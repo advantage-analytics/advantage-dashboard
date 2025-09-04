@@ -1,0 +1,55 @@
+/tennis-app
+├── /app
+│   ├── /layout.tsx              # Root layout (navbar, footer, etc.)
+│   ├── /page.tsx                # Landing page (public home)
+│   ├── /about/page.tsx          # About page
+│   ├── /contact/page.tsx        # Contact page
+│
+│   ├── /auth                    # Authentication (Supabase)
+│   │   ├── /login/page.tsx
+│   │   ├── /signup/page.tsx
+│   │   ├── /callback/page.tsx   # (optional: for OAuth redirects)
+│
+│   ├── /dashboard               # Private app (requires login)
+│   │   ├── /layout.tsx          # Dashboard layout (sidebar nav)
+│   │   ├── /page.tsx            # Home dashboard overview
+│   │   ├── /team/page.tsx       # Team management page
+│   │   ├── /schedule/page.tsx   # Match schedule page
+│   │   ├── /statistics/page.tsx # Stats & analytics
+│   │   ├── /profile/page.tsx    # User profile & settings
+│
+│   ├── /billing                 # Stripe integration pages
+│   │   ├── /page.tsx            # Billing overview (subscription info)
+│   │   ├── /success/page.tsx    # Stripe checkout success
+│   │   ├── /cancel/page.tsx     # Stripe checkout cancel
+│
+│   ├── /api                     # Next.js server actions & webhooks
+│   │   ├── /stripe/checkout     # Create checkout session
+│   │   ├── /stripe/webhook      # Stripe webhook listener
+│
+├── /components
+│   ├── ui/                      # Buttons, modals, inputs
+│   ├── nav/                     # Navbar, sidebar
+│   ├── charts/                  # Stats visualizations
+│
+├── /lib
+│   ├── supabaseClient.ts        # Supabase setup
+│   ├── stripe.ts                # Stripe SDK client
+│   ├── auth.ts                  # Auth helpers (protect routes)
+│
+├── /context
+│   ├── AuthContext.tsx          # Provide user auth state
+│
+├── /hooks
+│   ├── useAuth.ts               # Wraps Supabase auth
+│   ├── useSubscription.ts       # Hook for Stripe subscription status
+│
+├── /public                      # Static assets
+│   ├── logo.svg
+│
+├── /styles
+│   ├── globals.css
+│
+├── package.json
+├── tsconfig.json
+├── tailwind.config.js
