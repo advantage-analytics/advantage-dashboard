@@ -1,6 +1,15 @@
+import { redirect } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { createClient } from "@/lib/supabase/server"
 
-export default function Home() {
+export default async function Home() {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.auth.getClaims();
+  if (error || !data?.claims) {
+    redirect("/auth/login");
+  }
+  
   return (
     <div className="min-h-screen flex flex-col">
       {/* Navigation Bar */}
