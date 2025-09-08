@@ -21,11 +21,10 @@ export function SignUpForm({
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
   const [email, setEmail] = useState("");
+
   const [password, setPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
 
-
-  
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
@@ -48,10 +47,10 @@ export function SignUpForm({
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/confirm?next=/dashboard`,
+          emailRedirectTo: `${window.location.origin}/auth/confirm?next=/protected`,
         },
       });
-      
+
       if (signUpError) throw signUpError;
       router.push("/auth/sign-up-success");
     } catch (error: unknown) {

@@ -1,6 +1,8 @@
-import { redirect } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { createClient } from "@/lib/supabase/server"
+import { redirect } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { LogoutButton } from "@/components/logout-button";
+import { createClient } from "@/lib/supabase/server";
+import Link from "next/link";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -9,7 +11,7 @@ export default async function Home() {
   if (error || !data?.claims) {
     redirect("/auth/login");
   }
-  
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* Navigation Bar */}
@@ -19,10 +21,14 @@ export default async function Home() {
         <div className="text-center space-y-4">
           <h1 className="text-2xl font-bold">Welcome to Your Dashboard</h1>
           <p>Find all your statistics here!</p>
-          
-          <Button variant="default">
-          I am a button
-          </Button>
+
+          <LogoutButton />
+          <Link href="/" className="text-blue-600 hover:underline">
+            ← Back to Home
+          </Link>
+          <p>
+            <strong>Email:</strong> {data.claims.email}
+          </p>
         </div>
       </main>
     </div>
