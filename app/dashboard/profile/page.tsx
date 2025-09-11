@@ -9,5 +9,5 @@ export default async function Page() {
     redirect("/auth/login");
   }
 
-  return <div>Settings Page</div>;
+  return <div>Profile Page</div>;
 }

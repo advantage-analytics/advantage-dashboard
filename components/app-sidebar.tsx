@@ -1,6 +1,6 @@
-import Link from "next/link"
+import Link from "next/link";
 
-import { Calendar, Home, Inbox, Search, Settings } from "lucide-react"
+import { Calendar, Home, Inbox, Search, Settings } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -10,7 +10,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "@/components/ui/sidebar"
+} from "@/components/ui/sidebar";
 
 // Menu items.
 const items = [
@@ -20,18 +20,28 @@ const items = [
     icon: Home,
   },
   {
-    title: "Inbox",
-    url: "#",
+    title: "Team",
+    url: "/dashboard/team",
     icon: Inbox,
   },
   {
-    title: "Calendar",
-    url: "#",
+    title: "Schedule",
+    url: "/dashboard/schedule",
     icon: Calendar,
   },
   {
-    title: "Search",
-    url: "#",
+    title: "Statistics",
+    url: "/dashboard/statistics",
+    icon: Search,
+  },
+  {
+    title: "Upload",
+    url: "/dashboard/upload",
+    icon: Search,
+  },
+  {
+    title: "Profile",
+    url: "/dashboard/profile",
     icon: Search,
   },
   {
@@ -39,7 +49,7 @@ const items = [
     url: "/dashboard/settings",
     icon: Settings,
   },
-]
+];
 
 export function AppSidebar() {
   return (
@@ -64,5 +74,5 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
     </Sidebar>
-  )
+  );
 }
