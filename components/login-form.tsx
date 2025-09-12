@@ -13,8 +13,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { redirect, useRouter } from "next/navigation";
 import { useState } from "react";
+import { Chromium } from "lucide-react";
 
 export function LoginForm({
   className,
@@ -44,6 +45,20 @@ export function LoginForm({
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleGoogleOAuth = async () => {
+    const supabase = createClient();
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: "http://localhost:3000/auth/callback",
+      },
+    });
+
+    if (data.url) {
+      redirect(data.url); // use the redirect API for your server framework
     }
   };
 
@@ -103,6 +118,22 @@ export function LoginForm({
               </Link>
             </div>
           </form>
+          <div className="relative flex items-center justify-center py-4">
+            <div className="absolute w-full border-t border-gray-300"></div>
+            <div className="relative z-10 bg-white px-2 text-sm text-gray-500">
+              OR
+            </div>
+          </div>
+          <div className="flex flex-col gap-6 grid gap-2 ">
+            <Button
+              onClick={handleGoogleOAuth}
+              className="flex items-center gap-2 bg-blue-500 text-white hover:bg-blue-600"
+            >
+              <Chromium className="h-4 w-4" />{" "}
+              {/* Replace with your Google "G" icon */}
+              <span>Continue with Google</span>
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>
