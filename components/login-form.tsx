@@ -58,7 +58,7 @@ export function LoginForm({
     });
 
     if (data.url) {
-      redirect(data.url); // use the redirect API for your server framework
+      router.push(data.url); // use the redirect API for your server framework
     }
   };
 
