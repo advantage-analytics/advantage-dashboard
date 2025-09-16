@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { WelcomeBanner } from "./components/welcome-banner";
+import { WelcomeBanner } from "@/components/dashboard/welcome-banner";
 import { LogoutButton } from "@/components/logout-button";
 import { createClient } from "@/lib/supabase/server";
 
