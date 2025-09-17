@@ -22,10 +22,8 @@ export function SignUpForm({
 }: React.ComponentPropsWithoutRef<"div">) {
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
-
   const [password, setPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
-
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
@@ -55,6 +53,27 @@ export function SignUpForm({
       });
 
       if (signUpError) throw signUpError;
+
+      // Insert into users table after sign-up
+      if (data.user) {
+        const { error: insertError } = await supabase.from("users").insert([
+          {
+            id: data.user.id, // use auth user id
+            email,
+            phone: null,
+            dob: null,
+            state: null,
+            country: null,
+            role: null,
+          },
+        ]);
+
+        if (insertError) {
+          console.error("Error inserting into users:", insertError.message);
+          throw insertError;
+        }
+      }
+
       router.push("/auth/sign-up-success");
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");

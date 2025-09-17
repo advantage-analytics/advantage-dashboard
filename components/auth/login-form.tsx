@@ -13,7 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
-import { redirect, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Chromium } from "lucide-react";
 
@@ -27,6 +27,32 @@ export function LoginForm({
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
+  // helper to check if user profile is complete
+  const checkProfileAndRedirect = async (supabase: ReturnType<typeof createClient>) => {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+    if (userError || !user) throw userError ?? new Error("User not found");
+
+    const { data: profile, error: profileError } = await supabase
+      .from("users")
+      .select("phone, dob, state, country, role")
+      .eq("id", user.id)
+      .single();
+
+    if (profileError) throw profileError;
+
+    const isIncomplete =
+      !profile.phone || !profile.dob || !profile.state || !profile.country || !profile.role;
+
+    if (isIncomplete) {
+      router.push("/dashboard/settings");
+    } else {
+      router.push("/dashboard");
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const supabase = createClient();
@@ -34,13 +60,13 @@ export function LoginForm({
     setError(null);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-      if (error) throw error;
-      // Update this route to redirect to an authenticated route. The user already has an active session.
-      router.push("/dashboard");
+      if (signInError) throw signInError;
+
+      await checkProfileAndRedirect(supabase);
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
@@ -53,12 +79,18 @@ export function LoginForm({
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+        redirectTo: `${window.location.origin}/auth/callback`,
       },
     });
 
-    if (data.url) {
-      router.push(data.url); // use the redirect API for your server framework
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    if (data?.url) {
+      // Let Supabase handle redirect, then check profile after returning
+      window.location.href = data.url;
     }
   };
 
@@ -129,8 +161,7 @@ export function LoginForm({
               onClick={handleGoogleOAuth}
               className="flex items-center gap-2 bg-blue-500 text-white hover:bg-blue-600"
             >
-              <Chromium className="h-4 w-4" />{" "}
-              {/* Replace with your Google "G" icon */}
+              <Chromium className="h-4 w-4" />
               <span>Continue with Google</span>
             </Button>
           </div>
