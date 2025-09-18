@@ -16,7 +16,6 @@ export default function Page() {
         </Button>
       </div>
 
-      {/* Centered content (same pattern as sign-up) */}
       <main className="min-h-screen flex items-center justify-center px-6 md:px-10">
         <div className="w-full max-w-6xl grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-center gap-10 md:gap-16">
           {/* Left column — logo */}
