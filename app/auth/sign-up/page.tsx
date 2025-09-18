@@ -24,10 +24,10 @@ export default function Page() {
             <Image
               src="/logo.svg"               // make sure public/logo.svg exists
               alt="Advantage"
-              width={180}
-              height={48}
+              width={200}
+              height={56}
               priority
-              className="h-12 w-auto"
+              className="h-14 w-auto"
             />
           </div>
 

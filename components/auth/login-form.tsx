@@ -1,19 +1,13 @@
+// components/auth/login-form.tsx
 "use client";
 
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
-import { redirect, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Chromium } from "lucide-react";
 
@@ -34,108 +28,92 @@ export function LoginForm({
     setError(null);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      // Update this route to redirect to an authenticated route. The user already has an active session.
       router.push("/dashboard");
-    } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Google OAuth
   const handleGoogleOAuth = async () => {
     const supabase = createClient();
-    const { data, error } = await supabase.auth.signInWithOAuth({
+    const { data } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
       },
     });
-
-    if (data.url) {
-      router.push(data.url); // use the redirect API for your server framework
-    }
+    if (data?.url) router.push(data.url);
   };
 
   return (
-    <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl">Login</CardTitle>
-          <CardDescription>
-            Enter your email below to login to your account
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleLogin}>
-            <div className="flex flex-col gap-6">
-              <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="m@example.com"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-              <div className="grid gap-2">
-                <div className="flex items-center">
-                  <Label htmlFor="password">Password</Label>
-                  <Link
-                    href="/auth/forgot-password"
-                    className="ml-auto inline-block text-sm underline-offset-4 hover:underline"
-                  >
-                    Forgot your password?
-                  </Link>
-                </div>
-                <Input
-                  id="password"
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-              {error && <p className="text-sm text-red-500">{error}</p>}
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Logging in..." : "Login"}
-              </Button>
-            </div>
-            <div className="mt-4 text-center text-sm">
-              Don&apos;t have an account?{" "}
-              <Link
-                href="/auth/sign-up"
-                className="underline underline-offset-4"
-              >
-                Sign up
-              </Link>
-            </div>
-          </form>
-          <div className="relative flex items-center justify-center py-4">
-            <div className="absolute w-full border-t border-gray-300"></div>
-            <div className="relative z-10 bg-white px-2 text-sm text-gray-500">
-              OR
-            </div>
+    <div className={cn("space-y-5", className)} {...props}>
+      <form onSubmit={handleLogin} className="space-y-5">
+        {/* Email */}
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            type="email"
+            placeholder="m@example.com"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">Enter your email address</p>
+        </div>
+
+        {/* Password + forgot */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="password">Password</Label>
+            <Link href="/auth/forgot-password" className="text-xs underline">
+              Forgot your password?
+            </Link>
           </div>
-          <div className="flex flex-col gap-6 grid gap-2 ">
-            <Button
-              onClick={handleGoogleOAuth}
-              className="flex items-center gap-2 bg-blue-500 text-white hover:bg-blue-600"
-            >
-              <Chromium className="h-4 w-4" />{" "}
-              {/* Replace with your Google "G" icon */}
-              <span>Continue with Google</span>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          <Input
+            id="password"
+            type="password"
+            placeholder="Password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">Enter your password</p>
+        </div>
+
+        {error && <p className="text-sm text-red-500">{error}</p>}
+
+        <Button type="submit" className="w-full" disabled={isLoading}>
+          {isLoading ? "Logging in..." : "Login"}
+        </Button>
+
+        <p className="text-center text-sm text-muted-foreground">
+          Don&apos;t have an account?{" "}
+          <Link href="/auth/sign-up" className="underline">Sign up</Link>
+        </p>
+      </form>
+
+      {/* OR divider */}
+      <div className="relative my-4 text-center text-xs text-muted-foreground">
+        <span className="bg-white px-2 relative z-10">OR</span>
+        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-border" />
+      </div>
+
+      {/* Google OAuth button (same handler) */}
+      <Button
+        onClick={handleGoogleOAuth}
+        type="button"
+        variant="outline"
+        className="w-full bg-muted hover:bg-muted/80 flex items-center justify-center gap-2"
+      >
+        <Chromium className="h-4 w-4" />
+        <span>Sign in with Google</span>
+      </Button>
     </div>
   );
 }
