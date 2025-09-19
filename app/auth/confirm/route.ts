@@ -15,6 +15,44 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      // After email confirmation, check if user exists in users table and create if needed
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (user) {
+          const { data: profile, error: profileError } = await supabase
+            .from('users')
+            .select('id')
+            .eq('id', user.id)
+            .single();
+
+          // If profile doesn't exist (first-time email signup), create it
+          if (profileError && profileError.code === 'PGRST116') {
+            const { error: insertError } = await supabase.from("users").insert([
+              {
+                id: user.id,
+                email: user.email,
+                phone: null,
+                dob: null,
+                state: null,
+                country: null,
+                role: null,
+              },
+            ]);
+
+            if (insertError) {
+              console.error("Error creating user profile:", insertError.message);
+            } else {
+              console.log("Created new user profile for email signup");
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error in email confirmation:", error);
+      }
+
       redirect(next || `/dashboard`);
     } else {
       redirect(`/auth/error?error=${error?.message}`);
@@ -30,6 +68,44 @@ export async function GET(request: NextRequest) {
       token_hash,
     });
     if (!error) {
+      // After email confirmation, check if user exists in users table and create if needed
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (user) {
+          const { data: profile, error: profileError } = await supabase
+            .from('users')
+            .select('id')
+            .eq('id', user.id)
+            .single();
+
+          // If profile doesn't exist (first-time email signup), create it
+          if (profileError && profileError.code === 'PGRST116') {
+            const { error: insertError } = await supabase.from("users").insert([
+              {
+                id: user.id,
+                email: user.email,
+                phone: null,
+                dob: null,
+                state: null,
+                country: null,
+                role: null,
+              },
+            ]);
+
+            if (insertError) {
+              console.error("Error creating user profile:", insertError.message);
+            } else {
+              console.log("Created new user profile for email signup (token_hash)");
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error in email confirmation (token_hash):", error);
+      }
+
       // redirect user to specified redirect URL or root of app
       redirect(next || `/dashboard`);
     } else {

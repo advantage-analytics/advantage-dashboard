@@ -54,26 +54,7 @@ export function SignUpForm({
 
       if (signUpError) throw signUpError;
 
-      // Insert into users table after sign-up
-      if (data.user) {
-        const { error: insertError } = await supabase.from("users").insert([
-          {
-            id: data.user.id, // use auth user id
-            email,
-            phone: null,
-            dob: null,
-            state: null,
-            country: null,
-            role: null,
-          },
-        ]);
-
-        if (insertError) {
-          console.error("Error inserting into users:", insertError.message);
-          throw insertError;
-        }
-      }
-
+      // User creation will happen after email confirmation (when RLS allows it)
       router.push("/auth/sign-up-success");
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");

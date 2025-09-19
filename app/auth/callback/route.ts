@@ -16,26 +16,52 @@ export async function GET(request: Request) {
     const supabase = await createClient()
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
-      // After OAuth session is established, check profile completeness to decide redirect
+      // After OAuth session is established, check if user exists in users table
       try {
         const {
           data: { user },
         } = await supabase.auth.getUser()
 
         if (user) {
-          const { data: profile } = await supabase
+          const { data: profile, error: profileError } = await supabase
             .from('users')
             .select('phone, dob, state, country, role')
             .eq('id', user.id)
             .single()
 
-          const isIncomplete = !profile || !profile.phone || !profile.dob || !profile.state || !profile.country || !profile.role
+          // If profile doesn't exist (first-time Google sign-in), create it
+          if (profileError && profileError.code === 'PGRST116') {
+            const { error: insertError } = await supabase.from("users").insert([
+              {
+                id: user.id,
+                email: user.email,
+                phone: null,
+                dob: null,
+                state: null,
+                country: null,
+                role: null,
+              },
+            ])
 
-          if (isIncomplete) {
+            if (insertError) {
+              console.error("Error creating user profile:", insertError.message)
+            } else {
+              console.log("Created new user profile for Google OAuth user")
+            }
+            
+            // New user should go to settings to complete profile
             next = '/dashboard/settings'
+          } else if (profile) {
+            // Existing user - check if profile is complete
+            const isIncomplete = !profile.phone || !profile.dob || !profile.state || !profile.country || !profile.role
+
+            if (isIncomplete) {
+              next = '/dashboard/settings'
+            }
           }
         }
-      } catch (_) {
+      } catch (error) {
+        console.error("Error in OAuth callback:", error)
         // If any error occurs, fall back to default next
       }
 

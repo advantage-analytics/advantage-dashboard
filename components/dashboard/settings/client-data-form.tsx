@@ -105,7 +105,10 @@ export function ClientDataForm({
         role,
       }).eq("id", user.id);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error("Update error details:", updateError);
+        throw updateError;
+      }
 
       //router.push("/dashboard");
       console.log("User data saved successfully!");
