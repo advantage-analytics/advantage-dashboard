@@ -18,6 +18,9 @@ export default async function Home() {
         name="Clajerson Gimena"
         school="University of California, Los Angeles"
         classYear="Senior"
+        itaRanking={26}
+        winStreak={4}
+        matchesClinched={1}
       />
       <LogoutButton/>
     </div>

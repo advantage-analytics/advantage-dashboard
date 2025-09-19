@@ -22,10 +22,8 @@ export function SignUpForm({
 }: React.ComponentPropsWithoutRef<"div">) {
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
-
   const [password, setPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
-
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
@@ -55,6 +53,8 @@ export function SignUpForm({
       });
 
       if (signUpError) throw signUpError;
+
+      // User creation will happen after email confirmation (when RLS allows it)
       router.push("/auth/sign-up-success");
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
