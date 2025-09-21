@@ -48,6 +48,7 @@ def get_matches(user_id, year, match_type, result_type):
                 "player2_id": result['players']['loser1']['id'],
                 "player2_name": result['players']['loser1']['firstName'] + " " + result['players']['loser1']['lastName'].title(),
                 "round": result['round']['name'] if isinstance(result['round'], dict) else result['round'],
+                # "round": result['round'],
                 "score": result['score']
             }
             results.append(match_record)
@@ -55,21 +56,38 @@ def get_matches(user_id, year, match_type, result_type):
     return results
     
 ########### Set Information ##########
-user_id = '2580878'
 year = None  # set to an int when you want to filter by year
 match_type = "singles"
 result_type = None # sanctioned or myutr
-    
-########### Call function ##########
 
-results = get_matches(user_id, year, match_type, result_type)
+########### Fetch all UTR IDs from Supabase ##########
+user_records = supabase.table("users").select("utr_id").not_.is_('utr_id', "null").execute()
+
+# Extract list of UTR IDs
+utr_ids = [record["utr_id"] for record in user_records.data]
+print(utr_ids)
+
+########## Loop through each UTR ID ##########
+all_results = []
+for utr_id in utr_ids:
+    try:
+        user_results = get_matches(utr_id, year, match_type, result_type)
+        all_results.extend(user_results)
+    except Exception as e:
+        print(f"Error fetching matches for UTR ID {utr_id}: {e}")
+
+########## all_results is a list of dicts with "id" as primary key ##########
+unique_results = list({r["id"]: r for r in all_results}.values())
 
 ########## Insert into Supabase ##########
-response = (
-    supabase.table("matches_sample")
-    .upsert(results, on_conflict="id")  # will update if same id already exists
-    .execute()
-)
-print(response)
+if unique_results:
+    response = (
+        supabase.table("matches_sample")
+        .upsert(unique_results, on_conflict="id")  # will update if same id already exists
+        .execute()
+    )
+    print(response)
+else: 
+    print("No match results to insert.")
 
 
