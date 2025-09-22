@@ -149,6 +149,7 @@ export function ClientDataForm({
               <Input
                 id="phone"
                 type="tel"
+                required
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
               />
@@ -158,6 +159,7 @@ export function ClientDataForm({
               <Input
                 id="dob"
                 type="date"
+                required
                 value={dob}
                 onChange={(e) => setDob(e.target.value)}
               />
@@ -167,6 +169,7 @@ export function ClientDataForm({
               <Input
                 id="state"
                 type="text"
+                required
                 value={stateVal}
                 onChange={(e) => setStateVal(e.target.value)}
               />
@@ -176,6 +179,7 @@ export function ClientDataForm({
               <Input
                 id="country"
                 type="text"
+                required
                 value={country}
                 onChange={(e) => setCountry(e.target.value)}
               />
