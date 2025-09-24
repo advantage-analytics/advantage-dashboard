@@ -82,7 +82,7 @@ unique_results = list({r["id"]: r for r in all_results}.values())
 ########## Insert into Supabase ##########
 if unique_results:
     response = (
-        supabase.table("matches_sample")
+        supabase.table("matches")
         .upsert(unique_results, on_conflict="id")  # will update if same id already exists
         .execute()
     )
