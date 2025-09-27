@@ -44,9 +44,9 @@ def get_matches(user_id, year, match_type, result_type):
                 "id": result['id'],
                 "date": result['date'],
                 "player1_id": result['players']['winner1']['id'],
-                "player1_name": result['players']['winner1']['firstName'] + " " + result['players']['winner1']['lastName'].title(),
+                "player1_name": result['players']['winner1']['firstName'].title() + " " + result['players']['winner1']['lastName'].title(),
                 "player2_id": result['players']['loser1']['id'],
-                "player2_name": result['players']['loser1']['firstName'] + " " + result['players']['loser1']['lastName'].title(),
+                "player2_name": result['players']['loser1']['firstName'].title() + " " + result['players']['loser1']['lastName'].title(),
                 "round": result['round']['name'] if isinstance(result['round'], dict) else result['round'],
                 # "round": result['round'],
                 "score": result['score']
