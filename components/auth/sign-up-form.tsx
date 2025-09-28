@@ -121,10 +121,10 @@ export function SignUpForm({
             className="mt-0.5"
             required
           />
-          <Label htmlFor="consent" className="text-xs font-normal text-muted-foreground">
-            By signing up, you agree to our{" "}
-            <Link href="/terms" className="underline">Terms</Link> and{" "}
-            <Link href="/privacy" className="underline">Privacy Policy</Link>.
+          <Label htmlFor="consent" className="text-xs font-bold text-muted-foreground">
+            By signing up, you agree to our{""}
+            <Link href="/terms" className="underline">Terms</Link> and{""}
+            <Link href="/privacy" className="underline">Privacy Policy.</Link>
           </Label>
         </div>
 

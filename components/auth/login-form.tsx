@@ -1,4 +1,3 @@
-// components/auth/login-form.tsx
 "use client";
 
 import { cn } from "@/lib/utils";
@@ -51,7 +50,8 @@ export function LoginForm({
   };
 
   return (
-    <div className={cn("space-y-5", className)} {...props}>
+    <div className={cn("flex h-full w-full flex-col", className)} {...props}>
+      {/* Top */}
       <form onSubmit={handleLogin} className="space-y-5">
         {/* Email */}
         <div className="space-y-2">
@@ -63,15 +63,16 @@ export function LoginForm({
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
           />
           <p className="text-xs text-muted-foreground">Enter your email address</p>
         </div>
 
-        {/* Password + forgot */}
+        {/* Password forgot */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label htmlFor="password">Password</Label>
-            <Link href="/auth/forgot-password" className="text-xs underline">
+            <Link href="/auth/forgot-password" className="text-xs underline underline-offset-2">
               Forgot your password?
             </Link>
           </div>
@@ -82,6 +83,7 @@ export function LoginForm({
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
           />
           <p className="text-xs text-muted-foreground">Enter your password</p>
         </div>
@@ -94,26 +96,29 @@ export function LoginForm({
 
         <p className="text-center text-sm text-muted-foreground">
           Don&apos;t have an account?{" "}
-          <Link href="/auth/sign-up" className="underline">Sign up</Link>
+          <Link href="/auth/sign-up" className="underline underline-offset-2">
+            Sign up
+          </Link>
         </p>
       </form>
 
-      {/* OR divider */}
-      <div className="relative my-4 text-center text-xs text-muted-foreground">
-        <span className="bg-white px-2 relative z-10">OR</span>
-        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-border" />
-      </div>
+      {/* Bottom*/}
+      <div className="mt-auto pt-1">
+        <div className="relative my-4 text-center text-xs text-muted-foreground">
+          <span className="bg-white px-2 relative z-10">OR</span>
+          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-border" />
+        </div>
 
-      {/* Google OAuth button (same handler) */}
-      <Button
-        onClick={handleGoogleOAuth}
-        type="button"
-        variant="outline"
-        className="w-full bg-muted hover:bg-muted/80 flex items-center justify-center gap-2"
-      >
-        <Chromium className="h-4 w-4" />
-        <span>Sign in with Google</span>
-      </Button>
+        <Button
+          onClick={handleGoogleOAuth}
+          type="button"
+          variant="outline"
+          className="w-full bg-muted hover:bg-muted/80 flex items-center justify-center gap-2"
+        >
+          <Chromium className="h-4 w-4" />
+          <span>Sign in with Google</span>
+        </Button>
+      </div>
     </div>
   );
 }
