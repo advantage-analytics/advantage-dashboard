@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
+
 import { WelcomeBanner } from "@/components/dashboard/welcome-banner";
 import { PerformanceDashboard } from "@/components/dashboard/performance-dashboard";
 import { RecentMatches } from "@/components/dashboard/recent-matches";
 import { UpcomingMatches } from "@/components/dashboard/upcoming-matches";
 import { LogoutButton } from "@/components/logout-button";
+
 import { createClient } from "@/lib/supabase/server";
 
 export default async function Home() {
