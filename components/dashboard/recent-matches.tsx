@@ -27,26 +27,25 @@ export function RecentMatches({ matches }: RecentMatchesProps) {
             Your Last 5 Matches With Highlights
           </p>
         </div>
-        <a
-          href="#"
-          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-        >
-          View All
-        </a>
       </CardHeader>
+
       <CardContent className="space-y-0">
         {matches.map((match, index) => (
-          <div key={match.id} >
+          <div key={match.id}>
+            {/* Thin grey dividing line above each match (except first) */}
+            {<Separator className="bg-gray-200" />}
+            
             <div className="py-8 m-4 flex-col gap-8">
-              <div className="text-xs text-gray-500 mb-2">
-                Final Score | {match.matchType}
+              {/* Updated top line with time aligned right */}
+              <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
+                <span>Final Score | {match.matchType}</span>
+                <span>{match.timestamp}</span>
               </div>
+
               <div className="flex items-center justify-between">
                 <div className="flex items-center justify-between gap-4">
-                  <div className="bg-gray-300 w-8 h-8"/>
-                  <p>
-                    Player1 Name
-                  </p>
+                  <div className="bg-gray-300 w-8 h-8" />
+                  <p>Player1 Name</p>
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <p>0</p>
@@ -56,10 +55,8 @@ export function RecentMatches({ matches }: RecentMatchesProps) {
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center justify-between gap-4">
-                  <div className="bg-gray-300 w-8 h-8"/>
-                  <p>
-                    Player2 Name
-                  </p>
+                  <div className="bg-gray-300 w-8 h-8" />
+                  <p>Player2 Name</p>
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <p>0</p>
@@ -68,9 +65,18 @@ export function RecentMatches({ matches }: RecentMatchesProps) {
                 </div>
               </div>
             </div>
-            {index < matches.length - 1 && <Separator />}
           </div>
         ))}
+
+        {/* View All moved to bottom center */}
+        <div className="flex justify-center mt-6">
+          <a
+            href="#"
+            className="text-sm text-gray-500 hover:text-gray-700 font-medium"
+          >
+            View All
+          </a>
+        </div>
       </CardContent>
     </Card>
   );
