@@ -37,7 +37,7 @@ export function UpcomingMatches({ matches }: UpcomingMatchesProps) {
                     <div>
                       <div className="font-medium text-sm">{match.opponent}</div>
                       <div className="text-xs text-gray-500">{match.opponentSchool}</div>
-                      <div className="flex items-center space-x-1 text-xs text-gray-600 mt-3">
+                      <div className="flex items-center space-x-1 text-xs text-gray-600 mt-8">
                         <Calendar className="h-3 w-3" />
                         <span>{match.date}</span>
                         <Clock className="h-3 w-3" />

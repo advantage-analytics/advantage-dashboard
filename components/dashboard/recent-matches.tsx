@@ -35,7 +35,7 @@ export function RecentMatches({ matches }: RecentMatchesProps) {
             {/* Thin grey dividing line above each match (except first) */}
             {<Separator className="bg-gray-200" />}
             
-            <div className="py-8 m-4 flex-col gap-8">
+            <div className="py-4 m-4 flex-col gap-8">
               {/* Updated top line with time aligned right */}
               <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
                 <span>Final Score | {match.matchType}</span>
@@ -55,7 +55,7 @@ export function RecentMatches({ matches }: RecentMatchesProps) {
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center justify-between gap-4">
-                  <div className="bg-gray-300 w-8 h-8" />
+                  <div className="bg-gray-300 w-8 h-16" />
                   <p>Player2 Name</p>
                 </div>
                 <div className="flex items-center justify-between gap-4">
