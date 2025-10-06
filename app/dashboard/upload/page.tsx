@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import UploadClient from "./client";
 
 export default async function Page() {
   const supabase = await createClient();
@@ -9,5 +10,5 @@ export default async function Page() {
     redirect("/auth/login");
   }
 
-  return <div>Upload Page</div>;
+  return <UploadClient/>;
 }
