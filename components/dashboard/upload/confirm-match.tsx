@@ -1,9 +1,26 @@
 "use client";
 
+// Component: ConfirmMatch
+// Purpose:
+// - Fetch the selected match row and present editable fields
+// - Keep edits local; save all changes in a single update via “Confirm Changes”
+// - Show and edit per-set scores with player1 assumed as winner
+// Data model expectations:
+// - matches table includes: player1_name, player2_name, round, tournament_name,
+//   best_of (3|5), ad_scoring (bool), play_on_lets (bool), date (ISO), score (object)
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type MatchData = {
   id: string;
@@ -21,6 +38,9 @@ export function ConfirmMatch({ matchId }: { matchId?: string | null }) {
   const supabase = useMemo(() => createClient(), []);
   const [match, setMatch] = useState<MatchData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [p1Scores, setP1Scores] = useState<number[]>([0, 0, 0]);
+  const [p2Scores, setP2Scores] = useState<number[]>([0, 0, 0]);
 
   // Fetch match data when matchId changes
   useEffect(() => {
@@ -43,7 +63,12 @@ export function ConfirmMatch({ matchId }: { matchId?: string | null }) {
         }
         // eslint-disable-next-line no-console
         console.log("Fetched match data:", data);
-        setMatch(data as MatchData);
+        const m = data as MatchData;
+        setMatch(m);
+        // Initialize score arrays from object assuming player1 winner
+        const { playerScores, opponentScores } = scoresFromScoreObject(m.score);
+        setP1Scores(fillToThree(playerScores));
+        setP2Scores(fillToThree(opponentScores));
       } catch (e) {
         // eslint-disable-next-line no-console
         console.error("Error fetching match:", e);
@@ -55,39 +80,53 @@ export function ConfirmMatch({ matchId }: { matchId?: string | null }) {
     void fetchMatch();
   }, [matchId, supabase]);
 
-  const updateField = useCallback(
-    async (field: string, value: any) => {
-      if (!matchId) return;
-      try {
-        const { error } = await supabase
-          .from("matches")
-          .update({ [field]: value })
-          .eq("id", matchId);
-        if (error) throw error;
-        setMatch((prev) => (prev ? { ...prev, [field]: value } : prev));
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.error("Update error:", e);
-      }
-    },
-    [matchId, supabase],
-  );
+  const onScoreChange = (which: 1 | 2, idx: number, val: string) => {
+    const n = Number(val);
+    if (which === 1) {
+      const next = [...p1Scores];
+      next[idx] = Number.isFinite(n) ? n : 0;
+      setP1Scores(next);
+    } else {
+      const next = [...p2Scores];
+      next[idx] = Number.isFinite(n) ? n : 0;
+      setP2Scores(next);
+    }
+  };
 
-  const updateScore = useCallback(
-    async (playerIndex: 1 | 2, gameIndex: number, value: string) => {
-      if (!matchId || !match) return;
-      const newScore = { ...(match.score || {}) };
-      // For simplicity, assume score structure allows direct game indexing
-      // Adjust based on your actual score schema
-      if (!newScore[gameIndex + 1]) newScore[gameIndex + 1] = {};
-      
-      // Simple approach: store as player1/player2 keys per game
-      newScore[gameIndex + 1][`player${playerIndex}`] = parseInt(value) || 0;
-      
-      await updateField("score", newScore);
-    },
-    [matchId, match, updateField],
-  );
+  // Persist all local edits in one UPDATE to reduce latency and avoid per-keystroke writes
+  const confirmChanges = async () => {
+    if (!matchId) return;
+    setSaving(true);
+    try {
+      const score = scoreObjectFromArrays(p1Scores, p2Scores);
+      // Build one update payload using local draft state
+      const payload: Record<string, any> = {
+        score,
+      };
+      if (match) {
+        payload.tournament_name = match.tournament_name ?? null;
+        payload.round = match.round ?? null;
+        payload.best_of = match.best_of ?? null;
+        payload.ad_scoring = match.ad_scoring ?? false;
+        payload.play_on_lets = match.play_on_lets ?? false;
+        payload.player1_name = match.player1_name ?? null;
+        payload.player2_name = match.player2_name ?? null;
+      }
+
+      const { error } = await supabase
+        .from("matches")
+        .update(payload)
+        .eq("id", matchId);
+      if (error) throw error;
+      // reflect back into local state
+      setMatch((prev) => (prev ? { ...prev, ...payload } : prev));
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("Save error:", e);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (!matchId) {
     return (
@@ -129,7 +168,7 @@ export function ConfirmMatch({ matchId }: { matchId?: string | null }) {
             <Input
               id="tournament-name"
               value={match.tournament_name ?? ""}
-              onChange={(e) => updateField("tournament_name", e.target.value)}
+              onChange={(e) => setMatch((prev) => (prev ? { ...prev, tournament_name: e.target.value } : prev))}
               placeholder="Tournament Name"
             />
           </div>
@@ -138,7 +177,7 @@ export function ConfirmMatch({ matchId }: { matchId?: string | null }) {
             <Input
               id="round"
               value={match.round ?? ""}
-              onChange={(e) => updateField("round", e.target.value)}
+              onChange={(e) => setMatch((prev) => (prev ? { ...prev, round: e.target.value } : prev))}
               placeholder="Round"
             />
           </div>
@@ -151,19 +190,25 @@ export function ConfirmMatch({ matchId }: { matchId?: string | null }) {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-1.5">
             <Label htmlFor="best-of">Best of...</Label>
-            <Input
-              id="best-of"
-              value={match.best_of ?? ""}
-              onChange={(e) => updateField("best_of", parseInt(e.target.value) || null)}
-              placeholder="3 Sets"
-            />
+            <Select
+              value={(match.best_of ?? 3).toString()}
+              onValueChange={(v) => setMatch((prev) => (prev ? { ...prev, best_of: parseInt(v) } : prev))}
+            >
+              <SelectTrigger className="w-full justify-between" id="best-of">
+                <SelectValue>{match.best_of ?? 3} Sets</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="3">3</SelectItem>
+                <SelectItem value="5">5</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex items-center gap-2 pt-6">
             <input
               type="checkbox"
               id="ad-scoring"
               checked={match.ad_scoring ?? false}
-              onChange={(e) => updateField("ad_scoring", e.target.checked)}
+              onChange={(e) => setMatch((prev) => (prev ? { ...prev, ad_scoring: e.target.checked } : prev))}
               className="h-4 w-4"
             />
             <Label htmlFor="ad-scoring" className="cursor-pointer">Ad Scoring</Label>
@@ -173,7 +218,7 @@ export function ConfirmMatch({ matchId }: { matchId?: string | null }) {
               type="checkbox"
               id="play-on-lets"
               checked={match.play_on_lets ?? false}
-              onChange={(e) => updateField("play_on_lets", e.target.checked)}
+              onChange={(e) => setMatch((prev) => (prev ? { ...prev, play_on_lets: e.target.checked } : prev))}
               className="h-4 w-4"
             />
             <Label htmlFor="play-on-lets" className="cursor-pointer">Play on Lets</Label>
@@ -191,7 +236,7 @@ export function ConfirmMatch({ matchId }: { matchId?: string | null }) {
               <Label>Name</Label>
               <Input
                 value={match.player1_name ?? ""}
-                onChange={(e) => updateField("player1_name", e.target.value)}
+                onChange={(e) => setMatch((prev) => (prev ? { ...prev, player1_name: e.target.value } : prev))}
                 placeholder="Player Name"
               />
             </div>
@@ -202,8 +247,8 @@ export function ConfirmMatch({ matchId }: { matchId?: string | null }) {
                   <Input
                     key={i}
                     className="w-12 text-center"
-                    value={match.score?.[i + 1]?.player1 ?? 0}
-                    onChange={(e) => updateScore(1, i, e.target.value)}
+                    value={p1Scores[i] ?? 0}
+                    onChange={(e) => onScoreChange(1, i, e.target.value)}
                   />
                 ))}
               </div>
@@ -216,7 +261,7 @@ export function ConfirmMatch({ matchId }: { matchId?: string | null }) {
               <Label>Opponent</Label>
               <Input
                 value={match.player2_name ?? ""}
-                onChange={(e) => updateField("player2_name", e.target.value)}
+                onChange={(e) => setMatch((prev) => (prev ? { ...prev, player2_name: e.target.value } : prev))}
                 placeholder="Opponent Name"
               />
             </div>
@@ -227,8 +272,8 @@ export function ConfirmMatch({ matchId }: { matchId?: string | null }) {
                   <Input
                     key={i}
                     className="w-12 text-center"
-                    value={match.score?.[i + 1]?.player2 ?? 0}
-                    onChange={(e) => updateScore(2, i, e.target.value)}
+                    value={p2Scores[i] ?? 0}
+                    onChange={(e) => onScoreChange(2, i, e.target.value)}
                   />
                 ))}
               </div>
@@ -236,9 +281,55 @@ export function ConfirmMatch({ matchId }: { matchId?: string | null }) {
           </div>
         </div>
       </div>
+
+      <div className="flex justify-end">
+        <Button onClick={confirmChanges} disabled={saving}>
+          {saving ? "Saving..." : "Confirm Changes"}
+        </Button>
+      </div>
     </div>
   );
 }
 
 export default ConfirmMatch;
+
+// Helpers for score mapping: assume player1 is winner per set.
+function scoresFromScoreObject(score: any) {
+  if (!score || typeof score !== "object") return { playerScores: [], opponentScores: [] };
+  const entries = Object.entries(score)
+    .filter(([k]) => /^\d+$/.test(k))
+    .sort((a, b) => Number(a[0]) - Number(b[0]));
+  const playerScores: number[] = [];
+  const opponentScores: number[] = [];
+  for (const [, setAny] of entries) {
+    const set = (setAny ?? {}) as { winner?: number; loser?: number };
+    const w = toNumber(set.winner);
+    const l = toNumber(set.loser);
+    playerScores.push(w);
+    opponentScores.push(l);
+  }
+  return { playerScores, opponentScores };
+}
+
+function scoreObjectFromArrays(p1: number[], p2: number[]) {
+  const out: Record<string, any> = {};
+  for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
+    const a = toNumber(p1[i]);
+    const b = toNumber(p2[i]);
+    if (!a && !b) continue;
+    out[String(i + 1)] = { winner: a, loser: b, tiebreak: null, winnerTiebreak: null };
+  }
+  return out;
+}
+
+function toNumber(n: any) {
+  const v = typeof n === "number" ? n : Number(n);
+  return Number.isFinite(v) ? v : 0;
+}
+
+function fillToThree(arr: number[]) {
+  const out = [...arr];
+  while (out.length < 3) out.push(0);
+  return out.slice(0, 3);
+}
 

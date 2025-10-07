@@ -1,16 +1,21 @@
 "use client";
 
-// Lightweight searchable selector for matches stored in Supabase.
-// - Debounces user input and queries the `matches` table
-// - Searches by player names (ilike) and exact numeric ids (eq)
-// - Emits the selected row via `onChange`
+// Component: SelectMatch
+// Purpose:
+// - Provide a debounced search UI for `matches` in Supabase
+// - Filter by partial `player1_name` or `player2_name` (ilike)
+// - Render cards inspired by the Recent Matches layout
+// - Emit the selected match via `onChange`
+// Behavior:
+// - When search is empty, no results are shown (no initial fetch)
+// - Score rendering assumes player 1 is the winner per set
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 
-// Subset of the `matches` row used by the selector and display.
+// Narrow row shape used by the selector and display. Extend as needed.
 type MatchRow = {
   id: string;
   player1_id: string | number | null;
@@ -49,7 +54,7 @@ export function SelectMatch({
     return () => clearTimeout(handle);
   }, [query]);
 
-  // Fetch recent matches, filtered by query if present.
+  // Fetch recent matches filtered by query; hide results if query is empty.
   const runSearch = useCallback(async (q: string) => {
     setLoading(true);
     try {
@@ -96,6 +101,9 @@ export function SelectMatch({
         onChange={(e) => setQuery(e.target.value)}
       />
 
+      {/* Separator under search */}
+      <div className="h-px w-full bg-gray-200" />
+
       {query.trim().length > 0 && (
         <div className="flex flex-col gap-2">
           {loading && (
@@ -126,6 +134,8 @@ export function SelectMatch({
               </Card>
             </button>
           ))}
+          {/* Separator below list */}
+          <div className="h-px w-full bg-gray-200" />
         </div>
       )}
     </div>

@@ -1,5 +1,13 @@
 "use client";
 
+// Page shell for the Upload flow
+// Layout:
+// - Left: steps sidebar
+// - Right: select match, optional create match, upload area, confirm match
+// Data flow:
+// - SelectMatch emits a row; we pass its id to UploadMatch and ConfirmMatch
+// - CreateMatch inserts a minimal `matches` row then sets selection
+
 // Client-side page shell for the Upload screen.
 // Composes the SelectMatch component and shows a preview card
 // of the currently selected match.
@@ -9,6 +17,7 @@ import { SelectMatch, SelectMatchValue } from "@/components/dashboard/upload/sel
 import { UploadSteps } from "@/components/dashboard/upload/upload-steps";
 import { UploadMatch } from "@/components/dashboard/upload/upload-match";
 import { ConfirmMatch } from "@/components/dashboard/upload/confirm-match";
+import { CreateMatch } from "@/components/dashboard/upload/create-match";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
 export default function UploadClient() {
@@ -28,6 +37,8 @@ export default function UploadClient() {
 
           {/* Search and pick a match from Supabase */}
           <SelectMatch value={selected} onChange={setSelected} />
+
+          <CreateMatch onCreated={(id) => setSelected({ id, player1_id: null, player1_name: null, player2_id: null, player2_name: null, date: null, round: null, score: null })} />
 
           {selected && (
         <Card>
