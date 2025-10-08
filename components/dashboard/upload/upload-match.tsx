@@ -127,8 +127,8 @@ export function UploadMatch({ matchId }: { matchId?: string | null }) {
             }}
             onDragLeave={() => setIsOver(false)}
             onDrop={handleDrop}
-            className={`border-2 border-dashed rounded-xl flex items-center justify-center h-52 text-sm text-muted-foreground ${
-              isOver ? "border-primary bg-primary/5" : "border-gray-300"
+            className={`rounded-xl flex items-center justify-center h-52 text-sm text-muted-foreground ${
+              isOver ? "bg-primary/5" : ""
             } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
           >
             <label className="w-full h-full flex items-center justify-center" htmlFor="upload-input">

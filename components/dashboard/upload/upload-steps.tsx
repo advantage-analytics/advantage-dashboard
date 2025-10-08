@@ -5,13 +5,14 @@ import { Card, CardContent } from "@/components/ui/card";
 // Displays the three-step checklist shown on the upload flow sidebar.
 export function UploadSteps() {
   return (
-    <Card className="w-full rounded-2xl overflow-hidden">
-      <CardContent className="p-0">
+    <Card className="w-full h-full rounded-2xl overflow-hidden">
+      <CardContent className="p-0 h-full flex flex-col">
         <StepItem index={1} title="Select Match" subtitle="Select a recent match" />
         <Divider />
         <StepItem index={2} title="Upload Match" subtitle="Upload your match data" />
         <Divider />
         <StepItem index={3} title="Confirm Match" subtitle="Confirm match information" />
+        <div className="flex-1" />
       </CardContent>
     </Card>
   );

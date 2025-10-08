@@ -24,9 +24,9 @@ export default function UploadClient() {
   const [selected, setSelected] = useState<SelectMatchValue>(null);
 
   return (
-    <div className="flex-1 w-full p-6">
-      <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-6 items-start">
-        <div>
+    <div className="flex-1 w-full p-6 h-full">
+      <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-6 items-start h-full">
+        <div className="h-full">
           <UploadSteps />
         </div>
         <div className="space-y-6">
@@ -38,7 +38,7 @@ export default function UploadClient() {
           {/* Search and pick a match from Supabase */}
           <SelectMatch value={selected} onChange={setSelected} />
 
-          <CreateMatch onCreated={(id) => setSelected({ id, player1_id: null, player1_name: null, player2_id: null, player2_name: null, date: null, round: null, score: null })} />
+          <CreateMatch onCreated={(id) => setSelected({ id, player1_id: null, player1_name: null, player2_id: null, player2_name: null, date: null, round: null, tournament_name: null, score: null })} />
 
           {selected && (
         <Card>

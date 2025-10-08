@@ -24,6 +24,7 @@ type MatchRow = {
   player2_name: string | null;
   date: string | null; // ISO date/time
   round: string | null;
+  tournament_name: string | null;
   score: string | null;
 };
 
@@ -66,7 +67,7 @@ export function SelectMatch({
       let req = supabase
         .from("matches")
         .select(
-          "id,player1_id,player1_name,player2_id,player2_name,date,round,score",
+          "id,player1_id,player1_name,player2_id,player2_name,date,round,tournament_name,score",
         )
         .order("date", { ascending: false })
         .limit(20);
@@ -122,9 +123,19 @@ export function SelectMatch({
                 value?.id === match.id ? "border-primary" : undefined
               }>
                 <CardContent className="py-4">
-                  {/* Top meta line: Final Score | round  •  time */}
+                  {/* Top meta line: Final Score | tournament | round  •  time */}
                   <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
-                    <span>Final Score{match.round ? ` | ${match.round}` : ""}</span>
+                    <span>
+                      Final Score
+                      {match.tournament_name && match.round 
+                        ? ` | ${match.tournament_name} Round of ${match.round}`
+                        : match.tournament_name 
+                        ? ` | ${match.tournament_name}`
+                        : match.round 
+                        ? ` | Round of ${match.round}`
+                        : ""
+                      }
+                    </span>
                     <span>{formatTime(match.date)}</span>
                   </div>
 
