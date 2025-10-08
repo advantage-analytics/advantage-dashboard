@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Upload } from "lucide-react";
+import Link from "next/link";
 
 interface DashboardHeaderProps {
   title?: string;
@@ -20,9 +21,11 @@ export function DashboardHeader({
           <p className="text-muted-foreground">{subtitle}</p>
         </div>
         {showUploadButton && (
-          <Button>
-            <Upload className="mr-2 h-4 w-4" />
-            Upload
+          <Button asChild>
+            <Link href="/dashboard/upload">
+              <Upload className="mr-2 h-4 w-4" />
+              Upload
+            </Link>
           </Button>
         )}
       </div>
