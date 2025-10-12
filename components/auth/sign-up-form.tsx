@@ -112,21 +112,34 @@ export function SignUpForm({
           <p className="text-xs text-muted-foreground">Passwords must be the same.</p>
         </div>
 
-        {/* Consent */}
-        <div className="flex items-start gap-2">
-          <Checkbox
-            id="consent"
-            checked={agree}
-            onCheckedChange={(v) => setAgree(Boolean(v))}
-            className="mt-0.5"
-            required
-          />
-          <Label htmlFor="consent" className="text-xs font-bold text-muted-foreground">
-            By signing up, you agree to our{""}
-            <Link href="/terms" className="underline">Terms</Link> and{""}
-            <Link href="/privacy" className="underline">Privacy Policy.</Link>
-          </Label>
-        </div>
+            {/* consent (did some freaky stuff to fix spacing)*/}
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  id="consent"
+                  checked={agree}
+                  onCheckedChange={(v) => setAgree(Boolean(v))}
+                  className="mt-0.5"
+                />
+
+                <p className="text-xs font-normal">
+                  <span className="inline-flex flex-wrap items-baseline gap-0 align-baseline">
+                    <span>By signing up, you agree to our</span>
+                    <Link
+                      href="/terms"
+                      className="mx-[4px] inline-block font-semibold underline underline-offset-2"
+                    >
+                      Terms
+                    </Link>
+                    <span>and</span>
+                    <Link
+                      href="/privacy"
+                      className="mx-[4px] inline-block font-semibold underline underline-offset-2"
+                    >
+                      Privacy Policy.
+                    </Link>
+                  </span>
+                </p>
+              </div>
 
         {error && <p className="text-sm text-red-500">{error}</p>}
 
