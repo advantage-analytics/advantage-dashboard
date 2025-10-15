@@ -20,6 +20,32 @@ export function LoginForm({
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
+  // helper to check if user profile is complete
+  const checkProfileAndRedirect = async (supabase: ReturnType<typeof createClient>) => {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+    if (userError || !user) throw userError ?? new Error("User not found");
+
+    const { data: profile, error: profileError } = await supabase
+      .from("users")
+      .select("phone, dob, state, country, role")
+      .eq("id", user.id)
+      .single();
+
+    if (profileError) throw profileError;
+
+    const isIncomplete =
+      !profile.phone || !profile.dob || !profile.state || !profile.country || !profile.role;
+
+    if (isIncomplete) {
+      router.push("/dashboard/settings");
+    } else {
+      router.push("/dashboard");
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const supabase = createClient();
@@ -27,11 +53,15 @@ export function LoginForm({
     setError(null);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      router.push("/dashboard");
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "An error occurred");
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (signInError) throw signInError;
+
+      await checkProfileAndRedirect(supabase);
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
       setIsLoading(false);
     }
@@ -46,7 +76,15 @@ export function LoginForm({
         redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
       },
     });
-    if (data?.url) router.push(data.url);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    if (data?.url) {
+      // Let Supabase handle redirect, then check profile after returning
+      window.location.href = data.url;
+    }
   };
 
   return (

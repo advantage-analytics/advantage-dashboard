@@ -57,6 +57,7 @@ export function SignUpForm({
       });
       if (signUpError) throw signUpError;
 
+      // User creation will happen after email confirmation (when RLS allows it)
       router.push("/auth/sign-up-success");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "An error occurred");
