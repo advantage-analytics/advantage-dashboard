@@ -1,13 +1,7 @@
 // app/page.tsx
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
 import Image from "next/image";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Button } from "@/components/ui/button";
 import LandingNav from "@/components/landing-nav";
 import LandingInput from "@/components/landing-input";
 
