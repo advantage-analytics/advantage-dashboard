@@ -1,36 +1,32 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-export default async function Page({
+// app/auth/error/page.tsx
+export default function Page({
   searchParams,
-}: {
-  searchParams: Promise<{ error: string }>;
-}) {
-  const params = await searchParams;
+}: { searchParams?: { error?: string } }) {
+  const error = searchParams?.error?.trim();
 
   return (
-    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
-      <div className="w-full max-w-sm">
-        <div className="flex flex-col gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-2xl">
-                Sorry, something went wrong.
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {params?.error ? (
-                <p className="text-sm text-muted-foreground">
-                  Code error: {params.error}
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  An unspecified error occurred.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+    <div
+      className="
+        flex h-full w-full flex-col
+        /* Position block within the 440×N panel */
+        pt-[0px] pl-[4px]  /* move down/right as needed */
+      "
+    >
+      {/* Heading */}
+      <h1 className="text-[22px] leading-[28px] font-semibold tracking-[-0.01em]">
+        Sorry, something went wrong.
+      </h1>
+
+      {/* Subtext */}
+      {error ? (
+        <p className="mt-[10px] text-[13px] leading-[20px] text-muted-foreground">
+          Code error: <span className="font-medium text-foreground">{error}</span>
+        </p>
+      ) : (
+        <p className="mt-[26px] text-[16px] leading-[20px]">
+          An unspecified error occurred.
+        </p>
+      )}
     </div>
   );
 }

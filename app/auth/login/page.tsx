@@ -1,11 +1,18 @@
+"use client";
+
 import { LoginForm } from "@/components/auth/login-form";
 
 export default function Page() {
   return (
-    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
-      <div className="w-full max-w-sm">
+    <section className="w-full max-w-md">
+      <h1 className="text-2xl font-semibold">Login</h1>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+      </p>
+
+      <div className="mt-6">
         <LoginForm />
       </div>
-    </div>
+    </section>
   );
 }
