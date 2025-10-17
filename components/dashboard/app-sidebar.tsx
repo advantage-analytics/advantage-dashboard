@@ -1,4 +1,6 @@
 import Link from "next/link";
+import Image from "next/image";
+import logo from "@/public/logo.svg";
 import {
   Home,
   UsersRound,
@@ -42,6 +44,15 @@ export function AppSidebar() {
       <SidebarContent>
         {/* Top Menu */}
         <SidebarGroup>
+            <Link href="/">
+              <Image
+                src={logo}
+                alt="logo"
+                width={180}
+                height={32}
+                className="mx-auto"
+              />
+            </Link>
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
