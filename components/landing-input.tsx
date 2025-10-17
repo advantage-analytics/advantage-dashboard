@@ -41,7 +41,7 @@ export default function InputDemo() {
 
       setJoined(true);
     } catch (err) {
-      console.error('Error joining waitlist:', err);
+      // console.error('Error joining waitlist:', err);
       setError(err instanceof Error ? err.message : 'Error: You have already joined the waitlist.');
     } finally {
       setLoading(false);
