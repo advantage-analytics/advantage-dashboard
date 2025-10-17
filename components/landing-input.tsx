@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useState } from "react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 
 
 export default function InputDemo() {
@@ -13,12 +14,38 @@ export default function InputDemo() {
   const [name, setName] = useState("");
   const [agree, setAgree] = useState(false);
   const [joined, setJoined] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!agree) return;
-    // TODO: submit to your backend/Supabase
-    setJoined(true);
+    
+    setLoading(true);
+    setError("");
+    
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from('waitlists')
+        .insert([
+          {
+            email: email,
+            name: name
+          }
+        ]);
+
+      if (error) {
+        throw error;
+      }
+
+      setJoined(true);
+    } catch (err) {
+      console.error('Error joining waitlist:', err);
+      setError(err instanceof Error ? err.message : 'Error: You have already joined the waitlist.');
+    } finally {
+      setLoading(false);
+    }
   }
   
   return (
@@ -65,7 +92,7 @@ export default function InputDemo() {
             <Checkbox
               id="consent"
               checked={agree}
-              onCheckedChange={(v) => setAgree(Boolean(v))}
+              onCheckedChange={(v: boolean) => setAgree(v)}
               className="mt-0.5"
             />
 
@@ -89,17 +116,24 @@ export default function InputDemo() {
             </p>
           </div>
 
+          {/* Error message */}
+          {error && (
+            <div className="text-sm text-green-600 bg-green-50 border border-green-200 rounded-md p-3">
+              {error}
+            </div>
+          )}
+
           {/* waitlist button */}
           <Button
             type="submit"
-            disabled={!agree || joined}
+            disabled={!agree || joined || loading}
             className={
               joined
                 ? "w-full bg-muted text-muted-foreground hover:bg-muted disabled:opacity-100"
                 : "w-full bg-black text-white hover:bg-black/90"
             }
           >
-            {joined ? "You’ve joined the waitlist." : "Join the waitlist"}
+            {loading ? "Joining..." : joined ? "You've joined the waitlist." : "Join the waitlist"}
           </Button>
         </form>
       </section>
