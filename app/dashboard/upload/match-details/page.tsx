@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { Input } from "@/components/ui/input";
 
 export default async function MatchDetailsPage() {
   const supabase = await createClient();
@@ -9,5 +10,9 @@ export default async function MatchDetailsPage() {
     redirect("/auth/login");
   }
 
-  return "MatchDetailsClient";
+  return (
+    <>
+      <Input type="file" id="matches" className="file"/>
+    </>
+  );
 }

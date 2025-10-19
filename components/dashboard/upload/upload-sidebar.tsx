@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useRouter, usePathname } from "next/navigation";
 
 // Displays the three-step checklist shown on the upload flow sidebar.
-export function UploadSteps() {
+export default function UploadSideBar() {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -94,7 +94,5 @@ function StepItem({
 function Divider() {
   return <div className="h-px w-full bg-gray-200" />;
 }
-
-export default UploadSteps;
 
 
