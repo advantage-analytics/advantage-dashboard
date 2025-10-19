@@ -34,8 +34,10 @@ export default function UploadSideBar() {
   };
 
   return (
-    <Card className="w-full h-full rounded-2xl overflow-hidden">
-      <CardContent className="p-0 h-full flex flex-col">
+    <Card 
+      className="w-[280px] h-[408px] bg-[#FAFAFA] shadow-[0px_4px_8px_rgba(0,0,0,0.1)] rounded-[20px] flex flex-col items-start p-6"
+    >
+      <CardContent className="p-0 h-[120px] flex flex-col w-full">
         {steps.map((step, index) => (
           <div key={step.index}>
             <StepItem 
@@ -45,7 +47,7 @@ export default function UploadSideBar() {
               isActive={pathname === step.route}
               onClick={() => handleStepClick(step.route)}
             />
-            {index < steps.length - 1 && <Divider />}
+            {index < steps.length - 1}
           </div>
         ))}
         <div className="flex-1" />
@@ -69,8 +71,8 @@ function StepItem({
 }) {
   return (
     <div 
-      className={`px-4 sm:px-6 py-5 cursor-pointer hover:bg-gray-50 transition-colors ${
-        isActive ? 'bg-gray-100' : ''
+      className={`px-4 sm:px-6 py-5 cursor-pointer hover:bg-gray-50 transition-colors h-[120px] flex items-center rounded-2xl hover:border-2 focus:border-2 focus:border-[hsl(0,0%,90%)] ${
+        isActive ? 'bg-gray-100 border-2 border-[hsl(0,0%,90%)]' : ''
       }`}
       onClick={onClick}
     >
@@ -90,9 +92,3 @@ function StepItem({
     </div>
   );
 }
-
-function Divider() {
-  return <div className="h-px w-full bg-gray-200" />;
-}
-
-
