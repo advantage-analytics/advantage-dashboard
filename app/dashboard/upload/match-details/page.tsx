@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Input } from "@/components/ui/input";
+import UploadForm from "./UploadForm";
 
 export default async function MatchDetailsPage() {
   const supabase = await createClient();
@@ -10,9 +10,5 @@ export default async function MatchDetailsPage() {
     redirect("/auth/login");
   }
 
-  return (
-    <>
-      <Input type="file" id="matches" className="file"/>
-    </>
-  );
+  return <UploadForm />;
 }
