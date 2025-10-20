@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import ConfirmDetailsForm from "./ConfirmDetailsForm";
 
 export default async function ConfirmDetailsPage() {
   const supabase = await createClient();
@@ -9,5 +10,5 @@ export default async function ConfirmDetailsPage() {
     redirect("/auth/login");
   }
 
-  return "Confirm Details";
+  return <ConfirmDetailsForm />;
 }
