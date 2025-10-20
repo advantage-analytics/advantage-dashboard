@@ -13,7 +13,7 @@ export default function ChooseProviderClient() {
   };
 
   return (
-    <div className="flex-1 w-full p-6 h-full">
+    <div className="flex-1 w-full p-10 h-full">
       <div className="space-y-6">
         <div className="space-y-1">
           <h2 className="text-2xl font-semibold tracking-tight">
