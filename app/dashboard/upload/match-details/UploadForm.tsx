@@ -173,10 +173,15 @@ export default function UploadForm() {
   /**
    * Handler for form submission
    * Stores form data in localStorage and navigates to confirm details page
+   * 
+   * MODIFICATION: Added custom event dispatch to notify sidebar of form data changes
    */
   const handleSubmit = () => {
     // Store form data in localStorage for the next page
     localStorage.setItem('uploadFormData', JSON.stringify(formData));
+    // MODIFICATION: Dispatch event to notify sidebar that form data has changed
+    // This enables real-time updates to the sidebar navigation state
+    window.dispatchEvent(new CustomEvent('formDataChanged'));
     router.push('/dashboard/upload/confirm-details');
   };
 

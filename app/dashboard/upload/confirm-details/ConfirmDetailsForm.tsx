@@ -59,8 +59,9 @@ export default function ConfirmDetailsForm() {
   // State for uploaded file information
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
   
-  // State for private match toggle
-  const [isPrivateMatch, setIsPrivateMatch] = useState(false);
+  // State for private match toggle - always true and locked
+  // MODIFICATION: Changed from false to true and locked the switch
+  const [isPrivateMatch, setIsPrivateMatch] = useState(true);
   
   // State for loading indicator during match creation
   const [isCreating, setIsCreating] = useState(false);
@@ -84,6 +85,28 @@ export default function ConfirmDetailsForm() {
       setUploadedFile(JSON.parse(storedFile));
     }
   }, []);
+
+  /**
+   * Validation function to check if all required form fields are filled out
+   * MODIFICATION: Added form validation to show "fill out form" message when incomplete
+   * 
+   * @param data - The form data to validate
+   * @returns true if form is complete, false otherwise
+   */
+  const isFormComplete = (data: FormData | null): boolean => {
+    if (!data) return false;
+    
+    // Check required fields
+    const requiredFields = [
+      data.playerName?.trim(),
+      data.opponentName?.trim(),
+      data.eventName?.trim(),
+      data.date?.trim()
+    ];
+    
+    // All required fields must have non-empty values
+    return requiredFields.every(field => field && field.length > 0);
+  };
 
   /**
    * Main handler for creating a match in the database
@@ -217,8 +240,9 @@ export default function ConfirmDetailsForm() {
       localStorage.removeItem('uploadFormData');
       localStorage.removeItem('uploadedFile');
       
-      // Redirect to dashboard after successful match creation
-      router.push('/dashboard');
+      // MODIFICATION: Changed redirect from dashboard home to profile page
+      // Redirect to profile page after successful match creation
+      router.push('/dashboard/profile');
       
     } catch (error) {
       console.error("Error creating match:", error);
@@ -246,6 +270,42 @@ export default function ConfirmDetailsForm() {
             <Button onClick={handleBack} className="mt-4">
               Go Back
             </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // MODIFICATION: Added form completion check to show "fill out form" message when incomplete
+  // Show fill out form message if form is incomplete
+  if (!isFormComplete(formData)) {
+    return (
+      <div className="flex-1 w-full p-6 h-full">
+        <div className="space-y-6">
+          <div className="space-y-1">
+            <h2 className="text-2xl font-semibold tracking-tight">Confirm Details</h2>
+            <p className="text-sm text-muted-foreground">Complete your match details to proceed</p>
+          </div>
+          
+          {/* MODIFICATION: Added yellow warning card for incomplete form */}
+          <div className="text-center py-12">
+            <div className="max-w-md mx-auto">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+                <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-yellow-100 rounded-full">
+                  <Info className="h-6 w-6 text-yellow-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Complete Your Match Details</h3>
+                <p className="text-gray-600 mb-4">
+                  Please go back and fill out all required fields in the match details form before confirming.
+                </p>
+                <p className="text-sm text-gray-500 mb-6">
+                  Required fields: Player Name, Opponent Name, Event Name, and Date
+                </p>
+                <Button onClick={handleBack} className="w-full">
+                  Go Back to Fill Out Form
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -402,9 +462,12 @@ export default function ConfirmDetailsForm() {
                 <h4 className="font-semibold">Private Match</h4>
                 <p className="text-sm text-gray-500">Note: All matches will be private during our Beta Testing</p>
               </div>
+              {/* MODIFICATION: Locked private match switch to always be true */}
               <Switch
                 checked={isPrivateMatch}
-                onCheckedChange={setIsPrivateMatch}
+                onCheckedChange={() => {}} // Disabled - no action
+                disabled={true}
+                className="opacity-50 cursor-not-allowed"
               />
             </div>
           </div>
