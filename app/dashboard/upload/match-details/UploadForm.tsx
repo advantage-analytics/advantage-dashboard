@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,7 +21,7 @@ interface FormData {
   bestOf: string;          // Best of 3 or 5 sets
   adScoring: boolean;      // Whether to use ad scoring (deuce advantage)
   playOnLets: boolean;     // Whether to replay points on lets
-  status: string;          // Match status (Completed, In Progress, Scheduled)
+  result: string;          // Match result (Completed, Retired, Unfinished)
   date: string;            // Match date
   playerName: string;      // Name of the primary player
   opponentName: string;    // Name of the opponent
@@ -30,13 +30,20 @@ interface FormData {
 }
 
 /**
- * UploadForm Component
+ * UploadForm Component - Step 2 of Upload Flow
  * 
  * This component handles the match details form where users input:
  * - Event information (name, round)
  * - Scoring format (best of, ad scoring, play on lets)
- * - Match information (status, date, players, scores)
+ * - Match information (result, date, players, scores)
  * - File upload for match data
+ * 
+ * MAJOR MODIFICATIONS MADE IN THIS SESSION:
+ * 1. Added localStorage persistence for form data when navigating back from Step 3
+ * 2. Added custom event dispatching to notify sidebar of form completion
+ * 3. Moved "Upload Match" header inside the main Card container for consistent styling
+ * 4. Changed "status" field to "result" with new dropdown options (Completed, Retired, Unfinished)
+ * 5. Enhanced form validation and data persistence across navigation
  * 
  * The form validates input and stores data in localStorage for the next step
  */
@@ -51,7 +58,7 @@ export default function UploadForm() {
     bestOf: "3",
     adScoring: false,
     playOnLets: false,
-    status: "Completed",
+    result: "Completed",
     date: "04/25/2003",
     playerName: "",
     opponentName: "",
@@ -66,6 +73,36 @@ export default function UploadForm() {
     size: string;     // Human-readable file size
     status: string;   // Upload status (e.g., "Completed")
   } | null>(null);
+
+  /**
+   * MODIFICATION: Load existing form data and uploaded file from localStorage on component mount
+   * This allows the form to persist data when navigating back from Step 3
+   * Previously, the form would reset to default values when navigating back
+   */
+  useEffect(() => {
+    const storedFormData = localStorage.getItem('uploadFormData');
+    const storedFile = localStorage.getItem('uploadedFile');
+    
+    // Load existing form data if available
+    if (storedFormData) {
+      try {
+        const parsedData = JSON.parse(storedFormData);
+        setFormData(parsedData);
+      } catch (error) {
+        console.error('Error parsing stored form data:', error);
+      }
+    }
+    
+    // Load existing uploaded file if available
+    if (storedFile) {
+      try {
+        const parsedFile = JSON.parse(storedFile);
+        setUploadedFile(parsedFile);
+      } catch (error) {
+        console.error('Error parsing stored file data:', error);
+      }
+    }
+  }, []);
 
   /**
    * Generic handler for updating form field values
@@ -196,15 +233,14 @@ export default function UploadForm() {
   return (
     <div className="flex-1 w-full p-6 h-full">
       <div className="space-y-6">
-        {/* Page Header Section */}
-        <div className="space-y-1">
-          <h2 className="text-2xl font-semibold tracking-tight">Upload Match</h2>
-          <p className="text-sm text-muted-foreground">Upload match information and data from the specified provider.</p>
-        </div>
-
         {/* Main Form Card */}
         <Card className="rounded-xl">
           <CardContent className="p-6 space-y-6">
+            {/* Page Header Section - moved inside the card */}
+            <div className="space-y-1">
+              <h2 className="text-2xl font-semibold tracking-tight">Upload Match</h2>
+              <p className="text-sm text-muted-foreground">Upload match information and data from the specified provider.</p>
+            </div>
             {/* Event Information Section */}
             {/* Contains event name and tournament round selection */}
             <div className="space-y-3">
@@ -303,15 +339,16 @@ export default function UploadForm() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-3">
                   <div className="space-y-1.5">
-                    <Label htmlFor="status">Status</Label>
-                    <Select value={formData.status} onValueChange={(value) => handleInputChange("status", value)}>
+                    <Label htmlFor="result">Result</Label>
+                    {/* MODIFICATION: Changed from "status" to "result" field with new dropdown options */}
+                    <Select value={formData.result} onValueChange={(value) => handleInputChange("result", value)}>
                       <SelectTrigger className="w-full">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="Completed">Completed</SelectItem>
-                        <SelectItem value="In Progress">In Progress</SelectItem>
-                        <SelectItem value="Scheduled">Scheduled</SelectItem>
+                        <SelectItem value="Retired">Retired</SelectItem>
+                        <SelectItem value="Unfinished">Unfinished</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

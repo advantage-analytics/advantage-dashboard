@@ -18,7 +18,7 @@ interface FormData {
   bestOf: string;          // Best of 3 or 5 sets
   adScoring: boolean;      // Whether to use ad scoring (deuce advantage)
   playOnLets: boolean;     // Whether to replay points on lets
-  status: string;          // Match status (Completed, In Progress, Scheduled)
+  result: string;          // Match result (Completed, Retired, Unfinished)
   date: string;            // Match date
   playerName: string;      // Name of the primary player
   opponentName: string;    // Name of the opponent
@@ -38,10 +38,20 @@ interface UploadedFile {
 }
 
 /**
- * ConfirmDetailsForm Component
+ * ConfirmDetailsForm Component - Step 3 of Upload Flow
  * 
  * This component displays a summary of all the match information entered by the user
  * and allows them to confirm and create the match in the database.
+ * 
+ * MAJOR MODIFICATIONS MADE IN THIS SESSION:
+ * 1. Added form completion validation - shows warning message if form is incomplete
+ * 2. Locked "Private Match" switch to always be true and disabled user interaction
+ * 3. Changed redirect destination from /dashboard to /dashboard/profile after match creation
+ * 4. Restructured match data to store format information in JSONB column instead of separate fields
+ * 5. Added winner/loser determination logic based on scores
+ * 6. Changed "status" field to "result" throughout the component
+ * 7. Added Card wrapper with rounded-xl styling to match other pages
+ * 8. Enhanced error handling and user feedback
  * 
  * Features:
  * - Displays all form data in a clean, organized layout
@@ -87,8 +97,9 @@ export default function ConfirmDetailsForm() {
   }, []);
 
   /**
-   * Validation function to check if all required form fields are filled out
-   * MODIFICATION: Added form validation to show "fill out form" message when incomplete
+   * MODIFICATION: Added form completion validation function
+   * Checks if all required fields are filled out before allowing user to proceed
+   * Required fields: playerName, opponentName, eventName, date
    * 
    * @param data - The form data to validate
    * @returns true if form is complete, false otherwise
@@ -149,24 +160,74 @@ export default function ConfirmDetailsForm() {
       // This ensures each match has a unique identifier
       const matchId = crypto.randomUUID();
 
-      // Prepare match data object for database insertion
-      // This structure matches the matches table schema
+      /**
+       * MODIFICATION: Added winner/loser determination logic
+       * Analyzes scores to determine who won and who lost the match
+       * Winner becomes player1, loser becomes player2 in the database
+       */
+      const determineWinner = (playerScores: number[], opponentScores: number[], bestOf: number) => {
+        const setsToWin = Math.ceil(bestOf / 2); // 2 sets for best of 3, 3 sets for best of 5
+        
+        let playerSetsWon = 0;
+        let opponentSetsWon = 0;
+        
+        // Count sets won by each player
+        for (let i = 0; i < Math.min(playerScores.length, opponentScores.length); i++) {
+          if (playerScores[i] > opponentScores[i]) {
+            playerSetsWon++;
+          } else if (opponentScores[i] > playerScores[i]) {
+            opponentSetsWon++;
+          }
+        }
+        
+        // Determine winner (player with more sets won)
+        const playerWon = playerSetsWon > opponentSetsWon;
+        
+        return {
+          winner: playerWon ? {
+            id: user.id,
+            name: formData.playerName,
+            scores: formData.playerScores
+          } : {
+            id: null, // Opponent doesn't have an ID in our system yet
+            name: formData.opponentName,
+            scores: formData.opponentScores
+          },
+          loser: playerWon ? {
+            id: null, // Opponent doesn't have an ID in our system yet
+            name: formData.opponentName,
+            scores: formData.opponentScores
+          } : {
+            id: user.id,
+            name: formData.playerName,
+            scores: formData.playerScores
+          }
+        };
+      };
+
+      const { winner, loser } = determineWinner(formData.playerScores, formData.opponentScores, parseInt(formData.bestOf));
+
+      // MODIFICATION: Prepare match data object for database insertion
+      // This structure matches the matches table schema with winner/loser logic
       const matchData = {
         id: matchId,                           // Unique UUID for the match
-        player1_id: user.id,                   // Current user's ID
-        player1_name: formData.playerName,     // Player's name from form
-        player2_id: null,                      // Opponent ID (null for now)
-        player2_name: formData.opponentName,   // Opponent's name from form
+        player1_id: winner.id,                 // Winner's ID (or null if opponent)
+        player1_name: winner.name,             // Winner's name
+        player2_id: loser.id,                  // Loser's ID (or null if opponent)
+        player2_name: loser.name,              // Loser's name
         date: formData.date,                   // Match date
         round: formData.round,                 // Tournament round
+        result: formData.result,               // MODIFICATION: Changed from "status" to "result"
         score: {                               // JSON object containing both players' scores
-          player1: formData.playerScores,
-          player2: formData.opponentScores
+          player1: winner.scores,
+          player2: loser.scores
         },
         tournament_name: formData.eventName,   // Event/tournament name
-        best_of: parseInt(formData.bestOf),    // Best of 3 or 5 sets
-        ad_scoring: formData.adScoring,        // Ad scoring preference
-        play_on_lets: formData.playOnLets,     // Play on lets preference
+        format: {                              // MODIFICATION: JSONB column containing format information
+          best_of: parseInt(formData.bestOf),
+          ad_scoring: formData.adScoring,
+          play_on_lets: formData.playOnLets
+        },
         private: isPrivateMatch                // Private match setting
       };
 
@@ -343,12 +404,15 @@ export default function ConfirmDetailsForm() {
   return (
     <div className="flex-1 w-full p-6 h-full">
       <div className="space-y-6">
-        <div className="space-y-1">
-          <h2 className="text-2xl font-semibold tracking-tight">Confirm Details</h2>
-          <p className="text-sm text-muted-foreground">Confirm your match details and upload to your profile</p>
-        </div>
+        {/* Main Form Card - matching the styling from match details page */}
+        <Card className="rounded-xl">
+          <CardContent className="p-6 space-y-6">
+            <div className="space-y-1">
+              <h2 className="text-2xl font-semibold tracking-tight">Confirm Details</h2>
+              <p className="text-sm text-muted-foreground">Confirm your match details and upload to your profile</p>
+            </div>
 
-        <div className="space-y-6">
+            <div className="space-y-6">
           {/* Event Information */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
@@ -383,9 +447,9 @@ export default function ConfirmDetailsForm() {
             {/* Match Details Card */}
             <Card className="bg-gray-50">
               <CardContent className="p-4 space-y-3">
-                {/* Status and Date */}
+                {/* Result and Date */}
                 <div className="flex items-center gap-4">
-                  <span className="text-gray-900 font-medium">{formData.status}</span>
+                  <span className="text-gray-900 font-medium">{formData.result}</span>
                   <span className="text-gray-900">{formData.date}</span>
                 </div>
 
@@ -489,7 +553,9 @@ export default function ConfirmDetailsForm() {
               {isCreating ? "Creating Match..." : "Create Match"}
             </Button>
           </div>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

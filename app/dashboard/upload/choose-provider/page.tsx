@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ProviderCard } from "@/components/dashboard/upload/provider-card";
 import { providers } from "@/lib/providers";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 
 /**
  * ChooseProviderClient Component
@@ -66,48 +67,52 @@ export default function ChooseProviderClient() {
   };
 
   return (
-    <div className="flex-1 w-full p-10 h-full flex flex-col">
-      <div className="space-y-6 flex-1">
-        <div className="space-y-1">
-          <h2 className="text-2xl font-semibold tracking-tight">
-            Choose Provider
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Choose from the following Electronic Line Calling (ELC) Providers
-          </p>
-        </div>
+    <div className="flex-1 w-full p-6 h-full">
+      <div className="space-y-6">
+        {/* Main Form Card - matching the styling from match details page */}
+        <Card className="rounded-xl">
+          <CardContent className="p-6 space-y-6">
+            <div className="space-y-1">
+              <h2 className="text-2xl font-semibold tracking-tight">
+                Choose Provider
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Choose from the following Electronic Line Calling (ELC) Providers
+              </p>
+            </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {providers.map((provider) => (
-            <ProviderCard
-              key={provider.id}
-              id={provider.id}
-              name={provider.name}
-              description={provider.description}
-              logo={provider.logo}
-              onClick={handleProviderSelect}
-              // MODIFICATION: Added isSelected prop to show visual feedback
-              // when a provider is selected (highlighted with black ring and "Selected" badge)
-              isSelected={selectedProvider === provider.id}
-            />
-          ))}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {providers.map((provider) => (
+                <ProviderCard
+                  key={provider.id}
+                  id={provider.id}
+                  name={provider.name}
+                  description={provider.description}
+                  logo={provider.logo}
+                  onClick={handleProviderSelect}
+                  // MODIFICATION: Added isSelected prop to show visual feedback
+                  // when a provider is selected (highlighted with black ring and "Selected" badge)
+                  isSelected={selectedProvider === provider.id}
+                />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Action Buttons - matching the exact position from match details page */}
+        <div className="flex gap-4">
+          <Button
+            onClick={handleContinue}
+            disabled={!selectedProvider}
+            className={`${
+              selectedProvider 
+                ? 'bg-gray-600 hover:bg-gray-700' 
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            }`}
+          >
+            Continue
+          </Button>
         </div>
-      </div>
-      
-      {/* MODIFICATION: Added Continue button section */}
-      {/* This button is disabled until a provider is selected and turns black when clickable */}
-      <div className="mt-8 flex justify-end">
-        <Button
-          onClick={handleContinue}
-          disabled={!selectedProvider}
-          className={`px-8 py-2 ${
-            selectedProvider 
-              ? 'bg-black hover:bg-gray-800 text-white' 
-              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-          }`}
-        >
-          Continue
-        </Button>
       </div>
     </div>
   );
