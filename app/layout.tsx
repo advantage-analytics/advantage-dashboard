@@ -1,20 +1,17 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Open_Sans, Inter, Roboto} from "next/font/google";
+
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  variable: "--font-inter",
+  weight: ['300', '700'],
 });
 
 export const metadata: Metadata = {
-  title: "Advantage",
-  description: "Elevate Your Game.",
+  title: "Advantage Dashboard",
+  description: "Copyright Advantage Analytics LLC",
 };
 
 export default function RootLayout({
@@ -23,10 +20,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        {children}
-      </body>
+    <html lang="en" className={`${inter.variable}`}>
+      <body>{children}</body>
     </html>
   );
 }
