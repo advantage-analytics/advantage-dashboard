@@ -23,6 +23,13 @@ export default function Page() {
           You&apos;ve successfully signed up. Please check your email to confirm
           your account before signing in.
         </p>
+        <p className="mt-4 text-[16px] leading-[22px]">
+          If you don&apos;t receive an email within a few minutes, you may already have an account. Try{" "}
+          <a href="/auth/login" className="underline underline-offset-2">
+            signing in
+          </a>{" "}
+          instead.
+        </p>
       </div>
     </div>
   );

@@ -126,15 +126,15 @@ export function SignUpForm({
                   <span className="inline-flex flex-wrap items-baseline gap-0 align-baseline">
                     <span>By signing up, you agree to our</span>
                     <Link
-                      href="/terms"
-                      className="mx-[4px] inline-block font-semibold underline underline-offset-2"
+                      href="/legal/terms-and-conditions"
+                      className="mx-[4px] inline-block font-medium underline underline-offset-2 text-foreground"
                     >
                       Terms
                     </Link>
                     <span>and</span>
                     <Link
-                      href="/privacy"
-                      className="mx-[4px] inline-block font-semibold underline underline-offset-2"
+                      href="/legal/privacy-policy"
+                      className="mx-[4px] inline-block font-medium underline underline-offset-2 text-foreground"
                     >
                       Privacy Policy.
                     </Link>

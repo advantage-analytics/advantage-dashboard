@@ -6,9 +6,9 @@ import { SignUpForm } from "@/components/auth/sign-up-form";
 export default function Page() {
   return (
     <>
-      <h1 className="text-2xl font-semibold">Create your account</h1>
+      <h1 className="text-2xl font-medium">Create your account</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+        Unlock data-driven insights for your game.
       </p>
 
       <div className="mt-6">
