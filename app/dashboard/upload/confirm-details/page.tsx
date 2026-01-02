@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import ConfirmDetailsForm from "./ConfirmDetailsForm";
 
-export default async function Page() {
+export default async function ConfirmDetailsPage() {
   const supabase = await createClient();
 
   const { data, error } = await supabase.auth.getClaims();
@@ -9,6 +10,5 @@ export default async function Page() {
     redirect("/auth/login");
   }
 
-  // Redirect to the first step of the upload process
-  redirect("/dashboard/upload/choose-provider");
+  return <ConfirmDetailsForm />;
 }
