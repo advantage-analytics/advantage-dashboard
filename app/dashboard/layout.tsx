@@ -2,13 +2,11 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
-import { AppSidebar } from "@/components/dashboard/app-sidebar"
-import { DashboardHeader } from "@/components/dashboard/dashboard-header"
+import Header from "@/app/dashboard/header";
 
 /**
  * Dashboard Layout Component
- * 
+ *
  * MODIFICATIONS MADE IN THIS SESSION:
  * 1. Added upload data cleanup when leaving the upload flow
  * 2. Clears localStorage data (selectedProvider, uploadFormData, uploadedFile) when navigating away from upload pages
@@ -32,13 +30,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   return (
-    <SidebarProvider>
-      <AppSidebar />
-      <main className="flex-1 w-full">
-        <SidebarTrigger />
-        <DashboardHeader />
+    <div className="flex min-h-screen bg-white">
+      {/* <AppSidebar /> */}
+      <main className="flex-1 relative">
+        <Header />
         {children}
       </main>
-    </SidebarProvider>
+    </div>
   )
 }
