@@ -2,7 +2,8 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
-import Header from "@/app/dashboard/header";
+import { Header } from "@/app/dashboard/header";
+// import { AppSidebar } from "@/components/dashboard/app-sidebar";
 
 /**
  * Dashboard Layout Component
@@ -30,10 +31,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   return (
-    <div className="flex min-h-screen bg-white">
-      {/* <AppSidebar /> */}
-      <main className="flex-1 relative">
-        <Header />
+    <div className="min-h-screen bg-white">
+      <Header />
+      <main>
         {children}
       </main>
     </div>
