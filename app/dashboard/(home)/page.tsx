@@ -12,14 +12,17 @@ export default async function Home() {
 
   return (
     <div className="flex-1 w-full bg-white">
-      {/* Hero Background Section */}
-      <div className="relative w-full h-[360px] overflow-hidden">
+      {/* Hero Background - Fixed to viewport */}
+      <div className="fixed top-0 left-0 right-0 h-[360px] overflow-hidden -z-0">
         <img
           src="/hero.png"
           alt="Hero"
           className="absolute inset-0 w-full h-full object-cover object-center"
         />
+      </div>
 
+      {/* Hero Content Section */}
+      <div className="relative w-full h-[360px]">
         {/* Welcome Message Overlay */}
         <div className="absolute top-[136px] left-8 z-20">
           <WelcomeMessage name="Clajerson Gimena" />
@@ -28,7 +31,7 @@ export default async function Home() {
 
       {/* Main Content */}
       <div className="p-8">
-       
+
       </div>
     </div>
   );

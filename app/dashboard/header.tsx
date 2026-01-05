@@ -1,10 +1,18 @@
+"use client";
+
 import { Bell, Menu, Search } from "lucide-react";
+import { useSidebar } from "@/components/ui/sidebar";
 
 export function Header() {
+  const { toggleSidebar } = useSidebar();
+
   return (
     <header className="absolute top-0 left-0 right-0 z-30 flex items-center gap-4 px-8 py-6">
       {/* Left: Navigation Sidebar Button */}
-      <button className="transition-transform duration-200 ease-out hover:scale-120">
+      <button
+        onClick={toggleSidebar}
+        className="transition-transform duration-200 ease-out hover:scale-120"
+      >
         <Menu className="h-5 w-5 text-white" />
       </button>
 

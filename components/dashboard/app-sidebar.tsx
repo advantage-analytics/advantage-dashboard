@@ -5,10 +5,10 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   House,
-  CalendarDays,
+  Calendars,
   ChartColumnIncreasing,
   Settings,
-  CircleHelp,
+  Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -23,13 +23,13 @@ import {
 
 const MAIN_LINKS = [
   { name: "Home", href: "/dashboard", icon: House },
-  { name: "Matches", href: "/dashboard/matches", icon: CalendarDays },
+  { name: "Matches", href: "/dashboard/matches", icon: Calendars },
   { name: "Statistics", href: "/dashboard/statistics", icon: ChartColumnIncreasing },
 ] as const;
 
 const BOTTOM_LINKS = [
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
-  { name: "Help Center", href: "/dashboard/help", icon: CircleHelp },
+  { name: "Help Center", href: "/dashboard/help", icon: Info },
 ] as const;
 
 export function AppSidebar() {
@@ -37,7 +37,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar
-      collapsible="none"
+      collapsible="offcanvas"
       className="h-screen border-r border-gray-200 bg-white"
     >
       {/* Logo Section - 40px (pt-10) from top, 40px (mb-10) gap to nav */}
@@ -73,8 +73,8 @@ export function AppSidebar() {
                   )}
                 >
                   <Link href={href}>
-                    <Icon className="w-5 h-5" strokeWidth={1.5} />
-                    <span className="text-sm">{name}</span>
+                    <Icon className="w-5 h-5" strokeWidth={2} />
+                    <span className="text-md">{name}</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -100,8 +100,8 @@ export function AppSidebar() {
                     )}
                   >
                     <Link href={href}>
-                      <Icon className="w-5 h-5" strokeWidth={1.5} />
-                      <span className="text-sm">{name}</span>
+                      <Icon className="w-5 h-5" strokeWidth={2} />
+                      <span className="text-md">{name}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

@@ -12,7 +12,7 @@ export default function WelcomeMessage({
         <p className="font-medium text-white text-3xl">
           Welcome Back, Clajerson Gimena!
         </p>
-        <p className="font-medium text-white text-base">
+        <p className="font-regular text-white text-base">
           Take your game to the next level with data-driven insights.
         </p>
       </div>
