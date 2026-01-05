@@ -3,7 +3,8 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { Header } from "@/app/dashboard/header";
-// import { AppSidebar } from "@/components/dashboard/app-sidebar";
+import { AppSidebar } from "@/components/dashboard/app-sidebar";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 
 /**
  * Dashboard Layout Component
@@ -31,11 +32,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   return (
-    <div className="min-h-screen bg-white">
-      <Header />
-      <main>
-        {children}
-      </main>
-    </div>
-  )
+    <SidebarProvider style={{ "--sidebar-width": "240px" } as React.CSSProperties}>
+      <AppSidebar />
+      <SidebarInset className="bg-white">
+        <Header />
+        <main>
+          {children}
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
+  );
 }
