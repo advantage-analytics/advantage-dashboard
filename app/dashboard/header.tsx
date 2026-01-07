@@ -13,7 +13,7 @@ export function Header() {
         onClick={toggleSidebar}
         className="transition-transform duration-200 ease-out hover:scale-120"
       >
-        <Menu className="h-5 w-5 text-white" />
+        <Menu className="h-4 w-4 text-white" />
       </button>
 
       {/* Middle: Search Bar */}
@@ -35,11 +35,11 @@ export function Header() {
       {/* Right: Notifications & Profile */}
       <div className="flex items-center gap-6 shrink-0">
         <button className="transition-transform duration-200 ease-out hover:scale-120">
-          <Bell className="h-5 w-5 text-white" />
+          <Bell className="h-4 w-4 text-white" />
         </button>
 
         {/* Profile Button */}
-        <div className="h-8 w-8 rounded-full bg-gray-100"></div>
+        <div className="h-10 w-10 rounded-full bg-gray-100"></div>
       </div>
     </header>
   );

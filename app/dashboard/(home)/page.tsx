@@ -35,7 +35,7 @@ export default async function Home() {
           </div>
 
           {/* Right Column - Fixed 320px widget */}
-          <div className="w-[400px] flex-shrink-0 ">
+          <div className="w-[320px] flex-shrink-0 ">
             {/* Overall Performance Side Widget goes here */}
             <OverallPerformance/>
           </div>

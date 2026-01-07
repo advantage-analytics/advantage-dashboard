@@ -9,7 +9,7 @@ export default function WelcomeMessage({
     <div className="flex flex-row items-center px-4 gap-6 shrink-0">
       <div className="h-20 w-20 rounded-full bg-gray-100"></div>
       <div className="flex flex-col gap-2">
-        <p className="font-medium text-white text-3xl">
+        <p className="font-medium text-white text-[32px] text-2xl">
           Welcome Back, Clajerson Gimena!
         </p>
         <p className="font-regular text-white text-base">

@@ -68,13 +68,13 @@ export function AppSidebar() {
                   asChild
                   isActive={active}
                   className={cn(
-                    "h-12 px-4 rounded-xl gap-3 text-gray-900 hover:bg-gray-100 hover:text-gray-900",
-                    active && "bg-gray-100 text-gray-900 font-regular"
+                    "h-12 px-4 rounded-xl gap-3 text-gray-900 hover:bg-gray-50 hover:text-gray-900",
+                    active && "bg-gray-50 text-gray-900 font-regular"
                   )}
                 >
                   <Link href={href}>
-                    <Icon className="w-5 h-5" strokeWidth={2} />
-                    <span className="text-md">{name}</span>
+                    <Icon className="w-4 h-4" strokeWidth={2} />
+                    <span className="text-sm">{name}</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -95,13 +95,13 @@ export function AppSidebar() {
                     asChild
                     isActive={active}
                     className={cn(
-                      "h-12 px-4 rounded-xl gap-3 text-gray-900 hover:bg-gray-100 hover:text-gray-900",
-                      active && "bg-gray-100 text-gray-900 font-regular"
+                      "h-12 px-4 rounded-xl gap-3 text-gray-900 hover:bg-gray-50 hover:text-gray-900",
+                      active && "bg-gray-50 text-gray-900 font-regular"
                     )}
                   >
                     <Link href={href}>
-                      <Icon className="w-5 h-5" strokeWidth={2} />
-                      <span className="text-md">{name}</span>
+                      <Icon className="w-4 h-4" strokeWidth={2} />
+                      <span className="text-sm">{name}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
