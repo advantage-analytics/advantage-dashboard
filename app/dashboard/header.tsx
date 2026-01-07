@@ -1,10 +1,16 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { Bell, Menu, Search } from "lucide-react";
 import { useSidebar } from "@/components/ui/sidebar";
+import { cn } from "@/lib/utils";
 
 export function Header() {
   const { toggleSidebar } = useSidebar();
+  const pathname = usePathname();
+
+  const isHomePage = pathname === "/dashboard";
+  const iconColor = isHomePage ? "text-white" : "text-[#0D0D0D]";
 
   return (
     <header className="absolute top-0 left-0 right-0 z-30 flex items-center gap-4 px-8 py-6">
@@ -13,7 +19,7 @@ export function Header() {
         onClick={toggleSidebar}
         className="transition-transform duration-200 ease-out hover:scale-120"
       >
-        <Menu className="h-4 w-4 text-white" />
+        <Menu className={cn("h-4 w-4", iconColor)} />
       </button>
 
       {/* Middle: Search Bar */}
@@ -23,11 +29,14 @@ export function Header() {
           <input
             type="search"
             placeholder="Search..."
-            className="w-full h-10 pl-10 pr-4 rounded-full backdrop-blur text-[14px] text-gray-500 outline-none focus:outline-none focus:ring-0 [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-cancel-button]:cursor-pointer [&::-webkit-search-cancel-button]:opacity-70 hover:[&::-webkit-search-cancel-button]:opacity-100"
-            style={{
+            className={cn(
+              "w-full h-10 pl-10 pr-4 rounded-full text-[14px] text-gray-500 outline-none focus:outline-none focus:ring-0 [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-cancel-button]:cursor-pointer [&::-webkit-search-cancel-button]:opacity-70 hover:[&::-webkit-search-cancel-button]:opacity-100",
+              isHomePage ? "backdrop-blur" : "bg-[#F2F2F2]"
+            )}
+            style={isHomePage ? {
               backgroundColor: "rgba(255, 255, 255, 0.4)",
               mixBlendMode: "luminosity",
-            }}
+            } : undefined}
           />
         </div>
       </div>
@@ -35,7 +44,7 @@ export function Header() {
       {/* Right: Notifications & Profile */}
       <div className="flex items-center gap-6 shrink-0">
         <button className="transition-transform duration-200 ease-out hover:scale-120">
-          <Bell className="h-4 w-4 text-white" />
+          <Bell className={cn("h-4 w-4", iconColor)} />
         </button>
 
         {/* Profile Button */}

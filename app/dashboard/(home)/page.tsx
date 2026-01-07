@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import WelcomeMessage from "@/components/dashboard/home/welcome-message";
 import OverallPerformance from "./overall-performance";
-import RecentActivity from "./recent-activity";
+import HomeContent from "./home-content";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function Home() {
@@ -28,14 +28,14 @@ export default async function Home() {
         {/* Two Column Layout */}
         <div className="flex flex-row gap-8">
           {/* Left Column - Flexible width, expands when sidebar toggles */}
-          <div className="flex-1 flex flex-col gap-8">
+          <div className="flex-1 flex flex-col gap-18">
             <WelcomeMessage name="Clajerson Gimena" />
-            {/* Recent Activity Widget */}
-            <RecentActivity />
+            {/* Navigation Tabs + Tab Content */}
+            <HomeContent />
           </div>
 
           {/* Right Column - Fixed 320px widget */}
-          <div className="w-[320px] flex-shrink-0 ">
+          <div className="sticky top-8 w-[320px] flex-shrink-0 self-start h-fit">
             {/* Overall Performance Side Widget goes here */}
             <OverallPerformance/>
           </div>

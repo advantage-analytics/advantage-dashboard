@@ -69,7 +69,7 @@ export function AppSidebar() {
                   isActive={active}
                   className={cn(
                     "h-12 px-4 rounded-xl gap-3 text-gray-900 hover:bg-gray-50 hover:text-gray-900",
-                    active && "bg-gray-50 text-gray-900 font-regular"
+                    active && "bg-gray-50 text-gray-900 font-normal"
                   )}
                 >
                   <Link href={href}>
@@ -96,7 +96,7 @@ export function AppSidebar() {
                     isActive={active}
                     className={cn(
                       "h-12 px-4 rounded-xl gap-3 text-gray-900 hover:bg-gray-50 hover:text-gray-900",
-                      active && "bg-gray-50 text-gray-900 font-regular"
+                      active && "bg-gray-50 text-gray-900 font-normal"
                     )}
                   >
                     <Link href={href}>
