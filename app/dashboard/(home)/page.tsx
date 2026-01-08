@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import WelcomeMessage from "@/components/dashboard/home/welcome-message";
 import OverallPerformance from "./overall-performance";
 import HomeContent from "./home-content";
+import { UpcomingMatch } from "@/components/dashboard/home/upcoming-match";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function Home() {
@@ -35,9 +36,11 @@ export default async function Home() {
           </div>
 
           {/* Right Column - Fixed 320px widget */}
-          <div className="sticky top-8 w-[320px] flex-shrink-0 self-start h-fit">
+          <div className="sticky top-8 w-[320px] flex-shrink-0 self-start h-fit flex flex-col gap-5">
             {/* Overall Performance Side Widget goes here */}
             <OverallPerformance/>
+            {/* Upcoming Match */}
+            <UpcomingMatch />
           </div>
         </div>
       </div>
