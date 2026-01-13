@@ -17,11 +17,17 @@ interface NavigationTabsProps {
   onTabChange: (tab: TabType) => void;
 }
 
-export default function NavigationTabs({ activeTab, onTabChange }: NavigationTabsProps) {
+export default function NavigationTabs({
+  activeTab,
+  onTabChange,
+}: NavigationTabsProps) {
   return (
     <div className="flex flex-row justify-center items-center gap-4">
       {/* Tab Container */}
-      <div className="flex flex-row items-center justify-between gap-[15px] p-1 bg-white rounded-full" style={{ width: 400, height: 32 }}>
+      <div
+        className="flex flex-row items-center justify-between gap-[15px] p-1 bg-white rounded-full"
+        style={{ width: 400, height: 32 }}
+      >
         {TABS.map(({ name, id }) => {
           const isActive = activeTab === id;
 
@@ -46,7 +52,9 @@ export default function NavigationTabs({ activeTab, onTabChange }: NavigationTab
               <span
                 className={cn(
                   "relative z-10 transition-colors duration-200",
-                  isActive ? "text-[#999999]" : "text-[#CCCCCC] hover:text-[#999999]"
+                  isActive
+                    ? "text-[#999999]"
+                    : "text-[#CCCCCC] hover:text-[#999999]"
                 )}
               >
                 {name}
@@ -59,7 +67,7 @@ export default function NavigationTabs({ activeTab, onTabChange }: NavigationTab
       {/* Create Match Button */}
       <Link
         href="/dashboard/upload"
-        className="flex items-center justify-center px-3 py-2.5 bg-[#1D1D1F] text-white text-xs font-medium rounded-2xl hover:bg-[#2D2D2D] transition-colors"
+        className="flex items-center justify-center px-3 py-2.5 bg-[#3986F3] text-white text-xs font-medium rounded-2xl hover:bg-[#2D2D2D] transition-colors"
         style={{ width: 102, height: 32 }}
       >
         Create Match

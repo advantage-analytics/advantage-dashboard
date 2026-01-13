@@ -25,18 +25,22 @@ export function Header() {
       {/* Middle: Search Bar */}
       <div className="flex-1 max-w-md mx-auto">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 z-10 pointer-events-none" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white z-10 pointer-events-none" />
           <input
             type="search"
             placeholder="Search..."
             className={cn(
-              "w-full h-10 pl-10 pr-4 rounded-full text-[14px] text-gray-500 outline-none focus:outline-none focus:ring-0 [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-cancel-button]:cursor-pointer [&::-webkit-search-cancel-button]:opacity-70 hover:[&::-webkit-search-cancel-button]:opacity-100",
+              "w-full h-10 pl-10 pr-4 rounded-full text-[14px] text-white outline-none focus:outline-none focus:ring-0 [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-cancel-button]:cursor-pointer [&::-webkit-search-cancel-button]:opacity-70 hover:[&::-webkit-search-cancel-button]:opacity-100",
               isHomePage ? "backdrop-blur" : "bg-[#F2F2F2]"
             )}
-            style={isHomePage ? {
-              backgroundColor: "rgba(255, 255, 255, 0.4)",
-              mixBlendMode: "luminosity",
-            } : undefined}
+            style={
+              isHomePage
+                ? {
+                    backgroundColor: "rgba(255, 255, 255, 0.4)",
+                    mixBlendMode: "luminosity",
+                  }
+                : undefined
+            }
           />
         </div>
       </div>
