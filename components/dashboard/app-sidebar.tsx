@@ -3,13 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import {
-  House,
-  Calendars,
-  ChartColumnIncreasing,
-  Settings,
-  Info,
-} from "lucide-react";
+import { House, Calendars, ChartColumnIncreasing, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Sidebar,
@@ -24,11 +18,14 @@ import {
 const MAIN_LINKS = [
   { name: "Home", href: "/dashboard", icon: House },
   { name: "Matches", href: "/dashboard/matches", icon: Calendars },
-  { name: "Statistics", href: "/dashboard/statistics", icon: ChartColumnIncreasing },
+  {
+    name: "Statistics",
+    href: "/dashboard/statistics",
+    icon: ChartColumnIncreasing,
+  },
 ] as const;
 
 const BOTTOM_LINKS = [
-  { name: "Settings", href: "/dashboard/settings", icon: Settings },
   { name: "Help Center", href: "/dashboard/help", icon: Info },
 ] as const;
 
@@ -68,13 +65,13 @@ export function AppSidebar() {
                   asChild
                   isActive={active}
                   className={cn(
-                    "h-12 px-4 rounded-xl gap-3 text-gray-900 hover:bg-gray-50 hover:text-gray-900",
-                    active && "bg-gray-50 text-gray-900 font-normal"
+                    "h-10 px-4 py-3 rounded-lg gap-3 text-[#0D0D0D] font-normal hover:bg-[#F9F9F9] hover:text-[#0D0D0D]",
+                    active && "bg-[#F9F9F9] text-[#0D0D0D] font-normal"
                   )}
                 >
                   <Link href={href}>
-                    <Icon className="w-4 h-4" strokeWidth={2} />
-                    <span className="text-sm">{name}</span>
+                    <Icon className="w-3 h-3" strokeWidth={2} />
+                    <span className="text-xs">{name}</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -95,13 +92,13 @@ export function AppSidebar() {
                     asChild
                     isActive={active}
                     className={cn(
-                      "h-12 px-4 rounded-xl gap-3 text-gray-900 hover:bg-gray-50 hover:text-gray-900",
-                      active && "bg-gray-50 text-gray-900 font-normal"
+                      "h-10 px-4 py-3 rounded-lg gap-3 text-[#0D0D0D] font-normal hover:bg-[#F9F9F9] hover:text-[#0D0D0D]",
+                      active && "bg-[#F9F9F9] text-[#0D0D0D] font-normal"
                     )}
                   >
                     <Link href={href}>
-                      <Icon className="w-4 h-4" strokeWidth={2} />
-                      <span className="text-sm">{name}</span>
+                      <Icon className="w-3 h-3" strokeWidth={2} />
+                      <span className="text-xs">{name}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
