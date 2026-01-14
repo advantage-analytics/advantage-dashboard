@@ -24,6 +24,8 @@ export interface FormData {
   opponentName: string;
   playerScores: number[];
   opponentScores: number[];
+  matchType?: string;
+  courtType?: string;
 }
 
 /** Uploaded file metadata and data */
@@ -85,7 +87,9 @@ export const DEFAULT_FORM_DATA: FormData = {
   playerName: "",
   opponentName: "",
   playerScores: [0, 0, 0],
-  opponentScores: [0, 0, 0]
+  opponentScores: [0, 0, 0],
+  matchType: "",
+  courtType: ""
 };
 
 /** Step order for navigation and indicator */

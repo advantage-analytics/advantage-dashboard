@@ -95,9 +95,9 @@ export function UploadMatchModal({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
         hideCloseButton
-        className="max-w-180 h-120 overflow-y-auto p-6 rounded-2xl flex-1 flex items-center justify-center"
+        className="min-w-180 h-120 overflow-y-auto px-12 py-6 rounded-2xl flex-1 flex items-center justify-center"
       >
-        <div className="flex flex-col justify-between h-full">
+        <div className="flex flex-col justify-between h-full w-full">
           <div className="flex flex-col space-y-4">
             {/* Step Indicator */}
             <StepIndicator
@@ -123,7 +123,7 @@ export function UploadMatchModal({
           </div>
 
           {/* Content */}
-          <div>
+          <div className="w-full">
             {step === "method" && (
               <MethodContent
                 selectedMethod={selectedMethod}

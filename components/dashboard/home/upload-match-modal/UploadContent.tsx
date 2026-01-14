@@ -31,24 +31,32 @@ export function UploadContent({
   onRemoveFile
 }: UploadContentProps) {
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col items-center gap-6">
       {/* Drag and Drop Area */}
       <div
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
         onDrop={onDrop}
-        className={`border-2 border-dashed rounded-xl p-12 flex flex-col items-center justify-center ${
-          isOver ? "border-blue-500 bg-blue-50" : "border-blue-400"
+        className={`w-full border-2 border-dashed rounded-[4px] flex flex-col items-center justify-center py-12 px-6 ${
+          isOver ? "border-blue-500 bg-blue-50" : "border-blue-500"
         }`}
       >
         <FolderOpen className="h-12 w-12 text-blue-500 mb-4" />
-        <p className="text-sm text-gray-700 mb-2">Drag your file(s) to start uploading</p>
-        <p className="text-xs text-gray-400 mb-4">OR</p>
-        <label htmlFor="upload-input-modal">
+        <p className="text-[#0D0D0D] font-normal text-sm mb-4">
+          Drag your file(s) to start uploading
+        </p>
+        
+        {/* OR Separator */}
+        <div className="flex items-center gap-2 w-full mb-4">
+          <div className="flex-1 h-px bg-[#E5E5E5]"></div>
+          <span className="text-[#999999] font-normal text-xs uppercase">OR</span>
+          <div className="flex-1 h-px bg-[#E5E5E5]"></div>
+        </div>
+        
+        <label htmlFor="upload-input-modal" className="cursor-pointer">
           <Button
             type="button"
-            variant="outline"
-            className="cursor-pointer"
+            className="bg-blue-500 text-white border border-blue-500 rounded-[4px] px-4 py-2 hover:bg-blue-600 transition-colors shadow-none"
             onClick={() => document.getElementById("upload-input-modal")?.click()}
           >
             Browse files
@@ -63,28 +71,30 @@ export function UploadContent({
         />
       </div>
 
-      <p className="text-xs text-gray-500">Only support .csv files</p>
+      {/* File Type Restriction */}
+      <p className="text-[#999999] font-normal text-xs self-start">
+        Only support .csv files
+      </p>
 
       {/* Uploaded File Card */}
       {uploadedFile && (
-        <div className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-lg">
+        <div className="w-full flex items-center justify-between p-4 bg-white border border-[#E5E5E5] rounded-[4px]">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-black rounded flex items-center justify-center">
+            <div className="w-10 h-10 bg-[#0D0D0D] rounded flex items-center justify-center">
               <FolderOpen className="h-5 w-5 text-white" />
             </div>
             <div>
-              <p className="text-sm font-medium">{uploadedFile.name}</p>
-              <p className="text-xs text-gray-500">{uploadedFile.size}</p>
+              <p className="text-[#0D0D0D] font-medium text-xs">{uploadedFile.name}</p>
+              <p className="text-[#999999] font-normal text-xs">{uploadedFile.size}</p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
+          <button
+            type="button"
             onClick={onRemoveFile}
-            className="text-gray-400 hover:text-gray-600"
+            className="w-6 h-6 rounded-full bg-[#F7F7F7] flex items-center justify-center text-[#999999] hover:text-[#0D0D0D] hover:bg-[#E5E5E5] transition-colors"
           >
-            <X className="h-4 w-4" />
-          </Button>
+            <X className="h-3.5 w-3.5" />
+          </button>
         </div>
       )}
     </div>

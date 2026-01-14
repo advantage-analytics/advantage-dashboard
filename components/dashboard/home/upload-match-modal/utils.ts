@@ -5,10 +5,11 @@
 import { FormData, WinnerLoserResult, MatchData } from "./types";
 
 /**
- * Get the number of sets based on the "best of" format
+ * Get the number of sets
  */
 export function getNumberOfSets(bestOf: string): number {
-  return bestOf === "5" ? 5 : 3;
+  const num = parseInt(bestOf);
+  return isNaN(num) ? 3 : num;
 }
 
 /**

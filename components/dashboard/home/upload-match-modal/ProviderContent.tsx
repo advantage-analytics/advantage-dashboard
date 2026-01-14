@@ -14,7 +14,8 @@ export interface ProviderContentProps {
 
 export function ProviderContent({ selectedProvider, onProviderSelect }: ProviderContentProps) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-[24px]">
+    <div className="flex justify-center">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-[24px]">
       {providers.map((provider) => (
         <div
           key={provider.id}
@@ -32,6 +33,7 @@ export function ProviderContent({ selectedProvider, onProviderSelect }: Provider
           </div>
         </div>
       ))}
+      </div>
     </div>
   );
 }
