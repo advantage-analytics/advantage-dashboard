@@ -33,6 +33,7 @@ export interface UseUploadMatchModalProps {
 export interface UseUploadMatchModalReturn {
   // State
   step: Step;
+  selectedMethod: string | null;
   selectedProvider: string | null;
   sourceType: string;
   uploadedFile: UploadedFile | null;
@@ -44,8 +45,9 @@ export interface UseUploadMatchModalReturn {
 
   // Step navigation
   setStep: (step: Step) => void;
-  handleMethodSelect: () => void;
-  handleProviderSelect: (providerId: string) => void;
+  handleMethodSelect: (methodId: string | null) => void;
+  handleMethodContinue: () => void;
+  handleProviderSelect: (providerId: string | null) => void;
   handleProviderContinue: () => void;
   handleUploadContinue: () => void;
   handleDetailsContinue: () => void;
@@ -77,6 +79,7 @@ export function useUploadMatchModal({
 
   // State
   const [step, setStep] = useState<Step>("method");
+  const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [sourceType, setSourceType] = useState<string>("Swingvision");
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
@@ -107,13 +110,23 @@ export function useUploadMatchModal({
   }, [open]);
 
   // Step navigation handlers
-  const handleMethodSelect = useCallback(() => {
-    setStep("provider");
+  const handleMethodSelect = useCallback((methodId: string | null) => {
+    setSelectedMethod(methodId);
   }, []);
 
-  const handleProviderSelect = useCallback((providerId: string) => {
+  const handleMethodContinue = useCallback(() => {
+    if (selectedMethod) {
+      setStep("provider");
+    }
+  }, [selectedMethod]);
+
+  const handleProviderSelect = useCallback((providerId: string | null) => {
     setSelectedProvider(providerId);
-    localStorage.setItem(STORAGE_KEYS.SELECTED_PROVIDER, providerId);
+    if (providerId) {
+      localStorage.setItem(STORAGE_KEYS.SELECTED_PROVIDER, providerId);
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.SELECTED_PROVIDER);
+    }
   }, []);
 
   const handleProviderContinue = useCallback(() => {
@@ -315,6 +328,7 @@ export function useUploadMatchModal({
   return {
     // State
     step,
+    selectedMethod,
     selectedProvider,
     sourceType,
     uploadedFile,
@@ -327,6 +341,7 @@ export function useUploadMatchModal({
     // Step navigation
     setStep,
     handleMethodSelect,
+    handleMethodContinue,
     handleProviderSelect,
     handleProviderContinue,
     handleUploadContinue,

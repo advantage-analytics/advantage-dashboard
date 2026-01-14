@@ -99,15 +99,15 @@ export const STEP_CONFIG: Record<Step, { title: string; description: string }> =
   },
   provider: {
     title: "Choose Provider",
-    description: "Choose from a variety of protocols such as SwingVision, Goodminton, and many more."
+    description: "Choose from the following Electronic Line Calling (ELC) providers"
   },
   upload: {
-    title: "Upload Match",
-    description: "Upload and specify your match data"
+    title: "Upload File",
+    description: "Upload your documents here"
   },
   details: {
     title: "Match Details",
-    description: "Enter match information and details"
+    description: "Input and correct your match information"
   },
   confirm: {
     title: "Confirm Details",

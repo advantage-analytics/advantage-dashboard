@@ -5,57 +5,54 @@
  * Two cards for selecting analysis method
  */
 
-import { Card, CardContent } from "@/components/ui/card";
-
 export interface MethodContentProps {
-  onMethodSelect: () => void;
+  selectedMethod: string | null;
+  onMethodSelect: (methodId: string | null) => void;
 }
 
-export function MethodContent({ onMethodSelect }: MethodContentProps) {
+export function MethodContent({ selectedMethod, onMethodSelect }: MethodContentProps) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <Card
-        className="cursor-pointer hover:shadow-lg transition-shadow"
-        onClick={onMethodSelect}
+    <div className="flex justify-center gap-6">
+      <div
+        className={`w-[240px] h-[252px] cursor-pointer hover:shadow-lg transition-all duration-200 rounded-2xl relative overflow-hidden ${
+          selectedMethod === "elc" ? "scale-105" : ""
+        }`}
+        onClick={() => onMethodSelect(selectedMethod === "elc" ? null : "elc")}
       >
-        <CardContent className="p-6">
-          <div className="space-y-4">
-            <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden">
-              <img
-                src="/tennis-court.jpg"
-                alt="Tennis Court"
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                  e.currentTarget.parentElement!.innerHTML = '<span class="text-gray-400">Tennis Court Image</span>';
-                }}
-              />
-            </div>
-            <div>
-              <h3 className="font-semibold mb-2">Electronic Line Calling</h3>
-              <p className="text-sm text-muted-foreground">
-                Choose from a variety of protocols such as SwingVision, BaselineVision, and many more.
-              </p>
-            </div>
+        <img
+          src="/elc-image.png"
+          alt="Electronic Line Calling"
+          className="absolute inset-0 w-full h-full object-cover scale-100 origin-top"
+        />
+        <div className="absolute bottom-0 left-0 right-0 h-32 z-10">
+          <div className="absolute inset-0 backdrop-blur-[12px]" style={{ maskImage: 'linear-gradient(to top, black, transparent)', WebkitMaskImage: 'linear-gradient(to top, black, transparent)' }} />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/[0.7412] to-transparent" />
+          <div className="absolute bottom-0 left-0 right-0 px-4 pb-4 space-y-1.5">
+            <p className="italic font-medium text-xs text-white">Electronic Line Calling</p>
+            <p className="text-[10px] text-normal text-white/80">
+              Choose from a variety of providers such as SwingVision, BaselineVision, and many more.
+            </p>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      <Card className="opacity-50 cursor-not-allowed">
-        <CardContent className="p-6">
-          <div className="space-y-4">
-            <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center">
-              <span className="text-gray-400 font-semibold">ADVANTAGE</span>
-            </div>
-            <div>
-              <h3 className="font-semibold mb-2">Coming Soon</h3>
-              <p className="text-sm text-muted-foreground">
-                Choose to label with Advantage Intelligence or traditional labeling techniques.
-              </p>
-            </div>
+      <div className="w-[240px] h-[252px] opacity-50 cursor-not-allowed rounded-2xl relative overflow-hidden bg-white border-[0.5px] border-[#EAECF0]">
+        <img
+          src="/logo.svg"
+          alt="Advantage"
+          className="absolute top-[92px] left-1/2 -translate-x-1/2 w-[78px] h-[14px]"
+        />
+        <div className="absolute bottom-0 left-0 right-0 h-32 z-10">
+          <div className="absolute inset-0 backdrop-blur-[12px]" style={{ maskImage: 'linear-gradient(to top, black, transparent)', WebkitMaskImage: 'linear-gradient(to top, black, transparent)' }} />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/[0.7412] to-transparent" />
+          <div className="absolute bottom-0 left-0 right-0 px-4 pb-4 space-y-1.5">
+            <p className="italic font-medium text-xs text-[#0D0D0D]">Coming Soon</p>
+            <p className="text-[10px] text-normal text-gray-800">
+              Choose to label with Advantage Intelligence or traditional labeling techniques.
+            </p>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

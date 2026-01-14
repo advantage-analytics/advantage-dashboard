@@ -12,16 +12,16 @@ interface StepIndicatorProps {
 
 export function StepIndicator({ currentStep, totalSteps }: StepIndicatorProps) {
   return (
-    <div className="flex justify-center gap-2 mb-4">
+    <div className="flex justify-center gap-1">
       {Array.from({ length: totalSteps }, (_, index) => (
         <div
           key={index}
-          className={`w-2 h-2 rounded-full transition-colors ${
+          className={`h-1 rounded-full transition-all ${
             index === currentStep
-              ? "bg-blue-500"
+              ? "w-10 bg-[#7BABED]"
               : index < currentStep
-              ? "bg-gray-400"
-              : "bg-gray-200"
+              ? "w-3 bg-[#7BABED]"
+              : "w-3 bg-gray-200"
           }`}
         />
       ))}

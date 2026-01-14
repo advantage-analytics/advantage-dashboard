@@ -5,27 +5,32 @@
  * Grid of provider cards for selection
  */
 
-import { ProviderCard } from "@/components/dashboard/upload/provider-card";
 import { providers } from "@/lib/providers";
 
 export interface ProviderContentProps {
   selectedProvider: string | null;
-  onProviderSelect: (providerId: string) => void;
+  onProviderSelect: (providerId: string | null) => void;
 }
 
 export function ProviderContent({ selectedProvider, onProviderSelect }: ProviderContentProps) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-[24px]">
       {providers.map((provider) => (
-        <ProviderCard
+        <div
           key={provider.id}
-          id={provider.id}
-          name={provider.name}
-          description={provider.description}
-          logo={provider.logo}
-          onClick={onProviderSelect}
-          isSelected={selectedProvider === provider.id}
-        />
+          className={`w-[280px] h-[140px] cursor-pointer transition-all duration-200 rounded-xl bg-white border border-[#EAECF0] overflow-hidden ${
+            selectedProvider === provider.id ? 'scale-105' : ''
+          }`}
+          onClick={() => onProviderSelect(selectedProvider === provider.id ? null : provider.id)}
+        >
+          <div className="w-full h-full flex items-center justify-center p-6">
+            <img
+              src={provider.logo}
+              alt={provider.name}
+              className="w-[232px] h-[92px] object-contain"
+            />
+          </div>
+        </div>
       ))}
     </div>
   );
