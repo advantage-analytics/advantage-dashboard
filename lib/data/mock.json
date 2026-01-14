@@ -191,5 +191,22 @@
       ]
     }
   ],
-  "upcomingMatches": []
+  "upcomingMatches": [],
+  "overallPerformance": {
+    "views": [
+      { "wins": 4, "losses": 3, "label": "Overall Record" },
+      { "wins": 3, "losses": 1, "label": "Last 30 Days" },
+      { "wins": 1, "losses": 1, "label": "Last 7 Days" }
+    ],
+    "performanceRatings": [
+      { "label": "Serve", "value": 200.0, "barColor": "#666666" },
+      { "label": "Return", "value": 159.0, "barColor": "#4A90E2" },
+      { "label": "Under Pressure", "value": 165.0, "barColor": "#666666" }
+    ],
+    "recentPerformance": [
+      { "label": "First Serve In Percentage", "value": 0.0, "change": 4.5 },
+      { "label": "First Serve Won Percentage", "value": 0.0, "change": 4.5 },
+      { "label": "Second Serve Won Percentage", "value": 0.0, "change": 4.5 }
+    ]
+  }
 }

@@ -1,25 +1,22 @@
 "use client";
 
+import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { CircularProgressRing } from "@/components/dashboard/home/circular-progress-ring";
 import { PerformanceRating } from "@/components/dashboard/home/performance-rating";
 import { RecentPerformance } from "@/components/dashboard/home/recent-performance";
+import mockData from "@/lib/data/mock.json";
 
 export default function OverallPerformance() {
-  // Constant values as requested
-  const wins = 0;
-  const losses = 0;
+  const { views, performanceRatings, recentPerformance } =
+    mockData.overallPerformance;
 
-  const serveRating = 0.0;
-  const returnRating = 0.0;
-  const netRating = 0.0; // Assuming third is "Net" based on tennis context
+  const [currentViewIndex, setCurrentViewIndex] = useState(0);
+  const currentView = views[currentViewIndex];
 
-  const firstServeInPercentage = 0.0;
-  const firstServeWonPercentage = 0.0;
-  const secondServeWonPercentage = 0.0;
-  const firstServeInChange = 4.5;
-  const firstServeWonChange = 4.5;
-  const secondServeWonChange = 4.5;
+  const handleCycleView = () => {
+    setCurrentViewIndex((prev) => (prev + 1) % views.length);
+  };
 
   return (
     <div className="bg-white border-[#D9D9D9] border-2 p-6 rounded-2xl flex flex-col">
@@ -40,12 +37,26 @@ export default function OverallPerformance() {
 
       {/* Overall Performance Section */}
       <div className="mb-5">
-        <CircularProgressRing wins={wins} losses={losses} />
+        <CircularProgressRing
+          wins={currentView.wins}
+          losses={currentView.losses}
+          label={currentView.label}
+          onClick={handleCycleView}
+        />
         {/* Pagination dots */}
         <div className="flex justify-center gap-1.5 mt-4">
-          <div className="w-1.5 h-1.5 rounded-full bg-[#E5E5E5]"></div>
-          <div className="w-1.5 h-1.5 rounded-full bg-[#E5E5E5]"></div>
-          <div className="w-1.5 h-1.5 rounded-full bg-[#E5E5E5]"></div>
+          {views.map((_, index) => (
+            <button
+              key={index}
+              onClick={() => setCurrentViewIndex(index)}
+              className={`rounded-full transition-all ${
+                index === currentViewIndex
+                  ? "w-4 h-1 bg-[#4A90E2]"
+                  : "w-1 h-1 bg-[#E5E5E5]"
+              }`}
+              aria-label={`View ${index + 1}: ${views[index].label}`}
+            />
+          ))}
         </div>
       </div>
 
@@ -55,45 +66,32 @@ export default function OverallPerformance() {
           Performance Rating
         </p>
         <div className="space-y-5 px-2">
-          <PerformanceRating
-            label="Serve"
-            value={serveRating}
-            barColor="#666666"
-          />
-          <PerformanceRating
-            label="Return"
-            value={returnRating}
-            barColor="#4A90E2"
-          />
-          <PerformanceRating
-            label="Serve"
-            value={netRating}
-            barColor="#666666"
-          />
+          {performanceRatings.map((rating, index) => (
+            <PerformanceRating
+              key={index}
+              label={rating.label}
+              value={rating.value}
+              barColor={rating.barColor}
+            />
+          ))}
         </div>
       </div>
 
       {/* Recent Performance Section */}
-      <div>
-        <p className="font-medium text-base text-[#0D0D0D] mb-4">
+      <div className="flex flex-col space-y-4">
+        <p className="font-medium text-base text-[#0D0D0D]">
           Recent Performance
         </p>
-        <div className="space-y-5">
-          <RecentPerformance
-            value={firstServeInPercentage}
-            change={firstServeInChange}
-            label="First Serve In Percentage"
-          />
-          <RecentPerformance
-            value={firstServeWonPercentage}
-            change={firstServeWonChange}
-            label="First Serve Won Percentage"
-          />
-          <RecentPerformance
-            value={secondServeWonPercentage}
-            change={secondServeWonChange}
-            label="Second Serve Won Percentage"
-          />
+        <div className="flex flex-col space-y-4">
+          {recentPerformance.map((perf, index) => (
+            <RecentPerformance
+              key={index}
+              value={perf.value}
+              change={perf.change}
+              label={perf.label}
+              index={index}
+            />
+          ))}
         </div>
       </div>
     </div>

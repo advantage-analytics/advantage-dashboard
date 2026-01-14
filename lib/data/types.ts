@@ -42,7 +42,27 @@ export interface UpcomingMatch {
   matchType: string;
 }
 
+export interface PerformanceRatingData {
+  label: string;
+  value: number;
+  barColor: string;
+}
+
+export interface RecentPerformanceData {
+  label: string;
+  value: number;
+  change: number;
+}
+
+export interface OverallPerformanceData {
+  wins: number;
+  losses: number;
+  performanceRatings: PerformanceRatingData[];
+  recentPerformance: RecentPerformanceData[];
+}
+
 export interface MockData {
   recentMatches: Match[];
   upcomingMatches: UpcomingMatch[];
+  overallPerformance: OverallPerformanceData;
 }

@@ -38,7 +38,7 @@ export default async function Home() {
           {/* Right Column - Fixed 320px widget */}
           <div className="sticky top-8 w-[320px] flex-shrink-0 self-start h-fit flex flex-col gap-5">
             {/* Overall Performance Side Widget goes here */}
-            <OverallPerformance/>
+            <OverallPerformance />
             {/* Upcoming Match */}
             <UpcomingMatch />
           </div>
