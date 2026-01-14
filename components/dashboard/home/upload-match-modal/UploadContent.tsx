@@ -37,11 +37,11 @@ export function UploadContent({
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
         onDrop={onDrop}
-        className={`w-full border-2 border-dashed rounded-[4px] flex flex-col items-center justify-center py-12 px-6 ${
-          isOver ? "border-blue-500 bg-blue-50" : "border-blue-500"
+        className={`w-full border-2 border-dashed rounded-2xl flex flex-col items-center justify-center py-8 px-4 ${
+          isOver ? "border-[#3986F3] bg-blue-50" : "border-[#3986F3]"
         }`}
       >
-        <FolderOpen className="h-12 w-12 text-blue-500 mb-4" />
+        <FolderOpen className="h-8 w-8 text-[#3986F3] mb-4" />
         <p className="text-[#0D0D0D] font-normal text-sm mb-4">
           Drag your file(s) to start uploading
         </p>
@@ -56,7 +56,7 @@ export function UploadContent({
         <label htmlFor="upload-input-modal" className="cursor-pointer">
           <Button
             type="button"
-            className="bg-blue-500 text-white border border-blue-500 rounded-[4px] px-4 py-2 hover:bg-blue-600 transition-colors shadow-none"
+            className="bg-white border-3 text-[#3986F3] text-xs border border-[#3986F3] rounded-lg px-4 py-1 hover:bg-blue-400 transition-colors shadow-none"
             onClick={() => document.getElementById("upload-input-modal")?.click()}
           >
             Browse files

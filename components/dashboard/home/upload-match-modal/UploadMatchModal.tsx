@@ -178,7 +178,7 @@ export function UploadMatchModal({
             <Button
               onClick={getContinueHandler()}
               disabled={isContinueDisabled()}
-              className={`w-[85px] h-[27px] rounded-full text-sm ${
+              className={`w-[85px] h-[31px] rounded-full text-xs ${
                 isContinueDisabled()
                   ? "bg-[#F7F7F7] text-[#999999]"
                   : "bg-[#0D0D0D] text-white"
