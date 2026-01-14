@@ -22,7 +22,7 @@ export function PerformanceRating({
 
   return (
     <div className="flex flex-row items-end justify-between gap-4">
-      <div className="flex flex-col gap-[1.6px]">
+      <div className="flex flex-col gap-1">
         <span className="text-xs font-medium text-[#999999]">{label}</span>
         <div style={{ filter: "drop-shadow(0px 2px 4px rgba(0, 0, 0, 0.10))" }}>
           <svg width={barWidth} height={barHeight}>
@@ -43,7 +43,11 @@ export function PerformanceRating({
               fill={barColor}
               initial={{ width: 0 }}
               animate={{ width: barWidth * (normalizedValue / 100) }}
-              transition={{ duration: 0.8, delay: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+              transition={{
+                duration: 0.8,
+                delay: 0.2,
+                ease: [0.25, 0.46, 0.45, 0.94],
+              }}
             />
           </svg>
         </div>

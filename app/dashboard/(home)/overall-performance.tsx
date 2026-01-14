@@ -65,7 +65,7 @@ export default function OverallPerformance() {
         <p className="font-medium text-base text-[#0D0D0D] mb-4">
           Performance Rating
         </p>
-        <div className="space-y-5 px-2">
+        <div className="space-y-4 px-2">
           {performanceRatings.map((rating, index) => (
             <PerformanceRating
               key={index}
