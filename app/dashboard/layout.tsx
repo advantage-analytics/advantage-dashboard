@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { Header } from "@/app/dashboard/header";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
+import { PageTransition } from "@/components/dashboard/page-transition";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 
 /**
@@ -34,10 +35,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider style={{ "--sidebar-width": "240px" } as React.CSSProperties}>
       <AppSidebar />
-      <SidebarInset className="bg-white">
+      <SidebarInset className="bg-white h-screen overflow-y-auto">
         <Header />
         <main>
-          {children}
+          <PageTransition>
+            {children}
+          </PageTransition>
         </main>
       </SidebarInset>
     </SidebarProvider>

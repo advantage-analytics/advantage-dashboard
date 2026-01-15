@@ -1,0 +1,28 @@
+"use client";
+
+import { ChevronRight } from "lucide-react";
+
+export default function Upcoming() {
+  return (
+    <div className="bg-white border-[#D9D9D9] border-2 p-6 rounded-2xl h-fit">
+      {/* Heading */}
+      <div className="flex flex-row justify-between items-center mb-6">
+        <div className="flex flex-col">
+          <p className="font-medium text-xl text-[#000000]">Upcoming Matches</p>
+          <p className="font-normal text-sm text-[#999999] mt-1">
+            Your Scheduled Events
+          </p>
+        </div>
+        {/* Navigation Button */}
+        <button className="h-6 w-6 rounded-full bg-[#1D1D1F] flex items-center justify-center hover:bg-[#2D2D2D] transition-colors">
+          <ChevronRight className="h-3 w-3 text-white" />
+        </button>
+      </div>
+
+      {/* Placeholder Content */}
+      <div className="flex flex-col items-center justify-center py-12">
+        <p className="text-sm text-[#999999]">No upcoming matches scheduled</p>
+      </div>
+    </div>
+  );
+}
