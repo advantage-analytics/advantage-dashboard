@@ -15,10 +15,10 @@ export function getNumberOfSets(bestOf: string): number {
 /**
  * Get player scores array adjusted to the correct number of sets
  */
-export function getAdjustedScores(currentScores: number[], bestOf: string): number[] {
+export function getAdjustedScores(currentScores: (number | null)[], bestOf: string): (number | null)[] {
   const sets = getNumberOfSets(bestOf);
   if (currentScores.length < sets) {
-    return [...currentScores, ...Array(sets - currentScores.length).fill(0)];
+    return [...currentScores, ...Array(sets - currentScores.length).fill(null)];
   }
   return currentScores.slice(0, sets);
 }
@@ -27,8 +27,8 @@ export function getAdjustedScores(currentScores: number[], bestOf: string): numb
  * Determine the winner and loser based on set scores
  */
 export function determineWinner(
-  playerScores: number[],
-  opponentScores: number[],
+  playerScores: (number | null)[],
+  opponentScores: (number | null)[],
   _bestOf: number, // Used for future validation of sets to win
   userId: string,
   playerName: string,
@@ -37,10 +37,14 @@ export function determineWinner(
   let playerSetsWon = 0;
   let opponentSetsWon = 0;
 
-  for (let i = 0; i < Math.min(playerScores.length, opponentScores.length); i++) {
-    if (playerScores[i] > opponentScores[i]) {
+  // Convert null to 0 for comparison and result
+  const playerScoresNum = playerScores.map(s => s ?? 0);
+  const opponentScoresNum = opponentScores.map(s => s ?? 0);
+
+  for (let i = 0; i < Math.min(playerScoresNum.length, opponentScoresNum.length); i++) {
+    if (playerScoresNum[i] > opponentScoresNum[i]) {
       playerSetsWon++;
-    } else if (opponentScores[i] > playerScores[i]) {
+    } else if (opponentScoresNum[i] > playerScoresNum[i]) {
       opponentSetsWon++;
     }
   }
@@ -49,11 +53,11 @@ export function determineWinner(
 
   return {
     winner: playerWon
-      ? { id: userId, name: playerName, scores: playerScores }
-      : { id: null, name: opponentName, scores: opponentScores },
+      ? { id: userId, name: playerName, scores: playerScoresNum }
+      : { id: null, name: opponentName, scores: opponentScoresNum },
     loser: playerWon
-      ? { id: null, name: opponentName, scores: opponentScores }
-      : { id: userId, name: playerName, scores: playerScores }
+      ? { id: null, name: opponentName, scores: opponentScoresNum }
+      : { id: userId, name: playerName, scores: playerScoresNum }
   };
 }
 

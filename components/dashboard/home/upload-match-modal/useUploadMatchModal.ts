@@ -70,6 +70,27 @@ export interface UseUploadMatchModalReturn {
   handleCreateMatch: () => Promise<void>;
 }
 
+// Helper to get current date in YYYY-MM-DD format
+function getCurrentDate(): string {
+  const now = new Date();
+  return now.toISOString().split('T')[0];
+}
+
+// Helper to get current time in HH:MM format
+function getCurrentTime(): string {
+  const now = new Date();
+  return now.toTimeString().slice(0, 5);
+}
+
+// Get default form data with current date/time
+function getDefaultFormData(): FormData {
+  return {
+    ...DEFAULT_FORM_DATA,
+    date: getCurrentDate(),
+    time: getCurrentTime()
+  };
+}
+
 export function useUploadMatchModal({
   open,
   onOpenChange
@@ -87,7 +108,7 @@ export function useUploadMatchModal({
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPrivateMatch] = useState(true);
-  const [formData, setFormData] = useState<FormData>(DEFAULT_FORM_DATA);
+  const [formData, setFormData] = useState<FormData>(getDefaultFormData);
 
   // Load data from localStorage when modal opens
   useEffect(() => {
@@ -225,7 +246,8 @@ export function useUploadMatchModal({
 
   const handleScoreChange = useCallback(
     (player: "player" | "opponent", index: number, value: string) => {
-      const numValue = Number(value) || 0;
+      // Empty string means null (not set), otherwise parse the number
+      const numValue = value === "" ? null : Number(value);
       const field = player === "player" ? "playerScores" : "opponentScores";
       setFormData((prev) => ({
         ...prev,

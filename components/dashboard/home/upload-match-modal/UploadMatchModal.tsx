@@ -123,7 +123,7 @@ export function UploadMatchModal({
           </div>
 
           {/* Content */}
-          <div className="w-full">
+          <div className="w-full flex-1 overflow-y-auto py-6">
             {step === "method" && (
               <MethodContent
                 selectedMethod={selectedMethod}
@@ -174,20 +174,40 @@ export function UploadMatchModal({
           </div>
 
           {/* Footer */}
-          <div className="flex justify-center gap-4">
-            <Button
-              onClick={getContinueHandler()}
-              disabled={isContinueDisabled()}
-              className={`w-[85px] h-[31px] rounded-full text-xs ${
-                isContinueDisabled()
-                  ? "bg-[#F7F7F7] text-[#999999]"
-                  : "bg-[#0D0D0D] text-white"
-              }`}
-            >
-              {step === "confirm" && isCreating
-                ? "Creating Match..."
-                : continueLabel}
-            </Button>
+          <div className="flex justify-center gap-2 pt-4">
+            {step === "confirm" ? (
+              <>
+                <Button
+                  onClick={handleBack}
+                  className="w-[55px] h-[31px] rounded-full text-xs bg-[#3B82F6] text-white hover:bg-[#2563EB]"
+                >
+                  Edit
+                </Button>
+                <Button
+                  onClick={handleCreateMatch}
+                  disabled={isCreating}
+                  className={`w-[110px] h-[31px] rounded-full text-xs ${
+                    isCreating
+                      ? "bg-[#F7F7F7] text-[#999999]"
+                      : "bg-[#0D0D0D] text-white"
+                  }`}
+                >
+                  {isCreating ? "Creating..." : "Create Match"}
+                </Button>
+              </>
+            ) : (
+              <Button
+                onClick={getContinueHandler()}
+                disabled={isContinueDisabled()}
+                className={`w-[85px] h-[31px] rounded-full text-xs ${
+                  isContinueDisabled()
+                    ? "bg-[#F7F7F7] text-[#999999]"
+                    : "bg-[#0D0D0D] text-white"
+                }`}
+              >
+                {continueLabel}
+              </Button>
+            )}
           </div>
         </div>
       </DialogContent>

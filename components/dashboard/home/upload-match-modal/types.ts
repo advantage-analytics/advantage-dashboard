@@ -20,10 +20,11 @@ export interface FormData {
   playOnLets: boolean;
   result: string;
   date: string;
+  time: string;
   playerName: string;
   opponentName: string;
-  playerScores: number[];
-  opponentScores: number[];
+  playerScores: (number | null)[];
+  opponentScores: (number | null)[];
   matchType?: string;
   courtType?: string;
 }
@@ -77,17 +78,18 @@ export interface MatchData {
 
 /** Default form data values */
 export const DEFAULT_FORM_DATA: FormData = {
-  eventName: "ATP 250 Shanghi",
-  round: "16",
-  bestOf: "3",
+  eventName: "",
+  round: "",
+  bestOf: "",
   adScoring: false,
   playOnLets: false,
-  result: "Completed",
-  date: "04/25/2003",
+  result: "",
+  date: "",
+  time: "",
   playerName: "",
   opponentName: "",
-  playerScores: [0, 0, 0],
-  opponentScores: [0, 0, 0],
+  playerScores: [null, null, null],
+  opponentScores: [null, null, null],
   matchType: "",
   courtType: ""
 };
