@@ -40,7 +40,9 @@ export function UploadMatchModal({
     uploadedFile,
     isOver,
     isCreating,
+    isUploading,
     error,
+    uploadError,
     isPrivateMatch,
     formData,
     handleMethodSelect,
@@ -87,6 +89,8 @@ export function UploadMatchModal({
   const isContinueDisabled = () => {
     if (step === "method" && !selectedMethod) return true;
     if (step === "provider" && !selectedProvider) return true;
+    if (step === "upload" && !uploadedFile) return true; // Require file before continuing
+    if (step === "upload" && isUploading) return true; // Disable while uploading
     if (step === "confirm" && isCreating) return true;
     return false;
   };
@@ -141,8 +145,11 @@ export function UploadMatchModal({
             {step === "upload" && (
               <UploadContent
                 sourceType={sourceType}
+                selectedProvider={selectedProvider}
                 uploadedFile={uploadedFile}
                 isOver={isOver}
+                isUploading={isUploading}
+                uploadError={uploadError}
                 onSourceTypeChange={setSourceType}
                 onDragOver={(e) => {
                   e.preventDefault();

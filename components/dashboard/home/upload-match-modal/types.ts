@@ -74,6 +74,13 @@ export interface MatchData {
     player1: number[];
     player2: number[];
   };
+  // New metadata fields
+  created_by: string;
+  source_provider: string;
+  analysis_method: string;
+  match_type?: string;
+  court_type?: string;
+  verified?: boolean;
 }
 
 /** Default form data values */

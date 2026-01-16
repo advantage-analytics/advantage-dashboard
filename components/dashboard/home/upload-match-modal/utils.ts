@@ -61,6 +61,15 @@ export function determineWinner(
   };
 }
 
+/** Match metadata for database insertion */
+export interface MatchMetadata {
+  userId: string;
+  sourceProvider: string;
+  analysisMethod: string;
+  matchType?: string;
+  courtType?: string;
+}
+
 /**
  * Build match data object for database insertion
  */
@@ -69,7 +78,8 @@ export function buildMatchData(
   formData: FormData,
   winner: WinnerLoserResult["winner"],
   loser: WinnerLoserResult["loser"],
-  isPrivate: boolean
+  isPrivate: boolean,
+  metadata: MatchMetadata
 ): MatchData {
   return {
     id: matchId,
@@ -90,7 +100,13 @@ export function buildMatchData(
     score: {
       player1: winner.scores,
       player2: loser.scores
-    }
+    },
+    // New metadata fields
+    created_by: metadata.userId,
+    source_provider: metadata.sourceProvider,
+    analysis_method: metadata.analysisMethod,
+    match_type: formData.matchType || metadata.matchType,
+    court_type: formData.courtType || metadata.courtType
   };
 }
 

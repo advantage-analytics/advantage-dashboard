@@ -2,27 +2,38 @@
 
 /**
  * Custom hook for managing Upload Match Modal state and logic
+ *
+ * Orchestrates the multi-step upload wizard, including:
+ * - Step navigation
+ * - File upload via the upload service
+ * - Form data persistence
+ * - Match creation
  */
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
+  getProviderStrategy,
+  isProviderSupported,
+  ProviderId,
+} from "@/lib/services/upload";
+import {
   Step,
-  FormData,
+  FormData as MatchFormData,
   UploadedFile,
   DEFAULT_FORM_DATA
 } from "./types";
 import {
   determineWinner,
   buildMatchData,
-  base64ToBlob,
   formatFileSize,
   clearStorageData,
   loadFormDataFromStorage,
   loadUploadedFileFromStorage,
   saveFormDataToStorage,
-  STORAGE_KEYS
+  STORAGE_KEYS,
+  MatchMetadata
 } from "./utils";
 
 export interface UseUploadMatchModalProps {
@@ -34,14 +45,16 @@ export interface UseUploadMatchModalReturn {
   // State
   step: Step;
   selectedMethod: string | null;
-  selectedProvider: string | null;
+  selectedProvider: ProviderId | null;
   sourceType: string;
   uploadedFile: UploadedFile | null;
   isOver: boolean;
   isCreating: boolean;
+  isUploading: boolean;
   error: string | null;
+  uploadError: string | null;
   isPrivateMatch: boolean;
-  formData: FormData;
+  formData: MatchFormData;
 
   // Step navigation
   setStep: (step: Step) => void;
@@ -63,7 +76,7 @@ export interface UseUploadMatchModalReturn {
   handleRemoveFile: () => void;
 
   // Form handling
-  handleInputChange: (field: keyof FormData, value: any) => void;
+  handleInputChange: (field: keyof MatchFormData, value: any) => void;
   handleScoreChange: (player: "player" | "opponent", index: number, value: string) => void;
 
   // Match creation
@@ -83,7 +96,7 @@ function getCurrentTime(): string {
 }
 
 // Get default form data with current date/time
-function getDefaultFormData(): FormData {
+function getDefaultFormData(): MatchFormData {
   return {
     ...DEFAULT_FORM_DATA,
     date: getCurrentDate(),
@@ -101,21 +114,24 @@ export function useUploadMatchModal({
   // State
   const [step, setStep] = useState<Step>("method");
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
-  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
-  const [sourceType, setSourceType] = useState<string>("Swingvision");
+  const [selectedProvider, setSelectedProvider] = useState<ProviderId | null>(null);
+  const [sourceType, setSourceType] = useState<string>("swing-vision");
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
   const [isOver, setIsOver] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [isPrivateMatch] = useState(true);
-  const [formData, setFormData] = useState<FormData>(getDefaultFormData);
+  const [formData, setFormData] = useState<MatchFormData>(getDefaultFormData);
 
   // Load data from localStorage when modal opens
   useEffect(() => {
     if (open) {
       const existingProvider = localStorage.getItem(STORAGE_KEYS.SELECTED_PROVIDER);
-      if (existingProvider) {
-        setSelectedProvider(existingProvider);
+      if (existingProvider && isProviderSupported(existingProvider)) {
+        setSelectedProvider(existingProvider as ProviderId);
+        setSourceType(existingProvider);
       }
 
       const storedFormData = loadFormDataFromStorage();
@@ -142,12 +158,18 @@ export function useUploadMatchModal({
   }, [selectedMethod]);
 
   const handleProviderSelect = useCallback((providerId: string | null) => {
-    setSelectedProvider(providerId);
-    if (providerId) {
+    // Validate provider ID before setting
+    if (providerId && isProviderSupported(providerId)) {
+      setSelectedProvider(providerId as ProviderId);
+      setSourceType(providerId);
       localStorage.setItem(STORAGE_KEYS.SELECTED_PROVIDER, providerId);
     } else {
+      setSelectedProvider(null);
       localStorage.removeItem(STORAGE_KEYS.SELECTED_PROVIDER);
     }
+    // Clear any previous upload errors when changing provider
+    setUploadError(null);
+    setUploadedFile(null);
   }, []);
 
   const handleProviderContinue = useCallback(() => {
@@ -192,29 +214,48 @@ export function useUploadMatchModal({
   // File handling
   const onDrop = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
+    if (!selectedProvider) {
+      setUploadError("Please select a provider first");
+      return;
+    }
 
     const file = files[0];
+
+    // Validate file using provider strategy
+    try {
+      const strategy = getProviderStrategy(selectedProvider);
+      const validationResult = strategy.validateFile(file);
+
+      if (!validationResult.success) {
+        setUploadError(validationResult.error || "Invalid file");
+        return;
+      }
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Validation error");
+      return;
+    }
+
+    // Clear previous errors
+    setUploadError(null);
+
+    // Set file data for display
     const fileData: UploadedFile = {
       name: file.name,
       size: formatFileSize(file.size),
-      status: "Completed",
+      status: "Ready",
       file: file
     };
     setUploadedFile(fileData);
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const fileDataForStorage = {
-        name: file.name,
-        size: fileData.size,
-        status: "Completed",
-        data: reader.result,
-        type: file.type
-      };
-      localStorage.setItem(STORAGE_KEYS.UPLOADED_FILE, JSON.stringify(fileDataForStorage));
+    // Store file reference in localStorage (metadata only, not the actual file)
+    const fileDataForStorage = {
+      name: file.name,
+      size: fileData.size,
+      status: "Ready",
+      type: file.type
     };
-    reader.readAsDataURL(file);
-  }, []);
+    localStorage.setItem(STORAGE_KEYS.UPLOADED_FILE, JSON.stringify(fileDataForStorage));
+  }, [selectedProvider]);
 
   const handleDrop: React.DragEventHandler<HTMLDivElement> = useCallback(
     (e) => {
@@ -240,7 +281,7 @@ export function useUploadMatchModal({
   }, []);
 
   // Form handling
-  const handleInputChange = useCallback((field: keyof FormData, value: any) => {
+  const handleInputChange = useCallback((field: keyof MatchFormData, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   }, []);
 
@@ -257,10 +298,57 @@ export function useUploadMatchModal({
     []
   );
 
+  /**
+   * Upload file to Supabase storage via API route
+   *
+   * @param matchId - The match ID to associate the file with
+   * @returns Promise with upload result
+   */
+  const uploadFileToStorage = useCallback(async (matchId: string): Promise<{ success: boolean; error?: string }> => {
+    if (!uploadedFile?.file || !selectedProvider) {
+      return { success: false, error: "No file or provider selected" };
+    }
+
+    setIsUploading(true);
+    setUploadError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", uploadedFile.file);
+      formData.append("matchId", matchId);
+      formData.append("providerId", selectedProvider);
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        return { success: false, error: result.error || "Upload failed" };
+      }
+
+      return { success: true };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : "Upload error",
+      };
+    } finally {
+      setIsUploading(false);
+    }
+  }, [uploadedFile, selectedProvider]);
+
   // Match creation
   const handleCreateMatch = useCallback(async () => {
     if (!formData || !uploadedFile) {
       setError("Please complete all required fields and upload a file.");
+      return;
+    }
+
+    if (!selectedProvider) {
+      setError("Please select a provider.");
       return;
     }
 
@@ -288,7 +376,16 @@ export function useUploadMatchModal({
         formData.opponentName
       );
 
-      const matchData = buildMatchData(matchId, formData, winner, loser, isPrivateMatch);
+      // Build metadata for the match
+      const metadata: MatchMetadata = {
+        userId: user.id,
+        sourceProvider: selectedProvider,
+        analysisMethod: selectedMethod || 'elc', // Default to ELC if not set
+        matchType: formData.matchType,
+        courtType: formData.courtType
+      };
+
+      const matchData = buildMatchData(matchId, formData, winner, loser, isPrivateMatch, metadata);
 
       console.log("Attempting to insert match data:", matchData);
 
@@ -301,31 +398,15 @@ export function useUploadMatchModal({
         );
       }
 
-      // Upload file if exists
-      if (uploadedFile?.data) {
-        try {
-          const mimeType =
-            (uploadedFile as any).type ||
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-          const blob = base64ToBlob((uploadedFile as any).data, mimeType);
+      // Upload file to storage via API route
+      if (uploadedFile?.file) {
+        const uploadResult = await uploadFileToStorage(matchId);
 
-          const storagePath = `matches/${matchId}/${uploadedFile.name}`;
-          const { error: storageError } = await supabase.storage
-            .from("match-data")
-            .upload(storagePath, blob, { upsert: true });
-
-          if (storageError) {
-            console.error("Storage upload error:", storageError);
-          } else {
-            await supabase.from("match_files").insert({
-              match_id: matchId,
-              file_type: sourceType,
-              file_name: uploadedFile.name,
-              uploaded_by: user.id
-            });
-          }
-        } catch (fileError) {
-          console.error("File upload error:", fileError);
+        if (!uploadResult.success) {
+          // Log the error but don't fail the match creation
+          // The file can be re-uploaded later
+          console.error("File upload error:", uploadResult.error);
+          setUploadError(uploadResult.error || "File upload failed, but match was created.");
         }
       }
 
@@ -345,7 +426,7 @@ export function useUploadMatchModal({
     } finally {
       setIsCreating(false);
     }
-  }, [formData, uploadedFile, supabase, sourceType, isPrivateMatch, onOpenChange, router]);
+  }, [formData, uploadedFile, selectedProvider, selectedMethod, supabase, isPrivateMatch, onOpenChange, router, uploadFileToStorage]);
 
   return {
     // State
@@ -356,7 +437,9 @@ export function useUploadMatchModal({
     uploadedFile,
     isOver,
     isCreating,
+    isUploading,
     error,
+    uploadError,
     isPrivateMatch,
     formData,
 
