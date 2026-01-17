@@ -126,8 +126,8 @@ Match records with metadata for filtering and organization.
 | tournament_name | TEXT | YES | Event/tournament name |
 | round | TEXT | YES | Match round (Finals, SF, etc.) |
 | date | TIMESTAMPTZ | NO | Match date and time |
-| score | JSONB | YES | `{player1: [6,4,6], player2: [3,6,2]}` |
-| format | JSONB | YES | `{best_of: 3, ad_scoring: true}` |
+| score | JSONB | YES | `{player1: [6,4,6], player2: [3,6,2], player1_tiebreaks: [null,null,null], player2_tiebreaks: [null,null,null]}` |
+| format | JSONB | YES | `{best_of: 3, ad_scoring: true, play_on_lets: false}` |
 | result | TEXT | YES | Match result description |
 | status | TEXT | YES | Processing status |
 | source_provider | TEXT | YES | Data source (swing-vision, atp-tour) |
@@ -386,6 +386,7 @@ When file processing is implemented, these tables will store parsed data:
 | cleanup_unused_bucket | 2026-01 | Removed conferences bucket |
 | create_contact_submissions_table | 2026-01 | Contact form storage |
 | create_newsletter_subscribers_table | 2026-01 | Newsletter signups |
+| add_tiebreak_scores_to_matches | 2026-01 | Added tiebreak score support to JSONB score field |
 
 ---
 

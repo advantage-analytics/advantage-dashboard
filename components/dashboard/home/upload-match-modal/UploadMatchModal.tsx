@@ -60,6 +60,7 @@ export function UploadMatchModal({
     handleRemoveFile,
     handleInputChange,
     handleScoreChange,
+    handleTiebreakChange,
     handleCreateMatch,
   } = useUploadMatchModal({ open, onOpenChange });
 
@@ -167,6 +168,7 @@ export function UploadMatchModal({
                 formData={formData}
                 onInputChange={handleInputChange}
                 onScoreChange={handleScoreChange}
+                onTiebreakChange={handleTiebreakChange}
               />
             )}
 

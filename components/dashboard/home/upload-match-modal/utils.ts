@@ -99,7 +99,9 @@ export function buildMatchData(
     private: isPrivate,
     score: {
       player1: winner.scores,
-      player2: loser.scores
+      player2: loser.scores,
+      player1_tiebreaks: formData.playerTiebreaks,
+      player2_tiebreaks: formData.opponentTiebreaks
     },
     // New metadata fields
     created_by: metadata.userId,

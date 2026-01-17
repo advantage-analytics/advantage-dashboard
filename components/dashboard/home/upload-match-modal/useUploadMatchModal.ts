@@ -76,8 +76,9 @@ export interface UseUploadMatchModalReturn {
   handleRemoveFile: () => void;
 
   // Form handling
-  handleInputChange: (field: keyof MatchFormData, value: any) => void;
+  handleInputChange: (field: keyof MatchFormData, value: string | number | boolean) => void;
   handleScoreChange: (player: "player" | "opponent", index: number, value: string) => void;
+  handleTiebreakChange: (player: "player" | "opponent", index: number, value: string) => void;
 
   // Match creation
   handleCreateMatch: () => Promise<void>;
@@ -281,7 +282,7 @@ export function useUploadMatchModal({
   }, []);
 
   // Form handling
-  const handleInputChange = useCallback((field: keyof MatchFormData, value: any) => {
+  const handleInputChange = useCallback((field: keyof MatchFormData, value: string | number | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   }, []);
 
@@ -290,6 +291,19 @@ export function useUploadMatchModal({
       // Empty string means null (not set), otherwise parse the number
       const numValue = value === "" ? null : Number(value);
       const field = player === "player" ? "playerScores" : "opponentScores";
+      setFormData((prev) => ({
+        ...prev,
+        [field]: prev[field].map((score, i) => (i === index ? numValue : score))
+      }));
+    },
+    []
+  );
+
+  const handleTiebreakChange = useCallback(
+    (player: "player" | "opponent", index: number, value: string) => {
+      // Empty string means null (not set), otherwise parse the number
+      const numValue = value === "" ? null : Number(value);
+      const field = player === "player" ? "playerTiebreaks" : "opponentTiebreaks";
       setFormData((prev) => ({
         ...prev,
         [field]: prev[field].map((score, i) => (i === index ? numValue : score))
@@ -465,6 +479,7 @@ export function useUploadMatchModal({
     // Form handling
     handleInputChange,
     handleScoreChange,
+    handleTiebreakChange,
 
     // Match creation
     handleCreateMatch

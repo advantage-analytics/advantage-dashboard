@@ -25,6 +25,8 @@ export interface FormData {
   opponentName: string;
   playerScores: (number | null)[];
   opponentScores: (number | null)[];
+  playerTiebreaks: (number | null)[];
+  opponentTiebreaks: (number | null)[];
   matchType?: string;
   courtType?: string;
 }
@@ -97,6 +99,8 @@ export const DEFAULT_FORM_DATA: FormData = {
   opponentName: "",
   playerScores: [null, null, null],
   opponentScores: [null, null, null],
+  playerTiebreaks: [null, null, null],
+  opponentTiebreaks: [null, null, null],
   matchType: "",
   courtType: ""
 };
