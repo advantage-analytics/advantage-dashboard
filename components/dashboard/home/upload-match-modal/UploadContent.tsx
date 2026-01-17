@@ -19,8 +19,9 @@ import {
   Upload,
   Trash2,
   FileSpreadsheet,
+  AlertTriangle,
 } from "lucide-react";
-import { UploadedFile } from "./types";
+import { UploadedFile, ParsingState } from "./types";
 import { ProviderId } from "@/lib/services/upload";
 
 /** File type configuration per provider */
@@ -45,6 +46,7 @@ export interface UploadContentProps {
   isOver: boolean;
   isUploading?: boolean;
   uploadError?: string | null;
+  parsingState?: ParsingState;
   onSourceTypeChange: (type: string) => void;
   onDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
   onDragLeave: () => void;
@@ -59,6 +61,7 @@ export function UploadContent({
   isOver,
   isUploading = false,
   uploadError,
+  parsingState,
   onDragOver,
   onDragLeave,
   onDrop,
@@ -206,6 +209,62 @@ export function UploadContent({
                   File selected
                 </p>
               </div>
+
+              {/* Parsing Status */}
+              {parsingState && (
+                <>
+                  {parsingState.isParsing && (
+                    <div className="animate-slideDown flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                      <Loader2 className="h-4 w-4 text-blue-600 animate-spin flex-shrink-0" />
+                      <p className="text-blue-700 text-xs font-medium">
+                        Parsing file...
+                      </p>
+                    </div>
+                  )}
+
+                  {parsingState.parseSuccess && (
+                    <div className="animate-slideDown flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                      <p className="text-emerald-700 text-xs font-medium">
+                        Data auto-filled from file
+                      </p>
+                    </div>
+                  )}
+
+                  {parsingState.parseWarnings.length > 0 && (
+                    <div className="animate-slideDown flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-amber-700 text-xs font-medium">
+                          Parsing warnings
+                        </p>
+                        <ul className="text-amber-600 text-xs mt-1 space-y-0.5">
+                          {parsingState.parseWarnings.map((warning, idx) => (
+                            <li key={idx}>• {warning}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  {parsingState.parseError && (
+                    <div className="animate-slideDown p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2.5">
+                      <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-red-700 text-xs font-medium">
+                          Parsing Error
+                        </p>
+                        <p className="text-red-600 text-xs mt-0.5">
+                          {parsingState.parseError}
+                        </p>
+                        <p className="text-red-600 text-xs mt-1">
+                          You can still enter data manually in the next step.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
 
               {/* File Card */}
               <div className="border border-[#EAECF0] rounded-xl bg-white overflow-hidden hover:border-[#3B82F6]/30 transition-all duration-300">

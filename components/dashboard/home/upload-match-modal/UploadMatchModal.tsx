@@ -45,6 +45,7 @@ export function UploadMatchModal({
     uploadError,
     isPrivateMatch,
     formData,
+    parsingState,
     handleMethodSelect,
     handleMethodContinue,
     handleProviderSelect,
@@ -151,6 +152,7 @@ export function UploadMatchModal({
                 isOver={isOver}
                 isUploading={isUploading}
                 uploadError={uploadError}
+                parsingState={parsingState}
                 onSourceTypeChange={setSourceType}
                 onDragOver={(e) => {
                   e.preventDefault();
@@ -169,6 +171,7 @@ export function UploadMatchModal({
                 onInputChange={handleInputChange}
                 onScoreChange={handleScoreChange}
                 onTiebreakChange={handleTiebreakChange}
+                parsingState={parsingState}
               />
             )}
 

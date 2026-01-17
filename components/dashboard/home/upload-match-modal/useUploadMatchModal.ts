@@ -18,10 +18,12 @@ import {
   isProviderSupported,
   ProviderId,
 } from "@/lib/services/upload";
+import { getParser, hasParser } from "@/lib/services/upload/parsers";
 import {
   Step,
   FormData as MatchFormData,
   UploadedFile,
+  ParsingState,
   DEFAULT_FORM_DATA
 } from "./types";
 import {
@@ -55,6 +57,7 @@ export interface UseUploadMatchModalReturn {
   uploadError: string | null;
   isPrivateMatch: boolean;
   formData: MatchFormData;
+  parsingState: ParsingState;
 
   // Step navigation
   setStep: (step: Step) => void;
@@ -125,6 +128,12 @@ export function useUploadMatchModal({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isPrivateMatch] = useState(true);
   const [formData, setFormData] = useState<MatchFormData>(getDefaultFormData);
+  const [parsingState, setParsingState] = useState<ParsingState>({
+    isParsing: false,
+    parseError: null,
+    parseWarnings: [],
+    parseSuccess: false,
+  });
 
   // Load data from localStorage when modal opens
   useEffect(() => {
@@ -259,6 +268,61 @@ export function useUploadMatchModal({
       type: file.type
     };
     localStorage.setItem(STORAGE_KEYS.UPLOADED_FILE, JSON.stringify(fileDataForStorage));
+
+    // Attempt to parse file if parser exists for this provider
+    if (hasParser(selectedProvider)) {
+      setParsingState({ isParsing: true, parseError: null, parseWarnings: [], parseSuccess: false });
+
+      try {
+        const parser = getParser(selectedProvider);
+        if (parser) {
+          const parseResult = await parser.parse(file);
+
+          if (parseResult.success && parseResult.data) {
+            // Merge parsed data with existing form data
+            setFormData((prev) => ({
+              ...prev,
+              playerName: parseResult.data?.playerName || prev.playerName,
+              opponentName: parseResult.data?.opponentName || prev.opponentName,
+              playerScores: parseResult.data?.playerScores || prev.playerScores,
+              opponentScores: parseResult.data?.opponentScores || prev.opponentScores,
+              playerTiebreaks: parseResult.data?.playerTiebreaks || prev.playerTiebreaks,
+              opponentTiebreaks: parseResult.data?.opponentTiebreaks || prev.opponentTiebreaks,
+              bestOf: parseResult.data?.bestOf || prev.bestOf,
+              adScoring: parseResult.data?.adScoring !== undefined ? parseResult.data.adScoring : prev.adScoring,
+              result: parseResult.data?.result || prev.result,
+              duration: parseResult.data?.duration || prev.duration,
+              // Preserve existing date/time if parser didn't provide them
+              date: prev.date,
+              time: prev.time,
+            }));
+
+            setParsingState({
+              isParsing: false,
+              parseError: null,
+              parseWarnings: parseResult.warnings,
+              parseSuccess: true,
+            });
+          } else {
+            // Parsing failed - show error but allow manual entry
+            setParsingState({
+              isParsing: false,
+              parseError: parseResult.error || "Failed to parse file",
+              parseWarnings: parseResult.warnings,
+              parseSuccess: false,
+            });
+          }
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Parsing error";
+        setParsingState({
+          isParsing: false,
+          parseError: message,
+          parseWarnings: [],
+          parseSuccess: false,
+        });
+      }
+    }
   }, [selectedProvider]);
 
   const handleDrop: React.DragEventHandler<HTMLDivElement> = useCallback(
@@ -481,6 +545,7 @@ export function useUploadMatchModal({
     uploadError,
     isPrivateMatch,
     formData,
+    parsingState,
 
     // Step navigation
     setStep,

@@ -100,15 +100,16 @@ export function buildMatchData(
     score: {
       player1: winner.scores,
       player2: loser.scores,
-      player1_tiebreaks: formData.playerTiebreaks,
-      player2_tiebreaks: formData.opponentTiebreaks
+      player1_tiebreaks: winner.id === metadata.userId ? formData.playerTiebreaks : formData.opponentTiebreaks,
+      player2_tiebreaks: winner.id === metadata.userId ? formData.opponentTiebreaks : formData.playerTiebreaks
     },
     // New metadata fields
     created_by: metadata.userId,
     source_provider: metadata.sourceProvider,
     analysis_method: metadata.analysisMethod,
     match_type: formData.matchType || metadata.matchType,
-    court_type: formData.courtType || metadata.courtType
+    court_type: formData.courtType || metadata.courtType,
+    duration: formData.duration
   };
 }
 

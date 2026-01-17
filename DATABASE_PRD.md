@@ -136,6 +136,7 @@ Match records with metadata for filtering and organization.
 | court_type | TEXT | YES | hard, clay, grass, carpet |
 | private | BOOLEAN | YES | Visibility flag |
 | verified | BOOLEAN | YES | Admin verification (default: false) |
+| duration | TEXT | YES | Match duration in H:MM format (e.g., "2:45") |
 
 #### C. Table: `match_files`
 
@@ -387,6 +388,7 @@ When file processing is implemented, these tables will store parsed data:
 | create_contact_submissions_table | 2026-01 | Contact form storage |
 | create_newsletter_subscribers_table | 2026-01 | Newsletter signups |
 | add_tiebreak_scores_to_matches | 2026-01 | Added tiebreak score support to JSONB score field |
+| add_duration_column_to_matches | 2026-01 | Added duration column for match duration tracking in H:MM format |
 
 ---
 

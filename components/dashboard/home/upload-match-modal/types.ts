@@ -29,6 +29,7 @@ export interface FormData {
   opponentTiebreaks: (number | null)[];
   matchType?: string;
   courtType?: string;
+  duration?: string;
 }
 
 /** Uploaded file metadata and data */
@@ -75,6 +76,8 @@ export interface MatchData {
   score: {
     player1: number[];
     player2: number[];
+    player1_tiebreaks?: (number | null)[];
+    player2_tiebreaks?: (number | null)[];
   };
   // New metadata fields
   created_by: string;
@@ -83,6 +86,7 @@ export interface MatchData {
   match_type?: string;
   court_type?: string;
   verified?: boolean;
+  duration?: string;
 }
 
 /** Default form data values */
@@ -140,3 +144,11 @@ export const STEP_FOOTER_CONFIG: Record<Step, { showBack: boolean; continueLabel
   details: { showBack: true, continueLabel: "Continue" },
   confirm: { showBack: true, continueLabel: "Create Match" }
 };
+
+/** File parsing state for auto-population */
+export interface ParsingState {
+  isParsing: boolean;
+  parseError: string | null;
+  parseWarnings: string[];
+  parseSuccess: boolean;
+}
