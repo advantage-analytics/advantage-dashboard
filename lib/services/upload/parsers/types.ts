@@ -35,11 +35,11 @@ export interface SwingVisionSetData {
   hostTiebreak: number | null;
   guestTiebreak: number | null;
   winner: 'host' | 'guest';
-  duration: string; // Format: "H:MM"
+  duration: number; // Duration in milliseconds
 }
 
 export interface SwingVisionParsedData {
   settings: SwingVisionSettingsSheet;
   sets: SwingVisionSetData[];
-  totalDuration: string; // Format: "H:MM"
+  totalDuration: number; // Duration in milliseconds
 }

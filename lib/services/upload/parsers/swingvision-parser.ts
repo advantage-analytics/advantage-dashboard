@@ -22,7 +22,13 @@ export class SwingVisionParser implements IFileParser {
 
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const workbook = XLSX.read(arrayBuffer);
+      const uint8Array = new Uint8Array(arrayBuffer);
+      const workbook = XLSX.read(uint8Array, {
+        type: 'array',
+        cellFormula: false,
+        cellHTML: false,
+      });
+
       // SwingVision files must have Settings and Sets sheets
       return 'Settings' in workbook.Sheets && 'Sets' in workbook.Sheets;
     } catch {
@@ -33,7 +39,12 @@ export class SwingVisionParser implements IFileParser {
   async parse(file: File): Promise<ParseResult> {
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const workbook = XLSX.read(arrayBuffer);
+      const uint8Array = new Uint8Array(arrayBuffer);
+      const workbook = XLSX.read(uint8Array, {
+        type: 'array',
+        cellFormula: false,
+        cellHTML: false,
+      });
 
       // Validate required sheets
       if (!('Settings' in workbook.Sheets) || !('Sets' in workbook.Sheets)) {
@@ -186,21 +197,15 @@ export class SwingVisionParser implements IFileParser {
     return sets;
   }
 
-  private calculateTotalDuration(sets: SwingVisionSetData[]): string {
-    let totalMinutes = 0;
-    let totalHours = 0;
+  private calculateTotalDuration(sets: SwingVisionSetData[]): number {
+    // Sum all set durations (in milliseconds)
+    let totalMs = 0;
 
     for (const set of sets) {
-      const [hours, minutes] = set.duration.split(':').map(Number);
-      totalMinutes += minutes || 0;
-      totalHours += hours || 0;
+      totalMs += set.duration;
     }
 
-    // Handle minute overflow
-    totalHours += Math.floor(totalMinutes / 60);
-    totalMinutes = totalMinutes % 60;
-
-    return `${totalHours}:${String(totalMinutes).padStart(2, '0')}`;
+    return totalMs;
   }
 
 
@@ -255,8 +260,15 @@ export class SwingVisionParser implements IFileParser {
       }
     }
 
-    // Determine bestOf
-    const bestOfNum = sets.length > 0 ? (sets.length === 1 ? 1 : sets.length < 3 ? 2 : 3) : 3;
+    // Determine bestOf - only 1, 3, or 5 are valid
+    let bestOfNum = 3; // Default
+    if (sets.length === 1) {
+      bestOfNum = 1;
+    } else if (sets.length === 2) {
+      bestOfNum = 3; // Convert 2-set matches to best of 3 (player must have won 2-0)
+    } else if (sets.length >= 3) {
+      bestOfNum = 3; // 3 or more sets is best of 3
+    }
 
     return {
       playerName,
@@ -286,33 +298,32 @@ export class SwingVisionParser implements IFileParser {
     return str === 'true' || str === 'yes' || str === '1';
   }
 
-  private parseDuration(duration: unknown): string {
-    // Handle various formats: "H:MM" string, milliseconds number, or undefined
+  private parseDuration(duration: unknown): number {
+    // Return duration in milliseconds
+    // Handle various formats: "H:MM" string, or seconds number (SwingVision export format)
     if (!duration) {
-      return '0:00';
+      return 0;
     }
 
     const trimmed = String(duration).trim();
 
-    // If it contains a colon, it's already in H:MM format
+    // If it contains a colon, it's in H:MM format - convert to milliseconds
     if (trimmed.includes(':')) {
       const parts = trimmed.split(':');
       if (parts.length === 2) {
         const hours = parseInt(parts[0], 10) || 0;
         const minutes = parseInt(parts[1], 10) || 0;
-        return `${hours}:${String(minutes).padStart(2, '0')}`;
+        const totalSeconds = hours * 3600 + minutes * 60;
+        return totalSeconds * 1000; // Convert to milliseconds
       }
     }
 
-    // Try to parse as milliseconds (SwingVision export format)
-    const ms = parseFloat(trimmed);
-    if (!isNaN(ms) && ms > 0) {
-      const totalSeconds = Math.floor(ms);
-      const hours = Math.floor(totalSeconds / 3600);
-      const minutes = Math.floor((totalSeconds % 3600) / 60);
-      return `${hours}:${String(minutes).padStart(2, '0')}`;
+    // Parse as seconds (SwingVision export format) and convert to milliseconds
+    const seconds = parseFloat(trimmed);
+    if (!isNaN(seconds) && seconds > 0) {
+      return Math.floor(seconds * 1000); // Convert seconds to milliseconds
     }
 
-    return '0:00';
+    return 0;
   }
 }

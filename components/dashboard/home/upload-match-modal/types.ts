@@ -29,7 +29,7 @@ export interface FormData {
   opponentTiebreaks: (number | null)[];
   matchType?: string;
   courtType?: string;
-  duration?: string;
+  duration?: number;
 }
 
 /** Uploaded file metadata and data */
@@ -86,7 +86,7 @@ export interface MatchData {
   match_type?: string;
   court_type?: string;
   verified?: boolean;
-  duration?: string;
+  duration?: number;
 }
 
 /** Default form data values */
@@ -106,7 +106,8 @@ export const DEFAULT_FORM_DATA: FormData = {
   playerTiebreaks: [null, null, null],
   opponentTiebreaks: [null, null, null],
   matchType: "",
-  courtType: ""
+  courtType: "",
+  duration: 0
 };
 
 /** Step order for navigation and indicator */

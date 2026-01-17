@@ -38,6 +38,15 @@ function formatDate(dateString: string): string {
   });
 }
 
+// Helper to format duration from milliseconds to H:MM format
+function formatDuration(ms: number | undefined): string {
+  if (!ms || ms === 0) return "-:--";
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  return `${hours}:${String(minutes).padStart(2, '0')}`;
+}
+
 // Helper to determine winner based on scores
 function determineWinner(playerScores: (number | null)[], opponentScores: (number | null)[]): "player" | "opponent" | null {
   let playerSetsWon = 0;
@@ -123,7 +132,7 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
           {/* Match Header */}
           <div className="flex flex-row justify-between items-center font-normal text-xs text-[#999999]">
             <p>Final Score | {formData.round || "Round of 16"}</p>
-            <p>-:--</p>
+            <p>{formatDuration(formData.duration)}</p>
           </div>
 
           {/* Player Names + Scores */}

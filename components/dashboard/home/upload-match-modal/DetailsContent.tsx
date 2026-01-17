@@ -191,6 +191,7 @@ export function DetailsContent({
     { value: `${opponentName} Withdrew`, label: `${opponentName} Withdrew` },
     { value: `${playerName} Defaulted`, label: `${playerName} Defaulted` },
     { value: `${opponentName} Defaulted`, label: `${opponentName} Defaulted` },
+    { value: "Unfinished", label: "Unfinished" },
   ];
 
   return (
@@ -652,6 +653,18 @@ export function DetailsContent({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          {/* Match Duration */}
+          <div className="space-y-3">
+            <h4 className="text-[#0D0D0D] font-medium text-xs">Match Duration</h4>
+            <Input
+              type="number"
+              placeholder="Duration in seconds (optional)"
+              value={formData.duration || ""}
+              onChange={(e) => onInputChange("duration", e.target.value ? parseInt(e.target.value, 10) : 0)}
+              className="w-[200px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none placeholder:text-[#999999] px-3"
+            />
           </div>
           </div>
         </div>
