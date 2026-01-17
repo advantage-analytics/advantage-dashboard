@@ -19,7 +19,8 @@
 | User Authentication | ✅ | Supabase Auth with email/password |
 | SwingVision File Upload | ✅ | .xlsx file validation and storage |
 | Storage Bucket | ✅ | `match-data` bucket with user folders |
-| Match Records | ✅ | Basic match metadata storage |
+| Match Records | ✅ | Complete match metadata storage with scores, format, duration |
+| SwingVision Metadata Parser | ✅ | Extracts match info, player names, scores, sets, duration from xlsx |
 | Provider Strategy Pattern | ✅ | Extensible for ATP, WTA, etc. |
 | RLS Policies | ✅ | User-scoped data access |
 
@@ -119,9 +120,9 @@ Match records with metadata for filtering and organization.
 |--------|------|----------|-------------|
 | id | UUID | NO | Primary key |
 | created_by | UUID | YES | FK → users.id (match owner) |
-| player1_name | TEXT | NO | Winner/first player name |
+| player1_name | TEXT | NO | Host/first player name |
 | player1_id | UUID | YES | FK → users.id (if registered) |
-| player2_name | TEXT | NO | Loser/second player name |
+| player2_name | TEXT | NO | Guest/second player name |
 | player2_id | UUID | YES | FK → users.id (if registered) |
 | tournament_name | TEXT | YES | Event/tournament name |
 | round | TEXT | YES | Match round (Finals, SF, etc.) |
@@ -136,7 +137,7 @@ Match records with metadata for filtering and organization.
 | court_type | TEXT | YES | hard, clay, grass, carpet |
 | private | BOOLEAN | YES | Visibility flag |
 | verified | BOOLEAN | YES | Admin verification (default: false) |
-| duration | TEXT | YES | Match duration in H:MM format (e.g., "2:45") |
+| duration | BIGINT | YES | Match duration in milliseconds (e.g., 10800000 = 3 hours) |
 
 #### C. Table: `match_files`
 
@@ -388,7 +389,9 @@ When file processing is implemented, these tables will store parsed data:
 | create_contact_submissions_table | 2026-01 | Contact form storage |
 | create_newsletter_subscribers_table | 2026-01 | Newsletter signups |
 | add_tiebreak_scores_to_matches | 2026-01 | Added tiebreak score support to JSONB score field |
-| add_duration_column_to_matches | 2026-01 | Added duration column for match duration tracking in H:MM format |
+| add_duration_column_to_matches | 2026-01 | Added duration column for match duration tracking in milliseconds |
+| fix_player_assignment_logic | 2026-01 | Fixed player1/player2 assignment to use playerName/opponentName instead of winner/loser |
+| fix_duration_parsing | 2026-01 | Fixed SwingVision duration parsing - convert seconds to milliseconds; changed duration type from TEXT to BIGINT |
 
 ---
 
@@ -410,7 +413,34 @@ When file processing is implemented, these tables will store parsed data:
 
 ---
 
-## 11. Glossary
+## 11. Recent Bug Fixes & Changes (January 2026)
+
+### Player Assignment Logic
+**Issue:** player1/player2 were incorrectly assigned as winner/loser instead of host/guest teams.
+**Fix:** Updated `buildMatchData()` to always assign:
+- `player1` = `playerName` (Host Team - usually the user)
+- `player2` = `opponentName` (Guest Team)
+
+This ensures player1/player2 are always consistent with the match structure, regardless of who won. Scores are correctly mapped to each player.
+
+### Duration Parsing
+**Issue:** SwingVision exports duration as floating-point seconds (e.g., 3819.43), but the parser was treating them as milliseconds, making match durations appear ~1000x too short.
+**Fix:**
+- Parser now correctly converts seconds to milliseconds: `seconds * 1000`
+- Duration column type corrected to `BIGINT` (milliseconds) instead of `TEXT`
+- Added duration input field in Advanced Settings for manual editing (accepts seconds)
+- Display logic in Confirm step uses `formatDuration()` which expects milliseconds
+
+**Storage Format:** Duration is always stored in milliseconds in the database.
+
+### UI Updates
+- Added duration input field to Advanced Settings (Match Duration section)
+- Users can now manually adjust match duration if auto-parsed value is incorrect
+- Duration displays as "H:MM" format in confirmation view (e.g., "1:03" for 1 hour 3 minutes)
+
+---
+
+## 12. Glossary
 
 | Term | Definition |
 |------|------------|
