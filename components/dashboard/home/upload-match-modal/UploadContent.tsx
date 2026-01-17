@@ -79,7 +79,7 @@ export function UploadContent({
           <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2.5">
             <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
             <div>
-              <p className="text-red-700 text-xs font-semibold">Upload Error</p>
+              <p className="text-red-700 text-xs font-medium">Upload Error</p>
               <p className="text-red-600 text-xs mt-0.5">{uploadError}</p>
             </div>
           </div>
@@ -124,7 +124,7 @@ export function UploadContent({
                         <div className="absolute inset-0 bg-gradient-to-r from-[#3B82F6]/20 to-transparent rounded-full animate-spin" />
                         <Loader2 className="h-7 w-7 text-[#3B82F6] animate-spin" />
                       </div>
-                      <p className="text-[#0D0D0D] font-semibold text-sm">
+                      <p className="text-[#0D0D0D] font-medium text-sm">
                         Validating file...
                       </p>
                     </div>
@@ -152,7 +152,7 @@ export function UploadContent({
 
                       {/* Text Content */}
                       <div className="space-y-1.5">
-                        <p className="text-[#0D0D0D] font-semibold text-sm">
+                        <p className="text-[#0D0D0D] font-medium text-sm">
                           Drag your file here
                         </p>
                         <p className="text-[#999999] text-xs leading-relaxed">
@@ -172,7 +172,7 @@ export function UploadContent({
                       <label htmlFor="upload-input-modal" className="block">
                         <Button
                           type="button"
-                          className="bg-[#0D0D0D] hover:bg-[#1D1D1D] text-white text-xs font-semibold rounded-lg px-6 py-2 transition-all duration-200 active:scale-95"
+                          className="bg-[#0D0D0D] hover:bg-[#1D1D1D] text-white text-xs font-medium rounded-lg px-6 py-2 transition-all duration-200 active:scale-95"
                           onClick={() =>
                             document.getElementById("upload-input-modal")?.click()
                           }
@@ -202,7 +202,7 @@ export function UploadContent({
               {/* Success Badge */}
               <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg w-fit">
                 <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
-                <p className="text-green-700 text-xs font-semibold">
+                <p className="text-green-700 text-xs font-medium">
                   File selected
                 </p>
               </div>
@@ -216,7 +216,7 @@ export function UploadContent({
                       <FileSpreadsheet className="h-5 w-5 text-white" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-[#0D0D0D] font-semibold text-sm truncate">
+                      <p className="text-[#0D0D0D] font-medium text-sm truncate">
                         {uploadedFile.name}
                       </p>
                       <p className="text-[#999999] text-xs">{uploadedFile.size}</p>
