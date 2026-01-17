@@ -34,7 +34,7 @@ export interface SwingVisionSetData {
   guestScore: number;
   hostTiebreak: number | null;
   guestTiebreak: number | null;
-  winner: 'host' | 'guest';
+  winner: 'host' | 'guest' | 'draw';
   duration: number; // Duration in milliseconds
 }
 

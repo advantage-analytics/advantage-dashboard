@@ -225,8 +225,24 @@ export class SwingVisionParser implements IFileParser {
         continue; // Skip invalid rows
       }
 
-      // Determine winner from scores (SwingVision sometimes has stats labels in winner column)
-      const winner = hostScore > guestScore ? 'host' : 'guest';
+      // Read winner from the Set Winner column if available, otherwise calculate from scores
+      let winner: 'host' | 'guest' | 'draw';
+      if (winnerIdx !== -1 && row[winnerIdx]) {
+        const winnerValue = String(row[winnerIdx]).toLowerCase().trim();
+        if (winnerValue === 'draw') {
+          winner = 'draw';
+        } else if (winnerValue === 'guest') {
+          winner = 'guest';
+        } else if (winnerValue === 'host') {
+          winner = 'host';
+        } else {
+          // Column has stats data, calculate from scores
+          winner = hostScore > guestScore ? 'host' : (guestScore > hostScore ? 'guest' : 'draw');
+        }
+      } else {
+        // No winner column, calculate from scores
+        winner = hostScore > guestScore ? 'host' : (guestScore > hostScore ? 'guest' : 'draw');
+      }
       const duration = this.parseDuration(row[durationIdx]);
 
       sets.push({
@@ -283,10 +299,18 @@ export class SwingVisionParser implements IFileParser {
       // Calculate result normally
       const hostWins = sets.filter((s) => s.winner === 'host').length;
       const guestWins = sets.filter((s) => s.winner === 'guest').length;
-      if (hostWins > guestWins) {
+      const draws = sets.filter((s) => s.winner === 'draw').length;
+
+      if (draws > 0) {
+        // If any set is a draw, match is incomplete
+        result = 'Unfinished';
+      } else if (hostWins > guestWins) {
         result = `${playerName} Wins`;
       } else if (guestWins > hostWins) {
         result = `${opponentName} Wins`;
+      } else if (hostWins === guestWins && hostWins > 0) {
+        // Tied sets (both won same number of sets)
+        result = 'Unfinished';
       }
     } else {
       // Normal case: Both teams populated from Settings sheet
@@ -299,10 +323,18 @@ export class SwingVisionParser implements IFileParser {
       // Calculate result normally
       const hostWins = sets.filter((s) => s.winner === 'host').length;
       const guestWins = sets.filter((s) => s.winner === 'guest').length;
-      if (hostWins > guestWins) {
+      const draws = sets.filter((s) => s.winner === 'draw').length;
+
+      if (draws > 0) {
+        // If any set is a draw, match is incomplete
+        result = 'Unfinished';
+      } else if (hostWins > guestWins) {
         result = `${playerName} Wins`;
       } else if (guestWins > hostWins) {
         result = `${opponentName} Wins`;
+      } else if (hostWins === guestWins && hostWins > 0) {
+        // Tied sets (both won same number of sets)
+        result = 'Unfinished';
       }
     }
 
