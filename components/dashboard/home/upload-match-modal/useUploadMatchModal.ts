@@ -204,11 +204,14 @@ export function useUploadMatchModal({
   }, [step]);
 
   const handleClose = useCallback(() => {
+    clearStorageData();
     onOpenChange(false);
     setTimeout(() => {
       setStep("method");
       setSelectedProvider(null);
       setUploadedFile(null);
+      setFormData(getDefaultFormData());
+      setSelectedMethod(null);
     }, 200);
   }, [onOpenChange]);
 
@@ -288,26 +291,48 @@ export function useUploadMatchModal({
 
   const handleScoreChange = useCallback(
     (player: "player" | "opponent", index: number, value: string) => {
-      // Empty string means null (not set), otherwise parse the number
-      const numValue = value === "" ? null : Number(value);
-      const field = player === "player" ? "playerScores" : "opponentScores";
-      setFormData((prev) => ({
-        ...prev,
-        [field]: prev[field].map((score, i) => (i === index ? numValue : score))
-      }));
+      // Only allow empty string or valid integers
+      if (value === "") {
+        const numValue = null;
+        const field = player === "player" ? "playerScores" : "opponentScores";
+        setFormData((prev) => ({
+          ...prev,
+          [field]: prev[field].map((score, i) => (i === index ? numValue : score))
+        }));
+      } else if (/^\d+$/.test(value)) {
+        // Only accept positive integers
+        const numValue = Number(value);
+        const field = player === "player" ? "playerScores" : "opponentScores";
+        setFormData((prev) => ({
+          ...prev,
+          [field]: prev[field].map((score, i) => (i === index ? numValue : score))
+        }));
+      }
+      // Silently ignore invalid input
     },
     []
   );
 
   const handleTiebreakChange = useCallback(
     (player: "player" | "opponent", index: number, value: string) => {
-      // Empty string means null (not set), otherwise parse the number
-      const numValue = value === "" ? null : Number(value);
-      const field = player === "player" ? "playerTiebreaks" : "opponentTiebreaks";
-      setFormData((prev) => ({
-        ...prev,
-        [field]: prev[field].map((score, i) => (i === index ? numValue : score))
-      }));
+      // Only allow empty string or valid integers
+      if (value === "") {
+        const numValue = null;
+        const field = player === "player" ? "playerTiebreaks" : "opponentTiebreaks";
+        setFormData((prev) => ({
+          ...prev,
+          [field]: prev[field].map((score, i) => (i === index ? numValue : score))
+        }));
+      } else if (/^\d+$/.test(value)) {
+        // Only accept positive integers
+        const numValue = Number(value);
+        const field = player === "player" ? "playerTiebreaks" : "opponentTiebreaks";
+        setFormData((prev) => ({
+          ...prev,
+          [field]: prev[field].map((score, i) => (i === index ? numValue : score))
+        }));
+      }
+      // Silently ignore invalid input
     },
     []
   );

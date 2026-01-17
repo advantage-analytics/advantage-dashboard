@@ -290,6 +290,8 @@ export function DetailsContent({
                           if (el) playerScoreRefs.current[i] = el;
                         }}
                         placeholder="-"
+                        inputMode="numeric"
+                        pattern="\d*"
                         className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#999999]"
                         value={score === null ? "" : score}
                         onChange={(e) => {
@@ -330,6 +332,8 @@ export function DetailsContent({
                             if (el) playerTiebreakRefs.current[i] = el;
                           }}
                           placeholder="-"
+                          inputMode="numeric"
+                          pattern="\d*"
                           className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#999999]"
                           value={formData.playerTiebreaks[i] === null ? "" : String(formData.playerTiebreaks[i])}
                           onChange={(e) => {
@@ -403,6 +407,8 @@ export function DetailsContent({
                           if (el) opponentScoreRefs.current[i] = el;
                         }}
                         placeholder="-"
+                        inputMode="numeric"
+                        pattern="\d*"
                         className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#999999]"
                         value={score === null ? "" : score}
                         onChange={(e) => {
@@ -443,6 +449,8 @@ export function DetailsContent({
                             if (el) opponentTiebreakRefs.current[i] = el;
                           }}
                           placeholder="-"
+                          inputMode="numeric"
+                          pattern="\d*"
                           className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#999999]"
                           value={formData.opponentTiebreaks[i] === null ? "" : String(formData.opponentTiebreaks[i])}
                           onChange={(e) => {
