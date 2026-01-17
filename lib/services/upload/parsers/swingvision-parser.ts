@@ -59,7 +59,7 @@ export class SwingVisionParser implements IFileParser {
       const settingsSheet = workbook.Sheets['Settings'];
       const setsSheet = workbook.Sheets['Sets'];
 
-      const settings = this.parseSettingsSheet(settingsSheet);
+      const settings = this.parseSettingsSheet(settingsSheet, workbook);
       const sets = this.parseSetsSheet(setsSheet);
 
       if (sets.length === 0) {
@@ -95,8 +95,8 @@ export class SwingVisionParser implements IFileParser {
     }
   }
 
-  private parseSettingsSheet(sheet: XLSX.WorkSheet): SwingVisionSettingsSheet {
-    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
+  private parseSettingsSheet(sheet: XLSX.WorkSheet, workbook?: XLSX.WorkBook): SwingVisionSettingsSheet {
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as unknown[][];
 
     if (rows.length < 2) {
       return {
@@ -106,18 +106,44 @@ export class SwingVisionParser implements IFileParser {
       };
     }
 
-    const headers = (rows[0] || []).map((h) => String(h).toLowerCase().trim());
-    const values = rows[1] || [];
+    // Try direct cell access first (more reliable than header matching)
+    let hostTeam = 'Player';
+    let guestTeam = '';
+    let adScoring = false;
 
+    // Row 2 (index 1) contains the data values
+    const dataRow = rows[1] || [];
+
+    // Try common column positions: Host Team typically at D, Guest Team at E
+    // But use header matching to be flexible with column order
+    const headers = (rows[0] || []).map((h) => String(h).toLowerCase().trim());
     const hostTeamIdx = headers.findIndex((h) => h.includes('host team'));
     const guestTeamIdx = headers.findIndex((h) => h.includes('guest team'));
     const adScoringIdx = headers.findIndex((h) => h.includes('ad scoring'));
 
-    let hostTeam = hostTeamIdx !== -1 ? String(values[hostTeamIdx] || 'Player').trim() : 'Player';
-    let guestTeam = guestTeamIdx !== -1 ? String(values[guestTeamIdx] || '').trim() : '';
+    if (hostTeamIdx !== -1 && dataRow.length > hostTeamIdx) {
+      hostTeam = String(dataRow[hostTeamIdx] || 'Player').trim();
+    }
+
+    if (guestTeamIdx !== -1 && dataRow.length > guestTeamIdx) {
+      guestTeam = String(dataRow[guestTeamIdx] || '').trim();
+    }
+
+    if (adScoringIdx !== -1 && dataRow.length > adScoringIdx) {
+      adScoring = this.parseBoolean(dataRow[adScoringIdx]);
+    }
+
     let guestTeamFromFallback = false;
 
-    // If guest team is empty, search for it in the metadata rows (SwingVision sometimes puts it elsewhere)
+    // Validate guestTeam - must look like a name (contains at least one letter)
+    if (guestTeam) {
+      const hasLetters = /[a-zA-Z]/.test(guestTeam);
+      if (!hasLetters) {
+        guestTeam = ''; // Reject numeric-only values like "174"
+      }
+    }
+
+    // If guest team is still empty, search for it in the metadata rows (SwingVision sometimes puts it elsewhere)
     if (!guestTeam && rows.length > 6) {
       // Look in rows 5-10 for player names
       for (let i = 5; i < Math.min(10, rows.length); i++) {
@@ -133,6 +159,26 @@ export class SwingVisionParser implements IFileParser {
       }
     }
 
+    // If guest team is still empty and we have a workbook, try to extract from Shots sheet
+    if (!guestTeam && workbook && 'Shots' in workbook.Sheets) {
+      const shotsSheet = workbook.Sheets['Shots'];
+      const shotRows = XLSX.utils.sheet_to_json(shotsSheet, { header: 1, defval: '' }) as unknown[][];
+
+      // Look for player name in column 22 (index 22) of the Shots sheet
+      // Search through the first few rows to find a name that's different from hostTeam
+      for (let i = 1; i < Math.min(10, shotRows.length); i++) {
+        if (shotRows[i].length > 22) {
+          const playerFromShots = String(shotRows[i][22] || '').trim();
+          // Find the name that's NOT the host team
+          if (playerFromShots && playerFromShots !== hostTeam && playerFromShots.length > 2) {
+            guestTeam = playerFromShots;
+            guestTeamFromFallback = true;
+            break;
+          }
+        }
+      }
+    }
+
     if (!guestTeam) {
       guestTeam = 'Opponent';
     }
@@ -141,10 +187,10 @@ export class SwingVisionParser implements IFileParser {
       hostTeam,
       guestTeam,
       guestTeamFromFallback,
-      adScoring: this.parseBoolean(values[adScoringIdx]),
-      startTime: values[0] ? String(values[0]) : undefined,
-      endTime: values[1] ? String(values[1]) : undefined,
-      location: headers.includes('location') ? String(values[headers.indexOf('location')] || '') : undefined,
+      adScoring,
+      startTime: dataRow[0] ? String(dataRow[0]) : undefined,
+      endTime: dataRow[1] ? String(dataRow[1]) : undefined,
+      location: headers.includes('location') ? String(dataRow[headers.indexOf('location')] || '') : undefined,
     };
   }
 
