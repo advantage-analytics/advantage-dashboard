@@ -3,6 +3,7 @@ export interface Provider {
   name: string;
   description?: string;
   logo: string;
+  available?: boolean;
 }
 
 export const providers: Provider[] = [
@@ -17,6 +18,7 @@ export const providers: Provider[] = [
     name: "ATP TOUR",
     description: "Official ATP Tour data provider",
     logo: "/providers/atp.png",
+    available: false,
   },
   // Add more providers here easily
 ];
