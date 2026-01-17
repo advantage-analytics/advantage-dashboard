@@ -24,7 +24,7 @@ export function ProviderContent({ selectedProvider, onProviderSelect }: Provider
             className={`w-[280px] h-[140px] transition-all duration-200 rounded-xl bg-white border overflow-visible relative group ${
               isAvailable
                 ? 'cursor-pointer border-[#EAECF0] hover:scale-[1.02]'
-                : 'cursor-not-allowed border-[#D0D5DD]'
+                : 'cursor-not-allowed border-[#EAECF0]'
             } ${
               selectedProvider === provider.id ? 'ring-2 ring-[#3B82F6] ring-offset-2' : ''
             }`}
