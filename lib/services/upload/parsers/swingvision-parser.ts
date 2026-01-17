@@ -217,26 +217,25 @@ export class SwingVisionParser implements IFileParser {
     let opponentScores: number[];
     let playerTiebreaks: (number | null)[];
     let opponentTiebreaks: (number | null)[];
-    let result: 'Player Wins' | 'Opponent Wins' | null = null;
+    let result: string = '';
 
     if (settings.guestTeamFromFallback) {
       // Fallback case: Guest was empty, found in metadata
-      // In this case, SwingVision puts the OPPONENT in hostTeam
-      // and the actual PLAYER is in guestTeam (from fallback)
+      // Only swap the names - scores/tiebreaks are already correct
       playerName = settings.guestTeam || 'Player';
       opponentName = settings.hostTeam || 'Opponent';
-      // Swap scores and tiebreaks since we're swapping player/opponent
-      playerScores = sets.map((s) => s.guestScore);
-      opponentScores = sets.map((s) => s.hostScore);
-      playerTiebreaks = sets.map((s) => s.guestTiebreak);
-      opponentTiebreaks = sets.map((s) => s.hostTiebreak);
-      // Calculate result based on swapped scores
-      const playerWins = sets.filter((s) => s.winner === 'guest').length;
-      const opponentWins = sets.filter((s) => s.winner === 'host').length;
-      if (playerWins > opponentWins) {
-        result = 'Player Wins';
-      } else if (opponentWins > playerWins) {
-        result = 'Opponent Wins';
+      // Keep scores/tiebreaks mapped to host/guest (don't swap)
+      playerScores = sets.map((s) => s.hostScore);
+      opponentScores = sets.map((s) => s.guestScore);
+      playerTiebreaks = sets.map((s) => s.hostTiebreak);
+      opponentTiebreaks = sets.map((s) => s.guestTiebreak);
+      // Calculate result normally
+      const hostWins = sets.filter((s) => s.winner === 'host').length;
+      const guestWins = sets.filter((s) => s.winner === 'guest').length;
+      if (hostWins > guestWins) {
+        result = `${playerName} Wins`;
+      } else if (guestWins > hostWins) {
+        result = `${opponentName} Wins`;
       }
     } else {
       // Normal case: Both teams populated from Settings sheet
@@ -250,9 +249,9 @@ export class SwingVisionParser implements IFileParser {
       const hostWins = sets.filter((s) => s.winner === 'host').length;
       const guestWins = sets.filter((s) => s.winner === 'guest').length;
       if (hostWins > guestWins) {
-        result = 'Player Wins';
+        result = `${playerName} Wins`;
       } else if (guestWins > hostWins) {
-        result = 'Opponent Wins';
+        result = `${opponentName} Wins`;
       }
     }
 
@@ -268,7 +267,7 @@ export class SwingVisionParser implements IFileParser {
       opponentTiebreaks,
       bestOf: String(bestOfNum),
       adScoring: settings.adScoring,
-      result: result || '',
+      result,
       duration: totalDuration,
     };
   }
