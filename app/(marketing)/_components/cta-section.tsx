@@ -12,7 +12,7 @@ export function CtaSection() {
       {/* Full background image */}
       <div className="absolute inset-0">
         <Image
-          src="/cta-bg.webp"
+          src="/marketing/cta-bg.webp"
           alt=""
           fill
           className="object-cover opacity-100 blur-[1px]"
@@ -69,7 +69,7 @@ export function CtaSection() {
           >
             <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-8 space-y-6">
               <Image
-                src="/logo.svg"
+                src="/logos/logo.svg"
                 alt="Advantage"
                 width={160}
                 height={28}

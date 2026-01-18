@@ -97,7 +97,7 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
             <div className="flex items-center gap-1">
               {formData.matchType === "Tournament" ? (
                 <Image
-                  src="/tournament-icon.svg"
+                  src="/icons/tournament-icon.svg"
                   alt="Tournament"
                   width={16}
                   height={16}
@@ -113,7 +113,7 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
           {formData.courtType && (
             <div className="flex items-center gap-1">
               <Image
-                src="/tennis-court-icon.svg"
+                src="/icons/tennis-court-icon.svg"
                 alt="Court"
                 width={16}
                 height={16}

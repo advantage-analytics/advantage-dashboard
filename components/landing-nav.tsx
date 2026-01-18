@@ -15,7 +15,7 @@ export default function LandingNav() {
         className="fixed left-[40px] top-[40px] z-50 inline-flex h-[32px] items-center"
       >
         <Image
-          src="/logo.svg"
+          src="/logos/logo.svg"
           alt="Advantage Beta"
           width={180}
           height={32}

@@ -56,7 +56,7 @@ export default function RecentMatches({
           <div className="flex items-center gap-1">
             {matchType === "Tournament" ? (
               <Image
-                src="/tournament-icon.svg"
+                src="/icons/tournament-icon.svg"
                 alt="Tournament"
                 width={16}
                 height={16}
@@ -71,7 +71,7 @@ export default function RecentMatches({
           {courtType && (
             <div className="flex items-center gap-1">
               <Image
-                src="/tennis-court-icon.svg"
+                src="/icons/tennis-court-icon.svg"
                 alt="Court"
                 width={16}
                 height={16}
@@ -84,7 +84,7 @@ export default function RecentMatches({
           {verificationStatus && (
             <div className="flex items-center gap-1">
               <Image
-                src="/verified-check-icon.svg"
+                src="/icons/verified-check-icon.svg"
                 alt="Check"
                 width={16}
                 height={16}

@@ -32,7 +32,7 @@ export default function AboutPage() {
             className="relative w-full"
           >
             <Image
-              src="/IMG_3589.jpeg"
+              src="/marketing/IMG_3589.jpeg"
               alt="Go Bruins"
               width={900}
               height={600}

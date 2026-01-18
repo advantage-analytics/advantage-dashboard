@@ -32,7 +32,7 @@ export function TestimonialSection() {
             className="relative aspect-[4/3] bg-gray-200 rounded-2xl overflow-hidden"
           >
             <img
-              src="/IMG_3532.jpg"
+              src="/marketing/IMG_3532.jpg"
               alt="Gianluca Ballota - UCLA Tennis"
               className="absolute inset-0 w-full h-full object-cover"
             />

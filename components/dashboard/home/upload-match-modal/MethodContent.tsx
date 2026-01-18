@@ -20,7 +20,7 @@ export function MethodContent({ selectedMethod, onMethodSelect }: MethodContentP
         onClick={() => onMethodSelect(selectedMethod === "elc" ? null : "elc")}
       >
         <img
-          src="/elc-image.png"
+          src="/marketing/elc-image.png"
           alt="Electronic Line Calling"
           className="absolute inset-0 w-full h-full object-cover scale-100 origin-top"
         />
@@ -40,7 +40,7 @@ export function MethodContent({ selectedMethod, onMethodSelect }: MethodContentP
 
       <div className="w-[240px] h-[252px] cursor-not-allowed rounded-2xl relative overflow-hidden bg-white border-[0.5px] border-[#EAECF0]">
         <img
-          src="/logo.svg"
+          src="/logos/logo.svg"
           alt="Advantage"
           className="absolute top-[92px] left-1/2 -translate-x-1/2 w-[78px] h-[14px]"
         />
