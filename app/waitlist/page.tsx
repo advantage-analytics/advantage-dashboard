@@ -65,7 +65,7 @@ export default function WaitlistPage() {
           {/* Logo */}
           <Link href="/" aria-label="Advantage — Home">
             <Image
-              src="/logo.svg"
+              src="/logos/logo.svg"
               alt="Advantage Logo"
               width={120}
               height={22}
@@ -99,7 +99,7 @@ export default function WaitlistPage() {
             <div className="w-full md:max-w-[347px] text-left">
               {/* Advantage beta logo */}
               <Image
-                src="/logo2.svg"
+                src="/logos/logo2.svg"
                 alt="Advantage Beta"
                 width={347}
                 height={29}

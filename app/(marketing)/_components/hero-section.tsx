@@ -8,17 +8,17 @@ import { useState } from "react";
 
 const CAROUSEL_IMAGES = [
   {
-    src: "/Summary Statistics Template.png",
+    src: "/marketing/Summary Statistics Template.png",
     alt: "Overall Statistics - Tennis performance analytics overview",
     label: "Overall",
   },
   {
-    src: "/First Serve Statistics.png",
+    src: "/marketing/First Serve Statistics.png",
     alt: "Serve Statistics - First serve placement and analysis",
     label: "Serve",
   },
   {
-    src: "/First Return Deuce Statistics.png",
+    src: "/marketing/First Return Deuce Statistics.png",
     alt: "Return Statistics - Return placement and contact analysis",
     label: "Return",
   },

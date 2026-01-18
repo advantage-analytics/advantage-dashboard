@@ -27,7 +27,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           {/* Left */}
           <div className="relative hidden md:flex items-center justify-center md:justify-end md:pr-[14px]">
             <Image
-              src="/logo.svg"
+              src="/logos/logo.svg"
               alt="Advantage"
               width={200}
               height={56}

@@ -41,7 +41,7 @@ export function AppSidebar() {
       <SidebarHeader className="px-6 pt-10 pb-0 mb-10">
         <div className="flex items-center justify-center">
           <Image
-            src="/logo.svg"
+            src="/logos/logo.svg"
             alt="Advantage"
             width={141}
             height={24}

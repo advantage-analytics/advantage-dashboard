@@ -310,7 +310,7 @@ export const BentoGrid: React.FC = () => {
             <div className="flex flex-col md:flex-row items-center justify-center gap-6 p-4 md:p-8">
               <div className="relative w-64 md:w-72 aspect-[8.5/11] bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
                 <Image
-                  src="/First Return Deuce Statistics.png"
+                  src="/marketing/First Return Deuce Statistics.png"
                   alt="PDF Report Example"
                   fill
                   className="object-contain"

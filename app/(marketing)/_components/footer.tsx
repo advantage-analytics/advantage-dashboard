@@ -52,7 +52,7 @@ export function Footer() {
           <div className="mb-12 md:mb-12">
             <div className="flex flex-row items-center text-left md:text-left">
               <Image
-                src="/logo.svg"
+                src="/logos/logo.svg"
                 alt="Advantage Logo"
                 width={120}
                 height={22}

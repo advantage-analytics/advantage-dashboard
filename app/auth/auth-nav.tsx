@@ -12,7 +12,7 @@ export default function AuthNav() {
         {/* Logo */}
         <Link href="/" aria-label="Advantage — Home">
           <Image
-            src="/logo.svg"
+            src="/logos/logo.svg"
             alt="Advantage Logo"
             width={120}
             height={22}
