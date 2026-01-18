@@ -42,3 +42,19 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# claude code
+.claude/
+.mcp.json
+
+# lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# ide/editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

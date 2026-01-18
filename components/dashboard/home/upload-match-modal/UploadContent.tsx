@@ -3,16 +3,50 @@
 /**
  * UploadContent - Step 3 content
  * File upload zone with drag-and-drop support
+ *
+ * Enforces single file upload per match.
+ * Accepts provider-specific file types based on selected provider.
+ * Features sophisticated animations and state management matching modal design language.
  */
 
 import { Button } from "@/components/ui/button";
-import { FolderOpen, X } from "lucide-react";
-import { UploadedFile } from "./types";
+import {
+  FolderOpen,
+  AlertCircle,
+  Loader2,
+  CheckCircle2,
+  File,
+  Upload,
+  Trash2,
+  FileSpreadsheet,
+  AlertTriangle,
+} from "lucide-react";
+import { UploadedFile, ParsingState } from "./types";
+import { ProviderId } from "@/lib/services/upload";
+
+/** File type configuration per provider */
+const PROVIDER_FILE_CONFIG: Record<
+  ProviderId,
+  { accept: string; description: string }
+> = {
+  "swing-vision": {
+    accept: ".xlsx",
+    description: "SwingVision export (.xlsx)",
+  },
+  "atp-tour": {
+    accept: ".csv",
+    description: "ATP Tour data (.csv)",
+  },
+};
 
 export interface UploadContentProps {
   sourceType: string;
+  selectedProvider: ProviderId | null;
   uploadedFile: UploadedFile | null;
   isOver: boolean;
+  isUploading?: boolean;
+  uploadError?: string | null;
+  parsingState?: ParsingState;
   onSourceTypeChange: (type: string) => void;
   onDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
   onDragLeave: () => void;
@@ -22,81 +56,289 @@ export interface UploadContentProps {
 }
 
 export function UploadContent({
+  selectedProvider,
   uploadedFile,
   isOver,
+  isUploading = false,
+  uploadError,
+  parsingState,
   onDragOver,
   onDragLeave,
   onDrop,
   onFileChange,
-  onRemoveFile
+  onRemoveFile,
 }: UploadContentProps) {
+  const fileConfig = selectedProvider
+    ? PROVIDER_FILE_CONFIG[selectedProvider]
+    : { accept: ".csv,.xlsx", description: "Select a provider first" };
+
+  const hasFile = !!uploadedFile;
+
   return (
-    <div className="flex flex-col items-center gap-6">
-      {/* Drag and Drop Area */}
-      <div
-        onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
-        onDrop={onDrop}
-        className={`w-full border-2 border-dashed rounded-2xl flex flex-col items-center justify-center py-8 px-4 ${
-          isOver ? "border-[#3986F3] bg-blue-50" : "border-[#3986F3]"
-        }`}
-      >
-        <FolderOpen className="h-8 w-8 text-[#3986F3] mb-4" />
-        <p className="text-[#0D0D0D] font-normal text-sm mb-4">
-          Drag your file(s) to start uploading
-        </p>
-        
-        {/* OR Separator */}
-        <div className="flex items-center gap-2 w-full mb-4">
-          <div className="flex-1 h-px bg-[#E5E5E5]"></div>
-          <span className="text-[#999999] font-normal text-xs uppercase">OR</span>
-          <div className="flex-1 h-px bg-[#E5E5E5]"></div>
-        </div>
-        
-        <label htmlFor="upload-input-modal" className="cursor-pointer">
-          <Button
-            type="button"
-            className="bg-white border-3 text-[#3986F3] text-xs border border-[#3986F3] rounded-lg px-4 py-1 hover:bg-blue-400 transition-colors shadow-none"
-            onClick={() => document.getElementById("upload-input-modal")?.click()}
-          >
-            Browse files
-          </Button>
-        </label>
-        <input
-          id="upload-input-modal"
-          type="file"
-          onChange={onFileChange}
-          className="hidden"
-          accept=".csv"
-        />
-      </div>
-
-      {/* File Type Restriction */}
-      <p className="text-[#999999] font-normal text-xs self-start">
-        Only support .csv files
-      </p>
-
-      {/* Uploaded File Card */}
-      {uploadedFile && (
-        <div className="w-full flex items-center justify-between p-4 bg-white border border-[#E5E5E5] rounded-[4px]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#0D0D0D] rounded flex items-center justify-center">
-              <FolderOpen className="h-5 w-5 text-white" />
-            </div>
+    <div className="flex flex-col h-full gap-3 animate-fadeIn">
+      {/* Error State - Compact and at top */}
+      {uploadError && (
+        <div className="animate-slideDown">
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2.5">
+            <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
             <div>
-              <p className="text-[#0D0D0D] font-medium text-xs">{uploadedFile.name}</p>
-              <p className="text-[#999999] font-normal text-xs">{uploadedFile.size}</p>
+              <p className="text-red-700 text-xs font-medium">Upload Error</p>
+              <p className="text-red-600 text-xs mt-0.5">{uploadError}</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onRemoveFile}
-            className="w-6 h-6 rounded-full bg-[#F7F7F7] flex items-center justify-center text-[#999999] hover:text-[#0D0D0D] hover:bg-[#E5E5E5] transition-colors"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
         </div>
       )}
+
+      {/* Main Content Area - Grows to fill space */}
+      <div className="flex flex-col flex-1 gap-3 min-h-0">
+        {!hasFile ? (
+          <>
+            {/* Drag and Drop Zone - Centered and spacious */}
+            <div
+              onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
+              onDrop={onDrop}
+              className={`relative flex-1 border-2 border-dashed rounded-2xl transition-all duration-300 overflow-hidden group flex flex-col items-center justify-center ${
+                isUploading
+                  ? "border-gray-300 bg-gray-50"
+                  : isOver
+                    ? "border-[#3B82F6] bg-[#3B82F6]/5"
+                    : "border-[#EAECF0] hover:border-[#3B82F6] hover:bg-[#F0F7FF]"
+              }`}
+            >
+              {/* Background gradient effect on hover */}
+              <div
+                className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none ${
+                  isOver ? "opacity-100" : ""
+                }`}
+                style={{
+                  background:
+                    "radial-gradient(circle 400px at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(59, 130, 246, 0.1), transparent)",
+                }}
+              />
+
+              {/* Content - Properly centered */}
+              <div className="relative z-10 flex flex-col items-center justify-center gap-4 px-6">
+                {isUploading ? (
+                  <>
+                    {/* Loading State */}
+                    <div className="flex flex-col items-center gap-3 animate-fadeIn">
+                      <div className="relative w-14 h-14 flex items-center justify-center">
+                        <div className="absolute inset-0 bg-gradient-to-r from-[#3B82F6]/20 to-transparent rounded-full animate-spin" />
+                        <Loader2 className="h-7 w-7 text-[#3B82F6] animate-spin" />
+                      </div>
+                      <p className="text-[#0D0D0D] font-medium text-sm">
+                        Validating file...
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Upload Prompt */}
+                    <div className="flex flex-col items-center gap-3 text-center">
+                      {/* Icon */}
+                      <div
+                        className={`relative w-16 h-16 flex items-center justify-center rounded-2xl transition-all duration-300 ${
+                          isOver
+                            ? "bg-[#3B82F6] scale-110"
+                            : "bg-[#F0F4FF] group-hover:bg-[#3B82F6]"
+                        }`}
+                      >
+                        <Upload
+                          className={`h-8 w-8 transition-all duration-300 ${
+                            isOver
+                              ? "text-white scale-110"
+                              : "text-[#3B82F6] group-hover:text-white"
+                          }`}
+                        />
+                      </div>
+
+                      {/* Text Content */}
+                      <div className="space-y-1.5">
+                        <p className="text-[#0D0D0D] font-medium text-sm">
+                          Drag your file here
+                        </p>
+                        <p className="text-[#999999] text-xs leading-relaxed">
+                          or click the button below to browse
+                        </p>
+                      </div>
+
+                      {/* File Info */}
+                      <p className="text-[#999999] text-xs pt-1">
+                        {fileConfig.description} •{" "}
+                        <span className="font-medium">Max 50MB</span>
+                      </p>
+                    </div>
+
+                    {/* Browse Button */}
+                    <div className="pt-2">
+                      <label htmlFor="upload-input-modal" className="block">
+                        <Button
+                          type="button"
+                          className="bg-[#0D0D0D] hover:bg-[#1D1D1D] text-white text-xs font-medium rounded-lg px-6 py-2 transition-all duration-200 active:scale-95"
+                          onClick={() =>
+                            document.getElementById("upload-input-modal")?.click()
+                          }
+                        >
+                          Browse Files
+                        </Button>
+                      </label>
+                    </div>
+
+                    <input
+                      id="upload-input-modal"
+                      type="file"
+                      onChange={onFileChange}
+                      className="hidden"
+                      accept={fileConfig.accept}
+                      disabled={isUploading}
+                    />
+                  </>
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* File Uploaded State */}
+            <div className="animate-fadeIn space-y-3 flex flex-col">
+              {/* Success Badge */}
+              <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg w-fit">
+                <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                <p className="text-green-700 text-xs font-medium">
+                  File selected
+                </p>
+              </div>
+
+              {/* Parsing Status */}
+              {parsingState && (
+                <>
+                  {parsingState.isParsing && (
+                    <div className="animate-slideDown flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                      <Loader2 className="h-4 w-4 text-blue-600 animate-spin flex-shrink-0" />
+                      <p className="text-blue-700 text-xs font-medium">
+                        Parsing file...
+                      </p>
+                    </div>
+                  )}
+
+                  {parsingState.parseSuccess && (
+                    <div className="animate-slideDown flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                      <p className="text-emerald-700 text-xs font-medium">
+                        Data auto-filled from file
+                      </p>
+                    </div>
+                  )}
+
+                  {parsingState.parseWarnings.length > 0 && (
+                    <div className="animate-slideDown flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-amber-700 text-xs font-medium">
+                          Parsing warnings
+                        </p>
+                        <ul className="text-amber-600 text-xs mt-1 space-y-0.5">
+                          {parsingState.parseWarnings.map((warning, idx) => (
+                            <li key={idx}>• {warning}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  {parsingState.parseError && (
+                    <div className="animate-slideDown p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2.5">
+                      <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-red-700 text-xs font-medium">
+                          Parsing Error
+                        </p>
+                        <p className="text-red-600 text-xs mt-0.5">
+                          {parsingState.parseError}
+                        </p>
+                        <p className="text-red-600 text-xs mt-1">
+                          You can still enter data manually in the next step.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* File Card */}
+              <div className="border border-[#EAECF0] rounded-xl bg-white overflow-hidden hover:border-[#3B82F6]/30 transition-all duration-300">
+                {/* Card Header */}
+                <div className="px-4 py-3 border-b border-[#EAECF0] bg-[#FAFBFC] flex items-center justify-between">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="w-10 h-10 bg-[#3B82F6] rounded-lg flex items-center justify-center flex-shrink-0">
+                      <FileSpreadsheet className="h-5 w-5 text-white" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[#0D0D0D] font-medium text-sm truncate">
+                        {uploadedFile.name}
+                      </p>
+                      <p className="text-[#999999] text-xs">{uploadedFile.size}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card Footer - Action */}
+                <div className="px-4 py-3 flex items-center justify-between bg-white">
+                  <p className="text-[#999999] text-xs">
+                    Ready to proceed to next step
+                  </p>
+                  <button
+                    type="button"
+                    onClick={onRemoveFile}
+                    disabled={isUploading}
+                    className="p-2 text-[#999999] hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label="Remove file"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Info Text */}
+              <p className="text-[#999999] text-xs pt-1">
+                You can change this file at any time before creating the match.
+              </p>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* CSS Animations */}
+      <style>{`
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-8px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .animate-fadeIn {
+          animation: fadeIn 300ms ease-out;
+        }
+
+        .animate-slideDown {
+          animation: slideDown 300ms ease-out;
+        }
+      `}</style>
     </div>
   );
 }

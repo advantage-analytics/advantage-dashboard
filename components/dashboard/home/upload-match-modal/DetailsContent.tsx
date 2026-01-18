@@ -5,7 +5,7 @@
  * Match details form with player scores and result
  */
 
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -15,18 +15,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { ChevronDown, CircleMinus, CirclePlus, SquarePen } from "lucide-react";
-import { FormData } from "./types";
+import { ChevronDown, CircleMinus, CirclePlus, SquarePen, Info } from "lucide-react";
+import { FormData, ParsingState } from "./types";
 import { getAdjustedScores } from "./utils";
 
 export interface DetailsContentProps {
   formData: FormData;
-  onInputChange: (field: keyof FormData, value: any) => void;
+  onInputChange: (field: keyof FormData, value: string | number | boolean) => void;
   onScoreChange: (
     player: "player" | "opponent",
     index: number,
     value: string
   ) => void;
+  onTiebreakChange?: (
+    player: "player" | "opponent",
+    index: number,
+    value: string
+  ) => void;
+  parsingState?: ParsingState;
 }
 
 // Helper function to get initials from a name
@@ -38,15 +44,24 @@ function getInitials(name: string): string {
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
+// Helper function to check if a set needs a tiebreak (7-6 or 6-7)
+function needsTiebreak(playerScore: number | null, opponentScore: number | null): boolean {
+  if (playerScore === null || opponentScore === null) return false;
+  return (playerScore === 7 && opponentScore === 6) || (playerScore === 6 && opponentScore === 7);
+}
+
 export function DetailsContent({
   formData,
   onInputChange,
   onScoreChange,
+  onTiebreakChange,
+  parsingState,
 }: DetailsContentProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState(false);
   const [editingOpponent, setEditingOpponent] = useState(false);
 
+  // Get scores first (needed by focus functions)
   const playerScores = getAdjustedScores(
     formData.playerScores,
     formData.bestOf
@@ -55,7 +70,109 @@ export function DetailsContent({
     formData.opponentScores,
     formData.bestOf
   );
-  const bestOfNum = parseInt(formData.bestOf) || 3; // Default to 3 sets if empty
+  const bestOfNum = parseInt(formData.bestOf) || 3;
+
+  // Refs for all input fields to manage autofocus
+  const playerScoreRefs = useRef<Record<number, HTMLInputElement | null>>({});
+  const opponentScoreRefs = useRef<Record<number, HTMLInputElement | null>>({});
+  const playerTiebreakRefs = useRef<Record<number, HTMLInputElement | null>>({});
+  const opponentTiebreakRefs = useRef<Record<number, HTMLInputElement | null>>({});
+
+  // Focus management logic
+  const focusNextInput = useCallback((currentType: "playerScore" | "opponentScore" | "playerTiebreak" | "opponentTiebreak", setIndex: number) => {
+    const numSets = playerScores.length;
+
+    setTimeout(() => {
+      switch (currentType) {
+        case "playerScore":
+          // From player score → opponent score (same set)
+          if (opponentScoreRefs.current[setIndex]) {
+            opponentScoreRefs.current[setIndex]?.focus();
+          }
+          break;
+
+        case "opponentScore":
+          // From opponent score → next player score OR player tiebreak if 7-6/6-7
+          const playerScore = playerScores[setIndex];
+          const opponentScore = opponentScores[setIndex];
+
+          if (needsTiebreak(playerScore, opponentScore)) {
+            // Jump to player tiebreak
+            if (playerTiebreakRefs.current[setIndex]) {
+              playerTiebreakRefs.current[setIndex]?.focus();
+            }
+          } else if (setIndex < numSets - 1) {
+            // Jump to next set's player score
+            if (playerScoreRefs.current[setIndex + 1]) {
+              playerScoreRefs.current[setIndex + 1]?.focus();
+            }
+          }
+          break;
+
+        case "playerTiebreak":
+          // From player tiebreak → opponent tiebreak (same set)
+          if (opponentTiebreakRefs.current[setIndex]) {
+            opponentTiebreakRefs.current[setIndex]?.focus();
+          }
+          break;
+
+        case "opponentTiebreak":
+          // From opponent tiebreak → next set's player score
+          if (setIndex < numSets - 1) {
+            if (playerScoreRefs.current[setIndex + 1]) {
+              playerScoreRefs.current[setIndex + 1]?.focus();
+            }
+          }
+          break;
+      }
+    }, 0);
+  }, [playerScores, opponentScores]);
+
+  // Focus previous input when deleting
+  const focusPreviousInput = useCallback((currentType: "playerScore" | "opponentScore" | "playerTiebreak" | "opponentTiebreak", setIndex: number) => {
+    setTimeout(() => {
+      switch (currentType) {
+        case "playerScore":
+          // From player score → previous opponent tiebreak (if exists)
+          if (setIndex > 0) {
+            const prevPlayerScore = playerScores[setIndex - 1];
+            const prevOpponentScore = opponentScores[setIndex - 1];
+
+            if (needsTiebreak(prevPlayerScore, prevOpponentScore)) {
+              if (opponentTiebreakRefs.current[setIndex - 1]) {
+                opponentTiebreakRefs.current[setIndex - 1]?.focus();
+              }
+            } else {
+              if (opponentScoreRefs.current[setIndex - 1]) {
+                opponentScoreRefs.current[setIndex - 1]?.focus();
+              }
+            }
+          }
+          break;
+
+        case "opponentScore":
+          // From opponent score → player score (same set)
+          if (playerScoreRefs.current[setIndex]) {
+            playerScoreRefs.current[setIndex]?.focus();
+          }
+          break;
+
+        case "playerTiebreak":
+          // From player tiebreak → opponent score (same set)
+          if (opponentScoreRefs.current[setIndex]) {
+            opponentScoreRefs.current[setIndex]?.focus();
+          }
+          break;
+
+        case "opponentTiebreak":
+          // From opponent tiebreak → player tiebreak (same set)
+          if (playerTiebreakRefs.current[setIndex]) {
+            playerTiebreakRefs.current[setIndex]?.focus();
+          }
+          break;
+      }
+    }, 0);
+  }, [playerScores, opponentScores]);
 
   const handleSetsChange = (delta: number) => {
     const newSets = Math.max(1, Math.min(5, bestOfNum + delta));
@@ -74,10 +191,26 @@ export function DetailsContent({
     { value: `${opponentName} Withdrew`, label: `${opponentName} Withdrew` },
     { value: `${playerName} Defaulted`, label: `${playerName} Defaulted` },
     { value: `${opponentName} Defaulted`, label: `${opponentName} Defaulted` },
+    { value: "Unfinished", label: "Unfinished" },
   ];
 
   return (
     <div className="flex flex-col gap-9">
+      {/* Auto-fill Banner */}
+      {parsingState?.parseSuccess && (
+        <div className="animate-slideDown p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2.5">
+          <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-blue-700 text-xs font-medium">
+              Data auto-filled from file
+            </p>
+            <p className="text-blue-600 text-xs mt-0.5">
+              Please review the information below and make any necessary corrections.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-4">
         <div className="space-y-3">
           {/* Sets Configuration */}
@@ -110,23 +243,28 @@ export function DetailsContent({
 
         {/* Player Rows with Set Headers */}
         <div className="space-y-1 justify-end">
-          {/* Set Headers */}
+          {/* Set Headers - mirrors the score row structure */}
           <div className="flex items-center justify-end gap-4">
-            <div className="flex gap-4">
-              {playerScores.map((_, i) => (
-                <div
-                  key={i}
-                  className="w-6 text-center text-sm text-[#999999] font-normal"
-                >
-                  {i + 1}
+            {playerScores.map((score, i) => {
+              const hasTiebreak = needsTiebreak(score, opponentScores[i]);
+              return (
+                <div key={i} className="flex items-center gap-1">
+                  <div className="w-6 text-center text-sm text-[#999999] font-normal">
+                    {i + 1}
+                  </div>
+                  {hasTiebreak && (
+                    <span className="w-6 text-center text-[8px] text-[#999999] font-normal">
+                      TIE
+                    </span>
+                  )}
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
 
           <div className="space-y-3">
             {/* Player 1 */}
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-start">
               <div className="flex gap-3">
                 <div className="w-10 h-10 rounded-full bg-[#F7F7F7] flex items-center justify-center text-sm font-medium text-[#999999]">
                   {getInitials(playerName)}
@@ -158,20 +296,92 @@ export function DetailsContent({
               </div>
 
               <div className="flex gap-4">
-                {playerScores.map((score, i) => (
-                  <Input
-                    key={i}
-                    placeholder="-"
-                    className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#999999]"
-                    value={score === null ? "" : score}
-                    onChange={(e) => onScoreChange("player", i, e.target.value)}
-                  />
-                ))}
+                {playerScores.map((score, i) => {
+                  const opponentScore = opponentScores[i];
+                  const hasTiebreak = needsTiebreak(score, opponentScore);
+
+                  return (
+                    <div key={i} className="flex items-center gap-1">
+                      {/* Set Score */}
+                      <Input
+                        ref={(el) => {
+                          if (el) playerScoreRefs.current[i] = el;
+                        }}
+                        placeholder="-"
+                        inputMode="numeric"
+                        pattern="\d*"
+                        className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#999999]"
+                        value={score === null ? "" : score}
+                        onChange={(e) => {
+                          const newValue = e.target.value;
+                          onScoreChange("player", i, newValue);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            const newValue = e.currentTarget.value;
+
+                            if (newValue === "") {
+                              // User is deleting - focus previous
+                              focusPreviousInput("playerScore", i);
+                            } else if (newValue.length > 0) {
+                              // Check if this creates a tiebreak situation (7-6 or 6-7)
+                              const playerNum = Number(newValue);
+                              const currentOpponentScore = opponentScores[i];
+
+                              if (needsTiebreak(playerNum, currentOpponentScore)) {
+                                // Jump directly to player tiebreak
+                                setTimeout(() => {
+                                  if (playerTiebreakRefs.current[i]) {
+                                    playerTiebreakRefs.current[i]?.focus();
+                                  }
+                                }, 0);
+                              } else {
+                                // User pressed enter - focus next
+                                focusNextInput("playerScore", i);
+                              }
+                            }
+                          }
+                        }}
+                      />
+                      {/* Tiebreak Score - inline on the right */}
+                      {hasTiebreak && (
+                        <Input
+                          ref={(el) => {
+                            if (el) playerTiebreakRefs.current[i] = el;
+                          }}
+                          placeholder="-"
+                          inputMode="numeric"
+                          pattern="\d*"
+                          className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#999999]"
+                          value={formData.playerTiebreaks[i] === null ? "" : String(formData.playerTiebreaks[i])}
+                          onChange={(e) => {
+                            const newValue = e.target.value;
+                            onTiebreakChange?.("player", i, newValue);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              const newValue = e.currentTarget.value;
+
+                              if (newValue === "") {
+                                // User is deleting - focus previous
+                                focusPreviousInput("playerTiebreak", i);
+                              } else if (newValue.length > 0) {
+                                // User pressed enter - focus next
+                                focusNextInput("playerTiebreak", i);
+                              }
+                            }
+                          }}
+                          maxLength={3}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
             {/* Player 2 */}
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-start">
               <div className="flex gap-3">
                 <div className="w-10 h-10 rounded-full bg-[#F7F7F7] flex items-center justify-center text-sm font-medium text-[#999999]">
                   {getInitials(opponentName)}
@@ -203,15 +413,87 @@ export function DetailsContent({
               </div>
 
               <div className="flex gap-4">
-                {opponentScores.map((score, i) => (
-                  <Input
-                    key={i}
-                    placeholder="-"
-                    className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#999999]"
-                    value={score === null ? "" : score}
-                    onChange={(e) => onScoreChange("opponent", i, e.target.value)}
-                  />
-                ))}
+                {opponentScores.map((score, i) => {
+                  const playerScore = playerScores[i];
+                  const hasTiebreak = needsTiebreak(playerScore, score);
+
+                  return (
+                    <div key={i} className="flex items-center gap-1">
+                      {/* Set Score */}
+                      <Input
+                        ref={(el) => {
+                          if (el) opponentScoreRefs.current[i] = el;
+                        }}
+                        placeholder="-"
+                        inputMode="numeric"
+                        pattern="\d*"
+                        className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#999999]"
+                        value={score === null ? "" : score}
+                        onChange={(e) => {
+                          const newValue = e.target.value;
+                          onScoreChange("opponent", i, newValue);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            const newValue = e.currentTarget.value;
+
+                            if (newValue === "") {
+                              // User is deleting - focus previous
+                              focusPreviousInput("opponentScore", i);
+                            } else if (newValue.length > 0) {
+                              // Check if this creates a tiebreak situation (7-6 or 6-7)
+                              const opponentNum = Number(newValue);
+                              const currentPlayerScore = playerScores[i];
+
+                              if (needsTiebreak(currentPlayerScore, opponentNum)) {
+                                // Jump directly to player tiebreak (since player tiebreak comes before opponent tiebreak in the flow)
+                                setTimeout(() => {
+                                  if (playerTiebreakRefs.current[i]) {
+                                    playerTiebreakRefs.current[i]?.focus();
+                                  }
+                                }, 0);
+                              } else {
+                                // User pressed enter - focus next
+                                focusNextInput("opponentScore", i);
+                              }
+                            }
+                          }
+                        }}
+                      />
+                      {/* Tiebreak Score - inline on the right */}
+                      {hasTiebreak && (
+                        <Input
+                          ref={(el) => {
+                            if (el) opponentTiebreakRefs.current[i] = el;
+                          }}
+                          placeholder="-"
+                          inputMode="numeric"
+                          pattern="\d*"
+                          className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#999999]"
+                          value={formData.opponentTiebreaks[i] === null ? "" : String(formData.opponentTiebreaks[i])}
+                          onChange={(e) => {
+                            const newValue = e.target.value;
+                            onTiebreakChange?.("opponent", i, newValue);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              const newValue = e.currentTarget.value;
+
+                              if (newValue === "") {
+                                // User is deleting - focus previous
+                                focusPreviousInput("opponentTiebreak", i);
+                              } else if (newValue.length > 0) {
+                                // User pressed enter - focus next
+                                focusNextInput("opponentTiebreak", i);
+                              }
+                            }
+                          }}
+                          maxLength={3}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -372,9 +654,39 @@ export function DetailsContent({
               </Select>
             </div>
           </div>
+
+          {/* Match Duration */}
+          <div className="space-y-3">
+            <h4 className="text-[#0D0D0D] font-medium text-xs">Match Duration</h4>
+            <Input
+              type="number"
+              placeholder="Duration in seconds (optional)"
+              value={formData.duration || ""}
+              onChange={(e) => onInputChange("duration", e.target.value ? parseInt(e.target.value, 10) : 0)}
+              className="w-[200px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none placeholder:text-[#999999] px-3"
+            />
+          </div>
           </div>
         </div>
       </div>
+
+      {/* CSS Animations */}
+      <style>{`
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-8px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .animate-slideDown {
+          animation: slideDown 300ms ease-out;
+        }
+      `}</style>
     </div>
   );
 }

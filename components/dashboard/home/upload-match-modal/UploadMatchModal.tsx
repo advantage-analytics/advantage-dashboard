@@ -40,9 +40,12 @@ export function UploadMatchModal({
     uploadedFile,
     isOver,
     isCreating,
+    isUploading,
     error,
+    uploadError,
     isPrivateMatch,
     formData,
+    parsingState,
     handleMethodSelect,
     handleMethodContinue,
     handleProviderSelect,
@@ -58,6 +61,7 @@ export function UploadMatchModal({
     handleRemoveFile,
     handleInputChange,
     handleScoreChange,
+    handleTiebreakChange,
     handleCreateMatch,
   } = useUploadMatchModal({ open, onOpenChange });
 
@@ -87,6 +91,8 @@ export function UploadMatchModal({
   const isContinueDisabled = () => {
     if (step === "method" && !selectedMethod) return true;
     if (step === "provider" && !selectedProvider) return true;
+    if (step === "upload" && !uploadedFile) return true; // Require file before continuing
+    if (step === "upload" && isUploading) return true; // Disable while uploading
     if (step === "confirm" && isCreating) return true;
     return false;
   };
@@ -141,8 +147,12 @@ export function UploadMatchModal({
             {step === "upload" && (
               <UploadContent
                 sourceType={sourceType}
+                selectedProvider={selectedProvider}
                 uploadedFile={uploadedFile}
                 isOver={isOver}
+                isUploading={isUploading}
+                uploadError={uploadError}
+                parsingState={parsingState}
                 onSourceTypeChange={setSourceType}
                 onDragOver={(e) => {
                   e.preventDefault();
@@ -160,6 +170,8 @@ export function UploadMatchModal({
                 formData={formData}
                 onInputChange={handleInputChange}
                 onScoreChange={handleScoreChange}
+                onTiebreakChange={handleTiebreakChange}
+                parsingState={parsingState}
               />
             )}
 

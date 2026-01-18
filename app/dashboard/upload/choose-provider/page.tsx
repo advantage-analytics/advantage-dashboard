@@ -93,6 +93,8 @@ export default function ChooseProviderClient() {
                   // MODIFICATION: Added isSelected prop to show visual feedback
                   // when a provider is selected (highlighted with black ring and "Selected" badge)
                   isSelected={selectedProvider === provider.id}
+                  // MODIFICATION: Added available prop to handle unavailable providers
+                  available={provider.available !== false}
                 />
               ))}
             </div>

@@ -61,6 +61,15 @@ export function determineWinner(
   };
 }
 
+/** Match metadata for database insertion */
+export interface MatchMetadata {
+  userId: string;
+  sourceProvider: string;
+  analysisMethod: string;
+  matchType?: string;
+  courtType?: string;
+}
+
 /**
  * Build match data object for database insertion
  */
@@ -69,18 +78,32 @@ export function buildMatchData(
   formData: FormData,
   winner: WinnerLoserResult["winner"],
   loser: WinnerLoserResult["loser"],
-  isPrivate: boolean
+  isPrivate: boolean,
+  metadata: MatchMetadata
 ): MatchData {
+  // Validate bestOf - only 1, 3, or 5 are allowed
+  const bestOfValue = parseInt(formData.bestOf);
+  const validBestOf = [1, 3, 5];
+  const bestOf = validBestOf.includes(bestOfValue) ? bestOfValue : 3;
+
+  // Determine if the player (playerName) won
+  const playerWon = formData.playerName === winner.name;
+
+  // Convert null scores to 0 for database insertion
+  const playerScoresNum = formData.playerScores.map(s => s ?? 0);
+  const opponentScoresNum = formData.opponentScores.map(s => s ?? 0);
+
   return {
     id: matchId,
-    player1_id: winner.id,
-    player1_name: winner.name,
-    player2_id: loser.id,
-    player2_name: loser.name,
+    // player1 is always playerName (Host Team), player2 is always opponentName (Guest Team)
+    player1_id: playerWon ? winner.id : loser.id,
+    player1_name: formData.playerName,
+    player2_id: playerWon ? loser.id : winner.id,
+    player2_name: formData.opponentName,
     tournament_name: formData.eventName,
     round: formData.round,
     format: {
-      best_of: parseInt(formData.bestOf),
+      best_of: bestOf,
       ad_scoring: formData.adScoring,
       play_on_lets: formData.playOnLets
     },
@@ -88,9 +111,18 @@ export function buildMatchData(
     date: formData.date,
     private: isPrivate,
     score: {
-      player1: winner.scores,
-      player2: loser.scores
-    }
+      player1: playerScoresNum,
+      player2: opponentScoresNum,
+      player1_tiebreaks: formData.playerTiebreaks,
+      player2_tiebreaks: formData.opponentTiebreaks
+    },
+    // New metadata fields
+    created_by: metadata.userId,
+    source_provider: metadata.sourceProvider,
+    analysis_method: metadata.analysisMethod,
+    match_type: formData.matchType || metadata.matchType,
+    court_type: formData.courtType || metadata.courtType,
+    duration: formData.duration
   };
 }
 

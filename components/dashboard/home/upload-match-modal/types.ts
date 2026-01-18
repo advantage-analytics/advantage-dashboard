@@ -25,8 +25,11 @@ export interface FormData {
   opponentName: string;
   playerScores: (number | null)[];
   opponentScores: (number | null)[];
+  playerTiebreaks: (number | null)[];
+  opponentTiebreaks: (number | null)[];
   matchType?: string;
   courtType?: string;
+  duration?: number;
 }
 
 /** Uploaded file metadata and data */
@@ -73,7 +76,17 @@ export interface MatchData {
   score: {
     player1: number[];
     player2: number[];
+    player1_tiebreaks?: (number | null)[];
+    player2_tiebreaks?: (number | null)[];
   };
+  // New metadata fields
+  created_by: string;
+  source_provider: string;
+  analysis_method: string;
+  match_type?: string;
+  court_type?: string;
+  verified?: boolean;
+  duration?: number;
 }
 
 /** Default form data values */
@@ -90,8 +103,11 @@ export const DEFAULT_FORM_DATA: FormData = {
   opponentName: "",
   playerScores: [null, null, null],
   opponentScores: [null, null, null],
+  playerTiebreaks: [null, null, null],
+  opponentTiebreaks: [null, null, null],
   matchType: "",
-  courtType: ""
+  courtType: "",
+  duration: 0
 };
 
 /** Step order for navigation and indicator */
@@ -129,3 +145,11 @@ export const STEP_FOOTER_CONFIG: Record<Step, { showBack: boolean; continueLabel
   details: { showBack: true, continueLabel: "Continue" },
   confirm: { showBack: true, continueLabel: "Create Match" }
 };
+
+/** File parsing state for auto-population */
+export interface ParsingState {
+  isParsing: boolean;
+  parseError: string | null;
+  parseWarnings: string[];
+  parseSuccess: boolean;
+}
