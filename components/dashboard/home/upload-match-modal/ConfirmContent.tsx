@@ -226,7 +226,7 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
       {/* Error Display */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-sm text-red-800">{error}</p>
+          <p className="text-sm text-red-600">{error}</p>
         </div>
       )}
     </div>

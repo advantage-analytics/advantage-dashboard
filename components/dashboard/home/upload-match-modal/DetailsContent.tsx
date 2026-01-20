@@ -199,12 +199,12 @@ export function DetailsContent({
       {/* Auto-fill Banner */}
       {parsingState?.parseSuccess && (
         <div className="animate-slideDown p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2.5">
-          <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+          <Info className="h-4 w-4 text-blue-500 mt-0 flex-shrink-0" />
           <div>
-            <p className="text-blue-700 text-xs font-medium">
+            <p className="text-blue-600 text-xs font-medium">
               Data auto-filled from file
             </p>
-            <p className="text-blue-600 text-xs mt-0.5">
+            <p className="text-blue-600 text-xs mt-1">
               Please review the information below and make any necessary corrections.
             </p>
           </div>

@@ -80,9 +80,9 @@ export function UploadContent({
       {uploadError && (
         <div className="animate-slideDown">
           <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2.5">
-            <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+            <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
             <div>
-              <p className="text-red-700 text-xs font-medium">Upload Error</p>
+              <p className="text-red-600 text-xs font-medium">Upload Error</p>
               <p className="text-red-600 text-xs mt-0.5">{uploadError}</p>
             </div>
           </div>
@@ -202,40 +202,32 @@ export function UploadContent({
           <>
             {/* File Uploaded State */}
             <div className="animate-fadeIn space-y-3 flex flex-col">
-              {/* Success Badge */}
-              <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg w-fit">
-                <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
-                <p className="text-green-700 text-xs font-medium">
-                  File selected
-                </p>
-              </div>
-
-              {/* Parsing Status */}
+              {/* Upload Progress & Status */}
               {parsingState && (
                 <>
                   {parsingState.isParsing && (
                     <div className="animate-slideDown flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
-                      <Loader2 className="h-4 w-4 text-blue-600 animate-spin flex-shrink-0" />
-                      <p className="text-blue-700 text-xs font-medium">
-                        Parsing file...
+                      <Loader2 className="h-4 w-4 text-blue-500 animate-spin flex-shrink-0" />
+                      <p className="text-blue-600 text-xs font-medium">
+                        Extracting match data...
                       </p>
                     </div>
                   )}
 
                   {parsingState.parseSuccess && (
                     <div className="animate-slideDown flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
-                      <p className="text-emerald-700 text-xs font-medium">
-                        Data auto-filled from file
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+                      <p className="text-emerald-600 text-xs font-medium">
+                        Match data extracted, ready to proceed!
                       </p>
                     </div>
                   )}
 
                   {parsingState.parseWarnings.length > 0 && (
                     <div className="animate-slideDown flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
-                      <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
                       <div>
-                        <p className="text-amber-700 text-xs font-medium">
+                        <p className="text-amber-600 text-xs font-medium">
                           Parsing warnings
                         </p>
                         <ul className="text-amber-600 text-xs mt-1 space-y-0.5">
@@ -249,9 +241,9 @@ export function UploadContent({
 
                   {parsingState.parseError && (
                     <div className="animate-slideDown p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2.5">
-                      <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+                      <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
                       <div>
-                        <p className="text-red-700 text-xs font-medium">
+                        <p className="text-red-600 text-xs font-medium">
                           Parsing Error
                         </p>
                         <p className="text-red-600 text-xs mt-0.5">
