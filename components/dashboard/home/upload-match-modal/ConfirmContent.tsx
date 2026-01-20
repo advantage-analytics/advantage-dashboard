@@ -67,6 +67,16 @@ function determineWinner(playerScores: (number | null)[], opponentScores: (numbe
   return null;
 }
 
+// Helper to determine match status from result
+function getMatchStatus(result: string | undefined): string {
+  if (!result) return "Final Score";
+  if (result === "Unfinished") return "Unfinished";
+  if (result.includes("Withdrew")) return "Withdrew";
+  if (result.includes("Defaulted")) return "Defaulted";
+  if (result.includes("Wins")) return "Final Score";
+  return "Final Score";
+}
+
 export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }: ConfirmContentProps) {
   const playerScores = getAdjustedScores(
     formData.playerScores,
@@ -131,7 +141,7 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
         <div className="flex flex-col space-y-4 flex-1">
           {/* Match Header */}
           <div className="flex flex-row justify-between items-center font-normal text-xs text-[#999999]">
-            <p>Final Score | {formData.round || "Round of 16"}</p>
+            <p>{getMatchStatus(formData.result)} | {formData.round || "Round of 16"}</p>
             <p>{formatDuration(formData.duration)}</p>
           </div>
 
