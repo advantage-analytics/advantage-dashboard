@@ -151,6 +151,35 @@ export function formatFileSize(bytes: number): string {
 }
 
 /**
+ * Format duration from milliseconds to H:MM format
+ * Returns "-:--" if duration is 0 or undefined
+ */
+export function formatDuration(ms: number | undefined): string {
+  if (!ms || ms === 0) return "-:--";
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  return `${hours}:${String(minutes).padStart(2, "0")}`;
+}
+
+/**
+ * Parse H:MM format string back to milliseconds
+ * Returns 0 if format is invalid or "-:--"
+ */
+export function parseDuration(display: string): number {
+  if (!display || display === "-:--") return 0;
+
+  const match = display.match(/^(\d+):(\d{2})$/);
+  if (!match) return 0;
+
+  const hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+
+  if (minutes > 59) return 0;
+  return (hours * 3600 + minutes * 60) * 1000;
+}
+
+/**
  * Storage keys for localStorage persistence
  */
 export const STORAGE_KEYS = {

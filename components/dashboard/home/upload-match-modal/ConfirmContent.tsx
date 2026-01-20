@@ -9,7 +9,7 @@ import { GraduationCap } from "lucide-react";
 import Image from "next/image";
 import { Switch } from "@/components/ui/switch";
 import { FormData, UploadedFile } from "./types";
-import { getAdjustedScores } from "./utils";
+import { getAdjustedScores, formatDuration } from "./utils";
 
 export interface ConfirmContentProps {
   formData: FormData;
@@ -36,15 +36,6 @@ function formatDate(dateString: string): string {
     month: "long",
     day: "numeric",
   });
-}
-
-// Helper to format duration from milliseconds to H:MM format
-function formatDuration(ms: number | undefined): string {
-  if (!ms || ms === 0) return "-:--";
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  return `${hours}:${String(minutes).padStart(2, '0')}`;
 }
 
 // Helper to determine winner based on scores

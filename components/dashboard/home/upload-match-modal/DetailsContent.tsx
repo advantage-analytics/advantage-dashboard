@@ -17,7 +17,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { ChevronDown, CircleMinus, CirclePlus, SquarePen, Info } from "lucide-react";
 import { FormData, ParsingState } from "./types";
-import { getAdjustedScores } from "./utils";
+import { getAdjustedScores, formatDuration, parseDuration } from "./utils";
 
 export interface DetailsContentProps {
   formData: FormData;
@@ -657,13 +657,21 @@ export function DetailsContent({
 
           {/* Match Duration */}
           <div className="space-y-3">
-            <h4 className="text-[#0D0D0D] font-medium text-xs">Match Duration</h4>
+            <h4 className="text-[#0D0D0D] font-medium text-xs">Match Duration (Hours:Minutes)</h4>
             <Input
-              type="number"
-              placeholder="Duration in seconds (optional)"
-              value={formData.duration || ""}
-              onChange={(e) => onInputChange("duration", e.target.value ? parseInt(e.target.value, 10) : 0)}
-              className="w-[200px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none placeholder:text-[#999999] px-3"
+              type="text"
+              placeholder="-:--"
+              value={formatDuration(formData.duration)}
+              onChange={(e) => {
+                const displayValue = e.target.value;
+                if (displayValue === "" || displayValue === "-") {
+                  onInputChange("duration", 0);
+                } else {
+                  const seconds = parseDuration(displayValue);
+                  onInputChange("duration", seconds);
+                }
+              }}
+              className="w-[200px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none placeholder:text-[#999999] px-3 font-mono"
             />
           </div>
           </div>
