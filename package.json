@@ -29,9 +29,9 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.57.2",
-    "@types/xlsx": "^0.0.35",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "exceljs": "^4.4.0",
     "framer-motion": "^12.0.0",
     "lucide-react": "^0.562.0",
     "next": "^16.1.1-canary.10",
@@ -39,8 +39,7 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "recharts": "^2.15.0",
-    "tailwind-merge": "^3.3.1",
-    "xlsx": "^0.18.5"
+    "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

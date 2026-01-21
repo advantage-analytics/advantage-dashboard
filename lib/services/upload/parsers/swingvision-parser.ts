@@ -3,7 +3,7 @@
  * Parses SwingVision Excel files and extracts match data
  */
 
-import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 import {
   IFileParser,
   ParseResult,
@@ -22,15 +22,13 @@ export class SwingVisionParser implements IFileParser {
 
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
-      const workbook = XLSX.read(uint8Array, {
-        type: 'array',
-        cellFormula: false,
-        cellHTML: false,
-      });
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(arrayBuffer);
 
       // SwingVision files must have Settings and Sets sheets
-      return 'Settings' in workbook.Sheets && 'Sets' in workbook.Sheets;
+      const settingsSheet = workbook.getWorksheet('Settings');
+      const setsSheet = workbook.getWorksheet('Sets');
+      return settingsSheet !== undefined && setsSheet !== undefined;
     } catch {
       return false;
     }
@@ -39,25 +37,20 @@ export class SwingVisionParser implements IFileParser {
   async parse(file: File): Promise<ParseResult> {
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
-      const workbook = XLSX.read(uint8Array, {
-        type: 'array',
-        cellFormula: false,
-        cellHTML: false,
-      });
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(arrayBuffer);
 
       // Validate required sheets
-      if (!('Settings' in workbook.Sheets) || !('Sets' in workbook.Sheets)) {
+      const settingsSheet = workbook.getWorksheet('Settings');
+      const setsSheet = workbook.getWorksheet('Sets');
+
+      if (!settingsSheet || !setsSheet) {
         return {
           success: false,
           error: 'Invalid SwingVision file: Missing required sheets (Settings or Sets)',
           warnings: [],
         };
       }
-
-      // Parse both sheets
-      const settingsSheet = workbook.Sheets['Settings'];
-      const setsSheet = workbook.Sheets['Sets'];
 
       const settings = this.parseSettingsSheet(settingsSheet, workbook);
       const sets = this.parseSetsSheet(setsSheet);
@@ -95,8 +88,13 @@ export class SwingVisionParser implements IFileParser {
     }
   }
 
-  private parseSettingsSheet(sheet: XLSX.WorkSheet, workbook?: XLSX.WorkBook): SwingVisionSettingsSheet {
-    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as unknown[][];
+  private parseSettingsSheet(sheet: ExcelJS.Worksheet, workbook?: ExcelJS.Workbook): SwingVisionSettingsSheet {
+    // Convert worksheet to rows array
+    const rows: unknown[][] = [];
+    sheet.eachRow((row) => {
+      const values = row.values as unknown[] | undefined;
+      rows.push((values || []).slice(1)); // slice(1) removes Excel's 1-indexed placeholder
+    });
 
     if (rows.length < 2) {
       return {
@@ -160,20 +158,26 @@ export class SwingVisionParser implements IFileParser {
     }
 
     // If guest team is still empty and we have a workbook, try to extract from Shots sheet
-    if (!guestTeam && workbook && 'Shots' in workbook.Sheets) {
-      const shotsSheet = workbook.Sheets['Shots'];
-      const shotRows = XLSX.utils.sheet_to_json(shotsSheet, { header: 1, defval: '' }) as unknown[][];
+    if (!guestTeam && workbook) {
+      const shotsSheet = workbook.getWorksheet('Shots');
+      if (shotsSheet) {
+        const shotRows: unknown[][] = [];
+        shotsSheet.eachRow((row) => {
+          const values = row.values as unknown[] | undefined;
+          shotRows.push((values || []).slice(1));
+        });
 
-      // Look for player name in column 22 (index 22) of the Shots sheet
-      // Search through the first few rows to find a name that's different from hostTeam
-      for (let i = 1; i < Math.min(10, shotRows.length); i++) {
-        if (shotRows[i].length > 22) {
-          const playerFromShots = String(shotRows[i][22] || '').trim();
-          // Find the name that's NOT the host team
-          if (playerFromShots && playerFromShots !== hostTeam && playerFromShots.length > 2) {
-            guestTeam = playerFromShots;
-            guestTeamFromFallback = true;
-            break;
+        // Look for player name in column 22 (index 22) of the Shots sheet
+        // Search through the first few rows to find a name that's different from hostTeam
+        for (let i = 1; i < Math.min(10, shotRows.length); i++) {
+          if (shotRows[i].length > 22) {
+            const playerFromShots = String(shotRows[i][22] || '').trim();
+            // Find the name that's NOT the host team
+            if (playerFromShots && playerFromShots !== hostTeam && playerFromShots.length > 2) {
+              guestTeam = playerFromShots;
+              guestTeamFromFallback = true;
+              break;
+            }
           }
         }
       }
@@ -194,8 +198,13 @@ export class SwingVisionParser implements IFileParser {
     };
   }
 
-  private parseSetsSheet(sheet: XLSX.WorkSheet): SwingVisionSetData[] {
-    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
+  private parseSetsSheet(sheet: ExcelJS.Worksheet): SwingVisionSetData[] {
+    // Convert worksheet to rows array
+    const rows: unknown[][] = [];
+    sheet.eachRow((row) => {
+      const values = row.values as unknown[] | undefined;
+      rows.push((values || []).slice(1)); // slice(1) removes Excel's 1-indexed placeholder
+    });
 
     if (rows.length < 2) {
       return [];
