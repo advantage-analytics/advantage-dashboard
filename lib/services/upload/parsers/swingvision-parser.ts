@@ -1,9 +1,18 @@
 /**
  * SwingVision XLSX file parser
  * Parses SwingVision Excel files and extracts match data
+ * 
+ * NOTE: This parser uses exceljs which requires Node.js environment.
+ * It should only be used in client-side code or API routes.
  */
 
-import * as ExcelJS from 'exceljs';
+// Dynamic import to prevent SSR bundling issues
+// This function loads exceljs only when needed at runtime
+async function getExcelJS() {
+  // Dynamic import that Next.js won't try to bundle for SSR
+  const exceljs = await import('exceljs');
+  return exceljs;
+}
 import {
   IFileParser,
   ParseResult,
@@ -21,8 +30,9 @@ export class SwingVisionParser implements IFileParser {
     }
 
     try {
+      const exceljs = await getExcelJS();
       const arrayBuffer = await file.arrayBuffer();
-      const workbook = new ExcelJS.Workbook();
+      const workbook = new exceljs.Workbook();
       await workbook.xlsx.load(arrayBuffer);
 
       // SwingVision files must have Settings and Sets sheets
@@ -36,8 +46,9 @@ export class SwingVisionParser implements IFileParser {
 
   async parse(file: File): Promise<ParseResult> {
     try {
+      const exceljs = await getExcelJS();
       const arrayBuffer = await file.arrayBuffer();
-      const workbook = new ExcelJS.Workbook();
+      const workbook = new exceljs.Workbook();
       await workbook.xlsx.load(arrayBuffer);
 
       // Validate required sheets
@@ -52,8 +63,8 @@ export class SwingVisionParser implements IFileParser {
         };
       }
 
-      const settings = this.parseSettingsSheet(settingsSheet, workbook);
-      const sets = this.parseSetsSheet(setsSheet);
+      const settings = await this.parseSettingsSheet(settingsSheet, workbook);
+      const sets = await this.parseSetsSheet(setsSheet);
 
       if (sets.length === 0) {
         return {
@@ -88,7 +99,7 @@ export class SwingVisionParser implements IFileParser {
     }
   }
 
-  private parseSettingsSheet(sheet: ExcelJS.Worksheet, workbook?: ExcelJS.Workbook): SwingVisionSettingsSheet {
+  private async parseSettingsSheet(sheet: any, workbook?: any): Promise<SwingVisionSettingsSheet> {
     // Convert worksheet to rows array
     const rows: unknown[][] = [];
     sheet.eachRow((row) => {
@@ -198,7 +209,7 @@ export class SwingVisionParser implements IFileParser {
     };
   }
 
-  private parseSetsSheet(sheet: ExcelJS.Worksheet): SwingVisionSetData[] {
+  private async parseSetsSheet(sheet: any): Promise<SwingVisionSetData[]> {
     // Convert worksheet to rows array
     const rows: unknown[][] = [];
     sheet.eachRow((row) => {

@@ -234,7 +234,7 @@ export function useUploadMatchModal({
 
     const file = files[0];
 
-    // Validate file using provider strategy
+    // Basic file type validation using provider strategy
     try {
       const strategy = getProviderStrategy(selectedProvider);
       const validationResult = strategy.validateFile(file);
@@ -248,8 +248,60 @@ export function useUploadMatchModal({
       return;
     }
 
-    // Clear previous errors
-    setUploadError(null);
+    // For SwingVision files, validate structure using Python script
+    if (selectedProvider === "swing-vision" && file.name.endsWith(".xlsx")) {
+      setIsUploading(true);
+      setUploadError(null);
+
+      try {
+        // Convert file to base64 for API
+        const reader = new FileReader();
+        const fileData = await new Promise<string>((resolve, reject) => {
+          reader.onload = () => {
+            const result = reader.result as string;
+            resolve(result);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        // Call validation API
+        const response = await fetch("/api/validate-file", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            file: fileData,
+            fileName: file.name,
+          }),
+        });
+
+        const validationResult = await response.json();
+
+        if (!validationResult.success) {
+          // Use the error message directly from the API (already formatted)
+          const errorMessage = validationResult.error || "File validation failed";
+          setUploadError(errorMessage);
+          setIsUploading(false);
+          return;
+        }
+
+        // Validation passed
+        setUploadError(null);
+      } catch (err) {
+        console.error("Validation API error:", err);
+        setUploadError(
+          err instanceof Error
+            ? `Validation error: ${err.message}`
+            : "Failed to validate file. Please try again."
+        );
+        setIsUploading(false);
+        return;
+      } finally {
+        setIsUploading(false);
+      }
+    }
 
     // Set file data for display
     const fileData: UploadedFile = {
@@ -270,11 +322,12 @@ export function useUploadMatchModal({
     localStorage.setItem(STORAGE_KEYS.UPLOADED_FILE, JSON.stringify(fileDataForStorage));
 
     // Attempt to parse file if parser exists for this provider
-    if (hasParser(selectedProvider)) {
+    const parserExists = await hasParser(selectedProvider);
+    if (parserExists) {
       setParsingState({ isParsing: true, parseError: null, parseWarnings: [], parseSuccess: false });
 
       try {
-        const parser = getParser(selectedProvider);
+        const parser = await getParser(selectedProvider);
         if (parser) {
           const parseResult = await parser.parse(file);
 
