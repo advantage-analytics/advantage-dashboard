@@ -102,7 +102,7 @@ export class SwingVisionParser implements IFileParser {
   private async parseSettingsSheet(sheet: any, workbook?: any): Promise<SwingVisionSettingsSheet> {
     // Convert worksheet to rows array
     const rows: unknown[][] = [];
-    sheet.eachRow((row) => {
+    sheet.eachRow((row: any) => {
       const values = row.values as unknown[] | undefined;
       rows.push((values || []).slice(1)); // slice(1) removes Excel's 1-indexed placeholder
     });
@@ -173,7 +173,7 @@ export class SwingVisionParser implements IFileParser {
       const shotsSheet = workbook.getWorksheet('Shots');
       if (shotsSheet) {
         const shotRows: unknown[][] = [];
-        shotsSheet.eachRow((row) => {
+        shotsSheet.eachRow((row: any) => {
           const values = row.values as unknown[] | undefined;
           shotRows.push((values || []).slice(1));
         });
@@ -212,7 +212,7 @@ export class SwingVisionParser implements IFileParser {
   private async parseSetsSheet(sheet: any): Promise<SwingVisionSetData[]> {
     // Convert worksheet to rows array
     const rows: unknown[][] = [];
-    sheet.eachRow((row) => {
+    sheet.eachRow((row: any) => {
       const values = row.values as unknown[] | undefined;
       rows.push((values || []).slice(1)); // slice(1) removes Excel's 1-indexed placeholder
     });
