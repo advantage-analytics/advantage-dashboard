@@ -98,7 +98,7 @@ export function UploadContent({
               onDragOver={onDragOver}
               onDragLeave={onDragLeave}
               onDrop={onDrop}
-              className={`relative flex-1 border-2 border-dashed rounded-2xl transition-all duration-300 overflow-hidden group flex flex-col items-center justify-center ${
+              className={`relative flex-1 border-2 border-dashed rounded-2xl transition-all duration-300 group flex flex-col items-center justify-center ${
                 isUploading
                   ? "border-gray-300 bg-gray-50"
                   : isOver
@@ -118,7 +118,7 @@ export function UploadContent({
               />
 
               {/* Content - Properly centered */}
-              <div className="relative z-10 flex flex-col items-center justify-center gap-4 px-6">
+              <div className="relative z-10 flex flex-col items-center justify-center gap-4 px-6 py-6">
                 {isUploading ? (
                   <>
                     {/* Loading State */}
