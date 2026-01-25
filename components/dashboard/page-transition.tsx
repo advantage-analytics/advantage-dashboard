@@ -2,17 +2,37 @@
 
 import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
+import { useMemo } from "react";
 
 interface PageTransitionProps {
   children: React.ReactNode;
 }
 
+/**
+ * Extracts the base path for animation keying.
+ * Match detail tabs (/dashboard/matches/[id]/overall, /visuals, /video)
+ * share the same base path so tab switching doesn't trigger animations.
+ */
+function getAnimationKey(pathname: string): string {
+  // Match detail pages: /dashboard/matches/[matchId]/*
+  const matchDetailPattern = /^\/dashboard\/matches\/([^/]+)/;
+  const match = pathname.match(matchDetailPattern);
+
+  if (match) {
+    // Use match ID as key - all tabs share same animation key
+    return `/dashboard/matches/${match[1]}`;
+  }
+
+  return pathname;
+}
+
 export function PageTransition({ children }: PageTransitionProps) {
   const pathname = usePathname();
+  const animationKey = useMemo(() => getAnimationKey(pathname), [pathname]);
 
   return (
     <motion.div
-      key={pathname}
+      key={animationKey}
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{

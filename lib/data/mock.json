@@ -29,7 +29,36 @@
             "winner": "player2",
             "finalScore": "6-2, 7-6"
           },
-          "won": false
+          "won": false,
+          "statistics": {
+            "summary": {
+              "totalPoints": 87,
+              "durationMinutes": 94,
+              "longestRally": 23
+            },
+            "player1Stats": {
+              "aces": 3,
+              "doubleFaults": 2,
+              "firstServePercentage": 62,
+              "breakpointsWon": 1,
+              "tiebreaksWon": 0,
+              "servicePointsWon": 28,
+              "serviceGamesWon": 4,
+              "returnPointsWon": 18,
+              "returnGamesWon": 3
+            },
+            "player2Stats": {
+              "aces": 6,
+              "doubleFaults": 1,
+              "firstServePercentage": 71,
+              "breakpointsWon": 3,
+              "tiebreaksWon": 1,
+              "servicePointsWon": 35,
+              "serviceGamesWon": 6,
+              "returnPointsWon": 24,
+              "returnGamesWon": 5
+            }
+          }
         },
         {
           "id": "match-001b",
@@ -52,7 +81,36 @@
             "winner": "player1",
             "finalScore": "6-3, 6-4"
           },
-          "won": true
+          "won": true,
+          "statistics": {
+            "summary": {
+              "totalPoints": 102,
+              "durationMinutes": 135,
+              "longestRally": 31
+            },
+            "player1Stats": {
+              "aces": 8,
+              "doubleFaults": 1,
+              "firstServePercentage": 74,
+              "breakpointsWon": 4,
+              "tiebreaksWon": 0,
+              "servicePointsWon": 42,
+              "serviceGamesWon": 8,
+              "returnPointsWon": 28,
+              "returnGamesWon": 4
+            },
+            "player2Stats": {
+              "aces": 4,
+              "doubleFaults": 3,
+              "firstServePercentage": 58,
+              "breakpointsWon": 1,
+              "tiebreaksWon": 0,
+              "servicePointsWon": 31,
+              "serviceGamesWon": 5,
+              "returnPointsWon": 19,
+              "returnGamesWon": 2
+            }
+          }
         }
       ]
     },
@@ -86,7 +144,36 @@
             "winner": "player1",
             "finalScore": "6-4, 3-6, 6-2"
           },
-          "won": true
+          "won": true,
+          "statistics": {
+            "summary": {
+              "totalPoints": 156,
+              "durationMinutes": 135,
+              "longestRally": 42
+            },
+            "player1Stats": {
+              "aces": 11,
+              "doubleFaults": 3,
+              "firstServePercentage": 68,
+              "breakpointsWon": 5,
+              "tiebreaksWon": 0,
+              "servicePointsWon": 58,
+              "serviceGamesWon": 10,
+              "returnPointsWon": 39,
+              "returnGamesWon": 5
+            },
+            "player2Stats": {
+              "aces": 7,
+              "doubleFaults": 4,
+              "firstServePercentage": 63,
+              "breakpointsWon": 3,
+              "tiebreaksWon": 0,
+              "servicePointsWon": 49,
+              "serviceGamesWon": 7,
+              "returnPointsWon": 32,
+              "returnGamesWon": 3
+            }
+          }
         }
       ]
     },
@@ -119,7 +206,36 @@
             "winner": "player1",
             "finalScore": "6-3, 6-4"
           },
-          "won": true
+          "won": true,
+          "statistics": {
+            "summary": {
+              "totalPoints": 98,
+              "durationMinutes": 112,
+              "longestRally": 28
+            },
+            "player1Stats": {
+              "aces": 6,
+              "doubleFaults": 2,
+              "firstServePercentage": 69,
+              "breakpointsWon": 3,
+              "tiebreaksWon": 0,
+              "servicePointsWon": 38,
+              "serviceGamesWon": 8,
+              "returnPointsWon": 25,
+              "returnGamesWon": 4
+            },
+            "player2Stats": {
+              "aces": 3,
+              "doubleFaults": 4,
+              "firstServePercentage": 55,
+              "breakpointsWon": 1,
+              "tiebreaksWon": 0,
+              "servicePointsWon": 29,
+              "serviceGamesWon": 5,
+              "returnPointsWon": 18,
+              "returnGamesWon": 2
+            }
+          }
         }
       ]
     },
@@ -153,7 +269,36 @@
             "winner": "player2",
             "finalScore": "4-6, 7-6(7), 8-10"
           },
-          "won": false
+          "won": false,
+          "statistics": {
+            "summary": {
+              "totalPoints": 178,
+              "durationMinutes": 148,
+              "longestRally": 38
+            },
+            "player1Stats": {
+              "aces": 9,
+              "doubleFaults": 5,
+              "firstServePercentage": 61,
+              "breakpointsWon": 4,
+              "tiebreaksWon": 1,
+              "servicePointsWon": 62,
+              "serviceGamesWon": 11,
+              "returnPointsWon": 44,
+              "returnGamesWon": 6
+            },
+            "player2Stats": {
+              "aces": 12,
+              "doubleFaults": 3,
+              "firstServePercentage": 67,
+              "breakpointsWon": 5,
+              "tiebreaksWon": 0,
+              "servicePointsWon": 68,
+              "serviceGamesWon": 14,
+              "returnPointsWon": 48,
+              "returnGamesWon": 8
+            }
+          }
         }
       ]
     },
@@ -186,7 +331,36 @@
             "winner": "player1",
             "finalScore": "6-2, 6-3"
           },
-          "won": true
+          "won": true,
+          "statistics": {
+            "summary": {
+              "totalPoints": 82,
+              "durationMinutes": 105,
+              "longestRally": 19
+            },
+            "player1Stats": {
+              "aces": 5,
+              "doubleFaults": 1,
+              "firstServePercentage": 76,
+              "breakpointsWon": 5,
+              "tiebreaksWon": 0,
+              "servicePointsWon": 36,
+              "serviceGamesWon": 8,
+              "returnPointsWon": 28,
+              "returnGamesWon": 4
+            },
+            "player2Stats": {
+              "aces": 2,
+              "doubleFaults": 3,
+              "firstServePercentage": 52,
+              "breakpointsWon": 0,
+              "tiebreaksWon": 0,
+              "servicePointsWon": 22,
+              "serviceGamesWon": 4,
+              "returnPointsWon": 14,
+              "returnGamesWon": 1
+            }
+          }
         }
       ]
     }
