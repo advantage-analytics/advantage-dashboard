@@ -75,7 +75,7 @@ export function Nav() {
             About
           </Link>
           <Link
-            href="/waitlist"
+            href="/auth/sign-up"
             className="text-lg font-normal text-purple-400 hover:text-purple-300 transition-colors"
             onClick={() => setMobileMenuOpen(false)}
           >
@@ -131,7 +131,7 @@ export function Nav() {
               About
             </Link>
             <Link
-              href="/waitlist"
+              href="/auth/sign-up"
               className="text-[16px] font-normal text-purple-400 hover:text-purple-600 transition-colors"
             >
               BETA
