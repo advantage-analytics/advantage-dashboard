@@ -261,8 +261,10 @@ export default function ConfirmDetailsForm() {
 
           // Upload file to Supabase Storage bucket
           const fileExt = uploadedFile.name.split('.').pop(); // Get file extension
-          const fileName = `${matchId}.${fileExt}`; // Create filename with match ID
-          const filePath = `matches/${matchId}/${fileName}`; // Storage path
+          const fileName = uploadedFile.name; // Use original filename
+          // Use the same path structure as the upload service: {userId}/{providerId}/{matchId}/{fileName}
+          // For this flow, we'll use 'swing-vision' as the providerId
+          const filePath = `${user.id}/swing-vision/${matchId}/${fileName}`; // Storage path
 
           console.log("Uploading file to:", filePath);
           const { error: uploadError } = await supabase.storage
@@ -282,6 +284,7 @@ export default function ConfirmDetailsForm() {
                 match_id: matchId,             // Reference to the match
                 file_type: (uploadedFile as any).type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                 file_name: uploadedFile.name,  // Original filename
+                storage_path: filePath,        // Storage path for the file
                 uploaded_by: user.id,          // User who uploaded the file
                 uploaded_at: new Date().toISOString() // Upload timestamp
               });
@@ -290,6 +293,44 @@ export default function ConfirmDetailsForm() {
               console.error("File record error:", fileRecordError);
             } else {
               console.log("File record created successfully");
+
+              // Trigger Edge Function to process match data
+              try {
+                // Get all files for this match
+                const { data: matchFiles } = await supabase
+                  .from('match_files')
+                  .select('storage_path, file_name')
+                  .eq('match_id', matchId);
+
+                if (matchFiles && matchFiles.length > 0) {
+                  const fileNames = matchFiles
+                    .map((f) => f.storage_path || filePath || f.file_name)
+                    .filter((v): v is string => Boolean(v));
+
+                  // Fetch source_provider from match record
+                  const { data: match } = await supabase
+                    .from('matches')
+                    .select('source_provider')
+                    .eq('id', matchId)
+                    .single();
+
+                  // Call Edge Function asynchronously (don't wait for response)
+                  await supabase.functions.invoke('process-match', {
+                    body: {
+                      matchId,
+                      userId: user.id,
+                      fileNames,
+                      sourceProvider: match?.source_provider || null,
+                    },
+                  }).catch((err) => {
+                    // Log error but don't fail the upload
+                    console.error('Error triggering process-match Edge Function:', err);
+                  });
+                }
+              } catch (err) {
+                // Log error but don't fail the upload
+                console.error('Error fetching match files for Edge Function:', err);
+              }
             }
           }
         } catch (error) {

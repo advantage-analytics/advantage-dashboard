@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { CheckCircle2, Loader2 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 type MatchFile = {
   file_name: string | null;
@@ -51,22 +52,34 @@ export default function MatchesTable({ userId, matches }: MatchesTableProps) {
         throw new Error("No valid file paths found for this match.");
       }
 
-      const res = await fetch("/api/process-match", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      // Call the Edge Function using Supabase client
+      const supabase = createClient();
+      
+      // Fetch source_provider from match record
+      const { data: matchData } = await supabase
+        .from('matches')
+        .select('source_provider')
+        .eq('id', match.id)
+        .single();
+
+      const { data, error: functionError } = await supabase.functions.invoke(
+        "process-match",
+        {
+          body: {
+            matchId: match.id,
+            userId,
+            fileNames,
+            sourceProvider: matchData?.source_provider || null,
+          },
         },
-        body: JSON.stringify({
-          matchId: match.id,
-          userId,
-          fileNames,
-        }),
-      });
+      );
 
-      const data = await res.json();
+      if (functionError) {
+        throw new Error(functionError.message || "Failed to process match data.");
+      }
 
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Failed to process match data.");
+      if (!data || !data.success) {
+        throw new Error(data?.error || "Failed to process match data.");
       }
 
       setSuccessMessage("Report processing completed successfully.");
