@@ -73,34 +73,33 @@ Deno.serve(async (req: Request) => {
       },
     });
 
-    // Fetch source_provider from match record if not provided
-    let provider = sourceProvider;
-    if (!provider) {
-      const { data: match, error: matchError } = await supabase
-        .from("matches")
-        .select("source_provider")
-        .eq("id", matchId)
-        .single();
+    // Fetch match record for source_provider and format (JSONB with best_of)
+    const { data: match, error: matchError } = await supabase
+      .from("matches")
+      .select("source_provider, format")
+      .eq("id", matchId)
+      .single();
 
-      if (matchError) {
-        console.error("Error fetching match:", matchError);
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: `Failed to fetch match: ${matchError.message}`,
-          }),
-          {
-            status: 500,
-            headers: {
-              "Content-Type": "application/json",
-              "Access-Control-Allow-Origin": "*",
-            },
+    if (matchError) {
+      console.error("Error fetching match:", matchError);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: `Failed to fetch match: ${matchError.message}`,
+        }),
+        {
+          status: 500,
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
           },
-        );
-      }
-
-      provider = match?.source_provider || null;
+        },
+      );
     }
+
+    const provider = sourceProvider || match?.source_provider || null;
+    // Extract best_of from format JSONB field, default to best-of-3
+    const matchFormat = (match?.format as { best_of?: number } | null)?.best_of ?? 3;
 
     // Only process if source_provider is "swing-vision"
     if (provider !== "swing-vision") {
@@ -127,6 +126,7 @@ Deno.serve(async (req: Request) => {
       userId,
       fileNames,
       bucketId,
+      matchFormat,
     });
 
     console.log("✅ Match data processing completed successfully");
@@ -168,12 +168,14 @@ async function processMatchToDb({
   userId,
   fileNames,
   bucketId = "match-data",
+  matchFormat = 3,
 }: {
   supabase: ReturnType<typeof createClient>;
   matchId: string;
   userId: string;
   fileNames: string[];
   bucketId?: string;
+  matchFormat?: number;
 }): Promise<void> {
   // 1. Combine sheets across all files
   console.log(`📋 Processing ${fileNames.length} file(s):`, fileNames);
@@ -228,7 +230,7 @@ async function processMatchToDb({
   console.log(`🎾 Rally length map built with ${rallyLengthMap.size} entries`);
 
   // 2. Insert points
-  const pointInserts = buildPointInserts(pointsRows, matchId, setScoreMap, gameScoreMap, rallyLengthMap);
+  const pointInserts = buildPointInserts(pointsRows, matchId, setScoreMap, gameScoreMap, rallyLengthMap, matchFormat);
 
   const {
     data: insertedPoints,
@@ -507,7 +509,11 @@ function buildPointInserts(
   setScoreMap: Map<number, string>,
   gameScoreMap: Map<string, { host: number; guest: number }>,
   rallyLengthMap: Map<string, number>,
+  matchFormat: number = 3,
 ) {
+  // Calculate sets needed to win (2 for best-of-3, 3 for best-of-5)
+  const setsToWin = Math.ceil(matchFormat / 2);
+
   return pointsRows.map((row) => {
     const pointNumber = toInt(row["Point"]);
     const setNumber = toInt(row["Set"]);
@@ -545,6 +551,23 @@ function buildPointInserts(
     // Result type is in the "Detail" column (e.g., "Backhand Unforced Error", "Forehand Winner")
     const resultType = safeString(row["Detail"]);
 
+    // Calculate is_set_point and is_match_point based on scores
+    // (SwingVision's "Set Point" column is unreliable for sets 2+)
+    const { serverHasSetPoint, receiverHasSetPoint } = calculateSetPoint(
+      gameScore,
+      pointScore
+    );
+
+    const hostHasSetPoint = serverIsPlayer1 ? serverHasSetPoint : receiverHasSetPoint;
+    const guestHasSetPoint = serverIsPlayer1 ? receiverHasSetPoint : serverHasSetPoint;
+    const isSetPoint = hostHasSetPoint || guestHasSetPoint;
+
+    // Match point: set point for a player who needs 1 more set to win
+    const [hostSets, guestSets] = setScore.split("-").map(Number);
+    const isMatchPoint =
+      (hostHasSetPoint && hostSets === setsToWin - 1) ||
+      (guestHasSetPoint && guestSets === setsToWin - 1);
+
     return {
       match_id: matchId,
       point_number: pointNumber,
@@ -559,7 +582,10 @@ function buildPointInserts(
       result_type: resultType,
       // Additional fields from SwingVision that could be useful:
       is_break_point: String(row["Break Point"] ?? "").toLowerCase() === "true",
-      is_set_point: String(row["Set Point"] ?? "").toLowerCase() === "true",
+      is_set_point: isSetPoint,
+      is_match_point: isMatchPoint,
+      video_time: toFloatOrNull(row["Video Time"]),
+      duration: toFloatOrNull(row["Duration"]),
     };
   });
 }
@@ -597,6 +623,7 @@ function buildShotInserts(
     landing_x: number | null;
     landing_y: number | null;
     result: string | null;
+    video_time: number | null;
   }> = [];
 
   for (const row of shotsRows) {
@@ -614,11 +641,24 @@ function buildShotInserts(
     const playerName = String(row["Player"] ?? "").toLowerCase().trim();
     const isPlayer1 = hostTeam !== "" && playerName === hostTeam;
 
+    // Determine shot_type from "Stroke" column
+    // If stroke is "Serve", check "Type" column for first/second serve
+    const stroke = safeString(row["Stroke"]);
+    let shotType: string | null = stroke;
+    if (stroke?.toLowerCase() === "serve") {
+      const serveType = String(row["Type"] ?? "").toLowerCase();
+      if (serveType === "first_serve") {
+        shotType = "First Serve";
+      } else if (serveType === "second_serve") {
+        shotType = "Second Serve";
+      }
+    }
+
     inserts.push({
       point_id: pointId,
       shot_number: toInt(row["Shot"]),
       is_player1: isPlayer1,
-      shot_type: safeString(row["Type"]),
+      shot_type: shotType,
       spin_type: safeString(row["Spin"]),
       speed_mph: toFloatOrNull(row["Speed (MPH)"]),
       contact_x: toFloatOrNull(row["Hit (x)"]),
@@ -626,6 +666,7 @@ function buildShotInserts(
       landing_x: toFloatOrNull(row["Bounce (x)"]),
       landing_y: toFloatOrNull(row["Bounce (y)"]),
       result: safeString(row["Result"]),
+      video_time: toFloatOrNull(row["Video Time"]),
     });
   }
 
@@ -680,4 +721,51 @@ function safeString(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   const s = String(value);
   return s.length ? s : null;
+}
+
+/**
+ * Calculate whether server or receiver has a set point based on game and point scores.
+ * Uses no-ad scoring rules (40-40 = deciding point where both have game point).
+ *
+ * @param gameScore - Format "X-Y" where X is server's games, Y is receiver's games
+ * @param pointScore - Format "X-Y" where X is server's score, Y is receiver's score
+ * @returns Object indicating if server and/or receiver has set point
+ */
+function calculateSetPoint(
+  gameScore: string,
+  pointScore: string
+): { serverHasSetPoint: boolean; receiverHasSetPoint: boolean } {
+  const [serverGames, receiverGames] = gameScore.split("-").map(Number);
+  const [serverPts, receiverPts] = pointScore.split("-");
+
+  // Check if in tiebreak (both at 6 games)
+  const isTiebreak = serverGames === 6 && receiverGames === 6;
+
+  if (isTiebreak) {
+    // Tiebreak: parse numeric scores, set point at 6+ with 1-point lead
+    const sPts = parseInt(serverPts) || 0;
+    const rPts = parseInt(receiverPts) || 0;
+    return {
+      serverHasSetPoint: sPts >= 6 && sPts - rPts === 1,
+      receiverHasSetPoint: rPts >= 6 && rPts - sPts === 1,
+    };
+  }
+
+  // Regular game - check game point (no-ad scoring: 40-40 = both at game point)
+  const serverAtGamePoint = serverPts === "40";
+  const receiverAtGamePoint = receiverPts === "40";
+
+  // Winning game wins set if: 5+ games and would have 6+ with 2-game lead OR 7-5
+  const serverWinsSetIfWinsGame =
+    (serverGames >= 5 && receiverGames <= 4) ||
+    (serverGames === 6 && receiverGames === 5);
+
+  const receiverWinsSetIfWinsGame =
+    (receiverGames >= 5 && serverGames <= 4) ||
+    (receiverGames === 6 && serverGames === 5);
+
+  return {
+    serverHasSetPoint: serverAtGamePoint && serverWinsSetIfWinsGame,
+    receiverHasSetPoint: receiverAtGamePoint && receiverWinsSetIfWinsGame,
+  };
 }
