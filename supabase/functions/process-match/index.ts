@@ -189,6 +189,7 @@ async function processMatchToDb({
   const gamesRows = combined.Games ?? [];
   const setsRows = combined.Sets ?? [];
   const statsRows = combined.Stats ?? [];
+  const settingsRows = combined.Settings ?? [];
 
   console.log(`📊 Combined sheets summary:`, {
     Points: pointsRows.length,
@@ -196,7 +197,7 @@ async function processMatchToDb({
     Games: gamesRows.length,
     Sets: setsRows.length,
     Stats: statsRows.length,
-    Settings: combined.Settings?.length || 0,
+    Settings: settingsRows.length,
   });
 
   if (!pointsRows.length) {
@@ -208,8 +209,26 @@ async function processMatchToDb({
     );
   }
 
+  // Extract host team name from Settings for player identification
+  const hostTeam = settingsRows.length > 0
+    ? String(settingsRows[0]["Host Team"] ?? "").toLowerCase().trim()
+    : "";
+  console.log(`👤 Host team identified: "${hostTeam}"`);
+
+  // Build a map of set scores from Sets sheet: setNumber -> "hostWins-guestWins" (cumulative before that set)
+  const setScoreMap = buildSetScoreMap(setsRows);
+  console.log(`📊 Set score map built with ${setScoreMap.size} entries`);
+
+  // Build a map of game scores from Games sheet: "set-game" -> { host, guest } (games won in set)
+  const gameScoreMap = buildGameScoreMap(gamesRows);
+  console.log(`🎯 Game score map built with ${gameScoreMap.size} entries`);
+
+  // Build a map of rally lengths from Shots sheet: key = "set-game-point" -> shot count
+  const rallyLengthMap = buildRallyLengthMap(shotsRows);
+  console.log(`🎾 Rally length map built with ${rallyLengthMap.size} entries`);
+
   // 2. Insert points
-  const pointInserts = buildPointInserts(pointsRows, matchId);
+  const pointInserts = buildPointInserts(pointsRows, matchId, setScoreMap, gameScoreMap, rallyLengthMap);
 
   const {
     data: insertedPoints,
@@ -228,7 +247,7 @@ async function processMatchToDb({
 
   // 3. Insert shots (if we have shot data)
   if (shotsRows.length) {
-    const shotInserts = buildShotInserts(shotsRows, pointIdMap);
+    const shotInserts = buildShotInserts(shotsRows, pointIdMap, hostTeam);
     if (shotInserts.length) {
       const { error: shotsError } = await supabase
         .from("shots")
@@ -419,7 +438,76 @@ function extractRowsFromSheet(
 // Helper Functions
 // ---------------------------------------------------------------------------
 
-function buildPointInserts(pointsRows: CombinedRow[], matchId: string) {
+/**
+ * Build a map of set scores from the Sets sheet.
+ * Key: setNumber -> Value: "hostWins-guestWins" (cumulative wins BEFORE this set)
+ * Always in respect to player1 (host).
+ */
+function buildSetScoreMap(setsRows: CombinedRow[]): Map<number, string> {
+  // Sort by set number to ensure correct cumulative calculation
+  const sortedSets = [...setsRows].sort(
+    (a, b) => toInt(a["Set"]) - toInt(b["Set"])
+  );
+
+  const map = new Map<number, string>();
+  let hostWins = 0;
+  let guestWins = 0;
+
+  for (const row of sortedSets) {
+    const setNumber = toInt(row["Set"]);
+    // Score BEFORE this set (cumulative from previous sets)
+    map.set(setNumber, `${hostWins}-${guestWins}`);
+
+    // Update cumulative wins for next set
+    const winner = String(row["Set Winner"] ?? "").toLowerCase();
+    if (winner === "host") hostWins++;
+    else if (winner === "guest") guestWins++;
+  }
+
+  return map;
+}
+
+/**
+ * Build a map of game scores from the Games sheet.
+ * Key: "set-game" -> Value: { host: number, guest: number } (games won by each in that set)
+ * Used to show score like "3-2" meaning host leads 3 games to 2 in the current set.
+ */
+function buildGameScoreMap(gamesRows: CombinedRow[]): Map<string, { host: number; guest: number }> {
+  const map = new Map<string, { host: number; guest: number }>();
+  for (const row of gamesRows) {
+    const setNumber = toInt(row["Set"]);
+    const gameNumber = toInt(row["Game"]);
+    const hostSetScore = toInt(row["Host Set Score"]);
+    const guestSetScore = toInt(row["Guest Set Score"]);
+    const key = `${setNumber}-${gameNumber}`;
+    map.set(key, { host: hostSetScore, guest: guestSetScore });
+  }
+  return map;
+}
+
+/**
+ * Build a map of rally lengths (shot counts) from the Shots sheet.
+ * Key: "set-game-point" -> Value: number of shots in that point
+ */
+function buildRallyLengthMap(shotsRows: CombinedRow[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const row of shotsRows) {
+    const setNumber = toInt(row["Set"]);
+    const gameNumber = toInt(row["Game"]);
+    const pointNumber = toInt(row["Point"]);
+    const key = pointKey(setNumber, gameNumber, pointNumber);
+    map.set(key, (map.get(key) ?? 0) + 1);
+  }
+  return map;
+}
+
+function buildPointInserts(
+  pointsRows: CombinedRow[],
+  matchId: string,
+  setScoreMap: Map<number, string>,
+  gameScoreMap: Map<string, { host: number; guest: number }>,
+  rallyLengthMap: Map<string, number>,
+) {
   return pointsRows.map((row) => {
     const pointNumber = toInt(row["Point"]);
     const setNumber = toInt(row["Set"]);
@@ -430,18 +518,48 @@ function buildPointInserts(pointsRows: CombinedRow[], matchId: string) {
     const wonByPlayer1 =
       String(row["Point Winner"] ?? "").toLowerCase() === "host";
 
+    // Set score from Sets sheet (always in player1/host perspective)
+    const setScore = setScoreMap.get(setNumber) ?? "0-0";
+
+    // Game score from Games sheet (in server's perspective - server's score first)
+    const gameScoreKey = `${setNumber}-${gameNumber}`;
+    const gameScoreData = gameScoreMap.get(gameScoreKey);
+    let gameScore = "0-0";
+    if (gameScoreData) {
+      gameScore = serverIsPlayer1
+        ? `${gameScoreData.host}-${gameScoreData.guest}`
+        : `${gameScoreData.guest}-${gameScoreData.host}`;
+    }
+
+    // Point score from Points sheet (in server's perspective - server's score first)
+    const hostGameScore = safeString(row["Host Game Score"]) ?? "0";
+    const guestGameScore = safeString(row["Guest Game Score"]) ?? "0";
+    const pointScore = serverIsPlayer1
+      ? `${hostGameScore}-${guestGameScore}`
+      : `${guestGameScore}-${hostGameScore}`;
+
+    // Get rally length from shots count
+    const rallyKey = pointKey(setNumber, gameNumber, pointNumber);
+    const rallyLength = rallyLengthMap.get(rallyKey) ?? 0;
+
+    // Result type is in the "Detail" column (e.g., "Backhand Unforced Error", "Forehand Winner")
+    const resultType = safeString(row["Detail"]);
+
     return {
       match_id: matchId,
       point_number: pointNumber,
       set_number: setNumber,
       game_number: gameNumber,
-      set_score: safeString(row["Set Score"]),
-      game_score: safeString(row["Game Score"]),
-      point_score: safeString(row["Point Score"]),
+      set_score: setScore,
+      game_score: gameScore,
+      point_score: pointScore,
       server_is_player1: serverIsPlayer1,
       won_by_player1: wonByPlayer1,
-      rally_length: toInt(row["Shot"]), // optional, if present
-      result_type: safeString(row["Result"]),
+      rally_length: rallyLength,
+      result_type: resultType,
+      // Additional fields from SwingVision that could be useful:
+      is_break_point: String(row["Break Point"] ?? "").toLowerCase() === "true",
+      is_set_point: String(row["Set Point"] ?? "").toLowerCase() === "true",
     };
   });
 }
@@ -465,6 +583,7 @@ function buildPointIdMap(
 function buildShotInserts(
   shotsRows: CombinedRow[],
   pointIdMap: Map<string, string>,
+  hostTeam: string,
 ) {
   const inserts: Array<{
     point_id: string;
@@ -490,9 +609,10 @@ function buildShotInserts(
       continue;
     }
 
-    const isPlayer1 =
-      String(row["Player"] ?? "").toLowerCase() === "host" ||
-      String(row["Player"] ?? "").toLowerCase() === "player1";
+    // SwingVision uses actual player names in the "Player" column (e.g., "Rudy Quan")
+    // Compare to hostTeam name from Settings sheet to determine is_player1
+    const playerName = String(row["Player"] ?? "").toLowerCase().trim();
+    const isPlayer1 = hostTeam !== "" && playerName === hostTeam;
 
     inserts.push({
       point_id: pointId,
