@@ -261,25 +261,18 @@ async function processMatchToDb({
     }
   }
 
-  // 4. Insert a basic match_stats row for player1
-  const matchStatsInsert = buildMatchStatsInsert(
-    matchId,
-    true, // isPlayer1
-    shotsRows,
-    pointsRows,
-    gamesRows,
-    setsRows,
-    statsRows,
-  );
-
-  const { error: statsError } = await supabase
-    .from("match_stats")
-    .insert(matchStatsInsert);
+  // 4. Calculate match stats using Postgres function
+  // This aggregates from the points/shots we just inserted and upserts into match_stats
+  console.log("📊 Calculating match statistics...");
+  const { error: statsError } = await supabase.rpc("calculate_match_stats", {
+    p_match_id: matchId,
+  });
 
   if (statsError) {
-    console.error("Error inserting match_stats:", statsError);
+    console.error("Error calculating match_stats:", statsError);
     throw statsError;
   }
+  console.log("✅ Match statistics calculated successfully");
 }
 
 // ---------------------------------------------------------------------------
@@ -673,36 +666,6 @@ function buildShotInserts(
   return inserts;
 }
 
-function buildMatchStatsInsert(
-  matchId: string,
-  isPlayer1: boolean,
-  _shotsRows: CombinedRow[],
-  _pointsRows: CombinedRow[],
-  _gamesRows: CombinedRow[],
-  _setsRows: CombinedRow[],
-  _statsRows: CombinedRow[],
-) {
-  // For now we create a minimal stats row with placeholders.
-  // These fields can be updated later by a dedicated aggregation job that
-  // reads from `points` and `shots`.
-  return {
-    match_id: matchId,
-    is_player1: isPlayer1,
-    aces: null,
-    double_faults: null,
-    first_serve_pct: null,
-    first_serve_won_pct: null,
-    second_serve_won_pct: null,
-    break_points_saved_pct: null,
-    break_points_converted_pct: null,
-    winners: null,
-    unforced_errors: null,
-    forced_errors: null,
-    net_points_won_pct: null,
-    avg_rally_length: null,
-  };
-}
-
 function pointKey(setNumber: number, gameNumber: number, pointNumber: number) {
   return `${setNumber || 0}-${gameNumber || 0}-${pointNumber || 0}`;
 }
@@ -719,6 +682,29 @@ function toFloatOrNull(value: unknown): number | null {
 
 function safeString(value: unknown): string | null {
   if (value === null || value === undefined) return null;
+
+  // Handle ExcelJS objects (empty cells with formatting, rich text, formulas)
+  if (typeof value === 'object' && value !== null) {
+    // Rich text cells have a richText array
+    if ('richText' in value && Array.isArray((value as any).richText)) {
+      const text = (value as any).richText.map((rt: any) => rt.text || '').join('');
+      return text.length ? text : null;
+    }
+    // Some cells have a text property
+    if ('text' in value && typeof (value as any).text === 'string') {
+      const text = (value as any).text;
+      return text.length ? text : null;
+    }
+    // Formula cells might have a result property
+    if ('result' in value) {
+      const result = (value as any).result;
+      if (typeof result === 'string' && result.length) return result;
+      if (typeof result === 'number') return String(result);
+    }
+    // Empty object or unrecognized - treat as null
+    return null;
+  }
+
   const s = String(value);
   return s.length ? s : null;
 }
