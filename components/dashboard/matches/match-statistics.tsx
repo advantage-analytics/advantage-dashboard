@@ -2,7 +2,6 @@
 
 import { motion } from "framer-motion";
 import { getMatchById, getMatchStatistics } from "@/lib/data/match-utils";
-import { SummaryStatsRow } from "./statistics/summary-stats-row";
 import { PlayerComparisonHeader } from "./statistics/player-comparison-header";
 import { StatComparisonBar } from "./statistics/stat-comparison-bar";
 
@@ -81,56 +80,42 @@ export function MatchStatistics({ matchId }: MatchStatisticsProps) {
     );
   }
 
-  const winner =
-    match.score.winner === "player1" ? match.player1.name : match.player2.name;
-
   return (
-    <div className="space-y-6">
-      {/* Summary Stats Row */}
-      <SummaryStatsRow
-        totalPoints={statistics.summary.totalPoints}
-        durationMinutes={statistics.summary.durationMinutes}
-        longestRally={statistics.summary.longestRally}
-        winner={winner}
+    <motion.div
+      className="bg-white p-6 rounded-2xl"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: 0.5,
+        delay: 0.3,
+        ease: [0.25, 0.46, 0.45, 0.94],
+      }}
+    >
+      <PlayerComparisonHeader
+        player1Name={match.player1.name}
+        player2Name={match.player2.name}
       />
 
-      {/* Player Comparison Section */}
-      <motion.div
-        className="bg-white p-6 rounded-2xl"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{
-          duration: 0.5,
-          delay: 0.3,
-          ease: [0.25, 0.46, 0.45, 0.94],
-        }}
-      >
-        <PlayerComparisonHeader
-          player1Name={match.player1.name}
-          player2Name={match.player2.name}
-        />
-
-        <div className="mt-6 space-y-4">
-          {statsConfig.map((stat, index) => (
-            <StatComparisonBar
-              key={stat.key}
-              label={stat.label}
-              player1Value={
-                statistics.player1Stats[
-                  stat.player1Key as keyof typeof statistics.player1Stats
-                ]
-              }
-              player2Value={
-                statistics.player2Stats[
-                  stat.player1Key as keyof typeof statistics.player2Stats
-                ]
-              }
-              index={index}
-              isPercentage={stat.isPercentage}
-            />
-          ))}
-        </div>
-      </motion.div>
-    </div>
+      <div className="mt-6 space-y-6">
+        {statsConfig.map((stat, index) => (
+          <StatComparisonBar
+            key={stat.key}
+            label={stat.label}
+            player1Value={
+              statistics.player1Stats[
+                stat.player1Key as keyof typeof statistics.player1Stats
+              ]
+            }
+            player2Value={
+              statistics.player2Stats[
+                stat.player1Key as keyof typeof statistics.player2Stats
+              ]
+            }
+            index={index}
+            isPercentage={stat.isPercentage}
+          />
+        ))}
+      </div>
+    </motion.div>
   );
 }
