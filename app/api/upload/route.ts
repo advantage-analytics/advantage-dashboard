@@ -113,7 +113,45 @@ export async function POST(
       );
     }
 
-    // 7. Return success response
+    // 7. Trigger Edge Function to process match data (fire and forget)
+    // Get all files for this match to pass to the Edge Function
+    try {
+      const { data: matchFiles } = await supabase
+        .from('match_files')
+        .select('storage_path, file_name')
+        .eq('match_id', matchId);
+
+      if (matchFiles && matchFiles.length > 0) {
+        const fileNames = matchFiles
+          .map((f) => f.storage_path || f.file_name)
+          .filter((v): v is string => Boolean(v));
+
+        // Fetch source_provider from match record
+        const { data: match } = await supabase
+          .from('matches')
+          .select('source_provider')
+          .eq('id', matchId)
+          .single();
+
+        // Call Edge Function asynchronously (don't wait for response)
+        supabase.functions.invoke('process-match', {
+          body: {
+            matchId,
+            userId: user.id,
+            fileNames,
+            sourceProvider: match?.source_provider || null,
+          },
+        }).catch((err) => {
+          // Log error but don't fail the upload
+          console.error('Error triggering process-match Edge Function:', err);
+        });
+      }
+    } catch (err) {
+      // Log error but don't fail the upload
+      console.error('Error fetching match files for Edge Function:', err);
+    }
+
+    // 8. Return success response
     return NextResponse.json({
       success: true,
       fileId: uploadResult.fileId,
