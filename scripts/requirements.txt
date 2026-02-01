@@ -1,3 +1,7 @@
-supabase
-requests
-python-dotenv
+# Python dependencies for match data processing
+pandas>=2.0.0
+numpy>=1.24.0
+openpyxl>=3.1.0
+reportlab>=4.0.0
+supabase>=2.0.0
+python-dotenv>=1.0.0

@@ -4,20 +4,33 @@
  */
 
 import { IFileParser } from './types';
-import { SwingVisionParser } from './swingvision-parser';
 
-// Parser registry mapping provider IDs to parser instances
-const parserRegistry: Map<string, IFileParser> = new Map([
-  ['swing-vision', new SwingVisionParser()],
-]);
+// Lazy load parser to avoid bundling exceljs in server components
+let parserRegistry: Map<string, IFileParser> | null = null;
+
+async function getParserRegistry(): Promise<Map<string, IFileParser>> {
+  if (parserRegistry) {
+    return parserRegistry;
+  }
+
+  // Dynamic import to avoid bundling exceljs in server-side code
+  const { SwingVisionParser } = await import('./swingvision-parser');
+  
+  parserRegistry = new Map([
+    ['swing-vision', new SwingVisionParser()],
+  ]);
+
+  return parserRegistry;
+}
 
 /**
  * Get parser for a specific provider
  * @param providerId - The provider identifier (e.g., 'swing-vision')
  * @returns The parser instance, or undefined if not found
  */
-export function getParser(providerId: string): IFileParser | undefined {
-  return parserRegistry.get(providerId.toLowerCase());
+export async function getParser(providerId: string): Promise<IFileParser | undefined> {
+  const registry = await getParserRegistry();
+  return registry.get(providerId.toLowerCase());
 }
 
 /**
@@ -25,8 +38,9 @@ export function getParser(providerId: string): IFileParser | undefined {
  * @param providerId - The provider identifier
  * @returns True if parser exists
  */
-export function hasParser(providerId: string): boolean {
-  return parserRegistry.has(providerId.toLowerCase());
+export async function hasParser(providerId: string): Promise<boolean> {
+  const registry = await getParserRegistry();
+  return registry.has(providerId.toLowerCase());
 }
 
 export type { IFileParser, ParseResult } from './types';
