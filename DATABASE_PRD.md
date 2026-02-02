@@ -3,8 +3,8 @@
 ## 1. Project Overview
 
 **Project Name:** Advantage Analytics Dashboard
-**Version:** 2.0 (Phase 2 Complete)
-**Last Updated:** January 2026
+**Version:** 2.1 (Phase 2 Complete + Stats Calculation)
+**Last Updated:** February 2026
 
 **Objective:** Build a tennis analytics platform that ingests match data from Electronic Line Calling (ELC) providers (SwingVision, ATP Tour, etc.), stores it in Supabase, and enables performance analysis and visualization.
 
@@ -26,13 +26,15 @@
 
 ### Phase 2: Data Processing ✅ COMPLETE
 
-| Feature            | Status | Description                                   |
-| ------------------ | ------ | --------------------------------------------- |
-| SwingVision Parser | ✅     | Edge Function extracts points/shots from xlsx |
-| Points Table       | ✅     | Point-by-point data storage                   |
-| Shots Table        | ✅     | Granular shot physics data                    |
-| Match Stats        | ✅     | Pre-calculated KPIs (placeholder values)      |
-| Edge Function      | ✅     | `process-match` Supabase Edge Function        |
+| Feature                  | Status | Description                                               |
+| ------------------------ | ------ | --------------------------------------------------------- |
+| SwingVision Parser       | ✅     | Edge Function extracts points/shots from xlsx             |
+| Points Table             | ✅     | Point-by-point data storage                               |
+| Shots Table              | ✅     | Granular shot physics data                                |
+| Match Stats              | ✅     | Comprehensive statistics with 40+ metrics                 |
+| Edge Function            | ✅     | `process-match` Supabase Edge Function                    |
+| Stats Calculation RPC    | ✅     | `calculate_match_stats` function for real-time calculation|
+| Stats Percentages View   | ✅     | `match_stats_percentages` view for UI display             |
 
 ### Phase 3: Analytics & Visualization 🔜 PLANNED
 
@@ -344,23 +346,78 @@ Required sheets in SwingVision export:
 
 #### Table: `match_stats`
 
-| Column                     | Type    | Description            |
-| -------------------------- | ------- | ---------------------- |
-| id                         | UUID    | Primary key            |
-| match_id                   | UUID    | FK → matches           |
-| is_player1                 | BOOLEAN | Which player           |
-| aces                       | INT     | Total aces             |
-| double_faults              | INT     | Total DFs              |
-| first_serve_pct            | FLOAT   | 1st serve %            |
-| first_serve_won_pct        | FLOAT   | 1st serve points won % |
-| second_serve_won_pct       | FLOAT   | 2nd serve points won % |
-| break_points_saved_pct     | FLOAT   | BP saved %             |
-| break_points_converted_pct | FLOAT   | BP converted %         |
-| winners                    | INT     | Total winners          |
-| unforced_errors            | INT     | Total UEs              |
-| forced_errors              | INT     | Total FEs              |
-| net_points_won_pct         | FLOAT   | Net approach success % |
-| avg_rally_length           | FLOAT   | Average rally length   |
+Stores raw count statistics per player. Percentages are calculated via the `match_stats_percentages` view.
+
+| Column                    | Type    | Description                              |
+| ------------------------- | ------- | ---------------------------------------- |
+| id                        | UUID    | Primary key                              |
+| match_id                  | UUID    | FK → matches                             |
+| is_player1                | BOOLEAN | true for player1, false for player2      |
+| **Serve Stats**           |         |                                          |
+| aces                      | INT     | Total aces                               |
+| double_faults             | INT     | Total double faults                      |
+| first_serves              | INT     | Total 1st serve attempts                 |
+| first_serves_in           | INT     | 1st serves that went in                  |
+| first_serve_points_won    | INT     | Points won after 1st serve in            |
+| second_serves             | INT     | Total 2nd serve attempts                 |
+| second_serves_in          | INT     | 2nd serves that went in                  |
+| second_serve_points_won   | INT     | Points won after 2nd serve               |
+| service_games             | INT     | Total service games played               |
+| service_games_won         | INT     | Service games won (held serve)           |
+| **Return Stats**          |         |                                          |
+| first_returns             | INT     | Returns against opponent 1st serve       |
+| first_return_points_won   | INT     | Points won returning 1st serve           |
+| second_returns            | INT     | Returns against opponent 2nd serve       |
+| second_return_points_won  | INT     | Points won returning 2nd serve           |
+| return_games              | INT     | Total return games played                |
+| return_games_won          | INT     | Return games won (broke serve)           |
+| **Break Point Stats**     |         |                                          |
+| break_points_faced        | INT     | Break points faced when serving          |
+| break_points_saved        | INT     | Break points saved (won when facing BP)  |
+| break_point_opportunities | INT     | Break point chances when returning       |
+| break_points_converted    | INT     | Break points converted                   |
+| **Set Point Stats**       |         |                                          |
+| set_points_faced          | INT     | Set points faced (opponent had SP)       |
+| set_points_saved          | INT     | Set points saved                         |
+| set_point_opportunities   | INT     | Set point chances                        |
+| set_points_converted      | INT     | Set points converted                     |
+| **Point Totals**          |         |                                          |
+| total_points              | INT     | Total points played                      |
+| total_points_won          | INT     | Total points won                         |
+| **Winners & Errors**      |         |                                          |
+| winners                   | INT     | Total winners                            |
+| service_winners           | INT     | Non-ace serve winners                    |
+| forehand_winners          | INT     | Forehand winners                         |
+| backhand_winners          | INT     | Backhand winners                         |
+| volley_winners            | INT     | Volley/net winners                       |
+| unforced_errors           | INT     | Total unforced errors                    |
+| forehand_unforced_errors  | INT     | Forehand unforced errors                 |
+| backhand_unforced_errors  | INT     | Backhand unforced errors                 |
+| forced_errors             | INT     | Total forced errors                      |
+| **Other**                 |         |                                          |
+| avg_rally_length          | FLOAT   | Average rally length                     |
+| created_at                | TIMESTAMP | Record creation time                   |
+| updated_at                | TIMESTAMP | Last update time (auto-updated)        |
+
+#### View: `match_stats_percentages`
+
+Calculates percentage statistics from raw `match_stats` counts. Use this view for displaying stats in the UI.
+
+| Column                      | Type  | Description                                   |
+| --------------------------- | ----- | --------------------------------------------- |
+| (all match_stats columns)   | -     | Inherited from match_stats                    |
+| first_serve_pct             | FLOAT | % of 1st serves in (first_serves_in / first_serves) |
+| first_serve_won_pct         | FLOAT | % of points won on 1st serve                  |
+| second_serve_won_pct        | FLOAT | % of points won on 2nd serve                  |
+| service_games_won_pct       | FLOAT | % of service games won                        |
+| first_return_won_pct        | FLOAT | % of points won returning 1st serve           |
+| second_return_won_pct       | FLOAT | % of points won returning 2nd serve           |
+| return_games_won_pct        | FLOAT | % of return games won                         |
+| break_points_saved_pct      | FLOAT | % of break points saved                       |
+| break_points_converted_pct  | FLOAT | % of break points converted                   |
+| set_points_saved_pct        | FLOAT | % of set points saved                         |
+| set_points_converted_pct    | FLOAT | % of set points converted                     |
+| total_points_won_pct        | FLOAT | % of total points won                         |
 
 ---
 
@@ -391,7 +448,28 @@ await supabase.functions.invoke('process-match', {
 });
 ```
 
-### 7.3 Planned Routes
+### 7.3 Database Functions (RPC)
+
+| Function               | Description                                                                      |
+| ---------------------- | -------------------------------------------------------------------------------- |
+| `calculate_match_stats(p_match_id UUID)` | Calculates all match statistics from points/shots data and upserts to match_stats |
+
+**Invocation:**
+
+```typescript
+await supabase.rpc('calculate_match_stats', { p_match_id: matchId });
+```
+
+**What it calculates:**
+- Serve stats: aces, double faults, 1st/2nd serve %, points won on serve
+- Return stats: points won on 1st/2nd serve return
+- Break point stats: faced, saved, opportunities, converted
+- Set point stats: faced, saved, opportunities, converted
+- Winners/errors: total, by shot type (forehand, backhand, volley, service)
+- Game stats: service/return games won
+- Average rally length
+
+### 7.4 Planned Routes
 
 | Route                      | Method | Description             |
 | -------------------------- | ------ | ----------------------- |
@@ -427,7 +505,7 @@ await supabase.functions.invoke('process-match', {
 ### 8.4 Function Security
 
 - Functions use `SET search_path = ''` to prevent search path injection attacks
-- Affected functions: `update_match_stats_updated_at`, `custom_access_token_hook`
+- Affected functions: `update_match_stats_updated_at`, `custom_access_token_hook`, `calculate_match_stats`
 - All table references use fully-qualified names (e.g., `public.users`)
 
 ---
@@ -455,6 +533,14 @@ await supabase.functions.invoke('process-match', {
 | add_video_time_and_duration_columns | 2026-01 | Added video_time/duration to points and video_time to shots for video navigation                                |
 | fix_set_point_match_point_calc      | 2026-01 | Fixed is_set_point/is_match_point calculation - now computed from scores instead of unreliable SwingVision data |
 | fix_security_issues                 | 2026-01 | Added search_path to functions, tightened RLS INSERT policies for matches/users                                 |
+| create_calculate_match_stats_function | 2026-01 | Added RPC function to calculate match stats from points/shots data                                             |
+| add_stats_calculation_indexes       | 2026-01 | Added indexes on points/shots tables for efficient stats calculation                                            |
+| fix_calculate_match_stats_search_path | 2026-01 | Added search_path security to calculate_match_stats function                                                   |
+| expand_match_stats_detailed_statistics | 2026-01 | Expanded match_stats with detailed serve/return/break point columns                                            |
+| update_calculate_match_stats_function | 2026-01 | Updated RPC to calculate all new detailed statistics                                                           |
+| create_match_stats_percentages_view | 2026-01 | Created view to calculate percentage stats from raw counts                                                      |
+| fix_security_warnings               | 2026-01 | Additional security hardening for database functions                                                            |
+| convert_matches_duration_to_bigint  | 2026-02 | Converted matches.duration column from TEXT to BIGINT for proper numeric storage                               |
 
 ---
 
