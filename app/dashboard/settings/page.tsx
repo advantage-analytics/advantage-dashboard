@@ -1,23 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { ClientDataForm } from "@/components/dashboard/settings/client-data-form";
-import { DeleteAccount } from "@/components/dashboard/settings/delete-account";
 
-export default async function Page() {
-  const supabase = await createClient();
-
-  const { data, error } = await supabase.auth.getClaims();
-  if (error || !data?.claims) {
-    redirect("/auth/login");
-  }
-
-  return (
-    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
-      <div className="w-full max-w-lg space-y-6">
-        <ClientDataForm />
-        <DeleteAccount />
-      </div>
-    </div>
-  );
+export default function SettingsPage() {
+  redirect("/dashboard/settings/profile");
 }
-
