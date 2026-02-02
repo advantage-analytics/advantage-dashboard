@@ -80,10 +80,10 @@ export function CtaSection() {
                 className="w-full py-6 bg-[#4A9EFF] hover:bg-[#3A8EEF] text-white rounded-lg text-base font-medium transition-colors"
               >
                 <Link
-                  href="/waitlist"
+                  href="/auth/sign-up"
                   className="flex items-center justify-center"
                 >
-                  Join Waitlist
+                  Join
                 </Link>
               </Button>
               <p className="text-sm text-gray-500 text-center">
