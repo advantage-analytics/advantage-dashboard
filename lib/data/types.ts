@@ -66,3 +66,54 @@ export interface MockData {
   upcomingMatches: UpcomingMatch[];
   overallPerformance: OverallPerformanceData;
 }
+
+// Match Statistics Types
+export interface MatchSummaryStats {
+  totalPoints: number;
+  durationMinutes: number;
+  longestRally: number;
+}
+
+export interface PlayerStatistics {
+  aces: number;
+  doubleFaults: number;
+  firstServePercentage: number;
+  breakpointsWon: number;
+  tiebreaksWon: number;
+  servicePointsWon: number;
+  serviceGamesWon: number;
+  returnPointsWon: number;
+  returnGamesWon: number;
+}
+
+export interface MatchDetailedStats {
+  summary: MatchSummaryStats;
+  player1Stats: PlayerStatistics;
+  player2Stats: PlayerStatistics;
+}
+
+export interface MatchWithStats extends Match {
+  statistics?: MatchDetailedStats;
+}
+
+export interface EventMatch {
+  id: string;
+  round?: string;
+  matchContext?: string;
+  duration?: string;
+  player1: Player;
+  player2: Player;
+  score: MatchScore;
+  won: boolean;
+  statistics?: MatchDetailedStats;
+}
+
+export interface RecentEvent {
+  id: string;
+  tournamentName: string;
+  date: string;
+  matchType: string;
+  courtType?: string;
+  verificationStatus?: string;
+  matches: EventMatch[];
+}
