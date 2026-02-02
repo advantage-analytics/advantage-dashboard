@@ -13,6 +13,20 @@ export default async function Home() {
     redirect("/auth/login");
   }
 
+  // Fetch user profile from users table
+  const userId = data.claims.sub;
+  const { data: user } = await supabase
+    .from("users")
+    .select("first_name, last_name")
+    .eq("id", userId)
+    .single();
+
+  // Build display name with fallback
+  const displayName =
+    user?.first_name || user?.last_name
+      ? [user.first_name, user.last_name].filter(Boolean).join(" ")
+      : "Player";
+
   return (
     <div className="flex-1 w-full bg-white">
       {/* Hero Background - Fixed to viewport */}
@@ -30,7 +44,7 @@ export default async function Home() {
         <div className="flex flex-row gap-8">
           {/* Left Column - Flexible width, expands when sidebar toggles */}
           <div className="flex-1 flex flex-col gap-18">
-            <WelcomeMessage name="Clajerson Gimena" />
+            <WelcomeMessage name={displayName} />
             {/* Navigation Tabs + Tab Content */}
             <HomeContent />
           </div>
