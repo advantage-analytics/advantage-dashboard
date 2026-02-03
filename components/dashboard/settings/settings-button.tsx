@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
 
-type ButtonVariant = "primary" | "secondary" | "outline";
+type ButtonVariant = "primary" | "secondary" | "outline" | "blue";
 
 interface SettingsButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -22,8 +22,12 @@ const variantStyles: Record<ButtonVariant, { enabled: string; disabled: string }
     disabled: "bg-[#F5F5F5] text-[#999] cursor-not-allowed",
   },
   outline: {
-    enabled: "border border-[#0D0D0D] text-[#0D0D0D] hover:bg-[#0D0D0D] hover:text-white active:scale-[0.98]",
+    enabled: "border border-[#E5E5E5] text-[#0D0D0D] hover:border-[#3986F3] hover:text-[#3986F3] active:scale-[0.98]",
     disabled: "border border-[#E5E5E5] text-[#999] cursor-not-allowed",
+  },
+  blue: {
+    enabled: "bg-[#3986F3] text-white hover:bg-[#2a75e0] active:scale-[0.98] shadow-[0_2px_8px_rgba(57,134,243,0.25)]",
+    disabled: "bg-[#E5E5E5] text-[#999] cursor-not-allowed",
   },
 };
 

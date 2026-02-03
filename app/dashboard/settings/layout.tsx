@@ -1,4 +1,8 @@
+"use client";
+
 import { ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import { SettingsNavigation } from "@/components/dashboard/settings/settings-navigation";
 
 interface SettingsLayoutProps {
@@ -6,10 +10,11 @@ interface SettingsLayoutProps {
 }
 
 export default function SettingsLayout({ children }: SettingsLayoutProps) {
+  const pathname = usePathname();
+
   return (
     <div className="flex-1 w-full min-h-screen bg-white">
-      {/* pt-24 (96px) clears the absolutely positioned header (py-6 + h-10 ≈ 64px) with breathing room */}
-      <div className="px-8 pt-24 pb-12">
+      <div className="pl-12 pr-8 pt-24 pb-12">
         {/* Page Header */}
         <div className="mb-10">
           <h1 className="text-xl font-medium text-[#0D0D0D] tracking-tight">
@@ -23,7 +28,19 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
         {/* Content */}
         <div className="flex flex-col md:flex-row gap-10 max-w-4xl">
           <SettingsNavigation />
-          <div className="flex-1 min-w-0">{children}</div>
+          <div className="flex-1 min-w-0">
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={pathname}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15, ease: "easeOut" }}
+              >
+                {children}
+              </motion.div>
+            </AnimatePresence>
+          </div>
         </div>
       </div>
     </div>

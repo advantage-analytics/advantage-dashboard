@@ -23,6 +23,11 @@ function getAnimationKey(pathname: string): string {
     return `/dashboard/matches/${match[1]}`;
   }
 
+  // Settings pages: /dashboard/settings/* - handled by settings layout
+  if (pathname.startsWith("/dashboard/settings")) {
+    return "/dashboard/settings";
+  }
+
   return pathname;
 }
 

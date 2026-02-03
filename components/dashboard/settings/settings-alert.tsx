@@ -37,10 +37,10 @@ const alertConfig: Record<AlertType, AlertConfig> = {
   },
   info: {
     icon: Info,
-    bg: "bg-blue-50",
-    border: "border-blue-100",
-    text: "text-blue-700",
-    iconColor: "text-blue-500",
+    bg: "bg-[#EBF3FE]",
+    border: "border-[#3986F3]/20",
+    text: "text-[#2563eb]",
+    iconColor: "text-[#3986F3]",
   },
 };
 
