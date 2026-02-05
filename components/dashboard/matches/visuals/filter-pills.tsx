@@ -45,10 +45,10 @@ export function FilterPills({
             <motion.button
               key={option.value}
               onClick={() => handleClick(option.value)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
                 isSelected
-                  ? "bg-[#0D0D0D] text-white"
-                  : "bg-white text-[#666666] border border-[#D9D9D9] hover:border-[#999999]"
+                  ? "bg-[#60A5FA] text-white"
+                  : "bg-white text-[#525252] ring-1 ring-inset ring-[#E5E5E5] hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6]"
               }`}
             >
               {option.label}

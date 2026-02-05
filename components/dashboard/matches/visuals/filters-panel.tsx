@@ -71,6 +71,17 @@ export function FiltersPanel({
     onChange({ ...filters, [key]: value });
   }
 
+  function clearAllFilters(): void {
+    const cleared = Object.fromEntries(
+      Object.keys(filters).map((key) => [key, []])
+    );
+    onChange(cleared);
+  }
+
+  const hasActiveFilters = Object.values(filters).some(
+    (arr) => arr.length > 0
+  );
+
   return (
     <motion.div
       className="bg-white rounded-2xl p-6"
@@ -84,11 +95,16 @@ export function FiltersPanel({
       >
         <h3 className="text-xl font-medium text-[#0D0D0D]">Filters</h3>
         <motion.button
-          onClick={onApply}
-          className="px-4 py-1.5 rounded-full text-xs font-medium border border-[#D9D9D9] text-[#666666] hover:bg-[#F5F5F5] transition-colors"
-          whileTap={{ scale: 0.95 }}
+          onClick={clearAllFilters}
+          disabled={!hasActiveFilters}
+          className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
+            hasActiveFilters
+              ? "ring-1 ring-inset ring-[#E5E5E5] text-[#525252] hover:bg-[#FEF2F2] hover:ring-[#FECACA] hover:text-[#EF4444]"
+              : "text-[#CCCCCC] cursor-not-allowed"
+          }`}
+          whileTap={hasActiveFilters ? { scale: 0.95 } : undefined}
         >
-          Apply
+          Clear all
         </motion.button>
       </motion.div>
 

@@ -13,7 +13,7 @@ export const serveFiltersConfig: FilterConfig = {
           { value: "player1", labelKey: "player1Name" },
           { value: "player2", labelKey: "player2Name" },
         ],
-        multiSelect: false,
+        // multiSelect: false,
       },
       {
         key: "type",
@@ -41,7 +41,7 @@ export const serveFiltersConfig: FilterConfig = {
           { value: "wide", label: "Wide" },
           { value: "body", label: "Body" },
           { value: "t", label: "T" },
-          { value: "create", label: "Create Zone" },
+          // { value: "create", label: "Create Zone" },
         ],
       },
       {

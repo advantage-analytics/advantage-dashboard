@@ -75,6 +75,7 @@ export default function VisualsPage(): React.JSX.Element {
       </div>
 
       <FiltersPanel
+        key={visualizationType}
         config={config}
         filters={filters}
         onChange={setFilters}

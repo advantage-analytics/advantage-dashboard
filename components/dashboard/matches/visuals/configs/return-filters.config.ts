@@ -4,7 +4,7 @@ export const returnFiltersConfig: FilterConfig = {
   type: "return",
   courtType: "full",
   rows: [
-    // Row 1: Player, Serve Type, Side
+    // Row 1: Player, Type (serve), Side
     [
       {
         key: "player",
@@ -17,7 +17,7 @@ export const returnFiltersConfig: FilterConfig = {
       },
       {
         key: "serveType",
-        label: "Serve Type",
+        label: "Type",
         options: [
           { value: "first", label: "First Serve" },
           { value: "second", label: "Second Serve" },
@@ -32,8 +32,45 @@ export const returnFiltersConfig: FilterConfig = {
         ],
       },
     ],
-    // Row 2: Depth, Direction, Shot Type
+    // Row 2: Placement, Type (shot), Spin
     [
+      {
+        key: "placement",
+        label: "Placement",
+        options: [
+          { value: "dtl", label: "Down the Line" },
+          { value: "middle", label: "Middle" },
+          { value: "crosscourt", label: "Crosscourt" },
+        ],
+      },
+      {
+        key: "shotType",
+        label: "Stroke",
+        options: [
+          { value: "forehand", label: "Forehand" },
+          { value: "backhand", label: "Backhand" },
+        ],
+      },
+      {
+        key: "spin",
+        label: "Spin",
+        options: [
+          { value: "topspin", label: "Topspin" },
+          { value: "slice", label: "Slice" },
+        ],
+      },
+    ],
+    // Row 3: Contact, Depth, Result
+    [
+      {
+        key: "contact",
+        label: "Contact",
+        options: [
+          { value: "inside", label: "Inside" },
+          { value: "neutral", label: "Neutral" },
+          { value: "far", label: "Far" },
+        ],
+      },
       {
         key: "depth",
         label: "Depth",
@@ -44,26 +81,6 @@ export const returnFiltersConfig: FilterConfig = {
         ],
       },
       {
-        key: "direction",
-        label: "Direction",
-        options: [
-          { value: "crosscourt", label: "Crosscourt" },
-          { value: "dtl", label: "Down the Line" },
-          { value: "middle", label: "Middle" },
-        ],
-      },
-      {
-        key: "shotType",
-        label: "Shot Type",
-        options: [
-          { value: "forehand", label: "Forehand" },
-          { value: "backhand", label: "Backhand" },
-        ],
-      },
-    ],
-    // Row 3: Result, Other
-    [
-      {
         key: "result",
         label: "Result",
         options: [
@@ -72,14 +89,15 @@ export const returnFiltersConfig: FilterConfig = {
           { value: "winner", label: "Winner" },
         ],
       },
+    ],
+    // Row 4: Other
+    [
       {
         key: "other",
         label: "Other",
-        options: [
-          { value: "errors", label: "Errors" },
-          { value: "forced", label: "Forced Errors" },
-        ],
+        options: [{ value: "errors", label: "Errors" }],
       },
+      null,
       null,
     ],
   ],
