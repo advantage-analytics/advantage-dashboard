@@ -2,7 +2,6 @@ import { notFound } from "next/navigation";
 
 import { MatchEventHeader } from "@/components/dashboard/matches/match-event-header";
 import { MatchNavigationTabs } from "@/components/dashboard/matches/match-navigation-tabs";
-import { MatchScoreDisplay } from "@/components/dashboard/matches/match-score-display";
 import { MatchSidebar } from "@/components/dashboard/matches/match-sidebar";
 import { getMatchStatisticsFromSupabase } from "@/lib/data/match-stats-server";
 import { formatDuration } from "@/components/dashboard/home/upload-match-modal/utils";
@@ -139,8 +138,7 @@ export default async function MatchLayout({
             <div className="flex flex-col gap-10 min-w-0">{children}</div>
           </div>
 
-          <div className="sticky top-8 w-[320px] flex-shrink-0 self-start h-fit flex flex-col gap-5">
-            <MatchScoreDisplay match={match} />
+          <div className="sticky top-8 w-[320px] flex-shrink-0 self-start h-fit">
             <MatchSidebar
               match={match}
               matchId={matchId}
