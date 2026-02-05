@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { MatchEventHeader } from "@/components/dashboard/matches/match-event-header";
 import { MatchNavigationTabs } from "@/components/dashboard/matches/match-navigation-tabs";
 import { MatchScoreDisplay } from "@/components/dashboard/matches/match-score-display";
+import { MatchSidebar } from "@/components/dashboard/matches/match-sidebar";
+import { getMatchStatisticsFromSupabase } from "@/lib/data/match-stats-server";
 import { formatDuration } from "@/components/dashboard/home/upload-match-modal/utils";
 import type { Match, SetScore } from "@/lib/data/types";
 import { createClient } from "@/lib/supabase/server";
@@ -119,6 +121,7 @@ export default async function MatchLayout({
   }
 
   const match = transformDbMatchToMatch(row as DbMatch, user?.id ?? "");
+  const statsResult = await getMatchStatisticsFromSupabase(matchId);
 
   return (
     <div className="flex-1 w-full bg-white">
@@ -138,6 +141,11 @@ export default async function MatchLayout({
 
           <div className="sticky top-8 w-[320px] flex-shrink-0 self-start h-fit flex flex-col gap-5">
             <MatchScoreDisplay match={match} />
+            <MatchSidebar
+              match={match}
+              matchId={matchId}
+              statsResult={statsResult}
+            />
           </div>
         </div>
       </div>

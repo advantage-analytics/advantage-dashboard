@@ -9,9 +9,12 @@
       "args": [
         "-y",
         "figma-developer-mcp",
-        "--figma-api-key=figd_uOKhwWx2Ia734apW5ytD3cQPGbTp-2gf-E9Tgg-1",
+        "--figma-api-key=figd_6aIJGmOsrUyQOHUF2-ws22x2Ng1vh4DTOLcZkMTJ",
         "--stdio"
-      ]
+      ],
+      "env": {
+        "API_KEY": "figd_6aIJGmOsrUyQOHUF2-ws22x2Ng1vh4DTOLcZkMTJ"
+      }
     }
   }
 }
