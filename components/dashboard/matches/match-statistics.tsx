@@ -1,75 +1,42 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { getMatchById, getMatchStatistics } from "@/lib/data/match-utils";
 import { PlayerComparisonHeader } from "./statistics/player-comparison-header";
 import { StatComparisonBar } from "./statistics/stat-comparison-bar";
+import type { MatchDetailedStats, PlayerStatistics } from "@/lib/data/types";
 
 interface MatchStatisticsProps {
-  matchId: string;
+  statistics: MatchDetailedStats | null;
+  player1Name: string;
+  player2Name: string;
 }
 
 interface StatConfig {
-  key: string;
+  key: keyof PlayerStatistics;
   label: string;
-  player1Key: keyof typeof playerStatsKeys;
   isPercentage?: boolean;
 }
 
-const playerStatsKeys = {
-  aces: "aces",
-  doubleFaults: "doubleFaults",
-  firstServePercentage: "firstServePercentage",
-  breakpointsWon: "breakpointsWon",
-  tiebreaksWon: "tiebreaksWon",
-  servicePointsWon: "servicePointsWon",
-  serviceGamesWon: "serviceGamesWon",
-  returnPointsWon: "returnPointsWon",
-  returnGamesWon: "returnGamesWon",
-} as const;
-
 const statsConfig: StatConfig[] = [
-  { key: "aces", label: "Aces", player1Key: "aces" },
-  { key: "doubleFaults", label: "Double Faults", player1Key: "doubleFaults" },
-  {
-    key: "firstServePercentage",
-    label: "First Serve %",
-    player1Key: "firstServePercentage",
-    isPercentage: true,
-  },
-  {
-    key: "breakpointsWon",
-    label: "Breakpoints Won",
-    player1Key: "breakpointsWon",
-  },
-  { key: "tiebreaksWon", label: "Tiebreaks Won", player1Key: "tiebreaksWon" },
-  {
-    key: "servicePointsWon",
-    label: "Service Points Won",
-    player1Key: "servicePointsWon",
-  },
-  {
-    key: "serviceGamesWon",
-    label: "Service Games Won",
-    player1Key: "serviceGamesWon",
-  },
-  {
-    key: "returnPointsWon",
-    label: "Return Points Won",
-    player1Key: "returnPointsWon",
-  },
-  {
-    key: "returnGamesWon",
-    label: "Return Games Won",
-    player1Key: "returnGamesWon",
-  },
+  { key: "aces", label: "Aces" },
+  { key: "doubleFaults", label: "Double Faults" },
+  { key: "firstServeInPct", label: "First Serve In %", isPercentage: true },
+  { key: "firstServeWinPct", label: "First Serve Win %", isPercentage: true },
+  { key: "secondServeWinPct", label: "Second Serve Win %", isPercentage: true },
+  { key: "breakpointsWon", label: "Breakpoints Won" },
+  { key: "tiebreaksWon", label: "Tiebreaks Won" },
+  { key: "servicePointsWon", label: "Service Points Won" },
+  { key: "serviceGamesWon", label: "Service Games Won" },
+  { key: "returnPointsWon", label: "Return Points Won" },
+  { key: "returnGamesWon", label: "Return Games Won" },
 ];
 
-export function MatchStatistics({ matchId }: MatchStatisticsProps) {
-  const match = getMatchById(matchId);
-  const statistics = getMatchStatistics(matchId);
-
-  if (!match || !statistics) {
+export function MatchStatistics({
+  statistics,
+  player1Name,
+  player2Name,
+}: MatchStatisticsProps) {
+  if (!statistics) {
     return (
       <div className="bg-white p-6 rounded-2xl">
         <h2 className="text-lg font-medium text-[#000000] mb-6">Statistics</h2>
@@ -92,8 +59,8 @@ export function MatchStatistics({ matchId }: MatchStatisticsProps) {
       }}
     >
       <PlayerComparisonHeader
-        player1Name={match.player1.name}
-        player2Name={match.player2.name}
+        player1Name={player1Name}
+        player2Name={player2Name}
       />
 
       <div className="mt-6 space-y-6">
@@ -101,16 +68,8 @@ export function MatchStatistics({ matchId }: MatchStatisticsProps) {
           <StatComparisonBar
             key={stat.key}
             label={stat.label}
-            player1Value={
-              statistics.player1Stats[
-                stat.player1Key as keyof typeof statistics.player1Stats
-              ]
-            }
-            player2Value={
-              statistics.player2Stats[
-                stat.player1Key as keyof typeof statistics.player2Stats
-              ]
-            }
+            player1Value={statistics.player1Stats[stat.key]}
+            player2Value={statistics.player2Stats[stat.key]}
             index={index}
             isPercentage={stat.isPercentage}
           />

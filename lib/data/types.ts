@@ -1,7 +1,6 @@
 export interface Player {
   name: string;
   school: string;
-  // No logo field - will use placeholder divs in UI
 }
 
 export interface SetScore {
@@ -77,7 +76,9 @@ export interface MatchSummaryStats {
 export interface PlayerStatistics {
   aces: number;
   doubleFaults: number;
-  firstServePercentage: number;
+  firstServeInPct: number;
+  firstServeWinPct: number;
+  secondServeWinPct: number;
   breakpointsWon: number;
   tiebreaksWon: number;
   servicePointsWon: number;
