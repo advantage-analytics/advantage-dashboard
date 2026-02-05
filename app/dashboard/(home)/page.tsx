@@ -4,6 +4,7 @@ import OverallPerformance from "./overall-performance";
 import HomeContent from "./home-content";
 import { UpcomingMatch } from "@/components/dashboard/home/upcoming-match";
 import { createClient } from "@/lib/supabase/server";
+import { getOverallPerformance } from "@/lib/data/performance-server";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -13,13 +14,16 @@ export default async function Home() {
     redirect("/auth/login");
   }
 
-  // Fetch user profile from users table
+  // Fetch user profile and performance data in parallel
   const userId = data.claims.sub;
-  const { data: user } = await supabase
-    .from("users")
-    .select("first_name, last_name")
-    .eq("id", userId)
-    .single();
+  const [{ data: user }, performanceData] = await Promise.all([
+    supabase
+      .from("users")
+      .select("first_name, last_name")
+      .eq("id", userId)
+      .single(),
+    getOverallPerformance(),
+  ]);
 
   // Build display name with fallback
   const displayName =
@@ -52,7 +56,7 @@ export default async function Home() {
           {/* Right Column - Fixed 320px widget */}
           <div className="sticky top-8 w-[320px] flex-shrink-0 self-start h-fit flex flex-col gap-5">
             {/* Overall Performance Side Widget goes here */}
-            <OverallPerformance />
+            <OverallPerformance performanceData={performanceData} />
             {/* Upcoming Match */}
             <UpcomingMatch />
           </div>

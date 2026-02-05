@@ -5,11 +5,16 @@ import { ChevronRight } from "lucide-react";
 import { CircularProgressRing } from "@/components/dashboard/home/circular-progress-ring";
 import { PerformanceRating } from "@/components/dashboard/home/performance-rating";
 import { RecentPerformance } from "@/components/dashboard/home/recent-performance";
-import mockData from "@/lib/data/mock.json";
+import type { OverallPerformanceData } from "@/lib/data/performance-server";
 
-export default function OverallPerformance() {
-  const { views, performanceRatings, recentPerformance } =
-    mockData.overallPerformance;
+interface OverallPerformanceProps {
+  performanceData: OverallPerformanceData;
+}
+
+export default function OverallPerformance({
+  performanceData,
+}: OverallPerformanceProps) {
+  const { views, performanceRatings, recentPerformance } = performanceData;
 
   const [currentViewIndex, setCurrentViewIndex] = useState(0);
   const currentView = views[currentViewIndex];
