@@ -45,7 +45,7 @@ export const returnFiltersConfig: FilterConfig = {
       },
       {
         key: "shotType",
-        label: "Type",
+        label: "Stroke",
         options: [
           { value: "forehand", label: "Forehand" },
           { value: "backhand", label: "Backhand" },
@@ -60,8 +60,17 @@ export const returnFiltersConfig: FilterConfig = {
         ],
       },
     ],
-    // Row 3: Depth, Result, Other
+    // Row 3: Contact, Depth, Result
     [
+      {
+        key: "contact",
+        label: "Contact",
+        options: [
+          { value: "inside", label: "Inside" },
+          { value: "neutral", label: "Neutral" },
+          { value: "far", label: "Far" },
+        ],
+      },
       {
         key: "depth",
         label: "Depth",
@@ -80,11 +89,16 @@ export const returnFiltersConfig: FilterConfig = {
           { value: "winner", label: "Winner" },
         ],
       },
+    ],
+    // Row 4: Other
+    [
       {
         key: "other",
         label: "Other",
         options: [{ value: "errors", label: "Errors" }],
       },
+      null,
+      null,
     ],
   ],
 };
