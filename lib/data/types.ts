@@ -85,6 +85,9 @@ export interface PlayerStatistics {
   serviceGamesWon: number;
   returnPointsWon: number;
   returnGamesWon: number;
+  totalPoints: number;
+  totalPointsWon: number;
+  serveRating: number;
 }
 
 export interface MatchDetailedStats {

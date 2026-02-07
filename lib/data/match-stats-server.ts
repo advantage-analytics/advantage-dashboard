@@ -15,6 +15,9 @@ interface DbMatchStatsView {
   first_return_points_won: number | null;
   second_return_points_won: number | null;
   return_games_won: number | null;
+  total_points: number | null;
+  total_points_won: number | null;
+  serve_rating: number | null;
 }
 
 interface DbMatchScore {
@@ -44,7 +47,7 @@ export async function getMatchStatisticsFromSupabase(
     supabase
       .from("match_stats_with_percentages")
       .select(
-        "is_player1, aces, double_faults, first_serve_pct, first_serve_won_pct, second_serve_won_pct, break_points_converted, first_serve_points_won, second_serve_points_won, service_games_won, first_return_points_won, second_return_points_won, return_games_won"
+        "is_player1, aces, double_faults, first_serve_pct, first_serve_won_pct, second_serve_won_pct, break_points_converted, first_serve_points_won, second_serve_points_won, service_games_won, first_return_points_won, second_return_points_won, return_games_won, total_points, total_points_won, serve_rating"
       )
       .eq("match_id", matchId),
     supabase
@@ -109,6 +112,9 @@ const DEFAULT_STATS: PlayerStatistics = {
   serviceGamesWon: 0,
   returnPointsWon: 0,
   returnGamesWon: 0,
+  totalPoints: 0,
+  totalPointsWon: 0,
+  serveRating: 0,
 };
 
 function transformToPlayerStats(
@@ -131,5 +137,8 @@ function transformToPlayerStats(
     returnPointsWon:
       (row.first_return_points_won ?? 0) + (row.second_return_points_won ?? 0),
     returnGamesWon: row.return_games_won ?? 0,
+    totalPoints: row.total_points ?? 0,
+    totalPointsWon: row.total_points_won ?? 0,
+    serveRating: parseFloat(String(row.serve_rating ?? 0)),
   };
 }
