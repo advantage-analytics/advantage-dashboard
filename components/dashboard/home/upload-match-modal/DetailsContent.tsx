@@ -573,13 +573,13 @@ export function DetailsContent({
                 type="date"
                 value={formData.date}
                 onChange={(e) => onInputChange("date", e.target.value)}
-                className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none pl-3 pr-2 [&::-webkit-calendar-picker-indicator]:opacity-50 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none pl-3 pr-1 [&::-webkit-calendar-picker-indicator]:opacity-50 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:p-0 [&::-webkit-calendar-picker-indicator]:m-0"
               />
               <Input
                 type="time"
                 value={formData.time}
                 onChange={(e) => onInputChange("time", e.target.value)}
-                className="w-[95px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none pl-3 pr-2 [&::-webkit-calendar-picker-indicator]:opacity-50 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                className="w-[95px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none pl-3 pr-1 [&::-webkit-calendar-picker-indicator]:opacity-50 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:p-0 [&::-webkit-calendar-picker-indicator]:m-0"
               />
               <Select
                 value={formData.matchType || undefined}
