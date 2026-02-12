@@ -589,6 +589,7 @@ export function DetailsContent({
                   <SelectValue placeholder="Match Type..." />
                 </SelectTrigger>
                 <SelectContent className="shadow-none border-[#E5E5E5] text-[#999999] text-xs">
+                  <SelectItem value="N/A" className="text-[#999999] text-xs">N/A</SelectItem>
                   <SelectItem value="Tournament" className="text-[#999999] text-xs">Tournament</SelectItem>
                   <SelectItem value="Dual Match" className="text-[#999999] text-xs">Dual Match</SelectItem>
                   <SelectItem value="Practice" className="text-[#999999] text-xs">Practice</SelectItem>
