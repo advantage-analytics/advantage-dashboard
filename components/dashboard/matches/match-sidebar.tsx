@@ -1,17 +1,40 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import type { Match } from "@/lib/data/types";
 import type { MatchStatisticsResult } from "@/lib/data/match-stats-server";
 
-function getInitials(name: string): string {
-  return name
-    .split(/\s+/)
-    .map((s) => s[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+function RallyWinRow({
+  label,
+  valuePct,
+  fillPct,
+  barColor,
+}: {
+  label: string;
+  valuePct: number;
+  fillPct: number;
+  barColor: string;
+}) {
+  const pct = Math.min(100, Math.max(0, fillPct));
+
+  return (
+    <div className="flex flex-col gap-3 self-stretch">
+      <div className="flex flex-row justify-between items-end self-stretch gap-1">
+        <span className="text-xs font-normal text-[#999999] leading-[1.1]">
+          {label}
+        </span>
+        <span className="text-[16px] leading-[1.1] font-medium text-[#525252] tabular-nums">
+          {valuePct}%
+        </span>
+      </div>
+      <div className="h-[6px] w-full bg-[#D9D9D9] rounded-full overflow-hidden">
+        <div
+          className="h-full rounded-full"
+          style={{ width: `${pct}%`, backgroundColor: barColor }}
+        />
+      </div>
+    </div>
+  );
 }
 
 function WinningPercentageCircle({
@@ -87,7 +110,9 @@ function PerformanceBar({
   return (
     <div className="flex flex-col gap-3 w-full">
       <div className="flex flex-row justify-between items-end gap-1">
-        <span className="text-sm font-medium text-[#999999] leading-none">{label}</span>
+        <span className="text-sm font-medium text-[#999999] leading-none">
+          {label}
+        </span>
         <span className="font-medium text-2xl leading-none uppercase text-[#0D0D0D] tabular-nums">
           {displayValue}
         </span>
@@ -116,6 +141,7 @@ export function MatchSidebar({
   const [selectedPlayer, setSelectedPlayer] = useState<"player1" | "player2">(
     "player1"
   );
+  const [showMore, setShowMore] = useState(false);
 
   const playerStats = statsResult?.statistics
     ? selectedPlayer === "player1"
@@ -128,6 +154,8 @@ export function MatchSidebar({
   const winningPct =
     totalPoints > 0 ? (totalPointsWon / totalPoints) * 100 : 0;
 
+  const barColor = selectedPlayer === "player1" ? "#3986F3" : "#F38439";
+
   const serveRating = playerStats?.serveRating ?? 0;
   const returnRating = playerStats
     ? (playerStats.returnGamesWon / Math.max(1, 10)) * 100
@@ -136,94 +164,10 @@ export function MatchSidebar({
     ? Math.min(100, playerStats.breakpointsWon * 20)
     : 0;
 
-  const barColor = selectedPlayer === "player1" ? "#3986F3" : "#F38439";
-
   return (
     <div className="w-[320px] flex flex-col gap-6 p-6 bg-white rounded-2xl shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
-      {/* Match Score Block */}
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-row justify-between items-center gap-12">
-          <span className="text-xs font-medium text-[#999999]">
-            {match.matchContext}
-          </span>
-          <span className="px-2 py-0.5 rounded-[10px] bg-[#60A5FA] text-xs font-medium text-white">
-            {match.duration ?? "—"}
-          </span>
-        </div>
-
-        <div className="flex flex-col gap-4">
-          {/* Player 1 */}
-          <div className="flex flex-row justify-between items-center gap-[52px]">
-            <div className="flex flex-row items-center gap-4">
-              <div className="w-10 h-10 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
-                <span className="text-xs font-medium text-[#BFBFBF]">
-                  {getInitials(match.player1.name)}
-                </span>
-              </div>
-              <span
-                className={`text-sm font-semibold ${
-                  match.score.winner === "player1"
-                    ? "text-[#0D0D0D]"
-                    : "text-[#999999]"
-                }`}
-              >
-                {match.player1.name}
-              </span>
-            </div>
-            <div className="flex flex-row gap-4">
-              {match.score.sets.map((set, idx) => (
-                <span
-                  key={idx}
-                  className={`text-lg font-semibold ${
-                    match.score.winner === "player1"
-                      ? "text-[#0D0D0D]"
-                      : "text-[#999999]"
-                  }`}
-                >
-                  {set.player1}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* Player 2 */}
-          <div className="flex flex-row justify-between items-center gap-[52px]">
-            <div className="flex flex-row items-center gap-4">
-              <div className="w-10 h-10 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
-                <span className="text-xs font-medium text-[#BFBFBF]">
-                  {getInitials(match.player2.name)}
-                </span>
-              </div>
-              <span
-                className={`text-sm font-semibold ${
-                  match.score.winner === "player2"
-                    ? "text-[#0D0D0D]"
-                    : "text-[#999999]"
-                }`}
-              >
-                {match.player2.name}
-              </span>
-            </div>
-            <div className="flex flex-row gap-4">
-              {match.score.sets.map((set, idx) => (
-                <span
-                  key={idx}
-                  className={`text-lg font-semibold ${
-                    match.score.winner === "player2"
-                      ? "text-[#0D0D0D]"
-                      : "text-[#999999]"
-                  }`}
-                >
-                  {set.player2}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Player Tabs */}
-      <div className="flex flex-row shadow-[inset_0_-1px_0_0_#D9D9D9]">
+      <div className="flex flex-row gap-2 shadow-[inset_0_-1px_0_0_#D9D9D9]">
         <button
           type="button"
           onClick={() => setSelectedPlayer("player1")}
@@ -250,6 +194,10 @@ export function MatchSidebar({
 
       {/* Stats Content */}
       <div className="flex flex-col gap-6">
+        <div className="text-xs font-medium tracking-[0.16em] uppercase text-[#525252]">
+          Performance breakdown
+        </div>
+
         {/* Winning Percentage */}
         <div className="flex flex-col gap-2.5 min-h-[124px] justify-between">
           <WinningPercentageCircle
@@ -264,15 +212,50 @@ export function MatchSidebar({
         <div className="flex flex-col items-stretch gap-8">
           <PerformanceBar label="Serve Rating" value={serveRating} barColor={barColor} />
           <PerformanceBar label="Return Rating" value={returnRating} barColor={barColor} />
-          <PerformanceBar label="Under Pressure Rating" value={underPressureRating} barColor={barColor} />
+          <PerformanceBar
+            label="Under Pressure Rating"
+            value={underPressureRating}
+            barColor={barColor}
+          />
         </div>
 
-        <Link
-          href={`/dashboard/matches/${matchId}/overall`}
+        {showMore && (
+          <div className="flex flex-col gap-3">
+            <div className="h-px w-full bg-[#D9D9D9]" />
+            <div className="text-xs font-medium tracking-[0.16em] uppercase text-[#525252] px-1 pt-1">
+              Rally win Percentage
+            </div>
+            {/* Placeholder values (until rally-length stats exist) */}
+            <div className="flex flex-col gap-5 px-1 pt-1">
+              <RallyWinRow
+                label="1-4 shots"
+                valuePct={25}
+                fillPct={50}
+                barColor={barColor}
+              />
+              <RallyWinRow
+                label="5-9 shots"
+                valuePct={14}
+                fillPct={23}
+                barColor={barColor}
+              />
+              <RallyWinRow
+                label="10+ shots"
+                valuePct={21}
+                fillPct={35}
+                barColor={barColor}
+              />
+            </div>
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setShowMore((v) => !v)}
           className="block text-center text-xs font-medium text-[#999999] hover:text-[#666666] transition-colors"
         >
-          View more
-        </Link>
+          {showMore ? "View less" : "View more"}
+        </button>
       </div>
     </div>
   );

@@ -83,6 +83,7 @@ export interface PlayerStatistics {
   tiebreaksWon: number;
   servicePointsWon: number;
   serviceGamesWon: number;
+  serviceGamesWonPct: number;
   returnPointsWon: number;
   returnGamesWon: number;
   totalPoints: number;
