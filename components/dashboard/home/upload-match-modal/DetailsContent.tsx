@@ -61,16 +61,20 @@ export function DetailsContent({
   const [editingPlayer, setEditingPlayer] = useState(false);
   const [editingOpponent, setEditingOpponent] = useState(false);
 
+  const bestOfNum = parseInt(formData.bestOf) || 3;
+  const displayedSets = formData.numberOfSets ?? bestOfNum;
+
   // Get scores first (needed by focus functions)
   const playerScores = getAdjustedScores(
     formData.playerScores,
-    formData.bestOf
+    formData.bestOf,
+    formData.numberOfSets
   );
   const opponentScores = getAdjustedScores(
     formData.opponentScores,
-    formData.bestOf
+    formData.bestOf,
+    formData.numberOfSets
   );
-  const bestOfNum = parseInt(formData.bestOf) || 3;
 
   // Refs for all input fields to manage autofocus
   const playerScoreRefs = useRef<Record<number, HTMLInputElement | null>>({});
@@ -175,8 +179,8 @@ export function DetailsContent({
   }, [playerScores, opponentScores]);
 
   const handleSetsChange = (delta: number) => {
-    const newSets = Math.max(1, Math.min(5, bestOfNum + delta));
-    onInputChange("bestOf", newSets.toString());
+    const newSets = Math.max(1, Math.min(bestOfNum, displayedSets + delta));
+    onInputChange("numberOfSets", newSets);
   };
 
   // Determine player names and result options for dropdown
@@ -216,13 +220,13 @@ export function DetailsContent({
           {/* Sets Configuration */}
           <div className="flex justify-between items-center">
             <span className="text-[#999999] font-normal text-xs">
-              {formData.bestOf || 3} Sets
+              {displayedSets} Sets
             </span>
             <div className="flex items-center gap-6">
               <button
                 type="button"
                 onClick={() => handleSetsChange(-1)}
-                disabled={bestOfNum <= 1}
+                disabled={displayedSets <= 1}
                 className="text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed hover:text-blue-600 transition-colors"
               >
                 <CircleMinus className="h-3.5 w-3.5" />
@@ -230,7 +234,7 @@ export function DetailsContent({
               <button
                 type="button"
                 onClick={() => handleSetsChange(1)}
-                disabled={bestOfNum >= 5}
+                disabled={displayedSets >= bestOfNum}
                 className="text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed hover:text-blue-600 transition-colors"
               >
                 <CirclePlus className="h-3.5 w-3.5" />

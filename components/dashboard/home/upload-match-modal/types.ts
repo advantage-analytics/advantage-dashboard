@@ -27,6 +27,8 @@ export interface FormData {
   opponentScores: (number | null)[];
   playerTiebreaks: (number | null)[];
   opponentTiebreaks: (number | null)[];
+  /** Number of set inputs to show (1–5). When undefined, defaults to bestOf. */
+  numberOfSets?: number;
   matchType?: string;
   courtType?: string;
   duration?: number;

@@ -29,6 +29,7 @@ import {
 import {
   determineWinner,
   buildMatchData,
+  getAdjustedScores,
   formatFileSize,
   clearStorageData,
   loadFormDataFromStorage,
@@ -403,7 +404,14 @@ export function useUploadMatchModal({
 
   // Form handling
   const handleInputChange = useCallback((field: keyof MatchFormData, value: string | number | boolean) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormData((prev) => {
+      const next = { ...prev, [field]: value };
+      // When bestOf changes, reset numberOfSets so it uses the new format's default
+      if (field === "bestOf") {
+        next.numberOfSets = undefined;
+      }
+      return next;
+    });
   }, []);
 
   const handleScoreChange = useCallback(
@@ -523,9 +531,19 @@ export function useUploadMatchModal({
 
       const matchId = crypto.randomUUID();
 
-      const { winner, loser } = determineWinner(
+      const adjustedPlayerScores = getAdjustedScores(
         formData.playerScores,
+        formData.bestOf,
+        formData.numberOfSets
+      );
+      const adjustedOpponentScores = getAdjustedScores(
         formData.opponentScores,
+        formData.bestOf,
+        formData.numberOfSets
+      );
+      const { winner, loser } = determineWinner(
+        adjustedPlayerScores,
+        adjustedOpponentScores,
         parseInt(formData.bestOf),
         user.id,
         formData.playerName,

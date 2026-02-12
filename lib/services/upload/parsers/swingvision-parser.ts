@@ -376,6 +376,7 @@ export class SwingVisionParser implements IFileParser {
       playerTiebreaks,
       opponentTiebreaks,
       bestOf: String(bestOfNum),
+      numberOfSets: sets.length < bestOfNum ? sets.length : undefined,
       adScoring: settings.adScoring,
       result,
       duration: totalDuration,

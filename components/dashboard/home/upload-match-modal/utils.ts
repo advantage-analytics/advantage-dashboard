@@ -5,18 +5,25 @@
 import { FormData, WinnerLoserResult, MatchData } from "./types";
 
 /**
- * Get the number of sets
+ * Get the number of sets to display/edit.
+ * Uses numberOfSets when set; otherwise defaults to bestOf (1, 3, or 5).
  */
-export function getNumberOfSets(bestOf: string): number {
-  const num = parseInt(bestOf);
-  return isNaN(num) ? 3 : num;
+export function getNumberOfSets(bestOf: string, numberOfSets?: number): number {
+  const maxSets = parseInt(bestOf);
+  const defaultSets = isNaN(maxSets) ? 3 : maxSets;
+  const requested = numberOfSets ?? defaultSets;
+  return Math.max(1, Math.min(5, requested));
 }
 
 /**
  * Get player scores array adjusted to the correct number of sets
  */
-export function getAdjustedScores(currentScores: (number | null)[], bestOf: string): (number | null)[] {
-  const sets = getNumberOfSets(bestOf);
+export function getAdjustedScores(
+  currentScores: (number | null)[],
+  bestOf: string,
+  numberOfSets?: number
+): (number | null)[] {
+  const sets = getNumberOfSets(bestOf, numberOfSets);
   if (currentScores.length < sets) {
     return [...currentScores, ...Array(sets - currentScores.length).fill(null)];
   }
@@ -89,9 +96,14 @@ export function buildMatchData(
   // Determine if the player (playerName) won
   const playerWon = formData.playerName === winner.name;
 
-  // Convert null scores to 0 for database insertion
-  const playerScoresNum = formData.playerScores.map(s => s ?? 0);
-  const opponentScoresNum = formData.opponentScores.map(s => s ?? 0);
+  // Use adjusted scores (respects numberOfSets when user reduced sets)
+  const adjustedPlayerScores = getAdjustedScores(formData.playerScores, formData.bestOf, formData.numberOfSets);
+  const adjustedOpponentScores = getAdjustedScores(formData.opponentScores, formData.bestOf, formData.numberOfSets);
+  const adjustedPlayerTiebreaks = getAdjustedScores(formData.playerTiebreaks, formData.bestOf, formData.numberOfSets);
+  const adjustedOpponentTiebreaks = getAdjustedScores(formData.opponentTiebreaks, formData.bestOf, formData.numberOfSets);
+
+  const playerScoresNum = adjustedPlayerScores.map(s => s ?? 0);
+  const opponentScoresNum = adjustedOpponentScores.map(s => s ?? 0);
 
   return {
     id: matchId,
@@ -113,8 +125,8 @@ export function buildMatchData(
     score: {
       player1: playerScoresNum,
       player2: opponentScoresNum,
-      player1_tiebreaks: formData.playerTiebreaks,
-      player2_tiebreaks: formData.opponentTiebreaks
+      player1_tiebreaks: adjustedPlayerTiebreaks,
+      player2_tiebreaks: adjustedOpponentTiebreaks
     },
     // New metadata fields
     created_by: metadata.userId,

@@ -71,11 +71,13 @@ function getMatchStatus(result: string | undefined): string {
 export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }: ConfirmContentProps) {
   const playerScores = getAdjustedScores(
     formData.playerScores,
-    formData.bestOf
+    formData.bestOf,
+    formData.numberOfSets
   );
   const opponentScores = getAdjustedScores(
     formData.opponentScores,
-    formData.bestOf
+    formData.bestOf,
+    formData.numberOfSets
   );
 
   const playerName = formData.playerName || "N/A";
