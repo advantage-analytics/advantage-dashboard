@@ -343,6 +343,7 @@ export function useUploadMatchModal({
               playerTiebreaks: parseResult.data?.playerTiebreaks || prev.playerTiebreaks,
               opponentTiebreaks: parseResult.data?.opponentTiebreaks || prev.opponentTiebreaks,
               bestOf: parseResult.data?.bestOf || prev.bestOf,
+              numberOfSets: parseResult.data?.numberOfSets ?? prev.numberOfSets,
               adScoring: parseResult.data?.adScoring !== undefined ? parseResult.data.adScoring : prev.adScoring,
               result: parseResult.data?.result || prev.result,
               duration: parseResult.data?.duration || prev.duration,
