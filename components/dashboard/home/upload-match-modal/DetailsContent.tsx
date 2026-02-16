@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { ChevronDown, CircleMinus, CirclePlus, SquarePen, Info } from "lucide-react";
+import { Calendar, ChevronDown, CircleMinus, CirclePlus, Clock, SquarePen, Info } from "lucide-react";
 import { FormData, ParsingState } from "./types";
 import { getAdjustedScores, formatDuration, parseDuration } from "./utils";
 
@@ -81,6 +81,8 @@ export function DetailsContent({
   const opponentScoreRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const playerTiebreakRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const opponentTiebreakRefs = useRef<Record<number, HTMLInputElement | null>>({});
+  const dateInputRef = useRef<HTMLInputElement>(null);
+  const timeInputRef = useRef<HTMLInputElement>(null);
 
   // Focus management logic
   const focusNextInput = useCallback((currentType: "playerScore" | "opponentScore" | "playerTiebreak" | "opponentTiebreak", setIndex: number) => {
@@ -573,18 +575,32 @@ export function DetailsContent({
               </Select>
             </div>
             <div className="flex flex-wrap gap-3">
-              <Input
-                type="date"
-                value={formData.date}
-                onChange={(e) => onInputChange("date", e.target.value)}
-                className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none pl-3 pr-2 [&::-webkit-calendar-picker-indicator]:opacity-50 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-              />
-              <Input
-                type="time"
-                value={formData.time}
-                onChange={(e) => onInputChange("time", e.target.value)}
-                className="w-[95px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none pl-3 pr-2 [&::-webkit-calendar-picker-indicator]:opacity-50 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-              />
+              <div
+                className="relative w-fit cursor-pointer"
+                onClick={() => dateInputRef.current?.showPicker()}
+              >
+                <Input
+                  ref={dateInputRef}
+                  type="date"
+                  value={formData.date}
+                  onChange={(e) => onInputChange("date", e.target.value)}
+                  className="w-auto h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none pl-3 pr-7 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:p-0 [&::-webkit-datetime-edit-fields-wrapper]:p-0"
+                />
+                <Calendar className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-[#999999]" />
+              </div>
+              <div
+                className="relative w-fit cursor-pointer"
+                onClick={() => timeInputRef.current?.showPicker()}
+              >
+                <Input
+                  ref={timeInputRef}
+                  type="time"
+                  value={formData.time}
+                  onChange={(e) => onInputChange("time", e.target.value)}
+                  className="w-auto h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none pl-3 pr-7 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:p-0 [&::-webkit-datetime-edit-fields-wrapper]:p-0"
+                />
+                <Clock className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-[#999999]" />
+              </div>
               <Select
                 value={formData.matchType || undefined}
                 onValueChange={(value) => onInputChange("matchType", value)}
