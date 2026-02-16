@@ -564,6 +564,7 @@ export function DetailsContent({
                   <SelectValue placeholder="Round of..." />
                 </SelectTrigger>
                 <SelectContent className="shadow-none border-[#E5E5E5] text-[#999999] text-xs">
+                  <SelectItem value="None" className="text-[#999999] text-xs">None</SelectItem>
                   <SelectItem value="Round of 128" className="text-[#999999] text-xs">Round of 128</SelectItem>
                   <SelectItem value="Round of 64" className="text-[#999999] text-xs">Round of 64</SelectItem>
                   <SelectItem value="Round of 32" className="text-[#999999] text-xs">Round of 32</SelectItem>
@@ -609,6 +610,7 @@ export function DetailsContent({
                   <SelectValue placeholder="Match Type..." />
                 </SelectTrigger>
                 <SelectContent className="shadow-none border-[#E5E5E5] text-[#999999] text-xs">
+                  <SelectItem value="None" className="text-[#999999] text-xs">None</SelectItem>
                   <SelectItem value="Tournament" className="text-[#999999] text-xs">Tournament</SelectItem>
                   <SelectItem value="Dual Match" className="text-[#999999] text-xs">Dual Match</SelectItem>
                   <SelectItem value="Practice" className="text-[#999999] text-xs">Practice</SelectItem>
@@ -622,6 +624,7 @@ export function DetailsContent({
                   <SelectValue placeholder="Court Type..." />
                 </SelectTrigger>
                 <SelectContent className="shadow-none border-[#E5E5E5] text-[#999999] text-xs">
+                  <SelectItem value="None" className="text-[#999999] text-xs">None</SelectItem>
                   <SelectItem value="Indoor Hard Court" className="text-[#999999] text-xs">Indoor Hard Court</SelectItem>
                   <SelectItem value="Outdoor Hard Court" className="text-[#999999] text-xs">Outdoor Hard Court</SelectItem>
                   <SelectItem value="Clay Court" className="text-[#999999] text-xs">Clay Court</SelectItem>
