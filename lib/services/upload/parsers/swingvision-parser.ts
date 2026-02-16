@@ -362,10 +362,10 @@ export class SwingVisionParser implements IFileParser {
     let bestOfNum = 3; // Default
     if (sets.length === 1) {
       bestOfNum = 1;
-    } else if (sets.length === 2) {
-      bestOfNum = 3; // Convert 2-set matches to best of 3 (player must have won 2-0)
-    } else if (sets.length >= 3) {
-      bestOfNum = 3; // 3 or more sets is best of 3
+    } else if (sets.length <= 3) {
+      bestOfNum = 3;
+    } else {
+      bestOfNum = 5; // 4 or 5 sets is best of 5
     }
 
     return {
@@ -376,6 +376,7 @@ export class SwingVisionParser implements IFileParser {
       playerTiebreaks,
       opponentTiebreaks,
       bestOf: String(bestOfNum),
+      numberOfSets: sets.length < bestOfNum ? sets.length : undefined,
       adScoring: settings.adScoring,
       result,
       duration: totalDuration,
