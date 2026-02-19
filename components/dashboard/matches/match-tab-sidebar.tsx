@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import type { Match } from "@/lib/data/types";
 import type { MatchStatisticsResult } from "@/lib/data/match-stats-server";
-import { MatchSidebar } from "./match-sidebar";
+import { MatchOverallSidebar } from "./match-overall-sidebar";
 import { MatchVisualsSidebar } from "./match-visuals-sidebar";
 
 interface MatchTabSidebarProps {
@@ -20,6 +20,6 @@ export function MatchTabSidebar({ match, matchId, statsResult }: MatchTabSidebar
   }
 
   // Default: Overall sidebar (also used for Video until its version is built)
-  return <MatchSidebar match={match} matchId={matchId} statsResult={statsResult} />;
+  return <MatchOverallSidebar match={match} statsResult={statsResult} />;
 }
 

@@ -19,7 +19,7 @@ function RallyWinRow({
 
   return (
     <div className="flex flex-col gap-3 self-stretch">
-      <div className="flex flex-row justify-between items-end self-stretch gap-1">
+      <div className="flex flex-row justify-between items-end self-stretch">
         <span className="text-xs font-normal text-[#999999] leading-[1.1]">
           {label}
         </span>
@@ -48,12 +48,12 @@ function WinningPercentageCircle({
   total: number;
   barColor: string;
 }) {
-  const r = 40;
+  const r = 45;
   const circumference = 2 * Math.PI * r;
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
 
   return (
-    <div className="flex flex-row items-center gap-4">
+    <div className="flex flex-row py-3 items-center gap-4">
       <div className="relative w-[100px] h-[100px] shrink-0">
         <svg
           className="w-full h-full -rotate-90"
@@ -66,7 +66,7 @@ function WinningPercentageCircle({
             r={r}
             fill="none"
             stroke="#D9D9D9"
-            strokeWidth="8"
+            strokeWidth="10"
           />
           <circle
             cx="50"
@@ -74,7 +74,7 @@ function WinningPercentageCircle({
             r={r}
             fill="none"
             stroke={barColor}
-            strokeWidth="8"
+            strokeWidth="10"
             strokeLinecap="round"
             strokeDasharray={circumference}
             strokeDashoffset={strokeDashoffset}
@@ -95,51 +95,34 @@ function WinningPercentageCircle({
   );
 }
 
-function PerformanceBar({
-  label,
-  value,
-  barColor,
-}: {
-  label: string;
-  value: number;
-  barColor: string;
-}) {
+function PerformanceRow({ label, value }: { label: string; value: number }) {
   const displayValue = value.toFixed(1);
-  const pct = Math.min(100, Math.max(0, value));
 
   return (
-    <div className="flex flex-col gap-3 w-full">
-      <div className="flex flex-row justify-between items-end gap-1">
-        <span className="text-sm font-medium text-[#999999] leading-none">
+    <div className="flex flex-col gap-3 w-full self-stretch">
+      <div className="h-[15px] flex flex-row justify-between items-center self-stretch">
+        <span className="text-xs font-regular text-[#999999] leading-none">
           {label}
         </span>
-        <span className="font-medium text-2xl leading-none uppercase text-[#0D0D0D] tabular-nums">
+        <span className="font-medium text-xl items-center leading-none uppercase text-[#525252]">
           {displayValue}
         </span>
-      </div>
-      <div className="h-1.5 w-full bg-[#D9D9D9] rounded-lg overflow-hidden">
-        <div
-          className="h-full rounded-lg transition-[width] duration-500"
-          style={{ width: `${pct}%`, backgroundColor: barColor }}
-        />
       </div>
     </div>
   );
 }
 
-interface MatchSidebarProps {
+interface MatchOverallSidebarProps {
   match: Match;
-  matchId: string;
   statsResult: MatchStatisticsResult | null;
 }
 
-export function MatchSidebar({
+export function MatchOverallSidebar({
   match,
-  matchId,
   statsResult,
-}: MatchSidebarProps) {
+}: MatchOverallSidebarProps) {
   const [selectedPlayer, setSelectedPlayer] = useState<"player1" | "player2">(
-    "player1"
+    "player1",
   );
   const [showMore, setShowMore] = useState(false);
 
@@ -151,8 +134,7 @@ export function MatchSidebar({
 
   const totalPoints = playerStats?.totalPoints ?? 0;
   const totalPointsWon = playerStats?.totalPointsWon ?? 0;
-  const winningPct =
-    totalPoints > 0 ? (totalPointsWon / totalPoints) * 100 : 0;
+  const winningPct = totalPoints > 0 ? (totalPointsWon / totalPoints) * 100 : 0;
 
   const barColor = selectedPlayer === "player1" ? "#3986F3" : "#F38439";
 
@@ -165,13 +147,13 @@ export function MatchSidebar({
     : 0;
 
   return (
-    <div className="w-[320px] flex flex-col gap-6 p-6 bg-white rounded-2xl shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
+    <div className="w-[320px] flex flex-col gap-6 px-6 py-4 bg-white rounded-2xl shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
       {/* Player Tabs */}
-      <div className="flex flex-row gap-2 shadow-[inset_0_-1px_0_0_#D9D9D9]">
+      <div className="flex flex-row shadow-[inset_0_-1px_0_0_#D9D9D9]">
         <button
           type="button"
           onClick={() => setSelectedPlayer("player1")}
-          className={`flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
+          className={`h-[31px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
             selectedPlayer === "player1"
               ? "text-[#3986F3] border-[#3986F3]"
               : "text-[#999999] border-transparent hover:text-[#666666]"
@@ -182,7 +164,7 @@ export function MatchSidebar({
         <button
           type="button"
           onClick={() => setSelectedPlayer("player2")}
-          className={`flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
+          className={`h-[31px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
             selectedPlayer === "player2"
               ? "text-[#F38439] border-[#F38439]"
               : "text-[#999999] border-transparent hover:text-[#666666]"
@@ -192,71 +174,68 @@ export function MatchSidebar({
         </button>
       </div>
 
-      {/* Stats Content */}
-      <div className="flex flex-col gap-6">
+      {/* Winning Percentage */}
+      <WinningPercentageCircle
+        percentage={winningPct}
+        won={totalPointsWon}
+        total={totalPoints}
+        barColor={barColor}
+      />
+
+      {/* Performance Ratings */}
+      <div className="flex flex-col items-stretch gap-5">
         <div className="text-xs font-medium tracking-[0.16em] uppercase text-[#525252]">
           Performance breakdown
         </div>
-
-        {/* Winning Percentage */}
-        <div className="flex flex-col gap-2.5 min-h-[124px] justify-between">
-          <WinningPercentageCircle
-            percentage={winningPct}
-            won={totalPointsWon}
-            total={totalPoints}
-            barColor={barColor}
-          />
-        </div>
-
-        {/* Performance Ratings */}
-        <div className="flex flex-col items-stretch gap-8">
-          <PerformanceBar label="Serve Rating" value={serveRating} barColor={barColor} />
-          <PerformanceBar label="Return Rating" value={returnRating} barColor={barColor} />
-          <PerformanceBar
+        <div className="flex flex-col gap-4">
+          <PerformanceRow label="Serve Rating" value={serveRating} />
+          <div className="h-px w-full bg-[#D9D9D9] self-stretch" />
+          <PerformanceRow label="Return Rating" value={returnRating} />
+          <div className="h-px w-full bg-[#D9D9D9] self-stretch" />
+          <PerformanceRow
             label="Under Pressure Rating"
             value={underPressureRating}
-            barColor={barColor}
           />
+          <div className="h-px w-full bg-[#D9D9D9] self-stretch" />
         </div>
-
-        {showMore && (
-          <div className="flex flex-col gap-3">
-            <div className="h-px w-full bg-[#D9D9D9]" />
-            <div className="text-xs font-medium tracking-[0.16em] uppercase text-[#525252] px-1 pt-1">
-              Rally win Percentage
-            </div>
-            {/* Placeholder values (until rally-length stats exist) */}
-            <div className="flex flex-col gap-5 px-1 pt-1">
-              <RallyWinRow
-                label="1-4 shots"
-                valuePct={25}
-                fillPct={50}
-                barColor={barColor}
-              />
-              <RallyWinRow
-                label="5-9 shots"
-                valuePct={14}
-                fillPct={23}
-                barColor={barColor}
-              />
-              <RallyWinRow
-                label="10+ shots"
-                valuePct={21}
-                fillPct={35}
-                barColor={barColor}
-              />
-            </div>
-          </div>
-        )}
-
-        <button
-          type="button"
-          onClick={() => setShowMore((v) => !v)}
-          className="block text-center text-xs font-medium text-[#999999] hover:text-[#666666] transition-colors"
-        >
-          {showMore ? "View less" : "View more"}
-        </button>
       </div>
+
+      {showMore && (
+        <div className="flex flex-col gap-5">
+          <div className="text-xs font-medium tracking-[0.16em] uppercase text-[#525252]">
+            Rally win Percentage
+          </div>
+          {/* Placeholder values (until rally-length stats exist) */}
+          <div className="flex flex-col gap-4">
+            <RallyWinRow
+              label="1-4 shots"
+              valuePct={25}
+              fillPct={50}
+              barColor={barColor}
+            />
+            <RallyWinRow
+              label="5-9 shots"
+              valuePct={14}
+              fillPct={23}
+              barColor={barColor}
+            />
+            <RallyWinRow
+              label="10+ shots"
+              valuePct={21}
+              fillPct={35}
+              barColor={barColor}
+            />
+          </div>
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => setShowMore((v) => !v)}
+        className="block text-center text-xs font-medium text-[#999999] hover:text-[#666666] transition-colors"
+      >
+        {showMore ? "View less" : "View more"}
+      </button>
     </div>
   );
 }
