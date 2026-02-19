@@ -31,7 +31,7 @@
     "@supabase/supabase-js": "^2.57.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "exceljs": "^4.4.0",
+    "exceljs": "^4.1.1",
     "framer-motion": "^12.0.0",
     "lucide-react": "^0.562.0",
     "next": "^16.1.1-canary.10",
@@ -42,14 +42,14 @@
     "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3",
+    "@eslint/eslintrc": "^0.1.0",
     "@playwright/test": "^1.57.0",
     "@tailwindcss/postcss": "^4.1.13",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "15.5.2",
+    "eslint": "^4.1.1",
+    "eslint-config-next": "^0.2.4",
     "tailwindcss": "^4.0.0",
     "tw-animate-css": "^1.3.8",
     "typescript": "^5"
