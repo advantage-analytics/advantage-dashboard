@@ -617,6 +617,7 @@ function buildShotInserts(
     landing_y: number | null;
     result: string | null;
     video_time: number | null;
+    zone: string | null;
   }> = [];
 
   for (const row of shotsRows) {
@@ -660,7 +661,48 @@ function buildShotInserts(
       landing_y: toFloatOrNull(row["Bounce (y)"]),
       result: safeString(row["Result"]),
       video_time: toFloatOrNull(row["Video Time"]),
+      zone: null, // computed below
     });
+  }
+
+  // Compute zone for each shot
+  // Serves: based on landing_x thresholds
+  // Non-serves: compare landing_x to previous shot's contact_x
+  const byPoint = new Map<string, typeof inserts>();
+  for (const insert of inserts) {
+    const group = byPoint.get(insert.point_id) ?? [];
+    group.push(insert);
+    byPoint.set(insert.point_id, group);
+  }
+
+  for (const shots of byPoint.values()) {
+    shots.sort((a, b) => a.shot_number - b.shot_number);
+    for (let i = 0; i < shots.length; i++) {
+      const shot = shots[i];
+      if (shot.landing_x == null) continue;
+
+      if (shot.shot_number === 1) {
+        // Serve zone
+        const absX = Math.abs(shot.landing_x);
+        if (absX >= 2.74) shot.zone = "Wide";
+        else if (absX >= 1.37) shot.zone = "Body";
+        else shot.zone = "T";
+      } else {
+        // Non-serve zone
+        if (Math.abs(shot.landing_x) <= 1.0) {
+          shot.zone = "Middle";
+        } else {
+          const prev = shots[i - 1];
+          if (prev?.contact_x != null) {
+            if (Math.sign(shot.landing_x) !== Math.sign(prev.contact_x)) {
+              shot.zone = "Crosscourt";
+            } else {
+              shot.zone = "Down the Line";
+            }
+          }
+        }
+      }
+    }
   }
 
   return inserts;
