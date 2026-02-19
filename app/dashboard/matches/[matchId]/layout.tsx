@@ -123,7 +123,7 @@ export default async function MatchLayout({
   return (
     <div className="flex-1 w-full bg-white">
       <div className="relative z-10 pt-[88px] px-8">
-        <div className="flex flex-row py-6 gap-8">
+        <div className="flex flex-row py-6 gap-8 max-w-[1200px] mx-auto">
           <div className="flex-1 min-w-0 flex flex-col gap-10">
             <MatchEventHeader
               tournamentName={match.tournamentName}

@@ -34,24 +34,35 @@ export function AppSidebar() {
 
   return (
     <Sidebar
-      collapsible="offcanvas"
+      collapsible="icon"
       className="h-screen border-r border-gray-200 bg-white"
     >
       {/* Logo Section - 40px (pt-10) from top, 40px (mb-10) gap to nav */}
-      <SidebarHeader className="px-6 pt-10 pb-0 mb-10">
-        <div className="flex items-center justify-center">
+      <SidebarHeader className="pt-10 pb-0 mb-10 px-4">
+        <div className="relative flex items-center h-6">
+          {/* Expanded logo – fades out fast when collapsing, fades in slow when expanding */}
           <Image
-            src="/logos/logo.svg"
+            src="/logos/logo4.svg"
             alt="Advantage"
             width={141}
             height={24}
             priority
+            className="absolute left-1/2 -translate-x-1/2 opacity-100 group-data-[collapsible=icon]:opacity-0 transition-opacity duration-300 delay-200 ease-in group-data-[collapsible=icon]:duration-150 group-data-[collapsible=icon]:delay-0 group-data-[collapsible=icon]:ease-out"
+          />
+          {/* Collapsed logo – fades in slow when collapsing, fades out fast when expanding */}
+          <Image
+            src="/logos/logo3.svg"
+            alt="Advantage"
+            width={30}
+            height={21}
+            priority
+            className="absolute left-1/2 -translate-x-1/2 opacity-0 group-data-[collapsible=icon]:opacity-100 transition-opacity duration-150 ease-out group-data-[collapsible=icon]:duration-300 group-data-[collapsible=icon]:delay-200 group-data-[collapsible=icon]:ease-in"
           />
         </div>
       </SidebarHeader>
 
       {/* Navigation - spans full height with justify-between */}
-      <SidebarContent className="px-6 pb-10 justify-between">
+      <SidebarContent className="pb-10 justify-between px-4 group-data-[collapsible=icon]:px-4">
         {/* Main Navigation */}
         <SidebarMenu className="gap-2.5">
           {MAIN_LINKS.map(({ name, href, icon: Icon }) => {
@@ -64,14 +75,17 @@ export function AppSidebar() {
                 <SidebarMenuButton
                   asChild
                   isActive={active}
+                  tooltip={name}
                   className={cn(
-                    "h-10 px-4 py-3 rounded-lg gap-3 text-[#0D0D0D] font-normal hover:bg-[#F9F9F9] hover:text-[#0D0D0D]",
+                    "h-9 rounded-lg text-[#0D0D0D] font-normal hover:bg-[#F9F9F9] hover:text-[#0D0D0D] px-3.25 py-3 gap-3 group-data-[collapsible=icon]:px-3.25 group-data-[collapsible=icon]:gap-0 ",
                     active && "bg-[#F9F9F9] text-[#0D0D0D] font-normal"
                   )}
                 >
                   <Link href={href}>
-                    <Icon className="w-3 h-3" strokeWidth={2} />
-                    <span className="text-xs">{name}</span>
+                    <Icon className="w-3 h-3 shrink-0" strokeWidth={2} />
+                    <span className="text-xs whitespace-nowrap group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 transition-opacity duration-300 ease-out">
+                      {name}
+                    </span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -81,7 +95,7 @@ export function AppSidebar() {
 
         {/* Bottom Section */}
         <div>
-          <SidebarSeparator className="mb-6 bg-gray-200" />
+          <SidebarSeparator className="mb-6 bg-gray-200 mx-0" />
           <SidebarMenu className="gap-2.5">
             {BOTTOM_LINKS.map(({ name, href, icon: Icon }) => {
               const active = pathname === href || pathname?.startsWith(href);
@@ -91,14 +105,17 @@ export function AppSidebar() {
                   <SidebarMenuButton
                     asChild
                     isActive={active}
+                    tooltip={name}
                     className={cn(
-                      "h-10 px-4 py-3 rounded-lg gap-3 text-[#0D0D0D] font-normal hover:bg-[#F9F9F9] hover:text-[#0D0D0D]",
+                      "h-9 rounded-lg text-[#0D0D0D] font-normal hover:bg-[#F9F9F9] hover:text-[#0D0D0D] px-3.25 py-3 gap-3 group-data-[collapsible=icon]:px-3.25 group-data-[collapsible=icon]:gap-0",
                       active && "bg-[#F9F9F9] text-[#0D0D0D] font-normal"
                     )}
                   >
                     <Link href={href}>
-                      <Icon className="w-3 h-3" strokeWidth={2} />
-                      <span className="text-xs">{name}</span>
+                      <Icon className="w-3 h-3 shrink-0" strokeWidth={2} />
+                      <span className="text-xs whitespace-nowrap group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 transition-opacity duration-300 ease-out">
+                        {name}
+                      </span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
