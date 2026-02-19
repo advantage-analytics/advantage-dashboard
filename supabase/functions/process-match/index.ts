@@ -481,8 +481,9 @@ function buildGameScoreMap(gamesRows: CombinedRow[]): Map<string, { host: number
 }
 
 /**
- * Build a map of rally lengths (shot counts) from the Shots sheet.
- * Key: "set-game-point" -> Value: number of shots in that point
+ * Build a map of rally lengths from the Shots sheet.
+ * Key: "set-game-point" -> Value: max shot_number in that point
+ * Uses MAX(shot_number) so serve faults and feeds (shot_number=0) don't inflate the count.
  */
 function buildRallyLengthMap(shotsRows: CombinedRow[]): Map<string, number> {
   const map = new Map<string, number>();
@@ -491,7 +492,8 @@ function buildRallyLengthMap(shotsRows: CombinedRow[]): Map<string, number> {
     const gameNumber = toInt(row["Game"]);
     const pointNumber = toInt(row["Point"]);
     const key = pointKey(setNumber, gameNumber, pointNumber);
-    map.set(key, (map.get(key) ?? 0) + 1);
+    const shotNum = toInt(row["Shot"]);
+    map.set(key, Math.max(map.get(key) ?? 0, shotNum));
   }
   return map;
 }
