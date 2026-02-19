@@ -343,6 +343,7 @@ Required sheets in SwingVision export:
 | landing_y   | FLOAT   | Bounce position (0-1)                                                    |
 | result      | TEXT    | in, out, net, winner, error                                              |
 | video_time  | REAL    | Video timestamp in seconds for this shot                                 |
+| zone        | TEXT    | Shot direction zone. Serves: 'T', 'Body', 'Wide'. Non-serves: 'Crosscourt', 'Middle', 'Down the Line'. CHECK constrained. |
 
 #### Table: `match_stats`
 
@@ -541,6 +542,8 @@ await supabase.rpc('calculate_match_stats', { p_match_id: matchId });
 | create_match_stats_percentages_view | 2026-01 | Created view to calculate percentage stats from raw counts                                                      |
 | fix_security_warnings               | 2026-01 | Additional security hardening for database functions                                                            |
 | convert_matches_duration_to_bigint  | 2026-02 | Converted matches.duration column from TEXT to BIGINT for proper numeric storage                               |
+| populate_serve_return_placement_stats | 2026-02 | Updated calculate_match_stats to populate serve placement, return direction & contact position columns        |
+| add_shot_zone                         | 2026-02 | Added `zone` text column to shots table with CHECK constraint; backfilled existing rows from coordinates      |
 
 ---
 
@@ -599,7 +602,35 @@ if (stroke?.toLowerCase() === "serve") {
 }
 ```
 
-### 10.3 Video Time & Duration Columns ✅
+### 10.3 Shot `zone` Column ✅
+
+**Status:** ✅ Implemented (February 2026)
+
+**Problem:** Shot direction/zone was computed at query time from raw `landing_x` coordinates in `calculate_match_stats()`. This duplicated threshold logic and prevented filtering shots by zone directly.
+
+**Solution:** Added a `zone` text column to the `shots` table, computed at insert time in the Edge Function and backfilled for existing rows via migration.
+
+**Zone Values:**
+- **Serves** (`shot_number = 1`): `'T'` (|x| < 1.37m), `'Body'` (1.37m <= |x| < 2.74m), `'Wide'` (|x| >= 2.74m)
+- **Non-serves** (`shot_number >= 2`): `'Middle'` (|landing_x| <= 1.0m), `'Crosscourt'` (sign(landing_x) != sign(prev.contact_x)), `'Down the Line'` (sign(landing_x) = sign(prev.contact_x))
+
+**Implementation:** Computed in Edge Function `buildShotInserts()` after building all shot inserts, grouped by point_id:
+
+```typescript
+// supabase/functions/process-match/index.ts - buildShotInserts()
+if (shot.shot_number === 1) {
+  const absX = Math.abs(shot.landing_x);
+  if (absX >= 2.74) shot.zone = "Wide";
+  else if (absX >= 1.37) shot.zone = "Body";
+  else shot.zone = "T";
+} else {
+  if (Math.abs(shot.landing_x) <= 1.0) shot.zone = "Middle";
+  else if (Math.sign(shot.landing_x) !== Math.sign(prev.contact_x)) shot.zone = "Crosscourt";
+  else shot.zone = "Down the Line";
+}
+```
+
+### 10.4 Video Time & Duration Columns ✅
 
 **Status:** ✅ Implemented (January 2026)
 
