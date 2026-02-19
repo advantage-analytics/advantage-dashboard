@@ -252,6 +252,12 @@ match-data/
 | newsletter_subscribers | Admin read                   | `is_admin = true`                  |
 | storage.objects        | Own files                    | `auth.uid()::text = foldername[1]` |
 
+#### View Security
+
+| View                              | Setting                      | Description                                                    |
+| --------------------------------- | ---------------------------- | -------------------------------------------------------------- |
+| match_stats_with_percentages      | `security_invoker = true`    | RLS evaluated as calling user, not view owner                  |
+
 ---
 
 ## 5. Provider Support
@@ -544,6 +550,8 @@ await supabase.rpc('calculate_match_stats', { p_match_id: matchId });
 | convert_matches_duration_to_bigint  | 2026-02 | Converted matches.duration column from TEXT to BIGINT for proper numeric storage                               |
 | populate_serve_return_placement_stats | 2026-02 | Updated calculate_match_stats to populate serve placement, return direction & contact position columns        |
 | add_shot_zone                         | 2026-02 | Added `zone` text column to shots table with CHECK constraint; backfilled existing rows from coordinates      |
+| fix_rally_length                      | 2026-02 | Fixed rally_length to use MAX(shot_number) instead of COUNT(shots); backfilled all points and recalculated stats |
+| secure_match_stats_view               | 2026-02 | Set `security_invoker = true` on `match_stats_with_percentages` view to enforce RLS as calling user          |
 
 ---
 
@@ -662,7 +670,17 @@ if (shot.shot_number === 1) {
 
 ---
 
-## 12. Recent Bug Fixes & Changes (January 2026)
+## 12. Recent Bug Fixes & Changes
+
+### Rally Length Calculation (February 2026)
+
+**Issue:** `rally_length` was calculated by counting all rows in the Shots sheet for each point (`COUNT(shots)`). Serve faults and ball feeds have `shot_number = 0`, so they inflated the rally length. This affected 322 out of 557 points.
+
+**Fix:**
+- **Edge Function:** `buildRallyLengthMap()` now uses `MAX(shot_number)` instead of incrementing a counter, so only real rally shots contribute to the length.
+- **Migration:** Backfilled all existing points with `MAX(shot_number)` from their shots, then recalculated `avg_rally_length` in `match_stats` for all matches via `calculate_match_stats()`.
+
+### Previous Bug Fixes (January 2026)
 
 ### Player Assignment Logic
 
