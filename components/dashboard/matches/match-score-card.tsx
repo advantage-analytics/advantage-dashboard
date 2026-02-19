@@ -51,7 +51,7 @@ export function MatchScoreCard({ match }: MatchScoreCardProps) {
               <span
                 key={idx}
                 className={`text-lg font-semibold ${
-                  match.score.winner === "player1"
+                  set.player1 > set.player2
                     ? "text-[#0D0D0D]"
                     : "text-[#999999]"
                 }`}
@@ -85,7 +85,7 @@ export function MatchScoreCard({ match }: MatchScoreCardProps) {
               <span
                 key={idx}
                 className={`text-lg font-semibold ${
-                  match.score.winner === "player2"
+                  set.player2 > set.player1
                     ? "text-[#0D0D0D]"
                     : "text-[#999999]"
                 }`}
