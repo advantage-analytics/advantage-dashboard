@@ -1,8 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import type { Match } from "@/lib/data/types";
 import type { MatchStatisticsResult } from "@/lib/data/match-stats-server";
+import {
+  PlayerTabs,
+  WinningPercentageCircle,
+  SectionHeader,
+  ViewMoreButton,
+  PLAYER_COLORS,
+} from "./sidebar-shared";
 
 function MetricRow({
   label,
@@ -12,14 +20,14 @@ function MetricRow({
   value: string;
 }) {
   return (
-    <div className="flex flex-row justify-between items-center self-stretch px-1">
+    <div className="flex flex-row justify-between items-center self-stretch">
       <div className="flex flex-row items-center gap-2">
-        <div className="w-px h-3 bg-[#D9D9D9]" />
-        <span className="text-[12px] font-normal leading-[0.75] text-[#999999]">
+        {/* <div className="w-px h-3 bg-[#D9D9D9]" /> */}
+        <span className="text-xs font-normal leading-none text-[#999999]">
           {label}
         </span>
       </div>
-      <span className="w-[51px] text-right text-[20px] leading-[1.1] font-medium text-[#525252] tabular-nums">
+      <span className="text-xl leading-none font-medium text-[#525252] tabular-nums">
         {value}
       </span>
     </div>
@@ -41,8 +49,8 @@ function DistributionRow({
 
   return (
     <div className="flex flex-col gap-3 self-stretch">
-      <div className="flex flex-row justify-between items-end self-stretch gap-1">
-        <span className="text-[12px] font-normal leading-[1.1] text-[#999999]">
+      <div className="flex flex-row justify-between items-end self-stretch">
+        <span className="text-xs font-normal leading-[1.1] text-[#999999]">
           {label}
         </span>
         <span className="text-[16px] leading-[1.1] font-medium text-[#525252] tabular-nums">
@@ -51,57 +59,6 @@ function DistributionRow({
       </div>
       <div className="h-[6px] w-full bg-[#D9D9D9] overflow-hidden rounded-full">
         <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: barColor }} />
-      </div>
-    </div>
-  );
-}
-
-function WinningCircleCard({
-  percentage,
-  won,
-  total,
-  label,
-  barColor,
-}: {
-  percentage: number;
-  won: number;
-  total: number;
-  label: string;
-  barColor: string;
-}) {
-  const r = 40;
-  const circumference = 2 * Math.PI * r;
-  const strokeDashoffset = circumference - (percentage / 100) * circumference;
-
-  return (
-    <div className="w-full h-[124px] rounded-2xl flex flex-col justify-between">
-      <div className="flex flex-row items-center gap-4">
-        <div className="relative w-[100px] h-[100px] shrink-0">
-          <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100" aria-hidden>
-            <circle cx="50" cy="50" r={r} fill="none" stroke="#D9D9D9" strokeWidth="8" />
-            <circle
-              cx="50"
-              cy="50"
-              r={r}
-              fill="none"
-              stroke={barColor}
-              strokeWidth="8"
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={strokeDashoffset}
-              className="transition-[stroke-dashoffset] duration-500"
-            />
-          </svg>
-        </div>
-        <div className="flex flex-col justify-center gap-1">
-          <span className="font-medium text-[24px] leading-[1.1] uppercase text-black">
-            {percentage.toFixed(1)}%{" "}
-            <span className="text-[24px] leading-[1.1] font-medium uppercase text-black">{`(${won}/${total})`}</span>
-          </span>
-          <span className="text-[14px] font-normal text-[#999999] leading-[1.21]">
-            {label}
-          </span>
-        </div>
       </div>
     </div>
   );
@@ -118,10 +75,20 @@ export function MatchVisualsSidebar({
   matchId: _matchId,
   statsResult,
 }: MatchVisualsSidebarProps) {
+  const searchParams = useSearchParams();
+  const vizParam = searchParams.get("viz");
+  const breakdownView: "serve" | "return" =
+    vizParam === "return" ? "return" : "serve";
+
   const [selectedPlayer, setSelectedPlayer] = useState<"player1" | "player2">(
     "player1"
   );
   const [showMore, setShowMore] = useState(false);
+
+  // Reset "view more" when switching between serve/return
+  useEffect(() => {
+    setShowMore(false);
+  }, [breakdownView]);
 
   const playerStats = statsResult?.statistics
     ? selectedPlayer === "player1"
@@ -129,108 +96,131 @@ export function MatchVisualsSidebar({
       : statsResult.statistics.player2Stats
     : null;
 
-  const barColor = selectedPlayer === "player1" ? "#3986F3" : "#F38439";
+  const barColor = PLAYER_COLORS[selectedPlayer];
 
-  // Serve breakdown values (mapped to existing stats)
+  // Serve breakdown values
   const firstServeInPct = playerStats?.firstServeInPct ?? 0;
   const firstServeWonPct = playerStats?.firstServeWinPct ?? 0;
   const secondServeWonPct = playerStats?.secondServeWinPct ?? 0;
-
-  const serviceGamesWon = playerStats?.serviceGamesWon ?? 0;
+  const serviceGamesWonPct = playerStats?.serviceGamesWonPct ?? 0;
   const aces = playerStats?.aces ?? 0;
   const doubleFaults = playerStats?.doubleFaults ?? 0;
 
-  const serviceGamesWonPct = playerStats?.serviceGamesWonPct ?? 0;
+  // Return breakdown values (percentages)
+  const firstReturnWonPct = playerStats?.firstReturnWonPct ?? 0;
+  const secondReturnWonPct = playerStats?.secondReturnWonPct ?? 0;
+  const returnGamesWonPct = playerStats?.returnGamesWonPct ?? 0;
+  const breakpointsWonPct = playerStats?.breakpointsWonPct ?? 0;
 
-  // The data pipeline currently doesn't expose "total serve points" (attempted),
-  // so we use total points won/total points as the best available proxy for now.
+  // Circle values
   const totalPoints = playerStats?.totalPoints ?? 0;
-  const totalPointsWon = playerStats?.totalPointsWon ?? 0;
-  const proxyPct = totalPoints > 0 ? (totalPointsWon / totalPoints) * 100 : 0;
+  const servicePointsWon = playerStats?.servicePointsWon ?? 0;
+  const returnPointsWon = playerStats?.returnPointsWon ?? 0;
+
+  const circleWon = breakdownView === "serve" ? servicePointsWon : returnPointsWon;
+  const circlePct = totalPoints > 0 ? (circleWon / totalPoints) * 100 : 0;
+  const circleLabel =
+    breakdownView === "serve"
+      ? "Total Serve Points Won"
+      : "Total Return Points Won";
 
   return (
-    <div className="w-[320px] flex flex-col gap-6 px-6 pt-4 pb-6 bg-white rounded-2xl shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
+    <div className="w-[320px] flex flex-col gap-6 px-6 py-4 bg-white rounded-2xl shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
       {/* Player tabs */}
-      <div className="flex flex-row gap-2 self-stretch shadow-[inset_0_-1px_0_0_#D9D9D9]">
-        <button
-          type="button"
-          onClick={() => setSelectedPlayer("player1")}
-          className={`flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
-            selectedPlayer === "player1"
-              ? "text-[#3986F3] border-[#3986F3]"
-              : "text-[#999999] border-transparent hover:text-[#666666]"
-          }`}
-        >
-          {match.player1.name}
-        </button>
-        <button
-          type="button"
-          onClick={() => setSelectedPlayer("player2")}
-          className={`flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
-            selectedPlayer === "player2"
-              ? "text-[#F38439] border-[#F38439]"
-              : "text-[#999999] border-transparent hover:text-[#666666]"
-          }`}
-        >
-          {match.player2.name}
-        </button>
-      </div>
+      <PlayerTabs
+        match={match}
+        selectedPlayer={selectedPlayer}
+        onSelectPlayer={setSelectedPlayer}
+      />
 
       {/* Circle card */}
-      <WinningCircleCard
-        percentage={proxyPct}
-        won={totalPointsWon}
+      <WinningPercentageCircle
+        percentage={circlePct}
+        won={circleWon}
         total={totalPoints}
-        label="Total Serve Points Won"
+        label={circleLabel}
         barColor={barColor}
       />
 
-      {/* Serve Break down */}
-      <div className="flex flex-col gap-5 self-stretch">
-        <div className="text-xs font-medium tracking-[0.16em] uppercase text-[#525252]">
-          Serve Break down
-        </div>
+      {/* Breakdown section */}
+      <div className="flex flex-col items-stretch gap-5">
+        <SectionHeader>
+          {breakdownView === "serve" ? "Serve Break down" : "Return Break down"}
+        </SectionHeader>
 
         <div className="flex flex-col gap-4 self-stretch">
-          <MetricRow label="First Serve Points In" value={`${Math.round(firstServeInPct)}%`} />
-          <div className="h-px w-full bg-[#D9D9D9]" />
-          <MetricRow label="First Serve Points Won" value={`${Math.round(firstServeWonPct)}%`} />
-          <div className="h-px w-full bg-[#D9D9D9]" />
-          <MetricRow label="Second Serve Points Won" value={`${Math.round(secondServeWonPct)}%`} />
-          <div className="h-px w-full bg-[#D9D9D9]" />
-          <MetricRow label="Service Games Won" value={`${serviceGamesWonPct}%`} />
-          <div className="h-px w-full bg-[#D9D9D9]" />
-          <MetricRow label="Aces" value={aces.toFixed(1)} />
-          <div className="h-px w-full bg-[#D9D9D9]" />
-          <MetricRow label="Double Faults" value={doubleFaults.toFixed(1)} />
+          {breakdownView === "serve" ? (
+            <>
+              <MetricRow label="First Serve Points In" value={`${Math.round(firstServeInPct)}%`} />
+              <div className="h-px w-full bg-[#D9D9D9] self-stretch" />
+              <MetricRow label="First Serve Points Won" value={`${Math.round(firstServeWonPct)}%`} />
+              <div className="h-px w-full bg-[#D9D9D9] self-stretch" />
+              <MetricRow label="Second Serve Points Won" value={`${Math.round(secondServeWonPct)}%`} />
+              <div className="h-px w-full bg-[#D9D9D9] self-stretch" />
+              <MetricRow label="Service Games Won" value={`${serviceGamesWonPct}%`} />
+              <div className="h-px w-full bg-[#D9D9D9] self-stretch" />
+              <MetricRow label="Aces" value={aces.toFixed(1)} />
+              <div className="h-px w-full bg-[#D9D9D9] self-stretch" />
+              <MetricRow label="Double Faults" value={doubleFaults.toFixed(1)} />
+            </>
+          ) : (
+            <>
+              <MetricRow label="First Serve Returns Won" value={`${firstReturnWonPct}%`} />
+              <div className="h-px w-full bg-[#D9D9D9] self-stretch" />
+              <MetricRow label="Second Serve Returns Won" value={`${secondReturnWonPct}%`} />
+              <div className="h-px w-full bg-[#D9D9D9] self-stretch" />
+              <MetricRow label="Return Games Won" value={`${returnGamesWonPct}%`} />
+              <div className="h-px w-full bg-[#D9D9D9] self-stretch" />
+              <MetricRow label="Break Points Won" value={`${breakpointsWonPct}%`} />
+            </>
+          )}
         </div>
       </div>
 
-      {/* Serve placement Distribution (revealed on View more) */}
-      {showMore && (
-        <div className="flex flex-col gap-5 self-stretch">
-          <div className="text-xs font-medium tracking-[0.16em] uppercase text-[#525252]">
-            Serve placement Distribution
-          </div>
+      {/* Return placement Distribution (revealed on View more, return only) */}
+      {breakdownView === "return" && showMore && (
+        <div className="flex flex-col items-stretch gap-5">
+          <SectionHeader>Return placement Distribution</SectionHeader>
 
-          {/* Placeholder values (until placement distribution stats exist) */}
           <div className="flex flex-col gap-5 self-stretch">
-            <DistributionRow label="Wide" valuePct={25} fillPct={50} barColor={barColor} />
-            <DistributionRow label="Body" valuePct={14} fillPct={23} barColor={barColor} />
-            <DistributionRow label="T" valuePct={21} fillPct={35} barColor={barColor} />
+            <DistributionRow label="Cross Court" valuePct={playerStats?.returnCrossCourtPct ?? 0} fillPct={playerStats?.returnCrossCourtPct ?? 0} barColor={barColor} />
+            <DistributionRow label="Down The Line" valuePct={playerStats?.returnDownTheLinePct ?? 0} fillPct={playerStats?.returnDownTheLinePct ?? 0} barColor={barColor} />
+            <DistributionRow label="Middle" valuePct={playerStats?.returnMiddlePct ?? 0} fillPct={playerStats?.returnMiddlePct ?? 0} barColor={barColor} />
           </div>
         </div>
       )}
 
-      {/* View more / less (bottom) */}
-      <button
-        type="button"
-        onClick={() => setShowMore((v) => !v)}
-        className="text-center text-xs font-medium text-[#999999] hover:text-[#666666] transition-colors"
-      >
-        {showMore ? "View less" : "View more"}
-      </button>
+      {/* Return Contact Distribution (revealed on View more, return only) */}
+      {breakdownView === "return" && showMore && (
+        <div className="flex flex-col items-stretch gap-5">
+          <SectionHeader>Return Contact Distribution</SectionHeader>
+
+          <div className="flex flex-col gap-5 self-stretch">
+            <DistributionRow label="Inside" valuePct={playerStats?.returnContactInsidePct ?? 0} fillPct={playerStats?.returnContactInsidePct ?? 0} barColor={barColor} />
+            <DistributionRow label="Middle" valuePct={playerStats?.returnContactMiddlePct ?? 0} fillPct={playerStats?.returnContactMiddlePct ?? 0} barColor={barColor} />
+            <DistributionRow label="Deep" valuePct={playerStats?.returnContactDeepPct ?? 0} fillPct={playerStats?.returnContactDeepPct ?? 0} barColor={barColor} />
+          </div>
+        </div>
+      )}
+
+      {/* Serve placement Distribution (revealed on View more, serve only) */}
+      {breakdownView === "serve" && showMore && (
+        <div className="flex flex-col items-stretch gap-5">
+          <SectionHeader>Serve placement Distribution</SectionHeader>
+
+          <div className="flex flex-col gap-5 self-stretch">
+            <DistributionRow label="Wide" valuePct={playerStats?.serveWidePct ?? 0} fillPct={playerStats?.serveWidePct ?? 0} barColor={barColor} />
+            <DistributionRow label="Body" valuePct={playerStats?.serveBodyPct ?? 0} fillPct={playerStats?.serveBodyPct ?? 0} barColor={barColor} />
+            <DistributionRow label="T" valuePct={playerStats?.serveTpct ?? 0} fillPct={playerStats?.serveTpct ?? 0} barColor={barColor} />
+          </div>
+        </div>
+      )}
+
+      {/* View more / less */}
+      <ViewMoreButton
+        showMore={showMore}
+        onToggle={() => setShowMore((v) => !v)}
+      />
     </div>
   );
 }
-
