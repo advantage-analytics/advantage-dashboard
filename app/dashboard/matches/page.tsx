@@ -120,7 +120,7 @@ export default async function MatchesPage() {
   return (
     <div className="flex-1 w-full bg-white">
       <div className="relative z-10 px-8 py-12 pt-[136px]">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-[1200px] mx-auto">
           {/* Header */}
           <div className="mb-8">
             <h1 className="text-3xl font-medium text-[#0D0D0D] mb-2">
