@@ -331,6 +331,7 @@ Required sheets in SwingVision export:
 | result_type       | TEXT    | Winner, UE, FE, Ace, etc.                                                 |
 | video_time        | REAL    | Video timestamp in seconds for start of point                             |
 | duration          | REAL    | Point duration in seconds                                                 |
+| saved             | BOOLEAN | User-bookmarked point (default: false)                                    |
 
 #### Table: `shots`
 
@@ -576,6 +577,7 @@ await supabase.rpc('calculate_match_stats', { p_match_id: matchId });
 | add_shot_zone                         | 2026-02 | Added `zone` text column to shots table with CHECK constraint; backfilled existing rows from coordinates      |
 | fix_rally_length                      | 2026-02 | Fixed rally_length to use MAX(shot_number) instead of COUNT(shots); backfilled all points and recalculated stats |
 | secure_match_stats_view               | 2026-02 | Set `security_invoker = true` on `match_stats_with_percentages` view to enforce RLS as calling user          |
+| add_saved_to_points                   | 2026-02 | Added `saved` boolean column to points table for user bookmarking                                            |
 
 ---
 
