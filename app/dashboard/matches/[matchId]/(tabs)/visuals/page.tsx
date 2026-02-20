@@ -1,5 +1,7 @@
 "use client";
 
+import { useCallback } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 
 import { MatchInsights } from "@/components/dashboard/matches/match-insights";
@@ -20,6 +22,11 @@ const CONTEXT_DATA = {
 };
 
 export default function VisualsPage(): React.JSX.Element {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const vizParam = searchParams.get("viz") as VisualizationType | null;
+
   const {
     visualizationType,
     setVisualizationType,
@@ -28,7 +35,15 @@ export default function VisualsPage(): React.JSX.Element {
     filters,
     setFilters,
     applyFilters,
-  } = useVisualFilters();
+  } = useVisualFilters({ initialType: vizParam ?? "serve" });
+
+  const handleTabClick = useCallback(
+    (type: VisualizationType) => {
+      setVisualizationType(type);
+      router.replace(pathname + "?viz=" + type, { scroll: false });
+    },
+    [setVisualizationType, router, pathname]
+  );
 
   const courtLabel = courtType === "half" ? "Half Court" : "Full Court";
 
@@ -48,7 +63,7 @@ export default function VisualsPage(): React.JSX.Element {
           {VISUALIZATION_TABS.map((tab) => (
             <motion.button
               key={tab.value}
-              onClick={() => setVisualizationType(tab.value)}
+              onClick={() => handleTabClick(tab.value)}
               className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                 visualizationType === tab.value
                   ? "bg-[#0D0D0D] text-white"

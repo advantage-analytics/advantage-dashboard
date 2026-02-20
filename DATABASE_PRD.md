@@ -401,6 +401,18 @@ Stores raw count statistics per player. Percentages are calculated via the `matc
 | forehand_unforced_errors  | INT     | Forehand unforced errors                 |
 | backhand_unforced_errors  | INT     | Backhand unforced errors                 |
 | forced_errors             | INT     | Total forced errors                      |
+| **Serve Placement**       |         |                                          |
+| serve_wide                | INT     | Serves landing in outer third (|x| >= 2.74m) |
+| serve_body                | INT     | Serves landing in middle third (1.37m <= |x| < 2.74m) |
+| serve_t                   | INT     | Serves landing in inner third (|x| < 1.37m) |
+| **Return Direction**      |         |                                          |
+| return_cross_court        | INT     | Returns crossing to opposite side of serve |
+| return_down_the_line      | INT     | Returns staying on same side as serve    |
+| return_middle             | INT     | Returns landing in center corridor (|x| <= 1.0m) |
+| **Return Contact Position** |       |                                          |
+| return_contact_inside     | INT     | Returns contacted in front of baseline   |
+| return_contact_middle     | INT     | Returns contacted within 1m behind baseline |
+| return_contact_deep       | INT     | Returns contacted more than 1m behind baseline |
 | **Other**                 |         |                                          |
 | avg_rally_length          | FLOAT   | Average rally length                     |
 | created_at                | TIMESTAMP | Record creation time                   |
@@ -425,6 +437,15 @@ Calculates percentage statistics from raw `match_stats` counts. Use this view fo
 | set_points_saved_pct        | FLOAT | % of set points saved                         |
 | set_points_converted_pct    | FLOAT | % of set points converted                     |
 | total_points_won_pct        | FLOAT | % of total points won                         |
+| serve_wide_pct              | FLOAT | % of serves placed wide                       |
+| serve_body_pct              | FLOAT | % of serves placed to body                    |
+| serve_t_pct                 | FLOAT | % of serves placed down the T                 |
+| return_cross_court_pct      | FLOAT | % of returns hit cross-court                  |
+| return_down_the_line_pct    | FLOAT | % of returns hit down the line                |
+| return_middle_pct           | FLOAT | % of returns hit to middle                    |
+| return_contact_inside_pct   | FLOAT | % of returns contacted inside baseline        |
+| return_contact_middle_pct   | FLOAT | % of returns contacted near baseline          |
+| return_contact_deep_pct     | FLOAT | % of returns contacted deep behind baseline   |
 
 ---
 
@@ -475,6 +496,9 @@ await supabase.rpc('calculate_match_stats', { p_match_id: matchId });
 - Winners/errors: total, by shot type (forehand, backhand, volley, service)
 - Game stats: service/return games won
 - Average rally length
+- Serve placement: wide, body, T (based on landing_x thirds of service box)
+- Return direction: cross-court, down-the-line, middle (based on serve/return landing_x sign comparison)
+- Return contact position: inside, middle, deep (based on contact_y distance from nearest baseline)
 
 ### 7.4 Planned Routes
 
