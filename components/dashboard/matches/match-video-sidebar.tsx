@@ -1,89 +1,60 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import type { Match } from "@/lib/data/types";
 import type { MatchStatisticsResult } from "@/lib/data/match-stats-server";
-import { PLAYER_COLORS } from "./sidebar-shared";
+import type { MatchPoint } from "@/lib/data/match-points-server";
+import { createClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
+import { Bookmark } from "lucide-react";
+
+/* ── Constants ────────────────────────────────────────────── */
+
+const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as [number, number, number, number];
+const AUTO_ADVANCE_DELAY = 1; // seconds – pause at 100% before advancing
+const supabase = createClient();
 
 /* ── Types ─────────────────────────────────────────────────── */
 
-interface MatchEvent {
-  id: string;
-  player: "player1" | "player2";
-  eventType: string;
-  description: string;
-  score: string;
-  isSaved?: boolean;
-}
-
-interface SetGroup {
+interface GameGroup {
   setNumber: number;
-  startScore: string;
-  endScore?: string;
-  events: MatchEvent[];
+  gameScore: string;
+  points: MatchPoint[];
 }
 
-/* ── Mock data (to be replaced with real data source) ──────── */
+/* ── Helpers ───────────────────────────────────────────────── */
 
-function getMockEvents(): SetGroup[] {
-  return [
-    {
-      setNumber: 1,
-      startScore: "0-0",
-      endScore: "0-1",
-      events: [
-        {
-          id: "1",
-          player: "player1",
-          eventType: "Service Winner",
-          description: "Game 1",
-          score: "0-0",
-          isSaved: true,
-        },
-        {
-          id: "2",
-          player: "player2",
-          eventType: "Backhand Return Error",
-          description: "Slice down the line",
-          score: "15-0",
-        },
-        {
-          id: "3",
-          player: "player2",
-          eventType: "Backhand Return Error",
-          description: "Slice down the line",
-          score: "15-15",
-        },
-        {
-          id: "4",
-          player: "player2",
-          eventType: "Backhand Return Error",
-          description: "Slice down the line",
-          score: "15-30",
-        },
-        {
-          id: "5",
-          player: "player2",
-          eventType: "Backhand Return Error",
-          description: "Breakpoint",
-          score: "15-40",
-        },
-      ],
-    },
-    {
-      setNumber: 1,
-      startScore: "0-1",
-      events: [
-        {
-          id: "6",
-          player: "player2",
-          eventType: "Backhand Return Error",
-          description: "Breakpoint",
-          score: "15-40",
-        },
-      ],
-    },
-  ];
+function groupPointsByGame(points: MatchPoint[]): GameGroup[] {
+  const groups: GameGroup[] = [];
+  let current: GameGroup | null = null;
+
+  for (const point of points) {
+    if (
+      !current ||
+      current.setNumber !== point.setNumber ||
+      current.gameScore !== point.gameScore
+    ) {
+      current = {
+        setNumber: point.setNumber,
+        gameScore: point.gameScore,
+        points: [],
+      };
+      groups.push(current);
+    }
+    current.points.push(point);
+  }
+
+  return groups;
+}
+
+function getInitials(name: string): string {
+  return name
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 }
 
 /* ── Sub-components ────────────────────────────────────────── */
@@ -123,95 +94,152 @@ function EventTabs({
   );
 }
 
-function SetHeader({ setNumber, score }: { setNumber: number; score: string }) {
+function GameHeader({
+  setNumber,
+  gameScore,
+}: {
+  setNumber: number;
+  gameScore: string;
+}) {
   return (
-    <div className="flex flex-row justify-between items-center px-2 py-2 border-b border-[#D9D9D9]">
+    <div className="sticky top-0 z-10 flex flex-row justify-between items-center px-2 pt-4 pb-2 border-b border-[#D9D9D9] bg-white shadow-[0_1px_0_0_white]">
       <span className="text-xs font-medium text-[#999999]">
         Set {setNumber}
       </span>
-      <span className="text-xs font-medium text-[#999999]">{score}</span>
+      <span className="text-xs font-medium text-[#999999]">{gameScore}</span>
     </div>
   );
 }
 
-function BookmarkIcon() {
+function SavedIcon({
+  filled,
+  onClick,
+}: {
+  filled: boolean;
+  onClick: (e: React.MouseEvent) => void;
+}) {
   return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 12 12"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className="shrink-0"
+    <button
+      type="button"
+      onClick={onClick}
+      className="shrink-0 p-1 -m-1 hover:opacity-70 transition-opacity"
     >
-      <path
-        d="M2 1.5C2 1.22386 2.22386 1 2.5 1H9.5C9.77614 1 10 1.22386 10 1.5V11L6 8.5L2 11V1.5Z"
-        fill="#6AABFF"
+      <Bookmark
+        size={12}
+        stroke="#6AABFF"
+        strokeWidth={1.5}
+        fill={filled ? "#6AABFF" : "white"}
       />
-    </svg>
+    </button>
   );
 }
 
-function getInitials(name: string): string {
-  return name
-    .split(/\s+/)
-    .map((s) => s[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
-}
+function AnimatedProgressBar({ duration }: { duration: number | null }) {
+  const seconds = duration ?? 5;
 
-function ProgressBar({ percent = 90 }: { percent?: number }) {
   return (
-    <div className="w-full h-[2px] bg-[#E5E5E5] rounded-full overflow-hidden">
-      <div
-        className="h-full bg-[#3986F3] rounded-full"
-        style={{ width: `${percent}%` }}
-      />
-    </div>
+    <motion.div
+      key="progress-bar"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2, ease: EASE_CURVE }}
+    >
+      <div className="w-full h-[2px] bg-[#E5E5E5] rounded-full overflow-hidden">
+        <motion.div
+          className="h-full bg-[#3986F3] rounded-full"
+          initial={{ width: "0%" }}
+          animate={{ width: "100%" }}
+          transition={{ duration: seconds, ease: "linear" }}
+        />
+      </div>
+    </motion.div>
   );
 }
 
 function EventRow({
-  event,
+  point,
   match,
+  isActive,
+  onSelect,
+  onToggleSaved,
 }: {
-  event: MatchEvent;
+  point: MatchPoint;
   match: Match;
+  isActive: boolean;
+  onSelect: () => void;
+  onToggleSaved: () => void;
 }) {
+  const [isHovered, setIsHovered] = useState(false);
+  const isDisabled = point.videoTime == null;
   const playerName =
-    event.player === "player1" ? match.player1.name : match.player2.name;
-  const playerColor = PLAYER_COLORS[event.player];
+    point.player === "player1" ? match.player1.name : match.player2.name;
 
   return (
-    <div className="flex flex-row items-center gap-3 py-2">
-      {/* Player avatar */}
-      <div className="w-14 h-14 rounded-lg bg-[#F3F3F3] flex items-center justify-center shrink-0">
-        <span
-          className="text-sm font-semibold"
-          style={{ color: playerColor }}
-        >
-          {getInitials(playerName)}
-        </span>
-      </div>
+    <div
+      className={cn(
+        "flex flex-col gap-1 rounded-sm transition-colors",
+        isDisabled
+          ? "opacity-40 cursor-default"
+          : "cursor-pointer hover:bg-[#FAFAFA]",
+      )}
+      onMouseEnter={() => { if (!isDisabled) setIsHovered(true); }}
+      onMouseLeave={() => setIsHovered(false)}
+      onClick={() => {
+        if (!isDisabled) onSelect();
+      }}
+    >
+      <motion.div
+        layout
+        className="flex flex-row items-center gap-3 py-2 px-1.5"
+      >
+        {/* Player avatar */}
+        <div className="w-12 h-12 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
+          <span className="text-xs font-medium text-[#BFBFBF]">
+            {getInitials(playerName)}
+          </span>
+        </div>
 
-      {/* Event info */}
-      <div className="flex-1 min-w-0 flex flex-col gap-1">
-        <span className="text-sm font-medium text-[#0D0D0D] truncate">
-          {event.eventType}
-        </span>
-        <span className="text-xs font-normal text-[#999999] truncate">
-          {event.description}
-        </span>
-      </div>
+        {/* Event info */}
+        <div className="flex-1 min-w-0 flex flex-col gap-1">
+          <span className="text-xs font-medium text-[#0D0D0D] truncate">
+            {point.eventType}
+          </span>
+          <span className="text-[10px] font-normal text-[#999999] truncate">
+            {point.description}
+          </span>
+        </div>
 
-      {/* Score + bookmark */}
-      <div className="flex flex-row items-center gap-4 shrink-0">
-        <span className="text-xl font-medium text-[#0D0D0D] tabular-nums">
-          {event.score}
-        </span>
-        {event.isSaved && <BookmarkIcon />}
-      </div>
+        {/* Score + saved icon */}
+        <div className="flex flex-row items-center gap-4 shrink-0">
+          <span className="text-base font-medium text-[#0D0D0D] tabular-nums">
+            {point.pointScore}
+          </span>
+          <AnimatePresence>
+            {(isHovered || isActive) && (
+              <motion.div
+                initial={{ opacity: 0, width: 0 }}
+                animate={{ opacity: 1, width: "auto" }}
+                exit={{ opacity: 0, width: 0 }}
+                transition={{ duration: 0.15, ease: EASE_CURVE }}
+                className="overflow-hidden"
+              >
+                <SavedIcon
+                  filled={point.saved}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleSaved();
+                  }}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </motion.div>
+
+      <AnimatePresence>
+        {isActive && <AnimatedProgressBar duration={point.duration} />}
+      </AnimatePresence>
     </div>
   );
 }
@@ -222,62 +250,120 @@ interface MatchVideoSidebarProps {
   match: Match;
   matchId: string;
   statsResult: MatchStatisticsResult | null;
+  points: MatchPoint[];
 }
 
 export function MatchVideoSidebar({
   match,
   matchId: _matchId,
   statsResult: _statsResult,
+  points: initialPoints,
 }: MatchVideoSidebarProps) {
   const [activeTab, setActiveTab] = useState<"events" | "saved">("events");
-  const setGroups = getMockEvents();
+  const [activePointId, setActivePointId] = useState<string | null>(null);
+  const [points, setPoints] = useState<MatchPoint[]>(initialPoints);
 
-  const savedEvents = setGroups.flatMap((group) =>
-    group.events.filter((e) => e.isSaved)
-  );
+  const handleToggleSaved = useCallback(async (pointId: string) => {
+    let newSaved = true;
+    setPoints((prev) =>
+      prev.map((p) => {
+        if (p.id === pointId) {
+          newSaved = !p.saved;
+          return { ...p, saved: newSaved };
+        }
+        return p;
+      }),
+    );
+
+    const { error } = await supabase
+      .from("points")
+      .update({ saved: newSaved })
+      .eq("id", pointId);
+
+    if (error) {
+      setPoints((prev) =>
+        prev.map((p) => (p.id === pointId ? { ...p, saved: !newSaved } : p)),
+      );
+    }
+  }, []);
+
+  const displayPoints =
+    activeTab === "saved" ? points.filter((p) => p.saved) : points;
+  const gameGroups = groupPointsByGame(displayPoints);
+
+  // Auto-advance to next playable point when the active point's duration elapses
+  useEffect(() => {
+    if (!activePointId) return;
+    const idx = displayPoints.findIndex((p) => p.id === activePointId);
+    if (idx === -1) return;
+
+    const active = displayPoints[idx];
+    const seconds = active.duration ?? 5;
+
+    const timer = setTimeout(
+      () => {
+        const next = displayPoints
+          .slice(idx + 1)
+          .find((p) => p.videoTime != null);
+        setActivePointId(next ? next.id : null);
+      },
+      (seconds + AUTO_ADVANCE_DELAY) * 1000,
+    );
+
+    return () => clearTimeout(timer);
+  }, [activePointId, displayPoints]);
 
   return (
-    <div className="w-[320px] flex flex-col gap-6 px-6 py-4 bg-white rounded-2xl border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
+    <div className="w-[320px] flex flex-col bg-white rounded-2xl border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
       {/* Events / Saved tabs */}
-      <EventTabs activeTab={activeTab} onTabChange={setActiveTab} />
+      <div className="px-6 pt-4">
+        <EventTabs activeTab={activeTab} onTabChange={setActiveTab} />
+      </div>
 
-      {/* Event list */}
-      <div className="flex flex-col gap-6">
-        {activeTab === "events" ? (
-          setGroups.map((group, groupIdx) => (
-            <div key={groupIdx} className="flex flex-col gap-2">
-              <SetHeader
-                setNumber={group.setNumber}
-                score={group.startScore}
-              />
-              {group.events.map((event, eventIdx) => (
-                <div key={event.id}>
-                  <EventRow
-                    event={event}
-                    match={match}
-                  />
-                  {eventIdx === 0 && <ProgressBar />}
-                </div>
-              ))}
-              {group.endScore && (
-                <SetHeader
+      {/* Scrollable event list */}
+      <div
+        className="flex-1 overflow-y-auto max-h-[600px] scroll-pt-12 px-6 pb-4"
+      >
+        {gameGroups.length > 0 ? (
+          <div className="flex flex-col gap-2">
+            {gameGroups.map((group, groupIdx) => (
+              <div
+                key={`${group.setNumber}-${group.gameScore}-${groupIdx}`}
+                className="flex flex-col"
+              >
+                <GameHeader
                   setNumber={group.setNumber}
-                  score={group.endScore}
+                  gameScore={group.gameScore}
                 />
-              )}
-            </div>
-          ))
-        ) : savedEvents.length > 0 ? (
-          savedEvents.map((event) => (
-            <EventRow
-              key={event.id}
-              event={event}
-              match={match}
-            />
-          ))
+                {group.points.map((point) => (
+                  <motion.div
+                    key={point.id}
+                    layout
+                    transition={{ duration: 0.3, ease: EASE_CURVE }}
+                  >
+                    <EventRow
+                      point={point}
+                      match={match}
+                      isActive={activePointId === point.id}
+                      onSelect={() =>
+                        setActivePointId((prev) =>
+                          prev === point.id ? null : point.id,
+                        )
+                      }
+                      onToggleSaved={() => handleToggleSaved(point.id)}
+                    />
+                  </motion.div>
+                ))}
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-8">
-            <span className="text-xs text-[#999999]">No saved events yet</span>
+            <span className="text-xs text-[#999999]">
+              {activeTab === "saved"
+                ? "No saved events yet"
+                : "No events available"}
+            </span>
           </div>
         )}
       </div>

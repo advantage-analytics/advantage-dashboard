@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import type { Match } from "@/lib/data/types";
 import type { MatchStatisticsResult } from "@/lib/data/match-stats-server";
+import type { MatchPoint } from "@/lib/data/match-points-server";
 import { MatchOverallSidebar } from "./match-overall-sidebar";
 import { MatchVisualsSidebar } from "./match-visuals-sidebar";
 import { MatchVideoSidebar } from "./match-video-sidebar";
@@ -11,13 +12,14 @@ interface MatchTabSidebarProps {
   match: Match;
   matchId: string;
   statsResult: MatchStatisticsResult | null;
+  points: MatchPoint[];
 }
 
-export function MatchTabSidebar({ match, matchId, statsResult }: MatchTabSidebarProps) {
+export function MatchTabSidebar({ match, matchId, statsResult, points }: MatchTabSidebarProps) {
   const pathname = usePathname() ?? "";
 
   if (pathname.includes("/video")) {
-    return <MatchVideoSidebar match={match} matchId={matchId} statsResult={statsResult} />;
+    return <MatchVideoSidebar match={match} matchId={matchId} statsResult={statsResult} points={points} />;
   }
 
   if (pathname.includes("/visuals")) {
