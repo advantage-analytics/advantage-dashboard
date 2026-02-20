@@ -672,6 +672,15 @@ if (shot.shot_number === 1) {
 
 ## 12. Recent Bug Fixes & Changes
 
+### Match Time Storage (February 2026)
+
+**Issue:** `buildMatchData()` only stored `formData.date` (e.g., `"2024-01-15"`) into the `date` TIMESTAMPTZ column, discarding `formData.time`. All matches on the same day shared the same timestamp (midnight), so `.order("date", { ascending: false })` could not distinguish their order.
+
+**Fix:**
+- **`buildMatchData()`** (`components/dashboard/home/upload-match-modal/utils.ts`) now combines `formData.date` and `formData.time` into a full ISO datetime string: `"2024-01-15T14:30:00"`. Falls back to date-only if time is not provided.
+- No migration needed — the column was already TIMESTAMPTZ.
+- Existing queries in `performance-server.ts` and `recent-activity.tsx` already use `.order("date", { ascending: false })`, which now correctly sorts by date + time.
+
 ### Rally Length Calculation (February 2026)
 
 **Issue:** `rally_length` was calculated by counting all rows in the Shots sheet for each point (`COUNT(shots)`). Serve faults and ball feeds have `shot_number = 0`, so they inflated the rally length. This affected 322 out of 557 points.

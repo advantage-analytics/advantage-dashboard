@@ -112,15 +112,17 @@ export function buildMatchData(
     player1_name: formData.playerName,
     player2_id: playerWon ? loser.id : winner.id,
     player2_name: formData.opponentName,
-    tournament_name: formData.eventName,
-    round: formData.round,
+    tournament_name: formData.eventName || null,
+    round: formData.round && formData.round !== "None" ? formData.round : null,
     format: {
       best_of: bestOf,
       ad_scoring: formData.adScoring,
       play_on_lets: formData.playOnLets
     },
     result: formData.result,
-    date: formData.date,
+    date: formData.time
+      ? `${formData.date}T${formData.time}:00`
+      : formData.date,
     private: isPrivate,
     score: {
       player1: playerScoresNum,
@@ -132,8 +134,14 @@ export function buildMatchData(
     created_by: metadata.userId,
     source_provider: metadata.sourceProvider,
     analysis_method: metadata.analysisMethod,
-    match_type: formData.matchType || metadata.matchType,
-    court_type: formData.courtType || metadata.courtType,
+    match_type: (() => {
+      const val = formData.matchType || metadata.matchType;
+      return val && val !== "None" ? val : undefined;
+    })(),
+    court_type: (() => {
+      const val = formData.courtType || metadata.courtType;
+      return val && val !== "None" ? val : undefined;
+    })(),
     duration: formData.duration
   };
 }
