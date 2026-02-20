@@ -6,6 +6,7 @@ import type { Match } from "@/lib/data/types";
 import type { MatchStatisticsResult } from "@/lib/data/match-stats-server";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { createClient } from "@/lib/supabase/client";
+import { getInitials } from "@/lib/data/match-utils";
 import { cn } from "@/lib/utils";
 import { Bookmark } from "lucide-react";
 
@@ -48,14 +49,6 @@ function groupPointsByGame(points: MatchPoint[]): GameGroup[] {
   return groups;
 }
 
-function getInitials(name: string): string {
-  return name
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
-}
 
 /* ── Sub-components ────────────────────────────────────────── */
 

@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { Calendar } from "lucide-react";
 import { motion } from "framer-motion";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { MatchMetadataRow } from "./match-metadata-row";
@@ -28,24 +27,17 @@ export function FeaturedMatchCard({
           <div className="flex flex-col gap-6">
             {/* Header: Tournament name + badge | Date */}
             <div className="flex flex-col gap-4">
-              <div className="flex flex-row items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <p className="text-xl font-medium text-[#000000]">
-                    {match.tournamentName}
-                  </p>
-                  <span className="text-[10px] font-medium text-[#3986F3] bg-[#EBF2FD] px-2.5 py-1 rounded-xl">
-                    Latest Match
-                  </span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Calendar className="h-3 w-3 text-[#999999]" />
-                  <p className="text-xs font-medium text-[#999999]">
-                    {match.date}
-                  </p>
-                </div>
+              <div className="flex items-center gap-2">
+                <p className="text-xl font-medium text-[#000000]">
+                  {match.tournamentName}
+                </p>
+                <span className="text-[10px] font-medium text-[#3986F3] bg-[#EBF2FD] px-2.5 py-1 rounded-xl">
+                  Latest Match
+                </span>
               </div>
 
               <MatchMetadataRow
+                date={match.date}
                 matchType={match.matchType}
                 courtType={match.courtType}
                 verificationStatus={match.verificationStatus}

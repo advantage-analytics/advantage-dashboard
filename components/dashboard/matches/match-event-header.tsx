@@ -1,7 +1,5 @@
-"use client";
-
-import { GraduationCap } from "lucide-react";
-import Image from "next/image";
+import { MoreVertical } from "lucide-react";
+import { MatchMetadataRow } from "./match-metadata-row";
 
 interface MatchEventHeaderProps {
   tournamentName: string;
@@ -20,57 +18,20 @@ export function MatchEventHeader({
 }: MatchEventHeaderProps) {
   return (
     <div className="flex flex-col gap-4">
-      {/* Tournament Name and Date Row */}
+      {/* Tournament Name Row */}
       <div className="flex flex-row justify-between items-center gap-2">
-        <p className="text-xl font-medium text-[#000000]">{tournamentName}</p>
-        <p className="text-sm font-medium text-[#999999]">{date}</p>
+        <p className="text-xl font-medium text-[#0D0D0D]">{tournamentName}</p>
+        <button className="p-1 rounded hover:bg-gray-100 transition-colors">
+          <MoreVertical className="h-4 w-4 text-[#999999]" />
+        </button>
       </div>
 
-      {/* Match Details Row */}
-      <div className="flex flex-row gap-4 items-center">
-        {/* Match Type */}
-        <div className="flex items-center gap-1">
-          {matchType === "Tournament" ? (
-            <Image
-              src="/icons/tournament-icon.svg"
-              alt="Tournament"
-              width={16}
-              height={16}
-            />
-          ) : (
-            <GraduationCap className="h-4 w-4 text-[#999999]" />
-          )}
-          <p className="text-xs font-medium text-[#999999]">{matchType}</p>
-        </div>
-
-        {/* Court Type */}
-        {courtType && (
-          <div className="flex items-center gap-1">
-            <Image
-              src="/icons/tennis-court-icon.svg"
-              alt="Court"
-              width={16}
-              height={16}
-            />
-            <p className="text-xs font-medium text-[#999999]">{courtType}</p>
-          </div>
-        )}
-
-        {/* Verification Status */}
-        {verificationStatus && (
-          <div className="flex items-center gap-1">
-            <Image
-              src="/icons/verified-check-icon.svg"
-              alt="Check"
-              width={16}
-              height={16}
-            />
-            <p className="text-xs font-medium text-[#999999]">
-              {verificationStatus}
-            </p>
-          </div>
-        )}
-      </div>
+      <MatchMetadataRow
+        date={date}
+        matchType={matchType}
+        courtType={courtType}
+        verificationStatus={verificationStatus}
+      />
     </div>
   );
 }

@@ -34,10 +34,10 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
 
   return (
     <div className="flex-1 w-full bg-white min-h-[140vh]">
-      <div className="relative z-10 px-8 py-12 pt-[136px]">
+      <div className="relative z-10 px-8 py-12 pt-[104px]">
         <div className="max-w-[1200px] mx-auto">
           {/* Breadcrumb */}
-          <div className="mb-4">
+          <div className="mb-6">
             <Link
               href="/dashboard/matches"
               className="text-xs font-normal text-[#999999] hover:text-[#666666] transition-colors"
