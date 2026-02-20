@@ -11,6 +11,26 @@ function getInitials(name: string): string {
     .slice(0, 2);
 }
 
+function shortName(name: string, maxLen = 14): string {
+  if (name.length <= maxLen) return name;
+
+  const parts = name.trim().split(/\s+/);
+  if (parts.length < 2) return name;
+
+  const last = parts[parts.length - 1];
+
+  // Abbreviate middle names first
+  if (parts.length > 2) {
+    const midInitials = parts.slice(1, -1).map((m) => `${m[0]}.`);
+    const result = [parts[0], ...midInitials, last].join(" ");
+    if (result.length <= maxLen) return result;
+  }
+
+  // Then abbreviate first name too
+  const midInitials = parts.slice(1, -1).map((m) => `${m[0]}.`);
+  return [`${parts[0][0]}.`, ...midInitials, last].join(" ");
+}
+
 interface MatchScoreCardProps {
   match: Match;
 }
@@ -37,13 +57,13 @@ export function MatchScoreCard({ match }: MatchScoreCardProps) {
               </span>
             </div>
             <span
-              className={`text-sm font-semibold ${
+              className={`text-sm font-semibold truncate ${
                 match.score.winner === "player1"
                   ? "text-[#0D0D0D]"
                   : "text-[#999999]"
               }`}
             >
-              {match.player1.name}
+              {shortName(match.player1.name)}
             </span>
           </div>
           <div className="flex flex-row gap-4">
@@ -71,13 +91,13 @@ export function MatchScoreCard({ match }: MatchScoreCardProps) {
               </span>
             </div>
             <span
-              className={`text-sm font-semibold ${
+              className={`text-sm font-semibold truncate ${
                 match.score.winner === "player2"
                   ? "text-[#0D0D0D]"
                   : "text-[#999999]"
               }`}
             >
-              {match.player2.name}
+              {shortName(match.player2.name)}
             </span>
           </div>
           <div className="flex flex-row gap-4">
