@@ -39,7 +39,7 @@ export function AppSidebar() {
     >
       {/* Logo Section - 40px (pt-10) from top, 40px (mb-10) gap to nav */}
       <SidebarHeader className="pt-10 pb-0 mb-10 px-4">
-        <div className="relative flex items-center h-6">
+        <a href="https://advantage-analytics.com" className="relative flex items-center h-6">
           {/* Expanded logo – fades out fast when collapsing, fades in slow when expanding */}
           <Image
             src="/logos/logo4.svg"
@@ -47,7 +47,7 @@ export function AppSidebar() {
             width={141}
             height={24}
             priority
-            className="absolute left-1/2 -translate-x-1/2 opacity-100 group-data-[collapsible=icon]:opacity-0 transition-opacity duration-300 delay-200 ease-in group-data-[collapsible=icon]:duration-150 group-data-[collapsible=icon]:delay-0 group-data-[collapsible=icon]:ease-out"
+            className="absolute left-1/2 -translate-x-1/2 opacity-100 group-data-[collapsible=icon]:opacity-0 transition-opacity duration-800 delay-150 ease-in group-data-[collapsible=icon]:duration-0 group-data-[collapsible=icon]:delay-0 group-data-[collapsible=icon]:ease-out"
           />
           {/* Collapsed logo – fades in slow when collapsing, fades out fast when expanding */}
           <Image
@@ -56,9 +56,9 @@ export function AppSidebar() {
             width={30}
             height={21}
             priority
-            className="absolute left-1/2 -translate-x-1/2 opacity-0 group-data-[collapsible=icon]:opacity-100 transition-opacity duration-150 ease-out group-data-[collapsible=icon]:duration-300 group-data-[collapsible=icon]:delay-200 group-data-[collapsible=icon]:ease-in"
+            className="absolute left-1/2 -translate-x-1/2 opacity-0 group-data-[collapsible=icon]:opacity-100 transition-opacity duration-0 ease-out group-data-[collapsible=icon]:duration-800 group-data-[collapsible=icon]:delay-150 group-data-[collapsible=icon]:ease-in"
           />
-        </div>
+        </a>
       </SidebarHeader>
 
       {/* Navigation - spans full height with justify-between */}
@@ -77,8 +77,8 @@ export function AppSidebar() {
                   isActive={active}
                   tooltip={name}
                   className={cn(
-                    "h-9 rounded-lg text-[#0D0D0D] font-normal hover:bg-[#F9F9F9] hover:text-[#0D0D0D] px-3.25 py-3 gap-3 group-data-[collapsible=icon]:px-3.25 group-data-[collapsible=icon]:gap-0 ",
-                    active && "bg-[#F9F9F9] text-[#0D0D0D] font-normal"
+                    "h-9 rounded-lg text-[#0D0D0D] font-normal hover:bg-[#F9F9F9] hover:text-[#0D0D0D] px-3.5 py-3 gap-3 [&>svg]:size-3.5 group-data-[collapsible=icon]:px-3.5 group-data-[collapsible=icon]:gap-0 ",
+                    active && "bg-[#F9F9F9] text-[#0D0D0D] font-normal",
                   )}
                 >
                   <Link href={href}>
@@ -108,7 +108,7 @@ export function AppSidebar() {
                     tooltip={name}
                     className={cn(
                       "h-9 rounded-lg text-[#0D0D0D] font-normal hover:bg-[#F9F9F9] hover:text-[#0D0D0D] px-3.25 py-3 gap-3 group-data-[collapsible=icon]:px-3.25 group-data-[collapsible=icon]:gap-0",
-                      active && "bg-[#F9F9F9] text-[#0D0D0D] font-normal"
+                      active && "bg-[#F9F9F9] text-[#0D0D0D] font-normal",
                     )}
                   >
                     <Link href={href}>
