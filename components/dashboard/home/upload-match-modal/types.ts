@@ -65,8 +65,8 @@ export interface MatchData {
   player1_name: string;
   player2_id: string | null;
   player2_name: string;
-  tournament_name: string;
-  round: string;
+  tournament_name: string | null;
+  round: string | null;
   format: {
     best_of: number;
     ad_scoring: boolean;

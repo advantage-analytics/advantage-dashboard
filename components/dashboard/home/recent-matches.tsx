@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { GraduationCap, ChevronRight } from "lucide-react";
+import { GraduationCap, Calendar } from "lucide-react";
 import Image from "next/image";
 
 interface Match {
@@ -28,10 +28,19 @@ interface Match {
 interface RecentMatchesProps {
   tournamentName: string;
   date: string;
-  matchType: string;
+  matchType?: string;
   courtType?: string;
   verificationStatus?: string;
   matches: Match[];
+}
+
+function getInitials(name: string): string {
+  return name
+    .split(/\s+/)
+    .map((s) => s[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 }
 
 export default function RecentMatches({
@@ -46,27 +55,32 @@ export default function RecentMatches({
     <div className="space-y-6">
       <div className="flex flex-col gap-4">
         {/* Tournament Name and Date Row */}
-        <div className="flex flex-row justify-between items-center gap-2">
+        <div className="flex flex-row items-center justify-between">
           <p className="text-xl font-medium text-[#000000]">{tournamentName}</p>
-          <p className="text-sm font-medium text-[#999999]">{date}</p>
+          <div className="gap-1 flex items-center">
+            <Calendar className="h-3 w-3 text-[#999999]" />
+            <p className="text-xs font-medium text-[#999999]">{date}</p>
+          </div>
         </div>
 
         {/* Match Details Row */}
         <div className="flex flex-row gap-4 items-center">
           {/* Match Type */}
-          <div className="flex items-center gap-1">
-            {matchType === "Tournament" ? (
-              <Image
-                src="/icons/tournament-icon.svg"
-                alt="Tournament"
-                width={16}
-                height={16}
-              />
-            ) : (
-              <GraduationCap className="h-4 w-4 text-[#999999]" />
-            )}
-            <p className="text-xs font-medium text-[#999999]">{matchType}</p>
-          </div>
+          {matchType && (
+            <div className="flex items-center gap-1">
+              {matchType === "Tournament" ? (
+                <Image
+                  src="/icons/tournament-icon.svg"
+                  alt="Tournament"
+                  width={16}
+                  height={16}
+                />
+              ) : (
+                <GraduationCap className="h-4 w-4 text-[#999999]" />
+              )}
+              <p className="text-xs font-medium text-[#999999]">{matchType}</p>
+            </div>
+          )}
 
           {/* Court Type */}
           {courtType && (
@@ -82,19 +96,18 @@ export default function RecentMatches({
           )}
 
           {/* Verification Status */}
-          {verificationStatus && (
-            <div className="flex items-center gap-1">
-              <Image
-                src="/icons/verified-check-icon.svg"
-                alt="Check"
-                width={16}
-                height={16}
-              />
-              <p className="text-xs font-medium text-[#999999]">
-                {verificationStatus}
-              </p>
-            </div>
-          )}
+          <div className="flex items-center gap-1">
+            <Image
+              src="/icons/verified-check-icon.svg"
+              alt="Check"
+              width={16}
+              height={16}
+              className={verificationStatus ? "" : "grayscale"}
+            />
+            <p className="text-xs font-medium text-[#999999]">
+              {verificationStatus || "Unverified Result"}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -103,31 +116,52 @@ export default function RecentMatches({
         <Link
           key={match.id}
           href={`/dashboard/matches/${match.id}`}
-          className="block hover:bg-[#F9F9F9] transition-colors rounded-lg"
+          className="group block rounded-2xl transition-transform hover:scale-[1.01]"
         >
           <div className="pl-2 pr-4 py-3 flex flex-row gap-6">
             {/* Vertical Separator */}
-            <div className="w-0.5 bg-[#DDDDDD] self-stretch rounded-full"></div>
+            <div className="w-0.5 bg-[#DDDDDD] group-hover:bg-[#6AABFF] self-stretch rounded-full transition-colors"></div>
             <div className="flex flex-col space-y-4 flex-1">
               {/* Match Header */}
               <div className="flex flex-row justify-between items-center font-normal text-xs text-[#999999]">
-                <p>{match.matchContext} | {match.round}</p>
-                <div className="flex">
-                  <p>{match.duration}</p>
+                <div className="flex items-center gap-2">
+                  <p>{match.matchContext}</p>
+                  {match.round && (
+                    <>
+                      <span className="w-px h-3 bg-[#999999]" />
+                      <p>{match.round}</p>
+                    </>
+                  )}
                 </div>
+                <span className="rounded-[10px] px-1.5 py-0.5 text-xs font-medium bg-[#F3F3F3] text-[#999999] group-hover:bg-[#6AABFF] group-hover:text-white transition-colors">
+                  {match.duration}
+                </span>
               </div>
               {/* Player Names + Information */}
               <div className="flex flex-col space-y-2">
                 <div className="flex flex-row justify-between items-center">
                   <div className="flex flex-row items-center gap-4">
-                    <div className="h-10 w-10 rounded-sm bg-gray-200"></div>
-                    <p className={`font-semibold text-sm ${match.score.winner === "player1" ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}`}>
+                    <div className="w-10 h-10 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
+                      <span className="text-xs font-medium text-[#BFBFBF]">
+                        {getInitials(match.player1.name)}
+                      </span>
+                    </div>
+                    <p
+                      className={`font-semibold text-sm ${match.score.winner === "player1" ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}`}
+                    >
                       {match.player1.name}
                     </p>
                   </div>
                   <div className="flex flex-row gap-4 font-semibold text-[18px]">
                     {match.score.sets.map((set, idx) => (
-                      <p key={idx} className={set.player1 > set.player2 ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}>
+                      <p
+                        key={idx}
+                        className={
+                          set.player1 > set.player2
+                            ? "text-[#0D0D0D]"
+                            : "text-[#B3B3B3]"
+                        }
+                      >
                         {set.player1}
                       </p>
                     ))}
@@ -135,14 +169,27 @@ export default function RecentMatches({
                 </div>
                 <div className="flex flex-row justify-between items-center">
                   <div className="flex flex-row items-center gap-4">
-                    <div className="h-10 w-10 rounded-sm bg-gray-200"></div>
-                    <p className={`font-semibold text-sm ${match.score.winner === "player2" ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}`}>
+                    <div className="w-10 h-10 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
+                      <span className="text-xs font-medium text-[#BFBFBF]">
+                        {getInitials(match.player2.name)}
+                      </span>
+                    </div>
+                    <p
+                      className={`font-semibold text-sm ${match.score.winner === "player2" ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}`}
+                    >
                       {match.player2.name}
                     </p>
                   </div>
                   <div className="flex flex-row gap-4 font-semibold text-[18px]">
                     {match.score.sets.map((set, idx) => (
-                      <p key={idx} className={set.player2 > set.player1 ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}>
+                      <p
+                        key={idx}
+                        className={
+                          set.player2 > set.player1
+                            ? "text-[#0D0D0D]"
+                            : "text-[#B3B3B3]"
+                        }
+                      >
                         {set.player2}
                       </p>
                     ))}

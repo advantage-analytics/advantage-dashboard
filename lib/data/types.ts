@@ -83,8 +83,32 @@ export interface PlayerStatistics {
   tiebreaksWon: number;
   servicePointsWon: number;
   serviceGamesWon: number;
+  serviceGamesWonPct: number;
   returnPointsWon: number;
+  firstReturnPointsWon: number;
+  secondReturnPointsWon: number;
   returnGamesWon: number;
+  firstReturnWonPct: number;
+  secondReturnWonPct: number;
+  returnGamesWonPct: number;
+  breakpointsWonPct: number;
+  totalPoints: number;
+  totalPointsWon: number;
+  serveRating: number;
+  returnRating: number;
+  underPressureRating: number;
+  shortRallyWonPct: number;
+  mediumRallyWonPct: number;
+  longRallyWonPct: number;
+  serveWidePct: number;
+  serveBodyPct: number;
+  serveTpct: number;
+  returnCrossCourtPct: number;
+  returnDownTheLinePct: number;
+  returnMiddlePct: number;
+  returnContactInsidePct: number;
+  returnContactMiddlePct: number;
+  returnContactDeepPct: number;
 }
 
 export interface MatchDetailedStats {

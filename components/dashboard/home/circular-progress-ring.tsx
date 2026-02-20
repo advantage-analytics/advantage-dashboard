@@ -40,7 +40,7 @@ export function CircularProgressRing({
       <Tooltip delayDuration={0}>
         <TooltipTrigger asChild>
           <motion.div
-            whileHover={{ scale: 1.05 }}
+            whileHover={{ scale: 1.01 }}
             transition={{ duration: 0.2 }}
             onClick={onClick}
             className="flex items-center gap-4 cursor-pointer"
@@ -56,7 +56,7 @@ export function CircularProgressRing({
           >
             <div
               className="flex-shrink-0"
-              style={{ filter: "drop-shadow(0px 2px 4px rgba(0, 0, 0, 0.10))" }}
+              style={{ filter: "drop-shadow(0px 2px 4px rgba(0, 0, 0, 0.25))" }}
             >
               <svg width={size} height={size}>
               <g transform={`translate(${size / 2}, ${size / 2})`}>
@@ -64,7 +64,7 @@ export function CircularProgressRing({
                 <circle
                   r={radius}
                   fill="none"
-                  stroke="#E5E5E5"
+                  stroke="#D9D9D9"
                   strokeWidth={strokeWidth}
                 />
 
@@ -73,9 +73,9 @@ export function CircularProgressRing({
                   <motion.circle
                     r={radius}
                     fill="none"
-                    stroke="#4A90E2"
+                    stroke="#3986F3"
                     strokeWidth={strokeWidth}
-                    strokeLinecap="round"
+                    strokeLinecap="butt"
                     strokeDasharray={circumference}
                     initial={{ strokeDashoffset: circumference }}
                     animate={{ strokeDashoffset: progressOffset }}

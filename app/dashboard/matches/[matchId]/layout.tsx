@@ -2,7 +2,10 @@ import { notFound } from "next/navigation";
 
 import { MatchEventHeader } from "@/components/dashboard/matches/match-event-header";
 import { MatchNavigationTabs } from "@/components/dashboard/matches/match-navigation-tabs";
-import { MatchScoreDisplay } from "@/components/dashboard/matches/match-score-display";
+import { MatchScoreCard } from "@/components/dashboard/matches/match-score-card";
+import { MatchTabSidebar } from "@/components/dashboard/matches/match-tab-sidebar";
+import { getMatchStatisticsFromSupabase } from "@/lib/data/match-stats-server";
+import { getMatchPointsFromSupabase } from "@/lib/data/match-points-server";
 import { formatDuration } from "@/components/dashboard/home/upload-match-modal/utils";
 import type { Match, SetScore } from "@/lib/data/types";
 import { createClient } from "@/lib/supabase/server";
@@ -119,6 +122,10 @@ export default async function MatchLayout({
   }
 
   const match = transformDbMatchToMatch(row as DbMatch, user?.id ?? "");
+  const [statsResult, points] = await Promise.all([
+    getMatchStatisticsFromSupabase(matchId),
+    getMatchPointsFromSupabase(matchId),
+  ]);
 
   return (
     <div className="flex-1 w-full bg-white">
@@ -136,8 +143,9 @@ export default async function MatchLayout({
             <div className="flex flex-col gap-10 min-w-0">{children}</div>
           </div>
 
-          <div className="sticky top-8 w-[320px] flex-shrink-0 self-start h-fit flex flex-col gap-5">
-            <MatchScoreDisplay match={match} />
+          <div className="sticky top-8 w-[320px] flex-shrink-0 self-start h-fit flex flex-col gap-6">
+            <MatchScoreCard match={match} />
+            <MatchTabSidebar match={match} matchId={matchId} statsResult={statsResult} points={points} />
           </div>
         </div>
       </div>

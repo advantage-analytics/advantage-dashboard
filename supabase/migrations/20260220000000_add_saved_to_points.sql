@@ -1,0 +1,1 @@
+ALTER TABLE public.points ADD COLUMN saved BOOLEAN NOT NULL DEFAULT false;

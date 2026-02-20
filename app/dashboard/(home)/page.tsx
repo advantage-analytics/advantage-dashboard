@@ -58,7 +58,7 @@ export default async function Home() {
             {/* Overall Performance Side Widget goes here */}
             <OverallPerformance performanceData={performanceData} />
             {/* Upcoming Match */}
-            <UpcomingMatch />
+            {/* <UpcomingMatch /> */}
           </div>
         </div>
       </div>

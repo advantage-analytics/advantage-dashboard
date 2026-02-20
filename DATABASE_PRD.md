@@ -331,6 +331,7 @@ Required sheets in SwingVision export:
 | result_type       | TEXT    | Winner, UE, FE, Ace, etc.                                                 |
 | video_time        | REAL    | Video timestamp in seconds for start of point                             |
 | duration          | REAL    | Point duration in seconds                                                 |
+| saved             | BOOLEAN | User-bookmarked point (default: false)                                    |
 
 #### Table: `shots`
 
@@ -401,6 +402,18 @@ Stores raw count statistics per player. Percentages are calculated via the `matc
 | forehand_unforced_errors  | INT     | Forehand unforced errors                 |
 | backhand_unforced_errors  | INT     | Backhand unforced errors                 |
 | forced_errors             | INT     | Total forced errors                      |
+| **Serve Placement**       |         |                                          |
+| serve_wide                | INT     | Serves landing in outer third (|x| >= 2.74m) |
+| serve_body                | INT     | Serves landing in middle third (1.37m <= |x| < 2.74m) |
+| serve_t                   | INT     | Serves landing in inner third (|x| < 1.37m) |
+| **Return Direction**      |         |                                          |
+| return_cross_court        | INT     | Returns crossing to opposite side of serve |
+| return_down_the_line      | INT     | Returns staying on same side as serve    |
+| return_middle             | INT     | Returns landing in center corridor (|x| <= 1.0m) |
+| **Return Contact Position** |       |                                          |
+| return_contact_inside     | INT     | Returns contacted in front of baseline   |
+| return_contact_middle     | INT     | Returns contacted within 1m behind baseline |
+| return_contact_deep       | INT     | Returns contacted more than 1m behind baseline |
 | **Other**                 |         |                                          |
 | avg_rally_length          | FLOAT   | Average rally length                     |
 | created_at                | TIMESTAMP | Record creation time                   |
@@ -425,6 +438,15 @@ Calculates percentage statistics from raw `match_stats` counts. Use this view fo
 | set_points_saved_pct        | FLOAT | % of set points saved                         |
 | set_points_converted_pct    | FLOAT | % of set points converted                     |
 | total_points_won_pct        | FLOAT | % of total points won                         |
+| serve_wide_pct              | FLOAT | % of serves placed wide                       |
+| serve_body_pct              | FLOAT | % of serves placed to body                    |
+| serve_t_pct                 | FLOAT | % of serves placed down the T                 |
+| return_cross_court_pct      | FLOAT | % of returns hit cross-court                  |
+| return_down_the_line_pct    | FLOAT | % of returns hit down the line                |
+| return_middle_pct           | FLOAT | % of returns hit to middle                    |
+| return_contact_inside_pct   | FLOAT | % of returns contacted inside baseline        |
+| return_contact_middle_pct   | FLOAT | % of returns contacted near baseline          |
+| return_contact_deep_pct     | FLOAT | % of returns contacted deep behind baseline   |
 
 ---
 
@@ -475,6 +497,9 @@ await supabase.rpc('calculate_match_stats', { p_match_id: matchId });
 - Winners/errors: total, by shot type (forehand, backhand, volley, service)
 - Game stats: service/return games won
 - Average rally length
+- Serve placement: wide, body, T (based on landing_x thirds of service box)
+- Return direction: cross-court, down-the-line, middle (based on serve/return landing_x sign comparison)
+- Return contact position: inside, middle, deep (based on contact_y distance from nearest baseline)
 
 ### 7.4 Planned Routes
 
@@ -552,6 +577,7 @@ await supabase.rpc('calculate_match_stats', { p_match_id: matchId });
 | add_shot_zone                         | 2026-02 | Added `zone` text column to shots table with CHECK constraint; backfilled existing rows from coordinates      |
 | fix_rally_length                      | 2026-02 | Fixed rally_length to use MAX(shot_number) instead of COUNT(shots); backfilled all points and recalculated stats |
 | secure_match_stats_view               | 2026-02 | Set `security_invoker = true` on `match_stats_with_percentages` view to enforce RLS as calling user          |
+| add_saved_to_points                   | 2026-02 | Added `saved` boolean column to points table for user bookmarking                                            |
 
 ---
 
@@ -671,6 +697,15 @@ if (shot.shot_number === 1) {
 ---
 
 ## 12. Recent Bug Fixes & Changes
+
+### Match Time Storage (February 2026)
+
+**Issue:** `buildMatchData()` only stored `formData.date` (e.g., `"2024-01-15"`) into the `date` TIMESTAMPTZ column, discarding `formData.time`. All matches on the same day shared the same timestamp (midnight), so `.order("date", { ascending: false })` could not distinguish their order.
+
+**Fix:**
+- **`buildMatchData()`** (`components/dashboard/home/upload-match-modal/utils.ts`) now combines `formData.date` and `formData.time` into a full ISO datetime string: `"2024-01-15T14:30:00"`. Falls back to date-only if time is not provided.
+- No migration needed — the column was already TIMESTAMPTZ.
+- Existing queries in `performance-server.ts` and `recent-activity.tsx` already use `.order("date", { ascending: false })`, which now correctly sorts by date + time.
 
 ### Rally Length Calculation (February 2026)
 

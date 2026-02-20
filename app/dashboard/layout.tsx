@@ -33,7 +33,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   return (
-    <SidebarProvider style={{ "--sidebar-width": "240px" } as React.CSSProperties}>
+    <SidebarProvider defaultOpen={false} style={{ "--sidebar-width": "240px" } as React.CSSProperties}>
       <AppSidebar />
       <SidebarInset className="bg-white h-screen overflow-y-auto">
         <Header />
