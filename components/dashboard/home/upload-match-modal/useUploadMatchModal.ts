@@ -551,6 +551,12 @@ export function useUploadMatchModal({
         formData.opponentName
       );
 
+      // Auto-fill event name if empty
+      let eventName = formData.eventName;
+      if (!eventName) {
+        eventName = `${formData.playerName} vs ${formData.opponentName}`;
+      }
+
       // Build metadata for the match
       const metadata: MatchMetadata = {
         userId: user.id,
@@ -560,7 +566,7 @@ export function useUploadMatchModal({
         courtType: formData.courtType
       };
 
-      const matchData = buildMatchData(matchId, formData, winner, loser, isPrivateMatch, metadata);
+      const matchData = buildMatchData(matchId, { ...formData, eventName }, winner, loser, isPrivateMatch, metadata);
 
       console.log("Attempting to insert match data:", matchData);
 
@@ -588,6 +594,7 @@ export function useUploadMatchModal({
       clearStorageData();
       onOpenChange(false);
       router.push("/dashboard");
+      window.dispatchEvent(new Event("match-created"));
     } catch (e: any) {
       console.error("Error creating match:", e);
       const errorMessage =
