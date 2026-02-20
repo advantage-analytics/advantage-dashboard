@@ -4,8 +4,7 @@ import { usePathname } from "next/navigation";
 import type { Match } from "@/lib/data/types";
 import type { MatchStatisticsResult } from "@/lib/data/match-stats-server";
 import type { MatchPoint } from "@/lib/data/match-points-server";
-import { MatchOverallSidebar } from "./match-overall-sidebar";
-import { MatchVisualsSidebar } from "./match-visuals-sidebar";
+import { MatchOverallSidebar, MatchVisualsSidebar } from "./match-stats-sidebar";
 import { MatchVideoSidebar } from "./match-video-sidebar";
 
 interface MatchTabSidebarProps {
@@ -23,10 +22,9 @@ export function MatchTabSidebar({ match, matchId, statsResult, points }: MatchTa
   }
 
   if (pathname.includes("/visuals")) {
-    return <MatchVisualsSidebar match={match} matchId={matchId} statsResult={statsResult} />;
+    return <MatchVisualsSidebar match={match} statsResult={statsResult} />;
   }
 
   // Default: Overall sidebar
   return <MatchOverallSidebar match={match} statsResult={statsResult} />;
 }
-

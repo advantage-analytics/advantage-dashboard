@@ -1,35 +1,7 @@
 "use client";
 
 import type { Match } from "@/lib/data/types";
-
-function getInitials(name: string): string {
-  return name
-    .split(/\s+/)
-    .map((s) => s[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
-}
-
-function shortName(name: string, maxLen = 14): string {
-  if (name.length <= maxLen) return name;
-
-  const parts = name.trim().split(/\s+/);
-  if (parts.length < 2) return name;
-
-  const last = parts[parts.length - 1];
-
-  // Abbreviate middle names first
-  if (parts.length > 2) {
-    const midInitials = parts.slice(1, -1).map((m) => `${m[0]}.`);
-    const result = [parts[0], ...midInitials, last].join(" ");
-    if (result.length <= maxLen) return result;
-  }
-
-  // Then abbreviate first name too
-  const midInitials = parts.slice(1, -1).map((m) => `${m[0]}.`);
-  return [`${parts[0][0]}.`, ...midInitials, last].join(" ");
-}
+import { getInitials, shortName } from "@/lib/data/match-utils";
 
 interface MatchScoreCardProps {
   match: Match;

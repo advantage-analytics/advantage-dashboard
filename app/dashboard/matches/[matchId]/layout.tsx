@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 
+import { MatchBreadcrumbs } from "@/components/dashboard/matches/match-breadcrumbs";
+import { MatchDataProvider } from "@/components/dashboard/matches/match-data-provider";
 import { MatchEventHeader } from "@/components/dashboard/matches/match-event-header";
 import { MatchNavigationTabs } from "@/components/dashboard/matches/match-navigation-tabs";
 import { MatchScoreCard } from "@/components/dashboard/matches/match-score-card";
@@ -129,18 +131,27 @@ export default async function MatchLayout({
 
   return (
     <div className="flex-1 w-full bg-white">
-      <div className="relative z-10 pt-[88px] px-8">
-        <div className="flex flex-row py-6 gap-8 max-w-[1200px] mx-auto">
+      <div className="relative z-10 pt-[104px] px-8">
+        <div className="flex flex-row pb-6 gap-8 max-w-[1200px] mx-auto">
           <div className="flex-1 min-w-0 flex flex-col gap-10">
-            <MatchEventHeader
-              tournamentName={match.tournamentName}
-              date={match.date}
-              matchType={match.matchType}
-              courtType={match.courtType}
-              verificationStatus={match.verificationStatus}
-            />
+            <div className="flex flex-col gap-6">
+              <MatchBreadcrumbs
+                tournamentName={match.tournamentName}
+                player1Name={match.player1.name}
+                player2Name={match.player2.name}
+              />
+              <MatchEventHeader
+                tournamentName={match.tournamentName}
+                date={match.date}
+                matchType={match.matchType}
+                courtType={match.courtType}
+                verificationStatus={match.verificationStatus}
+              />
+            </div>
             <MatchNavigationTabs matchId={matchId} />
-            <div className="flex flex-col gap-10 min-w-0">{children}</div>
+            <MatchDataProvider statsResult={statsResult} points={points}>
+              <div className="flex flex-col gap-10 min-w-0">{children}</div>
+            </MatchDataProvider>
           </div>
 
           <div className="sticky top-8 w-[320px] flex-shrink-0 self-start h-fit flex flex-col gap-6">

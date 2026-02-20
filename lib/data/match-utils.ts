@@ -26,6 +26,35 @@ export function getInitials(name: string): string {
 }
 
 /**
+ * Abbreviate a player name to fit within maxLen characters.
+ * Shortens middle names first, then the first name.
+ */
+export function shortName(name: string, maxLen = 14): string {
+  if (name.length <= maxLen) return name;
+
+  const parts = name.trim().split(/\s+/);
+  if (parts.length < 2) return name;
+
+  const last = parts[parts.length - 1];
+
+  // Abbreviate middle names first
+  if (parts.length > 2) {
+    const midInitials = parts.slice(1, -1).map((m) => `${m[0]}.`);
+    const result = [parts[0], ...midInitials, last].join(" ");
+    if (result.length <= maxLen) return result;
+  }
+
+  // Then abbreviate first name too
+  const midInitials = parts.slice(1, -1).map((m) => `${m[0]}.`);
+  return [`${parts[0][0]}.`, ...midInitials, last].join(" ");
+}
+
+export const PLAYER_COLORS = {
+  player1: "#3986F3",
+  player2: "#F38439",
+} as const;
+
+/**
  * Format duration in minutes to "XHR YMIN" format
  */
 export function formatDuration(
