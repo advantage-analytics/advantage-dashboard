@@ -17,12 +17,12 @@ interface MatchScoreCardProps {
 
 export function MatchScoreCard({ match }: MatchScoreCardProps) {
   return (
-    <div className="w-[320px] flex flex-col gap-4 px-6 py-4 bg-white rounded-2xl shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
+    <div className="w-[320px] flex flex-col gap-4 px-6 py-4 bg-white rounded-2xl border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
       <div className="flex flex-row justify-between items-center gap-12">
         <span className="text-xs font-medium text-[#999999]">
           {match.matchContext}
         </span>
-        <span className="px-1.5 py-0.5 rounded-[10px] bg-[#60A5FA] text-xs font-medium text-white">
+        <span className="px-1.5 py-0.5 rounded-[10px] bg-[#6AABFF] text-xs font-medium text-white">
           {match.duration ?? "—"}
         </span>
       </div>
@@ -31,7 +31,7 @@ export function MatchScoreCard({ match }: MatchScoreCardProps) {
         {/* Player 1 */}
         <div className="flex flex-row justify-between items-center gap-[52px]">
           <div className="flex flex-row items-center gap-4">
-            <div className="w-10 h-10 rounded-[4px2] bg-[#F2F2F2] flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
               <span className="text-xs font-medium text-[#BFBFBF]">
                 {getInitials(match.player1.name)}
               </span>

@@ -125,7 +125,7 @@ export function MatchVisualsSidebar({
       : "Total Return Points Won";
 
   return (
-    <div className="w-[320px] flex flex-col gap-6 px-6 py-4 bg-white rounded-2xl shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
+    <div className="w-[320px] flex flex-col gap-6 px-6 py-4 bg-white rounded-2xl border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
       {/* Player tabs */}
       <PlayerTabs
         match={match}
