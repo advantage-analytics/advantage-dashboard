@@ -54,9 +54,9 @@ const DEFAULT_PERFORMANCE: OverallPerformanceData = {
     { wins: 0, losses: 0, label: "Last 7 Days" },
   ],
   performanceRatings: [
-    { label: "Serve", value: 0, barColor: "#666666" },
-    { label: "Return", value: 0, barColor: "#4A90E2" },
-    { label: "Under Pressure", value: 0, barColor: "#666666" },
+    { label: "Serve Rating", value: 0, barColor: "#666666" },
+    { label: "Return Rating", value: 0, barColor: "#4A90E2" },
+    { label: "Under Pressure Rating", value: 0, barColor: "#666666" },
   ],
   recentPerformance: [
     { label: "First Serve In Percentage", value: 0, change: 0 },
@@ -143,45 +143,71 @@ function calculateAverageRating(
 
 function calculateRecentPerformance(
   stats: DbMatchStats[],
-  matchPlayerMap: Map<string, boolean>
+  matchPlayerMap: Map<string, boolean>,
+  orderedMatchIds: string[]
 ): RecentPerformanceStat[] {
   if (stats.length === 0) {
     return DEFAULT_PERFORMANCE.recentPerformance;
   }
 
-  let firstServeIn = 0;
-  let firstServeWon = 0;
-  let secondServeWon = 0;
-  let count = 0;
-
+  // Build a map of matchId → user's stats
+  const matchStatsMap = new Map<
+    string,
+    { firstServeIn: number; firstServeWon: number; secondServeWon: number }
+  >();
   for (const stat of stats) {
     const isUserPlayer1 = matchPlayerMap.get(stat.match_id);
     if (isUserPlayer1 === undefined) continue;
     if (stat.is_player1 !== isUserPlayer1) continue;
 
-    firstServeIn += parseFloat(stat.first_serve_pct ?? "0");
-    firstServeWon += parseFloat(stat.first_serve_won_pct ?? "0");
-    secondServeWon += parseFloat(stat.second_serve_won_pct ?? "0");
-    count++;
+    matchStatsMap.set(stat.match_id, {
+      firstServeIn: parseFloat(stat.first_serve_pct ?? "0"),
+      firstServeWon: parseFloat(stat.first_serve_won_pct ?? "0"),
+      secondServeWon: parseFloat(stat.second_serve_won_pct ?? "0"),
+    });
   }
 
-  if (count === 0) return DEFAULT_PERFORMANCE.recentPerformance;
+  // Find the two most recent matches that have stats
+  let latestStats: (typeof matchStatsMap extends Map<string, infer V> ? V : never) | undefined;
+  let previousStats: (typeof matchStatsMap extends Map<string, infer V> ? V : never) | undefined;
+  for (const matchId of orderedMatchIds) {
+    const s = matchStatsMap.get(matchId);
+    if (!s) continue;
+    if (!latestStats) {
+      latestStats = s;
+    } else {
+      previousStats = s;
+      break;
+    }
+  }
+
+  if (!latestStats) return DEFAULT_PERFORMANCE.recentPerformance;
+
+  const firstServeInChange = previousStats
+    ? latestStats.firstServeIn - previousStats.firstServeIn
+    : 0;
+  const firstServeWonChange = previousStats
+    ? latestStats.firstServeWon - previousStats.firstServeWon
+    : 0;
+  const secondServeWonChange = previousStats
+    ? latestStats.secondServeWon - previousStats.secondServeWon
+    : 0;
 
   return [
     {
       label: "First Serve In Percentage",
-      value: Math.round(firstServeIn / count),
-      change: 0,
+      value: Math.round(latestStats.firstServeIn),
+      change: Math.round(firstServeInChange * 10) / 10,
     },
     {
       label: "First Serve Won Percentage",
-      value: Math.round(firstServeWon / count),
-      change: 0,
+      value: Math.round(latestStats.firstServeWon),
+      change: Math.round(firstServeWonChange * 10) / 10,
     },
     {
       label: "Second Serve Won Percentage",
-      value: Math.round(secondServeWon / count),
-      change: 0,
+      value: Math.round(latestStats.secondServeWon),
+      change: Math.round(secondServeWonChange * 10) / 10,
     },
   ];
 }
@@ -226,7 +252,8 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
   );
   const recentPerf = calculateRecentPerformance(
     (stats as DbMatchStats[]) ?? [],
-    matchPlayerMap
+    matchPlayerMap,
+    matches.map((m) => m.id)
   );
 
   return {
@@ -236,9 +263,9 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
       { ...last7, label: "Last 7 Days" },
     ],
     performanceRatings: [
-      { label: "Serve", value: ratings.serve, barColor: "#666666" },
-      { label: "Return", value: ratings.return_, barColor: "#4A90E2" },
-      { label: "Under Pressure", value: ratings.pressure, barColor: "#666666" },
+      { label: "Serve Rating", value: ratings.serve, barColor: "#666666" },
+      { label: "Return Rating", value: ratings.return_, barColor: "#4A90E2" },
+      { label: "Under Pressure Rating", value: ratings.pressure, barColor: "#666666" },
     ],
     recentPerformance: recentPerf,
   };
