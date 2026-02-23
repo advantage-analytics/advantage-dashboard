@@ -177,3 +177,31 @@
 .animate-scroll {
   animation: scroll 40s linear infinite;
 }
+
+/* Upload/match modal: minimal scrollbar on the left */
+.upload-modal-scroll {
+  direction: rtl;
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+
+.upload-modal-scroll > * {
+  direction: ltr;
+}
+
+.upload-modal-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.upload-modal-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.upload-modal-scroll::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+.upload-modal-scroll::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}

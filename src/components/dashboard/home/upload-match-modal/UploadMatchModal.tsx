@@ -101,7 +101,7 @@ export function UploadMatchModal({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
         hideCloseButton
-        className="min-w-180 h-120 overflow-y-auto px-12 py-6 rounded-2xl flex-1 flex items-center justify-center"
+        className="min-w-180 h-120 overflow-y-auto px-12 py-6 rounded-2xl flex-1 flex items-center justify-center upload-modal-scroll"
       >
         <div className="flex flex-col justify-between h-full w-full">
           <div className="flex flex-col space-y-4">
@@ -128,8 +128,9 @@ export function UploadMatchModal({
             </div>
           </div>
 
-          {/* Content */}
-          <div className="w-full flex-1 overflow-y-auto py-6">
+          {/* Content - scrollbar on left, minimal style */}
+          <div className="w-full flex-1 overflow-y-auto py-6 upload-modal-scroll -ml-3 pl-3">
+            <div className="min-h-0">
             {step === "method" && (
               <MethodContent
                 selectedMethod={selectedMethod}
@@ -183,10 +184,11 @@ export function UploadMatchModal({
                 error={error}
               />
             )}
+            </div>
           </div>
 
           {/* Footer */}
-          <div className="flex justify-center gap-2 pt-4">
+          <div className="flex justify-center items-center gap-2 pt-4">
             {step === "confirm" ? (
               <>
                 <Button
@@ -206,19 +208,33 @@ export function UploadMatchModal({
                 >
                   {isCreating ? "Creating..." : "Create Match"}
                 </Button>
+                <Button
+                  onClick={handleClose}
+                  className="w-[55px] h-[31px] rounded-full text-xs bg-white border border-[#EAECF0] text-[#0D0D0D] hover:bg-[#F7F7F7]"
+                >
+                  Exit
+                </Button>
               </>
             ) : (
-              <Button
-                onClick={getContinueHandler()}
-                disabled={isContinueDisabled()}
-                className={`w-[85px] h-[31px] rounded-full text-xs ${
-                  isContinueDisabled()
-                    ? "bg-[#F7F7F7] text-[#999999]"
-                    : "bg-[#0D0D0D] text-white"
-                }`}
-              >
-                {continueLabel}
-              </Button>
+              <>
+                <Button
+                  onClick={getContinueHandler()}
+                  disabled={isContinueDisabled()}
+                  className={`w-[85px] h-[31px] rounded-full text-xs ${
+                    isContinueDisabled()
+                      ? "bg-[#F7F7F7] text-[#999999]"
+                      : "bg-[#0D0D0D] text-white"
+                  }`}
+                >
+                  {continueLabel}
+                </Button>
+                <Button
+                  onClick={handleClose}
+                  className="w-[55px] h-[31px] rounded-full text-xs bg-white border border-[#EAECF0] text-[#0D0D0D] hover:bg-[#F7F7F7]"
+                >
+                  Exit
+                </Button>
+              </>
             )}
           </div>
         </div>
