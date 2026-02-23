@@ -156,15 +156,18 @@ export function MatchStatistics({
         </p>
       </div>
 
+      {/* Section label */}
+      <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#999999] mb-4">
+        Head to Head Statistics
+      </p>
+
       {/* Table header */}
-      <div className="grid grid-cols-[1fr_130px_130px] sm:grid-cols-[1fr_150px_150px] border-b border-[#E8E8E8] pb-3">
-        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#999999]">
-          Statistics
-        </span>
-        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#999999] text-center whitespace-nowrap truncate">
+      <div className="grid grid-cols-[1fr_130px_130px] sm:grid-cols-[1fr_150px_150px] border-b border-[#E8E8E8] pb-2 mb-1">
+        <span />
+        <span className="text-xs font-semibold text-[#4A8AF4] text-center whitespace-nowrap truncate">
           {p1Short}
         </span>
-        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#999999] text-center whitespace-nowrap truncate">
+        <span className="text-xs font-semibold text-[#F38439] text-center whitespace-nowrap truncate">
           {p2Short}
         </span>
       </div>
