@@ -5,9 +5,8 @@
  * Summary display of all entered data
  */
 
-import { GraduationCap } from "lucide-react";
-import Image from "next/image";
 import { Switch } from "@/components/ui/switch";
+import { MatchMetadataRow } from "@/components/dashboard/matches/match-metadata-row";
 import { FormData, UploadedFile } from "./types";
 import { getAdjustedScores, formatDuration } from "./utils";
 
@@ -20,11 +19,12 @@ export interface ConfirmContentProps {
 
 // Helper function to get initials from a name
 function getInitials(name: string): string {
-  if (!name) return "";
-  const parts = name.trim().split(" ");
-  if (parts.length === 0) return "";
-  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
-  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  return name
+    .split(/\s+/)
+    .map((s) => s[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 }
 
 // Helper to format date as "Month Day, Year"
@@ -86,56 +86,29 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
 
   return (
     <div className="space-y-6">
-      {/* Event Name and Date Row */}
+      {/* Event Name and Metadata Row */}
       <div className="flex flex-col gap-4">
-        <div className="flex flex-row justify-between items-center gap-2">
-          <p className="text-xl font-medium text-[#000000]">{formData.eventName || "Event Name"}</p>
-          <p className="text-sm font-medium text-[#999999]">{formatDate(formData.date)}</p>
-        </div>
-
-        {/* Match Details Row */}
-        <div className="flex flex-row gap-4 items-center">
-          {/* Match Type - only show if selected */}
-          {formData.matchType && (
-            <div className="flex items-center gap-1">
-              {formData.matchType === "Tournament" ? (
-                <Image
-                  src="/icons/tournament-icon.svg"
-                  alt="Tournament"
-                  width={16}
-                  height={16}
-                />
-              ) : (
-                <GraduationCap className="h-4 w-4 text-[#999999]" />
-              )}
-              <p className="text-xs font-medium text-[#999999]">{formData.matchType}</p>
-            </div>
-          )}
-
-          {/* Court Type - only show if selected */}
-          {formData.courtType && (
-            <div className="flex items-center gap-1">
-              <Image
-                src="/icons/tennis-court-icon.svg"
-                alt="Court"
-                width={16}
-                height={16}
-              />
-              <p className="text-xs font-medium text-[#999999]">{formData.courtType}</p>
-            </div>
-          )}
-        </div>
+        <p className="text-xl font-medium text-[#000000]">
+          {formData.eventName || `${formData.playerName} vs ${formData.opponentName}`}
+        </p>
+        <MatchMetadataRow
+          date={formatDate(formData.date)}
+          matchType={formData.matchType}
+          courtType={formData.courtType}
+        />
       </div>
 
       {/* Match Score Section */}
       <div className="pl-2 pr-4 py-3 flex flex-row gap-6">
         {/* Vertical Separator */}
-        <div className="w-0.5 bg-[#DDDDDD] self-stretch rounded-full"></div>
+        <div className="w-0.5 bg-[#6AABFF] self-stretch rounded-full"></div>
         <div className="flex flex-col space-y-4 flex-1">
           {/* Match Header */}
           <div className="flex flex-row justify-between items-center font-normal text-xs text-[#999999]">
             <p>{getMatchStatus(formData.result)} | {formData.round || "Round of 16"}</p>
-            <p>{formatDuration(formData.duration)}</p>
+            <span className="rounded-[10px] px-1.5 py-0.5 text-xs font-medium bg-[#6AABFF] text-white">
+              {formatDuration(formData.duration)}
+            </span>
           </div>
 
           {/* Player Names + Scores */}
@@ -143,8 +116,10 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
             {/* Player 1 */}
             <div className="flex flex-row justify-between items-center">
               <div className="flex flex-row items-center gap-4">
-                <div className="h-10 w-10 rounded-sm bg-[#F7F7F7] flex items-center justify-center text-sm font-medium text-[#999999]">
-                  {getInitials(playerName)}
+                <div className="w-10 h-10 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
+                  <span className="text-xs font-medium text-[#BFBFBF]">
+                    {getInitials(playerName)}
+                  </span>
                 </div>
                 <p className={`font-semibold text-sm ${winner === "player" ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}`}>
                   {playerName}
@@ -169,8 +144,10 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
             {/* Player 2 (Opponent) */}
             <div className="flex flex-row justify-between items-center">
               <div className="flex flex-row items-center gap-4">
-                <div className="h-10 w-10 rounded-sm bg-[#F7F7F7] flex items-center justify-center text-sm font-medium text-[#999999]">
-                  {getInitials(opponentName)}
+                <div className="w-10 h-10 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
+                  <span className="text-xs font-medium text-[#BFBFBF]">
+                    {getInitials(opponentName)}
+                  </span>
                 </div>
                 <p className={`font-semibold text-sm ${winner === "opponent" ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}`}>
                   {opponentName}
