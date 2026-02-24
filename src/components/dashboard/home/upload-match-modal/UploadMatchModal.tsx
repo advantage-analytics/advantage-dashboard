@@ -130,7 +130,7 @@ export function UploadMatchModal({
 
           {/* Content - scrollbar on left, minimal style */}
           <div className="w-full flex-1 overflow-y-auto py-6 upload-modal-scroll -ml-3 pl-3">
-            <div className="min-h-0">
+            <div className="min-h-0 h-full">
             {step === "method" && (
               <MethodContent
                 selectedMethod={selectedMethod}
