@@ -192,6 +192,12 @@ export function UploadMatchModal({
             {step === "confirm" ? (
               <>
                 <Button
+                  onClick={handleClose}
+                  className="w-[65px] h-[31px] rounded-full text-xs bg-white border border-[#EAECF0] text-[#0D0D0D] hover:bg-[#F7F7F7]"
+                >
+                  Cancel
+                </Button>
+                <Button
                   onClick={handleBack}
                   className="w-[55px] h-[31px] rounded-full text-xs bg-[#3B82F6] text-white hover:bg-[#2563EB]"
                 >
@@ -208,15 +214,15 @@ export function UploadMatchModal({
                 >
                   {isCreating ? "Creating..." : "Create Match"}
                 </Button>
-                <Button
-                  onClick={handleClose}
-                  className="w-[55px] h-[31px] rounded-full text-xs bg-white border border-[#EAECF0] text-[#0D0D0D] hover:bg-[#F7F7F7]"
-                >
-                  Exit
-                </Button>
               </>
             ) : (
               <>
+                <Button
+                  onClick={handleClose}
+                  className="w-[65px] h-[31px] rounded-full text-xs bg-white border border-[#EAECF0] text-[#0D0D0D] hover:bg-[#F7F7F7]"
+                >
+                  Cancel
+                </Button>
                 <Button
                   onClick={getContinueHandler()}
                   disabled={isContinueDisabled()}
@@ -227,12 +233,6 @@ export function UploadMatchModal({
                   }`}
                 >
                   {continueLabel}
-                </Button>
-                <Button
-                  onClick={handleClose}
-                  className="w-[55px] h-[31px] rounded-full text-xs bg-white border border-[#EAECF0] text-[#0D0D0D] hover:bg-[#F7F7F7]"
-                >
-                  Exit
                 </Button>
               </>
             )}
