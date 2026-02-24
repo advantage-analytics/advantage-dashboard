@@ -14,27 +14,28 @@ export function MethodContent({ selectedMethod, onMethodSelect }: MethodContentP
   return (
     <div className="h-full flex items-center justify-center gap-6">
       <div
-        className={`w-[240px] h-[252px] cursor-pointer transition-all duration-200 rounded-2xl relative overflow-hidden group hover:scale-[1.02] ${
+        className={`w-[240px] h-[252px] cursor-pointer transition-all duration-200 rounded-2xl relative overflow-visible group hover:scale-[1.02] ${
           selectedMethod === "elc" ? "ring-2 ring-[#3B82F6] ring-offset-2" : ""
         }`}
-        style={{ clipPath: "inset(0 round 16px)" }}
         onClick={() => onMethodSelect(selectedMethod === "elc" ? null : "elc")}
       >
-        <img
-          src="/marketing/elc-image.png"
-          alt="Electronic Line Calling"
-          className="absolute inset-0 w-full h-full object-cover scale-100 origin-top rounded-2xl"
-        />
-        {/* Hover overlay */}
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-white/5 transition-all duration-200 z-[5]" />
-        <div className="absolute bottom-0 left-0 right-0 h-32 z-10 rounded-b-2xl overflow-hidden" style={{ clipPath: "inset(0 0 0 0 round 0 0 16px 16px)" }}>
-          <div className="absolute inset-0 backdrop-blur-[24px]" style={{ maskImage: 'linear-gradient(to top, black, transparent)', WebkitMaskImage: 'linear-gradient(to top, black, transparent)' }} />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/[0.60] to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 px-4 pb-4 space-y-1.5">
-            <p className="italic font-medium text-xs text-white">Electronic Line Calling</p>
-            <p className="text-[10px] text-normal text-white/80">
-              Choose from a variety of providers such as SwingVision, BaselineVision, and many more.
-            </p>
+        <div className="absolute inset-0 overflow-hidden rounded-2xl" style={{ clipPath: "inset(0 round 16px)" }}>
+          <img
+            src="/marketing/elc-image.png"
+            alt="Electronic Line Calling"
+            className="absolute inset-0 w-full h-full object-cover scale-100 origin-top"
+          />
+          {/* Hover overlay */}
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-white/5 transition-all duration-200 z-[5]" />
+          <div className="absolute bottom-0 left-0 right-0 h-32 z-10 rounded-b-2xl overflow-hidden" style={{ clipPath: "inset(0 0 0 0 round 0 0 16px 16px)" }}>
+            <div className="absolute inset-0 backdrop-blur-[24px]" style={{ maskImage: 'linear-gradient(to top, black, transparent)', WebkitMaskImage: 'linear-gradient(to top, black, transparent)' }} />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/[0.60] to-transparent" />
+            <div className="absolute bottom-0 left-0 right-0 px-4 pb-4 space-y-1.5">
+              <p className="italic font-medium text-xs text-white">Electronic Line Calling</p>
+              <p className="text-[10px] text-normal text-white/80">
+                Choose from a variety of providers such as SwingVision, BaselineVision, and many more.
+              </p>
+            </div>
           </div>
         </div>
       </div>
