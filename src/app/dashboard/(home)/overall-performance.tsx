@@ -26,7 +26,7 @@ export default function OverallPerformance({
   };
 
   return (
-    <div className="bg-white border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-6 rounded-2xl flex flex-col gap-6 min-h-[580px]">
+    <div className="bg-white border border-[rgba(0,0,0,0.06)] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-6 rounded-2xl flex flex-col gap-6 min-h-[580px]">
       {/* Heading */}
       <div className="flex flex-row justify-between items-center">
         <div className="space-y-2">
@@ -37,8 +37,12 @@ export default function OverallPerformance({
             Your Recent Performance
           </p>
         </div>
-        <button className="h-6 w-6 rounded-full bg-[#0D0D0D] flex items-center justify-center hover:bg-[#2D2D2D] transition-colors">
-          <ChevronRight className="h-3 w-3 text-white" />
+        <button
+          type="button"
+          aria-label="View overall performance details"
+          className="h-6 w-6 rounded-full bg-[#0D0D0D] flex items-center justify-center hover:bg-[#2D2D2D] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#0D0D0D]"
+        >
+          <ChevronRight className="h-3 w-3 text-white" aria-hidden />
         </button>
       </div>
 
@@ -70,8 +74,9 @@ export default function OverallPerformance({
               {views.map((_, index) => (
                 <button
                   key={index}
+                  type="button"
                   onClick={() => setCurrentViewIndex(index)}
-                  className={`rounded-full transition-all ${
+                  className={`rounded-full transition-[width,background-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#3986F3] ${
                     index === currentViewIndex
                       ? "w-3 h-1 bg-[#3986F3]"
                       : "w-1 h-1 bg-[#D9D9D9]"

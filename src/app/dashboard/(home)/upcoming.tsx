@@ -4,7 +4,7 @@ import { ChevronRight } from "lucide-react";
 
 export default function Upcoming() {
   return (
-    <div className="bg-white border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-6 rounded-2xl h-fit">
+    <div className="bg-white border border-[rgba(0,0,0,0.06)] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-6 rounded-2xl h-fit">
       {/* Heading */}
       <div className="flex flex-row justify-between items-center mb-6">
         <div className="flex flex-col">
@@ -14,8 +14,12 @@ export default function Upcoming() {
           </p>
         </div>
         {/* Navigation Button */}
-        <button className="h-6 w-6 rounded-full bg-[#1D1D1F] flex items-center justify-center hover:bg-[#2D2D2D] transition-colors">
-          <ChevronRight className="h-3 w-3 text-white" />
+        <button
+          type="button"
+          aria-label="View upcoming matches"
+          className="h-6 w-6 rounded-full bg-[#1D1D1F] flex items-center justify-center hover:bg-[#2D2D2D] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#1D1D1F]"
+        >
+          <ChevronRight className="h-3 w-3 text-white" aria-hidden />
         </button>
       </div>
 
