@@ -21,7 +21,7 @@ export function FeaturedMatchCard({
     >
       <Link
         href={`/dashboard/matches/${match.id}`}
-        className="group block bg-white border border-[#E7E7E7] rounded-2xl shadow-[0_4px_16px_rgba(0,0,0,0.1)] overflow-hidden transition-transform hover:scale-[1.01]"
+        className="group block bg-white border border-[rgba(0,0,0,0.06)] rounded-2xl shadow-[0_4px_16px_rgba(0,0,0,0.1)] overflow-hidden transition-transform hover:scale-[1.01]"
       >
         <div className="p-6">
           <div className="flex flex-col gap-6">
