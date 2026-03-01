@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type { Match } from "@/lib/data/types";
 import type { MatchStatisticsResult } from "@/lib/data/match-stats-server";
@@ -122,7 +122,7 @@ function ViewMoreButton({
     <button
       type="button"
       onClick={onToggle}
-      className="block text-center text-xs font-medium text-[#999999] hover:text-[#666666] transition-colors"
+      className="block text-center text-xs font-medium text-[#999999] hover:text-[#666666] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#999999] rounded-sm"
     >
       {showMore ? "View less" : "View more"}
     </button>
@@ -233,7 +233,7 @@ export function MatchOverallSidebar({
   const underPressureRating = playerStats?.underPressureRating ?? 0;
 
   return (
-    <div className="w-[320px] flex flex-col gap-6 px-6 py-4 bg-white rounded-2xl border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
+    <div className="w-[320px] flex flex-col gap-6 px-6 py-4 bg-white rounded-2xl border border-[rgba(0,0,0,0.06)] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
       <PlayerTabs
         match={match}
         selectedPlayer={selectedPlayer}
@@ -265,7 +265,7 @@ export function MatchOverallSidebar({
 
       {showMore && (
         <div className="flex flex-col gap-5">
-          <SectionHeader>Rally win Percentage</SectionHeader>
+          <SectionHeader>Rally Win Percentage</SectionHeader>
           <div className="flex flex-col gap-4">
             <PercentageBarRow
               label="1-4 shots"
@@ -315,11 +315,13 @@ export function MatchVisualsSidebar({
     "player1"
   );
   const [showMore, setShowMore] = useState(false);
+  const [prevBreakdownView, setPrevBreakdownView] = useState(breakdownView);
 
-  // Reset "view more" when switching between serve/return
-  useEffect(() => {
+  // Derive state during render instead of useEffect
+  if (prevBreakdownView !== breakdownView) {
+    setPrevBreakdownView(breakdownView);
     setShowMore(false);
-  }, [breakdownView]);
+  }
 
   const playerStats = statsResult?.statistics
     ? selectedPlayer === "player1"
@@ -356,7 +358,7 @@ export function MatchVisualsSidebar({
       : "Total Return Points Won";
 
   return (
-    <div className="w-[320px] flex flex-col gap-6 px-6 py-4 bg-white rounded-2xl border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
+    <div className="w-[320px] flex flex-col gap-6 px-6 py-4 bg-white rounded-2xl border border-[rgba(0,0,0,0.06)] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
       <PlayerTabs
         match={match}
         selectedPlayer={selectedPlayer}
@@ -373,7 +375,7 @@ export function MatchVisualsSidebar({
 
       <div className="flex flex-col items-stretch gap-5">
         <SectionHeader>
-          {breakdownView === "serve" ? "Serve Break down" : "Return Break down"}
+          {breakdownView === "serve" ? "Serve Breakdown" : "Return Breakdown"}
         </SectionHeader>
 
         <div className="flex flex-col gap-4 self-stretch">
@@ -407,7 +409,7 @@ export function MatchVisualsSidebar({
 
       {breakdownView === "return" && showMore && (
         <div className="flex flex-col items-stretch gap-5">
-          <SectionHeader>Return placement Distribution</SectionHeader>
+          <SectionHeader>Return Placement Distribution</SectionHeader>
 
           <div className="flex flex-col gap-5 self-stretch">
             <PercentageBarRow label="Cross Court" valuePct={playerStats?.returnCrossCourtPct ?? 0} fillPct={playerStats?.returnCrossCourtPct ?? 0} barColor={barColor} />
@@ -431,7 +433,7 @@ export function MatchVisualsSidebar({
 
       {breakdownView === "serve" && showMore && (
         <div className="flex flex-col items-stretch gap-5">
-          <SectionHeader>Serve placement Distribution</SectionHeader>
+          <SectionHeader>Serve Placement Distribution</SectionHeader>
 
           <div className="flex flex-col gap-5 self-stretch">
             <PercentageBarRow label="Wide" valuePct={playerStats?.serveWidePct ?? 0} fillPct={playerStats?.serveWidePct ?? 0} barColor={barColor} />

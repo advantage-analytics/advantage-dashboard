@@ -1,128 +1,90 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { getInitials } from "@/lib/data/match-utils";
+import { shortName } from "@/lib/data/match-utils";
 import type { MatchDetailedStats, PlayerStatistics } from "@/lib/data/types";
 
-/* ── Animation variants (hoisted) ─────────────────────────── */
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.08,
-      delayChildren: 0.1,
-    },
-  },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 8 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: {
-      duration: 0.4,
-      ease: [0.25, 0.46, 0.45, 0.94] as const,
-    },
-  },
-};
+/* ── Animation constants ─────────────────────────────────── */
 
 const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
-const BOUNCE_EASE = [0.34, 1.56, 0.64, 1] as const;
 
-/* ── Private sub-components ───────────────────────────────── */
+/* ── Stat configuration ──────────────────────────────────── */
 
-function PlayerComparisonHeader({
-  player1Name,
-  player2Name,
-}: {
-  player1Name: string;
-  player2Name: string;
-}) {
-  const player1Initials = getInitials(player1Name);
-  const player2Initials = getInitials(player2Name);
-
-  return (
-    <motion.div
-      className="grid grid-cols-[1fr_auto_1fr] items-center gap-6 pb-4 border-b border-[#E8E8E8]"
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-    >
-      {/* Player 1 */}
-      <motion.div
-        className="flex items-center gap-3"
-        variants={itemVariants}
-      >
-        <div className="w-10 h-10 rounded-full bg-[#4A8AF4] flex items-center justify-center">
-          <span className="text-xs font-semibold text-white">
-            {player1Initials}
-          </span>
-        </div>
-        <div className="flex flex-col">
-          <span className="text-sm font-semibold text-[#0D0D0D]">
-            {player1Name}
-          </span>
-          <div className="flex items-center gap-1.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-[#4A8AF4]" />
-            <span className="text-[10px] font-medium text-[#999999] uppercase tracking-wider">
-              Player 1
-            </span>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Center Divider */}
-      <motion.div
-        className="flex items-center gap-3"
-        variants={itemVariants}
-      >
-        <div className="w-8 h-[1px] bg-[#D9D9D9]" />
-        <span className="text-[10px] font-semibold text-[#BBBBBB] tracking-wider">
-          VS
-        </span>
-        <div className="w-8 h-[1px] bg-[#D9D9D9]" />
-      </motion.div>
-
-      {/* Player 2 */}
-      <motion.div
-        className="flex items-center justify-end gap-3"
-        variants={itemVariants}
-      >
-        <div className="flex flex-col items-end">
-          <span className="text-sm font-semibold text-[#0D0D0D]">
-            {player2Name}
-          </span>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-medium text-[#999999] uppercase tracking-wider">
-              Player 2
-            </span>
-            <div className="w-1.5 h-1.5 rounded-full bg-[#F38439]" />
-          </div>
-        </div>
-        <div className="w-10 h-10 rounded-full bg-[#F38439] flex items-center justify-center">
-          <span className="text-xs font-semibold text-white">
-            {player2Initials}
-          </span>
-        </div>
-      </motion.div>
-    </motion.div>
-  );
+interface StatConfig {
+  key: keyof PlayerStatistics;
+  label: string;
+  isPercentage?: boolean;
 }
 
-function getTextColor(isLeading: boolean, isTied: boolean, leadingColor: string): string {
-  if (isLeading) return leadingColor;
-  if (isTied) return "text-[#666666]";
-  return "text-[#999999]";
-}
+const SERVE_STATS: StatConfig[] = [
+  { key: "aces", label: "Aces" },
+  { key: "doubleFaults", label: "Double Faults" },
+  { key: "firstServeInPct", label: "First Serve In %", isPercentage: true },
+  { key: "firstServeWinPct", label: "First Serve Won %", isPercentage: true },
+  { key: "secondServeWinPct", label: "Second Serve Won %", isPercentage: true },
+  { key: "servicePointsWon", label: "Service Points Won" },
+  { key: "serviceGamesWon", label: "Service Games Won" },
+];
+
+const RETURN_STATS: StatConfig[] = [
+  { key: "breakpointsWon", label: "Break Points Won" },
+  { key: "breakpointsWonPct", label: "Break Points Won %", isPercentage: true },
+  { key: "firstReturnWonPct", label: "First Return Won %", isPercentage: true },
+  { key: "secondReturnWonPct", label: "Second Return Won %", isPercentage: true },
+  { key: "returnPointsWon", label: "Return Points Won" },
+  { key: "returnGamesWon", label: "Return Games Won" },
+];
+
+const OTHER_STATS: StatConfig[] = [
+  { key: "shortRallyWonPct", label: "Short Rally Win %", isPercentage: true },
+  { key: "mediumRallyWonPct", label: "Medium Rally Win %", isPercentage: true },
+  { key: "longRallyWonPct", label: "Long Rally Win %", isPercentage: true },
+  { key: "tiebreaksWon", label: "Tiebreaks Won" },
+];
+
+const TAB_STATS = {
+  serve: SERVE_STATS,
+  return: RETURN_STATS,
+  other: OTHER_STATS,
+} as const;
+
+type Tab = keyof typeof TAB_STATS;
+
+/* ── Helpers ──────────────────────────────────────────────── */
 
 function formatValue(value: number, isPercentage: boolean): string {
   return isPercentage ? `${value}%` : value.toString();
 }
 
-function StatComparisonBar({
+/* ── StatBadge ────────────────────────────────────────────── */
+
+function StatBadge({
+  value,
+  isPercentage = false,
+  color,
+}: {
+  value: number;
+  isPercentage?: boolean;
+  color: "blue" | "orange";
+}) {
+  const styles =
+    color === "blue"
+      ? "bg-[#EBF2FD] text-[#4A8AF4]"
+      : "bg-[#FEF2E8] text-[#F38439]";
+
+  return (
+    <span
+      className={`inline-block min-w-[48px] text-center rounded-full px-3 py-1 text-sm font-medium tabular-nums ${styles}`}
+    >
+      {formatValue(value, isPercentage)}
+    </span>
+  );
+}
+
+/* ── Stat row ─────────────────────────────────────────────── */
+
+function StatRow({
   label,
   player1Value,
   player2Value,
@@ -134,110 +96,56 @@ function StatComparisonBar({
   player2Value: number;
   index: number;
   isPercentage?: boolean;
-}): React.JSX.Element {
-  const maxValue = Math.max(player1Value, player2Value);
-  const player1Percentage = maxValue > 0 ? (player1Value / maxValue) * 100 : 0;
-  const player2Percentage = maxValue > 0 ? (player2Value / maxValue) * 100 : 0;
-
-  const player1IsLeading = player1Value > player2Value;
-  const player2IsLeading = player2Value > player1Value;
-  const isTied = player1Value === player2Value;
-
-  const baseDelay = 0.15 + index * 0.04;
-  const barDelay = 0.25 + index * 0.04;
-  const dotDelay = 0.6 + index * 0.04;
-
+}) {
   return (
     <motion.div
-      className="grid grid-cols-[auto_1fr_auto_1fr_auto] items-center gap-2 sm:gap-4 rounded-xl"
-      initial={{ opacity: 0, x: -10 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.4, delay: baseDelay, ease: EASE_CURVE }}
+      className="grid grid-cols-[1fr_130px_130px] sm:grid-cols-[1fr_150px_150px] items-center border-b border-[#F0F0F0] py-3"
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: 0.06 + index * 0.04, ease: EASE_CURVE }}
     >
-      <div className="flex items-center justify-end gap-1 w-10 sm:w-[70px]">
-        {player1IsLeading && (
-          <motion.div
-            className="w-1.5 h-1.5 rounded-full bg-[#4A8AF4] hidden sm:block"
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ duration: 0.3, delay: dotDelay }}
-          />
-        )}
-        <span
-          className={`text-xs sm:text-sm font-semibold tabular-nums transition-colors duration-200 text-right ${getTextColor(player1IsLeading, isTied, "text-[#4A8AF4]")}`}
-        >
-          {formatValue(player1Value, isPercentage)}
-        </span>
+      <span className="text-xs font-medium uppercase tracking-[0.12em] text-[#999999]">
+        {label}
+      </span>
+
+      <div className="flex justify-center">
+        <StatBadge value={player1Value} isPercentage={isPercentage} color="blue" />
       </div>
 
-      <div className="flex justify-end min-w-0">
-        <div className="relative w-full h-1.5 bg-[#D9D9D9] rounded-full overflow-hidden">
-          <motion.div
-            className="absolute right-0 h-full bg-[#4A8AF4] rounded-full"
-            initial={{ width: 0 }}
-            animate={{ width: `${player1Percentage}%` }}
-            transition={{ duration: 0.7, delay: barDelay, ease: BOUNCE_EASE }}
-          />
-        </div>
-      </div>
-
-      <div className="flex items-center justify-center w-16 sm:w-[120px]">
-        <span className="text-[10px] sm:text-xs font-medium text-[#999999] text-center leading-tight">
-          {label}
-        </span>
-      </div>
-
-      <div className="flex justify-start min-w-0">
-        <div className="relative w-full h-1.5 bg-[#D9D9D9] rounded-full overflow-hidden">
-          <motion.div
-            className="absolute left-0 h-full bg-[#F38439] rounded-full"
-            initial={{ width: 0 }}
-            animate={{ width: `${player2Percentage}%` }}
-            transition={{ duration: 0.7, delay: barDelay, ease: BOUNCE_EASE }}
-          />
-        </div>
-      </div>
-
-      <div className="flex items-center justify-start gap-1 w-10 sm:w-[70px]">
-        <span
-          className={`text-xs sm:text-sm font-semibold tabular-nums transition-colors duration-200 text-left ${getTextColor(player2IsLeading, isTied, "text-[#F38439]")}`}
-        >
-          {formatValue(player2Value, isPercentage)}
-        </span>
-        {player2IsLeading && (
-          <motion.div
-            className="w-1.5 h-1.5 rounded-full bg-[#F38439] hidden sm:block"
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ duration: 0.3, delay: dotDelay }}
-          />
-        )}
+      <div className="flex justify-center">
+        <StatBadge value={player2Value} isPercentage={isPercentage} color="orange" />
       </div>
     </motion.div>
   );
 }
 
-/* ── Main component ───────────────────────────────────────── */
+/* ── Tab button ───────────────────────────────────────────── */
 
-interface StatConfig {
-  key: keyof PlayerStatistics;
+function TabButton({
+  label,
+  active,
+  onClick,
+}: {
   label: string;
-  isPercentage?: boolean;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full px-4 py-1.5 text-sm font-medium cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#0D0D0D] ${
+        active
+          ? "bg-[#0D0D0D] text-white"
+          : "border border-[#E8E8E8] text-[#666666] bg-white hover:border-[#999999]"
+      }`}
+    >
+      {label}
+    </button>
+  );
 }
 
-const statsConfig: StatConfig[] = [
-  { key: "aces", label: "Aces" },
-  { key: "doubleFaults", label: "Double Faults" },
-  { key: "firstServeInPct", label: "First Serve In %", isPercentage: true },
-  { key: "firstServeWinPct", label: "First Serve Win %", isPercentage: true },
-  { key: "secondServeWinPct", label: "Second Serve Win %", isPercentage: true },
-  { key: "breakpointsWon", label: "Breakpoints Won" },
-  { key: "tiebreaksWon", label: "Tiebreaks Won" },
-  { key: "servicePointsWon", label: "Service Points Won" },
-  { key: "serviceGamesWon", label: "Service Games Won" },
-  { key: "returnPointsWon", label: "Return Points Won" },
-  { key: "returnGamesWon", label: "Return Games Won" },
-];
+/* ── Main component ───────────────────────────────────────── */
 
 interface MatchStatisticsProps {
   statistics: MatchDetailedStats | null;
@@ -250,36 +158,78 @@ export function MatchStatistics({
   player1Name,
   player2Name,
 }: MatchStatisticsProps) {
+  const [activeTab, setActiveTab] = useState<Tab>("serve");
+
   if (!statistics) {
     return (
-      <div className="bg-white p-6 rounded-2xl">
-        <h2 className="text-lg font-medium text-[#000000] mb-6">Statistics</h2>
-        <p className="text-sm font-normal text-[#999999] text-center">
+      <div className="bg-white p-6 rounded-2xl border border-[rgba(0,0,0,0.06)] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
+        <h2 className="text-lg font-semibold text-[#0D0D0D] mb-6">
+          Match Statistics
+        </h2>
+        <p className="text-sm text-[#999999] text-center">
           Statistics not available for this match.
         </p>
       </div>
     );
   }
 
+  const p1Short = shortName(player1Name, 12);
+  const p2Short = shortName(player2Name, 12);
+  const activeStats = TAB_STATS[activeTab];
+
   return (
     <motion.div
-      className="bg-white p-6 rounded-2xl"
+      className="bg-white p-6 rounded-2xl border border-[rgba(0,0,0,0.06)] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{
-        duration: 0.5,
-        delay: 0.3,
-        ease: EASE_CURVE,
-      }}
+      transition={{ duration: 0.5, delay: 0.3, ease: EASE_CURVE }}
     >
-      <PlayerComparisonHeader
-        player1Name={player1Name}
-        player2Name={player2Name}
-      />
+      {/* Card header */}
+      <div className="mb-5">
+        <h2 className="text-lg font-semibold text-[#0D0D0D]">
+          Match Statistics
+        </h2>
+        <p className="text-sm text-[#999999] mt-1">
+          Compare {player1Name} and {player2Name} Match Statistics
+        </p>
+      </div>
 
-      <div className="mt-6 space-y-6">
-        {statsConfig.map((stat, index) => (
-          <StatComparisonBar
+      {/* Tab pills */}
+      <div className="flex gap-2 mb-5">
+        <TabButton
+          label="Serve"
+          active={activeTab === "serve"}
+          onClick={() => setActiveTab("serve")}
+        />
+        <TabButton
+          label="Return"
+          active={activeTab === "return"}
+          onClick={() => setActiveTab("return")}
+        />
+        <TabButton
+          label="Other"
+          active={activeTab === "other"}
+          onClick={() => setActiveTab("other")}
+        />
+      </div>
+
+      {/* Table header */}
+      <div className="grid grid-cols-[1fr_130px_130px] sm:grid-cols-[1fr_150px_150px] border-b border-[#E8E8E8] pb-2 mb-1">
+        <span className="text-xs font-semibold text-[#999999] uppercase tracking-[0.12em]">
+          Statistic
+        </span>
+        <span className="text-xs font-semibold text-[#4A8AF4] text-center whitespace-nowrap truncate">
+          {p1Short}
+        </span>
+        <span className="text-xs font-semibold text-[#F38439] text-center whitespace-nowrap truncate">
+          {p2Short}
+        </span>
+      </div>
+
+      {/* Stat rows — re-mount on tab change to replay entrance animation */}
+      <motion.div key={activeTab}>
+        {activeStats.map((stat, index) => (
+          <StatRow
             key={stat.key}
             label={stat.label}
             player1Value={statistics.player1Stats[stat.key]}
@@ -288,7 +238,7 @@ export function MatchStatistics({
             isPercentage={stat.isPercentage}
           />
         ))}
-      </div>
+      </motion.div>
     </motion.div>
   );
 }

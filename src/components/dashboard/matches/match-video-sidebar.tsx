@@ -64,7 +64,7 @@ function EventTabs({
       <button
         type="button"
         onClick={() => onTabChange("events")}
-        className={`h-[36px] flex-1 py-2 px-4 text-sm font-medium border-b-2 transition-colors ${
+        className={`h-[31px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
           activeTab === "events"
             ? "text-[#3986F3] border-[#3986F3]"
             : "text-[#999999] border-transparent hover:text-[#666666]"
@@ -75,7 +75,7 @@ function EventTabs({
       <button
         type="button"
         onClick={() => onTabChange("saved")}
-        className={`h-[36px] flex-1 py-2 px-4 text-sm font-medium border-b-2 transition-colors ${
+        className={`h-[31px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
           activeTab === "saved"
             ? "text-[#3986F3] border-[#3986F3]"
             : "text-[#999999] border-transparent hover:text-[#666666]"
@@ -115,13 +115,15 @@ function SavedIcon({
     <button
       type="button"
       onClick={onClick}
-      className="shrink-0 p-1 -m-1 hover:opacity-70 transition-opacity"
+      aria-label={filled ? "Remove from saved" : "Save event"}
+      className="shrink-0 p-1 -m-1 hover:opacity-70 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6AABFF] focus-visible:ring-offset-1 rounded-sm"
     >
       <Bookmark
         size={12}
         stroke="#6AABFF"
         strokeWidth={1.5}
         fill={filled ? "#6AABFF" : "white"}
+        aria-hidden
       />
     </button>
   );
@@ -170,16 +172,24 @@ function EventRow({
 
   return (
     <div
+      role={isDisabled ? undefined : "button"}
+      tabIndex={isDisabled ? undefined : 0}
       className={cn(
         "flex flex-col gap-1 rounded-sm transition-colors",
         isDisabled
           ? "opacity-40 cursor-default"
-          : "cursor-pointer hover:bg-[#FAFAFA]",
+          : "cursor-pointer hover:bg-[#FAFAFA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3986F3] focus-visible:ring-offset-1",
       )}
       onMouseEnter={() => { if (!isDisabled) setIsHovered(true); }}
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => {
         if (!isDisabled) onSelect();
+      }}
+      onKeyDown={(e) => {
+        if (!isDisabled && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onSelect();
+        }
       }}
     >
       <motion.div
