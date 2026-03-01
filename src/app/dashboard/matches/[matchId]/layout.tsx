@@ -114,7 +114,7 @@ export default async function MatchLayout({
   const { data: row, error } = await supabase
     .from("matches")
     .select(
-      "id, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration"
+      "id, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration",
     )
     .eq("id", matchId)
     .single();
@@ -131,15 +131,17 @@ export default async function MatchLayout({
 
   return (
     <div className="flex-1 w-full bg-white">
-      <div className="relative z-10 pt-[104px] px-8">
-        <div className="flex flex-row pb-6 gap-8 max-w-[1200px] mx-auto">
+      <div className="relative z-10 pt-[104px] pb-6 px-8">
+        <div className="max-w-[1200px] mx-auto">
+          <MatchBreadcrumbs
+            tournamentName={match.tournamentName}
+            player1Name={match.player1.name}
+            player2Name={match.player2.name}
+          />
+        </div>
+        <div className="flex flex-row mt-6 pb-6 gap-8 max-w-[1200px] mx-auto">
           <div className="flex-1 min-w-0 flex flex-col gap-10">
             <div className="flex flex-col gap-6">
-              <MatchBreadcrumbs
-                tournamentName={match.tournamentName}
-                player1Name={match.player1.name}
-                player2Name={match.player2.name}
-              />
               <MatchEventHeader
                 tournamentName={match.tournamentName}
                 date={match.date}
@@ -147,8 +149,8 @@ export default async function MatchLayout({
                 courtType={match.courtType}
                 verificationStatus={match.verificationStatus}
               />
+              <MatchNavigationTabs matchId={matchId} />
             </div>
-            <MatchNavigationTabs matchId={matchId} />
             <MatchDataProvider statsResult={statsResult} points={points}>
               <div className="flex flex-col gap-10 min-w-0">{children}</div>
             </MatchDataProvider>
@@ -156,7 +158,12 @@ export default async function MatchLayout({
 
           <div className="sticky top-8 w-[320px] flex-shrink-0 self-start h-fit flex flex-col gap-6">
             <MatchScoreCard match={match} />
-            <MatchTabSidebar match={match} matchId={matchId} statsResult={statsResult} points={points} />
+            <MatchTabSidebar
+              match={match}
+              matchId={matchId}
+              statsResult={statsResult}
+              points={points}
+            />
           </div>
         </div>
       </div>

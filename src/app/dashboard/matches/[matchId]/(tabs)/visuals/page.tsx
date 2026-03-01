@@ -4,7 +4,6 @@ import { useCallback } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 
-import { MatchInsights } from "@/components/dashboard/matches/match-insights";
 import { FiltersPanel } from "@/components/dashboard/matches/visuals/filters-panel";
 import { VisualizationType } from "@/components/dashboard/matches/visuals/types/filters.types";
 import { useVisualFilters } from "@/hooks/use-visual-filters";
@@ -49,8 +48,6 @@ export default function VisualsPage(): React.JSX.Element {
 
   return (
     <div className="space-y-6 mb-64">
-      <MatchInsights />
-
       <div className="bg-white rounded-2xl p-6">
         <div className="flex items-center gap-2 mb-4">
           <h3 className="text-xl font-medium text-[#0D0D0D]">Visualization</h3>
