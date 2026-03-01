@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 import { motion } from "framer-motion";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { shortName } from "@/lib/data/match-utils";
@@ -53,6 +53,10 @@ function MomentumChart({
   p1Short: string;
   p2Short: string;
 }) {
+  const uid = useId();
+  const clipAbove = `momentum-above-${uid}`;
+  const clipBelow = `momentum-below-${uid}`;
+
   if (data.length < 2) return null;
 
   const maxAbs = Math.max(...data.map((d) => Math.abs(d.diff)), 1);
@@ -85,12 +89,13 @@ function MomentumChart({
         className="w-full"
         style={{ height: 120 }}
         preserveAspectRatio="none"
+        aria-label="Point momentum chart"
       >
         <defs>
-          <clipPath id="momentum-above">
+          <clipPath id={clipAbove}>
             <rect x={0} y={0} width={CHART_W} height={yMid} />
           </clipPath>
-          <clipPath id="momentum-below">
+          <clipPath id={clipBelow}>
             <rect x={0} y={yMid} width={CHART_W} height={CHART_H} />
           </clipPath>
         </defs>
@@ -113,10 +118,10 @@ function MomentumChart({
         <line x1={0} y1={yMid} x2={CHART_W} y2={yMid} stroke="#EBEBEB" strokeWidth={1} />
 
         {/* P1 leading fill (blue, above baseline) */}
-        <path d={areaPath} fill={P1_COLOR} fillOpacity={0.12} clipPath="url(#momentum-above)" />
+        <path d={areaPath} fill={P1_COLOR} fillOpacity={0.12} clipPath={`url(#${clipAbove})`} />
 
         {/* P2 leading fill (orange, below baseline) */}
-        <path d={areaPath} fill={P2_COLOR} fillOpacity={0.12} clipPath="url(#momentum-below)" />
+        <path d={areaPath} fill={P2_COLOR} fillOpacity={0.12} clipPath={`url(#${clipBelow})`} />
 
         {/* Momentum line */}
         <polyline
@@ -484,7 +489,7 @@ export function PerformanceTracker({
 
   if (points.length === 0) {
     return (
-      <div className="bg-white p-6 rounded-2xl">
+      <div className="bg-white p-6 rounded-2xl border border-[rgba(0,0,0,0.06)] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
         <h2 className="text-lg font-semibold text-[#0D0D0D] mb-6">Performance Tracker</h2>
         <p className="text-sm text-[#999999] text-center">
           Point data not available for this match.
@@ -495,7 +500,7 @@ export function PerformanceTracker({
 
   return (
     <motion.div
-      className="bg-white p-6 rounded-2xl"
+      className="bg-white p-6 rounded-2xl border border-[rgba(0,0,0,0.06)] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: 0.4, ease: EASE_CURVE }}
