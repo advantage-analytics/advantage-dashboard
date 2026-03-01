@@ -4,7 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const tabs = [
-  { label: "Overall", slug: "overall" },
+  { label: "Analysis", slug: "analysis" },
+  { label: "Statistics", slug: "overall" },
   { label: "Visuals", slug: "visuals" },
   { label: "Video", slug: "video" },
 ] as const;
@@ -26,7 +27,8 @@ export function MatchNavigationTabs({ matchId }: MatchNavigationTabsProps) {
           <Link
             key={tab.slug}
             href={href}
-            className={`py-2 px-4 text-xs font-medium transition-colors flex items-center justify-center ${
+            aria-current={isActive ? "page" : undefined}
+            className={`py-2 px-4 text-xs font-medium transition-colors flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3986F3] focus-visible:ring-offset-1 ${
               isActive
                 ? "text-[#3986F3] border-b-2 border-[#3986F3]"
                 : "text-[#999999] border-b-2 border-transparent hover:text-[#666666]"
