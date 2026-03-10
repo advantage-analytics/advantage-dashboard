@@ -72,7 +72,7 @@ export function LoginForm({
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+        redirectTo: `${window.location.origin}/callback?next=/dashboard`,
       },
     });
     if (error) {
@@ -109,7 +109,7 @@ export function LoginForm({
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label htmlFor="password">Password</Label>
-            <Link href="/auth/forgot-password" className="text-xs underline underline-offset-2">
+            <Link href="/forgot-password" className="text-xs underline underline-offset-2">
               Forgot your password?
             </Link>
           </div>
@@ -133,7 +133,7 @@ export function LoginForm({
 
         <p className="text-center text-sm text-muted-foreground">
           Don&apos;t have an account?{" "}
-          <Link href="/auth/sign-up" className="underline underline-offset-2">
+          <Link href="/sign-up" className="underline underline-offset-2">
             Sign up
           </Link>
         </p>

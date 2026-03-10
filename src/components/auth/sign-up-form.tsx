@@ -52,13 +52,13 @@ export function SignUpForm({
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/confirm?next=/dashboard`,
+          emailRedirectTo: `${window.location.origin}/confirm?next=/dashboard`,
         },
       });
       if (signUpError) throw signUpError;
 
       // User creation will happen after email confirmation (when RLS allows it)
-      router.push("/auth/sign-up-success");
+      router.push("/sign-up-success");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
