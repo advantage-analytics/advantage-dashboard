@@ -3,8 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronUp, Upload, Video } from "lucide-react";
+import { ChevronDown, Upload, Video } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import * as tus from "tus-js-client";
+import { FilterPills } from "./visuals/filter-pills";
+import { useMatchData } from "./match-data-provider";
 
 type MatchFileRow = {
   id: string;
@@ -57,7 +60,7 @@ type VideoFilters = {
   returnTypes: Array<"Forehand" | "Backhand">;
   returnSpins: Array<"Topspin" | "Slice">;
   returnZones: Array<"Down the Line" | "Middle" | "Crosscourt">;
-  returnContacts: Array<"Inside" | "Middle" | "Neutral">;
+  returnContacts: Array<"Inside" | "Neutral" | "Deep">;
 
   // Result
   resultPlayers: Array<"player1" | "player2">;
@@ -101,30 +104,30 @@ const DEFAULT_FILTERS: VideoFilters = {
   rallyShots: [],
 };
 
-function Chip({
-  label,
-  selected,
-  onClick,
-}: {
-  label: string;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={[
-        "h-6 px-3 rounded-full text-[10px] font-medium border transition-colors",
-        selected
-          ? "bg-[#0D0D0D] border-[#0D0D0D] text-white"
-          : "bg-white border-[#D9D9D9] text-[#666666] hover:border-[#999999]",
-      ].join(" ")}
-    >
-      {label}
-    </button>
-  );
-}
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.05, delayChildren: 0.1 },
+  },
+};
+
+const EASE_CURVE: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 8 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.3, ease: EASE_CURVE },
+  },
+};
+
+const sectionBodyVariants = {
+  hidden: { opacity: 0, height: 0 },
+  visible: { opacity: 1, height: "auto", transition: { duration: 0.25, ease: EASE_CURVE } },
+  exit: { opacity: 0, height: 0, transition: { duration: 0.2, ease: EASE_CURVE } },
+};
 
 function SectionHeader({
   title,
@@ -141,12 +144,13 @@ function SectionHeader({
       onClick={onToggle}
       className="w-full flex items-center justify-between py-3 text-left"
     >
-      <span className="text-xs font-medium text-[#0D0D0D]">{title}</span>
-      {open ? (
-        <ChevronUp className="h-4 w-4 text-[#999999]" />
-      ) : (
+      <span className="text-base font-medium text-[#0D0D0D]">{title}</span>
+      <motion.div
+        animate={{ rotate: open ? 180 : 0 }}
+        transition={{ duration: 0.2 }}
+      >
         <ChevronDown className="h-4 w-4 text-[#999999]" />
-      )}
+      </motion.div>
     </button>
   );
 }
@@ -171,6 +175,17 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
     result: false,
     custom: false,
   });
+
+  const { statsResult } = useMatchData();
+  const player1Name = statsResult?.player1Name ?? "Player 1";
+  const player2Name = statsResult?.player2Name ?? "Player 2";
+
+  const hasActiveFilters = Object.values(filters).some((arr) => arr.length > 0);
+
+  const playerOptions = [
+    { value: "player1", label: player1Name },
+    { value: "player2", label: player2Name },
+  ];
 
   // Broadcast filters to the video sidebar
   useEffect(() => {
@@ -360,10 +375,6 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
 
   const showUpload = !loading && !videoUrl;
 
-  const toggleInList = useCallback(<T,>(list: T[], value: T): T[] => {
-    return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
-  }, []);
-
   return (
     <div className="bg-white rounded-2xl p-6 min-h-[400px]">
       <input
@@ -451,523 +462,367 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
       )}
 
       {/* Filters (below video player) */}
-      <div className="mt-8">
-        <div className="flex items-center justify-between">
-          <h4 className="text-sm font-medium text-[#0D0D0D]">Filters</h4>
-          <Button
-            type="button"
-            size="sm"
+      <motion.div
+        className="mt-8"
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+      >
+        <motion.div className="flex items-center justify-between mb-5" variants={itemVariants}>
+          <h3 className="text-xl font-medium text-[#0D0D0D]">Filters</h3>
+          <motion.button
             onClick={() => setFilters(DEFAULT_FILTERS)}
-            className="h-7 rounded-full text-[10px] bg-white border border-[#D9D9D9] text-[#666666] hover:bg-[#FAFAFA]"
+            disabled={!hasActiveFilters}
+            className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              hasActiveFilters
+                ? "ring-1 ring-inset ring-[#E5E5E5] text-[#525252] hover:bg-[#FEF2F2] hover:ring-[#FECACA] hover:text-[#EF4444]"
+                : "text-[#CCCCCC] cursor-not-allowed"
+            }`}
+            whileTap={hasActiveFilters ? { scale: 0.95 } : undefined}
           >
-            Clear All
-          </Button>
-        </div>
+            Clear all
+          </motion.button>
+        </motion.div>
 
-        <div className="mt-3 border-t border-[#E7E7E7]">
+        <div className="border-t border-[#E7E7E7]">
           {/* Score */}
-          <SectionHeader
-            title="Score"
-            open={openSections.score}
-            onToggle={() =>
-              setOpenSections((p) => ({ ...p, score: !p.score }))
-            }
-          />
-          {openSections.score && (
-            <div className="pb-4">
-              <div className="text-[10px] text-[#999999] mb-2">Sets</div>
-              <div className="flex flex-wrap gap-2">
-                <Chip
-                  label="Set 1"
-                  selected={filters.sets.includes(1)}
-                  onClick={() =>
-                    setFilters((p) => ({ ...p, sets: toggleInList(p.sets, 1) }))
-                  }
-                />
-                <Chip
-                  label="Set 2"
-                  selected={filters.sets.includes(2)}
-                  onClick={() =>
-                    setFilters((p) => ({ ...p, sets: toggleInList(p.sets, 2) }))
-                  }
-                />
-              </div>
-
-              <div className="mt-4 text-[10px] text-[#999999] mb-2">Type</div>
-              <div className="flex flex-wrap gap-2">
-                {(["Pressure", "Breakpoint", "Set Point", "Match Point"] as const).map((t) => (
-                  <Chip
-                    key={t}
-                    label={t}
-                    selected={filters.scoreTypes.includes(t)}
-                    onClick={() =>
-                      setFilters((p) => ({
-                        ...p,
-                        scoreTypes: toggleInList(p.scoreTypes, t),
-                      }))
-                    }
-                  />
-                ))}
-              </div>
-
-              <div className="mt-4 text-[10px] text-[#999999] mb-2">Points</div>
-              <div className="grid grid-cols-5 gap-2">
-                {[
-                  "0-0",
-                  "15-0",
-                  "30-0",
-                  "40-0",
-                  "0-15",
-                  "15-15",
-                  "30-15",
-                  "40-15",
-                  "0-30",
-                  "15-30",
-                  "30-30",
-                  "40-30",
-                  "0-40",
-                  "15-40",
-                  "30-40",
-                  "40-40",
-                  "Ad-40",
-                  "40-Ad",
-                ].map((s) => (
-                  <Chip
-                    key={s}
-                    label={s}
-                    selected={filters.pointScores.includes(s)}
-                    onClick={() =>
-                      setFilters((p) => ({
-                        ...p,
-                        pointScores: toggleInList(p.pointScores, s),
-                      }))
-                    }
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+          <motion.div variants={itemVariants}>
+            <SectionHeader
+              title="Score"
+              open={openSections.score}
+              onToggle={() =>
+                setOpenSections((p) => ({ ...p, score: !p.score }))
+              }
+            />
+            <AnimatePresence initial={false}>
+              {openSections.score && (
+                <motion.div
+                  key="score-body"
+                  variants={sectionBodyVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  className="overflow-hidden"
+                >
+                  <div className="pb-4 flex gap-6">
+                    <FilterPills
+                      label="Sets"
+                      className="shrink-0"
+                      options={[
+                        { value: "1", label: "Set 1" },
+                        { value: "2", label: "Set 2" },
+                      ]}
+                      selected={filters.sets.map(String)}
+                      onChange={(sel) => setFilters((prev) => ({ ...prev, sets: sel.map(Number) }))}
+                    />
+                    <FilterPills
+                      label="Type"
+                      className="shrink-0"
+                      options={[
+                        { value: "Pressure", label: "Pressure" },
+                        { value: "Breakpoint", label: "Breakpoint" },
+                        { value: "Set Point", label: "Set Point" },
+                        { value: "Match Point", label: "Match Point" },
+                      ]}
+                      selected={filters.scoreTypes}
+                      onChange={(sel) => setFilters((prev) => ({ ...prev, scoreTypes: sel as typeof prev.scoreTypes }))}
+                    />
+                    <FilterPills
+                      label="Points"
+                      options={[
+                        "0-0", "15-0", "30-0", "40-0",
+                        "0-15", "15-15", "30-15", "40-15",
+                        "0-30", "15-30", "30-30", "40-30",
+                        "0-40", "15-40", "30-40", "40-40",
+                        "Ad-40", "40-Ad",
+                      ].map((s) => ({ value: s, label: s }))}
+                      selected={filters.pointScores}
+                      onChange={(sel) => setFilters((prev) => ({ ...prev, pointScores: sel }))}
+                      pillClassName="w-[54px] text-center !px-0 truncate"
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
 
           <div className="border-t border-[#E7E7E7]" />
 
           {/* Serve */}
-          <SectionHeader
-            title="Serve"
-            open={openSections.serve}
-            onToggle={() => setOpenSections((p) => ({ ...p, serve: !p.serve }))}
-          />
-          {openSections.serve && (
-            <div className="pb-4">
-              <div className="flex flex-row gap-10 flex-wrap">
-                <div>
-                  <div className="text-[10px] text-[#999999] mb-2">Player</div>
-                  <div className="flex flex-wrap gap-2">
-                    <Chip
-                      label="Rudy Quan"
-                      selected={filters.servePlayers.includes("player1")}
-                      onClick={() =>
-                        setFilters((p) => ({
-                          ...p,
-                          servePlayers: toggleInList(p.servePlayers, "player1"),
-                        }))
-                      }
-                    />
-                    <Chip
-                      label="Federico Gomez"
-                      selected={filters.servePlayers.includes("player2")}
-                      onClick={() =>
-                        setFilters((p) => ({
-                          ...p,
-                          servePlayers: toggleInList(p.servePlayers, "player2"),
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-[10px] text-[#999999] mb-2">Side</div>
-                  <div className="flex flex-wrap gap-2">
-                    {(["Deuce", "Ad"] as const).map((s) => (
-                      <Chip
-                        key={s}
-                        label={s}
-                        selected={filters.serveSides.includes(s)}
-                        onClick={() =>
-                          setFilters((p) => ({
-                            ...p,
-                            serveSides: toggleInList(p.serveSides, s),
-                          }))
-                        }
+          <motion.div variants={itemVariants}>
+            <SectionHeader
+              title="Serve"
+              open={openSections.serve}
+              onToggle={() => setOpenSections((p) => ({ ...p, serve: !p.serve }))}
+            />
+            <AnimatePresence initial={false}>
+              {openSections.serve && (
+                <motion.div
+                  key="serve-body"
+                  variants={sectionBodyVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  className="overflow-hidden"
+                >
+                  <div className="pb-4">
+                    <div className="flex flex-row gap-10 flex-wrap">
+                      <FilterPills
+                        label="Player"
+                        options={playerOptions}
+                        selected={filters.servePlayers}
+                        onChange={(sel) => setFilters((prev) => ({ ...prev, servePlayers: sel as typeof prev.servePlayers }))}
                       />
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-[10px] text-[#999999] mb-2">Type</div>
-                  <div className="flex flex-wrap gap-2">
-                    {(["First Serve", "Second Serve"] as const).map((t) => (
-                      <Chip
-                        key={t}
-                        label={t}
-                        selected={filters.serveTypes.includes(t)}
-                        onClick={() =>
-                          setFilters((p) => ({
-                            ...p,
-                            serveTypes: toggleInList(p.serveTypes, t),
-                          }))
-                        }
+                      <FilterPills
+                        label="Side"
+                        options={[
+                          { value: "Deuce", label: "Deuce" },
+                          { value: "Ad", label: "Ad" },
+                        ]}
+                        selected={filters.serveSides}
+                        onChange={(sel) => setFilters((prev) => ({ ...prev, serveSides: sel as typeof prev.serveSides }))}
                       />
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-row gap-10 flex-wrap">
-                <div>
-                  <div className="text-[10px] text-[#999999] mb-2">Spin</div>
-                  <div className="flex flex-wrap gap-2">
-                    {(["Flat", "Slice", "Kick"] as const).map((s) => (
-                      <Chip
-                        key={s}
-                        label={s}
-                        selected={filters.serveSpins.includes(s)}
-                        onClick={() =>
-                          setFilters((p) => ({
-                            ...p,
-                            serveSpins: toggleInList(p.serveSpins, s),
-                          }))
-                        }
+                      <FilterPills
+                        label="Type"
+                        options={[
+                          { value: "First Serve", label: "First Serve" },
+                          { value: "Second Serve", label: "Second Serve" },
+                        ]}
+                        selected={filters.serveTypes}
+                        onChange={(sel) => setFilters((prev) => ({ ...prev, serveTypes: sel as typeof prev.serveTypes }))}
                       />
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-[10px] text-[#999999] mb-2">Zone</div>
-                  <div className="flex flex-wrap gap-2">
-                    {(["Wide", "Body", "T"] as const).map((z) => (
-                      <Chip
-                        key={z}
-                        label={z}
-                        selected={filters.serveZones.includes(z)}
-                        onClick={() =>
-                          setFilters((p) => ({
-                            ...p,
-                            serveZones: toggleInList(p.serveZones, z),
-                          }))
-                        }
+                    </div>
+                    <div className="mt-4 flex flex-row gap-10 flex-wrap">
+                      <FilterPills
+                        label="Spin"
+                        options={[
+                          { value: "Flat", label: "Flat" },
+                          { value: "Slice", label: "Slice" },
+                          { value: "Kick", label: "Kick" },
+                        ]}
+                        selected={filters.serveSpins}
+                        onChange={(sel) => setFilters((prev) => ({ ...prev, serveSpins: sel as typeof prev.serveSpins }))}
                       />
-                    ))}
+                      <FilterPills
+                        label="Zone"
+                        options={[
+                          { value: "Wide", label: "Wide" },
+                          { value: "Body", label: "Body" },
+                          { value: "T", label: "T" },
+                        ]}
+                        selected={filters.serveZones}
+                        onChange={(sel) => setFilters((prev) => ({ ...prev, serveZones: sel as typeof prev.serveZones }))}
+                      />
+                    </div>
                   </div>
-                </div>
-              </div>
-            </div>
-          )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
 
           <div className="border-t border-[#E7E7E7]" />
 
           {/* Return */}
-          <SectionHeader
-            title="Return"
-            open={openSections.return}
-            onToggle={() => setOpenSections((p) => ({ ...p, return: !p.return }))}
-          />
-          {openSections.return && (
-            <div className="pb-4">
-              <div className="flex flex-row gap-10 flex-wrap">
-                <div>
-                  <div className="text-[10px] text-[#999999] mb-2">Player</div>
-                  <div className="flex flex-wrap gap-2">
-                    <Chip
-                      label="Rudy Quan"
-                      selected={filters.returnPlayers.includes("player1")}
-                      onClick={() =>
-                        setFilters((p) => ({
-                          ...p,
-                          returnPlayers: toggleInList(p.returnPlayers, "player1"),
-                        }))
-                      }
-                    />
-                    <Chip
-                      label="Federico Gomez"
-                      selected={filters.returnPlayers.includes("player2")}
-                      onClick={() =>
-                        setFilters((p) => ({
-                          ...p,
-                          returnPlayers: toggleInList(p.returnPlayers, "player2"),
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-[10px] text-[#999999] mb-2">Side</div>
-                  <div className="flex flex-wrap gap-2">
-                    {(["Deuce", "Ad"] as const).map((s) => (
-                      <Chip
-                        key={s}
-                        label={s}
-                        selected={filters.returnSides.includes(s)}
-                        onClick={() =>
-                          setFilters((p) => ({
-                            ...p,
-                            returnSides: toggleInList(p.returnSides, s),
-                          }))
-                        }
+          <motion.div variants={itemVariants}>
+            <SectionHeader
+              title="Return"
+              open={openSections.return}
+              onToggle={() => setOpenSections((p) => ({ ...p, return: !p.return }))}
+            />
+            <AnimatePresence initial={false}>
+              {openSections.return && (
+                <motion.div
+                  key="return-body"
+                  variants={sectionBodyVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  className="overflow-hidden"
+                >
+                  <div className="pb-4">
+                    <div className="flex flex-row gap-10 flex-wrap">
+                      <FilterPills
+                        label="Player"
+                        options={playerOptions}
+                        selected={filters.returnPlayers}
+                        onChange={(sel) => setFilters((prev) => ({ ...prev, returnPlayers: sel as typeof prev.returnPlayers }))}
                       />
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-[10px] text-[#999999] mb-2">Type</div>
-                  <div className="flex flex-wrap gap-2">
-                    {(["Forehand", "Backhand"] as const).map((t) => (
-                      <Chip
-                        key={t}
-                        label={t}
-                        selected={filters.returnTypes.includes(t)}
-                        onClick={() =>
-                          setFilters((p) => ({
-                            ...p,
-                            returnTypes: toggleInList(p.returnTypes, t),
-                          }))
-                        }
+                      <FilterPills
+                        label="Side"
+                        options={[
+                          { value: "Deuce", label: "Deuce" },
+                          { value: "Ad", label: "Ad" },
+                        ]}
+                        selected={filters.returnSides}
+                        onChange={(sel) => setFilters((prev) => ({ ...prev, returnSides: sel as typeof prev.returnSides }))}
                       />
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-row gap-10 flex-wrap">
-                <div>
-                  <div className="text-[10px] text-[#999999] mb-2">Spin</div>
-                  <div className="flex flex-wrap gap-2">
-                    {(["Topspin", "Slice"] as const).map((s) => (
-                      <Chip
-                        key={s}
-                        label={s}
-                        selected={filters.returnSpins.includes(s)}
-                        onClick={() =>
-                          setFilters((p) => ({
-                            ...p,
-                            returnSpins: toggleInList(p.returnSpins, s),
-                          }))
-                        }
+                      <FilterPills
+                        label="Type"
+                        options={[
+                          { value: "Forehand", label: "Forehand" },
+                          { value: "Backhand", label: "Backhand" },
+                        ]}
+                        selected={filters.returnTypes}
+                        onChange={(sel) => setFilters((prev) => ({ ...prev, returnTypes: sel as typeof prev.returnTypes }))}
                       />
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-[10px] text-[#999999] mb-2">Zone</div>
-                  <div className="flex flex-wrap gap-2">
-                    {(["Down the Line", "Middle", "Crosscourt"] as const).map((z) => (
-                      <Chip
-                        key={z}
-                        label={z}
-                        selected={filters.returnZones.includes(z)}
-                        onClick={() =>
-                          setFilters((p) => ({
-                            ...p,
-                            returnZones: toggleInList(p.returnZones, z),
-                          }))
-                        }
+                    </div>
+                    <div className="mt-4 flex flex-row gap-10 flex-wrap">
+                      <FilterPills
+                        label="Spin"
+                        options={[
+                          { value: "Topspin", label: "Topspin" },
+                          { value: "Slice", label: "Slice" },
+                        ]}
+                        selected={filters.returnSpins}
+                        onChange={(sel) => setFilters((prev) => ({ ...prev, returnSpins: sel as typeof prev.returnSpins }))}
                       />
-                    ))}
+                      <FilterPills
+                        label="Zone"
+                        options={[
+                          { value: "Down the Line", label: "Down the Line" },
+                          { value: "Middle", label: "Middle" },
+                          { value: "Crosscourt", label: "Crosscourt" },
+                        ]}
+                        selected={filters.returnZones}
+                        onChange={(sel) => setFilters((prev) => ({ ...prev, returnZones: sel as typeof prev.returnZones }))}
+                      />
+                    </div>
+                    <div className="mt-4">
+                      <FilterPills
+                        label="Contact"
+                        options={[
+                          { value: "Inside", label: "Inside" },
+                          { value: "Neutral", label: "Neutral" },
+                          { value: "Deep", label: "Deep" },
+                        ]}
+                        selected={filters.returnContacts}
+                        onChange={(sel) => setFilters((prev) => ({ ...prev, returnContacts: sel as typeof prev.returnContacts }))}
+                      />
+                    </div>
                   </div>
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <div className="text-[10px] text-[#999999] mb-2">Contact</div>
-                <div className="flex flex-wrap gap-2">
-                  {(["Inside", "Middle", "Neutral"] as const).map((c) => (
-                    <Chip
-                      key={c}
-                      label={c}
-                      selected={filters.returnContacts.includes(c)}
-                      onClick={() =>
-                        setFilters((p) => ({
-                          ...p,
-                          returnContacts: toggleInList(p.returnContacts, c),
-                        }))
-                      }
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
 
           <div className="border-t border-[#E7E7E7]" />
 
           {/* Result */}
-          <SectionHeader
-            title="Result"
-            open={openSections.result}
-            onToggle={() => setOpenSections((p) => ({ ...p, result: !p.result }))}
-          />
-          {openSections.result && (
-            <div className="pb-4">
-              <div>
-                <div className="text-[10px] text-[#999999] mb-2">Player</div>
-                <div className="flex flex-wrap gap-2">
-                  <Chip
-                    label="Rudy Quan"
-                    selected={filters.resultPlayers.includes("player1")}
-                    onClick={() =>
-                      setFilters((p) => ({
-                        ...p,
-                        resultPlayers: toggleInList(p.resultPlayers, "player1"),
-                      }))
-                    }
-                  />
-                  <Chip
-                    label="Federico Gomez"
-                    selected={filters.resultPlayers.includes("player2")}
-                    onClick={() =>
-                      setFilters((p) => ({
-                        ...p,
-                        resultPlayers: toggleInList(p.resultPlayers, "player2"),
-                      }))
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <div className="text-[10px] text-[#999999] mb-2">Zone</div>
-                <div className="flex flex-wrap gap-2">
-                  {(["Serve", "Return", "Forehand", "Backhand", "Volley", "Overhead"] as const).map((z) => (
-                    <Chip
-                      key={z}
-                      label={z}
-                      selected={filters.resultZones.includes(z)}
-                      onClick={() =>
-                        setFilters((p) => ({
-                          ...p,
-                          resultZones: toggleInList(p.resultZones, z),
-                        }))
-                      }
+          <motion.div variants={itemVariants}>
+            <SectionHeader
+              title="Result"
+              open={openSections.result}
+              onToggle={() => setOpenSections((p) => ({ ...p, result: !p.result }))}
+            />
+            <AnimatePresence initial={false}>
+              {openSections.result && (
+                <motion.div
+                  key="result-body"
+                  variants={sectionBodyVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  className="overflow-hidden"
+                >
+                  <div className="pb-4 flex flex-col gap-4">
+                    <FilterPills
+                      label="Player"
+                      options={playerOptions}
+                      selected={filters.resultPlayers}
+                      onChange={(sel) => setFilters((prev) => ({ ...prev, resultPlayers: sel as typeof prev.resultPlayers }))}
                     />
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <div className="text-[10px] text-[#999999] mb-2">Outcome</div>
-                <div className="flex flex-wrap gap-2">
-                  {(["Won", "Lost", "Winner", "Error"] as const).map((o) => (
-                    <Chip
-                      key={o}
-                      label={o}
-                      selected={filters.resultOutcomes.includes(o)}
-                      onClick={() =>
-                        setFilters((p) => ({
-                          ...p,
-                          resultOutcomes: toggleInList(p.resultOutcomes, o),
-                        }))
-                      }
+                    <FilterPills
+                      label="Zone"
+                      options={[
+                        { value: "Serve", label: "Serve" },
+                        { value: "Return", label: "Return" },
+                        { value: "Forehand", label: "Forehand" },
+                        { value: "Backhand", label: "Backhand" },
+                        { value: "Volley", label: "Volley" },
+                        { value: "Overhead", label: "Overhead" },
+                      ]}
+                      selected={filters.resultZones}
+                      onChange={(sel) => setFilters((prev) => ({ ...prev, resultZones: sel as typeof prev.resultZones }))}
                     />
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
+                    <FilterPills
+                      label="Outcome"
+                      options={[
+                        { value: "Won", label: "Won" },
+                        { value: "Lost", label: "Lost" },
+                        { value: "Winner", label: "Winner" },
+                        { value: "Error", label: "Error" },
+                      ]}
+                      selected={filters.resultOutcomes}
+                      onChange={(sel) => setFilters((prev) => ({ ...prev, resultOutcomes: sel as typeof prev.resultOutcomes }))}
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
 
           <div className="border-t border-[#E7E7E7]" />
 
           {/* Custom */}
-          <SectionHeader
-            title="Custom"
-            open={openSections.custom}
-            onToggle={() => setOpenSections((p) => ({ ...p, custom: !p.custom }))}
-          />
-          {openSections.custom && (
-            <div className="pb-4">
-              <div className="text-[10px] text-[#999999] mb-2">Choose Player</div>
-              <div className="flex flex-wrap gap-2">
-                <Chip
-                  label="Rudy Quan"
-                  selected={filters.customPlayers.includes("player1")}
-                  onClick={() =>
-                    setFilters((p) => ({
-                      ...p,
-                      customPlayers: toggleInList(p.customPlayers, "player1"),
-                    }))
-                  }
-                />
-                <Chip
-                  label="Federico Gomez"
-                  selected={filters.customPlayers.includes("player2")}
-                  onClick={() =>
-                    setFilters((p) => ({
-                      ...p,
-                      customPlayers: toggleInList(p.customPlayers, "player2"),
-                    }))
-                  }
-                />
-              </div>
-
-              <div className="mt-4 text-[10px] text-[#999999] mb-2">Side</div>
-              <div className="flex flex-wrap gap-2">
-                {(["Deuce", "Ad"] as const).map((s) => (
-                  <Chip
-                    key={s}
-                    label={s}
-                    selected={filters.customSides.includes(s)}
-                    onClick={() =>
-                      setFilters((p) => ({
-                        ...p,
-                        customSides: toggleInList(p.customSides, s),
-                      }))
-                    }
-                  />
-                ))}
-              </div>
-
-              <div className="mt-4 text-[10px] text-[#999999] mb-2">Direction</div>
-              <div className="flex flex-wrap gap-2">
-                {(["Crosscourt", "Down the Line", "Inside Out", "Inside In"] as const).map((d) => (
-                  <Chip
-                    key={d}
-                    label={d}
-                    selected={filters.customDirections.includes(d)}
-                    onClick={() =>
-                      setFilters((p) => ({
-                        ...p,
-                        customDirections: toggleInList(p.customDirections, d),
-                      }))
-                    }
-                  />
-                ))}
-              </div>
-
-              <div className="mt-4 text-[10px] text-[#999999] mb-2">Rally Shot</div>
-              <div className="flex flex-wrap gap-2">
-                {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
-                  <Chip
-                    key={n}
-                    label={String(n)}
-                    selected={filters.rallyShots.includes(n)}
-                    onClick={() =>
-                      setFilters((p) => ({
-                        ...p,
-                        rallyShots: toggleInList(p.rallyShots, n),
-                      }))
-                    }
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+          <motion.div variants={itemVariants}>
+            <SectionHeader
+              title="Custom"
+              open={openSections.custom}
+              onToggle={() => setOpenSections((p) => ({ ...p, custom: !p.custom }))}
+            />
+            <AnimatePresence initial={false}>
+              {openSections.custom && (
+                <motion.div
+                  key="custom-body"
+                  variants={sectionBodyVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  className="overflow-hidden"
+                >
+                  <div className="pb-4 flex flex-col gap-4">
+                    <FilterPills
+                      label="Choose Player"
+                      options={playerOptions}
+                      selected={filters.customPlayers}
+                      onChange={(sel) => setFilters((prev) => ({ ...prev, customPlayers: sel as typeof prev.customPlayers }))}
+                    />
+                    <FilterPills
+                      label="Side"
+                      options={[
+                        { value: "Deuce", label: "Deuce" },
+                        { value: "Ad", label: "Ad" },
+                      ]}
+                      selected={filters.customSides}
+                      onChange={(sel) => setFilters((prev) => ({ ...prev, customSides: sel as typeof prev.customSides }))}
+                    />
+                    <FilterPills
+                      label="Direction"
+                      options={[
+                        { value: "Crosscourt", label: "Crosscourt" },
+                        { value: "Down the Line", label: "Down the Line" },
+                        { value: "Inside Out", label: "Inside Out" },
+                        { value: "Inside In", label: "Inside In" },
+                      ]}
+                      selected={filters.customDirections}
+                      onChange={(sel) => setFilters((prev) => ({ ...prev, customDirections: sel as typeof prev.customDirections }))}
+                    />
+                    <FilterPills
+                      label="Rally Shot"
+                      options={Array.from({ length: 12 }, (_, i) => ({
+                        value: String(i + 1),
+                        label: String(i + 1),
+                      }))}
+                      selected={filters.rallyShots.map(String)}
+                      onChange={(sel) => setFilters((prev) => ({ ...prev, rallyShots: sel.map(Number) }))}
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
-
