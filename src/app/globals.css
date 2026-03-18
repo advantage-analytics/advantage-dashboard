@@ -57,6 +57,22 @@
 }
 
 :root {
+  /* Auth design tokens */
+  --color-bg-dark: #FAFAFA;
+  --color-bg-panel: #FFFFFF;
+  --color-accent-blue: #3B82F6;
+  --color-accent-blue-hover: #2563EB;
+  --color-text-primary: #0A0A0C;
+  --color-text-secondary: #71717A;
+  --color-text-muted: #888888;
+  --color-text-dim: #AAAAAA;
+  --color-text-faint: #BBBBBB;
+  --color-border-subtle: rgba(0, 0, 0, 0.1);
+  --color-border-faint: rgba(0, 0, 0, 0.05);
+  --color-error: #FF453A;
+  --color-error-bg: rgba(255, 69, 58, 0.08);
+  --color-accent-blue-glow: rgba(59, 130, 246, 0.15);
+
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -194,4 +210,29 @@
 
 .upload-modal-scrolling::-webkit-scrollbar-thumb {
   background: rgba(0, 0, 0, 0.18);
+}
+
+/* Auth brand panel mesh gradient */
+.brand-mesh-gradient {
+  background:
+    radial-gradient(ellipse 80% 70% at 10% 15%, #60A5FA 0%, transparent 50%),
+    radial-gradient(ellipse 65% 80% at 85% 10%, #38BDF8 0%, transparent 45%),
+    radial-gradient(ellipse 70% 60% at 40% 50%, #7BA4F7 0%, transparent 50%),
+    radial-gradient(ellipse 60% 70% at 80% 70%, #818CF8 0%, transparent 45%),
+    radial-gradient(ellipse 55% 55% at 50% 35%, #93C5FD 0%, transparent 45%),
+    radial-gradient(ellipse 70% 60% at 15% 80%, #4F8EF7 0%, transparent 45%),
+    radial-gradient(ellipse 50% 50% at 70% 45%, #A78BFA 0%, transparent 40%),
+    linear-gradient(135deg, #5B8DEF, #7BA4F7, #818CF8);
+}
+
+/* Auth page animations */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
 }

@@ -11,7 +11,7 @@ export default async function Home() {
 
   const { data, error } = await supabase.auth.getClaims();
   if (error || !data?.claims) {
-    redirect("/auth/login");
+    redirect("/login");
   }
 
   // Fetch user profile and performance data in parallel

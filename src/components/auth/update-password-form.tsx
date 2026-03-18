@@ -1,33 +1,44 @@
-// components/auth/update-password-form.tsx
 "use client";
 
-import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import Link from "next/link";
+import FormHeader from "./form-header";
+import FormField from "./form-field";
 
-export function UpdatePasswordForm({
-  className,
-  ...props
-}: React.ComponentPropsWithoutRef<"div">) {
+const PASSWORD_REGEX = /^(?=.*\d)(?=.*[!@#$%^&*]).{8,}$/;
+
+export function UpdatePasswordForm() {
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    const supabase = createClient();
-    setIsLoading(true);
     setError(null);
 
+    if (password !== confirm) {
+      setError("Passwords must match.");
+      return;
+    }
+    if (!PASSWORD_REGEX.test(password)) {
+      setError(
+        "Password must be at least 8 characters, include a number and a special character.",
+      );
+      return;
+    }
+
+    setIsLoading(true);
+    const supabase = createClient();
+
     try {
-      const { error } = await supabase.auth.updateUser({ password });
-      if (error) throw error;
-      // route to an authenticated page if in already
+      const { error: updateError } = await supabase.auth.updateUser({
+        password,
+      });
+      if (updateError) throw updateError;
       router.push("/dashboard");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "An error occurred");
@@ -37,41 +48,100 @@ export function UpdatePasswordForm({
   };
 
   return (
-    <div className={cn("flex h-full w-full flex-col", className)} {...props}>
-      {/* Heading  description */}
-      <div>
-        <h1 className="text-[24px] leading-[28px] font-semibold">Reset Password</h1>
-        <p className="mt-2 text-[14px] leading-[22px]">
-          Please enter your new password below.
-        </p>
+    <form
+      onSubmit={handleUpdatePassword}
+      className="flex w-[360px] flex-col gap-[24px]"
+      style={{ animation: "fadeUp 0.5s ease-out" }}
+    >
+      <FormHeader
+        title="Set New Password."
+        description="Choose a strong password to secure your account."
+        subtitle="Your password must be at least 8 characters, include a number and a special character."
+      />
+
+      {/* Fields */}
+      <div className="flex flex-col gap-[20px]">
+        <FormField
+          label="NEW PASSWORD"
+          id="new-password"
+          type="password"
+          placeholder="••••••••••••"
+          showPasswordToggle
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          autoComplete="new-password"
+        />
+        <FormField
+          label="CONFIRM PASSWORD"
+          id="confirm-password"
+          type="password"
+          placeholder="••••••••••••"
+          showPasswordToggle
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          required
+          autoComplete="new-password"
+        />
+
+        {/* Error message */}
+        {error ? (
+          <div
+            className="flex w-full items-center gap-[8px] rounded-[6px] bg-[var(--color-error-bg)] px-[12px] py-[10px]"
+            style={{ animation: "shake 0.4s ease-in-out" }}
+            role="alert"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--color-error)"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="shrink-0"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <span className="text-[12px] leading-[1.4] text-[var(--color-error)]">
+              {error}
+            </span>
+          </div>
+        ) : null}
       </div>
 
-      {/* Form */}
-      <form onSubmit={handleUpdatePassword} className="mt-6 space-y-4 -ml-[0px]">
-        <div className="space-y-2">
-          <Label htmlFor="password">New Password</Label>
-          <Input
-            id="password"
-            type="password"
-            placeholder="New password"
-            autoComplete="new-password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          <p className="text-xs text-muted-foreground">Enter your new password</p>
-        </div>
-
-        {error && <p className="text-sm text-red-500">{error}</p>}
-
-        <Button
+      {/* Actions */}
+      <div className="flex flex-col items-center gap-[18px]">
+        <button
           type="submit"
-          className="w-full bg-black text-white hover:bg-black/90"
           disabled={isLoading}
+          className="flex h-[44px] w-full items-center justify-center rounded-[6px] bg-[var(--color-accent-blue)] text-[13px] font-medium tracking-[1px] text-white transition-all duration-200 hover:bg-[var(--color-accent-blue-hover)] hover:shadow-[0_0_20px_var(--color-accent-blue-glow)] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-60"
         >
-          {isLoading ? "Saving..." : "Save new password"}
-        </Button>
-      </form>
-    </div>
+          {isLoading ? "Saving..." : "Save New Password"}
+        </button>
+
+        <Link href="/login" className="flex items-center gap-[6px]">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="var(--color-text-dim)"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
+          <span className="text-[12px] text-[var(--color-text-secondary)]">
+            Back to Sign In
+          </span>
+        </Link>
+      </div>
+    </form>
   );
 }
