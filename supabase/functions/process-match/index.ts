@@ -579,7 +579,7 @@ function buildPointInserts(
       is_break_point: String(row["Break Point"] ?? "").toLowerCase() === "true",
       is_set_point: isSetPoint,
       is_match_point: isMatchPoint,
-      video_time: toFloatOrNull(row["Video Time"]),
+      video_time: toVideoTimeOrNull(row["Video Time"]),
       duration: toFloatOrNull(row["Duration"]),
     };
   });
@@ -662,7 +662,7 @@ function buildShotInserts(
       landing_x: toFloatOrNull(row["Bounce (x)"]),
       landing_y: toFloatOrNull(row["Bounce (y)"]),
       result: safeString(row["Result"]),
-      video_time: toFloatOrNull(row["Video Time"]),
+      video_time: toVideoTimeOrNull(row["Video Time"]),
       zone: null, // computed below
     });
   }
@@ -722,6 +722,54 @@ function toInt(value: unknown): number {
 function toFloatOrNull(value: unknown): number | null {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * SwingVision exports "Video Time" inconsistently depending on export settings:
+ * - numeric seconds (e.g. 83.2)
+ * - time string (e.g. "1:23", "00:01:23", "01:23:45.6")
+ *
+ * Normalize to seconds (float) for storage in points.video_time / shots.video_time.
+ */
+function toVideoTimeOrNull(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+
+  // Fast path: already numeric
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  // Handle ExcelJS objects and other non-primitives via safeString
+  const raw = typeof value === "string" ? value : safeString(value);
+  if (!raw) return null;
+  const s = raw.trim();
+  if (!s) return null;
+
+  // Plain numeric string
+  if (/^\d+(\.\d+)?$/.test(s)) {
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  // Time string: mm:ss(.ms) or hh:mm:ss(.ms)
+  const parts = s.split(":");
+  if (parts.length === 2 || parts.length === 3) {
+    const nums = parts.map((p) => p.trim());
+
+    const last = nums[nums.length - 1];
+    const sec = Number(last);
+    if (!Number.isFinite(sec)) return null;
+
+    const min = Number(nums[nums.length - 2]);
+    if (!Number.isFinite(min)) return null;
+
+    const hrs = nums.length === 3 ? Number(nums[0]) : 0;
+    if (!Number.isFinite(hrs)) return null;
+
+    return hrs * 3600 + min * 60 + sec;
+  }
+
+  return null;
 }
 
 function safeString(value: unknown): string | null {

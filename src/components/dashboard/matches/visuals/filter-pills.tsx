@@ -13,6 +13,8 @@ interface FilterPillsProps {
   selected: string[];
   onChange: (selected: string[]) => void;
   multiSelect?: boolean;
+  pillClassName?: string;
+  className?: string;
 }
 
 export function FilterPills({
@@ -21,6 +23,8 @@ export function FilterPills({
   selected,
   onChange,
   multiSelect = true,
+  pillClassName,
+  className,
 }: FilterPillsProps): React.JSX.Element {
   function handleClick(value: string): void {
     const isCurrentlySelected = selected.includes(value);
@@ -36,8 +40,8 @@ export function FilterPills({
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <span className="text-xs font-medium text-[#999999]">{label}</span>
+    <div className={`flex flex-col gap-2 min-w-0 ${className ?? ""}`}>
+      <span className="text-xs font-medium text-[#999999] whitespace-nowrap">{label}</span>
       <div className="flex flex-wrap gap-2">
         {options.map((option) => {
           const isSelected = selected.includes(option.value);
@@ -45,7 +49,7 @@ export function FilterPills({
             <motion.button
               key={option.value}
               onClick={() => handleClick(option.value)}
-              className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+              className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all duration-200 whitespace-nowrap ${pillClassName ?? ""} ${
                 isSelected
                   ? "bg-[#60A5FA] text-white"
                   : "bg-white text-[#525252] ring-1 ring-inset ring-[#E5E5E5] hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6]"

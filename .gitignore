@@ -64,3 +64,6 @@ pnpm-lock.yaml
 
 # agents
 .agents
+
+# design references
+figma/

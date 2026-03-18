@@ -20,6 +20,16 @@ export interface MatchPoint {
   duration: number | null;
   videoTime: number | null;
   saved: boolean;
+  // Shot metadata used for Video filters
+  firstShotType?: string | null;
+  firstShotSpin?: string | null;
+  firstShotZone?: string | null;
+  secondShotType?: string | null;
+  secondShotSpin?: string | null;
+  secondShotZone?: string | null;
+  lastShotType?: string | null;
+  lastShotSpin?: string | null;
+  lastShotZone?: string | null;
 }
 
 interface DbPoint {
@@ -159,6 +169,7 @@ export async function getMatchPointsFromSupabase(
   return points.map((point): MatchPoint => {
     const pointShots = shotsByPointId.get(point.id) ?? [];
     const firstShot = pointShots[0];
+    const secondShot = pointShots.length > 1 ? pointShots[1] : undefined;
     const lastShot = pointShots.length > 0 ? pointShots[pointShots.length - 1] : undefined;
     const resultType = point.result_type ?? "";
 
@@ -182,6 +193,15 @@ export async function getMatchPointsFromSupabase(
       duration: point.duration,
       videoTime: point.video_time,
       saved: point.saved,
+      firstShotType: firstShot?.shot_type ?? null,
+      firstShotSpin: firstShot?.spin_type ?? null,
+      firstShotZone: firstShot?.zone ?? null,
+      secondShotType: secondShot?.shot_type ?? null,
+      secondShotSpin: secondShot?.spin_type ?? null,
+      secondShotZone: secondShot?.zone ?? null,
+      lastShotType: lastShot?.shot_type ?? null,
+      lastShotSpin: lastShot?.spin_type ?? null,
+      lastShotZone: lastShot?.zone ?? null,
     };
   });
 }

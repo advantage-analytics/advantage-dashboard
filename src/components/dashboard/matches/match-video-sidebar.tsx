@@ -15,6 +15,203 @@ import { Bookmark } from "lucide-react";
 const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as [number, number, number, number];
 const AUTO_ADVANCE_DELAY = 1; // seconds – pause at 100% before advancing
 const supabase = createClient();
+const SEEK_EVENT = "match:video-seek";
+const PREROLL_SECONDS = 4;
+const FILTER_EVENT = "match:video-filters";
+
+type VideoFilters = {
+  sets: number[];
+  scoreTypes: Array<"Pressure" | "Breakpoint" | "Set Point" | "Match Point">;
+  pointScores: string[];
+  servePlayers: Array<"player1" | "player2">;
+  serveSides: Array<"Deuce" | "Ad">;
+  serveTypes: Array<"First Serve" | "Second Serve">;
+  serveSpins: Array<"Flat" | "Slice" | "Kick">;
+  serveZones: Array<"Wide" | "Body" | "T">;
+  returnPlayers: Array<"player1" | "player2">;
+  returnSides: Array<"Deuce" | "Ad">;
+  returnTypes: Array<"Forehand" | "Backhand">;
+  returnSpins: Array<"Topspin" | "Slice">;
+  returnZones: Array<"Down the Line" | "Middle" | "Crosscourt">;
+  returnContacts: Array<"Inside" | "Middle" | "Neutral">;
+  resultPlayers: Array<"player1" | "player2">;
+  resultZones: Array<"Serve" | "Return" | "Forehand" | "Backhand" | "Volley" | "Overhead">;
+  resultOutcomes: Array<"Won" | "Lost" | "Winner" | "Error">;
+  customPlayers: Array<"player1" | "player2">;
+  customSides: Array<"Deuce" | "Ad">;
+  customDirections: Array<"Crosscourt" | "Down the Line" | "Inside Out" | "Inside In">;
+  rallyShots: number[];
+};
+
+const EMPTY_FILTERS: VideoFilters = {
+  sets: [],
+  scoreTypes: [],
+  pointScores: [],
+  servePlayers: [],
+  serveSides: [],
+  serveTypes: [],
+  serveSpins: [],
+  serveZones: [],
+  returnPlayers: [],
+  returnSides: [],
+  returnTypes: [],
+  returnSpins: [],
+  returnZones: [],
+  returnContacts: [],
+  resultPlayers: [],
+  resultZones: [],
+  resultOutcomes: [],
+  customPlayers: [],
+  customSides: [],
+  customDirections: [],
+  rallyShots: [],
+};
+
+function getSeekOffsetSeconds(videoTime: number): number {
+  return Math.min(PREROLL_SECONDS, Math.max(0, videoTime));
+}
+
+function pointSide(pointNumberInGame: number): "Deuce" | "Ad" {
+  // Tennis side alternates each point; first point is deuce.
+  return pointNumberInGame % 2 === 1 ? "Deuce" : "Ad";
+}
+
+function winnerOrError(resultType: string): "Winner" | "Error" | null {
+  const s = (resultType || "").toLowerCase();
+  if (!s) return null;
+  if (s.includes("winner") || s === "ace" || s.includes("service winner")) return "Winner";
+  if (s.includes("error") || s.includes("double fault")) return "Error";
+  return null;
+}
+
+function resultZoneFromPoint(point: MatchPoint): VideoFilters["resultZones"][number] | null {
+  const t = (point.lastShotType || "").toLowerCase();
+  if (t.includes("serve")) return "Serve";
+  if (t.includes("forehand")) return "Forehand";
+  if (t.includes("backhand")) return "Backhand";
+  if (t.includes("volley")) return "Volley";
+  if (t.includes("overhead")) return "Overhead";
+  if (t.includes("return")) return "Return";
+
+  // Fallback for serve-only points
+  const rt = (point.resultType || "").toLowerCase();
+  if (rt === "ace" || rt.includes("service winner") || rt.includes("double fault")) return "Serve";
+  return null;
+}
+
+function contactBucketFromZone(zone: string | null | undefined): "Inside" | "Middle" | "Neutral" | null {
+  if (!zone) return null;
+  if (zone === "Middle") return "Middle";
+  if (zone === "Down the Line") return "Inside";
+  if (zone === "Crosscourt") return "Neutral";
+  return null;
+}
+
+function applyFilters(points: MatchPoint[], filters: VideoFilters): MatchPoint[] {
+  const has = <T,>(arr: T[]) => arr.length > 0;
+
+  return points.filter((p) => {
+    // Score: Sets
+    if (has(filters.sets) && !filters.sets.includes(p.setNumber)) return false;
+
+    // Score: Type
+    if (has(filters.scoreTypes)) {
+      const pressure = p.isBreakPoint || p.isSetPoint || p.isMatchPoint;
+      if (filters.scoreTypes.includes("Pressure") && !pressure) return false;
+      if (filters.scoreTypes.includes("Breakpoint") && !p.isBreakPoint) return false;
+      if (filters.scoreTypes.includes("Set Point") && !p.isSetPoint) return false;
+      if (filters.scoreTypes.includes("Match Point") && !p.isMatchPoint) return false;
+    }
+
+    // Score: Points
+    if (has(filters.pointScores) && !filters.pointScores.includes(p.pointScore)) return false;
+
+    // Serve filters (based on first shot / server)
+    if (
+      has(filters.servePlayers) ||
+      has(filters.serveSides) ||
+      has(filters.serveTypes) ||
+      has(filters.serveSpins) ||
+      has(filters.serveZones)
+    ) {
+      const server: "player1" | "player2" = p.serverIsPlayer1 ? "player1" : "player2";
+      if (has(filters.servePlayers) && !filters.servePlayers.includes(server)) return false;
+      const side = pointSide(p.pointNumber);
+      if (has(filters.serveSides) && !filters.serveSides.includes(side)) return false;
+      const serveType = p.firstShotType as any;
+      if (has(filters.serveTypes) && !filters.serveTypes.includes(serveType)) return false;
+      const spin = p.firstShotSpin as any;
+      if (has(filters.serveSpins) && !filters.serveSpins.includes(spin)) return false;
+      const zone = p.firstShotZone as any;
+      if (has(filters.serveZones) && !filters.serveZones.includes(zone)) return false;
+    }
+
+    // Return filters (based on second shot / receiver)
+    if (
+      has(filters.returnPlayers) ||
+      has(filters.returnSides) ||
+      has(filters.returnTypes) ||
+      has(filters.returnSpins) ||
+      has(filters.returnZones) ||
+      has(filters.returnContacts)
+    ) {
+      const receiver: "player1" | "player2" = p.serverIsPlayer1 ? "player2" : "player1";
+      if (has(filters.returnPlayers) && !filters.returnPlayers.includes(receiver)) return false;
+      const side = pointSide(p.pointNumber);
+      if (has(filters.returnSides) && !filters.returnSides.includes(side)) return false;
+      const type = p.secondShotType as any;
+      if (has(filters.returnTypes) && !filters.returnTypes.includes(type)) return false;
+      const spin = p.secondShotSpin as any;
+      if (has(filters.returnSpins) && !filters.returnSpins.includes(spin)) return false;
+      const zone = p.secondShotZone as any;
+      if (has(filters.returnZones) && !filters.returnZones.includes(zone)) return false;
+      const contact = contactBucketFromZone(p.secondShotZone);
+      if (has(filters.returnContacts) && (!contact || !filters.returnContacts.includes(contact))) return false;
+    }
+
+    // Result filters (based on decisive shot)
+    if (has(filters.resultPlayers) && !filters.resultPlayers.includes(p.player)) return false;
+    const rz = resultZoneFromPoint(p);
+    if (has(filters.resultZones) && (!rz || !filters.resultZones.includes(rz))) return false;
+    if (has(filters.resultOutcomes)) {
+      // Won/Lost are relative to the selected result player; if both are selected, allow either.
+      const outcome = winnerOrError(p.resultType);
+      if (filters.resultOutcomes.includes("Winner") || filters.resultOutcomes.includes("Error")) {
+        if (!outcome || !filters.resultOutcomes.includes(outcome)) return false;
+      }
+      if (filters.resultOutcomes.includes("Won") || filters.resultOutcomes.includes("Lost")) {
+        const wonBy = p.wonByPlayer1 ? "player1" : "player2";
+        const lostBy = wonBy === "player1" ? "player2" : "player1";
+        const okWon =
+          filters.resultOutcomes.includes("Won") &&
+          (!has(filters.resultPlayers) || filters.resultPlayers.includes(wonBy));
+        const okLost =
+          filters.resultOutcomes.includes("Lost") &&
+          (!has(filters.resultPlayers) || filters.resultPlayers.includes(lostBy));
+        if (!okWon && !okLost) return false;
+      }
+    }
+
+    // Custom filters (best-effort on existing data)
+    if (has(filters.customPlayers) && !filters.customPlayers.includes(p.player)) return false;
+    if (has(filters.customSides)) {
+      const side = pointSide(p.pointNumber);
+      if (!filters.customSides.includes(side)) return false;
+    }
+    if (has(filters.customDirections)) {
+      const z = p.lastShotZone;
+      const map: Record<string, VideoFilters["customDirections"][number]> = {
+        "Crosscourt": "Crosscourt",
+        "Down the Line": "Down the Line",
+      };
+      const dir = z ? map[z] : undefined;
+      if (!dir || !filters.customDirections.includes(dir)) return false;
+    }
+    if (has(filters.rallyShots) && !filters.rallyShots.includes(p.rallyLength)) return false;
+
+    return true;
+  });
+}
 
 /* ── Types ─────────────────────────────────────────────────── */
 
@@ -156,12 +353,14 @@ function EventRow({
   point,
   match,
   isActive,
+  activeDurationOverride,
   onSelect,
   onToggleSaved,
 }: {
   point: MatchPoint;
   match: Match;
   isActive: boolean;
+  activeDurationOverride?: number | null;
   onSelect: () => void;
   onToggleSaved: () => void;
 }) {
@@ -241,7 +440,9 @@ function EventRow({
       </motion.div>
 
       <AnimatePresence>
-        {isActive && <AnimatedProgressBar duration={point.duration} />}
+        {isActive && (
+          <AnimatedProgressBar duration={activeDurationOverride ?? point.duration} />
+        )}
       </AnimatePresence>
     </div>
   );
@@ -265,6 +466,7 @@ export function MatchVideoSidebar({
   const [activeTab, setActiveTab] = useState<"events" | "saved">("events");
   const [activePointId, setActivePointId] = useState<string | null>(null);
   const [points, setPoints] = useState<MatchPoint[]>(initialPoints);
+  const [filters, setFilters] = useState<VideoFilters>(EMPTY_FILTERS);
 
   const handleToggleSaved = useCallback(async (pointId: string) => {
     let newSaved = true;
@@ -290,9 +492,36 @@ export function MatchVideoSidebar({
     }
   }, []);
 
+  const filtered = applyFilters(points, filters);
   const displayPoints =
-    activeTab === "saved" ? points.filter((p) => p.saved) : points;
+    activeTab === "saved" ? filtered.filter((p) => p.saved) : filtered;
   const gameGroups = groupPointsByGame(displayPoints);
+
+  // Receive filter updates from the video panel
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent<VideoFilters>;
+      const next = ce?.detail;
+      if (!next) return;
+      setFilters(next);
+    };
+    window.addEventListener(FILTER_EVENT, handler as EventListener);
+    return () => window.removeEventListener(FILTER_EVENT, handler as EventListener);
+  }, []);
+
+  // Seek video when active point changes (click or auto-advance)
+  useEffect(() => {
+    if (!activePointId) return;
+    const active = displayPoints.find((p) => p.id === activePointId);
+    if (!active?.videoTime && active?.videoTime !== 0) return;
+
+    const offset = getSeekOffsetSeconds(active.videoTime);
+    const targetTime = Math.max(0, active.videoTime - offset);
+
+    window.dispatchEvent(
+      new CustomEvent(SEEK_EVENT, { detail: { time: targetTime } }),
+    );
+  }, [activePointId, displayPoints]);
 
   // Auto-advance to next playable point when the active point's duration elapses
   useEffect(() => {
@@ -302,6 +531,9 @@ export function MatchVideoSidebar({
 
     const active = displayPoints[idx];
     const seconds = active.duration ?? 5;
+    const offset =
+      active.videoTime != null ? getSeekOffsetSeconds(active.videoTime) : 0;
+    const effectiveSeconds = seconds + offset;
 
     const timer = setTimeout(
       () => {
@@ -310,7 +542,7 @@ export function MatchVideoSidebar({
           .find((p) => p.videoTime != null);
         setActivePointId(next ? next.id : null);
       },
-      (seconds + AUTO_ADVANCE_DELAY) * 1000,
+      (effectiveSeconds + AUTO_ADVANCE_DELAY) * 1000,
     );
 
     return () => clearTimeout(timer);
@@ -348,6 +580,11 @@ export function MatchVideoSidebar({
                       point={point}
                       match={match}
                       isActive={activePointId === point.id}
+                      activeDurationOverride={
+                        activePointId === point.id && point.videoTime != null
+                          ? (point.duration ?? 5) + getSeekOffsetSeconds(point.videoTime)
+                          : undefined
+                      }
                       onSelect={() =>
                         setActivePointId((prev) =>
                           prev === point.id ? null : point.id,
