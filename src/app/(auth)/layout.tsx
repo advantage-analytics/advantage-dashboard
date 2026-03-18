@@ -3,50 +3,37 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { cn } from "@/lib/utils";
-import AuthNav from "@/app/(auth)/auth-nav";
+import BrandPanel from "@/components/auth/brand-panel";
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname() || "";
-
-  const sizeClass =
-    pathname.includes("/login")
-      ? "h-[500px] w-[440px]"
-      : pathname.includes("/sign-up")
-        ? "h-[567px] w-[440px]"
-        : "max-w-[440px] w-full";
+  const variant = pathname.includes("/request-access")
+    ? "request-access"
+    : "default";
 
   return (
-    <div className="relative min-h-dvh bg-white text-foreground">
-      <AuthNav />
+    <div className="flex h-dvh w-full bg-[var(--color-bg-dark)]">
+      {/* Brand panel — desktop only */}
+      <div className="hidden lg:flex lg:flex-1">
+        <BrandPanel variant={variant} />
+      </div>
 
-      <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 bg-border md:block h-[320px] w-px" />
-
-      <main className="min-h-dvh flex items-center justify-center px-6 md:px-10 pt-28 pb-10 md:pt-0 md:pb-0">
-        <div className="w-full max-w-6xl grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-center gap-8 md:gap-16">
-          {/* Left */}
-          <div className="relative hidden md:flex items-center justify-center md:justify-end md:pr-[14px]">
-            <Image
-              src="/logos/logo.svg"
-              alt="Advantage"
-              width={200}
-              height={56}
-              priority
-              className="h-14 w-auto"
-            />
-          </div>
-
-          {/* Spacer */}
-          <div className="hidden md:block h-[320px] w-px bg-transparent" />
-
-          {/* Right column */}
-          <section className="relative flex items-center md:pl-[14px]">
-            <div className={cn(sizeClass, "flex flex-col w-full")}>
-              {children}
-            </div>
-          </section>
+      {/* Form panel */}
+      <div className="relative flex h-full w-full flex-1 items-center justify-center overflow-y-auto bg-[var(--color-bg-panel)] px-6 py-10 lg:px-16 lg:py-16">
+        {/* Mobile logo */}
+        <div className="absolute left-6 top-8 lg:hidden">
+          <Image
+            src="/logos/logo.svg"
+            alt="Advantage"
+            width={100}
+            height={20}
+            priority
+            className="h-5 w-auto"
+          />
         </div>
-      </main>
+
+        {children}
+      </div>
     </div>
   );
 }

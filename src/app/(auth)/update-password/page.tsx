@@ -1,10 +1,7 @@
-// app/auth/update-password/page.tsx
+"use client";
+
 import { UpdatePasswordForm } from "@/components/auth/update-password-form";
 
 export default function Page() {
-  return (
-    <div className="md:-ml-[-2px]">
-      <UpdatePasswordForm />
-    </div>
-  );
+  return <UpdatePasswordForm />;
 }

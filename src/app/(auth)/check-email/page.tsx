@@ -14,7 +14,7 @@ export default function Page() {
         <AccentLine />
       </div>
 
-      {/* Check icon */}
+      {/* Email icon */}
       <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[rgba(0,0,0,0.03)]">
         <svg
           width="24"
@@ -34,14 +34,14 @@ export default function Page() {
       {/* Header */}
       <div className="flex w-full flex-col gap-[12px]">
         <h2 className="text-[28px] font-light leading-[1.1] tracking-[-0.5px] text-[var(--color-text-primary)]">
-          You&apos;ve Joined the Team.
+          Check Your Email.
         </h2>
         <p className="text-[12px] leading-[1.5] text-[var(--color-text-muted)]">
-          Check your email to confirm your account.
+          A recovery link has been sent to help you reset your password.
         </p>
         <p className="text-[13px] leading-[1.6] text-[var(--color-text-secondary)]">
-          We&apos;ve sent a confirmation link to your email address. Please
-          check your inbox and follow the instructions to activate your account.
+          We&apos;ve sent a password recovery link to your email address. Please
+          check your inbox and follow the instructions to reset your password.
         </p>
       </div>
 
@@ -75,11 +75,8 @@ export default function Page() {
         </Link>
 
         <p className="text-center text-[11px] leading-[1.6] text-[var(--color-text-dim)]">
-          Didn&apos;t receive the email? Check your spam folder or try{" "}
-          <Link href="/sign-up" className="text-[var(--color-accent-blue)]">
-            signing up
-          </Link>{" "}
-          again.
+          Didn&apos;t receive the email? Check your spam folder or request a new
+          link.
         </p>
       </div>
     </div>

@@ -1,122 +1,122 @@
-// components/auth/forgot-password-form.tsx
 "use client";
 
-import * as React from "react";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-
-/**
- * trash attempt at
- */
-const UI = {
-  offsetTop: 0,     
-  offsetLeft: 0,   
-  titleSize: 24,    
-  titleLine: 28,    
-  descSize: 14,     
-  descLine: 22,     
-  blockGap: 24,     
-};
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import Link from "next/link";
+import FormHeader from "./form-header";
+import FormField from "./form-field";
 
 export function ForgotPasswordForm() {
-  const [email, setEmail] = React.useState("");
-  const [isLoading, setIsLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [sent, setSent] = React.useState(false);
+  const [email, setEmail] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
-  async function onSubmit(e: React.FormEvent) {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setSent(false);
     setIsLoading(true);
 
     try {
       const supabase = createClient();
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/update-password`,
-      });
-      if (error) throw error;
-      setSent(true);
+      const { error: resetError } =
+        await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/update-password`,
+        });
+      if (resetError) throw resetError;
+      router.push("/check-email");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setIsLoading(false);
     }
-  }
+  };
 
   return (
-    <div
-      className="flex h-full w-full flex-col"
-      style={{ paddingTop: UI.offsetTop, paddingLeft: UI.offsetLeft }}
+    <form
+      onSubmit={handleSubmit}
+      className="flex w-[360px] flex-col gap-[24px]"
+      style={{ animation: "fadeUp 0.5s ease-out" }}
     >
-      {/* Heading description */}
-      <div>
-        <h1
-          className="font-semibold"
-          style={{ fontSize: UI.titleSize, lineHeight: `${UI.titleLine}px` }}
-        >
-          Reset Password
-        </h1>
-        <p
-          className="text-sm"
-          style={{
-            marginTop: 8,
-            fontSize: UI.descSize,
-            lineHeight: `${UI.descLine}px`,
-            maxWidth: 420,
-          }}
-        >
-          Type in your email and we&apos;ll send you a link to reset your
-          password
-        </p>
+      <FormHeader
+        title="Reset Password."
+        description="We'll help you regain access to your account securely."
+        subtitle="Enter the email address associated with your account and we'll send you a recovery link."
+      />
+
+      {/* Fields */}
+      <div className="flex flex-col gap-[20px]">
+        <FormField
+          label="EMAIL ADDRESS"
+          id="reset-email"
+          placeholder="name@university.edu"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          autoComplete="email"
+          hasError={!!error}
+        />
+
+        {/* Error message */}
+        {error ? (
+          <div
+            className="flex w-full items-center gap-[8px] rounded-[6px] bg-[var(--color-error-bg)] px-[12px] py-[10px]"
+            style={{ animation: "shake 0.4s ease-in-out" }}
+            role="alert"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--color-error)"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="shrink-0"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <span className="text-[12px] leading-[1.4] text-[var(--color-error)]">
+              {error}
+            </span>
+          </div>
+        ) : null}
       </div>
 
-      {/* Form */}
-      <form onSubmit={onSubmit} className="space-y-4" style={{ marginTop: UI.blockGap }}>
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            placeholder="m@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-            required
-          />
-          <p className="text-sm text-muted-foreground">Enter your email address</p>
-        </div>
-
-        {error && (
-          <p className="text-sm text-red-500" role="alert">
-            {error}
-          </p>
-        )}
-        {sent && (
-          <p className="text-sm text-foreground" role="status">
-            Check your email for a password reset link.
-          </p>
-        )}
-
-        <Button
+      {/* Actions */}
+      <div className="flex flex-col items-center gap-[18px]">
+        <button
           type="submit"
-          className="w-full bg-black text-white hover:bg-black/90"
           disabled={isLoading}
+          className="flex h-[44px] w-full items-center justify-center rounded-[6px] bg-[var(--color-accent-blue)] text-[13px] font-medium tracking-[1px] text-white transition-all duration-200 hover:bg-[var(--color-accent-blue-hover)] hover:shadow-[0_0_20px_var(--color-accent-blue-glow)] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-60"
         >
-          {isLoading ? "Sending..." : "Send reset email"}
-        </Button>
-      </form>
+          {isLoading ? "Sending..." : "Send Recovery Link"}
+        </button>
 
-      {/* Footer */}
-      <p className="mt-6 text-center text-sm text-muted-foreground">
-        Already have an account?{" "}
-        <Link href="/login" className="underline underline-offset-2">
-          Login
+        <Link href="/login" className="flex items-center gap-[6px]">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="var(--color-text-dim)"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
+          <span className="text-[12px] text-[var(--color-text-secondary)]">
+            Back to Sign In
+          </span>
         </Link>
-      </p>
-    </div>
+      </div>
+    </form>
   );
 }

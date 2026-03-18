@@ -1,26 +1,22 @@
 "use client";
 
-import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import Link from "next/link";
+import FormHeader from "./form-header";
+import FormField from "./form-field";
 
-export function LoginForm({
-  className,
-  ...props
-}: React.ComponentPropsWithoutRef<"div">) {
+export function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  // helper to check if user profile is complete
-  const checkProfileAndRedirect = async (supabase: ReturnType<typeof createClient>) => {
+  const checkProfileAndRedirect = async (
+    supabase: ReturnType<typeof createClient>,
+  ) => {
     const {
       data: { user },
       error: userError,
@@ -36,13 +32,13 @@ export function LoginForm({
     if (profileError) throw profileError;
 
     const isIncomplete =
-      !profile.phone || !profile.dob || !profile.state || !profile.country || !profile.role;
+      !profile.phone ||
+      !profile.dob ||
+      !profile.state ||
+      !profile.country ||
+      !profile.role;
 
-    if (isIncomplete) {
-      router.push("/dashboard/settings");
-    } else {
-      router.push("/dashboard");
-    }
+    router.push(isIncomplete ? "/dashboard/settings" : "/dashboard");
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -52,117 +48,181 @@ export function LoginForm({
     setError(null);
 
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { error: signInError } =
+        await supabase.auth.signInWithPassword({ email, password });
       if (signInError) throw signInError;
-
       await checkProfileAndRedirect(supabase);
-    } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Google OAuth
   const handleGoogleOAuth = async () => {
     const supabase = createClient();
-    const { data, error } = await supabase.auth.signInWithOAuth({
+    const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/callback?next=/dashboard`,
       },
     });
-    if (error) {
-      setError(error.message);
+    if (oauthError) {
+      setError(oauthError.message);
       return;
     }
-
     if (data?.url) {
-      // Let Supabase handle redirect, then check profile after returning
       window.location.href = data.url;
     }
   };
 
   return (
-    <div className={cn("flex h-full w-full flex-col", className)} {...props}>
-      {/* Top */}
-      <form onSubmit={handleLogin} className="space-y-5">
-        {/* Email */}
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            placeholder="m@example.com"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-          />
-          <p className="text-xs text-muted-foreground">Enter your email address</p>
-        </div>
+    <form
+      onSubmit={handleLogin}
+      className="flex w-[360px] flex-col gap-[24px]"
+      style={{ animation: "fadeUp 0.5s ease-out" }}
+    >
+      <FormHeader
+        title="Welcome Back."
+        description="Enter your credentials to access your athlete dashboard and performance insights."
+        subtitle="Access to Advantage is currently limited to invited players and coaches."
+      />
 
-        {/* Password forgot */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="password">Password</Label>
-            <Link href="/forgot-password" className="text-xs underline underline-offset-2">
-              Forgot your password?
-            </Link>
+      {/* Fields */}
+      <div className="flex flex-col gap-[20px]">
+        <FormField
+          label="EMAIL"
+          id="login-email"
+          placeholder="name@university.edu"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          autoComplete="email"
+          hasError={!!error}
+        />
+        <FormField
+          label="PASSWORD"
+          id="login-password"
+          type="password"
+          placeholder="••••••••••••"
+          rightLabel={{ text: "Forgot Password?", href: "/forgot-password" }}
+          showPasswordToggle
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          autoComplete="current-password"
+          hasError={!!error}
+        />
+
+        {/* Error message */}
+        {error ? (
+          <div
+            className="flex w-full items-center gap-[8px] rounded-[6px] bg-[var(--color-error-bg)] px-[12px] py-[10px]"
+            style={{ animation: "shake 0.4s ease-in-out" }}
+            role="alert"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--color-error)"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="shrink-0"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <span className="text-[12px] leading-[1.4] text-[var(--color-error)]">
+              {error}
+            </span>
           </div>
-          <Input
-            id="password"
-            type="password"
-            placeholder="Password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-          />
-          <p className="text-xs text-muted-foreground">Enter your password</p>
-        </div>
+        ) : null}
+      </div>
 
-        {error && <p className="text-sm text-red-500">{error}</p>}
-
-        <Button type="submit" className="w-full" disabled={isLoading}>
-          {isLoading ? "Logging in..." : "Login"}
-        </Button>
-
-        <p className="text-center text-sm text-muted-foreground">
-          Don&apos;t have an account?{" "}
-          <Link href="/sign-up" className="underline underline-offset-2">
-            Sign up
-          </Link>
-        </p>
-      </form>
-
-      {/* Bottom*/}
-      <div className="mt-auto pt-1">
-        <div className="relative my-4 text-center text-xs text-muted-foreground">
-          <span className="bg-white px-2 relative z-10">OR</span>
-          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-border" />
-        </div>
-
-        <Button
-          onClick={handleGoogleOAuth}
-          type="button"
-          variant="outline"
-          className="w-full bg-[#f2f2f2] hover:bg-[#e8e8e8] border-0 flex items-center justify-center gap-3 h-10 font-medium text-[#3c4043]"
+      {/* Actions */}
+      <div className="flex flex-col gap-[18px]">
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="flex h-[44px] w-full items-center justify-center rounded-[6px] bg-[var(--color-accent-blue)] text-[13px] font-medium tracking-[1px] text-white transition-all duration-200 hover:bg-[var(--color-accent-blue-hover)] hover:shadow-[0_0_20px_var(--color-accent-blue-glow)] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-60"
         >
-          <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+          {isLoading ? "Signing In..." : "Sign In"}
+        </button>
+
+        {/* Divider */}
+        <div className="flex items-center gap-[16px]">
+          <div className="h-[1px] flex-1 bg-[var(--color-border-faint)]" />
+          <span className="text-[10px] font-medium tracking-[3px] text-[var(--color-text-faint)]">
+            OR
+          </span>
+          <div className="h-[1px] flex-1 bg-[var(--color-border-faint)]" />
+        </div>
+
+        {/* Google OAuth */}
+        <button
+          type="button"
+          onClick={handleGoogleOAuth}
+          className="flex h-[44px] w-full items-center justify-center gap-3 rounded-[6px] bg-[#f2f2f2] text-[13px] font-medium text-[#3c4043] transition-all duration-200 hover:bg-[#e8e8e8] active:scale-[0.98]"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 18 18"
+            xmlns="http://www.w3.org/2000/svg"
+          >
             <g fill="none" fillRule="evenodd">
-              <path d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
-              <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
-              <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
-              <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+              <path
+                d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"
+                fill="#4285F4"
+              />
+              <path
+                d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"
+                fill="#34A853"
+              />
+              <path
+                d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"
+                fill="#FBBC05"
+              />
+              <path
+                d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"
+                fill="#EA4335"
+              />
             </g>
           </svg>
-          <span>Sign in with Google</span>
-        </Button>
+          Sign in with Google
+        </button>
+
+        {/* Footer links */}
+        <div className="flex flex-col items-center gap-[8px]">
+          <div className="flex items-center gap-[6px]">
+            <span className="text-[12px] text-[var(--color-text-muted)]">
+              Don&apos;t have an account?
+            </span>
+            <Link
+              href="/sign-up"
+              className="text-[12px] text-[var(--color-accent-blue)]"
+            >
+              Sign up
+            </Link>
+          </div>
+          <div className="flex items-center gap-[6px]">
+            <span className="text-[12px] text-[var(--color-text-muted)]">
+              Not invited yet?
+            </span>
+            <Link
+              href="/request-access"
+              className="text-[12px] text-[var(--color-accent-blue)]"
+            >
+              Request access.
+            </Link>
+          </div>
+        </div>
       </div>
-    </div>
+    </form>
   );
 }
