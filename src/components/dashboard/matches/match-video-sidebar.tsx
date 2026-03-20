@@ -263,7 +263,7 @@ function EventTabs({
         onClick={() => onTabChange("events")}
         className={`h-[31px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
           activeTab === "events"
-            ? "text-[#3986F3] border-[#3986F3]"
+            ? "text-[#4A8AF4] border-[#4A8AF4]"
             : "text-[#999999] border-transparent hover:text-[#666666]"
         }`}
       >
@@ -274,7 +274,7 @@ function EventTabs({
         onClick={() => onTabChange("saved")}
         className={`h-[31px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
           activeTab === "saved"
-            ? "text-[#3986F3] border-[#3986F3]"
+            ? "text-[#4A8AF4] border-[#4A8AF4]"
             : "text-[#999999] border-transparent hover:text-[#666666]"
         }`}
       >
@@ -313,13 +313,13 @@ function SavedIcon({
       type="button"
       onClick={onClick}
       aria-label={filled ? "Remove from saved" : "Save event"}
-      className="shrink-0 p-1 -m-1 hover:opacity-70 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6AABFF] focus-visible:ring-offset-1 rounded-sm"
+      className="shrink-0 p-1 -m-1 hover:opacity-70 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4A8AF4] focus-visible:ring-offset-1 rounded-sm"
     >
       <Bookmark
         size={12}
-        stroke="#6AABFF"
+        stroke="#4A8AF4"
         strokeWidth={1.5}
-        fill={filled ? "#6AABFF" : "white"}
+        fill={filled ? "#4A8AF4" : "white"}
         aria-hidden
       />
     </button>
@@ -339,7 +339,7 @@ function AnimatedProgressBar({ duration }: { duration: number | null }) {
     >
       <div className="w-full h-[2px] bg-[#E5E5E5] rounded-full overflow-hidden">
         <motion.div
-          className="h-full bg-[#3986F3] rounded-full"
+          className="h-full bg-[#4A8AF4] rounded-full"
           initial={{ width: "0%" }}
           animate={{ width: "100%" }}
           transition={{ duration: seconds, ease: "linear" }}
@@ -549,7 +549,7 @@ export function MatchVideoSidebar({
   }, [activePointId, displayPoints]);
 
   return (
-    <div className="w-[320px] flex flex-col bg-white rounded-2xl border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
+    <div className="w-[320px] flex flex-col bg-white rounded-[16px] border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)]">
       {/* Events / Saved tabs */}
       <div className="px-6 pt-4">
         <EventTabs activeTab={activeTab} onTabChange={setActiveTab} />

@@ -52,7 +52,7 @@ export function FilterPills({
               className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all duration-200 whitespace-nowrap ${pillClassName ?? ""} ${
                 isSelected
                   ? "bg-[#60A5FA] text-white"
-                  : "bg-white text-[#525252] ring-1 ring-inset ring-[#E5E5E5] hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6]"
+                  : "bg-white text-[#525252] ring-1 ring-inset ring-[#D9D9D9] hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6]"
               }`}
             >
               {option.label}

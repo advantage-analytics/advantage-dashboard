@@ -24,7 +24,7 @@ function PlayerTabs({
         onClick={() => onSelectPlayer("player1")}
         className={`h-[31px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
           selectedPlayer === "player1"
-            ? "text-[#3986F3] border-[#3986F3]"
+            ? "text-[#4A8AF4] border-[#4A8AF4]"
             : "text-[#999999] border-transparent hover:text-[#666666]"
         }`}
       >
@@ -97,7 +97,7 @@ function WinningPercentageCircle({
           {percentage.toFixed(1)}%{" "}
           <span className="text-xs">{`(${won}/${total})`}</span>
         </span>
-        <span className="text-sm font-normal text-[#999999]">{label}</span>
+        <span className="text-[10px] font-medium uppercase tracking-[1px] text-[#999999]">{label}</span>
       </div>
     </div>
   );
@@ -105,7 +105,7 @@ function WinningPercentageCircle({
 
 function SectionHeader({ children }: { children: string }) {
   return (
-    <div className="text-xs font-medium tracking-[0.16em] uppercase text-[#525252]">
+    <div className="text-[10px] font-medium tracking-[0.16em] uppercase text-[#999999]">
       {children}
     </div>
   );
@@ -145,10 +145,10 @@ function PercentageBarRow({
   return (
     <div className="flex flex-col gap-3 self-stretch">
       <div className="flex flex-row justify-between items-end self-stretch">
-        <span className="text-xs font-normal text-[#999999] leading-[1.1]">
+        <span className="text-[10px] font-normal text-[#999999] leading-[1.1]">
           {label}
         </span>
-        <span className="text-[16px] leading-[1.1] font-medium text-[#525252] tabular-nums">
+        <span className="text-[16px] leading-[1.1] font-medium text-[#0D0D0D] tabular-nums">
           {valuePct}%
         </span>
       </div>
@@ -172,11 +172,11 @@ function MetricRow({
   return (
     <div className="flex flex-row justify-between items-center self-stretch">
       <div className="flex flex-row items-center gap-2">
-        <span className="text-xs font-normal leading-none text-[#999999]">
+        <span className="text-[10px] font-normal leading-none uppercase tracking-[0.5px] text-[#999999]">
           {label}
         </span>
       </div>
-      <span className="text-xl leading-none font-medium text-[#525252] tabular-nums">
+      <span className="text-xl leading-none font-medium text-[#0D0D0D] tabular-nums">
         {value}
       </span>
     </div>
@@ -189,10 +189,10 @@ function PerformanceRow({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex flex-col gap-3 w-full self-stretch">
       <div className="h-[15px] flex flex-row justify-between items-center self-stretch">
-        <span className="text-xs font-regular text-[#999999] leading-none">
+        <span className="text-[10px] font-regular text-[#999999] leading-none uppercase tracking-[1px]">
           {label}
         </span>
-        <span className="font-medium text-xl items-center leading-none uppercase text-[#525252]">
+        <span className="font-medium text-xl items-center leading-none uppercase text-[#0D0D0D]">
           {displayValue}
         </span>
       </div>
@@ -233,7 +233,7 @@ export function MatchOverallSidebar({
   const underPressureRating = playerStats?.underPressureRating ?? 0;
 
   return (
-    <div className="w-[320px] flex flex-col gap-6 px-6 py-4 bg-white rounded-2xl border border-[rgba(0,0,0,0.06)] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
+    <div className="w-[320px] flex flex-col gap-6 px-6 py-4 bg-white rounded-[16px] border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)]">
       <PlayerTabs
         match={match}
         selectedPlayer={selectedPlayer}
@@ -244,7 +244,7 @@ export function MatchOverallSidebar({
         percentage={winningPct}
         won={totalPointsWon}
         total={totalPoints}
-        label="Winning Percentage"
+        label="Total Points Won"
         barColor={barColor}
       />
 
@@ -358,7 +358,7 @@ export function MatchVisualsSidebar({
       : "Total Return Points Won";
 
   return (
-    <div className="w-[320px] flex flex-col gap-6 px-6 py-4 bg-white rounded-2xl border border-[rgba(0,0,0,0.06)] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
+    <div className="w-[320px] flex flex-col gap-6 px-6 py-4 bg-white rounded-[16px] border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)]">
       <PlayerTabs
         match={match}
         selectedPlayer={selectedPlayer}

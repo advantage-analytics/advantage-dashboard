@@ -95,7 +95,7 @@ export const returnFiltersConfig: FilterConfig = {
       {
         key: "other",
         label: "Other",
-        options: [{ value: "errors", label: "Errors" }],
+        options: [{ value: "doubleFault", label: "Double Fault" }],
       },
       null,
       null,

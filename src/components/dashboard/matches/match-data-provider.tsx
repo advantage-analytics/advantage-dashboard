@@ -3,8 +3,10 @@
 import { createContext, useContext } from "react";
 import type { MatchStatisticsResult } from "@/lib/data/match-stats-server";
 import type { MatchPoint } from "@/lib/data/match-points-server";
+import type { Match } from "@/lib/data/types";
 
 interface MatchDataContextValue {
+  match: Match;
   statsResult: MatchStatisticsResult | null;
   points: MatchPoint[];
 }
@@ -20,18 +22,20 @@ export function useMatchData(): MatchDataContextValue {
 }
 
 interface MatchDataProviderProps {
+  match: Match;
   statsResult: MatchStatisticsResult | null;
   points: MatchPoint[];
   children: React.ReactNode;
 }
 
 export function MatchDataProvider({
+  match,
   statsResult,
   points,
   children,
 }: MatchDataProviderProps) {
   return (
-    <MatchDataContext.Provider value={{ statsResult, points }}>
+    <MatchDataContext.Provider value={{ match, statsResult, points }}>
       {children}
     </MatchDataContext.Provider>
   );

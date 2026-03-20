@@ -13,7 +13,7 @@ export const serveFiltersConfig: FilterConfig = {
           { value: "player1", labelKey: "player1Name" },
           { value: "player2", labelKey: "player2Name" },
         ],
-        // multiSelect: false,
+        multiSelect: false,
       },
       {
         key: "type",
@@ -69,7 +69,7 @@ export const serveFiltersConfig: FilterConfig = {
       {
         key: "other",
         label: "Other",
-        options: [{ value: "errors", label: "Errors" }],
+        options: [{ value: "doubleFault", label: "Double Fault" }],
       },
       null,
     ],

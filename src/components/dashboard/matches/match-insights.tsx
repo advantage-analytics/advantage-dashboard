@@ -20,24 +20,6 @@ interface MatchInsightsProps {
   weaknesses?: StatItem[];
 }
 
-const DEFAULT_KEY_MOMENTS: KeyMoment[] = [
-  { title: "Break In Set 1, Game 7", score: "SET 1-0 40-30", description: "Converted break point with crosscourt winner" },
-  { title: "Held Serve Under Pressure", score: "SET 1-1 30-40", description: "Saved 3 break points in Set 2, Game 5" },
-  { title: "Strong Finish", score: "SET 2-0 40-0", description: "Won final 4 games to close out match" },
-  { title: "Clutch Return Winner", score: "SET 2-1 AD-40", description: "Return winner on match point in Set 2" },
-];
-
-const DEFAULT_STRENGTHS: StatItem[] = [
-  { label: "First Serve Percentage", value: 68, description: "Consistently landing serves in play with 68% success rate" },
-  { label: "Break Point Conversion", value: 71, description: "Converting opportunities when they arise" },
-  { label: "Forehand Winners", value: 78, description: "Dominating with powerful forehand shots" },
-];
-
-const DEFAULT_WEAKNESSES: StatItem[] = [
-  { label: "Second Serve Return", value: 42, description: "Struggling to capitalize on opponent's second serves" },
-  { label: "Backhand Errors", value: 58, description: "Unforced errors coming from backhand side" },
-  { label: "Net Play", value: 45, description: "Limited effectiveness at net, winning only 45% of approaches" },
-];
 
 const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
 
@@ -53,7 +35,7 @@ const containerVariants = {
 };
 
 const itemVariants = {
-  hidden: { opacity: 0, y: 8 },
+  hidden: { opacity: 0, y: 6 },
   visible: {
     opacity: 1,
     y: 0,
@@ -96,12 +78,12 @@ function StatRow({ item, color, index }: StatRowProps): React.JSX.Element {
   return (
     <motion.div
       className="flex flex-col gap-1.5"
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, delay: index * 0.08, ease: EASE_CURVE }}
+      transition={{ duration: 0.35, delay: index * 0.06, ease: EASE_CURVE }}
     >
       <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold text-[#0D0D0D]">{item.label}</span>
+        <span className="text-sm font-medium text-[#0D0D0D]">{item.label}</span>
         <span className={`text-sm font-semibold ${textColor}`}>{item.value}%</span>
       </div>
       <ProgressBar value={item.value} color={color} />
@@ -119,15 +101,15 @@ function KeyMomentCard({ moment, index }: KeyMomentCardProps): React.JSX.Element
   return (
     <motion.div
       className="flex flex-col gap-2"
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: index * 0.06, ease: EASE_CURVE }}
     >
       <div className="w-full aspect-video bg-[#F5F5F5] rounded-lg" />
       <div className="flex items-start justify-between gap-2">
-        <span className="text-sm font-semibold text-[#0D0D0D] leading-tight">{moment.title}</span>
+        <span className="text-sm font-medium text-[#0D0D0D] leading-tight">{moment.title}</span>
         {moment.score && (
-          <span className="text-[10px] font-semibold text-[#999999] uppercase tracking-wide whitespace-nowrap shrink-0">
+          <span className="text-[10px] font-medium text-[#999999] bg-[#F5F5F5] px-2 py-0.5 rounded-full uppercase tracking-wide whitespace-nowrap shrink-0">
             {moment.score}
           </span>
         )}
@@ -138,13 +120,13 @@ function KeyMomentCard({ moment, index }: KeyMomentCardProps): React.JSX.Element
 }
 
 export function MatchInsights({
-  keyMoments = DEFAULT_KEY_MOMENTS,
-  strengths = DEFAULT_STRENGTHS,
-  weaknesses = DEFAULT_WEAKNESSES,
+  keyMoments = [],
+  strengths = [],
+  weaknesses = [],
 }: MatchInsightsProps): React.JSX.Element {
   return (
     <motion.div
-      className="bg-white rounded-2xl overflow-hidden border border-[rgba(0,0,0,0.06)] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]"
+      className="bg-white rounded-[16px] overflow-hidden border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)]"
       variants={containerVariants}
       initial="hidden"
       animate="visible"
@@ -152,7 +134,7 @@ export function MatchInsights({
       {/* Header */}
       <motion.div className="px-6 pt-6 pb-5" variants={itemVariants}>
         <div className="flex items-center gap-2 mb-1">
-          <h2 className="text-base font-bold text-[#0D0D0D]">Advantage Intelligence</h2>
+          <h2 className="text-base font-medium text-[#0D0D0D]">Advantage Intelligence</h2>
           <span className="text-[10px] font-semibold text-[#3986F3] uppercase tracking-[0.12em] px-2 py-0.5 rounded-full bg-[#EEF4FE]">
             AI-Powered Analysis
           </span>

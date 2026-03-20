@@ -151,7 +151,7 @@ export default async function MatchLayout({
               />
               <MatchNavigationTabs matchId={matchId} />
             </div>
-            <MatchDataProvider statsResult={statsResult} points={points}>
+            <MatchDataProvider match={match} statsResult={statsResult} points={points}>
               <div className="flex flex-col gap-10 min-w-0">{children}</div>
             </MatchDataProvider>
           </div>

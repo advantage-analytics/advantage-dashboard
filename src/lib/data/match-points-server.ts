@@ -30,6 +30,10 @@ export interface MatchPoint {
   lastShotType?: string | null;
   lastShotSpin?: string | null;
   lastShotZone?: string | null;
+  firstShotLandingX?: number | null;
+  firstShotLandingY?: number | null;
+  secondShotLandingX?: number | null;
+  secondShotLandingY?: number | null;
 }
 
 interface DbPoint {
@@ -60,7 +64,14 @@ interface DbShot {
   spin_type: string | null;
   zone: string | null;
   result: string | null;
+  contact_x: number | null;
+  contact_y: number | null;
+  landing_x: number | null;
+  landing_y: number | null;
 }
+
+/** Full court length in meters (baseline to baseline) */
+const COURT_LENGTH = 23.77;
 
 const SERVE_RESULT_TYPES = new Set(["Ace", "Service Winner", "Double Fault"]);
 
@@ -144,7 +155,7 @@ export async function getMatchPointsFromSupabase(
   const { data: shotsData, error: shotsError } = await supabase
     .from("shots")
     .select(
-      "id, point_id, shot_number, is_player1, shot_type, spin_type, zone, result",
+      "id, point_id, shot_number, is_player1, shot_type, spin_type, zone, result, contact_x, contact_y, landing_x, landing_y",
     )
     .in("point_id", pointIds)
     .order("shot_number", { ascending: true });
@@ -172,6 +183,28 @@ export async function getMatchPointsFromSupabase(
     const secondShot = pointShots.length > 1 ? pointShots[1] : undefined;
     const lastShot = pointShots.length > 0 ? pointShots[pointShots.length - 1] : undefined;
     const resultType = point.result_type ?? "";
+
+    // Determine if coordinates need flipping to normalize to near-side frame
+    const serverAtNearEnd =
+      firstShot != null &&
+      firstShot.contact_y != null &&
+      firstShot.contact_y < 12;
+
+    // First shot (serve): flip if server at near end (ball lands on far side)
+    let firstLandX = firstShot?.landing_x ?? null;
+    let firstLandY = firstShot?.landing_y ?? null;
+    if (serverAtNearEnd && firstLandX != null && firstLandY != null) {
+      firstLandX = -firstLandX;
+      firstLandY = COURT_LENGTH - firstLandY;
+    }
+
+    // Second shot (return): flip if server at far end (returner hits from near to far)
+    let secondLandX = secondShot?.landing_x ?? null;
+    let secondLandY = secondShot?.landing_y ?? null;
+    if (!serverAtNearEnd && secondLandX != null && secondLandY != null) {
+      secondLandX = -secondLandX;
+      secondLandY = COURT_LENGTH - secondLandY;
+    }
 
     return {
       id: point.id,
@@ -202,6 +235,10 @@ export async function getMatchPointsFromSupabase(
       lastShotType: lastShot?.shot_type ?? null,
       lastShotSpin: lastShot?.spin_type ?? null,
       lastShotZone: lastShot?.zone ?? null,
+      firstShotLandingX: firstLandX,
+      firstShotLandingY: firstLandY,
+      secondShotLandingX: secondLandX,
+      secondShotLandingY: secondLandY,
     };
   });
 }

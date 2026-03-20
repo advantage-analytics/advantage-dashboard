@@ -67,6 +67,11 @@ export interface MockData {
 }
 
 // Match Statistics Types
+export interface StatFraction {
+  made: number;
+  attempts: number;
+}
+
 export interface MatchSummaryStats {
   totalPoints: number;
   durationMinutes: number;
@@ -88,6 +93,8 @@ export interface PlayerStatistics {
   firstReturnPointsWon: number;
   secondReturnPointsWon: number;
   returnGamesWon: number;
+  firstReturnInPct: number;
+  secondReturnInPct: number;
   firstReturnWonPct: number;
   secondReturnWonPct: number;
   returnGamesWonPct: number;
@@ -100,6 +107,13 @@ export interface PlayerStatistics {
   shortRallyWonPct: number;
   mediumRallyWonPct: number;
   longRallyWonPct: number;
+  winners: number;
+  unforcedErrors: number;
+  netPointsAppearances: number;
+  netPointsWon: number;
+  netPointsWonPct: number;
+  breakpointsSaved: number;
+  fractions: Partial<Record<string, StatFraction>>;
   serveWidePct: number;
   serveBodyPct: number;
   serveTpct: number;

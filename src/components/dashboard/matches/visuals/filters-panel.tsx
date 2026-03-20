@@ -84,7 +84,6 @@ export function FiltersPanel({
 
   return (
     <motion.div
-      className="bg-white rounded-2xl p-6"
       variants={containerVariants}
       initial="hidden"
       animate="visible"

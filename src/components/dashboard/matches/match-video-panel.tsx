@@ -376,7 +376,7 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
   const showUpload = !loading && !videoUrl;
 
   return (
-    <div className="bg-white rounded-2xl p-6 min-h-[400px]">
+    <div className="min-h-[400px]">
       <input
         ref={fileInputRef}
         type="file"

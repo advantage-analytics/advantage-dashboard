@@ -1,14 +1,9 @@
+"use client";
+
 import { MatchVideoPanel } from "@/components/dashboard/matches/match-video-panel";
+import { useParams } from "next/navigation";
 
-interface VideoPageProps {
-  params: Promise<{ matchId: string }>;
-}
-
-export default async function VideoPage({
-  params,
-}: VideoPageProps): Promise<React.JSX.Element> {
-  const { matchId } = await params;
-  return (
-    <MatchVideoPanel matchId={matchId} />
-  );
+export default function VideoPage() {
+  const { matchId } = useParams<{ matchId: string }>();
+  return <MatchVideoPanel matchId={matchId} />;
 }

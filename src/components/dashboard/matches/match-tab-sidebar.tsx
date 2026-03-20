@@ -1,11 +1,15 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import type { Match } from "@/lib/data/types";
 import type { MatchStatisticsResult } from "@/lib/data/match-stats-server";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { MatchOverallSidebar, MatchVisualsSidebar } from "./match-stats-sidebar";
 import { MatchVideoSidebar } from "./match-video-sidebar";
+import { KeyMoments } from "./key-moments";
+
+const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
 
 interface MatchTabSidebarProps {
   match: Match;
@@ -17,14 +21,34 @@ interface MatchTabSidebarProps {
 export function MatchTabSidebar({ match, matchId, statsResult, points }: MatchTabSidebarProps) {
   const pathname = usePathname() ?? "";
 
-  if (pathname.includes("/video")) {
-    return <MatchVideoSidebar match={match} matchId={matchId} statsResult={statsResult} points={points} />;
+  let tabKey: string;
+  let content: React.ReactNode;
+
+  if (pathname.includes("/analysis")) {
+    tabKey = "analysis";
+    content = <KeyMoments points={points} match={match} />;
+  } else if (pathname.includes("/video")) {
+    tabKey = "video";
+    content = <MatchVideoSidebar match={match} matchId={matchId} statsResult={statsResult} points={points} />;
+  } else if (pathname.includes("/visuals")) {
+    tabKey = "visuals";
+    content = <MatchVisualsSidebar match={match} statsResult={statsResult} />;
+  } else {
+    tabKey = "overall";
+    content = <MatchOverallSidebar match={match} statsResult={statsResult} />;
   }
 
-  if (pathname.includes("/visuals")) {
-    return <MatchVisualsSidebar match={match} statsResult={statsResult} />;
-  }
-
-  // Default: Overall sidebar
-  return <MatchOverallSidebar match={match} statsResult={statsResult} />;
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={tabKey}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        transition={{ duration: 0.25, ease: [...EASE_CURVE] }}
+      >
+        {content}
+      </motion.div>
+    </AnimatePresence>
+  );
 }
