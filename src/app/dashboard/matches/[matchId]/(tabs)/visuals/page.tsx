@@ -2,8 +2,6 @@
 
 import { useCallback } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { motion } from "framer-motion";
-import { Settings } from "lucide-react";
 
 import dynamic from "next/dynamic";
 import { FiltersPanel } from "@/components/dashboard/matches/visuals/filters-panel";
@@ -23,12 +21,6 @@ const CourtVisualization = dynamic(
     ).then((mod) => mod.CourtVisualization),
   { ssr: false }
 );
-
-const VISUALIZATION_TABS: { value: VisualizationType; label: string }[] = [
-  { value: "serve", label: "Serve" },
-  { value: "return", label: "Return" },
-  { value: "custom", label: "Custom" },
-];
 
 function buildSubtitle(
   type: VisualizationType,
@@ -101,75 +93,15 @@ export default function VisualsPage(): React.JSX.Element {
 
   return (
     <div className="space-y-6">
-      <div>
-        <div className="flex items-center justify-between mb-6">
-          {/* Left side — title + subtitle */}
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <h3 className="text-base font-medium text-[#0D0D0D]">
-                {titleMap[visualizationType]}
-              </h3>
-              <span
-                className={`text-white text-[10px] font-medium px-2 py-1 rounded-[16px] ${
-                  visualizationType === "return"
-                    ? "bg-[#F38439]"
-                    : "bg-[rgba(106,171,255,0.9)]"
-                }`}
-              >
-                {courtLabel}
-              </span>
-            </div>
-            <p className="text-xs font-normal italic text-[#999999]">
-              {buildSubtitle(visualizationType, filters, match)}
-            </p>
-          </div>
-
-          {/* Right side — segmented control + gear */}
-          <div className="flex items-center gap-2">
-            <div className="bg-[#F1F1F1]/60 rounded-[16px] p-1 flex items-center gap-1">
-              {VISUALIZATION_TABS.slice(0, 2).map((tab) => (
-                <button
-                  key={tab.value}
-                  onClick={() => handleTabClick(tab.value)}
-                  className="relative px-2 py-1 text-[10px] font-medium"
-                >
-                  {visualizationType === tab.value && (
-                    <motion.div
-                      layoutId="visualsTabHighlight"
-                      className="absolute inset-0 bg-white rounded-[16px]"
-                      transition={{
-                        type: "spring",
-                        stiffness: 500,
-                        damping: 35,
-                      }}
-                    />
-                  )}
-                  <span
-                    className={`relative z-10 ${
-                      visualizationType === tab.value
-                        ? "text-black"
-                        : "text-[#525252]"
-                    }`}
-                  >
-                    {tab.label}
-                  </span>
-                </button>
-              ))}
-            </div>
-            <Settings
-              size={16}
-              className="text-[#999999] cursor-pointer hover:text-[#666666]"
-            />
-          </div>
-        </div>
-
-        {/* Court Visualization */}
-        <CourtVisualization
-          points={points}
-          filters={filters}
-          visualizationType={visualizationType}
-        />
-      </div>
+      <CourtVisualization
+        points={points}
+        filters={filters}
+        visualizationType={visualizationType}
+        title={titleMap[visualizationType]}
+        courtLabel={courtLabel}
+        subtitle={buildSubtitle(visualizationType, filters, match)}
+        onTabChange={handleTabClick}
+      />
 
       <FiltersPanel
         key={visualizationType}

@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import { Settings } from "lucide-react";
 import {
   Tooltip,
   TooltipTrigger,
@@ -12,6 +13,11 @@ import type {
   FilterState,
   VisualizationType,
 } from "@/components/dashboard/matches/visuals/types/filters.types";
+
+const VISUALIZATION_TABS: { value: VisualizationType; label: string }[] = [
+  { value: "serve", label: "Serve" },
+  { value: "return", label: "Return" },
+];
 
 /* ── Animation constants ─────────────────────────────────── */
 
@@ -69,6 +75,10 @@ interface CourtVisualizationProps {
   points: MatchPoint[];
   filters: FilterState;
   visualizationType: VisualizationType;
+  title: string;
+  courtLabel: string;
+  subtitle: string;
+  onTabChange: (type: VisualizationType) => void;
 }
 
 /* ── Helpers ─────────────────────────────────────────────── */
@@ -165,6 +175,10 @@ export function CourtVisualization({
   points,
   filters,
   visualizationType,
+  title,
+  courtLabel,
+  subtitle,
+  onTabChange,
 }: CourtVisualizationProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [pinnedId, setPinnedId] = useState<string | null>(null);
@@ -449,19 +463,11 @@ export function CourtVisualization({
   const svgLeftPad = isReturn ? RET_LEFT_PAD : NET_EXTEND;
   const svgTotalW = COURT_W + svgLeftPad + NET_EXTEND;
 
-  // ── Point count for subtitle ──
-  const shownCount = dots.length;
-  const totalCount = points.length;
-  const subtitle =
-    shownCount === totalCount
-      ? `${totalCount} point${totalCount !== 1 ? "s" : ""}`
-      : `${shownCount} of ${totalCount} point${totalCount !== 1 ? "s" : ""}`;
-
   if (points.length === 0) {
     return (
       <div className="bg-white p-6 rounded-[16px] border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)]">
         <h2 className="text-base font-medium text-[#0D0D0D] mb-6">
-          {isReturn ? "Return Placement" : "Serve Placement"}
+          {title}
         </h2>
         <p className="text-sm text-[#999999] text-center">
           Point data not available for this match.
@@ -478,11 +484,55 @@ export function CourtVisualization({
       transition={{ duration: 0.5, delay: 0.2, ease: EASE_CURVE }}
     >
       {/* Card header */}
-      <div className="mb-5">
-        <h2 className="text-base font-medium text-[#0D0D0D]">
-          {isReturn ? "Return Placement" : "Serve Placement"}
-        </h2>
-        <p className="text-xs text-[#999999] mt-1">{subtitle}</p>
+      <div className="flex items-center justify-between mb-6">
+        {/* Left — title + badge + subtitle */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-medium text-[#0D0D0D]">{title}</h3>
+            <span
+              className={`text-white text-[10px] font-medium px-2 py-1 rounded-[16px] ${
+                visualizationType === "return"
+                  ? "bg-[#F38439]"
+                  : "bg-[rgba(106,171,255,0.9)]"
+              }`}
+            >
+              {courtLabel}
+            </span>
+          </div>
+          <p className="text-xs font-normal italic text-[#999999]">{subtitle}</p>
+        </div>
+
+        {/* Right — tab switcher + gear */}
+        <div className="flex items-center gap-2">
+          <div className="bg-[#F1F1F1]/60 rounded-[16px] p-1 flex items-center gap-1">
+            {VISUALIZATION_TABS.map((tab) => (
+              <button
+                key={tab.value}
+                onClick={() => onTabChange(tab.value)}
+                className="relative px-2 py-1 text-[10px] font-medium"
+              >
+                {visualizationType === tab.value && (
+                  <motion.div
+                    layoutId="visualsTabHighlight"
+                    className="absolute inset-0 bg-white rounded-[16px]"
+                    transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                  />
+                )}
+                <span
+                  className={`relative z-10 ${
+                    visualizationType === tab.value ? "text-black" : "text-[#525252]"
+                  }`}
+                >
+                  {tab.label}
+                </span>
+              </button>
+            ))}
+          </div>
+          <Settings
+            size={16}
+            className="text-[#999999] cursor-pointer hover:text-[#666666]"
+          />
+        </div>
       </div>
 
       {/* Court SVG */}
