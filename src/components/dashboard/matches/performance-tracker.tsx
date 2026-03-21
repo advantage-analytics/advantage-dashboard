@@ -305,8 +305,6 @@ function MomentumChart({
             const showBelow = hoveredCoord[1] < CHART_H * 0.25;
             // Horizontal alignment: shift tooltip to avoid clipping at edges
             const translateX = hoveredCoord[0] > CHART_W * 0.8 ? "-92%" : hoveredCoord[0] < CHART_W * 0.2 ? "-8%" : "-50%";
-            // Caret offset mirrors tooltip alignment
-            const caretLeft = hoveredCoord[0] > CHART_W * 0.8 ? "92%" : hoveredCoord[0] < CHART_W * 0.2 ? "8%" : "50%";
             const durationSec = hoveredPt.duration != null ? hoveredPt.duration : null;
             const pressureLabel = hoveredPt.isMatchPoint ? "Match Point" : hoveredPt.isSetPoint ? "Set Point" : hoveredPt.isBreakPoint ? "Break Point" : null;
 
@@ -391,28 +389,6 @@ function MomentumChart({
                   </div>
                 </div>
 
-                {/* Caret — inline SVG to avoid CSS transform conflicts */}
-                <div
-                  className="absolute"
-                  style={{
-                    left: caretLeft,
-                    transform: "translateX(-50%)",
-                    ...(showBelow ? { top: -5 } : { bottom: -5 }),
-                  }}
-                >
-                  <svg
-                    width="10"
-                    height="5"
-                    viewBox="0 0 10 5"
-                    fill="none"
-                    style={showBelow ? { transform: "rotate(180deg)" } : undefined}
-                  >
-                    <path
-                      d="M4.168 .445a1 1 0 0 1 1.664 0L8.618 5H1.382L4.168.445Z"
-                      fill={showBelow ? accentColor : "rgba(15, 17, 21, 0.92)"}
-                    />
-                  </svg>
-                </div>
               </motion.div>
             );
           })()}
