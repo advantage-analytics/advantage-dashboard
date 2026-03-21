@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, Menu, Search, Settings, LogOut, User } from "lucide-react";
+import { Bell, PanelLeft, Search, Settings, LogOut, User } from "lucide-react";
 import { useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -73,7 +73,7 @@ export function Header() {
         className="p-2 -m-2 transition-transform duration-200 ease-out hover:scale-110"
         aria-label="Toggle sidebar"
       >
-        <Menu
+        <PanelLeft
           className={cn(
             "h-4 w-4",
             isHomePage ? "text-white" : "text-[#0D0D0D]"
