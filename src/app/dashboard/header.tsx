@@ -8,6 +8,18 @@ import { useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 
+function getBreadcrumbs(pathname: string): { label: string; href?: string }[] {
+  if (pathname === "/dashboard") return [];
+  if (pathname.startsWith("/dashboard/statistics")) return [{ label: "Statistics" }];
+  if (pathname.startsWith("/dashboard/help")) return [{ label: "Help" }];
+  if (pathname.startsWith("/dashboard/settings")) return [{ label: "Settings" }];
+  if (pathname.startsWith("/dashboard/matches/")) {
+    return [{ label: "Matches", href: "/dashboard/matches" }, { label: "Match Detail" }];
+  }
+  if (pathname.startsWith("/dashboard/matches")) return [{ label: "Matches" }];
+  return [];
+}
+
 export function Header() {
   const { toggleSidebar } = useSidebar();
   const pathname = usePathname();
@@ -19,6 +31,8 @@ export function Header() {
   const isHomePage = pathname === "/dashboard";
   const isMatchDetailPage = /^\/dashboard\/matches\/[^/]+/.test(pathname);
   const isDarkPage = isHomePage || isMatchDetailPage;
+
+  const breadcrumbs = getBreadcrumbs(pathname);
 
   // Fetch user initials from Supabase
   useEffect(() => {
@@ -68,23 +82,58 @@ export function Header() {
   };
 
   return (
-    <header className="absolute top-0 left-0 right-0 z-30 flex items-center gap-4 px-8 py-4">
-      {/* Left: Navigation Sidebar Button */}
-      <button
-        onClick={toggleSidebar}
-        className="p-2 -m-2 transition-transform duration-200 ease-out hover:scale-110"
-        aria-label="Toggle sidebar"
-      >
-        <PanelLeft
-          className={cn(
-            "h-4 w-4",
-            isDarkPage ? "text-white" : "text-[#0D0D0D]"
-          )}
-        />
-      </button>
+    <header className="absolute top-0 left-0 right-0 z-30 flex items-center px-8 py-4">
+      {/* Left: Sidebar toggle + breadcrumbs */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={toggleSidebar}
+          className="p-2 -m-2 transition-transform duration-200 ease-out hover:scale-110"
+          aria-label="Toggle sidebar"
+        >
+          <PanelLeft
+            className={cn(
+              "h-4 w-4",
+              isDarkPage ? "text-white" : "text-[#0D0D0D]"
+            )}
+          />
+        </button>
 
-      {/* Middle: Search Bar */}
-      <div className="flex-1 max-w-sm mx-auto">
+        {breadcrumbs.length > 0 && (
+          <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-xs font-normal">
+            {breadcrumbs.map((crumb, i) => (
+              <span key={i} className="flex items-center gap-1">
+                {i > 0 && (
+                  <span className={isDarkPage ? "text-white/30" : "text-[#999999]"}>/</span>
+                )}
+                {crumb.href ? (
+                  <Link
+                    href={crumb.href}
+                    className={cn(
+                      "transition-colors",
+                      isDarkPage
+                        ? "text-white/40 hover:text-white/60"
+                        : "text-[#999999] hover:text-[#666666]"
+                    )}
+                  >
+                    {crumb.label}
+                  </Link>
+                ) : (
+                  <span className={isDarkPage ? "text-white/50" : "text-[#999999]"}>
+                    {crumb.label}
+                  </span>
+                )}
+              </span>
+            ))}
+          </nav>
+        )}
+      </div>
+
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* Right: Search, Notifications & Profile */}
+      <div className="flex items-center gap-5 shrink-0">
+        {/* Search Bar */}
         <div className="relative">
           <Search
             className={cn(
@@ -96,7 +145,7 @@ export function Header() {
             type="search"
             placeholder="Search matches, stats..."
             className={cn(
-              "w-full h-8 pl-9 pr-4 rounded-full text-xs outline-none transition-colors duration-150",
+              "w-48 h-8 pl-9 pr-4 rounded-full text-xs outline-none transition-all duration-200 focus:w-56",
               "[&::-webkit-search-cancel-button]:appearance-none",
               isDarkPage
                 ? "bg-white/15 backdrop-blur-sm text-white placeholder:text-white/40 focus:bg-white/20"
@@ -104,10 +153,7 @@ export function Header() {
             )}
           />
         </div>
-      </div>
 
-      {/* Right: Notifications & Profile */}
-      <div className="flex items-center gap-5 shrink-0">
         {/* Notifications */}
         <button
           className="relative p-2 -m-2 transition-transform duration-200 ease-out hover:scale-110"
