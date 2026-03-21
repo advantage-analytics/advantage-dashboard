@@ -17,6 +17,8 @@ export function Header() {
   const profileRef = useRef<HTMLDivElement>(null);
 
   const isHomePage = pathname === "/dashboard";
+  const isMatchDetailPage = /^\/dashboard\/matches\/[^/]+/.test(pathname);
+  const isDarkPage = isHomePage || isMatchDetailPage;
 
   // Fetch user initials from Supabase
   useEffect(() => {
@@ -66,7 +68,7 @@ export function Header() {
   };
 
   return (
-    <header className="absolute top-0 left-0 right-0 z-30 flex items-center gap-4 px-8 py-6">
+    <header className="absolute top-0 left-0 right-0 z-30 flex items-center gap-4 px-8 py-4">
       {/* Left: Navigation Sidebar Button */}
       <button
         onClick={toggleSidebar}
@@ -76,27 +78,27 @@ export function Header() {
         <PanelLeft
           className={cn(
             "h-4 w-4",
-            isHomePage ? "text-white" : "text-[#0D0D0D]"
+            isDarkPage ? "text-white" : "text-[#0D0D0D]"
           )}
         />
       </button>
 
       {/* Middle: Search Bar */}
-      <div className="flex-1 max-w-md mx-auto">
+      <div className="flex-1 max-w-sm mx-auto">
         <div className="relative">
           <Search
             className={cn(
-              "absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 z-10 pointer-events-none",
-              isHomePage ? "text-white/60" : "text-[#999]"
+              "absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 z-10 pointer-events-none",
+              isDarkPage ? "text-white/60" : "text-[#999]"
             )}
           />
           <input
             type="search"
             placeholder="Search matches, stats..."
             className={cn(
-              "w-full h-10 pl-10 pr-4 rounded-full text-xs outline-none transition-colors duration-150",
+              "w-full h-8 pl-9 pr-4 rounded-full text-xs outline-none transition-colors duration-150",
               "[&::-webkit-search-cancel-button]:appearance-none",
-              isHomePage
+              isDarkPage
                 ? "bg-white/15 backdrop-blur-sm text-white placeholder:text-white/40 focus:bg-white/20"
                 : "bg-[#F2F2F2] text-[#0D0D0D] placeholder:text-[#999] focus:bg-[#EAEAEA]"
             )}
@@ -114,7 +116,7 @@ export function Header() {
           <Bell
             className={cn(
               "h-4 w-4",
-              isHomePage ? "text-white" : "text-[#0D0D0D]"
+              isDarkPage ? "text-white" : "text-[#0D0D0D]"
             )}
           />
         </button>
@@ -125,7 +127,7 @@ export function Header() {
             onClick={() => setIsProfileOpen(!isProfileOpen)}
             className={cn(
               "h-9 w-9 rounded-full flex items-center justify-center text-xs font-medium transition-all duration-150",
-              isHomePage
+              isDarkPage
                 ? "bg-white/15 backdrop-blur-sm text-white hover:bg-white/25"
                 : "bg-[#F2F2F2] text-[#666] hover:bg-[#EAEAEA]"
             )}
