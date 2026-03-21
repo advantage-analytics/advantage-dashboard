@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useMatchData } from "./match-data-provider";
 import { shortName } from "@/lib/data/match-utils";
+import type { PlayerStatistics } from "@/lib/data/types";
 
 /* ── Constants ────────────────────────────────────────────── */
 
@@ -21,8 +22,21 @@ const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
 const P1_COLOR = "#4A8AF4";
 const P2_COLOR = "#F38439";
 
-const PLACEHOLDER_RESPONSE =
-  "I'm analyzing the match data now. Full AI responses will be available once the analysis engine is connected. Explore the key moments and insights panels above in the meantime.";
+/* ── Stats summary helper ─────────────────────────────────── */
+
+function buildStatsSummary(stats: PlayerStatistics): string {
+  const pct = (n: number) => `${Math.round(n)}%`;
+  return [
+    `Aces: ${stats.aces}`,
+    `Double Faults: ${stats.doubleFaults}`,
+    `1st Serve In: ${pct(stats.firstServeInPct)}`,
+    `1st Serve Win: ${pct(stats.firstServeWinPct)}`,
+    `2nd Serve Win: ${pct(stats.secondServeWinPct)}`,
+    `Winners: ${stats.winners}`,
+    `Unforced Errors: ${stats.unforcedErrors}`,
+    `Points Won: ${pct((stats.totalPointsWon / Math.max(stats.totalPoints, 1)) * 100)}`,
+  ].join(", ");
+}
 
 /* ── Types ─────────────────────────────────────────────────── */
 
@@ -304,6 +318,7 @@ interface ChatMessage {
 }
 
 function ChatCard() {
+  const { match, statsResult, keyMoments, insights } = useMatchData();
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "welcome",
@@ -319,26 +334,76 @@ function ChatCard() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  function handleSend() {
+  async function handleSend() {
     const text = input.trim();
-    if (!text) return;
-    setMessages((prev) => [
-      ...prev,
-      { id: Date.now().toString(), role: "user", text },
-    ]);
+    if (!text || isTyping) return;
+
+    const userMessage: ChatMessage = { id: Date.now().toString(), role: "user", text };
+    const assistantId = (Date.now() + 1).toString();
+
+    setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsTyping(true);
-    setTimeout(() => {
+
+    // Build conversation history for the API (exclude welcome message id)
+    const history = [...messages, userMessage]
+      .filter((m) => m.id !== "welcome" || m.role !== "assistant")
+      .map((m) => ({ role: m.role as "user" | "assistant", content: m.text }));
+
+    // Build match context
+    const p1Stats = statsResult?.statistics.player1Stats;
+    const p2Stats = statsResult?.statistics.player2Stats;
+    const matchContext = {
+      player1Name: match.player1.name,
+      player2Name: match.player2.name,
+      finalScore: match.score.finalScore,
+      tournamentName: match.tournamentName,
+      courtType: match.courtType ?? null,
+      statsP1: p1Stats ? buildStatsSummary(p1Stats) : "No stats available",
+      statsP2: p2Stats ? buildStatsSummary(p2Stats) : "No stats available",
+      keyMoments,
+      insights,
+    };
+
+    // Add empty assistant placeholder immediately
+    setMessages((prev) => [...prev, { id: assistantId, role: "assistant", text: "" }]);
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: history, matchContext }),
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error(`Request failed: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
       setIsTyping(false);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          text: PLACEHOLDER_RESPONSE,
-        },
-      ]);
-    }, 1200);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId ? { ...m, text: m.text + chunk } : m
+          )
+        );
+      }
+    } catch {
+      setIsTyping(false);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId
+            ? { ...m, text: "Sorry, something went wrong. Please try again." }
+            : m
+        )
+      );
+    }
   }
 
   return (
