@@ -34,7 +34,7 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
   return (
     <div className="flex-1 w-full bg-white min-h-[140vh]">
       <div className="relative z-10 px-8 py-12 pt-[104px]">
-        <div className="max-w-[1200px] mx-auto">
+        <div>
           {/* Header */}
           <div className="mb-8">
             <h1 className="text-2xl font-medium text-[#0D0D0D] mb-2">

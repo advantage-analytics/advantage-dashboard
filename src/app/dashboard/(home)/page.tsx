@@ -45,7 +45,7 @@ export default async function Home() {
       {/* Main Content - Positioned above hero background */}
       <div className="relative z-10 px-8 py-12 pt-[136px]">
         {/* Two Column Layout */}
-        <div className="flex flex-row gap-8 max-w-[1200px] mx-auto">
+        <div className="flex flex-row gap-8">
           {/* Left Column - Flexible width, expands when sidebar toggles */}
           <div className="flex-1 min-w-0 flex flex-col gap-18">
             <WelcomeMessage name={displayName} />
