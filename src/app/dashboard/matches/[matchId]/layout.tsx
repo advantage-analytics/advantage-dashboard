@@ -2,7 +2,6 @@ import { notFound } from "next/navigation";
 import Image from "next/image";
 import { Calendar, Clock, GraduationCap } from "lucide-react";
 
-import { MatchBreadcrumbs } from "@/components/dashboard/matches/match-breadcrumbs";
 import { MatchDataProvider } from "@/components/dashboard/matches/match-data-provider";
 import { MatchNavigationTabs } from "@/components/dashboard/matches/match-navigation-tabs";
 import { MatchTabSidebar } from "@/components/dashboard/matches/match-tab-sidebar";
@@ -137,17 +136,12 @@ export default async function MatchLayout({
   return (
     <div className="flex-1 w-full bg-white">
       {/* Dark hero header */}
-      <section className="bg-[#0D0D0D] pt-[88px] pb-8 px-8 border-b border-white/[0.06]">
-        <div className="max-w-[1200px] mx-auto">
-          <MatchBreadcrumbs
-            tournamentName={match.tournamentName}
-            player1Name={match.player1.name}
-            player2Name={match.player2.name}
-            variant="dark"
-          />
-
+      <section className="relative bg-[#0D0D0D] pt-20 pb-8 px-8 border-b border-white/[0.06] overflow-hidden">
+        {/* Subtle depth gradient */}
+        <div className="absolute inset-0 bg-gradient-to-b from-white/[0.025] to-transparent pointer-events-none" />
+        <div className="relative">
           {/* Compact inline strip */}
-          <div className="mt-7 flex items-center justify-between gap-8 min-w-0">
+          <div className="flex items-center justify-between gap-8 min-w-0">
             {/* Left player */}
             <div className="flex items-center gap-2.5 min-w-0 flex-1">
               <span className="text-2xl font-semibold text-white leading-tight truncate">
@@ -200,7 +194,7 @@ export default async function MatchLayout({
           </div>
 
           {/* Metadata pills */}
-          <div className="mt-6 flex gap-2 flex-wrap items-center">
+          <div className="mt-4 flex gap-2 flex-wrap items-center">
             <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 text-white/70 text-xs font-medium">
               <Calendar className="h-3 w-3 shrink-0" />
               {match.date}
@@ -243,7 +237,7 @@ export default async function MatchLayout({
 
       {/* Tabs + content */}
       <div className="px-8 pb-16">
-        <div className="max-w-[1200px] mx-auto">
+        <div>
           <div className="pt-6">
             <MatchNavigationTabs matchId={matchId} />
           </div>
