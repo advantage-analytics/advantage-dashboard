@@ -8,14 +8,17 @@ import { useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 
-function getBreadcrumbs(pathname: string): { label: string; href?: string }[] {
+interface MatchCrumb {
+  tournamentName: string;
+  player1Name: string;
+  player2Name: string;
+}
+
+function getStaticBreadcrumbs(pathname: string): { label: string; href?: string }[] | null {
   if (pathname === "/dashboard") return [];
   if (pathname.startsWith("/dashboard/statistics")) return [{ label: "Statistics" }];
   if (pathname.startsWith("/dashboard/help")) return [{ label: "Help" }];
   if (pathname.startsWith("/dashboard/settings")) return [{ label: "Settings" }];
-  if (pathname.startsWith("/dashboard/matches/")) {
-    return [{ label: "Matches", href: "/dashboard/matches" }, { label: "Match Detail" }];
-  }
   if (pathname.startsWith("/dashboard/matches")) return [{ label: "Matches" }];
   return [];
 }
@@ -26,13 +29,45 @@ export function Header() {
   const router = useRouter();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [initials, setInitials] = useState("P");
+  const [matchCrumb, setMatchCrumb] = useState<MatchCrumb | null>(null);
   const profileRef = useRef<HTMLDivElement>(null);
 
   const isHomePage = pathname === "/dashboard";
   const isMatchDetailPage = /^\/dashboard\/matches\/[^/]+/.test(pathname);
   const isDarkPage = isHomePage || isMatchDetailPage;
 
-  const breadcrumbs = getBreadcrumbs(pathname);
+  const matchId = isMatchDetailPage
+    ? pathname.match(/^\/dashboard\/matches\/([^/]+)/)?.[1]
+    : null;
+
+  // Fetch match breadcrumb data when on a match detail page
+  useEffect(() => {
+    if (!matchId) { setMatchCrumb(null); return; }
+    async function fetchMatchCrumb() {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("matches")
+        .select("tournament_name, player1_name, player2_name")
+        .eq("id", matchId)
+        .single();
+      if (data) {
+        setMatchCrumb({
+          tournamentName: data.tournament_name ?? "Unknown Event",
+          player1Name: data.player1_name,
+          player2Name: data.player2_name,
+        });
+      }
+    }
+    fetchMatchCrumb();
+  }, [matchId]);
+
+  const breadcrumbs: { label: string; href?: string }[] = isMatchDetailPage && matchCrumb
+    ? [
+        { label: "Matches", href: "/dashboard/matches" },
+        { label: matchCrumb.tournamentName },
+        { label: `${matchCrumb.player1Name} vs ${matchCrumb.player2Name}` },
+      ]
+    : (getStaticBreadcrumbs(pathname) ?? []);
 
   // Fetch user initials from Supabase
   useEffect(() => {
