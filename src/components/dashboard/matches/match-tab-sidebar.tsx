@@ -7,7 +7,8 @@ import type { MatchStatisticsResult } from "@/lib/data/match-stats-server";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { MatchOverallSidebar, MatchVisualsSidebar } from "./match-stats-sidebar";
 import { MatchVideoSidebar } from "./match-video-sidebar";
-import { KeyMoments } from "./key-moments";
+import { AnalysisSidebar } from "./analysis-sidebar";
+import { useMatchData } from "./match-data-provider";
 
 const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
 
@@ -20,13 +21,21 @@ interface MatchTabSidebarProps {
 
 export function MatchTabSidebar({ match, matchId, statsResult, points }: MatchTabSidebarProps) {
   const pathname = usePathname() ?? "";
+  const { keyMoments, insights } = useMatchData();
 
   let tabKey: string;
   let content: React.ReactNode;
 
   if (pathname.includes("/analysis")) {
     tabKey = "analysis";
-    content = <KeyMoments points={points} match={match} />;
+    content = (
+      <AnalysisSidebar
+        match={match}
+        statsResult={statsResult}
+        keyMoments={keyMoments}
+        insights={insights}
+      />
+    );
   } else if (pathname.includes("/video")) {
     tabKey = "video";
     content = <MatchVideoSidebar match={match} matchId={matchId} statsResult={statsResult} points={points} />;

@@ -32,6 +32,11 @@ interface DbMatch {
   court_type: string | null;
   verified: boolean | null;
   duration: number | null;
+  key_moments: Array<{ moment: string; description: string }> | null;
+  insights: {
+    player1?: { strengths?: Array<{ name: string; value: number; description: string }>; weaknesses?: Array<{ name: string; value: number; description: string }> };
+    player2?: { strengths?: Array<{ name: string; value: number; description: string }>; weaknesses?: Array<{ name: string; value: number; description: string }> };
+  } | null;
 }
 
 interface MatchLayoutProps {
@@ -114,7 +119,7 @@ export default async function MatchLayout({
   const { data: row, error } = await supabase
     .from("matches")
     .select(
-      "id, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration",
+      "id, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, key_moments, insights",
     )
     .eq("id", matchId)
     .single();
@@ -242,22 +247,22 @@ export default async function MatchLayout({
           <div className="pt-6">
             <MatchNavigationTabs matchId={matchId} />
           </div>
-          <div className="flex flex-row mt-6 pb-6 gap-8">
-            <div className="flex-1 min-w-0">
-              <MatchDataProvider match={match} statsResult={statsResult} points={points}>
+          <MatchDataProvider match={match} statsResult={statsResult} points={points} keyMoments={row.key_moments ?? []} insights={row.insights ?? null}>
+            <div className="flex flex-row mt-6 pb-6 gap-8">
+              <div className="flex-1 min-w-0">
                 <div className="flex flex-col gap-10 min-w-0">{children}</div>
-              </MatchDataProvider>
-            </div>
+              </div>
 
-            <div className="sticky top-8 w-[320px] flex-shrink-0 self-start h-fit">
-              <MatchTabSidebar
-                match={match}
-                matchId={matchId}
-                statsResult={statsResult}
-                points={points}
-              />
+              <div className="sticky top-8 w-[320px] flex-shrink-0 self-start h-fit">
+                <MatchTabSidebar
+                  match={match}
+                  matchId={matchId}
+                  statsResult={statsResult}
+                  points={points}
+                />
+              </div>
             </div>
-          </div>
+          </MatchDataProvider>
         </div>
       </div>
     </div>
