@@ -153,7 +153,11 @@ export function Header() {
                     {crumb.label}
                   </Link>
                 ) : (
-                  <span className={isDarkPage ? "text-white/50" : "text-[#999999]"}>
+                  <span className={
+                    i === breadcrumbs.length - 1
+                      ? (isDarkPage ? "text-white/70" : "text-[#0D0D0D]")
+                      : (isDarkPage ? "text-white/50" : "text-[#999999]")
+                  }>
                     {crumb.label}
                   </span>
                 )}
