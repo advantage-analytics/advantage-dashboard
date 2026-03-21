@@ -1,11 +1,11 @@
 "use client";
 
-import { MatchInsights } from "@/components/dashboard/matches/match-insights";
+import { AIAnalysisPanel } from "@/components/dashboard/matches/ai-analysis-panel";
 
 export default function AnalysisPage(): React.JSX.Element {
   return (
-    <div className="mb-64">
-      <MatchInsights />
+    <div className="mb-16">
+      <AIAnalysisPanel />
     </div>
   );
 }
