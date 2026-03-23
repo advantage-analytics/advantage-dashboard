@@ -1,16 +1,27 @@
-import { ChartColumnIncreasing } from "lucide-react";
+import { getStatisticsPageData, getSelectableMatches } from "@/lib/data/statistics-server";
+import { StatisticsPageContent } from "@/components/dashboard/statistics/statistics-page-content";
 
-export default function StatisticsPage() {
+export default async function StatisticsPage(): Promise<React.JSX.Element> {
+  const [data, allMatches] = await Promise.all([
+    getStatisticsPageData(),
+    getSelectableMatches(),
+  ]);
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] px-8 pt-[136px]">
-      <div className="flex flex-col items-center gap-4 text-center">
-        <div className="h-16 w-16 rounded-2xl bg-gray-100 flex items-center justify-center">
-          <ChartColumnIncreasing className="h-8 w-8 text-gray-400" />
+    <div className="flex-1 w-full bg-white min-h-screen">
+      <div className="relative z-10 px-8 py-12 pt-[104px]">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-semibold tracking-tight text-[#0D0D0D] mb-1.5">
+            Statistics
+          </h1>
+          <p className="text-sm text-[#999999]">
+            Dive deep into your performance analytics and discover patterns to
+            improve your game.
+          </p>
         </div>
-        <h1 className="font-medium text-2xl text-[#0D0D0D]">Statistics</h1>
-        <p className="font-normal text-base text-[#999999] max-w-md">
-          Dive deep into your performance analytics. Discover patterns and insights to improve your game.
-        </p>
+
+        <StatisticsPageContent initialData={data} allMatches={allMatches} />
       </div>
     </div>
   );
