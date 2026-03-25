@@ -1,50 +1,54 @@
 "use client";
 
 import Link from "next/link";
+import { Calendar, Layers, MapPin } from "lucide-react";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
-import { getInitials } from "@/lib/data/match-utils";
 
-interface GalleryPlayerRowProps {
+interface ScoreRowProps {
   playerName: string;
   isWinner: boolean;
   sets: DisplayMatch["score"]["sets"];
   playerKey: "player1" | "player2";
 }
 
-function GalleryPlayerRow({
+function ScoreRow({
   playerName,
   isWinner,
   sets,
   playerKey,
-}: GalleryPlayerRowProps): React.JSX.Element {
+}: ScoreRowProps): React.JSX.Element {
   const opponentKey = playerKey === "player1" ? "player2" : "player1";
 
   return (
-    <div className="flex flex-row justify-between items-center">
-      <div className="flex flex-row items-center gap-3">
-        <div className="w-7 h-7 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
-          <span className="text-[10px] font-medium text-[#BFBFBF]">
-            {getInitials(playerName)}
-          </span>
-        </div>
+    <div
+      className={`flex items-center justify-between px-3 py-2.5 rounded-lg ${
+        isWinner ? "bg-[#F7F9FF]" : ""
+      }`}
+    >
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div
+          className={`w-[2px] self-stretch rounded-full shrink-0 ${
+            isWinner ? "bg-[#3986F3]" : "bg-transparent"
+          }`}
+        />
         <span
-          className={`text-sm truncate max-w-[120px] ${
+          className={`text-[13px] truncate ${
             isWinner
               ? "font-semibold text-[#0D0D0D]"
-              : "font-normal text-[#ABABAB]"
+              : "font-normal text-[#999999]"
           }`}
         >
           {playerName}
         </span>
       </div>
-      <div className="flex flex-row gap-3">
+      <div className="flex items-center gap-4 shrink-0">
         {sets.map((set, idx) => (
           <span
             key={idx}
-            className={`text-base tabular-nums ${
+            className={`w-5 text-center text-[15px] tabular-nums ${
               set[playerKey] > set[opponentKey]
                 ? "font-semibold text-[#0D0D0D]"
-                : "font-normal text-[#C8C8C8]"
+                : "font-normal text-[#CCCCCC]"
             }`}
           >
             {set[playerKey]}
@@ -62,67 +66,80 @@ interface MatchCardGalleryProps {
 export function MatchCardGallery({
   match,
 }: MatchCardGalleryProps): React.JSX.Element {
-  const isWin = match.score.winner === "player1";
-
   return (
     <Link
       href={`/dashboard/matches/${match.id}`}
-      className="group block w-full bg-white rounded-2xl border border-[rgba(0,0,0,0.06)] hover:bg-[#FAFAFA] transition-colors duration-150"
+      className="group block w-full bg-white rounded-2xl border border-[rgba(0,0,0,0.06)] shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] hover:border-[rgba(0,0,0,0.10)] transition-all duration-150"
     >
-      <div className="flex flex-row gap-4 px-5 py-4">
-        {/* Left accent line */}
-        <div
-          className={`w-0.5 self-stretch rounded-full shrink-0 ${
-            isWin ? "bg-[#3986F3]" : "bg-[#E5E5E5]"
-          }`}
-        />
-
-        <div className="flex flex-col gap-3 flex-1 min-w-0">
-          {/* Top row: result label + duration */}
-          <div className="flex flex-row justify-between items-center gap-2">
-            <span
-              className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-[11px] font-medium ${
-                isWin
-                  ? "bg-[#D1FADF] text-[#05603A]"
-                  : "bg-[#FEE4E2] text-[#D92D20]"
-              }`}
-            >
-              {isWin ? "Won" : "Loss"}
+      <div className="px-5 pt-4 pb-4">
+        {/* Header: status + duration */}
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-[10px] font-medium text-[#D9D9D9] uppercase tracking-[0.5px]">
+            {match.matchContext ?? "Final Score"}
+          </span>
+          {match.duration && (
+            <span className="text-[10px] font-medium text-[#D9D9D9] tabular-nums">
+              {match.duration}
             </span>
-            {match.duration && (
-              <span className="text-[10px] font-medium text-[#BBBBBB] tabular-nums">
-                {match.duration}
+          )}
+        </div>
+
+        {/* Set column headers — aligned with ScoreRow scores via matching px-3 offset */}
+        <div className="flex items-center justify-end mb-1 px-3">
+          <div className="flex items-center gap-4">
+            {match.score.sets.map((_, idx) => (
+              <span
+                key={idx}
+                className="w-5 text-center text-[9px] font-medium text-[#D9D9D9] uppercase"
+              >
+                S{idx + 1}
               </span>
-            )}
+            ))}
           </div>
+        </div>
 
-          {/* Tournament + round */}
-          <div className="-mt-1">
-            <p className="text-xs font-medium text-[#0D0D0D] truncate">
-              {match.tournamentName}
-            </p>
-            {match.round && (
-              <p className="text-[11px] text-[#ABABAB] truncate mt-0.5">
-                {match.round}
-              </p>
-            )}
-          </div>
+        {/* Scoreboard */}
+        <div className="flex flex-col gap-0.5">
+          <ScoreRow
+            playerName={match.player1.name}
+            isWinner={match.score.winner === "player1"}
+            sets={match.score.sets}
+            playerKey="player1"
+          />
+          <ScoreRow
+            playerName={match.player2.name}
+            isWinner={match.score.winner === "player2"}
+            sets={match.score.sets}
+            playerKey="player2"
+          />
+        </div>
 
-          {/* Player rows */}
-          <div className="flex flex-col gap-2.5 pt-0.5">
-            <GalleryPlayerRow
-              playerName={match.player1.name}
-              isWinner={match.score.winner === "player1"}
-              sets={match.score.sets}
-              playerKey="player1"
-            />
-            <GalleryPlayerRow
-              playerName={match.player2.name}
-              isWinner={match.score.winner === "player2"}
-              sets={match.score.sets}
-              playerKey="player2"
-            />
-          </div>
+        {/* Footer metadata with icons */}
+        <div className="flex items-center gap-3 mt-3 pt-3 border-t border-[#F0F0F0]">
+          {match.courtType && (
+            <div className="flex items-center gap-1">
+              <MapPin className="w-3 h-3 text-[#D9D9D9]" strokeWidth={2} />
+              <span className="text-[11px] text-[#999999] capitalize">
+                {match.courtType}
+              </span>
+            </div>
+          )}
+          {match.matchType && (
+            <div className="flex items-center gap-1">
+              <Layers className="w-3 h-3 text-[#D9D9D9]" strokeWidth={2} />
+              <span className="text-[11px] text-[#999999]">
+                {match.matchType}
+              </span>
+            </div>
+          )}
+          {match.date && (
+            <div className="flex items-center gap-1 ml-auto">
+              <Calendar className="w-3 h-3 text-[#D9D9D9]" strokeWidth={2} />
+              <span className="text-[11px] text-[#999999] tabular-nums">
+                {match.date}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </Link>

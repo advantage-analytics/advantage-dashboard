@@ -5,6 +5,8 @@ import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { getInitials } from "@/lib/data/match-utils";
 import { providers } from "@/lib/providers";
 
+const LIST_GRID_COLS = { gridTemplateColumns: "2fr 60px 1.4fr 1fr 1fr 1.2fr 0.8fr 1fr" } as const;
+
 interface MatchCardListProps {
   match: DisplayMatch;
 }
@@ -16,22 +18,23 @@ export function MatchCardList({ match }: MatchCardListProps): React.JSX.Element 
   return (
     <Link
       href={`/dashboard/matches/${match.id}`}
-      className="group flex items-center px-4 h-12 rounded-lg hover:bg-[#FAFAFA] transition-colors duration-150"
+      className="group grid gap-x-4 items-center px-4 h-11 rounded-lg hover:bg-[#FAFAFA] transition-colors duration-150"
+      style={LIST_GRID_COLS}
     >
       {/* Event */}
-      <div className="flex-1 min-w-0 pr-8">
-        <p className="text-[13px] font-normal text-[#525252] truncate leading-tight">
+      <div className="min-w-0">
+        <p className="text-[12px] font-medium text-[#0D0D0D] truncate leading-tight">
           {match.tournamentName}
         </p>
         {match.round && (
-          <p className="text-[11px] text-[#CCCCCC] truncate leading-tight mt-0.5">{match.round}</p>
+          <p className="text-[10px] text-[#CCCCCC] truncate leading-tight mt-0.5">{match.round}</p>
         )}
       </div>
 
       {/* Result */}
-      <div className="w-20 shrink-0 pr-8">
+      <div className="min-w-0">
         <span
-          className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-[11px] font-medium ${
+          className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-[10px] font-medium ${
             isWin
               ? "bg-[#D1FADF] text-[#05603A]"
               : "bg-[#FEE4E2] text-[#D92D20]"
@@ -42,31 +45,40 @@ export function MatchCardList({ match }: MatchCardListProps): React.JSX.Element 
       </div>
 
       {/* Opponent */}
-      <div className="w-44 shrink-0 flex items-center gap-2 pr-8">
-        <div className="w-6 h-6 rounded-full bg-[#F2F2F2] flex items-center justify-center shrink-0">
-          <span className="text-[9px] font-medium text-[#BFBFBF] leading-none">
+      <div className="min-w-0 flex items-center gap-2">
+        <div className="w-5 h-5 rounded-full bg-[#F2F2F2] flex items-center justify-center shrink-0">
+          <span className="text-[8px] font-medium text-[#BFBFBF] leading-none">
             {getInitials(match.player2.name)}
           </span>
         </div>
-        <span className="text-[13px] text-[#525252] truncate">{match.player2.name}</span>
+        <span className="text-[12px] font-medium text-[#0D0D0D] truncate">{match.player2.name}</span>
+      </div>
+
+      {/* Match Type */}
+      <div className="min-w-0">
+        {match.matchType ? (
+          <span className="text-[12px] text-[#999999] capitalize truncate block">{match.matchType}</span>
+        ) : (
+          <span className="text-[12px] text-[#D9D9D9]">&mdash;</span>
+        )}
       </div>
 
       {/* Court Type */}
-      <div className="w-32 shrink-0 pr-8">
+      <div className="min-w-0">
         {match.courtType ? (
-          <span className="text-[12px] text-[#999999] capitalize whitespace-nowrap truncate">{match.courtType}</span>
+          <span className="text-[12px] text-[#999999] capitalize truncate block">{match.courtType}</span>
         ) : (
           <span className="text-[12px] text-[#D9D9D9]">&mdash;</span>
         )}
       </div>
 
       {/* Date */}
-      <div className="w-36 shrink-0 pr-8">
+      <div className="min-w-0">
         <span className="text-[12px] text-[#999999] tabular-nums whitespace-nowrap">{match.date}</span>
       </div>
 
       {/* Duration */}
-      <div className="w-20 shrink-0 pr-8">
+      <div className="min-w-0">
         {match.duration ? (
           <span className="text-[12px] text-[#999999] tabular-nums">{match.duration}</span>
         ) : (
@@ -75,9 +87,9 @@ export function MatchCardList({ match }: MatchCardListProps): React.JSX.Element 
       </div>
 
       {/* Source */}
-      <div className="w-32 shrink-0">
+      <div className="min-w-0">
         {provider ? (
-          <span className="text-[12px] text-[#999999]">{provider.name}</span>
+          <span className="text-[12px] text-[#999999] truncate block">{provider.name}</span>
         ) : (
           <span className="text-[12px] text-[#D9D9D9]">&mdash;</span>
         )}

@@ -18,14 +18,18 @@ interface MatchesGridProps {
   onSort: (field: SortField) => void;
 }
 
-const COLUMNS: { label: string; field?: SortField; className: string }[] = [
-  { label: "Event", field: "event", className: "flex-1 min-w-0 pr-8" },
-  { label: "Result", field: "result", className: "w-20 shrink-0 pr-8" },
-  { label: "Opponent", field: "opponent", className: "w-44 shrink-0 pr-8" },
-  { label: "Court", className: "w-32 shrink-0 pr-8" },
-  { label: "Date", field: "date", className: "w-36 shrink-0 pr-8" },
-  { label: "Duration", className: "w-20 shrink-0 pr-8" },
-  { label: "Source", className: "w-32 shrink-0" },
+const LIST_GRID_CLASSES = "grid gap-x-4" as const;
+const LIST_GRID_COLS = { gridTemplateColumns: "2fr 60px 1.4fr 1fr 1fr 1.2fr 0.8fr 1fr" } as const;
+
+const COLUMNS: { label: string; field?: SortField }[] = [
+  { label: "Event", field: "event" },
+  { label: "Result", field: "result" },
+  { label: "Opponent", field: "opponent" },
+  { label: "Type" },
+  { label: "Court" },
+  { label: "Date", field: "date" },
+  { label: "Duration" },
+  { label: "Source" },
 ];
 
 function SortIcon({ field, sortField, sortDir }: { field?: SortField; sortField: SortField; sortDir: SortDir }) {
@@ -75,9 +79,9 @@ export function MatchesGrid({
           transition={{ duration: shouldReduceMotion ? 0 : 0.15 }}
         >
           {/* Column headers */}
-          <div className="flex items-center px-4 py-2.5 border-b border-[#F0F0F0] mb-4" role="row">
+          <div className={`${LIST_GRID_CLASSES} items-center px-4 py-2.5 border-b border-[#F0F0F0] mb-4`} style={LIST_GRID_COLS} role="row">
             {COLUMNS.map((col) => (
-              <div key={col.label} className={col.className} role="columnheader" aria-sort={col.field === sortField ? (sortDir === "asc" ? "ascending" : "descending") : undefined}>
+              <div key={col.label} className="min-w-0" role="columnheader" aria-sort={col.field === sortField ? (sortDir === "asc" ? "ascending" : "descending") : undefined}>
                 {col.field ? (
                   <button
                     onClick={() => onSort(col.field!)}
