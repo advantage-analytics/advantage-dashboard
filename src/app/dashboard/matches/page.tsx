@@ -5,6 +5,7 @@ import {
   transformDbMatch,
 } from "@/lib/data/matches-list-types";
 import { MatchesPageContent } from "@/components/dashboard/matches/matches-page-content";
+import { CreateMatchButton } from "@/components/dashboard/matches/create-match-button";
 
 export default async function MatchesPage(): Promise<React.JSX.Element> {
   const supabase = await createClient();
@@ -16,38 +17,38 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
   let matches: DisplayMatch[] = [];
 
   if (user) {
-    const { data: rows } = await supabase
+    const { data } = await supabase
       .from("matches")
       .select(
-        "id, player1_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration"
+        "id, player1_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, source_provider"
       )
       .eq("created_by", user.id)
       .order("date", { ascending: false });
 
-    if (rows) {
-      matches = (rows as DbMatch[])
+    if (data) {
+      matches = (data as DbMatch[])
         .map((row) => transformDbMatch(row, user.id))
         .filter((m): m is DisplayMatch => m !== null);
     }
   }
 
   return (
-    <div className="flex-1 w-full bg-white min-h-[140vh]">
+    <div className="flex-1 w-full bg-white min-h-screen">
       <div className="relative z-10 px-8 py-12 pt-[104px]">
-        <div>
-          {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-2xl font-medium text-[#0D0D0D] mb-2">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight text-[#0D0D0D] mb-1.5">
               Matches
             </h1>
-            <p className="text-base font-normal text-[#999999]">
-              View and manage all your tennis matches. Click on any match to see
-              detailed statistics and insights.
+            <p className="text-sm text-[#999999]">
+              Your match history, scores, and performance over time.
             </p>
           </div>
-
-          <MatchesPageContent matches={matches} />
+          <CreateMatchButton />
         </div>
+
+        <MatchesPageContent matches={matches} />
       </div>
     </div>
   );
