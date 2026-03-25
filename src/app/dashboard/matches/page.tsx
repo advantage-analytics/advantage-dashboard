@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import {
   type DbMatch,
@@ -33,7 +34,7 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
   }
 
   return (
-    <div className="flex-1 w-full bg-white min-h-screen">
+    <main className="flex-1 w-full bg-white min-h-screen">
       <div className="relative z-10 px-8 py-12 pt-[104px]">
         {/* Header */}
         <div className="flex items-center justify-between gap-4 mb-10">
@@ -48,8 +49,10 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
           <CreateMatchButton />
         </div>
 
-        <MatchesPageContent matches={matches} />
+        <Suspense fallback={null}>
+          <MatchesPageContent matches={matches} />
+        </Suspense>
       </div>
-    </div>
+    </main>
   );
 }

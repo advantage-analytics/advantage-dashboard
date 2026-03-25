@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import type { MatchView } from "./view-toggle";
 import { MatchCardGallery } from "./match-card-gallery";
@@ -19,12 +19,12 @@ interface MatchesGridProps {
 }
 
 const COLUMNS: { label: string; field?: SortField; className: string }[] = [
-  { label: "Event", field: "event", className: "flex-1 min-w-0 pr-6" },
-  { label: "Result", field: "result", className: "w-20 shrink-0 pr-6" },
-  { label: "Opponent", field: "opponent", className: "w-44 shrink-0 pr-6" },
-  { label: "Court", className: "w-20 shrink-0 pr-6" },
-  { label: "Date", field: "date", className: "w-36 shrink-0 pr-6" },
-  { label: "Duration", className: "w-20 shrink-0 pr-6" },
+  { label: "Event", field: "event", className: "flex-1 min-w-0 pr-8" },
+  { label: "Result", field: "result", className: "w-20 shrink-0 pr-8" },
+  { label: "Opponent", field: "opponent", className: "w-44 shrink-0 pr-8" },
+  { label: "Court", className: "w-32 shrink-0 pr-8" },
+  { label: "Date", field: "date", className: "w-36 shrink-0 pr-8" },
+  { label: "Duration", className: "w-20 shrink-0 pr-8" },
   { label: "Source", className: "w-32 shrink-0" },
 ];
 
@@ -41,23 +41,25 @@ export function MatchesGrid({
   sortDir,
   onSort,
 }: MatchesGridProps): React.JSX.Element {
+  const shouldReduceMotion = useReducedMotion();
+
   return (
     <AnimatePresence mode="wait">
       {view === "gallery" ? (
         <motion.div
           key="gallery"
-          initial={{ opacity: 0 }}
+          initial={shouldReduceMotion ? false : { opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }}
+          transition={{ duration: shouldReduceMotion ? 0 : 0.15 }}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {matches.map((match, i) => (
               <motion.div
                 key={match.id}
-                initial={{ opacity: 0, y: 8 }}
+                initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2, delay: i * 0.03 }}
+                transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2, delay: i * 0.03 }}
               >
                 <MatchCardGallery match={match} />
               </motion.div>
@@ -67,15 +69,15 @@ export function MatchesGrid({
       ) : (
         <motion.div
           key="list"
-          initial={{ opacity: 0 }}
+          initial={shouldReduceMotion ? false : { opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }}
+          transition={{ duration: shouldReduceMotion ? 0 : 0.15 }}
         >
           {/* Column headers */}
-          <div className="flex items-center px-4 py-2.5 border-b border-[#F0F0F0]">
+          <div className="flex items-center px-4 py-2.5 border-b border-[#F0F0F0] mb-4" role="row">
             {COLUMNS.map((col) => (
-              <div key={col.label} className={col.className}>
+              <div key={col.label} className={col.className} role="columnheader" aria-sort={col.field === sortField ? (sortDir === "asc" ? "ascending" : "descending") : undefined}>
                 {col.field ? (
                   <button
                     onClick={() => onSort(col.field!)}
@@ -97,9 +99,9 @@ export function MatchesGrid({
           {matches.map((match, i) => (
             <motion.div
               key={match.id}
-              initial={{ opacity: 0, y: 4 }}
+              initial={shouldReduceMotion ? false : { opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.15, delay: i * 0.02 }}
+              transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.15, delay: i * 0.02 }}
             >
               <MatchCardList match={match} />
             </motion.div>

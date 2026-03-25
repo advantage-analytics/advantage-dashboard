@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Inbox, Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { providers } from "@/lib/providers";
@@ -79,6 +80,14 @@ function FilterChip({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [open]);
 
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    if (open) document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [open]);
+
   if (values.length === 0) return null;
 
   const hasActive = activeValues.length > 0;
@@ -87,6 +96,8 @@ function FilterChip({
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-haspopup="listbox"
         className={`flex items-center gap-1.5 h-8 px-3.5 rounded-full border text-xs font-medium transition-colors ${
           hasActive
             ? "border-[#3986F3] text-[#3986F3] bg-[#EBF0FE]"
@@ -107,12 +118,14 @@ function FilterChip({
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1.5 min-w-[160px] bg-white border border-[#E7E7E7] rounded-xl shadow-[0px_4px_16px_rgba(0,0,0,0.08)] z-20 py-1.5 px-1.5">
+        <div role="listbox" aria-label={`${label} options`} className="absolute top-full left-0 mt-1.5 min-w-[160px] bg-white border border-[#E7E7E7] rounded-xl shadow-[0px_4px_16px_rgba(0,0,0,0.08)] z-20 py-1.5 px-1.5">
           {values.map((val) => {
             const isActive = activeValues.includes(val);
             return (
               <button
                 key={val}
+                role="option"
+                aria-selected={isActive}
                 onClick={() => onToggle(filterKey, val)}
                 className={`flex items-center gap-2 w-full px-2.5 py-2 text-xs rounded-lg transition-colors ${
                   isActive
@@ -145,25 +158,49 @@ function FilterChip({
 
 /* ─── Main content ─── */
 export function MatchesPageContent({ matches }: MatchesPageContentProps): React.JSX.Element {
-  const [view, setView] = useState<MatchView>("list");
-  const [search, setSearch] = useState("");
-  const [sortField, setSortField] = useState<SortField>("date");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [filters, setFilters] = useState<ActiveFilter[]>([]);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<number>(10);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const [view, setView] = useState<MatchView>(() => (searchParams.get("view") as MatchView) || "list");
+  const [search, setSearch] = useState(() => searchParams.get("q") || "");
+  const [sortField, setSortField] = useState<SortField>(() => (searchParams.get("sort") as SortField) || "date");
+  const [sortDir, setSortDir] = useState<SortDir>(() => (searchParams.get("dir") as SortDir) || "desc");
+  const [filters, setFilters] = useState<ActiveFilter[]>(() => {
+    const result: ActiveFilter[] = [];
+    for (const key of ["result", "matchType", "courtType", "source"] as FilterKey[]) {
+      for (const value of searchParams.getAll(key)) {
+        result.push({ key, value });
+      }
+    }
+    return result;
+  });
+  const [page, setPage] = useState(() => Number(searchParams.get("page")) || 1);
+  const [pageSize, setPageSize] = useState<number>(() => {
+    const ps = Number(searchParams.get("pageSize"));
+    return (PAGE_SIZES as readonly number[]).includes(ps) ? ps : 10;
+  });
   const [pageSizeOpen, setPageSizeOpen] = useState(false);
   const pageSizeRef = useRef<HTMLDivElement>(null);
 
-  // Close page-size dropdown on outside click
+  // Close page-size dropdown on outside click or Escape
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (pageSizeRef.current && !pageSizeRef.current.contains(e.target as Node)) {
         setPageSizeOpen(false);
       }
     }
-    if (pageSizeOpen) document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setPageSizeOpen(false);
+    }
+    if (pageSizeOpen) {
+      document.addEventListener("mousedown", handleClick);
+      document.addEventListener("keydown", handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [pageSizeOpen]);
 
   // Filter matches
@@ -247,6 +284,25 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
     setPage(1);
   }, [search, filters, pageSize]);
 
+  // Sync state to URL
+  const isInitialMount = useRef(true);
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    const params = new URLSearchParams();
+    if (search) params.set("q", search);
+    if (view !== "list") params.set("view", view);
+    if (sortField !== "date") params.set("sort", sortField);
+    if (sortDir !== "desc") params.set("dir", sortDir);
+    if (page > 1) params.set("page", String(page));
+    if (pageSize !== 10) params.set("pageSize", String(pageSize));
+    for (const f of filters) params.append(f.key, f.value);
+    const query = params.toString();
+    window.history.replaceState(null, "", `${pathname}${query ? `?${query}` : ""}`);
+  }, [search, view, sortField, sortDir, page, pageSize, filters, pathname]);
+
   function toggleSort(field: SortField) {
     if (sortField === field) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -324,14 +380,16 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
             <input
               type="text"
               placeholder="Search"
+              aria-label="Search matches"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-8 w-48 pl-8 pr-3 rounded-full border border-[#E7E7E7] text-xs text-[#0D0D0D] placeholder:text-[#CCCCCC] focus:outline-none focus:border-[#3986F3] transition-colors bg-white"
+              className="h-8 w-48 pl-8 pr-3 rounded-full border border-[#E7E7E7] text-xs text-[#0D0D0D] placeholder:text-[#CCCCCC] focus:outline-none focus:border-[#3986F3] focus-visible:ring-2 focus-visible:ring-[#3986F3]/25 transition-colors bg-white"
             />
           </div>
 
           <button
             onClick={() => toggleSort(sortField)}
+            aria-label={`Sort by ${sortField}, ${sortDir === "asc" ? "ascending" : "descending"}`}
             className="flex items-center gap-1.5 h-8 px-3.5 rounded-full border border-[#E7E7E7] text-xs font-medium text-[#525252] hover:border-[#D0D0D0] bg-white transition-colors"
           >
             <ArrowUpDown className="w-3.5 h-3.5" />
@@ -366,7 +424,7 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
         <div className="flex items-center justify-between mt-4 pt-4 border-t border-[#F0F0F0]">
           <div className="flex items-center gap-3 text-xs text-[#888888]">
             <span className="tabular-nums">
-              {rangeStart}-{rangeEnd} of {sorted.length}
+              {rangeStart}–{rangeEnd} of {sorted.length}
             </span>
             <span className="text-[#D9D9D9]">&middot;</span>
             <div className="flex items-center gap-2">
@@ -411,6 +469,7 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={safePage <= 1}
+              aria-label="Previous page"
               className="flex items-center justify-center w-7 h-7 rounded-full border border-[#E7E7E7] text-[#525252] hover:bg-[#F7F7F7] disabled:opacity-30 disabled:pointer-events-none transition-colors"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
@@ -421,6 +480,7 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={safePage >= totalPages}
+              aria-label="Next page"
               className="flex items-center justify-center w-7 h-7 rounded-full border border-[#E7E7E7] text-[#525252] hover:bg-[#F7F7F7] disabled:opacity-30 disabled:pointer-events-none transition-colors"
             >
               <ChevronRight className="w-3.5 h-3.5" />
