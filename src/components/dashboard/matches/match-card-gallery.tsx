@@ -81,10 +81,10 @@ export function MatchCardGallery({
           {/* Top row: result label + duration */}
           <div className="flex flex-row justify-between items-center gap-2">
             <span
-              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${
+              className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-[11px] font-medium ${
                 isWin
-                  ? "bg-[#EBF0FE] text-[#3986F3]"
-                  : "bg-[#F5F5F5] text-[#999999]"
+                  ? "bg-[#D1FADF] text-[#05603A]"
+                  : "bg-[#FEE4E2] text-[#D92D20]"
               }`}
             >
               {isWin ? "Won" : "Loss"}

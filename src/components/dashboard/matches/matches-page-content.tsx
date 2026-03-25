@@ -1,10 +1,15 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
-import { Inbox, SlidersHorizontal, Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown, X } from "lucide-react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { Inbox, Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
+import { providers } from "@/lib/providers";
 import { MatchesGrid } from "./matches-grid";
 import { ViewToggle, type MatchView } from "./view-toggle";
+
+function providerName(id: string): string {
+  return providers.find((p) => p.id === id)?.name ?? id;
+}
 
 interface MatchesPageContentProps {
   matches: DisplayMatch[];
@@ -19,7 +24,7 @@ interface ActiveFilter {
   value: string;
 }
 
-const FILTER_OPTIONS: { key: FilterKey; label: string; getValues: (matches: DisplayMatch[]) => string[] }[] = [
+const FILTER_CHIPS: { key: FilterKey; label: string; getValues: (matches: DisplayMatch[]) => string[]; displayValue?: (val: string) => string }[] = [
   {
     key: "result",
     label: "Result",
@@ -39,34 +44,127 @@ const FILTER_OPTIONS: { key: FilterKey; label: string; getValues: (matches: Disp
     key: "source",
     label: "Source",
     getValues: (matches) => [...new Set(matches.map((m) => m.sourceProvider).filter(Boolean) as string[])].sort(),
+    displayValue: providerName,
   },
 ];
 
 const PAGE_SIZES = [10, 25, 50] as const;
 
+/* ─── Individual filter chip with its own dropdown ─── */
+function FilterChip({
+  filterKey,
+  label,
+  values,
+  activeValues,
+  onToggle,
+  displayValue,
+}: {
+  filterKey: FilterKey;
+  label: string;
+  values: string[];
+  activeValues: string[];
+  onToggle: (key: FilterKey, value: string) => void;
+  displayValue?: (val: string) => string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    if (open) document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  if (values.length === 0) return null;
+
+  const hasActive = activeValues.length > 0;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className={`flex items-center gap-1.5 h-8 px-3.5 rounded-full border text-xs font-medium transition-colors ${
+          hasActive
+            ? "border-[#3986F3] text-[#3986F3] bg-[#EBF0FE]"
+            : "border-[#E7E7E7] text-[#525252] hover:border-[#D0D0D0] bg-white"
+        }`}
+      >
+        {label}
+        {hasActive && (
+          <span className="min-w-[16px] h-4 flex items-center justify-center rounded-full bg-[#3986F3] text-white text-[10px] font-semibold px-1">
+            {activeValues.length}
+          </span>
+        )}
+        <ChevronDown
+          className={`w-3 h-3 transition-transform ${open ? "rotate-180" : ""} ${
+            hasActive ? "text-[#3986F3]" : "text-[#999999]"
+          }`}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 mt-1.5 min-w-[160px] bg-white border border-[#E7E7E7] rounded-xl shadow-[0px_4px_16px_rgba(0,0,0,0.08)] z-20 py-1.5 px-1.5">
+          {values.map((val) => {
+            const isActive = activeValues.includes(val);
+            return (
+              <button
+                key={val}
+                onClick={() => onToggle(filterKey, val)}
+                className={`flex items-center gap-2 w-full px-2.5 py-2 text-xs rounded-lg transition-colors ${
+                  isActive
+                    ? "bg-[#EBF0FE] text-[#3986F3] font-medium"
+                    : "text-[#525252] hover:bg-[#F7F7F7]"
+                }`}
+              >
+                <span
+                  className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${
+                    isActive
+                      ? "border-[#3986F3] bg-[#3986F3]"
+                      : "border-[#D9D9D9]"
+                  }`}
+                >
+                  {isActive && (
+                    <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
+                      <path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                </span>
+                {displayValue ? displayValue(val) : val}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Main content ─── */
 export function MatchesPageContent({ matches }: MatchesPageContentProps): React.JSX.Element {
   const [view, setView] = useState<MatchView>("list");
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState<SortField>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [filters, setFilters] = useState<ActiveFilter[]>([]);
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [expandedFilter, setExpandedFilter] = useState<FilterKey | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(10);
-  const filterRef = useRef<HTMLDivElement>(null);
+  const [pageSizeOpen, setPageSizeOpen] = useState(false);
+  const pageSizeRef = useRef<HTMLDivElement>(null);
 
-  // Close filters dropdown when clicking outside
+  // Close page-size dropdown on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
-        setFiltersOpen(false);
-        setExpandedFilter(null);
+      if (pageSizeRef.current && !pageSizeRef.current.contains(e.target as Node)) {
+        setPageSizeOpen(false);
       }
     }
-    if (filtersOpen) document.addEventListener("mousedown", handleClick);
+    if (pageSizeOpen) document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
-  }, [filtersOpen]);
+  }, [pageSizeOpen]);
 
   // Filter matches
   const filtered = useMemo(() => {
@@ -158,21 +256,17 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
     }
   }
 
-  function addFilter(key: FilterKey, value: string) {
+  const toggleFilter = useCallback((key: FilterKey, value: string) => {
     setFilters((prev) => {
-      const without = prev.filter((f) => !(f.key === key && f.value === value));
-      if (without.length < prev.length) return without; // toggle off
+      const exists = prev.some((f) => f.key === key && f.value === value);
+      if (exists) return prev.filter((f) => !(f.key === key && f.value === value));
       return [...prev, { key, value }];
     });
-  }
+  }, []);
 
-  function removeFilter(key: FilterKey, value: string) {
-    setFilters((prev) => prev.filter((f) => !(f.key === key && f.value === value)));
-  }
-
-  function clearFilters() {
-    setFilters([]);
-    setSearch("");
+  // Get active values per filter key
+  function activeValuesFor(key: FilterKey): string[] {
+    return filters.filter((f) => f.key === key).map((f) => f.value);
   }
 
   if (matches.length === 0) {
@@ -191,153 +285,62 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
 
   return (
     <div>
-      {/* Toolbar */}
+      {/* Toolbar: filters, search, sort, view toggle — single row */}
       <div className="flex items-center justify-between gap-3 mb-5">
+        {/* Left: filter chips */}
         <div className="flex items-center gap-2">
-          {/* Filters button */}
-          <div className="relative" ref={filterRef}>
-            <button
-              onClick={() => {
-                setFiltersOpen(!filtersOpen);
-                setExpandedFilter(null);
-              }}
-              className={`flex items-center gap-1.5 h-8 px-3 rounded-lg border text-xs font-medium transition-colors ${
-                filtersOpen || filters.length > 0
-                  ? "border-[#3986F3] text-[#3986F3] bg-[#EBF0FE]"
-                  : "border-[#E7E7E7] text-[#525252] hover:border-[#D0D0D0] bg-white"
-              }`}
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              Filters
-              {filters.length > 0 && (
-                <span className="ml-0.5 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-[#3986F3] text-white text-[10px] font-semibold px-1">
-                  {filters.length}
-                </span>
-              )}
-            </button>
-
-            {/* Filters dropdown */}
-            {filtersOpen && (
-              <div className="absolute top-full left-0 mt-1.5 w-56 bg-white border border-[#E7E7E7] rounded-xl shadow-[0px_4px_16px_rgba(0,0,0,0.08)] z-20 py-1">
-                {FILTER_OPTIONS.map((opt) => {
-                  const isExpanded = expandedFilter === opt.key;
-                  const values = opt.getValues(matches);
-                  if (values.length === 0) return null;
-
-                  return (
-                    <div key={opt.key}>
-                      <button
-                        onClick={() => setExpandedFilter(isExpanded ? null : opt.key)}
-                        className="flex items-center justify-between w-full px-3 py-2 text-sm text-[#333333] hover:bg-[#F7F7F7] transition-colors"
-                      >
-                        <span>{opt.label}</span>
-                        <ChevronDown
-                          className={`w-3.5 h-3.5 text-[#999999] transition-transform ${
-                            isExpanded ? "rotate-180" : ""
-                          }`}
-                        />
-                      </button>
-                      {isExpanded && (
-                        <div className="px-2 pb-1">
-                          {values.map((val) => {
-                            const isActive = filters.some(
-                              (f) => f.key === opt.key && f.value === val
-                            );
-                            return (
-                              <button
-                                key={val}
-                                onClick={() => addFilter(opt.key, val)}
-                                className={`flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded-md transition-colors ${
-                                  isActive
-                                    ? "bg-[#EBF0FE] text-[#3986F3] font-medium"
-                                    : "text-[#525252] hover:bg-[#F7F7F7]"
-                                }`}
-                              >
-                                <span
-                                  className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${
-                                    isActive
-                                      ? "border-[#3986F3] bg-[#3986F3]"
-                                      : "border-[#D9D9D9]"
-                                  }`}
-                                >
-                                  {isActive && (
-                                    <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
-                                      <path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                                    </svg>
-                                  )}
-                                </span>
-                                {val}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Active filter pills */}
-          {filters.map((f) => (
-            <span
-              key={`${f.key}-${f.value}`}
-              className="inline-flex items-center gap-1 h-7 pl-2.5 pr-1.5 rounded-full bg-[#F5F5F5] text-xs text-[#525252]"
-            >
-              {f.value}
-              <button
-                onClick={() => removeFilter(f.key, f.value)}
-                className="p-0.5 rounded-full hover:bg-[#E5E5E5] transition-colors"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </span>
+          {FILTER_CHIPS.map((chip) => (
+            <FilterChip
+              key={chip.key}
+              filterKey={chip.key}
+              label={chip.label}
+              values={chip.getValues(matches)}
+              activeValues={activeValuesFor(chip.key)}
+              onToggle={toggleFilter}
+              displayValue={chip.displayValue}
+            />
           ))}
 
+          {/* Clear all + results count */}
           {filters.length > 0 && (
             <button
-              onClick={clearFilters}
-              className="text-xs text-[#999999] hover:text-[#525252] transition-colors"
+              onClick={() => { setFilters([]); setSearch(""); }}
+              className="text-xs text-[#999999] hover:text-[#525252] transition-colors ml-1"
             >
               Clear all
             </button>
           )}
+          {(search || filters.length > 0) && (
+            <p className="text-xs text-[#BBBBBB] ml-1">
+              {sorted.length} {sorted.length === 1 ? "match" : "matches"}
+            </p>
+          )}
         </div>
 
+        {/* Right: search, sort, view toggle */}
         <div className="flex items-center gap-2">
-          {/* Search */}
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#CCCCCC]" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#CCCCCC]" />
             <input
               type="text"
               placeholder="Search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-8 w-48 pl-8 pr-3 rounded-lg border border-[#E7E7E7] text-xs text-[#0D0D0D] placeholder:text-[#CCCCCC] focus:outline-none focus:border-[#3986F3] transition-colors bg-white"
+              className="h-8 w-48 pl-8 pr-3 rounded-full border border-[#E7E7E7] text-xs text-[#0D0D0D] placeholder:text-[#CCCCCC] focus:outline-none focus:border-[#3986F3] transition-colors bg-white"
             />
           </div>
 
-          {/* Sort */}
           <button
             onClick={() => toggleSort(sortField)}
-            className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-[#E7E7E7] text-xs font-medium text-[#525252] hover:border-[#D0D0D0] bg-white transition-colors"
+            className="flex items-center gap-1.5 h-8 px-3.5 rounded-full border border-[#E7E7E7] text-xs font-medium text-[#525252] hover:border-[#D0D0D0] bg-white transition-colors"
           >
             <ArrowUpDown className="w-3.5 h-3.5" />
             Sort order
           </button>
 
-          {/* View toggle */}
           <ViewToggle view={view} onViewChange={setView} />
         </div>
       </div>
-
-      {/* Results info */}
-      {(search || filters.length > 0) && (
-        <p className="text-xs text-[#999999] mb-3">
-          {sorted.length} {sorted.length === 1 ? "match" : "matches"} found
-        </p>
-      )}
 
       {/* Table / Grid */}
       {sorted.length === 0 ? (
@@ -361,30 +364,54 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
       {/* Pagination */}
       {sorted.length > 0 && (
         <div className="flex items-center justify-between mt-4 pt-4 border-t border-[#F0F0F0]">
-          <div className="flex items-center gap-2 text-xs text-[#888888]">
-            <span>
+          <div className="flex items-center gap-3 text-xs text-[#888888]">
+            <span className="tabular-nums">
               {rangeStart}-{rangeEnd} of {sorted.length}
             </span>
-            <span className="text-[#D9D9D9]">·</span>
-            <span>Results per page</span>
-            <select
-              value={pageSize}
-              onChange={(e) => setPageSize(Number(e.target.value))}
-              className="h-6 px-1.5 rounded border border-[#E7E7E7] text-xs text-[#525252] bg-white focus:outline-none focus:border-[#3986F3]"
-            >
-              {PAGE_SIZES.map((size) => (
-                <option key={size} value={size}>
-                  {size}
-                </option>
-              ))}
-            </select>
+            <span className="text-[#D9D9D9]">&middot;</span>
+            <div className="flex items-center gap-2">
+              <span>Results per page</span>
+              <div className="relative" ref={pageSizeRef}>
+                <button
+                  onClick={() => setPageSizeOpen(!pageSizeOpen)}
+                  className="flex items-center gap-1 h-7 px-2.5 rounded-full border border-[#E7E7E7] bg-white text-xs font-medium text-[#525252] hover:border-[#D0D0D0] transition-colors tabular-nums"
+                >
+                  {pageSize}
+                  <ChevronDown
+                    className={`w-3 h-3 text-[#999999] transition-transform ${
+                      pageSizeOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+                {pageSizeOpen && (
+                  <div className="absolute bottom-full left-0 mb-1.5 min-w-[56px] bg-white border border-[#E7E7E7] rounded-xl shadow-[0px_4px_16px_rgba(0,0,0,0.08)] z-20 py-1 px-1">
+                    {PAGE_SIZES.map((size) => (
+                      <button
+                        key={size}
+                        onClick={() => {
+                          setPageSize(size);
+                          setPageSizeOpen(false);
+                        }}
+                        className={`flex items-center justify-center w-full px-2 py-1.5 text-xs tabular-nums rounded-lg transition-colors ${
+                          pageSize === size
+                            ? "bg-[#EBF0FE] text-[#3986F3] font-medium"
+                            : "text-[#525252] hover:bg-[#F7F7F7]"
+                        }`}
+                      >
+                        {size}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={safePage <= 1}
-              className="flex items-center justify-center w-7 h-7 rounded-md border border-[#E7E7E7] text-[#525252] hover:bg-[#F7F7F7] disabled:opacity-30 disabled:pointer-events-none transition-colors"
+              className="flex items-center justify-center w-7 h-7 rounded-full border border-[#E7E7E7] text-[#525252] hover:bg-[#F7F7F7] disabled:opacity-30 disabled:pointer-events-none transition-colors"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
@@ -394,7 +421,7 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={safePage >= totalPages}
-              className="flex items-center justify-center w-7 h-7 rounded-md border border-[#E7E7E7] text-[#525252] hover:bg-[#F7F7F7] disabled:opacity-30 disabled:pointer-events-none transition-colors"
+              className="flex items-center justify-center w-7 h-7 rounded-full border border-[#E7E7E7] text-[#525252] hover:bg-[#F7F7F7] disabled:opacity-30 disabled:pointer-events-none transition-colors"
             >
               <ChevronRight className="w-3.5 h-3.5" />
             </button>

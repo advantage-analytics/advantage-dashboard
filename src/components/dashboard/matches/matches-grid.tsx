@@ -19,11 +19,12 @@ interface MatchesGridProps {
 }
 
 const COLUMNS: { label: string; field?: SortField; className: string }[] = [
-  { label: "Event", field: "event", className: "flex-1 min-w-0 pr-4" },
-  { label: "Result", field: "result", className: "w-16 shrink-0 pr-4" },
-  { label: "Opponent", field: "opponent", className: "w-44 shrink-0 pr-4" },
-  { label: "Date", field: "date", className: "w-32 shrink-0 pr-4" },
-  { label: "Duration", className: "w-20 shrink-0 pr-4" },
+  { label: "Event", field: "event", className: "flex-1 min-w-0 pr-6" },
+  { label: "Result", field: "result", className: "w-20 shrink-0 pr-6" },
+  { label: "Opponent", field: "opponent", className: "w-44 shrink-0 pr-6" },
+  { label: "Court", className: "w-20 shrink-0 pr-6" },
+  { label: "Date", field: "date", className: "w-36 shrink-0 pr-6" },
+  { label: "Duration", className: "w-20 shrink-0 pr-6" },
   { label: "Source", className: "w-32 shrink-0" },
 ];
 

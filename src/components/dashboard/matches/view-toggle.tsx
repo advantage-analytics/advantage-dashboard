@@ -1,5 +1,6 @@
 "use client";
 
+import { LayoutGrid, List } from "lucide-react";
 import { motion } from "framer-motion";
 
 export type MatchView = "gallery" | "list";
@@ -9,37 +10,38 @@ interface ViewToggleProps {
   onViewChange: (view: MatchView) => void;
 }
 
-const VIEW_OPTIONS: { value: MatchView; label: string }[] = [
-  { value: "gallery", label: "Gallery" },
-  { value: "list", label: "List" },
+const VIEW_OPTIONS: { value: MatchView; icon: typeof LayoutGrid }[] = [
+  { value: "gallery", icon: LayoutGrid },
+  { value: "list", icon: List },
 ];
 
 export function ViewToggle({ view, onViewChange }: ViewToggleProps): React.JSX.Element {
   return (
-    <div className="flex bg-[#F1F1F1]/60 rounded-full p-[3px]">
+    <div className="flex items-center h-8 rounded-full border border-[#E7E7E7] bg-white p-[3px]">
       {VIEW_OPTIONS.map((option) => {
         const isActive = view === option.value;
+        const Icon = option.icon;
 
         return (
           <button
             key={option.value}
             onClick={() => onViewChange(option.value)}
-            className="relative w-12 px-2 py-1 text-[10px] font-medium rounded-full transition-colors"
+            className="relative flex items-center justify-center w-[26px] h-[26px] rounded-full transition-colors"
+            aria-label={`${option.value} view`}
           >
             {isActive && (
               <motion.div
                 layoutId="matchViewToggle"
-                className="absolute inset-0 bg-white rounded-full"
+                className="absolute inset-0 bg-[#F5F5F5] rounded-full"
                 transition={{ type: "spring", stiffness: 500, damping: 35 }}
               />
             )}
-            <span
-              className={`relative z-10 ${
-                isActive ? "text-[#000000]" : "text-[#525252]"
+            <Icon
+              className={`relative z-10 w-3.5 h-3.5 transition-colors ${
+                isActive ? "text-[#0D0D0D]" : "text-[#CCCCCC]"
               }`}
-            >
-              {option.label}
-            </span>
+              strokeWidth={1.75}
+            />
           </button>
         );
       })}

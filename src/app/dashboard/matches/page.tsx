@@ -36,7 +36,7 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
     <div className="flex-1 w-full bg-white min-h-screen">
       <div className="relative z-10 px-8 py-12 pt-[104px]">
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 mb-8">
+        <div className="flex items-center justify-between gap-4 mb-10">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight text-[#0D0D0D] mb-1.5">
               Matches
