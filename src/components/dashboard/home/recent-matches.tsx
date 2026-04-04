@@ -51,9 +51,13 @@ export default function RecentMatches({
   matches,
 }: RecentMatchesProps) {
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-4">
+      {/* Event Header */}
       <div className="flex flex-col gap-4">
-        <p className="text-xl font-medium text-[#000000]">{tournamentName}</p>
+        <div className="flex items-center justify-between">
+          <p className="text-[16px] font-medium text-black">{tournamentName}</p>
+          <p className="text-[12px] font-medium text-[#999999]">{date}</p>
+        </div>
 
         <MatchMetadataRow
           date={date}
@@ -64,94 +68,96 @@ export default function RecentMatches({
       </div>
 
       {/* Individual Matches */}
-      {matches.map((match) => (
-        <Link
-          key={match.id}
-          href={`/dashboard/matches/${match.id}`}
-          className="group block rounded-2xl transition-transform hover:scale-[1.01]"
-        >
-          <div className="pl-2 pr-4 py-3 flex flex-row gap-6">
-            {/* Vertical Separator */}
-            <div className="w-0.5 bg-[#DDDDDD] group-hover:bg-[#6AABFF] self-stretch rounded-full transition-colors"></div>
-            <div className="flex flex-col space-y-4 flex-1">
-              {/* Match Header */}
-              <div className="flex flex-row justify-between items-center font-normal text-xs text-[#999999]">
-                <div className="flex items-center gap-2">
-                  <p>{match.matchContext}</p>
-                  {match.round && (
-                    <>
-                      <span className="w-px h-3 bg-[#999999]" />
-                      <p>{match.round}</p>
-                    </>
-                  )}
+      <div className="flex flex-col">
+        {matches.map((match) => (
+          <Link
+            key={match.id}
+            href={`/dashboard/matches/${match.id}`}
+            className="group block rounded-2xl transition-transform hover:scale-[1.005]"
+          >
+            <div className="pl-2 pr-4 py-3 flex flex-row gap-6">
+              {/* Vertical Separator */}
+              <div className="w-0.5 bg-[#DDDDDD] group-hover:bg-[#6AABFF] self-stretch rounded-full transition-colors" />
+              <div className="flex flex-col gap-4 flex-1 min-w-0 overflow-hidden">
+                {/* Match Header — 14px regular for context */}
+                <div className="flex items-center justify-between text-[14px] text-[#999999]">
+                  <div className="flex items-center gap-2">
+                    <span>{match.matchContext}</span>
+                    {match.round && (
+                      <>
+                        <span className="w-px h-4 bg-[#999999]" />
+                        <span>{match.round}</span>
+                      </>
+                    )}
+                  </div>
+                  <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-[#F3F3F3] text-[#999999] group-hover:bg-[#6AABFF] group-hover:text-white transition-colors tabular-nums">
+                    {match.duration}
+                  </span>
                 </div>
-                <span className="rounded-[10px] px-1.5 py-0.5 text-xs font-medium bg-[#F3F3F3] text-[#999999] group-hover:bg-[#6AABFF] group-hover:text-white transition-colors">
-                  {match.duration}
-                </span>
-              </div>
-              {/* Player Names + Information */}
-              <div className="flex flex-col space-y-2">
-                <div className="flex flex-row justify-between items-center">
-                  <div className="flex flex-row items-center gap-4">
-                    <div className="w-10 h-10 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
-                      <span className="text-xs font-medium text-[#BFBFBF]">
-                        {getInitials(match.player1.name)}
-                      </span>
-                    </div>
-                    <p
-                      className={`font-semibold text-sm ${match.score.winner === "player1" ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}`}
-                    >
-                      {match.player1.name}
-                    </p>
-                  </div>
-                  <div className="flex flex-row gap-4 font-semibold text-[18px]">
-                    {match.score.sets.map((set, idx) => (
+                {/* Player Rows — 14px semibold names, 18px semibold scores */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
+                        <span className="text-xs font-medium text-[#BFBFBF]">
+                          {getInitials(match.player1.name)}
+                        </span>
+                      </div>
                       <p
-                        key={idx}
-                        className={
-                          set.player1 > set.player2
-                            ? "text-[#0D0D0D]"
-                            : "text-[#B3B3B3]"
-                        }
+                        className={`font-semibold text-[14px] ${match.score.winner === "player1" ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}`}
                       >
-                        {set.player1}
+                        {match.player1.name}
                       </p>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex flex-row justify-between items-center">
-                  <div className="flex flex-row items-center gap-4">
-                    <div className="w-10 h-10 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
-                      <span className="text-xs font-medium text-[#BFBFBF]">
-                        {getInitials(match.player2.name)}
-                      </span>
                     </div>
-                    <p
-                      className={`font-semibold text-sm ${match.score.winner === "player2" ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}`}
-                    >
-                      {match.player2.name}
-                    </p>
+                    <div className="flex gap-4 font-semibold text-[18px] tabular-nums">
+                      {match.score.sets.map((set, idx) => (
+                        <span
+                          key={idx}
+                          className={
+                            set.player1 > set.player2
+                              ? "text-[#0D0D0D]"
+                              : "text-[#BFBFBF]"
+                          }
+                        >
+                          {set.player1}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex flex-row gap-4 font-semibold text-[18px]">
-                    {match.score.sets.map((set, idx) => (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
+                        <span className="text-xs font-medium text-[#BFBFBF]">
+                          {getInitials(match.player2.name)}
+                        </span>
+                      </div>
                       <p
-                        key={idx}
-                        className={
-                          set.player2 > set.player1
-                            ? "text-[#0D0D0D]"
-                            : "text-[#B3B3B3]"
-                        }
+                        className={`font-semibold text-[14px] ${match.score.winner === "player2" ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}`}
                       >
-                        {set.player2}
+                        {match.player2.name}
                       </p>
-                    ))}
+                    </div>
+                    <div className="flex gap-4 font-semibold text-[18px] tabular-nums">
+                      {match.score.sets.map((set, idx) => (
+                        <span
+                          key={idx}
+                          className={
+                            set.player2 > set.player1
+                              ? "text-[#0D0D0D]"
+                              : "text-[#BFBFBF]"
+                          }
+                        >
+                          {set.player2}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        </Link>
-      ))}
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }

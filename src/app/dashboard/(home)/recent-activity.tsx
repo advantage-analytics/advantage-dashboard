@@ -207,11 +207,11 @@ export default function RecentActivity() {
   }, [load]);
 
   return (
-    <div className="bg-white border border-[rgba(0,0,0,0.06)] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-6 rounded-2xl h-fit">
-      <div className="flex flex-row justify-between items-center mb-6">
-        <div className="flex flex-col">
-          <p className="font-medium text-xl text-[#000000]">Recent Activity</p>
-          <p className="font-normal text-sm text-[#999999] mt-2">
+    <div className="bg-white border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-6 rounded-2xl h-fit">
+      <div className="flex flex-row justify-between items-center mb-5">
+        <div className="flex flex-col gap-2">
+          <p className="font-medium text-[20px] text-black">Recent Activity</p>
+          <p className="text-[12px] text-[#999999]">
             Your Last 3 Events with Insights
           </p>
         </div>
@@ -252,7 +252,7 @@ export default function RecentActivity() {
       )}
 
       {!loading && !error && events.length > 0 && (
-        <div className="space-y-4">
+        <div className="flex flex-col gap-5">
           {events.map((event) => (
             <RecentMatches
               key={event.id}

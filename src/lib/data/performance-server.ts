@@ -18,10 +18,35 @@ interface RecentPerformanceStat {
   change: number;
 }
 
+export interface KpiCardData {
+  label: string;
+  value: string;
+  change: number;
+  changeLabel: string;
+  sparkline: number[];
+}
+
+export interface PerformanceProfileDimension {
+  label: string;
+  current: number;
+  previous: number;
+}
+
+export interface HeatmapDay {
+  date: string;
+  count: number;
+}
+
 export interface OverallPerformanceData {
   views: WinLossView[];
   performanceRatings: PerformanceRating[];
   recentPerformance: RecentPerformanceStat[];
+  kpiCards: KpiCardData[];
+  winRate: { value: number; change: number; sparkline: number[] };
+  form: ("W" | "L")[];
+  matchCount: number;
+  heatmap: HeatmapDay[];
+  performanceProfile: PerformanceProfileDimension[];
 }
 
 interface DbMatch {
@@ -62,6 +87,21 @@ const DEFAULT_PERFORMANCE: OverallPerformanceData = {
     { label: "First Serve In Percentage", value: 0, change: 0 },
     { label: "First Serve Won Percentage", value: 0, change: 0 },
     { label: "Second Serve Won Percentage", value: 0, change: 0 },
+  ],
+  kpiCards: [],
+  winRate: { value: 0, change: 0, sparkline: [] },
+  form: [],
+  matchCount: 0,
+  heatmap: [],
+  performanceProfile: [
+    { label: "SERVE", current: 0, previous: 0 },
+    { label: "RETURN", current: 0, previous: 0 },
+    { label: "FOREHAND", current: 0, previous: 0 },
+    { label: "BACKHAND", current: 0, previous: 0 },
+    { label: "NET", current: 0, previous: 0 },
+    { label: "DEPTH", current: 0, previous: 0 },
+    { label: "CLUTCH", current: 0, previous: 0 },
+    { label: "FITNESS", current: 0, previous: 0 },
   ],
 };
 
@@ -212,6 +252,271 @@ function calculateRecentPerformance(
   ];
 }
 
+function calculateForm(
+  matches: DbMatch[],
+  userId: string,
+  count: number
+): ("W" | "L")[] {
+  const form: ("W" | "L")[] = [];
+  for (const match of matches) {
+    if (form.length >= count) break;
+    if (!match.score?.player1 || !match.score?.player2) continue;
+
+    const p1Sets = match.score.player1.filter(
+      (s, i) => s > (match.score?.player2[i] ?? 0)
+    ).length;
+    const p2Sets = match.score.player2.filter(
+      (s, i) => s > (match.score?.player1[i] ?? 0)
+    ).length;
+
+    const player1Won = p1Sets > p2Sets;
+    const isUserPlayer1 = match.player1_id === userId;
+    form.push((isUserPlayer1 ? player1Won : !player1Won) ? "W" : "L");
+  }
+  return form;
+}
+
+function calculateHeatmap(matches: DbMatch[]): HeatmapDay[] {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const countMap = new Map<string, number>();
+  for (const match of matches) {
+    const d = new Date(match.date);
+    if (d.getFullYear() === year && d.getMonth() === month) {
+      const key = match.date.slice(0, 10);
+      countMap.set(key, (countMap.get(key) ?? 0) + 1);
+    }
+  }
+
+  const result: HeatmapDay[] = [];
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    result.push({ date: dateStr, count: countMap.get(dateStr) ?? 0 });
+  }
+  return result;
+}
+
+function calculateKpiCards(
+  stats: DbMatchStats[],
+  matchPlayerMap: Map<string, boolean>,
+  orderedMatchIds: string[]
+): KpiCardData[] {
+  // Build per-match stat values for the user, ordered by date (most recent first)
+  const matchStatsList: {
+    firstServePct: number;
+    serviceGamesWon: number;
+    bpSaved: number;
+    serviceReturnsWon: number;
+    bpConverted: number;
+  }[] = [];
+
+  const statByMatch = new Map<string, DbMatchStats>();
+  for (const stat of stats) {
+    const isUserPlayer1 = matchPlayerMap.get(stat.match_id);
+    if (isUserPlayer1 === undefined) continue;
+    if (stat.is_player1 !== isUserPlayer1) continue;
+    statByMatch.set(stat.match_id, stat);
+  }
+
+  for (const matchId of orderedMatchIds) {
+    const s = statByMatch.get(matchId);
+    if (!s) continue;
+    matchStatsList.push({
+      firstServePct: parseFloat(s.first_serve_pct ?? "0"),
+      serviceGamesWon: parseFloat(s.serve_rating ?? "0") / 2.5, // scale serve_rating to approx %
+      bpSaved: parseFloat(s.break_points_saved_pct ?? "0"),
+      serviceReturnsWon:
+        (parseFloat(s.first_return_won_pct ?? "0") +
+          parseFloat(s.second_return_won_pct ?? "0")) /
+        2,
+      bpConverted: parseFloat(s.break_points_converted_pct ?? "0"),
+    });
+  }
+
+  if (matchStatsList.length === 0) return [];
+
+  const buildCard = (
+    label: string,
+    key: keyof (typeof matchStatsList)[0]
+  ): KpiCardData => {
+    const latest = matchStatsList[0][key];
+    const sparkline = matchStatsList
+      .slice(0, 8)
+      .map((s) => s[key])
+      .reverse();
+
+    // Calculate 30-day change (approximate: compare first half vs second half of recent matches)
+    let change = 0;
+    if (matchStatsList.length >= 2) {
+      change =
+        Math.round((matchStatsList[0][key] - matchStatsList[1][key]) * 10) / 10;
+    }
+
+    return {
+      label,
+      value: `${Math.round(latest)}%`,
+      change,
+      changeLabel: "last 30 days",
+      sparkline,
+    };
+  };
+
+  return [
+    buildCard("1ST SERVE PERCENTAGE", "firstServePct"),
+    buildCard("SERVICE GAMES WON", "serviceGamesWon"),
+    buildCard("BREAKPOINTS SAVED", "bpSaved"),
+    buildCard("SERVICE RETURNS WON", "serviceReturnsWon"),
+    buildCard("BREAKPOINTS CONVERTED", "bpConverted"),
+  ];
+}
+
+function calculateWinRateSparkline(
+  matches: DbMatch[],
+  userId: string
+): { value: number; change: number; sparkline: number[] } {
+  if (matches.length === 0) return { value: 0, change: 0, sparkline: [] };
+
+  // Calculate running win rate for sparkline (reversed to show chronological order)
+  const results: boolean[] = [];
+  for (const match of [...matches].reverse()) {
+    if (!match.score?.player1 || !match.score?.player2) continue;
+    const p1Sets = match.score.player1.filter(
+      (s, i) => s > (match.score?.player2[i] ?? 0)
+    ).length;
+    const p2Sets = match.score.player2.filter(
+      (s, i) => s > (match.score?.player1[i] ?? 0)
+    ).length;
+    const player1Won = p1Sets > p2Sets;
+    const isUserPlayer1 = match.player1_id === userId;
+    results.push(isUserPlayer1 ? player1Won : !player1Won);
+  }
+
+  if (results.length === 0) return { value: 0, change: 0, sparkline: [] };
+
+  const sparkline: number[] = [];
+  let wins = 0;
+  for (let i = 0; i < results.length; i++) {
+    if (results[i]) wins++;
+    sparkline.push(Math.round((wins / (i + 1)) * 100));
+  }
+
+  const currentRate = sparkline[sparkline.length - 1];
+
+  // Calculate change vs 30 days ago
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const recentMatches = matches.filter((m) => new Date(m.date) >= cutoff);
+  let recentWins = 0;
+  let recentTotal = 0;
+  for (const match of recentMatches) {
+    if (!match.score?.player1 || !match.score?.player2) continue;
+    recentTotal++;
+    const p1Sets = match.score.player1.filter(
+      (s, i) => s > (match.score?.player2[i] ?? 0)
+    ).length;
+    const p2Sets = match.score.player2.filter(
+      (s, i) => s > (match.score?.player1[i] ?? 0)
+    ).length;
+    const player1Won = p1Sets > p2Sets;
+    const isUserPlayer1 = match.player1_id === userId;
+    if (isUserPlayer1 ? player1Won : !player1Won) recentWins++;
+  }
+  const olderMatches = matches.filter((m) => new Date(m.date) < cutoff);
+  let olderWins = 0;
+  let olderTotal = 0;
+  for (const match of olderMatches) {
+    if (!match.score?.player1 || !match.score?.player2) continue;
+    olderTotal++;
+    const p1Sets = match.score.player1.filter(
+      (s, i) => s > (match.score?.player2[i] ?? 0)
+    ).length;
+    const p2Sets = match.score.player2.filter(
+      (s, i) => s > (match.score?.player1[i] ?? 0)
+    ).length;
+    const player1Won = p1Sets > p2Sets;
+    const isUserPlayer1 = match.player1_id === userId;
+    if (isUserPlayer1 ? player1Won : !player1Won) olderWins++;
+  }
+
+  const recentRate = recentTotal > 0 ? (recentWins / recentTotal) * 100 : 0;
+  const olderRate = olderTotal > 0 ? (olderWins / olderTotal) * 100 : 0;
+  const change = olderTotal > 0 ? Math.round((recentRate - olderRate) * 10) / 10 : 0;
+
+  return { value: currentRate, change, sparkline: sparkline.slice(-8) };
+}
+
+function calculatePerformanceProfile(
+  stats: DbMatchStats[],
+  matchPlayerMap: Map<string, boolean>,
+  orderedMatchIds: string[]
+): PerformanceProfileDimension[] {
+  const dimensions = [
+    "SERVE",
+    "RETURN",
+    "FOREHAND",
+    "BACKHAND",
+    "NET",
+    "DEPTH",
+    "CLUTCH",
+    "FITNESS",
+  ];
+
+  const userStats: DbMatchStats[] = [];
+  for (const matchId of orderedMatchIds) {
+    for (const stat of stats) {
+      if (stat.match_id !== matchId) continue;
+      const isUserPlayer1 = matchPlayerMap.get(stat.match_id);
+      if (isUserPlayer1 === undefined) continue;
+      if (stat.is_player1 !== isUserPlayer1) continue;
+      userStats.push(stat);
+    }
+  }
+
+  if (userStats.length === 0) {
+    return dimensions.map((label) => ({ label, current: 0, previous: 0 }));
+  }
+
+  // Current = average of last 3 matches, previous = average of matches 4-6
+  const recentStats = userStats.slice(0, Math.min(3, userStats.length));
+  const olderStats = userStats.slice(3, Math.min(6, userStats.length));
+
+  const avg = (arr: DbMatchStats[], fn: (s: DbMatchStats) => number) => {
+    if (arr.length === 0) return 0;
+    return arr.reduce((sum, s) => sum + fn(s), 0) / arr.length;
+  };
+
+  const serveScore = (s: DbMatchStats) =>
+    Math.min(100, parseFloat(s.serve_rating ?? "0") / 2.5);
+  const returnScore = (s: DbMatchStats) =>
+    (parseFloat(s.first_return_won_pct ?? "0") +
+      parseFloat(s.second_return_won_pct ?? "0")) /
+    2;
+  const clutchScore = (s: DbMatchStats) =>
+    (parseFloat(s.break_points_saved_pct ?? "0") +
+      parseFloat(s.break_points_converted_pct ?? "0")) /
+    2;
+
+  const currentServe = Math.round(avg(recentStats, serveScore));
+  const previousServe = olderStats.length > 0 ? Math.round(avg(olderStats, serveScore)) : currentServe;
+  const currentReturn = Math.round(avg(recentStats, returnScore));
+  const previousReturn = olderStats.length > 0 ? Math.round(avg(olderStats, returnScore)) : currentReturn;
+  const currentClutch = Math.round(avg(recentStats, clutchScore));
+  const previousClutch = olderStats.length > 0 ? Math.round(avg(olderStats, clutchScore)) : currentClutch;
+
+  return [
+    { label: "SERVE", current: currentServe, previous: previousServe },
+    { label: "RETURN", current: currentReturn, previous: previousReturn },
+    { label: "FOREHAND", current: 0, previous: 0 },
+    { label: "BACKHAND", current: 0, previous: 0 },
+    { label: "NET", current: 0, previous: 0 },
+    { label: "DEPTH", current: 0, previous: 0 },
+    { label: "CLUTCH", current: currentClutch, previous: previousClutch },
+    { label: "FITNESS", current: 0, previous: 0 },
+  ];
+}
+
 export async function getOverallPerformance(): Promise<OverallPerformanceData> {
   const supabase = await createClient();
   const {
@@ -228,9 +533,10 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
 
   if (!matches || matches.length === 0) return DEFAULT_PERFORMANCE;
 
-  const overall = calculateWinLoss(matches as DbMatch[], user.id);
-  const last30 = calculateWinLoss(matches as DbMatch[], user.id, 30);
-  const last7 = calculateWinLoss(matches as DbMatch[], user.id, 7);
+  const typedMatches = matches as DbMatch[];
+  const overall = calculateWinLoss(typedMatches, user.id);
+  const last30 = calculateWinLoss(typedMatches, user.id, 30);
+  const last7 = calculateWinLoss(typedMatches, user.id, 7);
 
   const matchIds = matches.map((m) => m.id);
   const matchPlayerMap = new Map<string, boolean>();
@@ -245,15 +551,14 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
     )
     .in("match_id", matchIds);
 
-  const ratings = calculateAverageRating(
-    (stats as DbMatchStats[]) ?? [],
-    user.id,
-    matchPlayerMap
-  );
+  const typedStats = (stats as DbMatchStats[]) ?? [];
+  const orderedMatchIds = matches.map((m) => m.id);
+
+  const ratings = calculateAverageRating(typedStats, user.id, matchPlayerMap);
   const recentPerf = calculateRecentPerformance(
-    (stats as DbMatchStats[]) ?? [],
+    typedStats,
     matchPlayerMap,
-    matches.map((m) => m.id)
+    orderedMatchIds
   );
 
   return {
@@ -268,5 +573,15 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
       { label: "Under Pressure Rating", value: ratings.pressure, barColor: "#666666" },
     ],
     recentPerformance: recentPerf,
+    kpiCards: calculateKpiCards(typedStats, matchPlayerMap, orderedMatchIds),
+    winRate: calculateWinRateSparkline(typedMatches, user.id),
+    form: calculateForm(typedMatches, user.id, 5),
+    matchCount: typedMatches.length,
+    heatmap: calculateHeatmap(typedMatches),
+    performanceProfile: calculatePerformanceProfile(
+      typedStats,
+      matchPlayerMap,
+      orderedMatchIds
+    ),
   };
 }
