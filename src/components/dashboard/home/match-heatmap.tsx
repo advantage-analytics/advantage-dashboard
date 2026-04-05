@@ -43,7 +43,7 @@ export default function MatchHeatmap({
   }
 
   return (
-    <div className="bg-white border border-[#F0F0F0] rounded-[16px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] overflow-hidden">
+    <div className="bg-white border border-[#F0F0F0] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] overflow-hidden transition-[box-shadow,border-color,transform] duration-200 hover:shadow-[0px_8px_24px_0px_rgba(0,0,0,0.12)] hover:border-[#E7E7E7] hover:scale-[1.008]">
       {/* Header */}
       <div className="border-b border-[#F2F2F2] px-5 py-4 flex items-center justify-between">
         <p className="text-[10px] font-medium text-[#888888] tracking-[2.5px]">
