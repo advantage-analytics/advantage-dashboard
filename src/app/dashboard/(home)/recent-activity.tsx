@@ -207,7 +207,7 @@ export default function RecentActivity() {
   }, [load]);
 
   return (
-    <div className="bg-white border border-[rgba(0,0,0,0.06)] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-6 rounded-2xl h-fit">
+    <div className="bg-white border border-[rgba(0,0,0,0.06)] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-6 rounded-2xl h-fit transition-[box-shadow,border-color,transform] duration-200 hover:shadow-[0px_8px_24px_0px_rgba(0,0,0,0.12)] hover:border-[#E7E7E7] hover:scale-[1.008]">
       <div className="flex flex-row justify-between items-center mb-6">
         <div className="flex flex-col">
           <p className="font-medium text-xl text-[#000000]">Recent Activity</p>
