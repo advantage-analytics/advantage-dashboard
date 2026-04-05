@@ -47,7 +47,7 @@ export default async function Home() {
         {/* Two Column Layout */}
         <div className="flex flex-row gap-8 max-w-[1200px] mx-auto">
           {/* Left Column - Flexible width, expands when sidebar toggles */}
-          <div className="flex-1 min-w-0 flex flex-col gap-18">
+          <div className="flex-1 min-w-0 flex flex-col gap-20">
             <WelcomeMessage name={displayName} />
             {/* Navigation Tabs + Tab Content */}
             <HomeContent />

@@ -12,7 +12,7 @@ export default function HomeContent() {
   const [activeTab, setActiveTab] = useState<TabType>("past");
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-7">
       {/* Navigation Tabs */}
       <NavigationTabs activeTab={activeTab} onTabChange={setActiveTab} />
 

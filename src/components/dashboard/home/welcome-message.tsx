@@ -23,7 +23,7 @@ export default function WelcomeMessage({
           {initials}
         </span>
       </div>
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-2">
         <h1 className="font-medium text-white text-3xl tracking-tight">
           Welcome back, {name}
         </h1>
