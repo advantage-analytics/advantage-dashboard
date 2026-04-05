@@ -55,12 +55,12 @@ export default function WinRateCard({
   sparkline,
 }: WinRateCardProps) {
   return (
-    <div className="bg-white border border-[#F0F0F0] rounded-[16px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-6 overflow-hidden flex flex-col gap-4">
+    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-6 overflow-hidden flex flex-col gap-4 transition-[box-shadow,border-color,transform] duration-200 hover:shadow-[0px_8px_24px_0px_rgba(0,0,0,0.12)] hover:border-[#E7E7E7] hover:scale-[1.008]">
       <p className="text-[9px] font-medium text-[#AAAAAA] uppercase tracking-[2px]">
         WIN RATE
       </p>
       <div className="flex items-end justify-between overflow-hidden">
-        <p className="text-[28px] font-light text-[#0A0A0C] tracking-[-0.5px] leading-none">
+        <p className="text-[28px] font-light text-[#0D0D0D] tracking-[-0.5px] leading-none tabular-nums">
           {value}%
         </p>
         <Sparkline data={sparkline} positive={change >= 0} />
@@ -77,7 +77,7 @@ export default function WinRateCard({
           {change >= 0 ? "+" : ""}
           {change}%
         </span>
-        <span className="text-[10px] font-normal text-[#AAAAAA]">
+        <span className="text-[10px] font-normal text-[#777777]">
           last 30 days
         </span>
       </div>
