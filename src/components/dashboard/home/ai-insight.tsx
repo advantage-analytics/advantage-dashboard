@@ -26,7 +26,7 @@ export default function AIInsight() {
             duration: shouldReduceMotion ? 0.15 : 0.3,
             ease: EASE_CURVE,
           }}
-          className="bg-white border border-[#E7E7E7] rounded-[16px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-6 overflow-hidden flex flex-col gap-4"
+          className="bg-white border border-[#E7E7E7] rounded-[16px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-6 overflow-hidden flex flex-col gap-4 transition-[box-shadow,border-color,transform] duration-200 hover:shadow-[0px_8px_24px_0px_rgba(0,0,0,0.12)] hover:border-[#E7E7E7] hover:scale-[1.008]"
         >
           {/* Label */}
           <p className="text-[9px] font-medium uppercase tracking-[2px] text-[#AAAAAA]">
