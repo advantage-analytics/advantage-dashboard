@@ -1,21 +1,22 @@
-import { Calendars } from "lucide-react";
+import { Search } from "lucide-react";
 import Link from "next/link";
 
 export default function NotFound() {
   return (
     <div className="flex-1 w-full bg-white">
-      <div className="flex flex-col items-center justify-center min-h-[60vh] px-6 pt-[136px]">
-        <div className="flex flex-col items-center gap-4 text-center max-w-md">
-          <div className="h-16 w-16 rounded-2xl bg-gray-100 flex items-center justify-center">
-            <Calendars className="h-8 w-8 text-gray-400" />
-          </div>
-          <h1 className="font-medium text-2xl text-[#0D0D0D]">Match Not Found</h1>
-          <p className="font-normal text-base text-[#999999]">
-            The match you're looking for doesn't exist or has been removed.
+      <div className="flex items-center justify-center min-h-[80vh] px-6">
+        <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-8 flex flex-col items-center text-center max-w-sm w-full">
+          <Search className="text-[#AAAAAA] size-8" />
+          <h1 className="text-[20px] font-medium text-[#0D0D0D] mt-4">
+            Match Not Found
+          </h1>
+          <p className="text-[12px] text-[#525252] mt-2">
+            The match you&apos;re looking for doesn&apos;t exist or has been
+            removed.
           </p>
           <Link
             href="/dashboard/matches"
-            className="mt-6 px-6 py-2 bg-[#1D1D1F] text-white rounded-lg hover:bg-[#2D2D2D] transition-colors font-medium text-sm"
+            className="mt-6 px-4 py-2 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[11px] font-medium uppercase tracking-[1.5px] rounded-full transition-colors duration-200 active:scale-[0.97]"
           >
             Back to Matches
           </Link>
