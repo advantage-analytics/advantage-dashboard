@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 import { FilterPills } from "./filter-pills";
 import {
@@ -84,6 +85,7 @@ export function FiltersPanel({
 
   return (
     <motion.div
+      className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5"
       variants={containerVariants}
       initial="hidden"
       animate="visible"
@@ -92,22 +94,22 @@ export function FiltersPanel({
         className="flex items-center justify-between mb-5"
         variants={itemVariants}
       >
-        <h3 className="text-xl font-medium text-[#0D0D0D]">Filters</h3>
-        <motion.button
+        <h3 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">Filters</h3>
+        <button
           onClick={clearAllFilters}
           disabled={!hasActiveFilters}
-          className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
+          className={cn(
+            "text-[9px] font-medium uppercase tracking-[1.5px] transition-colors duration-200",
             hasActiveFilters
-              ? "ring-1 ring-inset ring-[#E5E5E5] text-[#525252] hover:bg-[#FEF2F2] hover:ring-[#FECACA] hover:text-[#EF4444]"
-              : "text-[#CCCCCC] cursor-not-allowed"
-          }`}
-          whileTap={hasActiveFilters ? { scale: 0.95 } : undefined}
+              ? "text-[#3B82F6] hover:text-[#2563EB]"
+              : "text-[#D9D9D9] pointer-events-none",
+          )}
         >
           Clear all
-        </motion.button>
+        </button>
       </motion.div>
 
-      <div className="grid grid-cols-3 gap-x-8 gap-y-5">
+      <div className="grid grid-cols-3 gap-x-8 gap-y-4">
         {config.rows.map((row, rowIndex) =>
           row.map((group, colIndex) => (
             <motion.div
