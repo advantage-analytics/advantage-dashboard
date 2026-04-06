@@ -11,9 +11,9 @@ interface ActivityItem {
 }
 
 const INDICATOR_COLORS: Record<ActivityItem["type"], string> = {
-  milestone: "bg-[#3B82F6]",
-  alert: "bg-[#FF453A]",
-  system: "bg-[#AAAAAA]",
+  milestone: "bg-[var(--color-accent-blue)]",
+  alert: "bg-[var(--color-error)]",
+  system: "bg-[var(--color-text-dim)]",
 };
 
 function formatTimeAgo(date: Date): string {
@@ -141,9 +141,9 @@ export default function ActivityFeed() {
   if (loading || items.length === 0) return null;
 
   return (
-    <div className="bg-white border border-[#F0F0F0] rounded-[16px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] overflow-hidden py-5">
+    <div className="bg-white border border-[var(--color-divider)] rounded-[16px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] overflow-hidden py-5">
       <div className="px-5 mb-4">
-        <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
+        <p className="text-[10px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px]">
           ACTIVITY
         </p>
       </div>
@@ -160,10 +160,10 @@ export default function ActivityFeed() {
               />
             </div>
             <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-              <p className="text-[12px] font-light text-[#71717A] leading-[1.5]">
+              <p className="text-[12px] font-light text-[var(--color-text-secondary)] leading-[1.5]">
                 {item.message}
               </p>
-              <p className="text-[10px] font-normal text-[#AAAAAA]">
+              <p className="text-[10px] font-normal text-[var(--color-text-dim)]">
                 {item.timeAgo}
               </p>
             </div>

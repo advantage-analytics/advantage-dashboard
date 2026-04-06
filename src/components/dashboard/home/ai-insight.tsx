@@ -26,13 +26,13 @@ export default function AIInsight() {
             duration: shouldReduceMotion ? 0.15 : 0.3,
             ease: EASE_CURVE,
           }}
-          className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5 overflow-hidden flex flex-col gap-4"
+          className="bg-white border border-[var(--color-border-card)] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5 overflow-hidden flex flex-col gap-4"
         >
-          <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+          <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[var(--color-text-dim)]">
             AI Insight
           </p>
 
-          <p className="text-[12px] font-normal text-[#525252] leading-[1.65]">
+          <p className="text-[12px] font-normal text-[var(--color-text-tertiary)] leading-[1.65]">
             Your backhand depth has improved 11% over three matches. Next focus:
             second serve placement to the ad court, where you&apos;re losing 62%
             of points. Shifting 5% more serves to the T could save an extra
@@ -49,7 +49,7 @@ export default function AIInsight() {
             <button
               type="button"
               onClick={() => setVisible(false)}
-              className="text-[9px] font-medium uppercase tracking-[1.5px] text-[#AAAAAA] transition-colors duration-200 hover:text-[#525252] active:scale-[0.97]"
+              className="text-[9px] font-medium uppercase tracking-[1.5px] text-[var(--color-text-dim)] transition-colors duration-200 hover:text-[var(--color-text-tertiary)] active:scale-[0.97]"
             >
               Dismiss
             </button>
