@@ -14,7 +14,7 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
 
   return (
     <div className="flex-1 w-full min-h-screen bg-white">
-      <div className="pl-12 pr-8 pt-24 pb-12">
+      <div className="pl-12 pr-8 py-10">
         {/* Page Header */}
         <div className="mb-10">
           <h1 className="text-xl font-medium text-[#0D0D0D] tracking-tight">

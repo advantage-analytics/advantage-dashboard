@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 interface FilterOption {
   value: string;
@@ -40,23 +40,28 @@ export function FilterPills({
   }
 
   return (
-    <div className={`flex flex-col gap-2 min-w-0 ${className ?? ""}`}>
-      <span className="text-xs font-medium text-[#999999] whitespace-nowrap">{label}</span>
+    <div className={cn("flex flex-col gap-2 min-w-0", className)}>
+      <span className="text-[10px] font-medium text-[#525252] whitespace-nowrap">{label}</span>
       <div className="flex flex-wrap gap-2">
         {options.map((option) => {
           const isSelected = selected.includes(option.value);
           return (
-            <motion.button
+            <button
               key={option.value}
               onClick={() => handleClick(option.value)}
-              className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all duration-200 whitespace-nowrap ${pillClassName ?? ""} ${
+              className={cn(
+                "rounded-full h-8 px-3.5 text-[11px] font-medium whitespace-nowrap",
+                "transition-[background-color,color,box-shadow] duration-200",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/50 focus-visible:ring-offset-1",
+                "active:scale-[0.97]",
                 isSelected
-                  ? "bg-[#60A5FA] text-white"
-                  : "bg-white text-[#525252] ring-1 ring-inset ring-[#E5E5E5] hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6]"
-              }`}
+                  ? "bg-[#EBF2FD] text-[#3B82F6] ring-1 ring-inset ring-[#3B82F6]"
+                  : "ring-1 ring-inset ring-[#D9D9D9] text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6]",
+                pillClassName,
+              )}
             >
               {option.label}
-            </motion.button>
+            </button>
           );
         })}
       </div>

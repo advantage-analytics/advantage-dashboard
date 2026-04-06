@@ -73,6 +73,7 @@ export const customFiltersConfig: FilterConfig = {
         key: "other",
         label: "Other",
         options: [
+          { value: "doubleFault", label: "Double Fault" },
           { value: "errors", label: "Errors" },
           { value: "forced", label: "Forced Errors" },
         ],

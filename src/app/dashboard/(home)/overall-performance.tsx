@@ -26,21 +26,21 @@ export default function OverallPerformance({
   };
 
   return (
-    <div className="bg-white border border-[rgba(0,0,0,0.06)] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-6 rounded-2xl flex flex-col gap-6 min-h-[580px]">
+    <div className="bg-white border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-6 rounded-2xl flex flex-col">
       {/* Heading */}
       <div className="flex flex-row justify-between items-center">
-        <div className="space-y-2">
-          <p className="font-medium text-xl text-[#0D0D0D]">
+        <div className="flex flex-col gap-2">
+          <p className="font-medium text-[16px] text-[#0D0D0D]">
             Overall Performance
           </p>
-          <p className="font-normal text-sm text-[#999999]">
+          <p className="text-[12px] text-[#888888]">
             Your Recent Performance
           </p>
         </div>
         <button
           type="button"
           aria-label="View overall performance details"
-          className="h-6 w-6 rounded-full bg-[#0D0D0D] flex items-center justify-center hover:bg-[#2D2D2D] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#0D0D0D]"
+          className="h-6 w-6 rounded-full bg-[#1D1D1F] flex items-center justify-center hover:bg-[#2D2D2D] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#1D1D1F]"
         >
           <ChevronRight className="h-3 w-3 text-white" aria-hidden />
         </button>
@@ -48,21 +48,21 @@ export default function OverallPerformance({
 
       {isEmpty ? (
         <div
-          className="flex flex-col items-center justify-center flex-1 px-4 text-center"
+          className="flex flex-col items-center justify-center py-12 px-4 text-center"
           data-state="empty"
         >
           <div className="rounded-full bg-[#F5F5F5] p-4 mb-4">
-            <Inbox className="h-8 w-8 text-[#999999]" aria-hidden />
+            <Inbox className="h-8 w-8 text-[#888888]" aria-hidden />
           </div>
           <p className="font-medium text-[#000000] mb-1">No matches yet</p>
-          <p className="text-sm text-[#999999] max-w-[260px]">
+          <p className="text-sm text-[#888888] max-w-[260px]">
             Upload your first match to see your performance stats here.
           </p>
         </div>
       ) : (
         <>
-          {/* Overall Performance Section */}
-          <div>
+          {/* Win/Loss Ring Section */}
+          <div className="pt-5">
             <CircularProgressRing
               wins={currentView.wins}
               losses={currentView.losses}
@@ -70,15 +70,15 @@ export default function OverallPerformance({
               onClick={handleCycleView}
             />
             {/* Pagination dots */}
-            <div className="flex justify-center gap-1 mt-4">
+            <div className="flex justify-center gap-1 mt-3">
               {views.map((_, index) => (
                 <button
                   key={index}
                   type="button"
                   onClick={() => setCurrentViewIndex(index)}
-                  className={`rounded-full transition-[width,background-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#3986F3] ${
+                  className={`rounded-full transition-[width,background-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#3B82F6] ${
                     index === currentViewIndex
-                      ? "w-3 h-1 bg-[#3986F3]"
+                      ? "w-3 h-1 bg-[#3B82F6]"
                       : "w-1 h-1 bg-[#D9D9D9]"
                   }`}
                   aria-label={`View ${index + 1}: ${views[index].label}`}
@@ -87,12 +87,15 @@ export default function OverallPerformance({
             </div>
           </div>
 
+          {/* Divider */}
+          <div className="h-px bg-[#F0F0F0] mt-5" />
+
           {/* Performance Rating Section */}
-          <div>
-            <p className="font-medium text-xs text-[#0D0D0D] mb-4 uppercase tracking-[0.16em]">
+          <div className="pt-5">
+            <p className="font-medium text-[12px] text-[#AAAAAA] mb-5 uppercase tracking-[1.6px]">
               Performance breakdown
             </p>
-            <div className="divide-y divide-[#D9D9D9]">
+            <div className="divide-y divide-[#F0F0F0]">
               {performanceRatings.map((rating, index) => (
                 <PerformanceRating
                   key={index}
@@ -103,12 +106,15 @@ export default function OverallPerformance({
             </div>
           </div>
 
+          {/* Divider */}
+          <div className="h-px bg-[#F0F0F0] mt-5" />
+
           {/* Recent Performance Section */}
-          <div className="flex flex-col space-y-3">
-            <p className="font-medium text-xs text-[#0D0D0D] uppercase tracking-[0.16em]">
+          <div className="pt-5">
+            <p className="font-medium text-[12px] text-[#AAAAAA] mb-4 uppercase tracking-[1.6px]">
               Recent Performance
             </p>
-            <div className="flex flex-col space-y-3">
+            <div className="flex flex-col gap-1">
               {recentPerformance.map((perf, index) => (
                 <RecentPerformance
                   key={index}

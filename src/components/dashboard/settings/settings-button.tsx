@@ -14,19 +14,19 @@ interface SettingsButtonProps
 
 const variantStyles: Record<ButtonVariant, { enabled: string; disabled: string }> = {
   primary: {
-    enabled: "bg-[#0D0D0D] text-white hover:bg-[#1a1a1a] active:scale-[0.98]",
+    enabled: "bg-[#0D0D0D] text-white hover:bg-[#1a1a1a] active:scale-[0.97]",
     disabled: "bg-[#E5E5E5] text-[#999] cursor-not-allowed",
   },
   secondary: {
-    enabled: "bg-[#F2F2F2] text-[#0D0D0D] hover:bg-[#E8E8E8] active:scale-[0.98]",
+    enabled: "bg-[#F2F2F2] text-[#0D0D0D] hover:bg-[#E8E8E8] active:scale-[0.97]",
     disabled: "bg-[#F5F5F5] text-[#999] cursor-not-allowed",
   },
   outline: {
-    enabled: "border border-[#E5E5E5] text-[#0D0D0D] hover:border-[#3986F3] hover:text-[#3986F3] active:scale-[0.98]",
+    enabled: "border border-[#E5E5E5] text-[#0D0D0D] hover:border-[#3B82F6] hover:text-[#3B82F6] active:scale-[0.97]",
     disabled: "border border-[#E5E5E5] text-[#999] cursor-not-allowed",
   },
   blue: {
-    enabled: "bg-[#3986F3] text-white hover:bg-[#2a75e0] active:scale-[0.98] shadow-[0_2px_8px_rgba(57,134,243,0.25)]",
+    enabled: "bg-[#3B82F6] text-white hover:bg-[#2a75e0] active:scale-[0.97] shadow-[0_2px_8px_rgba(57,134,243,0.25)]",
     disabled: "bg-[#E5E5E5] text-[#999] cursor-not-allowed",
   },
 };

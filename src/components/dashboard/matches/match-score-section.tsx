@@ -74,15 +74,15 @@ function MatchHeader({
   const durationClassName =
     durationStyle === "featured"
       ? "rounded-[10px] px-1.5 py-0.5 text-xs font-medium bg-[#6AABFF] text-white"
-      : "rounded-[10px] px-1.5 py-0.5 text-xs font-medium bg-[#F3F3F3] text-[#999999] group-hover:bg-[#6AABFF] group-hover:text-white transition-colors";
+      : "rounded-[10px] px-1.5 py-0.5 text-xs font-medium bg-[#F3F3F3] text-[#888888] group-hover:bg-[#6AABFF] group-hover:text-white transition-colors";
 
   return (
-    <div className="flex flex-row justify-between items-center font-normal text-xs text-[#999999]">
+    <div className="flex flex-row justify-between items-center font-normal text-xs text-[#888888]">
       <div className="flex items-center gap-2">
         {matchContext && <p>{matchContext}</p>}
         {round && (
           <>
-            <span className="w-px h-3 bg-[#999999]" />
+            <span className="w-px h-3 bg-[#888888]" />
             <p>{round}</p>
           </>
         )}

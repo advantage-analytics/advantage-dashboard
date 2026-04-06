@@ -1,4 +1,3 @@
-// Performance Rating Component
 export function PerformanceRating({
   label,
   value,
@@ -7,10 +6,12 @@ export function PerformanceRating({
   value: number;
 }) {
   return (
-    <div className="flex flex-row items-center justify-between py-3">
-      <span className="text-xs font-normal text-[#999999]">{label}</span>
-      <span className="text-xl font-medium text-[#0D0D0D]">
-        {value.toFixed(1)}
+    <div className="flex items-center justify-between px-1 py-4">
+      <span className="text-xs font-medium text-[#888888] uppercase tracking-[1.6px]">
+        {label}
+      </span>
+      <span className="text-xl font-medium text-[#525252] leading-[1.1] tabular-nums">
+        {value.toFixed(0)}
       </span>
     </div>
   );

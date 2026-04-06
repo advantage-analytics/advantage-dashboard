@@ -40,7 +40,7 @@ function ProgressBar({
     return (
       <div className="relative w-full h-1.5 rounded-full overflow-hidden bg-gradient-to-r from-[#E5E5E5] to-[#F0F0F0]">
         <motion.div
-          className="absolute inset-0 bg-gradient-to-r from-[#3986F3] via-[#60a5fa] to-[#3986F3]"
+          className="absolute inset-0 bg-gradient-to-r from-[#3B82F6] via-[#60a5fa] to-[#3B82F6]"
           initial={{ x: "-100%" }}
           animate={{ x: "100%" }}
           transition={{
@@ -71,7 +71,7 @@ function ProgressBar({
                 ? "bg-amber-500"
                 : isCurrentPlan
                   ? "bg-[#0D0D0D]"
-                  : "bg-[#3986F3]"
+                  : "bg-[#3B82F6]"
               : "bg-[#E5E5E5]"
           )}
           initial={{ scaleX: 0 }}
@@ -132,11 +132,11 @@ function UsageIndicator({
           <div
             className={cn(
               "w-6 h-6 rounded-lg flex items-center justify-center",
-              isUnlimited ? "bg-[#3986F3]/10" : "bg-[#0D0D0D]/5"
+              isUnlimited ? "bg-[#3B82F6]/10" : "bg-[#0D0D0D]/5"
             )}
           >
             {isUnlimited ? (
-              <Zap className="w-3.5 h-3.5 text-[#3986F3]" />
+              <Zap className="w-3.5 h-3.5 text-[#3B82F6]" />
             ) : (
               <span className="text-[10px] font-bold text-[#0D0D0D]">
                 {filesUsed || 0}
@@ -160,7 +160,7 @@ function UsageIndicator({
         <p
           className={cn(
             "text-[11px]",
-            isUnlimited ? "text-[#3986F3] font-medium" : "text-[#999]"
+            isUnlimited ? "text-[#3B82F6] font-medium" : "text-[#999]"
           )}
         >
           {filesMessage}
@@ -292,7 +292,7 @@ export function PlanCard({
                   isCurrentPlan
                     ? "bg-[#0D0D0D] group-hover:scale-110"
                     : feature.highlighted
-                      ? "bg-[#3986F3] group-hover:scale-110"
+                      ? "bg-[#3B82F6] group-hover:scale-110"
                       : "bg-[#E5E5E5] group-hover:bg-[#D0D0D0]"
                 )}
               >

@@ -19,6 +19,7 @@ export interface DbMatch {
   court_type: string | null;
   verified: boolean | null;
   duration: number | null;
+  source_provider?: string | null;
 }
 
 export interface DisplayMatch {
@@ -31,8 +32,11 @@ export interface DisplayMatch {
   round?: string;
   matchContext?: string;
   duration?: string;
+  sourceProvider?: string;
   player1: { name: string };
   player2: { name: string };
+  player2Hand?: string;
+  player2Backhand?: string;
   score: {
     sets: { player1: number; player2: number; tiebreak?: boolean }[];
     winner: "player1" | "player2";
@@ -83,6 +87,7 @@ export function transformDbMatch(
     round: row.round ?? undefined,
     matchContext: row.result ?? "Final Score",
     duration: formatDuration(row.duration ?? undefined),
+    sourceProvider: row.source_provider ?? undefined,
     player1: { name: row.player1_name },
     player2: { name: row.player2_name },
     score: {

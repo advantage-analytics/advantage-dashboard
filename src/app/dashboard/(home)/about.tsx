@@ -9,7 +9,7 @@ export default function About() {
       <div className="flex flex-row justify-between items-center mb-6">
         <div className="flex flex-col">
           <p className="font-medium text-xl text-[#000000]">About</p>
-          <p className="font-normal text-sm text-[#999999] mt-2">
+          <p className="font-normal text-sm text-[#888888] mt-2">
             Player Information & Stats
           </p>
         </div>
@@ -25,7 +25,7 @@ export default function About() {
 
       {/* Placeholder Content */}
       <div className="flex flex-col items-center justify-center py-12">
-        <p className="text-sm text-[#999999]">Player information coming soon</p>
+        <p className="text-sm text-[#888888]">Player information coming soon</p>
       </div>
     </div>
   );

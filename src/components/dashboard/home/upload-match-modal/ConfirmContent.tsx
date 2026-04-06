@@ -104,7 +104,7 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
         <div className="w-0.5 bg-[#6AABFF] self-stretch rounded-full"></div>
         <div className="flex flex-col space-y-4 flex-1">
           {/* Match Header */}
-          <div className="flex flex-row justify-between items-center font-normal text-xs text-[#999999]">
+          <div className="flex flex-row justify-between items-center font-normal text-xs text-[#888888]">
             <p>{getMatchStatus(formData.result)} | {formData.round || "Round of 16"}</p>
             <span className="rounded-[10px] px-1.5 py-0.5 text-xs font-medium bg-[#6AABFF] text-white">
               {formatDuration(formData.duration)}
@@ -192,7 +192,7 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
       <div className="flex items-center justify-between">
         <div className="flex flex-col gap-1">
           <h4 className="text-[#0D0D0D] font-medium text-sm">Public</h4>
-          <p className="text-[#999999] font-normal text-xs">
+          <p className="text-[#888888] font-normal text-xs">
             Note: All matches will be private during our Beta Testing
           </p>
         </div>

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import { Calendars } from "lucide-react";
+import { AlertCircle } from "lucide-react";
+import Link from "next/link";
 
 export default function Error({
   error,
@@ -15,25 +16,27 @@ export default function Error({
   }, [error]);
 
   return (
-    <div className="flex-1 w-full bg-white">
-      <div className="flex flex-col items-center justify-center min-h-[60vh] px-6 pt-[136px]">
-        <div className="flex flex-col items-center gap-4 text-center max-w-md">
-          <div className="h-16 w-16 rounded-2xl bg-red-100 flex items-center justify-center">
-            <Calendars className="h-8 w-8 text-red-400" />
-          </div>
-          <h1 className="font-medium text-2xl text-[#0D0D0D]">
-            Something went wrong
-          </h1>
-          <p className="font-normal text-base text-[#999999]">
-            We couldn't load this match. Please try again.
-          </p>
-          <button
-            onClick={reset}
-            className="mt-6 px-6 py-2 bg-[#1D1D1F] text-white rounded-lg hover:bg-[#2D2D2D] transition-colors font-medium text-sm"
-          >
-            Try Again
-          </button>
-        </div>
+    <div className="flex-1 w-full bg-white flex items-center justify-center min-h-[60vh]">
+      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-8 flex flex-col items-center text-center max-w-sm">
+        <AlertCircle className="text-[#E51837] size-8" />
+        <h1 className="text-[20px] font-medium text-[#0D0D0D] mt-4">
+          Something went wrong
+        </h1>
+        <p className="text-[12px] text-[#525252] mt-2">
+          We couldn&apos;t load this match. Please try again.
+        </p>
+        <button
+          onClick={reset}
+          className="mt-6 px-4 py-2 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[11px] font-medium uppercase tracking-[1.5px] rounded-full transition-colors duration-200 active:scale-[0.97]"
+        >
+          Try Again
+        </button>
+        <Link
+          href="/dashboard/matches"
+          className="text-[#3B82F6] hover:text-[#2563EB] text-[11px] font-medium mt-3 transition-colors duration-200"
+        >
+          Back to Matches
+        </Link>
       </div>
     </div>
   );

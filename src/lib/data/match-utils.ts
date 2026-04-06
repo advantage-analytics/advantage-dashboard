@@ -50,7 +50,7 @@ export function shortName(name: string, maxLen = 14): string {
 }
 
 export const PLAYER_COLORS = {
-  player1: "#3986F3",
+  player1: "#3B82F6",
   player2: "#F38439",
 } as const;
 

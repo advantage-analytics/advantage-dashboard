@@ -9,7 +9,7 @@ export default function Upcoming() {
       <div className="flex flex-row justify-between items-center mb-6">
         <div className="flex flex-col">
           <p className="font-medium text-xl text-[#000000]">Upcoming Matches</p>
-          <p className="font-normal text-sm text-[#999999] mt-2">
+          <p className="font-normal text-sm text-[#888888] mt-2">
             Your Scheduled Events
           </p>
         </div>
@@ -25,7 +25,7 @@ export default function Upcoming() {
 
       {/* Placeholder Content */}
       <div className="flex flex-col items-center justify-center py-12">
-        <p className="text-sm text-[#999999]">No upcoming matches scheduled</p>
+        <p className="text-sm text-[#888888]">No upcoming matches scheduled</p>
       </div>
     </div>
   );

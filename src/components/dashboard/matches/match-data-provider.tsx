@@ -3,10 +3,17 @@
 import { createContext, useContext } from "react";
 import type { MatchStatisticsResult } from "@/lib/data/match-stats-server";
 import type { MatchPoint } from "@/lib/data/match-points-server";
+import type { Match } from "@/lib/data/types";
 
 interface MatchDataContextValue {
+  match: Match;
   statsResult: MatchStatisticsResult | null;
   points: MatchPoint[];
+  keyMoments: Array<{ moment: string; description: string }>;
+  insights: {
+    player1?: { strengths?: Array<{ name: string; value: number; description: string }>; weaknesses?: Array<{ name: string; value: number; description: string }> };
+    player2?: { strengths?: Array<{ name: string; value: number; description: string }>; weaknesses?: Array<{ name: string; value: number; description: string }> };
+  } | null;
 }
 
 const MatchDataContext = createContext<MatchDataContextValue | null>(null);
@@ -20,18 +27,27 @@ export function useMatchData(): MatchDataContextValue {
 }
 
 interface MatchDataProviderProps {
+  match: Match;
   statsResult: MatchStatisticsResult | null;
   points: MatchPoint[];
+  keyMoments?: Array<{ moment: string; description: string }>;
+  insights?: {
+    player1?: { strengths?: Array<{ name: string; value: number; description: string }>; weaknesses?: Array<{ name: string; value: number; description: string }> };
+    player2?: { strengths?: Array<{ name: string; value: number; description: string }>; weaknesses?: Array<{ name: string; value: number; description: string }> };
+  } | null;
   children: React.ReactNode;
 }
 
 export function MatchDataProvider({
+  match,
   statsResult,
   points,
+  keyMoments = [],
+  insights = null,
   children,
 }: MatchDataProviderProps) {
   return (
-    <MatchDataContext.Provider value={{ statsResult, points }}>
+    <MatchDataContext.Provider value={{ match, statsResult, points, keyMoments, insights }}>
       {children}
     </MatchDataContext.Provider>
   );

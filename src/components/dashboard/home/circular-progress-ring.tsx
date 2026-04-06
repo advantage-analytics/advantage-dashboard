@@ -27,10 +27,10 @@ export function CircularProgressRing({
   const winRate = Math.round(winPercentage * 100);
 
   // SVG geometry calculations
-  const size = 120;
-  const strokeWidth = 12;
-  const radius = (size - strokeWidth) / 2; // 54
-  const circumference = 2 * Math.PI * radius; // ~339.29
+  const size = 100;
+  const strokeWidth = 8;
+  const radius = (size - strokeWidth) / 2; // 46
+  const circumference = 2 * Math.PI * radius; // ~289.03
 
   // Calculate stroke-dashoffset for progress ring
   const progressOffset = circumference * (1 - winPercentage);
@@ -56,7 +56,7 @@ export function CircularProgressRing({
           >
             <div
               className="flex-shrink-0"
-              style={{ filter: "drop-shadow(0px 2px 4px rgba(0, 0, 0, 0.25))" }}
+              style={{ filter: "drop-shadow(0px 1px 3px rgba(0, 0, 0, 0.12))" }}
             >
               <svg width={size} height={size}>
               <g transform={`translate(${size / 2}, ${size / 2})`}>
@@ -73,7 +73,7 @@ export function CircularProgressRing({
                   <motion.circle
                     r={radius}
                     fill="none"
-                    stroke="#3986F3"
+                    stroke="#3B82F6"
                     strokeWidth={strokeWidth}
                     strokeLinecap="butt"
                     strokeDasharray={circumference}
@@ -95,7 +95,7 @@ export function CircularProgressRing({
               <p className="text-2xl font-medium text-[#0D0D0D]">
                 {wins}-{losses}
               </p>
-              <p className="text-sm font-normal text-[#747474]">{label}</p>
+              <p className="text-sm font-normal text-[#71717A]">{label}</p>
             </div>
           </motion.div>
         </TooltipTrigger>
@@ -106,7 +106,7 @@ export function CircularProgressRing({
             <p>
               Wins: {wins} | Losses: {losses}
             </p>
-            <p className="text-[#999999]">Total: {total} matches</p>
+            <p className="text-[#888888]">Total: {total} matches</p>
           </div>
         </TooltipContent>
       </Tooltip>

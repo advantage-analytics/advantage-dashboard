@@ -221,7 +221,7 @@ export function DetailsContent({
         <div className="space-y-3">
           {/* Sets Configuration */}
           <div className="flex justify-between items-center">
-            <span className="text-[#999999] font-normal text-xs">
+            <span className="text-[#888888] font-normal text-xs">
               {displayedSets} Sets
             </span>
             <div className="flex items-center gap-6">
@@ -255,11 +255,11 @@ export function DetailsContent({
               const hasTiebreak = needsTiebreak(score, opponentScores[i]);
               return (
                 <div key={i} className="flex items-center gap-1">
-                  <div className="w-6 text-center text-sm text-[#999999] font-normal">
+                  <div className="w-6 text-center text-sm text-[#888888] font-normal">
                     {i + 1}
                   </div>
                   {hasTiebreak && (
-                    <span className="w-6 text-center text-[8px] text-[#999999] font-normal">
+                    <span className="w-6 text-center text-[8px] text-[#888888] font-normal">
                       TIE
                     </span>
                   )}
@@ -272,7 +272,7 @@ export function DetailsContent({
             {/* Player 1 */}
             <div className="flex justify-between items-start">
               <div className="flex gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#F7F7F7] flex items-center justify-center text-sm font-medium text-[#999999]">
+                <div className="w-10 h-10 rounded-full bg-[#F7F7F7] flex items-center justify-center text-sm font-medium text-[#888888]">
                   {getInitials(playerName)}
                 </div>
                 <div className="flex-1 flex items-center gap-2">
@@ -284,7 +284,7 @@ export function DetailsContent({
                       onBlur={() => setEditingPlayer(false)}
                       onKeyDown={(e) => e.key === "Enter" && setEditingPlayer(false)}
                       autoFocus
-                      className="w-40 h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none placeholder:text-[#999999] px-3"
+                      className="w-40 h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3"
                     />
                   ) : (
                     <span className="w-40 text-[#0D0D0D] font-medium text-xs">
@@ -294,7 +294,7 @@ export function DetailsContent({
                   <button
                     type="button"
                     onClick={() => setEditingPlayer(!editingPlayer)}
-                    className="w-4 h-4 flex items-center justify-center text-[#999999] hover:text-[#0D0D0D] transition-colors"
+                    className="w-4 h-4 flex items-center justify-center text-[#888888] hover:text-[#0D0D0D] transition-colors"
                   >
                     <SquarePen className="h-3.5 w-3.5" />
                   </button>
@@ -316,7 +316,7 @@ export function DetailsContent({
                         placeholder="-"
                         inputMode="numeric"
                         pattern="\d*"
-                        className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#999999]"
+                        className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#888888]"
                         value={score === null ? "" : score}
                         onChange={(e) => {
                           const newValue = e.target.value;
@@ -358,7 +358,7 @@ export function DetailsContent({
                           placeholder="-"
                           inputMode="numeric"
                           pattern="\d*"
-                          className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#999999]"
+                          className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#888888]"
                           value={formData.playerTiebreaks[i] === null ? "" : String(formData.playerTiebreaks[i])}
                           onChange={(e) => {
                             const newValue = e.target.value;
@@ -389,7 +389,7 @@ export function DetailsContent({
             {/* Player 2 */}
             <div className="flex justify-between items-start">
               <div className="flex gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#F7F7F7] flex items-center justify-center text-sm font-medium text-[#999999]">
+                <div className="w-10 h-10 rounded-full bg-[#F7F7F7] flex items-center justify-center text-sm font-medium text-[#888888]">
                   {getInitials(opponentName)}
                 </div>
                 <div className="flex-1 flex items-center gap-2">
@@ -401,7 +401,7 @@ export function DetailsContent({
                       onBlur={() => setEditingOpponent(false)}
                       onKeyDown={(e) => e.key === "Enter" && setEditingOpponent(false)}
                       autoFocus
-                      className="w-40 h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none placeholder:text-[#999999] px-3"
+                      className="w-40 h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3"
                     />
                   ) : (
                     <span className="w-40 text-[#0D0D0D] font-medium text-xs">
@@ -411,7 +411,7 @@ export function DetailsContent({
                   <button
                     type="button"
                     onClick={() => setEditingOpponent(!editingOpponent)}
-                    className="w-4 h-4 flex items-center justify-center text-[#999999] hover:text-[#0D0D0D] transition-colors"
+                    className="w-4 h-4 flex items-center justify-center text-[#888888] hover:text-[#0D0D0D] transition-colors"
                   >
                     <SquarePen className="h-3.5 w-3.5" />
                   </button>
@@ -433,7 +433,7 @@ export function DetailsContent({
                         placeholder="-"
                         inputMode="numeric"
                         pattern="\d*"
-                        className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#999999]"
+                        className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#888888]"
                         value={score === null ? "" : score}
                         onChange={(e) => {
                           const newValue = e.target.value;
@@ -475,7 +475,7 @@ export function DetailsContent({
                           placeholder="-"
                           inputMode="numeric"
                           pattern="\d*"
-                          className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#999999]"
+                          className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#888888]"
                           value={formData.opponentTiebreaks[i] === null ? "" : String(formData.opponentTiebreaks[i])}
                           onChange={(e) => {
                             const newValue = e.target.value;
@@ -514,12 +514,12 @@ export function DetailsContent({
             value={formData.result || undefined}
             onValueChange={(value) => onInputChange("result", value)}
           >
-            <SelectTrigger className="w-[180px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none [&_svg]:size-3">
+            <SelectTrigger className="w-[180px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
               <SelectValue placeholder="Select Result..." />
             </SelectTrigger>
-            <SelectContent className="shadow-none border-[#E5E5E5] text-[#999999] text-xs">
+            <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
               {resultOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value} className="text-[#999999] text-xs">
+                <SelectItem key={option.value} value={option.value} className="text-[#888888] text-xs">
                   {option.label}
                 </SelectItem>
               ))}
@@ -529,7 +529,7 @@ export function DetailsContent({
         <button
           type="button"
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className="flex items-center gap-1 text-[10px] text-[#999999] hover:text-[#666666] transition-colors"
+          className="flex items-center gap-1 text-[10px] text-[#888888] hover:text-[#666666] transition-colors"
         >
           <span className="underline underline-offset-[19.89%]">Advanced Settings (Optional)</span>
           <ChevronDown
@@ -554,24 +554,24 @@ export function DetailsContent({
                 placeholder="Type Event Name..."
                 value={formData.eventName}
                 onChange={(e) => onInputChange("eventName", e.target.value)}
-                className="w-[200px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none placeholder:text-[#999999] px-3"
+                className="w-[200px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3"
               />
               <Select
                 value={formData.round || undefined}
                 onValueChange={(value) => onInputChange("round", value)}
               >
-                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none [&_svg]:size-3">
+                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
                   <SelectValue placeholder="Round of..." />
                 </SelectTrigger>
-                <SelectContent className="shadow-none border-[#E5E5E5] text-[#999999] text-xs">
-                  <SelectItem value="None" className="text-[#999999] text-xs">None</SelectItem>
-                  <SelectItem value="Round of 128" className="text-[#999999] text-xs">Round of 128</SelectItem>
-                  <SelectItem value="Round of 64" className="text-[#999999] text-xs">Round of 64</SelectItem>
-                  <SelectItem value="Round of 32" className="text-[#999999] text-xs">Round of 32</SelectItem>
-                  <SelectItem value="Round of 16" className="text-[#999999] text-xs">Round of 16</SelectItem>
-                  <SelectItem value="Quarterfinals" className="text-[#999999] text-xs">Quarterfinals</SelectItem>
-                  <SelectItem value="Semifinals" className="text-[#999999] text-xs">Semifinals</SelectItem>
-                  <SelectItem value="Finals" className="text-[#999999] text-xs">Finals</SelectItem>
+                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
+                  <SelectItem value="None" className="text-[#888888] text-xs">None</SelectItem>
+                  <SelectItem value="Round of 128" className="text-[#888888] text-xs">Round of 128</SelectItem>
+                  <SelectItem value="Round of 64" className="text-[#888888] text-xs">Round of 64</SelectItem>
+                  <SelectItem value="Round of 32" className="text-[#888888] text-xs">Round of 32</SelectItem>
+                  <SelectItem value="Round of 16" className="text-[#888888] text-xs">Round of 16</SelectItem>
+                  <SelectItem value="Quarterfinals" className="text-[#888888] text-xs">Quarterfinals</SelectItem>
+                  <SelectItem value="Semifinals" className="text-[#888888] text-xs">Semifinals</SelectItem>
+                  <SelectItem value="Finals" className="text-[#888888] text-xs">Finals</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -585,9 +585,9 @@ export function DetailsContent({
                   type="date"
                   value={formData.date}
                   onChange={(e) => onInputChange("date", e.target.value)}
-                  className="w-auto h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none pl-3 pr-7 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:p-0 [&::-webkit-datetime-edit-fields-wrapper]:p-0"
+                  className="w-auto h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none pl-3 pr-7 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:p-0 [&::-webkit-datetime-edit-fields-wrapper]:p-0"
                 />
-                <Calendar className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-[#999999]" />
+                <Calendar className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-[#888888]" />
               </div>
               <div
                 className="relative w-fit cursor-pointer"
@@ -598,37 +598,37 @@ export function DetailsContent({
                   type="time"
                   value={formData.time}
                   onChange={(e) => onInputChange("time", e.target.value)}
-                  className="w-auto h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none pl-3 pr-7 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:p-0 [&::-webkit-datetime-edit-fields-wrapper]:p-0"
+                  className="w-auto h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none pl-3 pr-7 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:p-0 [&::-webkit-datetime-edit-fields-wrapper]:p-0"
                 />
-                <Clock className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-[#999999]" />
+                <Clock className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-[#888888]" />
               </div>
               <Select
                 value={formData.matchType || undefined}
                 onValueChange={(value) => onInputChange("matchType", value)}
               >
-                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none [&_svg]:size-3">
+                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
                   <SelectValue placeholder="Match Type..." />
                 </SelectTrigger>
-                <SelectContent className="shadow-none border-[#E5E5E5] text-[#999999] text-xs">
-                  <SelectItem value="None" className="text-[#999999] text-xs">None</SelectItem>
-                  <SelectItem value="Tournament" className="text-[#999999] text-xs">Tournament</SelectItem>
-                  <SelectItem value="Dual Match" className="text-[#999999] text-xs">Dual Match</SelectItem>
-                  <SelectItem value="Practice" className="text-[#999999] text-xs">Practice</SelectItem>
+                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
+                  <SelectItem value="None" className="text-[#888888] text-xs">None</SelectItem>
+                  <SelectItem value="Tournament" className="text-[#888888] text-xs">Tournament</SelectItem>
+                  <SelectItem value="Dual Match" className="text-[#888888] text-xs">Dual Match</SelectItem>
+                  <SelectItem value="Practice" className="text-[#888888] text-xs">Practice</SelectItem>
                 </SelectContent>
               </Select>
               <Select
                 value={formData.courtType || undefined}
                 onValueChange={(value) => onInputChange("courtType", value)}
               >
-                <SelectTrigger className="w-[160px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none [&_svg]:size-3">
+                <SelectTrigger className="w-[160px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
                   <SelectValue placeholder="Court Type..." />
                 </SelectTrigger>
-                <SelectContent className="shadow-none border-[#E5E5E5] text-[#999999] text-xs">
-                  <SelectItem value="None" className="text-[#999999] text-xs">None</SelectItem>
-                  <SelectItem value="Indoor Hard Court" className="text-[#999999] text-xs">Indoor Hard Court</SelectItem>
-                  <SelectItem value="Outdoor Hard Court" className="text-[#999999] text-xs">Outdoor Hard Court</SelectItem>
-                  <SelectItem value="Clay Court" className="text-[#999999] text-xs">Clay Court</SelectItem>
-                  <SelectItem value="Grass Court" className="text-[#999999] text-xs">Grass Court</SelectItem>
+                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
+                  <SelectItem value="None" className="text-[#888888] text-xs">None</SelectItem>
+                  <SelectItem value="Indoor Hard Court" className="text-[#888888] text-xs">Indoor Hard Court</SelectItem>
+                  <SelectItem value="Outdoor Hard Court" className="text-[#888888] text-xs">Outdoor Hard Court</SelectItem>
+                  <SelectItem value="Clay Court" className="text-[#888888] text-xs">Clay Court</SelectItem>
+                  <SelectItem value="Grass Court" className="text-[#888888] text-xs">Grass Court</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -642,37 +642,37 @@ export function DetailsContent({
                 value={formData.bestOf || undefined}
                 onValueChange={(value) => onInputChange("bestOf", value)}
               >
-                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none [&_svg]:size-3">
+                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
                   <SelectValue placeholder="Best of..." />
                 </SelectTrigger>
-                <SelectContent className="shadow-none border-[#E5E5E5] text-[#999999] text-xs">
-                  <SelectItem value="1" className="text-[#999999] text-xs">Best of 1 Set</SelectItem>
-                  <SelectItem value="3" className="text-[#999999] text-xs">Best of 3 Sets</SelectItem>
-                  <SelectItem value="5" className="text-[#999999] text-xs">Best of 5 Sets</SelectItem>
+                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
+                  <SelectItem value="1" className="text-[#888888] text-xs">Best of 1 Set</SelectItem>
+                  <SelectItem value="3" className="text-[#888888] text-xs">Best of 3 Sets</SelectItem>
+                  <SelectItem value="5" className="text-[#888888] text-xs">Best of 5 Sets</SelectItem>
                 </SelectContent>
               </Select>
               <Select
                 value={formData.adScoring === undefined ? undefined : (formData.adScoring ? "ad" : "no-ad")}
                 onValueChange={(value) => onInputChange("adScoring", value === "ad")}
               >
-                <SelectTrigger className="w-[140px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none [&_svg]:size-3">
+                <SelectTrigger className="w-[140px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
                   <SelectValue placeholder="Ad Scoring..." />
                 </SelectTrigger>
-                <SelectContent className="shadow-none border-[#E5E5E5] text-[#999999] text-xs">
-                  <SelectItem value="ad" className="text-[#999999] text-xs">Ad Scoring</SelectItem>
-                  <SelectItem value="no-ad" className="text-[#999999] text-xs">No-Ad Scoring</SelectItem>
+                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
+                  <SelectItem value="ad" className="text-[#888888] text-xs">Ad Scoring</SelectItem>
+                  <SelectItem value="no-ad" className="text-[#888888] text-xs">No-Ad Scoring</SelectItem>
                 </SelectContent>
               </Select>
               <Select
                 value={formData.playOnLets === undefined ? undefined : (formData.playOnLets ? "play-on" : "lets")}
                 onValueChange={(value) => onInputChange("playOnLets", value === "play-on")}
               >
-                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none [&_svg]:size-3">
+                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
                   <SelectValue placeholder="Lets..." />
                 </SelectTrigger>
-                <SelectContent className="shadow-none border-[#E5E5E5] text-[#999999] text-xs">
-                  <SelectItem value="lets" className="text-[#999999] text-xs">Lets</SelectItem>
-                  <SelectItem value="play-on" className="text-[#999999] text-xs">Play on Lets</SelectItem>
+                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
+                  <SelectItem value="lets" className="text-[#888888] text-xs">Lets</SelectItem>
+                  <SelectItem value="play-on" className="text-[#888888] text-xs">Play on Lets</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -694,7 +694,7 @@ export function DetailsContent({
                   onInputChange("duration", seconds);
                 }
               }}
-              className="w-[200px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none placeholder:text-[#999999] px-3 font-mono"
+              className="w-[200px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3 font-mono"
             />
           </div>
           </div>
