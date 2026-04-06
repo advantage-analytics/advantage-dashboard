@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, Upload, Video } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import * as tus from "tus-js-client";
 import { FilterPills } from "./visuals/filter-pills";
 import { useMatchData } from "./match-data-provider";
@@ -133,10 +133,12 @@ function SectionHeader({
   title,
   open,
   onToggle,
+  activeCount,
 }: {
   title: string;
   open: boolean;
   onToggle: () => void;
+  activeCount?: number;
 }) {
   return (
     <button
@@ -144,12 +146,21 @@ function SectionHeader({
       onClick={onToggle}
       className="w-full flex items-center justify-between py-3 text-left"
     >
-      <span className="text-base font-medium text-[#0D0D0D]">{title}</span>
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+          {title}
+        </span>
+        {activeCount != null && activeCount > 0 && (
+          <span className="bg-[#EBF2FD] text-[#3B82F6] rounded-full px-2 py-0.5 text-[10px] font-medium">
+            {activeCount}
+          </span>
+        )}
+      </div>
       <motion.div
         animate={{ rotate: open ? 180 : 0 }}
-        transition={{ duration: 0.2 }}
+        transition={{ duration: 0.2, ease: EASE_CURVE }}
       >
-        <ChevronDown className="h-4 w-4 text-[#999999]" />
+        <ChevronDown className="h-4 w-4 text-[#888888]" />
       </motion.div>
     </button>
   );
@@ -180,7 +191,34 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
   const player1Name = statsResult?.player1Name ?? "Player 1";
   const player2Name = statsResult?.player2Name ?? "Player 2";
 
+  const prefersReducedMotion = useReducedMotion();
+
   const hasActiveFilters = Object.values(filters).some((arr) => arr.length > 0);
+
+  const scoreActiveCount =
+    filters.sets.length + filters.scoreTypes.length + filters.pointScores.length;
+  const serveActiveCount =
+    filters.servePlayers.length +
+    filters.serveSides.length +
+    filters.serveTypes.length +
+    filters.serveSpins.length +
+    filters.serveZones.length;
+  const returnActiveCount =
+    filters.returnPlayers.length +
+    filters.returnSides.length +
+    filters.returnTypes.length +
+    filters.returnSpins.length +
+    filters.returnZones.length +
+    filters.returnContacts.length;
+  const resultActiveCount =
+    filters.resultPlayers.length +
+    filters.resultZones.length +
+    filters.resultOutcomes.length;
+  const customActiveCount =
+    filters.customPlayers.length +
+    filters.customSides.length +
+    filters.customDirections.length +
+    filters.rallyShots.length;
 
   const playerOptions = [
     { value: "player1", label: player1Name },
@@ -376,7 +414,7 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
   const showUpload = !loading && !videoUrl;
 
   return (
-    <div className="bg-white rounded-2xl p-6 min-h-[400px]">
+    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5 min-h-[400px]">
       <input
         ref={fileInputRef}
         type="file"
@@ -392,9 +430,11 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
 
       <div className="flex items-center justify-between gap-4 mb-4">
         <div className="flex items-center gap-2">
-          <h3 className="text-xl font-medium text-[#0D0D0D]">Video</h3>
+          <span className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+            Video
+          </span>
           {matchFile?.video_file_name && (
-            <span className="text-xs text-[#999999]">
+            <span className="text-[10px] text-[#888888]">
               {matchFile.video_file_name}
             </span>
           )}
@@ -406,7 +446,7 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
             size="sm"
             disabled={uploading}
             onClick={() => fileInputRef.current?.click()}
-            className="h-8 rounded-full text-xs bg-[#0D0D0D] text-white hover:bg-[#2D2D2D]"
+            className="bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-full px-4 py-2 text-[11px] font-medium uppercase tracking-[1.5px] transition-colors duration-200"
           >
             <Upload className="h-3.5 w-3.5 mr-2" />
             {uploading
@@ -417,46 +457,58 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
       </div>
 
       {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
-          <p className="text-sm text-red-700">{error}</p>
+        <div className="mb-4 bg-[rgba(229,24,55,0.1)] border border-[#E51837]/20 rounded-lg p-3">
+          <p className="text-[12px] text-[#E51837]">{error}</p>
         </div>
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[#888888]">
+        <div className="flex items-center justify-center py-20 text-[12px] text-[#888888]">
           Loading…
         </div>
       ) : videoUrl ? (
-        <div className="w-full">
+        <div className="w-full rounded-xl overflow-hidden">
           <video
             ref={videoRef}
-            className="w-full rounded-xl bg-black"
+            className="w-full bg-black"
             controls
             preload="metadata"
             src={videoUrl}
           />
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center py-20 px-8 bg-white rounded-2xl min-h-[300px]">
-          <div className="w-12 h-12 rounded-full bg-[#F5F5F5] flex items-center justify-center mb-4">
+        <div className="flex flex-col items-center justify-center py-20 px-8 bg-[#FAFAFA] rounded-xl min-h-[300px]">
+          <div className="w-12 h-12 rounded-full bg-[#F2F2F2] flex items-center justify-center mb-4">
             <Video className="w-6 h-6 text-[#888888]" />
           </div>
-          <h2 className="text-base font-semibold text-[#0D0D0D] mb-2">
+          <h2 className="text-[14px] font-medium text-[#0D0D0D] mb-2">
             No video uploaded yet
           </h2>
-          <p className="text-sm text-[#888888] text-center max-w-sm">
+          <p className="text-[12px] text-[#525252] text-center max-w-sm">
             Upload match footage to enable replays and jump-to-moment playback.
           </p>
+          {uploading && uploadPct !== null && (
+            <div className="mt-4 w-full max-w-xs">
+              <div className="bg-[#F3F3F3] rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-[#3B82F6] rounded-full h-2 transition-[width] duration-300"
+                  style={{ width: `${uploadPct}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-[#888888] mt-1 text-center tabular-nums">
+                {uploadPct.toFixed(0)}%
+              </p>
+            </div>
+          )}
           <div className="mt-5">
-            <Button
+            <button
               type="button"
-              size="sm"
               disabled={uploading}
               onClick={() => void load()}
-              className="h-8 rounded-full text-xs bg-[#F7F7F7] text-[#666666] hover:bg-[#EEEEEE]"
+              className="text-[9px] font-medium uppercase tracking-[1.5px] text-[#3B82F6] hover:text-[#2563EB] transition-colors duration-200 active:scale-[0.97]"
             >
               Refresh
-            </Button>
+            </button>
           </div>
         </div>
       )}
@@ -469,22 +521,24 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
         animate="visible"
       >
         <motion.div className="flex items-center justify-between mb-5" variants={itemVariants}>
-          <h3 className="text-xl font-medium text-[#0D0D0D]">Filters</h3>
+          <span className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+            Filters
+          </span>
           <motion.button
             onClick={() => setFilters(DEFAULT_FILTERS)}
             disabled={!hasActiveFilters}
-            className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
+            className={`text-[9px] font-medium uppercase tracking-[1.5px] transition-colors duration-200 ${
               hasActiveFilters
-                ? "ring-1 ring-inset ring-[#E5E5E5] text-[#525252] hover:bg-[#FEF2F2] hover:ring-[#FECACA] hover:text-[#EF4444]"
+                ? "text-[#3B82F6] hover:text-[#2563EB]"
                 : "text-[#CCCCCC] cursor-not-allowed"
             }`}
-            whileTap={hasActiveFilters ? { scale: 0.95 } : undefined}
+            whileTap={hasActiveFilters ? { scale: 0.97 } : undefined}
           >
             Clear all
           </motion.button>
         </motion.div>
 
-        <div className="border-t border-[#E7E7E7]">
+        <div className="border-t border-[#F0F0F0]">
           {/* Score */}
           <motion.div variants={itemVariants}>
             <SectionHeader
@@ -493,6 +547,7 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
               onToggle={() =>
                 setOpenSections((p) => ({ ...p, score: !p.score }))
               }
+              activeCount={scoreActiveCount}
             />
             <AnimatePresence initial={false}>
               {openSections.score && (
@@ -504,7 +559,7 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
                   exit="exit"
                   className="overflow-hidden"
                 >
-                  <div className="pb-4 flex gap-6">
+                  <div className="bg-[#FAFAFA] rounded-xl p-4 mb-4 flex gap-6">
                     <FilterPills
                       label="Sets"
                       className="shrink-0"
@@ -546,7 +601,7 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
             </AnimatePresence>
           </motion.div>
 
-          <div className="border-t border-[#E7E7E7]" />
+          <div className="h-px bg-[#F0F0F0]" />
 
           {/* Serve */}
           <motion.div variants={itemVariants}>
@@ -554,6 +609,7 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
               title="Serve"
               open={openSections.serve}
               onToggle={() => setOpenSections((p) => ({ ...p, serve: !p.serve }))}
+              activeCount={serveActiveCount}
             />
             <AnimatePresence initial={false}>
               {openSections.serve && (
@@ -565,7 +621,7 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
                   exit="exit"
                   className="overflow-hidden"
                 >
-                  <div className="pb-4">
+                  <div className="bg-[#FAFAFA] rounded-xl p-4 mb-4">
                     <div className="flex flex-row gap-10 flex-wrap">
                       <FilterPills
                         label="Player"
@@ -620,7 +676,7 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
             </AnimatePresence>
           </motion.div>
 
-          <div className="border-t border-[#E7E7E7]" />
+          <div className="h-px bg-[#F0F0F0]" />
 
           {/* Return */}
           <motion.div variants={itemVariants}>
@@ -628,6 +684,7 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
               title="Return"
               open={openSections.return}
               onToggle={() => setOpenSections((p) => ({ ...p, return: !p.return }))}
+              activeCount={returnActiveCount}
             />
             <AnimatePresence initial={false}>
               {openSections.return && (
@@ -639,7 +696,7 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
                   exit="exit"
                   className="overflow-hidden"
                 >
-                  <div className="pb-4">
+                  <div className="bg-[#FAFAFA] rounded-xl p-4 mb-4">
                     <div className="flex flex-row gap-10 flex-wrap">
                       <FilterPills
                         label="Player"
@@ -705,7 +762,7 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
             </AnimatePresence>
           </motion.div>
 
-          <div className="border-t border-[#E7E7E7]" />
+          <div className="h-px bg-[#F0F0F0]" />
 
           {/* Result */}
           <motion.div variants={itemVariants}>
@@ -713,6 +770,7 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
               title="Result"
               open={openSections.result}
               onToggle={() => setOpenSections((p) => ({ ...p, result: !p.result }))}
+              activeCount={resultActiveCount}
             />
             <AnimatePresence initial={false}>
               {openSections.result && (
@@ -724,7 +782,7 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
                   exit="exit"
                   className="overflow-hidden"
                 >
-                  <div className="pb-4 flex flex-col gap-4">
+                  <div className="bg-[#FAFAFA] rounded-xl p-4 mb-4 flex flex-col gap-4">
                     <FilterPills
                       label="Player"
                       options={playerOptions}
@@ -761,7 +819,7 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
             </AnimatePresence>
           </motion.div>
 
-          <div className="border-t border-[#E7E7E7]" />
+          <div className="h-px bg-[#F0F0F0]" />
 
           {/* Custom */}
           <motion.div variants={itemVariants}>
@@ -769,6 +827,7 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
               title="Custom"
               open={openSections.custom}
               onToggle={() => setOpenSections((p) => ({ ...p, custom: !p.custom }))}
+              activeCount={customActiveCount}
             />
             <AnimatePresence initial={false}>
               {openSections.custom && (
@@ -780,7 +839,7 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
                   exit="exit"
                   className="overflow-hidden"
                 >
-                  <div className="pb-4 flex flex-col gap-4">
+                  <div className="bg-[#FAFAFA] rounded-xl p-4 mb-4 flex flex-col gap-4">
                     <FilterPills
                       label="Choose Player"
                       options={playerOptions}

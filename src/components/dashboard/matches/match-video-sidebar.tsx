@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import type { Match } from "@/lib/data/types";
 import type { MatchStatisticsResult } from "@/lib/data/match-stats-server";
 import type { MatchPoint } from "@/lib/data/match-points-server";
@@ -257,14 +257,14 @@ function EventTabs({
   onTabChange: (tab: "events" | "saved") => void;
 }) {
   return (
-    <div className="flex flex-row shadow-[inset_0_-1px_0_0_#D9D9D9]">
+    <div className="flex flex-row shadow-[inset_0_-1px_0_0_#F0F0F0]">
       <button
         type="button"
         onClick={() => onTabChange("events")}
-        className={`h-[31px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
+        className={`h-[31px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors duration-200 ${
           activeTab === "events"
-            ? "text-[#3986F3] border-[#3986F3]"
-            : "text-[#999999] border-transparent hover:text-[#666666]"
+            ? "text-[#3B82F6] border-[#3B82F6]"
+            : "text-[#888888] border-transparent hover:text-[#666666]"
         }`}
       >
         Events
@@ -272,10 +272,10 @@ function EventTabs({
       <button
         type="button"
         onClick={() => onTabChange("saved")}
-        className={`h-[31px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
+        className={`h-[31px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors duration-200 ${
           activeTab === "saved"
-            ? "text-[#3986F3] border-[#3986F3]"
-            : "text-[#999999] border-transparent hover:text-[#666666]"
+            ? "text-[#3B82F6] border-[#3B82F6]"
+            : "text-[#888888] border-transparent hover:text-[#666666]"
         }`}
       >
         Saved
@@ -292,11 +292,11 @@ function GameHeader({
   gameScore: string;
 }) {
   return (
-    <div className="sticky top-0 z-10 flex flex-row justify-between items-center px-2 pt-4 pb-2 border-b border-[#D9D9D9] bg-white shadow-[0_1px_0_0_white]">
-      <span className="text-xs font-medium text-[#999999]">
+    <div className="sticky top-0 z-10 flex flex-row justify-between items-center px-2 pt-4 pb-2 border-b border-[#F0F0F0] bg-white">
+      <span className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
         Set {setNumber}
       </span>
-      <span className="text-xs font-medium text-[#999999]">{gameScore}</span>
+      <span className="text-[12px] text-[#525252] tracking-[0.3px]">{gameScore}</span>
     </div>
   );
 }
@@ -313,13 +313,13 @@ function SavedIcon({
       type="button"
       onClick={onClick}
       aria-label={filled ? "Remove from saved" : "Save event"}
-      className="shrink-0 p-1 -m-1 hover:opacity-70 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6AABFF] focus-visible:ring-offset-1 rounded-sm"
+      className="shrink-0 p-1 -m-1 hover:opacity-70 transition-opacity duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/50 focus-visible:ring-offset-1 rounded-sm"
     >
       <Bookmark
         size={12}
-        stroke="#6AABFF"
+        stroke="#3B82F6"
         strokeWidth={1.5}
-        fill={filled ? "#6AABFF" : "white"}
+        fill={filled ? "#3B82F6" : "white"}
         aria-hidden
       />
     </button>
@@ -337,9 +337,9 @@ function AnimatedProgressBar({ duration }: { duration: number | null }) {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2, ease: EASE_CURVE }}
     >
-      <div className="w-full h-[2px] bg-[#E5E5E5] rounded-full overflow-hidden">
+      <div className="w-full h-[2px] bg-[#F3F3F3] rounded-full overflow-hidden">
         <motion.div
-          className="h-full bg-[#3986F3] rounded-full"
+          className="h-full bg-[#3B82F6] rounded-full"
           initial={{ width: "0%" }}
           animate={{ width: "100%" }}
           transition={{ duration: seconds, ease: "linear" }}
@@ -374,10 +374,11 @@ function EventRow({
       role={isDisabled ? undefined : "button"}
       tabIndex={isDisabled ? undefined : 0}
       className={cn(
-        "flex flex-col gap-1 rounded-sm transition-colors",
+        "flex flex-col gap-1 rounded-lg transition-colors duration-200",
+        isActive && "bg-[#EBF2FD] border-l-2 border-[#3B82F6]",
         isDisabled
           ? "opacity-40 cursor-default"
-          : "cursor-pointer hover:bg-[#FAFAFA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3986F3] focus-visible:ring-offset-1",
+          : "cursor-pointer hover:bg-[#FAFAFA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/50 focus-visible:ring-offset-1",
       )}
       onMouseEnter={() => { if (!isDisabled) setIsHovered(true); }}
       onMouseLeave={() => setIsHovered(false)}
@@ -404,17 +405,17 @@ function EventRow({
 
         {/* Event info */}
         <div className="flex-1 min-w-0 flex flex-col gap-1">
-          <span className="text-xs font-medium text-[#0D0D0D] truncate">
+          <span className="text-[12px] font-medium text-[#0D0D0D] truncate">
             {point.eventType}
           </span>
-          <span className="text-[10px] font-normal text-[#999999] truncate">
+          <span className="text-[10px] text-[#888888] tabular-nums truncate">
             {point.description}
           </span>
         </div>
 
         {/* Score + saved icon */}
         <div className="flex flex-row items-center gap-4 shrink-0">
-          <span className="text-base font-medium text-[#0D0D0D] tabular-nums">
+          <span className="text-[12px] text-[#525252] tabular-nums tracking-[0.3px]">
             {point.pointScore}
           </span>
           <AnimatePresence>
@@ -548,19 +549,28 @@ export function MatchVideoSidebar({
     return () => clearTimeout(timer);
   }, [activePointId, displayPoints]);
 
+  const prefersReducedMotion = useReducedMotion();
+
+  let globalPointIndex = 0;
+
   return (
-    <div className="w-[320px] flex flex-col bg-white rounded-2xl border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
+    <div className="w-[320px] flex flex-col bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5">
+      {/* Section header */}
+      <span className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-3">
+        Moments
+      </span>
+
       {/* Events / Saved tabs */}
-      <div className="px-6 pt-4">
+      <div>
         <EventTabs activeTab={activeTab} onTabChange={setActiveTab} />
       </div>
 
       {/* Scrollable event list */}
       <div
-        className="flex-1 overflow-y-auto max-h-[600px] scroll-pt-12 px-6 pb-4"
+        className="flex-1 overflow-y-auto max-h-[600px] scroll-pt-12 pt-2 pb-1"
       >
         {gameGroups.length > 0 ? (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col">
             {gameGroups.map((group, groupIdx) => (
               <div
                 key={`${group.setNumber}-${group.gameScore}-${groupIdx}`}
@@ -570,36 +580,46 @@ export function MatchVideoSidebar({
                   setNumber={group.setNumber}
                   gameScore={group.gameScore}
                 />
-                {group.points.map((point) => (
-                  <motion.div
-                    key={point.id}
-                    layout
-                    transition={{ duration: 0.3, ease: EASE_CURVE }}
-                  >
-                    <EventRow
-                      point={point}
-                      match={match}
-                      isActive={activePointId === point.id}
-                      activeDurationOverride={
-                        activePointId === point.id && point.videoTime != null
-                          ? (point.duration ?? 5) + getSeekOffsetSeconds(point.videoTime)
-                          : undefined
-                      }
-                      onSelect={() =>
-                        setActivePointId((prev) =>
-                          prev === point.id ? null : point.id,
-                        )
-                      }
-                      onToggleSaved={() => handleToggleSaved(point.id)}
-                    />
-                  </motion.div>
-                ))}
+                {group.points.map((point) => {
+                  const i = globalPointIndex++;
+                  return (
+                    <motion.div
+                      key={point.id}
+                      layout
+                      initial={prefersReducedMotion ? { opacity: 1 } : { opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{
+                        duration: 0.3,
+                        ease: EASE_CURVE,
+                        delay: prefersReducedMotion ? 0 : i * 0.03,
+                      }}
+                      className="border-b border-[#F0F0F0] last:border-b-0"
+                    >
+                      <EventRow
+                        point={point}
+                        match={match}
+                        isActive={activePointId === point.id}
+                        activeDurationOverride={
+                          activePointId === point.id && point.videoTime != null
+                            ? (point.duration ?? 5) + getSeekOffsetSeconds(point.videoTime)
+                            : undefined
+                        }
+                        onSelect={() =>
+                          setActivePointId((prev) =>
+                            prev === point.id ? null : point.id,
+                          )
+                        }
+                        onToggleSaved={() => handleToggleSaved(point.id)}
+                      />
+                    </motion.div>
+                  );
+                })}
               </div>
             ))}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-8">
-            <span className="text-xs text-[#999999]">
+            <span className="text-[12px] text-[#888888]">
               {activeTab === "saved"
                 ? "No saved events yet"
                 : "No events available"}
