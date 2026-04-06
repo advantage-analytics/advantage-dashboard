@@ -86,6 +86,17 @@ Filter configs: `src/components/dashboard/matches/visuals/configs/` (serve, retu
 
 Key principles: Inter font only (weights 300/400/500/600), strict type scale (9–56px), blue accent `#3B82F6`, semantic success `#5DB955` / error `#E51837`, Lucide React icons only, two Framer Motion curves (`[0.25, 0.46, 0.45, 0.94]` primary, `[0.23, 1, 0.32, 1]` spring-like), no bounce/glassmorphism.
 
+**Typography conventions:**
+- Page headings (30px): `font-light text-[30px] leading-[36px] tracking-[-0.6px] text-[#0D0D0D]` — 1.2 line-height ratio
+- Page labels: `text-[10px] font-medium uppercase tracking-[3px] text-[#AAAAAA]` — always above the heading with `gap-3`
+- Stat values (28px): `font-light text-[28px] leading-none tracking-[-0.5px]` — tight for numeric display
+- Section headings: `text-xl font-medium text-[#0D0D0D]`
+
+**Layout conventions:**
+- Two-column widget grid: `grid grid-cols-1 lg:grid-cols-[5fr_2fr] gap-8` — proportional, responsive
+- Widget stacking: `gap-6` between cards in a column
+- Page container: `px-8 py-10`
+
 Auth pages use CSS variables from `globals.css`. Dashboard pages use Tailwind utilities directly — two distinct styling paradigms.
 
 ## Key Conventions
