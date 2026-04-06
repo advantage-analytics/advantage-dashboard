@@ -44,7 +44,8 @@ yarn-error.log*
 next-env.d.ts
 
 # claude code
-.claude/
+.claude/*
+!.claude/skills/
 .mcp.json
 
 # lock files
