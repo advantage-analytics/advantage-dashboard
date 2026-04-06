@@ -15,7 +15,7 @@ export function RecentPerformance({
   index?: number;
 }) {
   const changeColor = change >= 0 ? "bg-[#73E668]/15" : "bg-red-200";
-  const changeTextColor = change >= 0 ? "text-[#5DB955]" : "text-[#E05252]";
+  const changeTextColor = change >= 0 ? "text-[var(--color-success)]" : "text-[#E05252]";
   const changeText = change >= 0 ? `+${change.toFixed(1)}` : change.toFixed(1);
 
   return (

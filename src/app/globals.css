@@ -72,6 +72,14 @@
   --color-error: #FF453A;
   --color-error-bg: rgba(255, 69, 58, 0.08);
   --color-accent-blue-glow: rgba(59, 130, 246, 0.15);
+  --color-text-tertiary: #525252;
+  --color-text-change: #777777;
+  --color-text-disabled: #BFBFBF;
+  --color-text-separator: #CCCCCC;
+  --color-border-card: #F3F3F3;
+  --color-divider: #F0F0F0;
+  --color-success: #5DB955;
+  --color-danger: #E51837;
 
   --radius: 0.625rem;
   --background: oklch(1 0 0);

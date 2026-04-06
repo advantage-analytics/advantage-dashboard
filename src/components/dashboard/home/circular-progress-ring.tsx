@@ -92,7 +92,7 @@ export function CircularProgressRing({
             </div>
 
             <div className="flex flex-col">
-              <p className="text-2xl font-medium text-[#0D0D0D]">
+              <p className="text-2xl font-medium text-[var(--color-text-primary)]">
                 {wins}-{losses}
               </p>
               <p className="text-sm font-normal text-[#747474]">{label}</p>
