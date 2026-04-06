@@ -35,6 +35,8 @@ export interface DisplayMatch {
   sourceProvider?: string;
   player1: { name: string };
   player2: { name: string };
+  player2Hand?: string;
+  player2Backhand?: string;
   score: {
     sets: { player1: number; player2: number; tiebreak?: boolean }[];
     winner: "player1" | "player2";

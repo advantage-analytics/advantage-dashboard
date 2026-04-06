@@ -149,7 +149,7 @@ function SectionHeader({
         animate={{ rotate: open ? 180 : 0 }}
         transition={{ duration: 0.2 }}
       >
-        <ChevronDown className="h-4 w-4 text-[#888888]" />
+        <ChevronDown className="h-4 w-4 text-[#999999]" />
       </motion.div>
     </button>
   );
@@ -376,7 +376,7 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
   const showUpload = !loading && !videoUrl;
 
   return (
-    <div className="min-h-[400px]">
+    <div className="bg-white rounded-2xl p-6 min-h-[400px]">
       <input
         ref={fileInputRef}
         type="file"
@@ -394,7 +394,7 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
         <div className="flex items-center gap-2">
           <h3 className="text-xl font-medium text-[#0D0D0D]">Video</h3>
           {matchFile?.video_file_name && (
-            <span className="text-xs text-[#888888]">
+            <span className="text-xs text-[#999999]">
               {matchFile.video_file_name}
             </span>
           )}

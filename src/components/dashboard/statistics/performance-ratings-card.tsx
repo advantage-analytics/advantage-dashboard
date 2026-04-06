@@ -14,10 +14,12 @@ export function PerformanceRatingsCard({
   const hasData = serveRating > 0 || returnRating > 0 || underPressureRating > 0;
 
   return (
-    <div className="bg-white border border-[rgba(0,0,0,0.06)] rounded-2xl p-6 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5 overflow-hidden transition-[box-shadow,border-color,transform] duration-200 hover:shadow-[0px_8px_24px_0px_rgba(0,0,0,0.12)] hover:border-[#E7E7E7] hover:scale-[1.008]">
       <div className="mb-4">
-        <h2 className="text-sm font-semibold text-[#0D0D0D]">Performance Ratings</h2>
-        <p className="text-xs text-[#888888] mt-0.5">
+        <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+          Performance Ratings
+        </h2>
+        <p className="text-[12px] font-normal text-[#71717A] mt-1">
           {hasData ? "Averaged across all tracked matches" : "No stats data yet"}
         </p>
       </div>

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Calendar, Layers, MapPin } from "lucide-react";
+import Image from "next/image";
+import { Calendar, GraduationCap } from "lucide-react";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 
 interface ScoreRowProps {
@@ -22,12 +23,12 @@ function ScoreRow({
   return (
     <div
       className={`flex items-center justify-between px-3 py-2.5 rounded-lg ${
-        isWinner ? "bg-[#F7F9FF]" : ""
+        isWinner ? "bg-[#FAFAFA]" : ""
       }`}
     >
       <div className="flex items-center gap-2.5 min-w-0">
         <div
-          className={`w-[2px] self-stretch rounded-full shrink-0 ${
+          className={`w-px self-stretch rounded-full shrink-0 ${
             isWinner ? "bg-[#3B82F6]" : "bg-transparent"
           }`}
         />
@@ -45,7 +46,7 @@ function ScoreRow({
         {sets.map((set, idx) => (
           <span
             key={idx}
-            className={`w-5 text-center text-[15px] tabular-nums ${
+            className={`w-5 text-center text-[14px] tabular-nums ${
               set[playerKey] > set[opponentKey]
                 ? "font-semibold text-[#0D0D0D]"
                 : "font-normal text-[#CCCCCC]"
@@ -69,16 +70,16 @@ export function MatchCardGallery({
   return (
     <Link
       href={`/dashboard/matches/${match.id}`}
-      className="group block w-full bg-white rounded-2xl border border-[rgba(0,0,0,0.06)] shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] hover:border-[rgba(0,0,0,0.10)] transition-all duration-150"
+      className="group block w-full bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] hover:shadow-[0px_8px_24px_0px_rgba(0,0,0,0.12)] hover:border-[#E7E7E7] hover:scale-[1.008] transition-[box-shadow,border-color,transform] duration-200 overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/50 focus-visible:ring-offset-1"
     >
-      <div className="px-5 pt-4 pb-4">
-        {/* Header: status + duration */}
+      <div className="p-5">
+        {/* Header: match context + duration */}
         <div className="flex items-center justify-between mb-3">
-          <span className="text-[10px] font-medium text-[#D9D9D9] uppercase tracking-[0.5px]">
+          <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2px]">
             {match.matchContext ?? "Final Score"}
           </span>
           {match.duration && (
-            <span className="text-[10px] font-medium text-[#D9D9D9] tabular-nums">
+            <span className="text-[10px] font-medium text-[#AAAAAA] tabular-nums">
               {match.duration}
             </span>
           )}
@@ -90,9 +91,9 @@ export function MatchCardGallery({
             {match.score.sets.map((_, idx) => (
               <span
                 key={idx}
-                className="w-5 text-center text-[9px] font-medium text-[#D9D9D9] uppercase"
+                className="w-5 text-center text-[9px] font-medium text-[#AAAAAA] uppercase"
               >
-                S{idx + 1}
+                {idx + 1}
               </span>
             ))}
           </div>
@@ -118,24 +119,40 @@ export function MatchCardGallery({
         <div className="flex items-center gap-3 mt-3 pt-3 border-t border-[#F0F0F0]">
           {match.courtType && (
             <div className="flex items-center gap-1">
-              <MapPin className="w-3 h-3 text-[#D9D9D9]" strokeWidth={2} />
-              <span className="text-[11px] text-[#888888] capitalize">
+              <Image
+                src="/icons/tennis-court-icon.svg"
+                alt=""
+                width={14}
+                height={14}
+                aria-hidden="true"
+              />
+              <span className="text-[10px] font-normal text-[#888888] leading-[16px] capitalize">
                 {match.courtType}
               </span>
             </div>
           )}
           {match.matchType && (
             <div className="flex items-center gap-1">
-              <Layers className="w-3 h-3 text-[#D9D9D9]" strokeWidth={2} />
-              <span className="text-[11px] text-[#888888]">
+              {match.matchType === "Tournament" ? (
+                <Image
+                  src="/icons/tournament-icon.svg"
+                  alt=""
+                  width={14}
+                  height={14}
+                  aria-hidden="true"
+                />
+              ) : (
+                <GraduationCap className="size-[14px] text-[#888888]" strokeWidth={1.5} aria-hidden="true" />
+              )}
+              <span className="text-[10px] font-normal text-[#888888] leading-[16px]">
                 {match.matchType}
               </span>
             </div>
           )}
           {match.date && (
             <div className="flex items-center gap-1 ml-auto">
-              <Calendar className="w-3 h-3 text-[#D9D9D9]" strokeWidth={2} />
-              <span className="text-[11px] text-[#888888] tabular-nums">
+              <Calendar className="size-[14px] text-[#888888]" strokeWidth={1.5} aria-hidden="true" />
+              <span className="text-[10px] font-normal text-[#888888] leading-[16px] tabular-nums">
                 {match.date}
               </span>
             </div>

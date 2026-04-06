@@ -45,10 +45,12 @@ export function StatsGrid({ data }: StatsGridProps) {
   const hasData = stats.some((s) => s.value !== "—");
 
   return (
-    <div className="bg-white border border-[rgba(0,0,0,0.06)] rounded-2xl p-6 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5 overflow-hidden transition-[box-shadow,border-color,transform] duration-200 hover:shadow-[0px_8px_24px_0px_rgba(0,0,0,0.12)] hover:border-[#E7E7E7] hover:scale-[1.008]">
       <div className="mb-5">
-        <h2 className="text-sm font-semibold text-[#0D0D0D]">Key Stats</h2>
-        <p className="text-xs text-[#888888] mt-0.5">
+        <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+          Key Stats
+        </h2>
+        <p className="text-[12px] font-normal text-[#71717A] mt-1">
           {hasData ? "Averages across all tracked matches" : "Upload matches with stats to see averages"}
         </p>
       </div>
@@ -57,14 +59,14 @@ export function StatsGrid({ data }: StatsGridProps) {
         {stats.map(({ label, value, icon: Icon }) => (
           <div
             key={label}
-            className="flex flex-col gap-2 bg-[#FAFAFA] rounded-xl p-4 border border-[rgba(0,0,0,0.04)]"
+            className="flex flex-col gap-2 bg-[#FAFAFA] rounded-xl p-4 border border-[#F3F3F3]"
           >
-            <Icon className="w-4 h-4 text-[#CCCCCC]" />
+            <Icon className="size-4 text-[#AAAAAA]" strokeWidth={1.5} aria-hidden="true" />
             <div>
-              <p className="text-[10px] font-medium text-[#888888] uppercase tracking-wide leading-tight mb-1">
+              <p className="text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2px] leading-[13.5px] mb-1">
                 {label}
               </p>
-              <p className="text-2xl font-semibold tabular-nums text-[#0D0D0D] leading-none">
+              <p className="text-[28px] font-light text-[#0D0D0D] tracking-[-0.5px] leading-none tabular-nums">
                 {value}
               </p>
             </div>

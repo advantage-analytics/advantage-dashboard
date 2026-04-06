@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { motion, useReducedMotion } from "framer-motion";
 
 import dynamic from "next/dynamic";
 import { FiltersPanel } from "@/components/dashboard/matches/visuals/filters-panel";
@@ -21,6 +22,8 @@ const CourtVisualization = dynamic(
     ).then((mod) => mod.CourtVisualization),
   { ssr: false }
 );
+
+const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
 
 function buildSubtitle(
   type: VisualizationType,
@@ -64,6 +67,7 @@ export default function VisualsPage(): React.JSX.Element {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const vizParam = searchParams.get("viz") as VisualizationType | null;
+  const prefersReducedMotion = useReducedMotion();
 
   const {
     visualizationType,
@@ -93,24 +97,36 @@ export default function VisualsPage(): React.JSX.Element {
 
   return (
     <div className="space-y-6">
-      <CourtVisualization
-        points={points}
-        filters={filters}
-        visualizationType={visualizationType}
-        title={titleMap[visualizationType]}
-        courtLabel={courtLabel}
-        subtitle={buildSubtitle(visualizationType, filters, match)}
-        onTabChange={handleTabClick}
-      />
+      <motion.div
+        initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 12 }}
+        animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: EASE_CURVE }}
+      >
+        <CourtVisualization
+          points={points}
+          filters={filters}
+          visualizationType={visualizationType}
+          title={titleMap[visualizationType]}
+          courtLabel={courtLabel}
+          subtitle={buildSubtitle(visualizationType, filters, match)}
+          onTabChange={handleTabClick}
+        />
+      </motion.div>
 
-      <FiltersPanel
-        key={visualizationType}
-        config={config}
-        filters={filters}
-        onChange={setFilters}
-        onApply={applyFilters}
-        contextData={{ player1Name: match.player1.name, player2Name: match.player2.name }}
-      />
+      <motion.div
+        initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 12 }}
+        animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.07, ease: EASE_CURVE }}
+      >
+        <FiltersPanel
+          key={visualizationType}
+          config={config}
+          filters={filters}
+          onChange={setFilters}
+          onApply={applyFilters}
+          contextData={{ player1Name: match.player1.name, player2Name: match.player2.name }}
+        />
+      </motion.div>
     </div>
   );
 }

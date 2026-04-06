@@ -56,8 +56,9 @@ const ZONE_W = (SINGLES_RIGHT - SINGLES_LEFT) / 6; // 72
 
 // Court aesthetics
 const COURT_FILL = "#F4F7FA";
-const COURT_LINE_COLOR = "#C8D4E0";
-const COURT_LABEL_FILL = "#94A3B8";
+const COURT_LINE_COLOR = "#E7E7E7";
+const COURT_LINE_COLOR_MINOR = "#F0F0F0";
+const COURT_LABEL_FILL = "#AAAAAA";
 const COURT_FONT = "var(--font-inter), Inter, sans-serif";
 
 /* ── Dot colors ──────────────────────────────────────────── */
@@ -403,7 +404,7 @@ export function CourtVisualization({
         <TooltipContent
           side="top"
           sideOffset={10}
-          className="!bg-[#1A1A1A] !text-white !rounded-xl !px-0 !py-0 !text-left !w-auto !border !border-white/10 !shadow-2xl"
+          className="!bg-white !rounded-xl !px-0 !py-0 !text-left !w-auto !border !border-[#E7E7E7] !shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]"
         >
           <div className="flex flex-col w-[200px]">
             <div
@@ -423,24 +424,24 @@ export function CourtVisualization({
             </div>
             <div className="flex flex-col gap-2 px-3 py-2.5">
               <div className="flex items-baseline justify-between">
-                <span className="text-white/90 text-xs font-medium font-mono tracking-tight">
+                <span className="text-[11px] font-medium text-[#0D0D0D] tracking-tight">
                   {dot.point.gameScore}
                 </span>
-                <span className="text-white/40 text-[10px]">
+                <span className="text-[11px] text-[#525252]">
                   {dot.point.pointScore}
                 </span>
               </div>
-              <div className="h-px bg-white/[0.08]" />
+              <div className="h-px bg-[#F0F0F0]" />
               <div className="flex items-center justify-between">
-                <span className="text-white/50 text-[10px]">
+                <span className="text-[11px] text-[#525252]">
                   Set {dot.point.setNumber}
                 </span>
-                <span className="text-white/50 text-[10px]">
+                <span className="text-[11px] text-[#525252]">
                   {dot.point.rallyLength} {dot.point.rallyLength === 1 ? "shot" : "shots"}
                 </span>
               </div>
               {dot.point.description && (
-                <span className="text-white/40 text-[10px] leading-tight">
+                <span className="text-[10px] text-[#888888] leading-tight">
                   {dot.point.description}
                 </span>
               )}
@@ -465,11 +466,11 @@ export function CourtVisualization({
 
   if (points.length === 0) {
     return (
-      <div className="bg-white p-6 rounded-[16px] border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)]">
-        <h2 className="text-base font-medium text-[#0D0D0D] mb-6">
+      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5">
+        <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-6">
           {title}
         </h2>
-        <p className="text-sm text-[#888888] text-center">
+        <p className="text-[12px] text-[#525252] text-center">
           Point data not available for this match.
         </p>
       </div>
@@ -478,19 +479,19 @@ export function CourtVisualization({
 
   return (
     <motion.div
-      className="bg-white p-6 rounded-[16px] border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)]"
-      initial={{ opacity: 0, y: 20 }}
+      className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5"
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: 0.2, ease: EASE_CURVE }}
+      transition={{ duration: 0.4, ease: EASE_CURVE }}
     >
       {/* Card header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-5">
         {/* Left — title + badge + subtitle */}
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
-            <h3 className="text-base font-medium text-[#0D0D0D]">{title}</h3>
+            <h3 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">{title}</h3>
             <span
-              className={`text-white text-[10px] font-medium px-2 py-1 rounded-[16px] ${
+              className={`text-white text-[10px] font-medium px-2 py-0.5 rounded-full ${
                 visualizationType === "return"
                   ? "bg-[#F38439]"
                   : "bg-[rgba(106,171,255,0.9)]"
@@ -499,38 +500,32 @@ export function CourtVisualization({
               {courtLabel}
             </span>
           </div>
-          <p className="text-xs font-normal italic text-[#888888]">{subtitle}</p>
+          <p className="text-[12px] text-[#525252]">{subtitle}</p>
         </div>
 
         {/* Right — tab switcher + gear */}
-        <div className="flex items-center gap-2">
-          <div className="bg-[#F1F1F1]/60 rounded-[16px] p-1 flex items-center gap-1">
-            {VISUALIZATION_TABS.map((tab) => (
-              <button
-                key={tab.value}
-                onClick={() => onTabChange(tab.value)}
-                className="relative px-2 py-1 text-[10px] font-medium"
-              >
-                {visualizationType === tab.value && (
-                  <motion.div
-                    layoutId="visualsTabHighlight"
-                    className="absolute inset-0 bg-white rounded-[16px]"
-                    transition={{ type: "spring", stiffness: 500, damping: 35 }}
-                  />
-                )}
-                <span
-                  className={`relative z-10 ${
-                    visualizationType === tab.value ? "text-[#0D0D0D]" : "text-[#525252]"
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            {VISUALIZATION_TABS.map((tab) => {
+              const isActive = visualizationType === tab.value;
+              return (
+                <button
+                  key={tab.value}
+                  onClick={() => onTabChange(tab.value)}
+                  className={`rounded-full h-8 px-3.5 text-[11px] font-medium transition-[background-color,color,box-shadow] duration-200 ${
+                    isActive
+                      ? "ring-1 ring-inset ring-[#3B82F6] text-[#3B82F6] bg-[#EBF2FD]"
+                      : "ring-1 ring-inset ring-[#D9D9D9] text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6]"
                   }`}
                 >
                   {tab.label}
-                </span>
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
           <Settings
             size={16}
-            className="text-[#888888] cursor-pointer hover:text-[#666666]"
+            className="text-[#888888] cursor-pointer hover:text-[#525252] transition-colors duration-200"
           />
         </div>
       </div>
@@ -570,19 +565,19 @@ export function CourtVisualization({
               <line x1={0} y1={retNearBaseline} x2={COURT_W} y2={retNearBaseline} stroke={COURT_LINE_COLOR} strokeWidth="6" />
 
               {/* ── Dashed zone dividers on far half ── */}
-              <line x1={SINGLES_LEFT + ZONE_W} y1={retFarBaseline} x2={SINGLES_LEFT + ZONE_W} y2={retNet} stroke={COURT_LINE_COLOR} strokeWidth="2" strokeDasharray="6 4" />
-              <line x1={SINGLES_LEFT + 2 * ZONE_W} y1={retFarBaseline} x2={SINGLES_LEFT + 2 * ZONE_W} y2={retNet} stroke={COURT_LINE_COLOR} strokeWidth="2" strokeDasharray="6 4" />
-              <line x1={CX + ZONE_W} y1={retFarBaseline} x2={CX + ZONE_W} y2={retNet} stroke={COURT_LINE_COLOR} strokeWidth="2" strokeDasharray="6 4" />
-              <line x1={CX + 2 * ZONE_W} y1={retFarBaseline} x2={CX + 2 * ZONE_W} y2={retNet} stroke={COURT_LINE_COLOR} strokeWidth="2" strokeDasharray="6 4" />
+              <line x1={SINGLES_LEFT + ZONE_W} y1={retFarBaseline} x2={SINGLES_LEFT + ZONE_W} y2={retNet} stroke={COURT_LINE_COLOR_MINOR} strokeWidth="2" strokeDasharray="6 4" />
+              <line x1={SINGLES_LEFT + 2 * ZONE_W} y1={retFarBaseline} x2={SINGLES_LEFT + 2 * ZONE_W} y2={retNet} stroke={COURT_LINE_COLOR_MINOR} strokeWidth="2" strokeDasharray="6 4" />
+              <line x1={CX + ZONE_W} y1={retFarBaseline} x2={CX + ZONE_W} y2={retNet} stroke={COURT_LINE_COLOR_MINOR} strokeWidth="2" strokeDasharray="6 4" />
+              <line x1={CX + 2 * ZONE_W} y1={retFarBaseline} x2={CX + 2 * ZONE_W} y2={retNet} stroke={COURT_LINE_COLOR_MINOR} strokeWidth="2" strokeDasharray="6 4" />
 
               {/* ── DEEP / MIDDLE / SHORT depth labels & dashed dividers ── */}
-              <g fontFamily={COURT_FONT} fontWeight="600" fontSize="13" letterSpacing="0.12em" fill={COURT_LABEL_FILL}>
+              <g fontFamily={COURT_FONT} fontWeight="500" fontSize="10" letterSpacing="0.25em" fill={COURT_LABEL_FILL}>
                 <text x={-12} y={retFarBaseline + RET_DEPTH_ZONE * 0.5} textAnchor="end" dominantBaseline="middle">DEEP</text>
                 <text x={-12} y={retFarBaseline + RET_DEPTH_ZONE * 1.5} textAnchor="end" dominantBaseline="middle">MIDDLE</text>
                 <text x={-12} y={retFarBaseline + RET_DEPTH_ZONE * 2.5} textAnchor="end" dominantBaseline="middle">SHORT</text>
               </g>
-              <line x1={0} y1={retFarBaseline + RET_DEPTH_ZONE} x2={COURT_W} y2={retFarBaseline + RET_DEPTH_ZONE} stroke={COURT_LINE_COLOR} strokeWidth="2" strokeDasharray="6 4" />
-              <line x1={0} y1={retFarBaseline + 2 * RET_DEPTH_ZONE} x2={COURT_W} y2={retFarBaseline + 2 * RET_DEPTH_ZONE} stroke={COURT_LINE_COLOR} strokeWidth="2" strokeDasharray="6 4" />
+              <line x1={0} y1={retFarBaseline + RET_DEPTH_ZONE} x2={COURT_W} y2={retFarBaseline + RET_DEPTH_ZONE} stroke={COURT_LINE_COLOR_MINOR} strokeWidth="2" strokeDasharray="6 4" />
+              <line x1={0} y1={retFarBaseline + 2 * RET_DEPTH_ZONE} x2={COURT_W} y2={retFarBaseline + 2 * RET_DEPTH_ZONE} stroke={COURT_LINE_COLOR_MINOR} strokeWidth="2" strokeDasharray="6 4" />
 
               {/* ── RETURN CONTACT POSITION banner ── */}
               <rect x={0} y={retNet + RET_BANNER_H} width={COURT_W} height={RET_BANNER_H} fill="white" />
@@ -594,22 +589,22 @@ export function CourtVisualization({
                 textAnchor="middle"
                 dominantBaseline="central"
                 fill={COURT_LABEL_FILL}
-                fontSize="14"
-                letterSpacing="0.15em"
-                fontWeight="600"
+                fontSize="10"
+                letterSpacing="0.25em"
+                fontWeight="500"
                 fontFamily={COURT_FONT}
               >
                 RETURN CONTACT POSITION
               </text>
 
               {/* ── INSIDE / NEUTRAL / FAR labels ── */}
-              <g fontFamily={COURT_FONT} fontWeight="600" fontSize="13" letterSpacing="0.12em" fill={COURT_LABEL_FILL}>
+              <g fontFamily={COURT_FONT} fontWeight="500" fontSize="10" letterSpacing="0.25em" fill={COURT_LABEL_FILL}>
                 <text x={-12} y={retNearBaseline + RET_CONTACT_ZONE * 0.5} textAnchor="end" dominantBaseline="middle">INSIDE</text>
                 <text x={-12} y={retNearBaseline + RET_CONTACT_ZONE * 1.5} textAnchor="end" dominantBaseline="middle">NEUTRAL</text>
                 <text x={-12} y={retNearBaseline + RET_CONTACT_ZONE * 2.5} textAnchor="end" dominantBaseline="middle">FAR</text>
               </g>
-              <line x1={0} y1={retNearBaseline + RET_CONTACT_ZONE} x2={COURT_W} y2={retNearBaseline + RET_CONTACT_ZONE} stroke={COURT_LINE_COLOR} strokeWidth="2" strokeDasharray="6 4" />
-              <line x1={0} y1={retNearBaseline + 2 * RET_CONTACT_ZONE} x2={COURT_W} y2={retNearBaseline + 2 * RET_CONTACT_ZONE} stroke={COURT_LINE_COLOR} strokeWidth="2" strokeDasharray="6 4" />
+              <line x1={0} y1={retNearBaseline + RET_CONTACT_ZONE} x2={COURT_W} y2={retNearBaseline + RET_CONTACT_ZONE} stroke={COURT_LINE_COLOR_MINOR} strokeWidth="2" strokeDasharray="6 4" />
+              <line x1={0} y1={retNearBaseline + 2 * RET_CONTACT_ZONE} x2={COURT_W} y2={retNearBaseline + 2 * RET_CONTACT_ZONE} stroke={COURT_LINE_COLOR_MINOR} strokeWidth="2" strokeDasharray="6 4" />
 
               {/* Dots */}
               {dotElements}
@@ -634,26 +629,26 @@ export function CourtVisualization({
               <line x1={SINGLES_RIGHT} y1={courtTop} x2={SINGLES_RIGHT} y2={baselineY} stroke={COURT_LINE_COLOR} strokeWidth="6" />
 
               {/* Zone labels — Deuce side */}
-              <g fontFamily={COURT_FONT} fontWeight="600" fontSize="14" letterSpacing="0.15em" fill={COURT_LABEL_FILL}>
+              <g fontFamily={COURT_FONT} fontWeight="500" fontSize="10" letterSpacing="0.25em" fill="#888888">
                 <text x={SINGLES_LEFT + ZONE_W / 2} y={serviceLineY - 12} textAnchor="middle">WIDE</text>
                 <text x={SINGLES_LEFT + ZONE_W + ZONE_W / 2} y={serviceLineY - 12} textAnchor="middle">BODY</text>
                 <text x={SINGLES_LEFT + 2 * ZONE_W + ZONE_W / 2} y={serviceLineY - 12} textAnchor="middle">T</text>
               </g>
 
               {/* Zone labels — Ad side */}
-              <g fontFamily={COURT_FONT} fontWeight="600" fontSize="14" letterSpacing="0.15em" fill={COURT_LABEL_FILL}>
+              <g fontFamily={COURT_FONT} fontWeight="500" fontSize="10" letterSpacing="0.25em" fill="#888888">
                 <text x={CX + ZONE_W / 2} y={serviceLineY - 12} textAnchor="middle">T</text>
                 <text x={CX + ZONE_W + ZONE_W / 2} y={serviceLineY - 12} textAnchor="middle">BODY</text>
                 <text x={CX + 2 * ZONE_W + ZONE_W / 2} y={serviceLineY - 12} textAnchor="middle">WIDE</text>
               </g>
 
               {/* Dashed zone dividers — Deuce side */}
-              <line x1={SINGLES_LEFT + ZONE_W} y1={serviceLineY} x2={SINGLES_LEFT + ZONE_W} y2={baselineY} stroke={COURT_LINE_COLOR} strokeWidth="2" strokeDasharray="6 4" />
-              <line x1={SINGLES_LEFT + 2 * ZONE_W} y1={serviceLineY} x2={SINGLES_LEFT + 2 * ZONE_W} y2={baselineY} stroke={COURT_LINE_COLOR} strokeWidth="2" strokeDasharray="6 4" />
+              <line x1={SINGLES_LEFT + ZONE_W} y1={serviceLineY} x2={SINGLES_LEFT + ZONE_W} y2={baselineY} stroke={COURT_LINE_COLOR_MINOR} strokeWidth="2" strokeDasharray="6 4" />
+              <line x1={SINGLES_LEFT + 2 * ZONE_W} y1={serviceLineY} x2={SINGLES_LEFT + 2 * ZONE_W} y2={baselineY} stroke={COURT_LINE_COLOR_MINOR} strokeWidth="2" strokeDasharray="6 4" />
 
               {/* Dashed zone dividers — Ad side */}
-              <line x1={CX + ZONE_W} y1={serviceLineY} x2={CX + ZONE_W} y2={baselineY} stroke={COURT_LINE_COLOR} strokeWidth="2" strokeDasharray="6 4" />
-              <line x1={CX + 2 * ZONE_W} y1={serviceLineY} x2={CX + 2 * ZONE_W} y2={baselineY} stroke={COURT_LINE_COLOR} strokeWidth="2" strokeDasharray="6 4" />
+              <line x1={CX + ZONE_W} y1={serviceLineY} x2={CX + ZONE_W} y2={baselineY} stroke={COURT_LINE_COLOR_MINOR} strokeWidth="2" strokeDasharray="6 4" />
+              <line x1={CX + 2 * ZONE_W} y1={serviceLineY} x2={CX + 2 * ZONE_W} y2={baselineY} stroke={COURT_LINE_COLOR_MINOR} strokeWidth="2" strokeDasharray="6 4" />
 
               {/* Center service line */}
               <line x1={CX} y1={serviceLineY} x2={CX} y2={baselineY} stroke={COURT_LINE_COLOR} strokeWidth="6" />
@@ -678,9 +673,9 @@ export function CourtVisualization({
                 y={baselineY + FAR_COURT_H + 24}
                 textAnchor="middle"
                 fill={COURT_LABEL_FILL}
-                fontSize="16"
-                letterSpacing="0.15em"
-                fontWeight="600"
+                fontSize="10"
+                letterSpacing="0.25em"
+                fontWeight="500"
                 fontFamily={COURT_FONT}
               >
                 DEUCE
@@ -690,9 +685,9 @@ export function CourtVisualization({
                 y={baselineY + FAR_COURT_H + 24}
                 textAnchor="middle"
                 fill={COURT_LABEL_FILL}
-                fontSize="16"
-                letterSpacing="0.15em"
-                fontWeight="600"
+                fontSize="10"
+                letterSpacing="0.25em"
+                fontWeight="500"
                 fontFamily={COURT_FONT}
               >
                 AD
@@ -706,22 +701,22 @@ export function CourtVisualization({
       <div className="flex items-center justify-center gap-5 mt-4 flex-wrap">
         <div className="flex items-center gap-1.5">
           <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: DOT_COLORS.won }} />
-          <span className="text-[10px] font-medium text-[#D9D9D9] uppercase tracking-[0.5px]">Won</span>
+          <span className="text-[11px] text-[#525252]">Won</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: DOT_COLORS.lost }} />
-          <span className="text-[10px] font-medium text-[#D9D9D9] uppercase tracking-[0.5px]">Lost</span>
+          <span className="text-[11px] text-[#525252]">Lost</span>
         </div>
         <div className="flex items-center gap-1.5">
           <svg width="10" height="10" viewBox="0 0 10 10" className="shrink-0">
             <polygon points={starPoints(5, 5, 5, 2.5, 5)} fill={DOT_COLORS.ace} />
           </svg>
-          <span className="text-[10px] font-medium text-[#D9D9D9] uppercase tracking-[0.5px]">Ace</span>
+          <span className="text-[11px] text-[#525252]">Ace</span>
         </div>
         {!isReturn && (
           <div className="flex items-center gap-1.5">
             <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: DOT_COLORS.doubleFault }} />
-            <span className="text-[10px] font-medium text-[#D9D9D9] uppercase tracking-[0.5px]">Double Fault</span>
+            <span className="text-[11px] text-[#525252]">Double Fault</span>
           </div>
         )}
       </div>

@@ -98,10 +98,10 @@ function FilterChip({
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         aria-haspopup="listbox"
-        className={`flex items-center gap-1.5 h-8 px-3.5 rounded-full border text-xs font-medium transition-colors ${
+        className={`flex items-center gap-1.5 h-8 px-3.5 rounded-full text-xs font-medium transition-[color,background-color] duration-200 ${
           hasActive
-            ? "border-[#3B82F6] text-[#3B82F6] bg-[#EBF0FE]"
-            : "border-[#E7E7E7] text-[#525252] hover:border-[#D0D0D0] bg-white"
+            ? "ring-1 ring-inset ring-[#3B82F6] text-[#3B82F6] bg-[#EBF2FD]"
+            : "ring-1 ring-inset ring-[#D9D9D9] text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6]"
         }`}
       >
         {label}
@@ -127,9 +127,9 @@ function FilterChip({
                 role="option"
                 aria-selected={isActive}
                 onClick={() => onToggle(filterKey, val)}
-                className={`flex items-center gap-2 w-full px-2.5 py-2 text-xs rounded-lg transition-colors ${
+                className={`flex items-center gap-2 w-full px-2.5 py-2 text-xs rounded-lg transition-[background-color,color] duration-200 ${
                   isActive
-                    ? "bg-[#EBF0FE] text-[#3B82F6] font-medium"
+                    ? "bg-[#EBF2FD] text-[#3B82F6] font-medium"
                     : "text-[#525252] hover:bg-[#F7F7F7]"
                 }`}
               >
@@ -331,8 +331,8 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
         <div className="rounded-full bg-[#F5F5F5] p-4 mb-4">
           <Inbox className="h-8 w-8 text-[#888888]" />
         </div>
-        <p className="font-medium text-[#000000] mb-1">No matches yet</p>
-        <p className="text-sm text-[#888888]">
+        <p className="font-medium text-[#0D0D0D] mb-1">No matches yet</p>
+        <p className="text-[14px] text-[#888888]">
           Upload your first match to see it here.
         </p>
       </div>
@@ -361,7 +361,7 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
           {filters.length > 0 && (
             <button
               onClick={() => { setFilters([]); setSearch(""); }}
-              className="text-xs text-[#888888] hover:text-[#525252] transition-colors ml-1"
+              className="text-xs text-[#888888] hover:text-[#525252] transition-[color] duration-200 ml-1"
             >
               Clear all
             </button>
@@ -383,14 +383,14 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
               aria-label="Search matches"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-8 w-48 pl-8 pr-3 rounded-full border border-[#E7E7E7] text-xs text-[#0D0D0D] placeholder:text-[#CCCCCC] focus:outline-none focus:border-[#3B82F6] focus-visible:ring-2 focus-visible:ring-[#3B82F6]/25 transition-colors bg-white"
+              className="h-8 w-48 pl-8 pr-3 rounded-full ring-1 ring-inset ring-[#D9D9D9] text-xs text-[#0D0D0D] placeholder:text-[#CCCCCC] focus:outline-none focus:ring-[#3B82F6] focus:ring-2 transition-[color,background-color] duration-200 bg-white"
             />
           </div>
 
           <button
             onClick={() => toggleSort(sortField)}
             aria-label={`Sort by ${sortField}, ${sortDir === "asc" ? "ascending" : "descending"}`}
-            className="flex items-center gap-1.5 h-8 px-3.5 rounded-full border border-[#E7E7E7] text-xs font-medium text-[#525252] hover:border-[#D0D0D0] bg-white transition-colors"
+            className="flex items-center gap-1.5 h-8 px-3.5 rounded-full ring-1 ring-inset ring-[#D9D9D9] text-xs font-medium text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6] transition-[color,background-color] duration-200"
           >
             <ArrowUpDown className="w-3.5 h-3.5" />
             Sort order
@@ -404,8 +404,8 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
       {sorted.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16">
           <Search className="h-8 w-8 text-[#D9D9D9] mb-3" />
-          <p className="text-sm font-medium text-[#0D0D0D] mb-1">No matches found</p>
-          <p className="text-xs text-[#888888]">
+          <p className="text-[14px] font-medium text-[#0D0D0D] mb-1">No matches found</p>
+          <p className="text-[12px] text-[#888888]">
             Try adjusting your filters or search query.
           </p>
         </div>
@@ -432,7 +432,7 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
               <div className="relative" ref={pageSizeRef}>
                 <button
                   onClick={() => setPageSizeOpen(!pageSizeOpen)}
-                  className="flex items-center gap-1 h-7 px-2.5 rounded-full border border-[#E7E7E7] bg-white text-xs font-medium text-[#525252] hover:border-[#D0D0D0] transition-colors tabular-nums"
+                  className="flex items-center gap-1 h-7 px-2.5 rounded-full ring-1 ring-inset ring-[#D9D9D9] bg-white text-xs font-medium text-[#525252] hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6] transition-[color,background-color] duration-200 tabular-nums"
                 >
                   {pageSize}
                   <ChevronDown
@@ -450,9 +450,9 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
                           setPageSize(size);
                           setPageSizeOpen(false);
                         }}
-                        className={`flex items-center justify-center w-full px-2 py-1.5 text-xs tabular-nums rounded-lg transition-colors ${
+                        className={`flex items-center justify-center w-full px-2 py-1.5 text-xs tabular-nums rounded-lg transition-[background-color,color] duration-200 ${
                           pageSize === size
-                            ? "bg-[#EBF0FE] text-[#3B82F6] font-medium"
+                            ? "bg-[#EBF2FD] text-[#3B82F6] font-medium"
                             : "text-[#525252] hover:bg-[#F7F7F7]"
                         }`}
                       >
@@ -470,7 +470,7 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={safePage <= 1}
               aria-label="Previous page"
-              className="flex items-center justify-center w-7 h-7 rounded-full border border-[#E7E7E7] text-[#525252] hover:bg-[#F7F7F7] disabled:opacity-30 disabled:pointer-events-none transition-colors"
+              className="flex items-center justify-center w-7 h-7 rounded-full ring-1 ring-inset ring-[#D9D9D9] text-[#525252] hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6] disabled:opacity-30 disabled:pointer-events-none transition-[color,background-color] duration-200"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
@@ -481,7 +481,7 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={safePage >= totalPages}
               aria-label="Next page"
-              className="flex items-center justify-center w-7 h-7 rounded-full border border-[#E7E7E7] text-[#525252] hover:bg-[#F7F7F7] disabled:opacity-30 disabled:pointer-events-none transition-colors"
+              className="flex items-center justify-center w-7 h-7 rounded-full ring-1 ring-inset ring-[#D9D9D9] text-[#525252] hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6] disabled:opacity-30 disabled:pointer-events-none transition-[color,background-color] duration-200"
             >
               <ChevronRight className="w-3.5 h-3.5" />
             </button>

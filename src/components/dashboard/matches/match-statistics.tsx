@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { shortName } from "@/lib/data/match-utils";
 import type { MatchDetailedStats, PlayerStatistics, StatFraction } from "@/lib/data/types";
-import { FilterPills } from "@/components/dashboard/matches/visuals/filter-pills";
+import { cn } from "@/lib/utils";
 
 /* ── Animation constants ─────────────────────────────────── */
 
@@ -92,23 +92,36 @@ function StatBadge({
   if (isPercentage && fraction) {
     display = (
       <>
-        {value}%{" "}
-        <span className="text-[10px] opacity-70">
+        <span className="text-[12px] font-medium tabular-nums">{value}%</span>{" "}
+        <span className="text-[10px] text-[#888888]">
           ({fraction.made}/{fraction.attempts})
         </span>
       </>
     );
   } else if (isFraction && fraction) {
-    display = `${fraction.made}/${fraction.attempts}`;
+    display = (
+      <span className="text-[12px] font-medium tabular-nums">
+        {fraction.made}/{fraction.attempts}
+      </span>
+    );
   } else if (isPercentage) {
-    display = `${value}%`;
+    display = (
+      <span className="text-[12px] font-medium tabular-nums">{value}%</span>
+    );
   } else {
-    display = value.toString();
+    display = (
+      <span className="text-[12px] font-medium tabular-nums">
+        {value}
+      </span>
+    );
   }
 
   return (
     <span
-      className={`inline-block rounded px-2 py-1 text-xs font-medium tabular-nums whitespace-nowrap ${styles}`}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2.5 py-1 whitespace-nowrap",
+        styles
+      )}
     >
       {display}
     </span>
@@ -126,6 +139,7 @@ function StatRow({
   index,
   isPercentage = false,
   isFraction = false,
+  prefersReducedMotion = false,
 }: {
   label: string;
   player1Value: number;
@@ -135,17 +149,20 @@ function StatRow({
   index: number;
   isPercentage?: boolean;
   isFraction?: boolean;
+  prefersReducedMotion?: boolean;
 }) {
   return (
     <motion.div
       className="grid grid-cols-[1fr_120px_120px] sm:grid-cols-[1fr_140px_140px] items-center border-b border-[#F0F0F0] py-3"
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, delay: 0.06 + index * 0.04, ease: EASE_CURVE }}
+      initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
+      animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+      transition={{
+        duration: 0.3,
+        ease: EASE_CURVE,
+        delay: index * 0.04,
+      }}
     >
-      <span className="text-[10px] font-medium uppercase tracking-[0.5px] text-[#888888]">
-        {label}
-      </span>
+      <span className="text-[12px] text-[#525252]">{label}</span>
 
       <div className="flex justify-start">
         <StatBadge value={player1Value} isPercentage={isPercentage} isFraction={isFraction} fraction={player1Fraction} color="blue" />
@@ -172,14 +189,15 @@ export function MatchStatistics({
   player2Name,
 }: MatchStatisticsProps) {
   const [activeTab, setActiveTab] = useState<Tab>("serve");
+  const prefersReducedMotion = useReducedMotion() ?? false;
 
   if (!statistics) {
     return (
-      <div className="bg-white p-6 rounded-[16px] border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)]">
-        <h2 className="text-base font-medium text-[#0D0D0D] mb-6">
+      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5">
+        <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-6">
           Match Statistics
         </h2>
-        <p className="text-sm text-[#888888] text-center">
+        <p className="text-[12px] text-[#525252] text-center">
           Statistics not available for this match.
         </p>
       </div>
@@ -192,48 +210,57 @@ export function MatchStatistics({
 
   return (
     <motion.div
-      className="bg-white p-6 rounded-[16px] border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)]"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
+      className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5"
+      initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 20 }}
+      animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: 0.3, ease: EASE_CURVE }}
     >
       {/* Card header */}
       <div className="mb-5">
-        <h2 className="text-base font-medium text-[#0D0D0D]">
+        <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
           Match Statistics
         </h2>
-        <p className="text-xs text-[#888888] mt-1">
+        <p className="text-[12px] text-[#525252] mt-1">
           Compare {player1Name} and {player2Name} Match Statistics
         </p>
       </div>
 
       {/* Tab pills */}
-      <FilterPills
-        label=""
-        options={TAB_OPTIONS}
-        selected={[activeTab]}
-        onChange={(sel) => {
-          if (sel.length > 0) setActiveTab(sel[sel.length - 1] as Tab);
-        }}
-        multiSelect={false}
-        className="mb-5"
-      />
+      <div className="flex gap-2 mb-5">
+        {TAB_OPTIONS.map((option) => {
+          const isActive = activeTab === option.value;
+          return (
+            <button
+              key={option.value}
+              onClick={() => setActiveTab(option.value as Tab)}
+              className={cn(
+                "rounded-full h-8 px-3.5 text-[11px] font-medium transition-colors duration-200 active:scale-[0.97]",
+                isActive
+                  ? "ring-1 ring-inset ring-[#3B82F6] text-[#3B82F6] bg-[#EBF2FD]"
+                  : "ring-1 ring-inset ring-[#D9D9D9] text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6]"
+              )}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
 
       {/* Table header */}
       <div className="grid grid-cols-[1fr_120px_120px] sm:grid-cols-[1fr_140px_140px] pb-2 mb-1">
-        <span className="text-[10px] font-medium text-[#D9D9D9] uppercase tracking-[0.5px]">
+        <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
           Statistic
         </span>
-        <span className="text-[10px] font-medium text-[#D9D9D9] text-left uppercase tracking-[0.5px] whitespace-nowrap truncate">
+        <span className="text-[12px] font-medium text-[#0D0D0D] text-left whitespace-nowrap truncate">
           {p1Short}
         </span>
-        <span className="text-[10px] font-medium text-[#D9D9D9] text-left uppercase tracking-[0.5px] whitespace-nowrap truncate">
+        <span className="text-[12px] font-medium text-[#0D0D0D] text-left whitespace-nowrap truncate">
           {p2Short}
         </span>
       </div>
 
       {/* Stat rows — re-mount on tab change to replay entrance animation */}
-      <motion.div key={activeTab} className="min-h-[320px] [&>:last-child]:border-b-0">
+      <div key={activeTab} className="min-h-[320px] [&>:last-child]:border-b-0">
         {activeStats.map((stat, index) => (
           <StatRow
             key={stat.key}
@@ -245,9 +272,10 @@ export function MatchStatistics({
             index={index}
             isPercentage={stat.isPercentage}
             isFraction={stat.isFraction}
+            prefersReducedMotion={prefersReducedMotion}
           />
         ))}
-      </motion.div>
+      </div>
     </motion.div>
   );
 }

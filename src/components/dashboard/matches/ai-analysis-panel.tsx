@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   Sparkles,
   Send,
@@ -50,17 +50,18 @@ interface InsightItem {
 
 function Card({
   children,
-  delay = 0,
+  index = 0,
 }: {
   children: React.ReactNode;
-  delay?: number;
+  index?: number;
 }) {
+  const prefersReduced = useReducedMotion();
   return (
     <motion.div
-      className="bg-white rounded-[16px] border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)] overflow-hidden"
-      initial={{ opacity: 0, y: 20 }}
+      className="bg-white rounded-[14px] border border-[#F3F3F3] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] overflow-hidden"
+      initial={prefersReduced ? { opacity: 0 } : { opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay, ease: EASE_CURVE }}
+      transition={{ duration: 0.4, delay: index * 0.07, ease: EASE_CURVE }}
     >
       {children}
     </motion.div>
@@ -69,7 +70,7 @@ function Card({
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#888888] mb-3">
+    <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-3">
       {children}
     </p>
   );
@@ -77,8 +78,8 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 function EmptyState({ label }: { label: string }) {
   return (
-    <div className="flex items-center justify-center py-10 border border-dashed border-[#EBEBEB] rounded-xl">
-      <p className="text-sm text-[#CCCCCC]">{label}</p>
+    <div className="flex items-center justify-center py-10 border border-dashed border-[#F0F0F0] rounded-xl">
+      <p className="text-[12px] text-[#AAAAAA]">{label}</p>
     </div>
   );
 }
@@ -90,18 +91,20 @@ function KeyMomentsCard({
 }: {
   moments: Array<{ moment: string; description: string }>;
 }) {
+  const prefersReduced = useReducedMotion();
   return (
-    <Card delay={0.3}>
-      <div className="p-6">
+    <Card index={0}>
+      <div className="p-5">
         {/* Header */}
-        <div className="flex items-start justify-between mb-5">
-          <div>
-            <h2 className="text-base font-medium text-[#0D0D0D]">Key Moments</h2>
-            <p className="text-xs text-[#888888] mt-1">Turning points identified by AI</p>
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Zap className="w-4 h-4 text-[#3B82F6]" />
+            <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+              Key Moments
+            </p>
           </div>
           {moments.length > 0 && (
-            <span className="flex items-center gap-1 text-[10px] font-semibold text-[#888888] bg-[#F5F5F5] rounded-full px-2.5 py-1 mt-0.5 shrink-0">
-              <Zap className="w-2.5 h-2.5" />
+            <span className="bg-[#EBF2FD] text-[#3B82F6] rounded-full px-2 py-0.5 text-[10px] font-medium shrink-0">
               {moments.length} events
             </span>
           )}
@@ -110,17 +113,17 @@ function KeyMomentsCard({
         {moments.length === 0 ? (
           <EmptyState label="No key moments recorded for this match" />
         ) : (
-          <div className="flex flex-col">
+          <div className="flex flex-col divide-y divide-[#F0F0F0]">
             {moments.map((m, i) => (
               <motion.div
                 key={i}
-                className="flex items-start gap-3.5 py-3.5 border-b border-[#F5F5F5] last:border-0"
-                initial={{ opacity: 0, y: 8 }}
+                className="flex items-start gap-3.5 py-3.5 first:pt-0 last:pb-0"
+                initial={prefersReduced ? { opacity: 0 } : { opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.35, delay: 0.35 + i * 0.07, ease: EASE_CURVE }}
               >
                 {/* Sequence number */}
-                <span className="shrink-0 text-[11px] font-semibold tabular-nums text-[#CCCCCC] w-5 pt-[3px] leading-none">
+                <span className="shrink-0 text-[12px] font-medium tabular-nums text-[#AAAAAA] w-5 pt-[2px] leading-none">
                   {String(i + 1).padStart(2, "0")}
                 </span>
 
@@ -132,8 +135,8 @@ function KeyMomentsCard({
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-[#0D0D0D] leading-snug">{m.moment}</p>
-                  <p className="text-xs text-[#888888] mt-0.5 leading-relaxed">{m.description}</p>
+                  <p className="text-[12px] font-medium text-[#0D0D0D] leading-snug">{m.moment}</p>
+                  <p className="text-[12px] text-[#525252] mt-0.5 leading-relaxed">{m.description}</p>
                 </div>
               </motion.div>
             ))}
@@ -155,15 +158,16 @@ function InsightRow({
   color: "green" | "red";
   index: number;
 }) {
-  const barColor = color === "green" ? "#22C55E" : "#EF4444";
-  const valueColor = color === "green" ? "text-[#16A34A]" : "text-[#EF4444]";
-  const iconColor = color === "green" ? "#22C55E" : "#EF4444";
+  const barColor = color === "green" ? "#5DB955" : "#E51837";
+  const valueColor = color === "green" ? "text-[#5DB955]" : "text-[#E51837]";
+  const iconColor = color === "green" ? "#5DB955" : "#E51837";
   const Icon = color === "green" ? TrendingUp : TrendingDown;
+  const prefersReduced = useReducedMotion();
 
   return (
     <motion.div
-      className="py-4 border-b border-[#F5F5F5] last:border-0"
-      initial={{ opacity: 0, y: 6 }}
+      className="py-3.5 border-b border-[#F0F0F0] last:border-0"
+      initial={prefersReduced ? { opacity: 0 } : { opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: 0.1 + index * 0.06, ease: EASE_CURVE }}
     >
@@ -171,17 +175,17 @@ function InsightRow({
       <div className="flex items-center justify-between gap-3 mb-1.5">
         <div className="flex items-center gap-1.5 min-w-0">
           <Icon className="w-3 h-3 shrink-0" style={{ color: iconColor }} />
-          <span className="text-sm font-medium text-[#0D0D0D] leading-snug truncate">
+          <span className="text-[12px] text-[#525252] leading-snug truncate">
             {item.name}
           </span>
         </div>
-        <span className={`text-sm font-bold tabular-nums shrink-0 ${valueColor}`}>
+        <span className={`text-[12px] font-medium tabular-nums shrink-0 ${valueColor}`}>
           {item.value}%
         </span>
       </div>
 
       {/* Progress bar */}
-      <div className="w-full h-1 bg-[#F0F0F0] rounded-full overflow-hidden mb-2">
+      <div className="w-full bg-[#F3F3F3] rounded-full h-2 overflow-hidden mb-2">
         <motion.div
           className="h-full rounded-full"
           style={{ backgroundColor: barColor }}
@@ -226,27 +230,29 @@ function PlayerInsightsCard({
     (insights?.player2?.weaknesses?.length ?? 0) > 0;
 
   return (
-    <Card delay={0.4}>
-      <div className="px-6 pt-6">
-        <h2 className="text-base font-medium text-[#0D0D0D]">Match Intelligence</h2>
-        <p className="text-xs text-[#888888] mt-1">AI-analyzed strengths and areas to improve</p>
+    <Card index={1}>
+      <div className="p-5">
+        <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-1">
+          Match Intelligence
+        </p>
+        <p className="text-[11px] text-[#888888] leading-relaxed">AI-analyzed strengths and areas to improve</p>
       </div>
 
       {!hasData ? (
-        <div className="px-6 pb-6 pt-4">
+        <div className="px-5 pb-5">
           <EmptyState label="No insights data available for this match" />
         </div>
       ) : (
         <>
-          {/* Player tabs — same pattern as existing sidebar */}
-          <div className="flex flex-row shadow-[inset_0_-1px_0_0_#E8E8E8] mt-4">
+          {/* Player selector pills */}
+          <div className="flex flex-row gap-2 px-5 pb-4">
             <button
               type="button"
               onClick={() => setSelected("player1")}
-              className={`h-[34px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
+              className={`px-4 py-1.5 text-[12px] font-medium rounded-full transition-colors duration-200 ${
                 selected === "player1"
-                  ? "text-[#4A8AF4] border-[#4A8AF4]"
-                  : "text-[#888888] border-transparent hover:text-[#666666]"
+                  ? "ring-1 ring-inset ring-[#3B82F6] text-[#3B82F6] bg-[#EBF2FD]"
+                  : "ring-1 ring-inset ring-[#D9D9D9] text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6]"
               }`}
             >
               {p1Short}
@@ -254,10 +260,10 @@ function PlayerInsightsCard({
             <button
               type="button"
               onClick={() => setSelected("player2")}
-              className={`h-[34px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
+              className={`px-4 py-1.5 text-[12px] font-medium rounded-full transition-colors duration-200 ${
                 selected === "player2"
-                  ? "text-[#F38439] border-[#F38439]"
-                  : "text-[#888888] border-transparent hover:text-[#666666]"
+                  ? "ring-1 ring-inset ring-[#3B82F6] text-[#3B82F6] bg-[#EBF2FD]"
+                  : "ring-1 ring-inset ring-[#D9D9D9] text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6]"
               }`}
             >
               {p2Short}
@@ -267,7 +273,7 @@ function PlayerInsightsCard({
           <AnimatePresence mode="wait">
             <motion.div
               key={selected}
-              className="px-6 py-5"
+              className="px-5 pb-5"
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
@@ -278,7 +284,7 @@ function PlayerInsightsCard({
                   label={`No insights for ${selected === "player1" ? p1Short : p2Short}`}
                 />
               ) : (
-                <div className="flex flex-col gap-6">
+                <div className="flex flex-col gap-5">
                   {strengths.length > 0 && (
                     <div>
                       <SectionLabel>Strengths</SectionLabel>
@@ -407,21 +413,23 @@ function ChatCard() {
   }
 
   return (
-    <Card delay={0.5}>
+    <Card index={2}>
       {/* Header */}
-      <div className="flex items-start justify-between px-6 pt-6 pb-4">
+      <div className="flex items-start justify-between px-5 pt-5 pb-4">
         <div>
-          <h2 className="text-base font-medium text-[#0D0D0D]">Ask the AI</h2>
-          <p className="text-xs text-[#888888] mt-1">Ask questions about this match</p>
+          <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+            Ask the AI
+          </p>
+          <p className="text-[11px] text-[#888888] mt-1">Ask questions about this match</p>
         </div>
-        <div className="flex items-center gap-1 text-[10px] font-semibold text-[#888888] bg-[#F5F5F5] rounded-full px-2.5 py-1 mt-0.5">
+        <div className="flex items-center gap-1 bg-[#EBF2FD] text-[#3B82F6] rounded-full px-2 py-0.5 text-[10px] font-medium mt-0.5">
           <MessageSquare className="w-2.5 h-2.5" />
           Beta
         </div>
       </div>
 
       {/* Message list */}
-      <div className="flex flex-col gap-3 px-6 max-h-[300px] overflow-y-auto">
+      <div className="flex flex-col gap-3 px-5 max-h-[300px] overflow-y-auto [scrollbar-width:thin] [scrollbar-color:#D9D9D9_transparent]">
         <AnimatePresence initial={false}>
           {messages.map((msg) => (
             <motion.div
@@ -437,7 +445,7 @@ function ChatCard() {
               <div
                 className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
                   msg.role === "assistant"
-                    ? "bg-[#EEF4FE] text-[#4A8AF4]"
+                    ? "bg-[#EBF2FD] text-[#3B82F6]"
                     : "bg-[#0D0D0D] text-white"
                 }`}
               >
@@ -450,10 +458,10 @@ function ChatCard() {
 
               {/* Bubble */}
               <div
-                className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-[13px] leading-relaxed ${
                   msg.role === "user"
-                    ? "bg-[#4A8AF4] text-white"
-                    : "bg-[#F5F5F5] text-[#0D0D0D]"
+                    ? "bg-[#3B82F6] text-white"
+                    : "bg-[#FAFAFA] text-[#0D0D0D]"
                 }`}
               >
                 {msg.text}
@@ -470,14 +478,14 @@ function ChatCard() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
             >
-              <div className="shrink-0 w-6 h-6 rounded-full bg-[#EEF4FE] text-[#4A8AF4] flex items-center justify-center">
+              <div className="shrink-0 w-6 h-6 rounded-full bg-[#EBF2FD] text-[#3B82F6] flex items-center justify-center">
                 <Bot className="w-3 h-3" />
               </div>
-              <div className="bg-[#F5F5F5] rounded-2xl px-3.5 py-3 flex items-center gap-1">
+              <div className="bg-[#FAFAFA] rounded-2xl px-4 py-3 flex items-center gap-1">
                 {[0, 1, 2].map((i) => (
                   <motion.span
                     key={i}
-                    className="w-1.5 h-1.5 rounded-full bg-[#CCCCCC]"
+                    className="w-1.5 h-1.5 rounded-full bg-[#AAAAAA]"
                     animate={{ opacity: [0.3, 1, 0.3] }}
                     transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.2 }}
                   />
@@ -490,21 +498,21 @@ function ChatCard() {
       </div>
 
       {/* Input bar */}
-      <div className="mx-6 my-4 flex items-center gap-2.5 rounded-xl border border-[#E8E8E8] bg-[#FAFAFA] px-4 py-2.5 focus-within:border-[#4A8AF4] focus-within:bg-white focus-within:shadow-[0_0_0_3px_rgba(74,138,244,0.08)] transition-all">
+      <div className="mx-5 my-4 flex items-center gap-2.5">
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSend()}
           placeholder="Ask about this match..."
-          className="flex-1 text-sm text-[#0D0D0D] placeholder:text-[#CCCCCC] bg-transparent outline-none"
+          className="flex-1 border border-[#E7E7E7] rounded-full px-4 py-2.5 text-[13px] text-[#0D0D0D] placeholder:text-[#AAAAAA] bg-white focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/50 focus:border-[#3B82F6] transition-[border-color,box-shadow] duration-200"
         />
         <button
           onClick={handleSend}
           disabled={!input.trim()}
-          className="shrink-0 w-7 h-7 rounded-full bg-[#4A8AF4] disabled:bg-[#E8E8E8] flex items-center justify-center transition-colors"
+          className="shrink-0 bg-[#3B82F6] hover:bg-[#2563EB] disabled:bg-[#F3F3F3] disabled:pointer-events-none text-white rounded-full p-2 transition-colors duration-200 active:scale-[0.97]"
         >
-          <Send className="w-3 h-3 text-white" />
+          <Send className="w-3.5 h-3.5" />
         </button>
       </div>
     </Card>
@@ -515,21 +523,24 @@ function ChatCard() {
 
 export function AIAnalysisPanel() {
   const { keyMoments, insights, match } = useMatchData();
+  const prefersReduced = useReducedMotion();
 
   return (
     <div className="flex flex-col gap-6">
       {/* Tab header */}
       <motion.div
         className="flex items-center gap-3"
-        initial={{ opacity: 0, y: 8 }}
+        initial={prefersReduced ? { opacity: 0 } : { opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.38, delay: 0.2, ease: EASE_CURVE }}
+        transition={{ duration: 0.4, ease: EASE_CURVE }}
       >
         <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-[#4A8AF4]" />
-          <h2 className="text-base font-medium text-[#0D0D0D]">Advantage Intelligence</h2>
+          <Sparkles className="w-4 h-4 text-[#3B82F6]" />
+          <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+            Advantage Intelligence
+          </h2>
         </div>
-        <span className="text-[10px] font-semibold text-[#3B82F6] uppercase tracking-[0.12em] px-2 py-0.5 rounded-full bg-[#EEF4FE]">
+        <span className="text-[10px] font-medium text-[#3B82F6] uppercase tracking-[2px] px-2 py-0.5 rounded-full bg-[#EBF2FD]">
           AI-Powered
         </span>
       </motion.div>

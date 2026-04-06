@@ -263,8 +263,8 @@ function EventTabs({
         onClick={() => onTabChange("events")}
         className={`h-[31px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
           activeTab === "events"
-            ? "text-[#4A8AF4] border-[#4A8AF4]"
-            : "text-[#888888] border-transparent hover:text-[#666666]"
+            ? "text-[#3986F3] border-[#3986F3]"
+            : "text-[#999999] border-transparent hover:text-[#666666]"
         }`}
       >
         Events
@@ -274,8 +274,8 @@ function EventTabs({
         onClick={() => onTabChange("saved")}
         className={`h-[31px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
           activeTab === "saved"
-            ? "text-[#4A8AF4] border-[#4A8AF4]"
-            : "text-[#888888] border-transparent hover:text-[#666666]"
+            ? "text-[#3986F3] border-[#3986F3]"
+            : "text-[#999999] border-transparent hover:text-[#666666]"
         }`}
       >
         Saved
@@ -293,10 +293,10 @@ function GameHeader({
 }) {
   return (
     <div className="sticky top-0 z-10 flex flex-row justify-between items-center px-2 pt-4 pb-2 border-b border-[#D9D9D9] bg-white shadow-[0_1px_0_0_white]">
-      <span className="text-xs font-medium text-[#888888]">
+      <span className="text-xs font-medium text-[#999999]">
         Set {setNumber}
       </span>
-      <span className="text-xs font-medium text-[#888888]">{gameScore}</span>
+      <span className="text-xs font-medium text-[#999999]">{gameScore}</span>
     </div>
   );
 }
@@ -313,13 +313,13 @@ function SavedIcon({
       type="button"
       onClick={onClick}
       aria-label={filled ? "Remove from saved" : "Save event"}
-      className="shrink-0 p-1 -m-1 hover:opacity-70 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4A8AF4] focus-visible:ring-offset-1 rounded-sm"
+      className="shrink-0 p-1 -m-1 hover:opacity-70 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6AABFF] focus-visible:ring-offset-1 rounded-sm"
     >
       <Bookmark
         size={12}
-        stroke="#4A8AF4"
+        stroke="#6AABFF"
         strokeWidth={1.5}
-        fill={filled ? "#4A8AF4" : "white"}
+        fill={filled ? "#6AABFF" : "white"}
         aria-hidden
       />
     </button>
@@ -339,7 +339,7 @@ function AnimatedProgressBar({ duration }: { duration: number | null }) {
     >
       <div className="w-full h-[2px] bg-[#E5E5E5] rounded-full overflow-hidden">
         <motion.div
-          className="h-full bg-[#4A8AF4] rounded-full"
+          className="h-full bg-[#3986F3] rounded-full"
           initial={{ width: "0%" }}
           animate={{ width: "100%" }}
           transition={{ duration: seconds, ease: "linear" }}
@@ -377,7 +377,7 @@ function EventRow({
         "flex flex-col gap-1 rounded-sm transition-colors",
         isDisabled
           ? "opacity-40 cursor-default"
-          : "cursor-pointer hover:bg-[#FAFAFA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-1",
+          : "cursor-pointer hover:bg-[#FAFAFA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3986F3] focus-visible:ring-offset-1",
       )}
       onMouseEnter={() => { if (!isDisabled) setIsHovered(true); }}
       onMouseLeave={() => setIsHovered(false)}
@@ -407,7 +407,7 @@ function EventRow({
           <span className="text-xs font-medium text-[#0D0D0D] truncate">
             {point.eventType}
           </span>
-          <span className="text-[10px] font-normal text-[#888888] truncate">
+          <span className="text-[10px] font-normal text-[#999999] truncate">
             {point.description}
           </span>
         </div>
@@ -549,7 +549,7 @@ export function MatchVideoSidebar({
   }, [activePointId, displayPoints]);
 
   return (
-    <div className="w-[320px] flex flex-col bg-white rounded-[16px] border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)]">
+    <div className="w-[320px] flex flex-col bg-white rounded-2xl border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
       {/* Events / Saved tabs */}
       <div className="px-6 pt-4">
         <EventTabs activeTab={activeTab} onTabChange={setActiveTab} />
@@ -599,7 +599,7 @@ export function MatchVideoSidebar({
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-8">
-            <span className="text-xs text-[#888888]">
+            <span className="text-xs text-[#999999]">
               {activeTab === "saved"
                 ? "No saved events yet"
                 : "No events available"}

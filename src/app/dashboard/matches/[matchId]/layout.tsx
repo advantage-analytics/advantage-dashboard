@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Image from "next/image";
-import { Calendar, Clock, GraduationCap } from "lucide-react";
+import { Calendar, Check, Clock, GraduationCap } from "lucide-react";
 
 import { MatchDataProvider } from "@/components/dashboard/matches/match-data-provider";
 import { MatchNavigationTabs } from "@/components/dashboard/matches/match-navigation-tabs";
@@ -135,103 +135,95 @@ export default async function MatchLayout({
 
   return (
     <div className="flex-1 w-full bg-white">
-      {/* Dark hero header */}
-      <section className="relative bg-[#0D0D0D] pt-8 pb-8 px-8 border-b border-white/[0.06] overflow-hidden">
-        {/* Subtle depth gradient */}
-        <div className="absolute inset-0 bg-gradient-to-b from-white/[0.025] to-transparent pointer-events-none" />
-        <div className="relative">
-          {/* Compact inline strip */}
-          <div className="flex items-center justify-between gap-8 min-w-0">
-            {/* Left player */}
-            <div className="flex items-center gap-2.5 min-w-0 flex-1">
-              <span className="text-2xl font-semibold text-white leading-tight truncate">
-                {match.player1.name}
+      {/* Light hero header */}
+      <section className="bg-white pt-8 pb-8 px-8 border-b border-[#F0F0F0]">
+        {/* Compact inline strip */}
+        <div className="flex items-center justify-between gap-8 min-w-0">
+          {/* Left player */}
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <span className="text-[30px] font-light text-[#0D0D0D] tracking-[-0.6px] leading-tight truncate">
+              {match.player1.name}
+            </span>
+            {match.score.winner === "player1" && (
+              <span className="shrink-0 inline-flex items-center gap-1 bg-[rgba(93,185,85,0.1)] text-[#5DB955] rounded-full px-2.5 py-0.5 text-[10px] font-medium leading-none">
+                <Check className="h-3 w-3 shrink-0" />
+                Winner
               </span>
-              {match.score.winner === "player1" && (
-                <span className="shrink-0 inline-flex items-center gap-1 px-2 py-[3px] rounded border border-[#22C55E]/40 bg-[#16A34A]/10 text-[#4ADE80] text-[9px] font-semibold tracking-[0.9px] uppercase leading-none">
-                  <svg width="7" height="7" viewBox="0 0 7 7" fill="none" aria-hidden="true">
-                    <path d="M1 3.5L2.8 5.5L6 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  Winner
-                </span>
-              )}
-            </div>
+            )}
+          </div>
 
-            {/* Set scores */}
-            <div className="flex items-center gap-8 shrink-0">
-              {match.score.sets.map((set, i) => (
-                <div key={i} className="flex flex-col items-center gap-1.5">
-                  <span className="text-[10px] font-medium tracking-[0.5px] uppercase text-white/30">
-                    Set {i + 1}
+          {/* Set scores */}
+          <div className="flex items-center gap-8 shrink-0">
+            {match.score.sets.map((set, i) => (
+              <div key={i} className="flex flex-col items-center gap-1.5">
+                <span className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+                  Set {i + 1}
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`text-3xl font-bold tabular-nums leading-none ${set.player1 > set.player2 ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}`}>
+                    {set.player1}{set.tiebreak ? <sup className="text-sm">*</sup> : null}
                   </span>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-3xl font-bold tabular-nums leading-none ${set.player1 > set.player2 ? "text-white" : "text-white/30"}`}>
-                      {set.player1}{set.tiebreak ? <sup className="text-sm">*</sup> : null}
-                    </span>
-                    <span className="text-sm text-white/20">–</span>
-                    <span className={`text-3xl font-bold tabular-nums leading-none ${set.player2 > set.player1 ? "text-white" : "text-white/30"}`}>
-                      {set.player2}{set.tiebreak ? <sup className="text-sm">*</sup> : null}
-                    </span>
-                  </div>
+                  <span className="text-sm text-[#D9D9D9]">&ndash;</span>
+                  <span className={`text-3xl font-bold tabular-nums leading-none ${set.player2 > set.player1 ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}`}>
+                    {set.player2}{set.tiebreak ? <sup className="text-sm">*</sup> : null}
+                  </span>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
+          </div>
 
-            {/* Right player */}
-            <div className="flex items-center justify-end gap-2.5 min-w-0 flex-1">
-              {match.score.winner === "player2" && (
-                <span className="shrink-0 inline-flex items-center gap-1 px-2 py-[3px] rounded border border-[#22C55E]/40 bg-[#16A34A]/10 text-[#4ADE80] text-[9px] font-semibold tracking-[0.9px] uppercase leading-none">
-                  <svg width="7" height="7" viewBox="0 0 7 7" fill="none" aria-hidden="true">
-                    <path d="M1 3.5L2.8 5.5L6 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  Winner
-                </span>
+          {/* Right player */}
+          <div className="flex items-center justify-end gap-2.5 min-w-0 flex-1">
+            {match.score.winner === "player2" && (
+              <span className="shrink-0 inline-flex items-center gap-1 bg-[rgba(93,185,85,0.1)] text-[#5DB955] rounded-full px-2.5 py-0.5 text-[10px] font-medium leading-none">
+                <Check className="h-3 w-3 shrink-0" />
+                Winner
+              </span>
+            )}
+            <span className="text-[30px] font-light text-[#0D0D0D] tracking-[-0.6px] leading-tight truncate">
+              {match.player2.name}
+            </span>
+          </div>
+        </div>
+
+        {/* Metadata pills */}
+        <div className="mt-4 flex gap-2 flex-wrap items-center">
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full ring-1 ring-inset ring-[#E7E7E7] bg-white text-[#888888] text-xs font-medium">
+            <Calendar className="h-3 w-3 shrink-0 text-[#888888]" />
+            {match.date}
+          </span>
+          {match.courtType && (
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full ring-1 ring-inset ring-[#E7E7E7] bg-white text-[#888888] text-xs font-medium">
+              <Image src="/icons/tennis-court-icon.svg" alt="Court" width={12} height={12} className="shrink-0" />
+              {match.courtType}
+            </span>
+          )}
+          {match.matchType && (
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full ring-1 ring-inset ring-[#E7E7E7] bg-white text-[#888888] text-xs font-medium">
+              {match.matchType === "Tournament" ? (
+                <Image src="/icons/tournament-icon.svg" alt="Tournament" width={12} height={12} className="shrink-0" />
+              ) : (
+                <GraduationCap className="h-3 w-3 shrink-0 text-[#888888]" />
               )}
-              <span className="text-2xl font-semibold text-white leading-tight truncate">
-                {match.player2.name}
-              </span>
-            </div>
-          </div>
-
-          {/* Metadata pills */}
-          <div className="mt-4 flex gap-2 flex-wrap items-center">
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 text-white/70 text-xs font-medium">
-              <Calendar className="h-3 w-3 shrink-0" />
-              {match.date}
+              {match.matchType}
             </span>
-            {match.courtType && (
-              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 text-white/70 text-xs font-medium">
-                <Image src="/icons/tennis-court-icon.svg" alt="Court" width={12} height={12} className="shrink-0" />
-                {match.courtType}
-              </span>
-            )}
-            {match.matchType && (
-              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 text-white/70 text-xs font-medium">
-                {match.matchType === "Tournament" ? (
-                  <Image src="/icons/tournament-icon.svg" alt="Tournament" width={12} height={12} className="shrink-0" />
-                ) : (
-                  <GraduationCap className="h-3 w-3 shrink-0" />
-                )}
-                {match.matchType}
-              </span>
-            )}
-            {match.duration && (
-              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 text-white/70 text-xs font-medium">
-                <Clock className="h-3 w-3 shrink-0" />
-                {match.duration}
-              </span>
-            )}
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 text-white/70 text-xs font-medium">
-              <Image
-                src="/icons/verified-check-icon.svg"
-                alt="Verified"
-                width={12}
-                height={12}
-                className={`shrink-0 ${match.verificationStatus ? "" : "grayscale"}`}
-              />
-              {match.verificationStatus ?? "Unverified Result"}
+          )}
+          {match.duration && (
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full ring-1 ring-inset ring-[#E7E7E7] bg-white text-[#888888] text-xs font-medium">
+              <Clock className="h-3 w-3 shrink-0 text-[#888888]" />
+              {match.duration}
             </span>
-          </div>
+          )}
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full ring-1 ring-inset ring-[#E7E7E7] bg-white text-[#888888] text-xs font-medium">
+            <Image
+              src="/icons/verified-check-icon.svg"
+              alt="Verified"
+              width={12}
+              height={12}
+              className={`shrink-0 ${match.verificationStatus ? "" : "grayscale"}`}
+            />
+            {match.verificationStatus ?? "Unverified Result"}
+          </span>
         </div>
       </section>
 
@@ -247,7 +239,7 @@ export default async function MatchLayout({
                 <div className="flex flex-col gap-10 min-w-0">{children}</div>
               </div>
 
-              <div className="sticky top-8 w-[320px] flex-shrink-0 self-start h-fit">
+              <div className="sticky top-8 w-[384px] flex-shrink-0 self-start h-fit">
                 <MatchTabSidebar
                   match={match}
                   matchId={matchId}

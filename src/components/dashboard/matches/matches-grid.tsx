@@ -19,16 +19,18 @@ interface MatchesGridProps {
 }
 
 const LIST_GRID_CLASSES = "grid gap-x-4" as const;
-const LIST_GRID_COLS = { gridTemplateColumns: "2fr 60px 1.4fr 1fr 1fr 1.2fr 0.8fr 1fr" } as const;
+const LIST_GRID_COLS = { gridTemplateColumns: "1.5fr 55px 1fr 1.2fr 0.6fr 0.6fr 0.7fr 0.7fr 1fr 0.7fr" } as const;
 
 const COLUMNS: { label: string; field?: SortField }[] = [
   { label: "Event", field: "event" },
   { label: "Result", field: "result" },
+  { label: "Score" },
   { label: "Opponent", field: "opponent" },
+  { label: "Hand" },
+  { label: "BH" },
   { label: "Type" },
   { label: "Court" },
   { label: "Date", field: "date" },
-  { label: "Duration" },
   { label: "Source" },
 ];
 
@@ -55,15 +57,15 @@ export function MatchesGrid({
           initial={shouldReduceMotion ? false : { opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: shouldReduceMotion ? 0 : 0.15 }}
+          transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {matches.map((match, i) => (
               <motion.div
                 key={match.id}
-                initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
+                initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.2, delay: i * 0.03 }}
+                transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.4, delay: i * 0.07, ease: [0.25, 0.46, 0.45, 0.94] }}
               >
                 <MatchCardGallery match={match} />
               </motion.div>
@@ -76,7 +78,7 @@ export function MatchesGrid({
           initial={shouldReduceMotion ? false : { opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: shouldReduceMotion ? 0 : 0.15 }}
+          transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
         >
           {/* Column headers */}
           <div className={`${LIST_GRID_CLASSES} items-center px-4 py-2.5 border-b border-[#F0F0F0] mb-4`} style={LIST_GRID_COLS} role="row">
@@ -85,13 +87,13 @@ export function MatchesGrid({
                 {col.field ? (
                   <button
                     onClick={() => onSort(col.field!)}
-                    className="inline-flex items-center gap-0.5 text-[10px] font-medium text-[#D9D9D9] uppercase tracking-[0.5px] hover:text-[#888888] transition-colors"
+                    className="inline-flex items-center gap-0.5 text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] hover:text-[#525252] transition-[color] duration-200"
                   >
                     {col.label}
                     <SortIcon field={col.field} sortField={sortField} sortDir={sortDir} />
                   </button>
                 ) : (
-                  <span className="text-[10px] font-medium text-[#D9D9D9] uppercase tracking-[0.5px]">
+                  <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
                     {col.label}
                   </span>
                 )}
@@ -103,9 +105,9 @@ export function MatchesGrid({
           {matches.map((match, i) => (
             <motion.div
               key={match.id}
-              initial={shouldReduceMotion ? false : { opacity: 0, y: 4 }}
+              initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.15, delay: i * 0.02 }}
+              transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.4, delay: i * 0.07, ease: [0.25, 0.46, 0.45, 0.94] }}
             >
               <MatchCardList match={match} />
             </motion.div>

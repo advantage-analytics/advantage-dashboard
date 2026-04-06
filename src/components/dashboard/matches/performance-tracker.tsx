@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useId, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { shortName } from "@/lib/data/match-utils";
 
@@ -150,7 +150,7 @@ function MomentumChart({
 
   return (
     <div>
-      <p className="text-[10px] font-medium text-[#D9D9D9] uppercase tracking-[0.5px] mb-3">
+      <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] mb-3">
         Point Momentum
       </p>
 
@@ -180,7 +180,7 @@ function MomentumChart({
               y1={0}
               x2={xScale(idx)}
               y2={CHART_H}
-              stroke="#E8E8E8"
+              stroke="#F0F0F0"
               strokeWidth={1}
               strokeDasharray="4 3"
             />
@@ -194,14 +194,14 @@ function MomentumChart({
               y1={0}
               x2={xScale(b.index)}
               y2={CHART_H}
-              stroke="#E53E3E"
+              stroke="#E51837"
               strokeWidth={1}
               strokeDasharray="3 2"
             />
           ))}
 
           {/* Zero baseline */}
-          <line x1={0} y1={yMid} x2={CHART_W} y2={yMid} stroke="#EBEBEB" strokeWidth={1} />
+          <line x1={0} y1={yMid} x2={CHART_W} y2={yMid} stroke="#F0F0F0" strokeWidth={1} />
 
           {/* P1 leading fill (blue, above baseline) */}
           <path d={areaPath} fill={P1_COLOR} fillOpacity={0.12} clipPath={`url(#${clipAbove})`} />
@@ -419,18 +419,18 @@ function MomentumChart({
       <div className="flex items-center justify-center gap-5 mt-3">
         <div className="flex items-center gap-1.5">
           <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: P1_COLOR, opacity: 0.6 }} />
-          <span className="text-[10px] font-medium text-[#D9D9D9] uppercase tracking-[0.5px]">{p1Short} leading</span>
+          <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">{p1Short} leading</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: P2_COLOR, opacity: 0.6 }} />
-          <span className="text-[10px] font-medium text-[#D9D9D9] uppercase tracking-[0.5px]">{p2Short} leading</span>
+          <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">{p2Short} leading</span>
         </div>
         {breakIndices.length > 0 && (
           <div className="flex items-center gap-1.5">
             <svg width="10" height="10" className="shrink-0">
-              <line x1={0} y1={5} x2={10} y2={5} stroke="#E53E3E" strokeWidth={1.5} strokeDasharray="2 1.5" />
+              <line x1={0} y1={5} x2={10} y2={5} stroke="#E51837" strokeWidth={1.5} strokeDasharray="2 1.5" />
             </svg>
-            <span className="text-[10px] font-medium text-[#D9D9D9] uppercase tracking-[0.5px]">Break of Serve</span>
+            <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">Break of Serve</span>
           </div>
         )}
       </div>
@@ -452,18 +452,18 @@ function SetBreakdown({
   const maxPts = Math.max(...sets.flatMap((s) => [s.p1Points, s.p2Points]), 1);
 
   return (
-    <div className="mb-8">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#888888] mb-4">
+    <div>
+      <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-4">
         Points Per Set
       </p>
 
       {/* Column headers */}
       <div className="grid grid-cols-[auto_1fr_1fr] gap-x-3 mb-3">
         <div className="w-12" />
-        <span className="text-xs font-semibold text-[#4A8AF4] whitespace-nowrap truncate">
+        <span className="text-[12px] font-medium text-[#4A8AF4] whitespace-nowrap truncate">
           {p1Short}
         </span>
-        <span className="text-xs font-semibold text-[#F38439] whitespace-nowrap truncate">
+        <span className="text-[12px] font-medium text-[#F38439] whitespace-nowrap truncate">
           {p2Short}
         </span>
       </div>
@@ -483,18 +483,18 @@ function SetBreakdown({
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35, delay: 0.1 + index * 0.07, ease: EASE_CURVE }}
             >
-              <span className="text-xs font-medium text-[#888888] w-12">Set {s.set}</span>
+              <span className="text-[12px] font-medium text-[#525252] w-12">Set {s.set}</span>
 
               {/* P1: count then bar */}
               <div className="flex items-center gap-2">
                 <span
-                  className={`text-sm tabular-nums font-semibold w-6 ${
+                  className={`text-[13px] tabular-nums font-medium w-6 ${
                     p1Wins ? "text-[#4A8AF4]" : "text-[#888888]"
                   }`}
                 >
                   {s.p1Points}
                 </span>
-                <div className="flex-1 h-1.5 bg-[#F0F0F0] rounded-full overflow-hidden">
+                <div className="flex-1 h-1.5 bg-[#F3F3F3] rounded-full overflow-hidden">
                   <motion.div
                     className="h-full rounded-full bg-[#4A8AF4]"
                     initial={{ width: "0%" }}
@@ -507,13 +507,13 @@ function SetBreakdown({
               {/* P2: count then bar */}
               <div className="flex items-center gap-2">
                 <span
-                  className={`text-sm tabular-nums font-semibold w-6 ${
+                  className={`text-[13px] tabular-nums font-medium w-6 ${
                     p2Wins ? "text-[#F38439]" : "text-[#888888]"
                   }`}
                 >
                   {s.p2Points}
                 </span>
-                <div className="flex-1 h-1.5 bg-[#F0F0F0] rounded-full overflow-hidden">
+                <div className="flex-1 h-1.5 bg-[#F3F3F3] rounded-full overflow-hidden">
                   <motion.div
                     className="h-full rounded-full bg-[#F38439]"
                     initial={{ width: "0%" }}
@@ -534,12 +534,12 @@ function SetBreakdown({
 
 function TableHeader({ p1Short, p2Short }: { p1Short: string; p2Short: string }) {
   return (
-    <div className="grid grid-cols-[1fr_130px_130px] sm:grid-cols-[1fr_150px_150px] border-b border-[#E8E8E8] pb-2 mb-1">
+    <div className="grid grid-cols-[1fr_130px_130px] sm:grid-cols-[1fr_150px_150px] border-b border-[#F0F0F0] pb-2 mb-1">
       <span />
-      <span className="text-xs font-semibold text-[#4A8AF4] text-center whitespace-nowrap truncate">
+      <span className="text-[12px] font-medium text-[#4A8AF4] text-center whitespace-nowrap truncate">
         {p1Short}
       </span>
-      <span className="text-xs font-semibold text-[#F38439] text-center whitespace-nowrap truncate">
+      <span className="text-[12px] font-medium text-[#F38439] text-center whitespace-nowrap truncate">
         {p2Short}
       </span>
     </div>
@@ -561,8 +561,8 @@ function PressureSection({
   if (visible.length === 0) return null;
 
   return (
-    <div className="mb-8">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#888888] mb-4">
+    <div>
+      <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-4">
         Pressure Situations
       </p>
       <TableHeader p1Short={p1Short} p2Short={p2Short} />
@@ -574,25 +574,25 @@ function PressureSection({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, delay: 0.1 + index * 0.07, ease: EASE_CURVE }}
         >
-          <span className="text-sm text-[#333333]">{s.label}</span>
+          <span className="text-[12px] text-[#525252]">{s.label}</span>
           <div className="text-center">
             {s.p1Total > 0 ? (
               <>
-                <span className="text-sm tabular-nums font-semibold text-[#4A8AF4]">{s.p1Won}</span>
-                <span className="text-xs text-[#BBBBBB]">/{s.p1Total}</span>
+                <span className="text-[13px] tabular-nums font-medium text-[#4A8AF4]">{s.p1Won}</span>
+                <span className="text-[12px] text-[#BBBBBB]">/{s.p1Total}</span>
               </>
             ) : (
-              <span className="text-sm text-[#CCCCCC]">—</span>
+              <span className="text-[13px] text-[#CCCCCC]">—</span>
             )}
           </div>
           <div className="text-center">
             {s.p2Total > 0 ? (
               <>
-                <span className="text-sm tabular-nums font-semibold text-[#F38439]">{s.p2Won}</span>
-                <span className="text-xs text-[#BBBBBB]">/{s.p2Total}</span>
+                <span className="text-[13px] tabular-nums font-medium text-[#F38439]">{s.p2Won}</span>
+                <span className="text-[12px] text-[#BBBBBB]">/{s.p2Total}</span>
               </>
             ) : (
-              <span className="text-sm text-[#CCCCCC]">—</span>
+              <span className="text-[13px] text-[#CCCCCC]">—</span>
             )}
           </div>
         </motion.div>
@@ -617,7 +617,7 @@ function RallySection({
 
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#888888] mb-4">
+      <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-4">
         Rally Length Win %
       </p>
       <TableHeader p1Short={p1Short} p2Short={p2Short} />
@@ -632,17 +632,17 @@ function RallySection({
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, delay: 0.1 + index * 0.07, ease: EASE_CURVE }}
           >
-            <span className="text-sm text-[#333333]">{b.label}</span>
+            <span className="text-[12px] text-[#525252]">{b.label}</span>
 
             <div className="text-center">
               <span
-                className={`text-sm tabular-nums ${
-                  p1Leads ? "font-semibold text-[#4A8AF4]" : "text-[#666666]"
+                className={`text-[13px] tabular-nums ${
+                  p1Leads ? "font-medium text-[#4A8AF4]" : "text-[#525252]"
                 }`}
               >
                 {b.p1WonPct}%
               </span>
-              <div className="mt-1.5 mx-auto w-16 h-1 rounded-full bg-[#F0F0F0] overflow-hidden">
+              <div className="mt-1.5 mx-auto w-16 h-1 rounded-full bg-[#F3F3F3] overflow-hidden">
                 <motion.div
                   className="h-full rounded-full bg-[#4A8AF4]"
                   initial={{ width: "0%" }}
@@ -654,13 +654,13 @@ function RallySection({
 
             <div className="text-center">
               <span
-                className={`text-sm tabular-nums ${
-                  p2Leads ? "font-semibold text-[#F38439]" : "text-[#666666]"
+                className={`text-[13px] tabular-nums ${
+                  p2Leads ? "font-medium text-[#F38439]" : "text-[#525252]"
                 }`}
               >
                 {b.p2WonPct}%
               </span>
-              <div className="mt-1.5 mx-auto w-16 h-1 rounded-full bg-[#F0F0F0] overflow-hidden">
+              <div className="mt-1.5 mx-auto w-16 h-1 rounded-full bg-[#F3F3F3] overflow-hidden">
                 <motion.div
                   className="h-full rounded-full bg-[#F38439]"
                   initial={{ width: "0%" }}
@@ -691,6 +691,7 @@ export function PerformanceTracker({
 }: PerformanceTrackerProps) {
   const p1Short = shortName(player1Name, 18);
   const p2Short = shortName(player2Name, 18);
+  const prefersReducedMotion = useReducedMotion();
 
   const { momentumData, setSummaries, pressureStats, rallyBuckets } = useMemo(() => {
     // ── Momentum ──────────────────────────────
@@ -748,41 +749,91 @@ export function PerformanceTracker({
     }
 
     const rallyBuckets: RallyBucket[] = [
-      { label: "Short (1–4 shots)", ...calcBucket((pt) => pt.rallyLength >= 1 && pt.rallyLength <= 4) },
-      { label: "Medium (5–9 shots)", ...calcBucket((pt) => pt.rallyLength >= 5 && pt.rallyLength <= 9) },
+      { label: "Short (1\u20134 shots)", ...calcBucket((pt) => pt.rallyLength >= 1 && pt.rallyLength <= 4) },
+      { label: "Medium (5\u20139 shots)", ...calcBucket((pt) => pt.rallyLength >= 5 && pt.rallyLength <= 9) },
       { label: "Long (10+ shots)", ...calcBucket((pt) => pt.rallyLength >= 10) },
     ];
 
     return { momentumData, setSummaries, pressureStats, rallyBuckets };
   }, [points]);
 
+  const sectionAnimate = { opacity: 1, y: 0 };
+  const sectionInitial = prefersReducedMotion ? sectionAnimate : { opacity: 0, y: 12 };
+
   if (points.length === 0) {
     return (
-      <div className="bg-white p-6 rounded-[16px] border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)]">
-        <h2 className="text-base font-medium text-[#0D0D0D] mb-6">Performance Tracker</h2>
-        <p className="text-sm text-[#888888] text-center">
+      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5">
+        <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-4">
+          Performance Tracker
+        </p>
+        <p className="text-[12px] text-[#888888] text-center">
           Point data not available for this match.
         </p>
       </div>
     );
   }
 
-  return (
-    <motion.div
-      className="bg-white p-6 rounded-[16px] border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)]"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: 0.4, ease: EASE_CURVE }}
-    >
-      {/* Header */}
-      <div className="mb-5">
-        <h2 className="text-base font-medium text-[#0D0D0D]">Performance Tracker</h2>
-        <p className="text-xs text-[#888888] mt-1">
-          Game-by-game momentum tracking throughout the match
-        </p>
-      </div>
+  const hasPressure = pressureStats.some((s) => s.p1Total > 0 || s.p2Total > 0);
+  const hasRally = rallyBuckets.some((b) => b.hasData);
 
-      <MomentumChart data={momentumData} rawPoints={points} p1Short={p1Short} p2Short={p2Short} />
-    </motion.div>
+  return (
+    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5">
+      <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-5">
+        Performance Tracker
+      </p>
+
+      {/* Momentum chart sub-section */}
+      <motion.div
+        className="bg-[#FAFAFA] rounded-xl p-4"
+        initial={sectionInitial}
+        animate={sectionAnimate}
+        transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, ease: EASE_CURVE }}
+      >
+        <MomentumChart data={momentumData} rawPoints={points} p1Short={p1Short} p2Short={p2Short} />
+      </motion.div>
+
+      {/* Divider */}
+      <div className="h-px bg-[#F0F0F0] my-5" />
+
+      {/* Set breakdown sub-section */}
+      <motion.div
+        className="bg-[#FAFAFA] rounded-xl p-4"
+        initial={sectionInitial}
+        animate={sectionAnimate}
+        transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, ease: EASE_CURVE, delay: 1 * 0.07 }}
+      >
+        <SetBreakdown sets={setSummaries} p1Short={p1Short} p2Short={p2Short} />
+      </motion.div>
+
+      {/* Pressure situations sub-section */}
+      {hasPressure && (
+        <>
+          <div className="h-px bg-[#F0F0F0] my-5" />
+          <motion.div
+            className="bg-[#FAFAFA] rounded-xl p-4"
+            initial={sectionInitial}
+            animate={sectionAnimate}
+            transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, ease: EASE_CURVE, delay: 2 * 0.07 }}
+          >
+            <PressureSection stats={pressureStats} p1Short={p1Short} p2Short={p2Short} />
+          </motion.div>
+        </>
+      )}
+
+      {/* Rally length sub-section */}
+      {hasRally && (
+        <>
+          <div className="h-px bg-[#F0F0F0] my-5" />
+          <motion.div
+            className="bg-[#FAFAFA] rounded-xl p-4"
+            initial={sectionInitial}
+            animate={sectionAnimate}
+            transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, ease: EASE_CURVE, delay: 3 * 0.07 }}
+          >
+            <RallySection buckets={rallyBuckets} p1Short={p1Short} p2Short={p2Short} />
+          </motion.div>
+        </>
+      )}
+    </div>
   );
 }

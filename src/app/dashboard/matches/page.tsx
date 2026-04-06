@@ -21,38 +21,67 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
     const { data } = await supabase
       .from("matches")
       .select(
-        "id, player1_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, source_provider"
+        "id, player1_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, source_provider, player2_id"
       )
       .eq("created_by", user.id)
       .order("date", { ascending: false });
 
     if (data) {
-      matches = (data as DbMatch[])
-        .map((row) => transformDbMatch(row, user.id))
+      // Collect unique opponent user IDs to fetch hand/backhand
+      const opponentIds = [...new Set(
+        data.map((r) => r.player2_id).filter((id): id is string => id != null)
+      )];
+      const opponentMap = new Map<string, { hand: string | null; backhand: string | null }>();
+
+      if (opponentIds.length > 0) {
+        const { data: opponents } = await supabase
+          .from("users")
+          .select("id, hand, backhand")
+          .in("id", opponentIds);
+        if (opponents) {
+          for (const o of opponents) {
+            opponentMap.set(o.id, { hand: o.hand, backhand: o.backhand });
+          }
+        }
+      }
+
+      matches = (data as (DbMatch & { player2_id: string | null })[])
+        .map((row) => {
+          const display = transformDbMatch(row, user.id);
+          if (!display) return null;
+          const opp = row.player2_id ? opponentMap.get(row.player2_id) : undefined;
+          if (opp) {
+            display.player2Hand = opp.hand ?? undefined;
+            display.player2Backhand = opp.backhand ?? undefined;
+          }
+          return display;
+        })
         .filter((m): m is DisplayMatch => m !== null);
     }
   }
 
   return (
-    <main className="flex-1 w-full bg-white min-h-screen">
-      <div className="relative z-10 px-8 py-12 pt-[104px]">
+    <div className="flex-1 w-full bg-white">
+      <div className="px-8 py-10">
         {/* Header */}
-        <div className="flex items-center justify-between gap-4 mb-10">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-[#0D0D0D] mb-1.5">
+        <div className="flex items-end justify-between">
+          <div className="flex flex-col gap-2">
+            <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[3px]">
+              {matches.length} {matches.length === 1 ? "MATCH" : "MATCHES"} RECORDED
+            </p>
+            <h1 className="font-light text-[30px] text-[#0D0D0D] tracking-[-0.6px] leading-[30px]">
               Matches
             </h1>
-            <p className="text-sm text-[#888888]">
-              Your match history, scores, and performance over time.
-            </p>
           </div>
-          <CreateMatchButton />
+          <CreateMatchButton variant="blue" />
         </div>
 
-        <Suspense fallback={null}>
-          <MatchesPageContent matches={matches} />
-        </Suspense>
+        <div className="mt-10">
+          <Suspense fallback={null}>
+            <MatchesPageContent matches={matches} />
+          </Suspense>
+        </div>
       </div>
-    </main>
+    </div>
   );
 }

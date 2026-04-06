@@ -8,14 +8,17 @@ export default async function StatisticsPage(): Promise<React.JSX.Element> {
   ]);
 
   return (
-    <div className="flex-1 w-full bg-white min-h-screen">
-      <div className="relative z-10 px-8 py-12 pt-[104px]">
+    <div className="flex-1 w-full bg-white">
+      <div className="px-8 py-10">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-semibold tracking-tight text-[#0D0D0D] mb-1.5">
+          <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[3px]">
+            {allMatches.length} {allMatches.length === 1 ? "MATCH" : "MATCHES"} ANALYZED
+          </p>
+          <h1 className="font-light text-[30px] text-[#0D0D0D] tracking-[-0.6px] leading-[30px] mt-2">
             Statistics
           </h1>
-          <p className="text-sm text-[#888888]">
+          <p className="text-[12px] font-normal text-[#71717A] mt-1.5">
             Dive deep into your performance analytics and discover patterns to
             improve your game.
           </p>

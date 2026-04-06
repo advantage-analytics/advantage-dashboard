@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import type { Match } from "@/lib/data/types";
 import type { MatchStatisticsResult } from "@/lib/data/match-stats-server";
 import { shortName, PLAYER_COLORS } from "@/lib/data/match-utils";
@@ -13,7 +13,7 @@ const EASE = [0.25, 0.46, 0.45, 0.94] as const;
 
 function SectionHeader({ children }: { children: string }) {
   return (
-    <div className="text-[10px] font-medium tracking-[0.16em] uppercase text-[#888888]">
+    <div className="text-[10px] font-medium tracking-[2.5px] uppercase text-[#AAAAAA]">
       {children}
     </div>
   );
@@ -31,14 +31,14 @@ function PlayerTabs({
   onSelectPlayer: (p: "player1" | "player2") => void;
 }) {
   return (
-    <div className="flex flex-row shadow-[inset_0_-1px_0_0_#D9D9D9]">
+    <div className="flex flex-row gap-2">
       <button
         type="button"
         onClick={() => onSelectPlayer("player1")}
-        className={`h-[31px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
+        className={`h-8 rounded-full px-3.5 text-xs font-medium ring-1 ring-inset transition-colors duration-200 ${
           selectedPlayer === "player1"
-            ? "text-[#4A8AF4] border-[#4A8AF4]"
-            : "text-[#888888] border-transparent hover:text-[#666666]"
+            ? "ring-[#3B82F6] text-[#3B82F6] bg-[#EBF2FD]"
+            : "ring-[#D9D9D9] text-[#525252] bg-white"
         }`}
       >
         {shortName(match.player1.name)}
@@ -46,10 +46,10 @@ function PlayerTabs({
       <button
         type="button"
         onClick={() => onSelectPlayer("player2")}
-        className={`h-[31px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
+        className={`h-8 rounded-full px-3.5 text-xs font-medium ring-1 ring-inset transition-colors duration-200 ${
           selectedPlayer === "player2"
-            ? "text-[#F38439] border-[#F38439]"
-            : "text-[#888888] border-transparent hover:text-[#666666]"
+            ? "ring-[#3B82F6] text-[#3B82F6] bg-[#EBF2FD]"
+            : "ring-[#D9D9D9] text-[#525252] bg-white"
         }`}
       >
         {shortName(match.player2.name)}
@@ -63,25 +63,34 @@ function PercentageBarRow({
   valuePct,
   fillPct,
   barColor,
+  index = 0,
+  reduceMotion = false,
 }: {
   label: string;
   valuePct: number;
   fillPct: number;
   barColor: string;
+  index?: number;
+  reduceMotion?: boolean;
 }) {
   const pct = Math.min(100, Math.max(0, fillPct));
   return (
-    <div className="flex flex-col gap-3 self-stretch">
+    <motion.div
+      className="flex flex-col gap-3 self-stretch"
+      initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: EASE, delay: index * 0.04 }}
+    >
       <div className="flex flex-row justify-between items-end self-stretch">
-        <span className="text-[10px] font-normal text-[#888888] leading-[1.1]">{label}</span>
-        <span className="text-[16px] leading-[1.1] font-medium text-[#0D0D0D] tabular-nums">
+        <span className="text-[12px] text-[#525252]">{label}</span>
+        <span className="text-[13px] font-medium text-[#0D0D0D] tabular-nums">
           {valuePct}%
         </span>
       </div>
-      <div className="h-[6px] w-full bg-[#D9D9D9] rounded-full overflow-hidden">
+      <div className="h-2 w-full bg-[#F3F3F3] rounded-full overflow-hidden">
         <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: barColor }} />
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -90,10 +99,10 @@ function PercentageBarRow({
 function PlayerHeader({ match }: { match: Match }) {
   return (
     <div className="flex flex-row items-center justify-between">
-      <span className="text-[10px] font-medium text-[#D9D9D9] uppercase tracking-[0.5px] truncate">
+      <span className="text-[12px] font-medium text-[#0D0D0D] truncate">
         {shortName(match.player1.name)}
       </span>
-      <span className="text-[10px] font-medium text-[#D9D9D9] uppercase tracking-[0.5px] truncate text-right">
+      <span className="text-[12px] font-medium text-[#0D0D0D] truncate text-right">
         {shortName(match.player2.name)}
       </span>
     </div>
@@ -177,7 +186,7 @@ function PointsSplit({
             {p2Pct.toFixed(1)}%
           </span>
         </div>
-        <div className="h-[7px] w-full rounded-full overflow-hidden flex">
+        <div className="h-2 w-full rounded-full overflow-hidden flex">
           <motion.div
             className="h-full"
             style={{ backgroundColor: PLAYER_COLORS.player1 }}
@@ -200,32 +209,34 @@ function ComparisonRow({
   p1Value,
   p2Value,
   index = 0,
+  reduceMotion = false,
 }: {
   label: string;
   p1Value: string;
   p2Value: string;
   index?: number;
+  reduceMotion?: boolean;
 }) {
   return (
     <motion.div
       className="grid grid-cols-[1fr_auto_1fr] items-center gap-2"
-      initial={{ opacity: 0, y: 8 }}
+      initial={reduceMotion ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, delay: index * 0.04 }}
+      transition={{ duration: 0.3, ease: EASE, delay: index * 0.04 }}
     >
       <span
-        className="text-sm font-semibold tabular-nums text-left"
+        className="text-[13px] font-medium tabular-nums text-left"
         style={{ color: PLAYER_COLORS.player1 }}
       >
         {p1Value}
       </span>
       <div className="flex flex-col items-center min-w-[80px]">
-        <span className="text-[9px] font-medium tracking-[0.14em] uppercase text-[#AAAAAA] text-center leading-none">
+        <span className="text-[12px] text-[#525252] text-center leading-none">
           {label}
         </span>
       </div>
       <span
-        className="text-sm font-semibold tabular-nums text-right"
+        className="text-[13px] font-medium tabular-nums text-right"
         style={{ color: PLAYER_COLORS.player2 }}
       >
         {p2Value}
@@ -267,16 +278,16 @@ function StatHero({
         >
           {clampedPct.toFixed(1)}%
         </motion.span>
-        <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-[#888888] text-center">
+        <span className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] text-center">
           {label}
         </span>
-        <span className="text-xs tabular-nums text-[#BBBBBB] font-medium">
+        <span className="text-[12px] tabular-nums text-[#525252] font-medium">
           {won} / {total} pts
         </span>
       </div>
 
       {/* Animated progress bar */}
-      <div className="h-[6px] w-full bg-[#F0F0F0] rounded-full overflow-hidden">
+      <div className="h-2 w-full bg-[#F3F3F3] rounded-full overflow-hidden">
         <motion.div
           key={`bar-${barColor}-${pct}`}
           className="h-full rounded-full"
@@ -301,6 +312,8 @@ export function MatchOverallSidebar({
   match,
   statsResult,
 }: MatchOverallSidebarProps) {
+  const prefersReducedMotion = useReducedMotion();
+
   const p1Stats = statsResult?.statistics?.player1Stats ?? null;
   const p2Stats = statsResult?.statistics?.player2Stats ?? null;
 
@@ -315,14 +328,14 @@ export function MatchOverallSidebar({
   };
 
   const cardClass =
-    "w-[320px] flex flex-col gap-5 px-5 py-4 bg-white rounded-[16px] border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)]";
+    "bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5";
 
   if (!hasStats) {
     return (
-      <div className={cardClass}>
+      <div className={`w-[320px] flex flex-col gap-5 ${cardClass}`}>
         <PlayerHeader match={match} />
         <div className="flex items-center justify-center py-12">
-          <span className="text-xs text-[#BBBBBB] font-medium">
+          <span className="text-[12px] text-[#525252] font-medium">
             No stats available
           </span>
         </div>
@@ -331,45 +344,45 @@ export function MatchOverallSidebar({
   }
 
   return (
-    <div className={cardClass}>
-      <div>
-        <h2 className="text-base font-medium text-[#0D0D0D]">Match Summary</h2>
-        <p className="text-xs text-[#888888] mt-1">
-          Points won and performance ratings comparison
-        </p>
+    <div className="w-[320px] flex flex-col gap-5">
+      {/* Points Won card */}
+      <div className={`flex flex-col gap-5 ${cardClass}`}>
+        <SectionHeader>Points Won</SectionHeader>
+        <PointsSplit
+          match={match}
+          p1TotalWon={p1TotalWon}
+          p2TotalWon={p2TotalWon}
+        />
       </div>
 
-      <SectionHeader>Points Won</SectionHeader>
-      <PointsSplit
-        match={match}
-        p1TotalWon={p1TotalWon}
-        p2TotalWon={p2TotalWon}
-      />
-
-      <div className="h-px w-full bg-[#F0F0F0]" />
-
-      <SectionHeader>Performance</SectionHeader>
-      <div className="flex flex-col gap-2.5">
-        <ComparisonRow
-          label="Serve Rating"
-          p1Value={fmt(p1Stats.serveRating, 1)}
-          p2Value={fmt(p2Stats.serveRating, 1)}
-          index={0}
-        />
-        <div className="h-px w-full bg-[#F4F4F4]" />
-        <ComparisonRow
-          label="Return Rating"
-          p1Value={fmt(p1Stats.returnRating, 1)}
-          p2Value={fmt(p2Stats.returnRating, 1)}
-          index={1}
-        />
-        <div className="h-px w-full bg-[#F4F4F4]" />
-        <ComparisonRow
-          label="Under Pressure"
-          p1Value={fmt(p1Stats.underPressureRating, 1)}
-          p2Value={fmt(p2Stats.underPressureRating, 1)}
-          index={2}
-        />
+      {/* Performance card */}
+      <div className={`flex flex-col gap-5 ${cardClass}`}>
+        <SectionHeader>Performance</SectionHeader>
+        <div className="flex flex-col gap-2.5">
+          <ComparisonRow
+            label="Serve Rating"
+            p1Value={fmt(p1Stats.serveRating, 1)}
+            p2Value={fmt(p2Stats.serveRating, 1)}
+            index={0}
+            reduceMotion={!!prefersReducedMotion}
+          />
+          <div className="h-px bg-[#F0F0F0]" />
+          <ComparisonRow
+            label="Return Rating"
+            p1Value={fmt(p1Stats.returnRating, 1)}
+            p2Value={fmt(p2Stats.returnRating, 1)}
+            index={1}
+            reduceMotion={!!prefersReducedMotion}
+          />
+          <div className="h-px bg-[#F0F0F0]" />
+          <ComparisonRow
+            label="Under Pressure"
+            p1Value={fmt(p1Stats.underPressureRating, 1)}
+            p2Value={fmt(p2Stats.underPressureRating, 1)}
+            index={2}
+            reduceMotion={!!prefersReducedMotion}
+          />
+        </div>
       </div>
     </div>
   );
@@ -384,6 +397,7 @@ export function MatchVisualsSidebar({
   match,
   statsResult,
 }: MatchVisualsSidebarProps) {
+  const prefersReducedMotion = useReducedMotion();
   const searchParams = useSearchParams();
   const vizParam = searchParams.get("viz");
   const breakdownView: "serve" | "return" =
@@ -412,51 +426,60 @@ export function MatchVisualsSidebar({
       ? "Total Serve Points Won"
       : "Total Return Points Won";
 
+  const cardClass =
+    "bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5";
+
   return (
-    <div className="w-[320px] flex flex-col gap-6 px-6 py-4 bg-white rounded-[16px] border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)]">
-      <div>
-        <h2 className="text-base font-medium text-[#0D0D0D]">Shot Analysis</h2>
-        <p className="text-xs text-[#888888] mt-1">
-          Points won and shot placement breakdown by player
-        </p>
+    <div className="w-[320px] flex flex-col gap-5">
+      {/* Player selection + stat hero card */}
+      <div className={`flex flex-col gap-5 ${cardClass}`}>
+        <SectionHeader>Shot Analysis</SectionHeader>
+
+        <PlayerTabs
+          match={match}
+          selectedPlayer={selectedPlayer}
+          onSelectPlayer={setSelectedPlayer}
+        />
+
+        <StatHero
+          key={`${selectedPlayer}-${breakdownView}`}
+          pct={circlePct}
+          won={circleWon}
+          total={totalPoints}
+          label={circleLabel}
+          barColor={barColor}
+        />
       </div>
 
-      <PlayerTabs
-        match={match}
-        selectedPlayer={selectedPlayer}
-        onSelectPlayer={setSelectedPlayer}
-      />
-
-      <StatHero
-        key={`${selectedPlayer}-${breakdownView}`}
-        pct={circlePct}
-        won={circleWon}
-        total={totalPoints}
-        label={circleLabel}
-        barColor={barColor}
-      />
-
       {breakdownView === "serve" && (
-        <div className="flex flex-col items-stretch gap-5">
+        <div className={`flex flex-col gap-5 ${cardClass}`}>
           <SectionHeader>Serve Placement Distribution</SectionHeader>
-          <div className="flex flex-col gap-5 self-stretch">
+          <div className="flex flex-col gap-4 self-stretch">
             <PercentageBarRow
               label="Wide"
               valuePct={playerStats?.serveWidePct ?? 0}
               fillPct={playerStats?.serveWidePct ?? 0}
               barColor={barColor}
+              index={0}
+              reduceMotion={!!prefersReducedMotion}
             />
+            <div className="h-px bg-[#F0F0F0]" />
             <PercentageBarRow
               label="Body"
               valuePct={playerStats?.serveBodyPct ?? 0}
               fillPct={playerStats?.serveBodyPct ?? 0}
               barColor={barColor}
+              index={1}
+              reduceMotion={!!prefersReducedMotion}
             />
+            <div className="h-px bg-[#F0F0F0]" />
             <PercentageBarRow
               label="T"
               valuePct={playerStats?.serveTpct ?? 0}
               fillPct={playerStats?.serveTpct ?? 0}
               barColor={barColor}
+              index={2}
+              reduceMotion={!!prefersReducedMotion}
             />
           </div>
         </div>
@@ -464,50 +487,66 @@ export function MatchVisualsSidebar({
 
       {breakdownView === "return" && (
         <>
-          <div className="flex flex-col items-stretch gap-5">
+          <div className={`flex flex-col gap-5 ${cardClass}`}>
             <SectionHeader>Return Placement Distribution</SectionHeader>
-            <div className="flex flex-col gap-5 self-stretch">
+            <div className="flex flex-col gap-4 self-stretch">
               <PercentageBarRow
                 label="Cross Court"
                 valuePct={playerStats?.returnCrossCourtPct ?? 0}
                 fillPct={playerStats?.returnCrossCourtPct ?? 0}
                 barColor={barColor}
+                index={0}
+                reduceMotion={!!prefersReducedMotion}
               />
+              <div className="h-px bg-[#F0F0F0]" />
               <PercentageBarRow
                 label="Down The Line"
                 valuePct={playerStats?.returnDownTheLinePct ?? 0}
                 fillPct={playerStats?.returnDownTheLinePct ?? 0}
                 barColor={barColor}
+                index={1}
+                reduceMotion={!!prefersReducedMotion}
               />
+              <div className="h-px bg-[#F0F0F0]" />
               <PercentageBarRow
                 label="Middle"
                 valuePct={playerStats?.returnMiddlePct ?? 0}
                 fillPct={playerStats?.returnMiddlePct ?? 0}
                 barColor={barColor}
+                index={2}
+                reduceMotion={!!prefersReducedMotion}
               />
             </div>
           </div>
 
-          <div className="flex flex-col items-stretch gap-5">
+          <div className={`flex flex-col gap-5 ${cardClass}`}>
             <SectionHeader>Return Contact Distribution</SectionHeader>
-            <div className="flex flex-col gap-5 self-stretch">
+            <div className="flex flex-col gap-4 self-stretch">
               <PercentageBarRow
                 label="Inside"
                 valuePct={playerStats?.returnContactInsidePct ?? 0}
                 fillPct={playerStats?.returnContactInsidePct ?? 0}
                 barColor={barColor}
+                index={0}
+                reduceMotion={!!prefersReducedMotion}
               />
+              <div className="h-px bg-[#F0F0F0]" />
               <PercentageBarRow
                 label="Middle"
                 valuePct={playerStats?.returnContactMiddlePct ?? 0}
                 fillPct={playerStats?.returnContactMiddlePct ?? 0}
                 barColor={barColor}
+                index={1}
+                reduceMotion={!!prefersReducedMotion}
               />
+              <div className="h-px bg-[#F0F0F0]" />
               <PercentageBarRow
                 label="Deep"
                 valuePct={playerStats?.returnContactDeepPct ?? 0}
                 fillPct={playerStats?.returnContactDeepPct ?? 0}
                 barColor={barColor}
+                index={2}
+                reduceMotion={!!prefersReducedMotion}
               />
             </div>
           </div>
