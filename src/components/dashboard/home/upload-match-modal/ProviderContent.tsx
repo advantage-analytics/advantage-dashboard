@@ -26,7 +26,7 @@ export function ProviderContent({ selectedProvider, onProviderSelect }: Provider
                 ? 'cursor-pointer border-[#EAECF0] hover:scale-[1.02]'
                 : 'cursor-not-allowed border-[#EAECF0]'
             } ${
-              selectedProvider === provider.id ? 'ring-2 ring-[#3B82F6] ring-offset-2' : ''
+              selectedProvider === provider.id ? 'ring-2 ring-[var(--color-accent-blue)] ring-offset-2' : ''
             }`}
             onClick={() => {
               if (isAvailable) {

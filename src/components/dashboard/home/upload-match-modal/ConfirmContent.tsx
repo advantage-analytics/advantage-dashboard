@@ -116,12 +116,12 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
             {/* Player 1 */}
             <div className="flex flex-row justify-between items-center">
               <div className="flex flex-row items-center gap-4">
-                <div className="w-10 h-10 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded bg-[var(--color-bg-input)] flex items-center justify-center shrink-0">
                   <span className="text-xs font-medium text-[#BFBFBF]">
                     {getInitials(playerName)}
                   </span>
                 </div>
-                <p className={`font-semibold text-sm ${winner === "player" ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}`}>
+                <p className={`font-semibold text-sm ${winner === "player" ? "text-[var(--color-text-primary)]" : "text-[#B3B3B3]"}`}>
                   {playerName}
                 </p>
               </div>
@@ -132,7 +132,7 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
                   return (
                     <p
                       key={idx}
-                      className={pScore > oScore ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}
+                      className={pScore > oScore ? "text-[var(--color-text-primary)]" : "text-[#B3B3B3]"}
                     >
                       {pScore}
                     </p>
@@ -144,12 +144,12 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
             {/* Player 2 (Opponent) */}
             <div className="flex flex-row justify-between items-center">
               <div className="flex flex-row items-center gap-4">
-                <div className="w-10 h-10 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded bg-[var(--color-bg-input)] flex items-center justify-center shrink-0">
                   <span className="text-xs font-medium text-[#BFBFBF]">
                     {getInitials(opponentName)}
                   </span>
                 </div>
-                <p className={`font-semibold text-sm ${winner === "opponent" ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}`}>
+                <p className={`font-semibold text-sm ${winner === "opponent" ? "text-[var(--color-text-primary)]" : "text-[#B3B3B3]"}`}>
                   {opponentName}
                 </p>
               </div>
@@ -160,7 +160,7 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
                   return (
                     <p
                       key={idx}
-                      className={oScore > pScore ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}
+                      className={oScore > pScore ? "text-[var(--color-text-primary)]" : "text-[#B3B3B3]"}
                     >
                       {oScore}
                     </p>
@@ -174,15 +174,15 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
 
       {/* Scoring Format Section */}
       <div className="space-y-3">
-        <h4 className="text-[#0D0D0D] font-medium text-sm">Scoring Format</h4>
+        <h4 className="text-[var(--color-text-primary)] font-medium text-sm">Scoring Format</h4>
         <div className="flex flex-row gap-3">
-          <div className="px-3 py-2 bg-[#F7F7F7] rounded-lg">
+          <div className="px-3 py-2 bg-[var(--color-bg-disabled)] rounded-lg">
             <p className="text-xs font-medium text-[#666666]">Best of {formData.bestOf} Sets</p>
           </div>
-          <div className="px-3 py-2 bg-[#F7F7F7] rounded-lg">
+          <div className="px-3 py-2 bg-[var(--color-bg-disabled)] rounded-lg">
             <p className="text-xs font-medium text-[#666666]">{formData.adScoring ? "Ad Scoring" : "No-Ad Scoring"}</p>
           </div>
-          <div className="px-3 py-2 bg-[#F7F7F7] rounded-lg">
+          <div className="px-3 py-2 bg-[var(--color-bg-disabled)] rounded-lg">
             <p className="text-xs font-medium text-[#666666]">{formData.playOnLets ? "Play on Lets" : "Lets"}</p>
           </div>
         </div>
@@ -191,7 +191,7 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
       {/* Public/Private Toggle */}
       <div className="flex items-center justify-between">
         <div className="flex flex-col gap-1">
-          <h4 className="text-[#0D0D0D] font-medium text-sm">Public</h4>
+          <h4 className="text-[var(--color-text-primary)] font-medium text-sm">Public</h4>
           <p className="text-[#999999] font-normal text-xs">
             Note: All matches will be private during our Beta Testing
           </p>

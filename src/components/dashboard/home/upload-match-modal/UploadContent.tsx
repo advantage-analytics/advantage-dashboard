@@ -102,8 +102,8 @@ export function UploadContent({
                 isUploading
                   ? "border-gray-300 bg-gray-50"
                   : isOver
-                    ? "border-[#3B82F6] bg-[#3B82F6]/5"
-                    : "border-[#EAECF0] hover:border-[#3B82F6] hover:bg-[#F0F7FF]"
+                    ? "border-[var(--color-accent-blue)] bg-[#3B82F6]/5"
+                    : "border-[#EAECF0] hover:border-[var(--color-accent-blue)] hover:bg-[#F0F7FF]"
               }`}
             >
               {/* Background gradient effect on hover */}
@@ -125,9 +125,9 @@ export function UploadContent({
                     <div className="flex flex-col items-center gap-3 animate-fadeIn">
                       <div className="relative w-14 h-14 flex items-center justify-center">
                         <div className="absolute inset-0 bg-gradient-to-r from-[#3B82F6]/20 to-transparent rounded-full animate-spin" />
-                        <Loader2 className="h-7 w-7 text-[#3B82F6] animate-spin" />
+                        <Loader2 className="h-7 w-7 text-[var(--color-accent-blue)] animate-spin" />
                       </div>
-                      <p className="text-[#0D0D0D] font-medium text-sm">
+                      <p className="text-[var(--color-text-primary)] font-medium text-sm">
                         Validating file...
                       </p>
                     </div>
@@ -140,22 +140,22 @@ export function UploadContent({
                       <div
                         className={`relative w-16 h-16 flex items-center justify-center rounded-2xl transition-all duration-300 ${
                           isOver
-                            ? "bg-[#3B82F6] scale-110"
-                            : "bg-[#F0F4FF] group-hover:bg-[#3B82F6]"
+                            ? "bg-[var(--color-accent-blue)] scale-110"
+                            : "bg-[#F0F4FF] group-hover:bg-[var(--color-accent-blue)]"
                         }`}
                       >
                         <Upload
                           className={`h-8 w-8 transition-all duration-300 ${
                             isOver
                               ? "text-white scale-110"
-                              : "text-[#3B82F6] group-hover:text-white"
+                              : "text-[var(--color-accent-blue)] group-hover:text-white"
                           }`}
                         />
                       </div>
 
                       {/* Text Content */}
                       <div className="space-y-1.5">
-                        <p className="text-[#0D0D0D] font-medium text-sm">
+                        <p className="text-[var(--color-text-primary)] font-medium text-sm">
                           Drag your file here
                         </p>
                         <p className="text-[#999999] text-xs leading-relaxed">
@@ -175,7 +175,7 @@ export function UploadContent({
                       <label htmlFor="upload-input-modal" className="block">
                         <Button
                           type="button"
-                          className="bg-[#0D0D0D] hover:bg-[#1D1D1D] text-white text-xs font-medium rounded-lg px-6 py-2 transition-all duration-200 active:scale-95"
+                          className="bg-[var(--color-text-primary)] hover:bg-[#1D1D1D] text-white text-xs font-medium rounded-lg px-6 py-2 transition-all duration-200 active:scale-95"
                           onClick={() =>
                             document.getElementById("upload-input-modal")?.click()
                           }
@@ -263,11 +263,11 @@ export function UploadContent({
                 {/* Card Header */}
                 <div className="px-4 py-3 border-b border-[#EAECF0] bg-[#FAFBFC] flex items-center justify-between">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="w-10 h-10 bg-[#3B82F6] rounded-lg flex items-center justify-center flex-shrink-0">
+                    <div className="w-10 h-10 bg-[var(--color-accent-blue)] rounded-lg flex items-center justify-center flex-shrink-0">
                       <FileSpreadsheet className="h-5 w-5 text-white" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-[#0D0D0D] font-medium text-sm truncate">
+                      <p className="text-[var(--color-text-primary)] font-medium text-sm truncate">
                         {uploadedFile.name}
                       </p>
                       <p className="text-[#999999] text-xs">{uploadedFile.size}</p>

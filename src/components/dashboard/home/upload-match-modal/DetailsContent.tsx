@@ -272,7 +272,7 @@ export function DetailsContent({
             {/* Player 1 */}
             <div className="flex justify-between items-start">
               <div className="flex gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#F7F7F7] flex items-center justify-center text-sm font-medium text-[#999999]">
+                <div className="w-10 h-10 rounded-full bg-[var(--color-bg-disabled)] flex items-center justify-center text-sm font-medium text-[#999999]">
                   {getInitials(playerName)}
                 </div>
                 <div className="flex-1 flex items-center gap-2">
@@ -287,14 +287,14 @@ export function DetailsContent({
                       className="w-40 h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none placeholder:text-[#999999] px-3"
                     />
                   ) : (
-                    <span className="w-40 text-[#0D0D0D] font-medium text-xs">
+                    <span className="w-40 text-[var(--color-text-primary)] font-medium text-xs">
                       {playerName} (You)
                     </span>
                   )}
                   <button
                     type="button"
                     onClick={() => setEditingPlayer(!editingPlayer)}
-                    className="w-4 h-4 flex items-center justify-center text-[#999999] hover:text-[#0D0D0D] transition-colors"
+                    className="w-4 h-4 flex items-center justify-center text-[#999999] hover:text-[var(--color-text-primary)] transition-colors"
                   >
                     <SquarePen className="h-3.5 w-3.5" />
                   </button>
@@ -316,7 +316,7 @@ export function DetailsContent({
                         placeholder="-"
                         inputMode="numeric"
                         pattern="\d*"
-                        className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#999999]"
+                        className="!w-6 h-8 text-center text-[var(--color-text-primary)] bg-[var(--color-bg-disabled)] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#999999]"
                         value={score === null ? "" : score}
                         onChange={(e) => {
                           const newValue = e.target.value;
@@ -358,7 +358,7 @@ export function DetailsContent({
                           placeholder="-"
                           inputMode="numeric"
                           pattern="\d*"
-                          className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#999999]"
+                          className="!w-6 h-8 text-center text-[var(--color-text-primary)] bg-[var(--color-bg-disabled)] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#999999]"
                           value={formData.playerTiebreaks[i] === null ? "" : String(formData.playerTiebreaks[i])}
                           onChange={(e) => {
                             const newValue = e.target.value;
@@ -389,7 +389,7 @@ export function DetailsContent({
             {/* Player 2 */}
             <div className="flex justify-between items-start">
               <div className="flex gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#F7F7F7] flex items-center justify-center text-sm font-medium text-[#999999]">
+                <div className="w-10 h-10 rounded-full bg-[var(--color-bg-disabled)] flex items-center justify-center text-sm font-medium text-[#999999]">
                   {getInitials(opponentName)}
                 </div>
                 <div className="flex-1 flex items-center gap-2">
@@ -404,14 +404,14 @@ export function DetailsContent({
                       className="w-40 h-7 bg-white border-[#E5E5E5] border rounded-full text-[#999999] text-xs shadow-none placeholder:text-[#999999] px-3"
                     />
                   ) : (
-                    <span className="w-40 text-[#0D0D0D] font-medium text-xs">
+                    <span className="w-40 text-[var(--color-text-primary)] font-medium text-xs">
                       {opponentName}
                     </span>
                   )}
                   <button
                     type="button"
                     onClick={() => setEditingOpponent(!editingOpponent)}
-                    className="w-4 h-4 flex items-center justify-center text-[#999999] hover:text-[#0D0D0D] transition-colors"
+                    className="w-4 h-4 flex items-center justify-center text-[#999999] hover:text-[var(--color-text-primary)] transition-colors"
                   >
                     <SquarePen className="h-3.5 w-3.5" />
                   </button>
@@ -433,7 +433,7 @@ export function DetailsContent({
                         placeholder="-"
                         inputMode="numeric"
                         pattern="\d*"
-                        className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#999999]"
+                        className="!w-6 h-8 text-center text-[var(--color-text-primary)] bg-[var(--color-bg-disabled)] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#999999]"
                         value={score === null ? "" : score}
                         onChange={(e) => {
                           const newValue = e.target.value;
@@ -475,7 +475,7 @@ export function DetailsContent({
                           placeholder="-"
                           inputMode="numeric"
                           pattern="\d*"
-                          className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#999999]"
+                          className="!w-6 h-8 text-center text-[var(--color-text-primary)] bg-[var(--color-bg-disabled)] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#999999]"
                           value={formData.opponentTiebreaks[i] === null ? "" : String(formData.opponentTiebreaks[i])}
                           onChange={(e) => {
                             const newValue = e.target.value;
@@ -509,7 +509,7 @@ export function DetailsContent({
       {/* Result Section */}
       <div className="flex items-end justify-between">
         <div className="flex flex-col gap-2">
-          <span className="text-[#0D0D0D] font-medium text-xs">Result</span>
+          <span className="text-[var(--color-text-primary)] font-medium text-xs">Result</span>
           <Select
             value={formData.result || undefined}
             onValueChange={(value) => onInputChange("result", value)}
@@ -548,7 +548,7 @@ export function DetailsContent({
           <div className="flex flex-col gap-6 pt-2">
           {/* Event Information */}
           <div className="space-y-3">
-            <h4 className="text-[#0D0D0D] font-medium text-xs">Event Information</h4>
+            <h4 className="text-[var(--color-text-primary)] font-medium text-xs">Event Information</h4>
             <div className="flex flex-wrap gap-3">
               <Input
                 placeholder="Type Event Name..."
@@ -636,7 +636,7 @@ export function DetailsContent({
 
           {/* Scoring Format */}
           <div className="space-y-3">
-            <h4 className="text-[#0D0D0D] font-medium text-xs">Scoring Format</h4>
+            <h4 className="text-[var(--color-text-primary)] font-medium text-xs">Scoring Format</h4>
             <div className="flex flex-wrap gap-3">
               <Select
                 value={formData.bestOf || undefined}
@@ -680,7 +680,7 @@ export function DetailsContent({
 
           {/* Match Duration */}
           <div className="space-y-3">
-            <h4 className="text-[#0D0D0D] font-medium text-xs">Match Duration (Hours:Minutes)</h4>
+            <h4 className="text-[var(--color-text-primary)] font-medium text-xs">Match Duration (Hours:Minutes)</h4>
             <Input
               type="text"
               placeholder="-:--"

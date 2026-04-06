@@ -225,13 +225,13 @@ export function UploadMatchModal({
               <>
                 <Button
                   onClick={handleClose}
-                  className="w-[65px] h-[31px] rounded-full text-xs bg-white border border-[#EAECF0] text-[#0D0D0D] hover:bg-[#F7F7F7] shadow-none"
+                  className="w-[65px] h-[31px] rounded-full text-xs bg-white border border-[#EAECF0] text-[var(--color-text-primary)] hover:bg-[var(--color-bg-disabled)] shadow-none"
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handleBack}
-                  className="w-[55px] h-[31px] rounded-full text-xs bg-[#3B82F6] text-white hover:bg-[#2563EB]"
+                  className="w-[55px] h-[31px] rounded-full text-xs bg-[var(--color-accent-blue)] text-white hover:bg-[var(--color-accent-blue-hover)]"
                 >
                   Edit
                 </Button>
@@ -240,8 +240,8 @@ export function UploadMatchModal({
                   disabled={isCreating}
                   className={`w-[110px] h-[31px] rounded-full text-xs ${
                     isCreating
-                      ? "bg-[#F7F7F7] text-[#999999]"
-                      : "bg-[#0D0D0D] text-white"
+                      ? "bg-[var(--color-bg-disabled)] text-[#999999]"
+                      : "bg-[var(--color-text-primary)] text-white"
                   }`}
                 >
                   {isCreating ? "Creating..." : "Create Match"}
@@ -251,7 +251,7 @@ export function UploadMatchModal({
               <>
                 <Button
                   onClick={handleClose}
-                  className="w-[65px] h-[31px] rounded-full text-xs bg-white border border-[#EAECF0] text-[#0D0D0D] hover:bg-[#F7F7F7] shadow-none"
+                  className="w-[65px] h-[31px] rounded-full text-xs bg-white border border-[#EAECF0] text-[var(--color-text-primary)] hover:bg-[var(--color-bg-disabled)] shadow-none"
                 >
                   Cancel
                 </Button>
@@ -260,8 +260,8 @@ export function UploadMatchModal({
                   disabled={continueDisabled}
                   className={`w-[85px] h-[31px] rounded-full text-xs ${
                     continueDisabled
-                      ? "bg-[#F7F7F7] text-[#999999]"
-                      : "bg-[#0D0D0D] text-white"
+                      ? "bg-[var(--color-bg-disabled)] text-[#999999]"
+                      : "bg-[var(--color-text-primary)] text-white"
                   }`}
                 >
                   {continueLabel}
