@@ -51,14 +51,14 @@ export default function Loading() {
           </div>
         </div>
 
-        <div className="flex flex-row mt-6 pb-6 gap-8">
-          <div className="flex-1 min-w-0 flex flex-col gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[5fr_2fr] gap-8 mt-6 pb-6">
+          <div className="flex flex-col gap-6 min-w-0">
             <div className="h-[280px] bg-[#F3F3F3] rounded-[14px] animate-pulse" />
             <div className="h-[200px] bg-[#F3F3F3] rounded-[14px] animate-pulse" />
             <div className="h-[240px] bg-[#F3F3F3] rounded-[14px] animate-pulse" />
           </div>
 
-          <div className="w-[384px] flex-shrink-0 flex flex-col gap-6">
+          <div className="flex flex-col gap-6">
             <div className="h-[320px] bg-[#F3F3F3] rounded-[14px] animate-pulse" />
             <div className="h-[200px] bg-[#F3F3F3] rounded-[14px] animate-pulse" />
           </div>

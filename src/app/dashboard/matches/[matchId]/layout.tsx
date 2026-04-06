@@ -234,12 +234,12 @@ export default async function MatchLayout({
             <MatchNavigationTabs matchId={matchId} />
           </div>
           <MatchDataProvider match={match} statsResult={statsResult} points={points} keyMoments={row.key_moments ?? []} insights={row.insights ?? null}>
-            <div className="flex flex-row mt-6 pb-6 gap-8">
-              <div className="flex-1 min-w-0">
+            <div className="grid grid-cols-1 lg:grid-cols-[5fr_2fr] gap-8 mt-6 pb-6">
+              <div className="min-w-0">
                 <div className="flex flex-col gap-10 min-w-0">{children}</div>
               </div>
 
-              <div className="sticky top-8 w-[384px] flex-shrink-0 self-start h-fit">
+              <div className="lg:sticky lg:top-8 lg:self-start lg:h-fit">
                 <MatchTabSidebar
                   match={match}
                   matchId={matchId}

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { cn } from "@/lib/utils";
 import WelcomeMessage from "@/components/dashboard/home/welcome-message";
 import RecentActivity from "./recent-activity";
 import ServePlacementHome from "@/components/dashboard/home/serve-placement-home";
@@ -20,16 +21,19 @@ export default function HomeContent({
 
       {kpiStrip && <div className="mt-8">{kpiStrip}</div>}
 
-      <div className="flex flex-row gap-8 mt-10">
+      <div className={cn("mt-10", sidebar
+        ? "grid grid-cols-1 lg:grid-cols-[5fr_2fr] gap-8"
+        : "flex flex-col gap-6"
+      )}>
         {/* Left Column */}
-        <div className="flex-1 min-w-0 flex flex-col gap-6">
+        <div className="flex flex-col gap-6 min-w-0">
           <RecentActivity />
           <ServePlacementHome />
         </div>
 
-        {/* Right Column - Sidebar */}
+        {/* Right Column */}
         {sidebar && (
-          <div className="w-[384px] flex-shrink-0 flex flex-col gap-6">
+          <div className="flex flex-col gap-6">
             {sidebar}
           </div>
         )}

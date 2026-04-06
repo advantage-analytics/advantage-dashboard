@@ -27,11 +27,11 @@ function getFormattedDate(): string {
 export default function WelcomeMessage({ name = "Player" }: WelcomeMessageProps) {
   return (
     <div className="flex items-end justify-between">
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-3">
         <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[3px]">
           {getFormattedDate()}
         </p>
-        <h1 className="font-light text-[30px] text-[#0D0D0D] tracking-[-0.6px] leading-[30px]">
+        <h1 className="font-light text-[30px] text-[#0D0D0D] tracking-[-0.6px] leading-[36px]">
           {getGreeting()}, {name}
         </h1>
       </div>

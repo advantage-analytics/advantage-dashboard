@@ -125,9 +125,9 @@ export function StatisticsPageContent({
       </motion.div>
 
       {/* Charts + sidebar */}
-      <div className="flex flex-row gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-[5fr_2fr] gap-8">
         {/* Left column */}
-        <div className="flex-1 min-w-0 flex flex-col gap-6">
+        <div className="flex flex-col gap-6 min-w-0">
           <motion.div {...sectionAnim(1)}>
             <WinRateChart data={data.monthlyTrend} />
           </motion.div>
@@ -140,7 +140,7 @@ export function StatisticsPageContent({
         </div>
 
         {/* Right column */}
-        <div className="w-[384px] flex-shrink-0 flex flex-col gap-5">
+        <div className="flex flex-col gap-5">
           <motion.div {...sectionAnim(4)}>
             <PerformanceRatingsCard
               serveRating={data.serveRating}
