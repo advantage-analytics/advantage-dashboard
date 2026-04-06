@@ -1,7 +1,7 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { Brain, CircleDot, Zap } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
+import { Brain, CircleDot } from "lucide-react";
 import type { Match } from "@/lib/data/types";
 import type { MatchStatisticsResult } from "@/lib/data/match-stats-server";
 
@@ -17,11 +17,11 @@ interface AnalysisSidebarProps {
   } | null;
 }
 
-function StatPill({ label, value }: { label: string; value: string | number }) {
+function StatRow({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="flex items-center justify-between py-2.5 border-b border-[#F0F0F0] last:border-0">
-      <span className="text-xs text-[#888888]">{label}</span>
-      <span className="text-xs font-semibold text-[#0D0D0D]">{value}</span>
+    <div className="flex items-center justify-between py-2.5">
+      <span className="text-[12px] text-[#525252]">{label}</span>
+      <span className="text-[13px] font-medium text-[#0D0D0D] tabular-nums">{value}</span>
     </div>
   );
 }
@@ -32,6 +32,7 @@ export function AnalysisSidebar({
   keyMoments,
   insights,
 }: AnalysisSidebarProps) {
+  const prefersReduced = useReducedMotion();
   const hasKeyMoments = keyMoments.length > 0;
   const hasInsights =
     (insights?.player1?.strengths?.length ?? 0) > 0 ||
@@ -46,26 +47,28 @@ export function AnalysisSidebar({
 
   return (
     <motion.div
-      className="w-[320px] bg-white rounded-[16px] border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)] overflow-hidden"
-      initial={{ opacity: 0, y: 10 }}
+      className="w-[320px] bg-white rounded-[14px] border border-[#F3F3F3] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] overflow-hidden"
+      initial={prefersReduced ? { opacity: 0 } : { opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: EASE_CURVE }}
+      transition={{ duration: 0.4, ease: EASE_CURVE }}
     >
       {/* AI Status header */}
-      <div className="px-5 py-4 border-b border-[#F0F0F0]">
+      <div className="p-5 border-b border-[#F0F0F0]">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
-            <Brain className="w-4 h-4 text-[#4A8AF4]" />
-            <span className="text-sm font-medium text-[#0D0D0D]">AI Readiness</span>
+            <Brain className="w-4 h-4 text-[#3B82F6]" />
+            <span className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+              AI Readiness
+            </span>
           </div>
           <span
-            className={`flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.1em] px-2 py-0.5 rounded-full ${
+            className={`flex items-center gap-1 text-[10px] font-medium rounded-full px-2.5 py-0.5 ${
               aiReady
-                ? "bg-[#16A34A]/10 text-[#22C55E]"
-                : "bg-[#F5F5F5] text-[#BBBBBB]"
+                ? "bg-[rgba(93,185,85,0.1)] text-[#5DB955]"
+                : "bg-[#F3F3F3] text-[#888888]"
             }`}
           >
-            <CircleDot className="w-2.5 h-2.5" />
+            <CircleDot className="w-2.5 h-2.5 text-[#888888]" />
             {aiReady ? "Ready" : "No Data"}
           </span>
         </div>
@@ -78,26 +81,23 @@ export function AnalysisSidebar({
 
       {/* Quick match stats */}
       {p1 && p2 && (
-        <div className="px-5 py-4">
-          <div className="flex items-center gap-1.5 mb-3">
-            <Zap className="w-3 h-3 text-[#888888]" />
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#888888]">
-              Quick Stats
-            </p>
-          </div>
-          <div className="flex flex-col">
-            <StatPill label="Total Points" value={(p1.totalPoints ?? 0) + (p2.totalPoints ?? 0)} />
-            <StatPill label={`${match.player1.name.split(" ")[0]} Winners`} value={p1.winners ?? "—"} />
-            <StatPill label={`${match.player2.name.split(" ")[0]} Winners`} value={p2.winners ?? "—"} />
-            <StatPill label={`${match.player1.name.split(" ")[0]} Unforced Errors`} value={p1.unforcedErrors ?? "—"} />
-            <StatPill label={`${match.player2.name.split(" ")[0]} Unforced Errors`} value={p2.unforcedErrors ?? "—"} />
+        <div className="p-5">
+          <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-3">
+            Quick Stats
+          </p>
+          <div className="flex flex-col divide-y divide-[#F0F0F0]">
+            <StatRow label="Total Points" value={(p1.totalPoints ?? 0) + (p2.totalPoints ?? 0)} />
+            <StatRow label={`${match.player1.name.split(" ")[0]} Winners`} value={p1.winners ?? "—"} />
+            <StatRow label={`${match.player2.name.split(" ")[0]} Winners`} value={p2.winners ?? "—"} />
+            <StatRow label={`${match.player1.name.split(" ")[0]} UE`} value={p1.unforcedErrors ?? "—"} />
+            <StatRow label={`${match.player2.name.split(" ")[0]} UE`} value={p2.unforcedErrors ?? "—"} />
           </div>
         </div>
       )}
 
       {!p1 && !p2 && (
-        <div className="px-5 py-6 flex items-center justify-center">
-          <p className="text-xs text-[#BBBBBB]">No statistics available</p>
+        <div className="p-5 flex items-center justify-center">
+          <p className="text-[12px] text-[#AAAAAA]">No statistics available</p>
         </div>
       )}
     </motion.div>
