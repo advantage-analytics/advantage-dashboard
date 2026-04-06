@@ -34,7 +34,7 @@ function Sparkline({
       <polyline
         points={points}
         fill="none"
-        stroke={positive ? "#28e317" : "#FF453A"}
+        stroke={positive ? "#5DB955" : "#E51837"}
         strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -55,8 +55,8 @@ export default function WinRateCard({
   sparkline,
 }: WinRateCardProps) {
   return (
-    <div className="bg-white border border-[#F0F0F0] rounded-[16px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-6 overflow-hidden flex flex-col gap-4">
-      <p className="text-[9px] font-medium text-[#AAAAAA] uppercase tracking-[2px]">
+    <div className="bg-white border border-[#F0F0F0] rounded-[16px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5 overflow-hidden flex flex-col gap-4">
+      <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
         WIN RATE
       </p>
       <div className="flex items-end justify-between overflow-hidden">
@@ -65,14 +65,14 @@ export default function WinRateCard({
         </p>
         <Sparkline data={sparkline} positive={change >= 0} />
       </div>
-      <div className="flex items-center gap-1 overflow-hidden">
+      <div className="flex items-center gap-1.5 overflow-hidden">
         <span
-          className={`text-[10px] font-semibold ${change >= 0 ? "text-[#28e317]" : "text-[#FF453A]"}`}
+          className={`text-[10px] font-semibold ${change >= 0 ? "text-[#5DB955]" : "text-[#E51837]"}`}
         >
           {change >= 0 ? "↑" : "↓"}
         </span>
         <span
-          className={`text-[11px] font-medium ${change >= 0 ? "text-[#28e317]" : "text-[#FF453A]"}`}
+          className={`text-[11px] font-medium ${change >= 0 ? "text-[#5DB955]" : "text-[#E51837]"}`}
         >
           {change >= 0 ? "+" : ""}
           {change}%

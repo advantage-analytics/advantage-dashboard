@@ -18,8 +18,8 @@ export function MatchMetadataRow({
     <div className="flex flex-row gap-4 items-center">
       {date && (
         <div className="flex items-center gap-1">
-          <Calendar className="h-3 w-3 text-[#999999]" />
-          <p className="text-xs font-medium text-[#999999]">{date}</p>
+          <Calendar className="size-[14px] text-[#999999]" strokeWidth={1.5} aria-hidden="true" />
+          <p className="text-[10px] font-normal text-[#999999] leading-[16px]">{date}</p>
         </div>
       )}
 
@@ -28,14 +28,15 @@ export function MatchMetadataRow({
           {matchType === "Tournament" ? (
             <Image
               src="/icons/tournament-icon.svg"
-              alt="Tournament"
-              width={16}
-              height={16}
+              alt=""
+              width={14}
+              height={14}
+              aria-hidden="true"
             />
           ) : (
-            <GraduationCap className="h-4 w-4 text-[#999999]" />
+            <GraduationCap className="size-[14px] text-[#999999]" strokeWidth={1.5} aria-hidden="true" />
           )}
-          <p className="text-xs font-medium text-[#999999]">{matchType}</p>
+          <p className="text-[10px] font-normal text-[#999999] leading-[16px]">{matchType}</p>
         </div>
       )}
 
@@ -43,23 +44,25 @@ export function MatchMetadataRow({
         <div className="flex items-center gap-1">
           <Image
             src="/icons/tennis-court-icon.svg"
-            alt="Court"
-            width={16}
-            height={16}
+            alt=""
+            width={14}
+            height={14}
+            aria-hidden="true"
           />
-          <p className="text-xs font-medium text-[#999999]">{courtType}</p>
+          <p className="text-[10px] font-normal text-[#999999] leading-[16px]">{courtType}</p>
         </div>
       )}
 
       <div className="flex items-center gap-1">
         <Image
           src="/icons/verified-check-icon.svg"
-          alt="Check"
-          width={16}
-          height={16}
+          alt=""
+          width={14}
+          height={14}
           className={verificationStatus ? "" : "grayscale"}
+          aria-hidden="true"
         />
-        <p className="text-xs font-medium text-[#999999]">
+        <p className="text-[10px] font-normal text-[#999999] leading-[16px]">
           {verificationStatus || "Unverified Result"}
         </p>
       </div>

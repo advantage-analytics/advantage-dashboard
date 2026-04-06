@@ -136,7 +136,7 @@ export default async function MatchLayout({
   return (
     <div className="flex-1 w-full bg-white">
       {/* Dark hero header */}
-      <section className="relative bg-[#0D0D0D] pt-20 pb-8 px-8 border-b border-white/[0.06] overflow-hidden">
+      <section className="relative bg-[#0D0D0D] pt-8 pb-8 px-8 border-b border-white/[0.06] overflow-hidden">
         {/* Subtle depth gradient */}
         <div className="absolute inset-0 bg-gradient-to-b from-white/[0.025] to-transparent pointer-events-none" />
         <div className="relative">

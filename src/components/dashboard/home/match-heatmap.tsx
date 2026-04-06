@@ -43,10 +43,10 @@ export default function MatchHeatmap({
   }
 
   return (
-    <div className="bg-white border border-[#F0F0F0] rounded-[16px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] overflow-hidden">
+    <div className="bg-white border border-[#F3F3F3] rounded-[16px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] overflow-hidden">
       {/* Header */}
-      <div className="border-b border-[#F2F2F2] px-5 py-4 flex items-center justify-between">
-        <p className="text-[10px] font-medium text-[#888888] tracking-[2.5px]">
+      <div className="px-5 py-4 flex items-center justify-between">
+        <p className="text-[10px] font-medium text-[#AAAAAA] tracking-[2.5px] uppercase">
           MATCH ACTIVITY
         </p>
         <p className="text-[10px] font-medium text-[#AAAAAA]">
@@ -116,7 +116,7 @@ export default function MatchHeatmap({
               {form.map((result, i) => (
                 <span
                   key={i}
-                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-semibold ${
+                  className={`w-5 h-5 rounded-[3px] flex items-center justify-center text-[9px] font-semibold ${
                     result === "W"
                       ? "bg-[rgba(115,230,104,0.15)] text-[#5DB955]"
                       : "bg-[rgba(229,24,55,0.15)] text-[#E51837]"

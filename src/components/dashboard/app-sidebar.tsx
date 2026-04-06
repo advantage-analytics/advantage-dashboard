@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { House, Calendars, ChartColumnIncreasing, Info } from "lucide-react";
+import { Home, Calendar, BarChart3, HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Sidebar,
@@ -16,17 +16,17 @@ import {
 } from "@/components/ui/sidebar";
 
 const MAIN_LINKS = [
-  { name: "Home", href: "/dashboard", icon: House },
-  { name: "Matches", href: "/dashboard/matches", icon: Calendars },
+  { name: "Home", href: "/dashboard", icon: Home },
+  { name: "Matches", href: "/dashboard/matches", icon: Calendar },
   {
     name: "Statistics",
     href: "/dashboard/statistics",
-    icon: ChartColumnIncreasing,
+    icon: BarChart3,
   },
 ] as const;
 
 const BOTTOM_LINKS = [
-  { name: "Help Center", href: "/dashboard/help", icon: Info },
+  { name: "Help Center", href: "/dashboard/help", icon: HelpCircle },
 ] as const;
 
 export function AppSidebar() {
@@ -35,7 +35,7 @@ export function AppSidebar() {
   return (
     <Sidebar
       collapsible="icon"
-      className="h-screen border-r border-gray-200 bg-white"
+      className="h-screen border-r border-[#F0F0F0] bg-white"
     >
       {/* Logo Section - 40px (pt-10) from top, 40px (mb-10) gap to nav */}
       <SidebarHeader className="pt-10 pb-0 mb-10 px-4">
@@ -62,7 +62,7 @@ export function AppSidebar() {
       </SidebarHeader>
 
       {/* Navigation - spans full height with justify-between */}
-      <SidebarContent className="pb-10 justify-between px-4 group-data-[collapsible=icon]:px-4">
+      <SidebarContent className="pb-10 justify-between px-4">
         {/* Main Navigation */}
         <SidebarMenu className="gap-2.5">
           {MAIN_LINKS.map(({ name, href, icon: Icon }) => {
@@ -77,13 +77,13 @@ export function AppSidebar() {
                   isActive={active}
                   tooltip={name}
                   className={cn(
-                    "h-9 rounded-lg text-[#0D0D0D] font-normal hover:bg-[#F9F9F9] hover:text-[#0D0D0D] px-3.5 py-3 gap-3 [&>svg]:size-3.5 group-data-[collapsible=icon]:px-3.5 group-data-[collapsible=icon]:gap-0 ",
-                    active && "bg-[#F9F9F9] text-[#0D0D0D] font-normal",
+                    "h-9 rounded-lg text-[#8A8A8E] font-normal hover:bg-[#F5F5F5] hover:text-[#3C3C43] transition-colors duration-200 pl-[13px] pr-3.5 py-3 gap-3 [&>svg]:size-4",
+                    active && "bg-[#F5F5F5] text-[#0D0D0D] font-medium hover:text-[#0D0D0D]",
                   )}
                 >
                   <Link href={href}>
-                    <Icon className="w-3 h-3 shrink-0" strokeWidth={2} />
-                    <span className="text-xs whitespace-nowrap group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 transition-opacity duration-300 ease-out">
+                    <Icon className="w-4 h-4 shrink-0" strokeWidth={1.5} aria-hidden="true" />
+                    <span className="text-[13px] whitespace-nowrap group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 transition-opacity duration-300 ease-out">
                       {name}
                     </span>
                   </Link>
@@ -95,7 +95,7 @@ export function AppSidebar() {
 
         {/* Bottom Section */}
         <div>
-          <SidebarSeparator className="mb-6 bg-gray-200 mx-0" />
+          <SidebarSeparator className="mb-6 bg-[#F0F0F0] mx-0" />
           <SidebarMenu className="gap-2.5">
             {BOTTOM_LINKS.map(({ name, href, icon: Icon }) => {
               const active = pathname === href || pathname?.startsWith(href);
@@ -107,13 +107,13 @@ export function AppSidebar() {
                     isActive={active}
                     tooltip={name}
                     className={cn(
-                      "h-9 rounded-lg text-[#0D0D0D] font-normal hover:bg-[#F9F9F9] hover:text-[#0D0D0D] px-3.25 py-3 gap-3 group-data-[collapsible=icon]:px-3.25 group-data-[collapsible=icon]:gap-0",
-                      active && "bg-[#F9F9F9] text-[#0D0D0D] font-normal",
+                      "h-9 rounded-lg text-[#8A8A8E] font-normal hover:bg-[#F5F5F5] hover:text-[#3C3C43] transition-colors duration-200 pl-[13px] pr-3.5 py-3 gap-3 [&>svg]:size-4",
+                      active && "bg-[#F5F5F5] text-[#0D0D0D] font-medium hover:text-[#0D0D0D]",
                     )}
                   >
                     <Link href={href}>
-                      <Icon className="w-3 h-3 shrink-0" strokeWidth={2} />
-                      <span className="text-xs whitespace-nowrap group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 transition-opacity duration-300 ease-out">
+                      <Icon className="w-4 h-4 shrink-0" strokeWidth={1.5} aria-hidden="true" />
+                      <span className="text-[13px] whitespace-nowrap group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 transition-opacity duration-300 ease-out">
                         {name}
                       </span>
                     </Link>

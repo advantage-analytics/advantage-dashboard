@@ -1,12 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ChevronRight, Inbox } from "lucide-react";
+import { Inbox } from "lucide-react";
+import Link from "next/link";
 import RecentMatches from "@/components/dashboard/home/recent-matches";
 import { createClient } from "@/lib/supabase/client";
-import { formatDuration } from "@/components/dashboard/home/upload-match-modal/utils";
 
-/** DB match row from Supabase matches table */
 interface DbMatch {
   id: string;
   created_by: string;
@@ -30,28 +29,38 @@ interface DbMatch {
   duration: number | null;
 }
 
-/** Event group: same tournament + date, with one or more matches */
-interface EventGroup {
+interface MatchStats {
+  match_id: string;
+  is_player1: boolean;
+  first_serve_pct: string | null;
+  winners: number | null;
+  unforced_errors: number | null;
+  break_points_saved: number | null;
+  break_points_faced: number | null;
+  break_point_opportunities: number | null;
+  break_points_converted: number | null;
+}
+
+export interface EventGroup {
   id: string;
   tournamentName: string;
   date: string;
   matchType: string | null;
   courtType: string | null;
   verificationStatus: string | null;
-  matches: Array<{
-    id: string;
-    round: string;
-    matchContext: string;
-    duration: string;
-    player1: { name: string; school: string };
-    player2: { name: string; school: string };
-    score: {
-      sets: Array<{ player1: number; player2: number; tiebreak?: boolean }>;
-      winner: "player1" | "player2";
-      finalScore: string;
-    };
-    won: boolean;
-  }>;
+  matches: MatchRow[];
+}
+
+export interface MatchRow {
+  id: string;
+  opponentName: string;
+  score: string;
+  won: boolean;
+  firstServePct: number | null;
+  winners: number | null;
+  errors: number | null;
+  breakpointsWon: number | null;
+  breakpointsTotal: number | null;
 }
 
 function formatDisplayDate(isoDate: string): string {
@@ -67,58 +76,34 @@ function formatDisplayDate(isoDate: string): string {
   }
 }
 
-function mapDbScoreToDisplay(score: DbMatch["score"]): {
-  sets: Array<{ player1: number; player2: number; tiebreak?: boolean }>;
-  winner: "player1" | "player2";
-  finalScore: string;
-} | null {
-  if (!score?.player1?.length || !score?.player2?.length) return null;
-  const p1 = score.player1;
-  const p2 = score.player2;
-  const tb1 = score.player1_tiebreaks ?? [];
-  const tb2 = score.player2_tiebreaks ?? [];
-  const sets = p1.map((a, i) => ({
-    player1: a,
-    player2: p2[i] ?? 0,
-    tiebreak: (tb1[i] ?? 0) > 0 || (tb2[i] ?? 0) > 0,
-  }));
-  let p1Sets = 0,
-    p2Sets = 0;
-  sets.forEach((s) => {
-    if (s.player1 > s.player2) p1Sets++;
-    else if (s.player2 > s.player1) p2Sets++;
-  });
-  const winner: "player1" | "player2" = p1Sets > p2Sets ? "player1" : "player2";
-  const finalScore = sets.map((s) => `${s.player1}-${s.player2}`).join(", ");
-  return { sets, winner, finalScore };
+function buildScoreString(
+  score: DbMatch["score"],
+  isUserPlayer1: boolean
+): string {
+  if (!score?.player1?.length || !score?.player2?.length) return "";
+  const userScores = isUserPlayer1 ? score.player1 : score.player2;
+  const oppScores = isUserPlayer1 ? score.player2 : score.player1;
+  return userScores.map((s, i) => `${s}-${oppScores[i] ?? 0}`).join(" ");
 }
 
-function mapDbMatchToEventMatch(
-  row: DbMatch,
-  createdBy: string
-): EventGroup["matches"][number] | null {
-  const scoreDisplay = mapDbScoreToDisplay(row.score);
-  if (!scoreDisplay) return null;
-  const durationStr = formatDuration(row.duration ?? undefined);
-  const isUserPlayer1 = row.player1_id === createdBy;
-  const won =
-    (isUserPlayer1 && scoreDisplay.winner === "player1") ||
-    (!isUserPlayer1 && scoreDisplay.winner === "player2");
-  return {
-    id: row.id,
-    round: row.round ?? "",
-    matchContext: row.result ?? "Final Score",
-    duration: durationStr,
-    player1: { name: row.player1_name, school: "" },
-    player2: { name: row.player2_name, school: "" },
-    score: scoreDisplay,
-    won,
-  };
+function didUserWin(
+  score: DbMatch["score"],
+  isUserPlayer1: boolean
+): boolean {
+  if (!score?.player1?.length || !score?.player2?.length) return false;
+  let p1Sets = 0;
+  let p2Sets = 0;
+  score.player1.forEach((s, i) => {
+    if (s > (score.player2[i] ?? 0)) p1Sets++;
+    else if ((score.player2[i] ?? 0) > s) p2Sets++;
+  });
+  return isUserPlayer1 ? p1Sets > p2Sets : p2Sets > p1Sets;
 }
 
 function groupMatchesIntoEvents(
   rows: DbMatch[],
-  createdBy: string
+  createdBy: string,
+  statsMap: Map<string, MatchStats>
 ): EventGroup[] {
   const byKey = new Map<string, DbMatch[]>();
   for (const row of rows) {
@@ -137,9 +122,31 @@ function groupMatchesIntoEvents(
   for (const key of keys.slice(0, 3)) {
     const matches = byKey.get(key)!;
     const first = matches[0];
-    const mapped = matches
-      .map((m) => mapDbMatchToEventMatch(m, createdBy))
-      .filter((m): m is NonNullable<typeof m> => m !== null);
+    const mapped: MatchRow[] = [];
+
+    for (const m of matches) {
+      if (!m.score?.player1?.length) continue;
+      const isUserPlayer1 = m.player1_id === createdBy;
+      const opponent = isUserPlayer1 ? m.player2_name : m.player1_name;
+      const stat = statsMap.get(m.id);
+
+      mapped.push({
+        id: m.id,
+        opponentName: opponent,
+        score: buildScoreString(m.score, isUserPlayer1),
+        won: didUserWin(m.score, isUserPlayer1),
+        firstServePct: stat ? Math.round(parseFloat(stat.first_serve_pct ?? "0")) : null,
+        winners: stat?.winners ?? null,
+        errors: stat?.unforced_errors ?? null,
+        breakpointsWon: stat
+          ? (stat.break_points_converted ?? stat.break_points_saved ?? null)
+          : null,
+        breakpointsTotal: stat
+          ? (stat.break_point_opportunities ?? stat.break_points_faced ?? null)
+          : null,
+      });
+    }
+
     if (mapped.length === 0) continue;
     events.push({
       id: first.id,
@@ -187,7 +194,30 @@ export default function RecentActivity() {
         return;
       }
       const list = (rows ?? []) as DbMatch[];
-      setEvents(groupMatchesIntoEvents(list, user.id));
+      const matchIds = list.map((m) => m.id);
+
+      // Fetch stats for these matches
+      const { data: stats } = await supabase
+        .from("match_stats_with_percentages")
+        .select(
+          "match_id, is_player1, first_serve_pct, winners, unforced_errors, break_points_saved, break_points_faced, break_point_opportunities, break_points_converted"
+        )
+        .in("match_id", matchIds);
+
+      // Build a map of match_id -> user's stats
+      const statsMap = new Map<string, MatchStats>();
+      if (stats) {
+        for (const stat of stats as MatchStats[]) {
+          const match = list.find((m) => m.id === stat.match_id);
+          if (!match) continue;
+          const isUserPlayer1 = match.player1_id === user.id;
+          if (stat.is_player1 === isUserPlayer1) {
+            statsMap.set(stat.match_id, stat);
+          }
+        }
+      }
+
+      setEvents(groupMatchesIntoEvents(list, user.id, statsMap));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load matches");
       setEvents([]);
@@ -207,65 +237,54 @@ export default function RecentActivity() {
   }, [load]);
 
   return (
-    <div className="bg-white border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-6 rounded-2xl h-fit">
-      <div className="flex flex-row justify-between items-center mb-5">
-        <div className="flex flex-col gap-2">
-          <p className="font-medium text-[20px] text-black">Recent Activity</p>
-          <p className="text-[12px] text-[#999999]">
-            Your Last 3 Events with Insights
-          </p>
-        </div>
-        <button
-          type="button"
-          className="h-6 w-6 rounded-full bg-[#1D1D1F] flex items-center justify-center hover:bg-[#2D2D2D] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#1D1D1F]"
-          aria-label="View all"
+    <div className="bg-white border border-[#F3F3F3] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] rounded-[14px] overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between h-14 px-5">
+        <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
+          RECENT MATCHES
+        </p>
+        <Link
+          href="/dashboard/matches"
+          className="text-[10px] font-medium text-[#3B82F6] uppercase tracking-[2px] transition-colors duration-200 hover:text-[#2D6FD9]"
         >
-          <ChevronRight className="h-3 w-3 text-white" aria-hidden />
-        </button>
+          VIEW ALL
+        </Link>
       </div>
 
-      {loading && (
-        <div className="flex items-center justify-center py-12 text-[#999999] text-sm">
-          Loading…
-        </div>
-      )}
-
-      {error && (
-        <div className="py-6 text-center text-sm text-red-600" role="alert">
-          {error}
-        </div>
-      )}
-
-      {!loading && !error && events.length === 0 && (
-        <div
-          className="flex flex-col items-center justify-center py-12 px-4 text-center"
-          data-state="empty"
-        >
-          <div className="rounded-full bg-[#F5F5F5] p-4 mb-4">
-            <Inbox className="h-8 w-8 text-[#999999]" aria-hidden />
+      {/* Content */}
+      <div className="pb-5">
+        {loading && (
+          <div className="flex items-center justify-center py-12 text-[#999999] text-sm">
+            Loading...
           </div>
-          <p className="font-medium text-[#000000] mb-1">No matches yet</p>
-          <p className="text-sm text-[#999999] max-w-[260px]">
-            Upload your first match to see your recent activity and insights here.
-          </p>
-        </div>
-      )}
+        )}
 
-      {!loading && !error && events.length > 0 && (
-        <div className="flex flex-col gap-5">
-          {events.map((event) => (
-            <RecentMatches
-              key={event.id}
-              tournamentName={event.tournamentName}
-              date={event.date}
-              matchType={event.matchType ?? undefined}
-              courtType={event.courtType ?? undefined}
-              verificationStatus={event.verificationStatus ?? undefined}
-              matches={event.matches}
-            />
-          ))}
-        </div>
-      )}
+        {error && (
+          <div className="py-6 text-center text-sm text-red-600" role="alert">
+            {error}
+          </div>
+        )}
+
+        {!loading && !error && events.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+            <div className="rounded-full bg-[#F5F5F5] p-4 mb-4">
+              <Inbox className="h-8 w-8 text-[#999999]" aria-hidden />
+            </div>
+            <p className="font-medium text-[#000000] mb-1">No matches yet</p>
+            <p className="text-sm text-[#999999] max-w-[260px]">
+              Upload your first match to see your recent activity here.
+            </p>
+          </div>
+        )}
+
+        {!loading && !error && events.length > 0 && (
+          <div className="flex flex-col gap-5">
+            {events.map((event) => (
+              <RecentMatches key={event.id} event={event} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

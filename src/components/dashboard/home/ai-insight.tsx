@@ -26,14 +26,12 @@ export default function AIInsight() {
             duration: shouldReduceMotion ? 0.15 : 0.3,
             ease: EASE_CURVE,
           }}
-          className="bg-white border border-[#E7E7E7] rounded-[16px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-6 overflow-hidden flex flex-col gap-4"
+          className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5 overflow-hidden flex flex-col gap-4"
         >
-          {/* Label */}
-          <p className="text-[9px] font-medium uppercase tracking-[2px] text-[#AAAAAA]">
+          <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
             AI Insight
           </p>
 
-          {/* Body */}
           <p className="text-[12px] font-normal text-[#525252] leading-[1.65]">
             Your backhand depth has improved 11% over three matches. Next focus:
             second serve placement to the ad court, where you&apos;re losing 62%
@@ -41,18 +39,17 @@ export default function AIInsight() {
             break per match.
           </p>
 
-          {/* Actions */}
           <div className="flex items-center gap-4">
             <button
               type="button"
-              className="text-[11px] font-medium uppercase tracking-[1.5px] text-[#3986F3] transition-colors duration-200 hover:text-[#2D6FD9] active:scale-[0.97]"
+              className="text-[9px] font-medium uppercase tracking-[1.5px] text-[#3986F3] transition-colors duration-200 hover:text-[#2D6FD9] active:scale-[0.97]"
             >
               View Analysis
             </button>
             <button
               type="button"
               onClick={() => setVisible(false)}
-              className="text-[11px] font-medium uppercase tracking-[1.5px] text-[#AAAAAA] transition-colors duration-200 hover:text-[#525252] active:scale-[0.97]"
+              className="text-[9px] font-medium uppercase tracking-[1.5px] text-[#AAAAAA] transition-colors duration-200 hover:text-[#525252] active:scale-[0.97]"
             >
               Dismiss
             </button>

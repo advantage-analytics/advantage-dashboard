@@ -1,3 +1,7 @@
+"use client";
+
+import { CreateMatchButton } from "@/components/dashboard/matches/create-match-button";
+
 interface WelcomeMessageProps {
   name?: string;
 }
@@ -22,13 +26,16 @@ function getFormattedDate(): string {
 
 export default function WelcomeMessage({ name = "Player" }: WelcomeMessageProps) {
   return (
-    <div className="flex flex-col gap-2">
-      <p className="text-xs font-medium text-[#999999] uppercase tracking-[1.2px] leading-4">
-        {getFormattedDate()}
-      </p>
-      <h1 className="font-light text-[30px] text-white tracking-[-0.6px] leading-[30px]">
-        {getGreeting()}, {name}
-      </h1>
+    <div className="flex items-end justify-between">
+      <div className="flex flex-col gap-2">
+        <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[3px]">
+          {getFormattedDate()}
+        </p>
+        <h1 className="font-light text-[30px] text-[#0D0D0D] tracking-[-0.6px] leading-[30px]">
+          {getGreeting()}, {name}
+        </h1>
+      </div>
+      <CreateMatchButton variant="blue" />
     </div>
   );
 }

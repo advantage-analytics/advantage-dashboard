@@ -1,3 +1,5 @@
+"use client";
+
 import type { KpiCardData } from "@/lib/data/performance-server";
 
 function Sparkline({
@@ -17,16 +19,17 @@ function Sparkline({
   const max = Math.max(...data);
   const range = max - min || 1;
 
-  const points = data
-    .map((v, i) => {
-      const x = padding + (i / (data.length - 1)) * (width - padding * 2);
-      const y =
-        height - padding - ((v - min) / range) * (height - padding * 2);
-      return `${x},${y}`;
-    })
-    .join(" ");
+  const pts = data.map((v, i) => ({
+    x: padding + (i / (data.length - 1)) * (width - padding * 2),
+    y: height - padding - ((v - min) / range) * (height - padding * 2),
+  }));
 
-  const id = positive ? "spark-pos" : "spark-neg";
+  const polylinePoints = pts.map((p) => `${p.x},${p.y}`).join(" ");
+  const areaPath = `M ${pts[0].x},${height} ${pts.map((p) => `L ${p.x},${p.y}`).join(" ")} L ${pts[pts.length - 1].x},${height} Z`;
+
+  const color = positive ? "#5DB955" : "#E51837";
+  const lineId = `spark-line-${positive ? "pos" : "neg"}`;
+  const areaId = `spark-area-${positive ? "pos" : "neg"}`;
 
   return (
     <svg
@@ -34,25 +37,23 @@ function Sparkline({
       height={height}
       viewBox={`0 0 ${width} ${height}`}
       className="shrink-0"
+      aria-hidden="true"
     >
       <defs>
-        <linearGradient id={id} x1="0" y1="0" x2="1" y2="0">
-          <stop
-            offset="0%"
-            stopColor={positive ? "#5DB955" : "#E51837"}
-            stopOpacity={0.3}
-          />
-          <stop
-            offset="100%"
-            stopColor={positive ? "#5DB955" : "#E51837"}
-            stopOpacity={1}
-          />
+        <linearGradient id={lineId} x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor={color} stopOpacity={0.3} />
+          <stop offset="100%" stopColor={color} stopOpacity={1} />
+        </linearGradient>
+        <linearGradient id={areaId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity={0.1} />
+          <stop offset="100%" stopColor={color} stopOpacity={0} />
         </linearGradient>
       </defs>
+      <path d={areaPath} fill={`url(#${areaId})`} />
       <polyline
-        points={points}
+        points={polylinePoints}
         fill="none"
-        stroke={`url(#${id})`}
+        stroke={`url(#${lineId})`}
         strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -73,13 +74,13 @@ export default function KpiCards({ cards }: KpiCardsProps) {
       {cards.map((card) => (
         <div
           key={card.label}
-          className="flex-1 flex flex-col gap-3 bg-white/[0.07] border border-white/[0.1] rounded-xl p-5 overflow-hidden min-w-0 transition-colors duration-200 hover:bg-white/[0.1]"
+          className="flex-1 flex flex-col gap-3 bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5 overflow-hidden min-w-0 transition-[box-shadow,border-color,transform] duration-200 hover:shadow-[0px_8px_24px_0px_rgba(0,0,0,0.12)] hover:border-[#E7E7E7] hover:scale-[1.008]"
         >
           <p className="text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2px] whitespace-nowrap">
             {card.label}
           </p>
           <div className="flex items-end justify-between overflow-hidden">
-            <p className="text-[28px] font-light text-white tracking-[-0.5px] leading-none tabular-nums">
+            <p className="text-[28px] font-light text-[#0D0D0D] tracking-[-0.5px] leading-none tabular-nums">
               {card.value}
             </p>
             <Sparkline data={card.sparkline} positive={card.change >= 0} />
