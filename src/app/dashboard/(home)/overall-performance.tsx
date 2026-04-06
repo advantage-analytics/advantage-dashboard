@@ -30,7 +30,7 @@ export default function OverallPerformance({
       {/* Heading */}
       <div className="flex flex-row justify-between items-center">
         <div className="space-y-2">
-          <p className="font-medium text-xl text-[#0D0D0D]">
+          <p className="font-medium text-xl text-[var(--color-text-primary)]">
             Overall Performance
           </p>
           <p className="font-normal text-sm text-[#999999]">
@@ -40,7 +40,7 @@ export default function OverallPerformance({
         <button
           type="button"
           aria-label="View overall performance details"
-          className="h-6 w-6 rounded-full bg-[#0D0D0D] flex items-center justify-center hover:bg-[#2D2D2D] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#0D0D0D]"
+          className="h-6 w-6 rounded-full bg-[var(--color-text-primary)] flex items-center justify-center hover:bg-[#2D2D2D] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--color-text-primary)]"
         >
           <ChevronRight className="h-3 w-3 text-white" aria-hidden />
         </button>
@@ -89,7 +89,7 @@ export default function OverallPerformance({
 
           {/* Performance Rating Section */}
           <div>
-            <p className="font-medium text-xs text-[#0D0D0D] mb-4 uppercase tracking-[0.16em]">
+            <p className="font-medium text-xs text-[var(--color-text-primary)] mb-4 uppercase tracking-[0.16em]">
               Performance breakdown
             </p>
             <div className="divide-y divide-[#D9D9D9]">
@@ -105,7 +105,7 @@ export default function OverallPerformance({
 
           {/* Recent Performance Section */}
           <div className="flex flex-col space-y-3">
-            <p className="font-medium text-xs text-[#0D0D0D] uppercase tracking-[0.16em]">
+            <p className="font-medium text-xs text-[var(--color-text-primary)] uppercase tracking-[0.16em]">
               Recent Performance
             </p>
             <div className="flex flex-col space-y-3">

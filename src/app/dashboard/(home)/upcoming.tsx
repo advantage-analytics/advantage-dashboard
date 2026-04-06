@@ -17,7 +17,7 @@ export default function Upcoming() {
         <button
           type="button"
           aria-label="View upcoming matches"
-          className="h-6 w-6 rounded-full bg-[#1D1D1F] flex items-center justify-center hover:bg-[#2D2D2D] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#1D1D1F]"
+          className="h-6 w-6 rounded-full bg-[var(--color-dark-action)] flex items-center justify-center hover:bg-[#2D2D2D] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--color-dark-action)]"
         >
           <ChevronRight className="h-3 w-3 text-white" aria-hidden />
         </button>
