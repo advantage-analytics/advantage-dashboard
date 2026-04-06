@@ -74,30 +74,30 @@ export default function KpiCards({ cards }: KpiCardsProps) {
       {cards.map((card) => (
         <div
           key={card.label}
-          className="flex-1 flex flex-col gap-3 bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5 overflow-hidden min-w-0 transition-[box-shadow,border-color,transform] duration-200 hover:shadow-[0px_8px_24px_0px_rgba(0,0,0,0.12)] hover:border-[#E7E7E7] hover:scale-[1.008]"
+          className="flex-1 flex flex-col gap-3 bg-white border border-[var(--color-border-card)] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5 overflow-hidden min-w-0 transition-[box-shadow,border-color,transform] duration-200 hover:shadow-[0px_8px_24px_0px_rgba(0,0,0,0.12)] hover:border-[var(--color-border-default)] hover:scale-[1.008]"
         >
-          <p className="text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2px] whitespace-nowrap">
+          <p className="text-[9px] font-normal text-[var(--color-text-dim)] uppercase tracking-[2px] whitespace-nowrap">
             {card.label}
           </p>
           <div className="flex items-end justify-between overflow-hidden">
-            <p className="text-[28px] font-light text-[#0D0D0D] tracking-[-0.5px] leading-none tabular-nums">
+            <p className="text-[28px] font-light text-[var(--color-text-primary)] tracking-[-0.5px] leading-none tabular-nums">
               {card.value}
             </p>
             <Sparkline data={card.sparkline} positive={card.change >= 0} />
           </div>
           <div className="flex items-center gap-1.5 overflow-hidden">
             <span
-              className={`text-[10px] font-semibold ${card.change >= 0 ? "text-[#5DB955]" : "text-[#E51837]"}`}
+              className={`text-[10px] font-semibold ${card.change >= 0 ? "text-[var(--color-success)]" : "text-[var(--color-danger)]"}`}
             >
               {card.change >= 0 ? "↑" : "↓"}
             </span>
             <span
-              className={`text-[11px] font-medium ${card.change >= 0 ? "text-[#5DB955]" : "text-[#E51837]"}`}
+              className={`text-[11px] font-medium ${card.change >= 0 ? "text-[var(--color-success)]" : "text-[var(--color-danger)]"}`}
             >
               {card.change >= 0 ? "+" : ""}
               {card.change}%
             </span>
-            <span className="text-[10px] font-normal text-[#777777]">
+            <span className="text-[10px] font-normal text-[var(--color-text-change)]">
               {card.changeLabel}
             </span>
           </div>

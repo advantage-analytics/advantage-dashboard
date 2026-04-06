@@ -55,29 +55,29 @@ export default function WinRateCard({
   sparkline,
 }: WinRateCardProps) {
   return (
-    <div className="bg-white border border-[#F0F0F0] rounded-[16px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5 overflow-hidden flex flex-col gap-4">
-      <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
+    <div className="bg-white border border-[var(--color-divider)] rounded-[16px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5 overflow-hidden flex flex-col gap-4">
+      <p className="text-[10px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px]">
         WIN RATE
       </p>
       <div className="flex items-end justify-between overflow-hidden">
-        <p className="text-[28px] font-light text-[#0A0A0C] tracking-[-0.5px] leading-none">
+        <p className="text-[28px] font-light text-[var(--color-text-primary)] tracking-[-0.5px] leading-none">
           {value}%
         </p>
         <Sparkline data={sparkline} positive={change >= 0} />
       </div>
       <div className="flex items-center gap-1.5 overflow-hidden">
         <span
-          className={`text-[10px] font-semibold ${change >= 0 ? "text-[#5DB955]" : "text-[#E51837]"}`}
+          className={`text-[10px] font-semibold ${change >= 0 ? "text-[var(--color-success)]" : "text-[var(--color-danger)]"}`}
         >
           {change >= 0 ? "↑" : "↓"}
         </span>
         <span
-          className={`text-[11px] font-medium ${change >= 0 ? "text-[#5DB955]" : "text-[#E51837]"}`}
+          className={`text-[11px] font-medium ${change >= 0 ? "text-[var(--color-success)]" : "text-[var(--color-danger)]"}`}
         >
           {change >= 0 ? "+" : ""}
           {change}%
         </span>
-        <span className="text-[10px] font-normal text-[#AAAAAA]">
+        <span className="text-[10px] font-normal text-[var(--color-text-dim)]">
           last 30 days
         </span>
       </div>
