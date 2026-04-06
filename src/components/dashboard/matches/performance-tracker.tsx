@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useMemo } from "react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { shortName } from "@/lib/data/match-utils";
 
@@ -79,8 +79,8 @@ function MomentumChart({
   const areaPath = `M ${xScale(0)},${yMid} L ${areaCoords} L ${xScale(data.length - 1)},${yMid} Z`;
 
   return (
-    <div className="mb-8">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#999999] mb-3">
+    <div>
+      <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-3">
         Point Momentum
       </p>
 
@@ -108,7 +108,7 @@ function MomentumChart({
             y1={0}
             x2={xScale(idx)}
             y2={CHART_H}
-            stroke="#E8E8E8"
+            stroke="#F0F0F0"
             strokeWidth={1}
             strokeDasharray="4 3"
           />
@@ -183,18 +183,18 @@ function SetBreakdown({
   const maxPts = Math.max(...sets.flatMap((s) => [s.p1Points, s.p2Points]), 1);
 
   return (
-    <div className="mb-8">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#999999] mb-4">
+    <div>
+      <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-4">
         Points Per Set
       </p>
 
       {/* Column headers */}
       <div className="grid grid-cols-[auto_1fr_1fr] gap-x-3 mb-3">
         <div className="w-12" />
-        <span className="text-xs font-semibold text-[#4A8AF4] whitespace-nowrap truncate">
+        <span className="text-[12px] font-medium text-[#0D0D0D] whitespace-nowrap truncate">
           {p1Short}
         </span>
-        <span className="text-xs font-semibold text-[#F38439] whitespace-nowrap truncate">
+        <span className="text-[12px] font-medium text-[#0D0D0D] whitespace-nowrap truncate">
           {p2Short}
         </span>
       </div>
@@ -225,7 +225,7 @@ function SetBreakdown({
                 >
                   {s.p1Points}
                 </span>
-                <div className="flex-1 h-1.5 bg-[#F0F0F0] rounded-full overflow-hidden">
+                <div className="flex-1 h-1.5 bg-[#F3F3F3] rounded-full overflow-hidden">
                   <motion.div
                     className="h-full rounded-full bg-[#4A8AF4]"
                     initial={{ width: "0%" }}
@@ -244,7 +244,7 @@ function SetBreakdown({
                 >
                   {s.p2Points}
                 </span>
-                <div className="flex-1 h-1.5 bg-[#F0F0F0] rounded-full overflow-hidden">
+                <div className="flex-1 h-1.5 bg-[#F3F3F3] rounded-full overflow-hidden">
                   <motion.div
                     className="h-full rounded-full bg-[#F38439]"
                     initial={{ width: "0%" }}
@@ -265,12 +265,12 @@ function SetBreakdown({
 
 function TableHeader({ p1Short, p2Short }: { p1Short: string; p2Short: string }) {
   return (
-    <div className="grid grid-cols-[1fr_130px_130px] sm:grid-cols-[1fr_150px_150px] border-b border-[#E8E8E8] pb-2 mb-1">
+    <div className="grid grid-cols-[1fr_130px_130px] sm:grid-cols-[1fr_150px_150px] border-b border-[#F0F0F0] pb-2 mb-1">
       <span />
-      <span className="text-xs font-semibold text-[#4A8AF4] text-center whitespace-nowrap truncate">
+      <span className="text-[12px] font-medium text-[#0D0D0D] text-center whitespace-nowrap truncate">
         {p1Short}
       </span>
-      <span className="text-xs font-semibold text-[#F38439] text-center whitespace-nowrap truncate">
+      <span className="text-[12px] font-medium text-[#0D0D0D] text-center whitespace-nowrap truncate">
         {p2Short}
       </span>
     </div>
@@ -292,8 +292,8 @@ function PressureSection({
   if (visible.length === 0) return null;
 
   return (
-    <div className="mb-8">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#999999] mb-4">
+    <div>
+      <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-4">
         Pressure Situations
       </p>
       <TableHeader p1Short={p1Short} p2Short={p2Short} />
@@ -305,11 +305,11 @@ function PressureSection({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, delay: 0.1 + index * 0.07, ease: EASE_CURVE }}
         >
-          <span className="text-sm text-[#333333]">{s.label}</span>
+          <span className="text-[12px] text-[#525252]">{s.label}</span>
           <div className="text-center">
             {s.p1Total > 0 ? (
               <>
-                <span className="text-sm tabular-nums font-semibold text-[#4A8AF4]">{s.p1Won}</span>
+                <span className="text-[13px] font-medium text-[#0D0D0D] tabular-nums">{s.p1Won}</span>
                 <span className="text-xs text-[#BBBBBB]">/{s.p1Total}</span>
               </>
             ) : (
@@ -319,7 +319,7 @@ function PressureSection({
           <div className="text-center">
             {s.p2Total > 0 ? (
               <>
-                <span className="text-sm tabular-nums font-semibold text-[#F38439]">{s.p2Won}</span>
+                <span className="text-[13px] font-medium text-[#0D0D0D] tabular-nums">{s.p2Won}</span>
                 <span className="text-xs text-[#BBBBBB]">/{s.p2Total}</span>
               </>
             ) : (
@@ -348,7 +348,7 @@ function RallySection({
 
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#999999] mb-4">
+      <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-4">
         Rally Length Win %
       </p>
       <TableHeader p1Short={p1Short} p2Short={p2Short} />
@@ -363,17 +363,17 @@ function RallySection({
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, delay: 0.1 + index * 0.07, ease: EASE_CURVE }}
           >
-            <span className="text-sm text-[#333333]">{b.label}</span>
+            <span className="text-[12px] text-[#525252]">{b.label}</span>
 
             <div className="text-center">
               <span
-                className={`text-sm tabular-nums ${
-                  p1Leads ? "font-semibold text-[#4A8AF4]" : "text-[#666666]"
+                className={`text-[13px] tabular-nums ${
+                  p1Leads ? "font-medium text-[#4A8AF4]" : "text-[#525252]"
                 }`}
               >
                 {b.p1WonPct}%
               </span>
-              <div className="mt-1.5 mx-auto w-16 h-1 rounded-full bg-[#F0F0F0] overflow-hidden">
+              <div className="mt-1.5 mx-auto w-16 h-1 rounded-full bg-[#F3F3F3] overflow-hidden">
                 <motion.div
                   className="h-full rounded-full bg-[#4A8AF4]"
                   initial={{ width: "0%" }}
@@ -385,13 +385,13 @@ function RallySection({
 
             <div className="text-center">
               <span
-                className={`text-sm tabular-nums ${
-                  p2Leads ? "font-semibold text-[#F38439]" : "text-[#666666]"
+                className={`text-[13px] tabular-nums ${
+                  p2Leads ? "font-medium text-[#F38439]" : "text-[#525252]"
                 }`}
               >
                 {b.p2WonPct}%
               </span>
-              <div className="mt-1.5 mx-auto w-16 h-1 rounded-full bg-[#F0F0F0] overflow-hidden">
+              <div className="mt-1.5 mx-auto w-16 h-1 rounded-full bg-[#F3F3F3] overflow-hidden">
                 <motion.div
                   className="h-full rounded-full bg-[#F38439]"
                   initial={{ width: "0%" }}
@@ -422,6 +422,7 @@ export function PerformanceTracker({
 }: PerformanceTrackerProps) {
   const p1Short = shortName(player1Name, 12);
   const p2Short = shortName(player2Name, 12);
+  const prefersReducedMotion = useReducedMotion();
 
   const { momentumData, setSummaries, pressureStats, rallyBuckets } = useMemo(() => {
     // ── Momentum ──────────────────────────────
@@ -489,7 +490,7 @@ export function PerformanceTracker({
 
   if (points.length === 0) {
     return (
-      <div className="bg-white p-6 rounded-2xl border border-[rgba(0,0,0,0.06)] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
+      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5">
         <h2 className="text-lg font-semibold text-[#0D0D0D] mb-6">Performance Tracker</h2>
         <p className="text-sm text-[#999999] text-center">
           Point data not available for this match.
@@ -498,10 +499,19 @@ export function PerformanceTracker({
     );
   }
 
+  const sectionVariants = {
+    hidden: { opacity: 0, y: prefersReducedMotion ? 0 : 12 },
+    visible: (i: number) => ({
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.4, delay: i * 0.07, ease: EASE_CURVE },
+    }),
+  };
+
   return (
     <motion.div
-      className="bg-white p-6 rounded-2xl border border-[rgba(0,0,0,0.06)] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]"
-      initial={{ opacity: 0, y: 20 }}
+      className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5"
+      initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: 0.4, ease: EASE_CURVE }}
     >
@@ -513,10 +523,47 @@ export function PerformanceTracker({
         </p>
       </div>
 
-      <MomentumChart data={momentumData} p1Short={p1Short} p2Short={p2Short} />
-      <SetBreakdown sets={setSummaries} p1Short={p1Short} p2Short={p2Short} />
-      <PressureSection stats={pressureStats} p1Short={p1Short} p2Short={p2Short} />
-      <RallySection buckets={rallyBuckets} p1Short={p1Short} p2Short={p2Short} />
+      <motion.div
+        custom={0}
+        initial="hidden"
+        animate="visible"
+        variants={sectionVariants}
+      >
+        <MomentumChart data={momentumData} p1Short={p1Short} p2Short={p2Short} />
+      </motion.div>
+
+      <div className="h-px bg-[#F0F0F0] my-5" />
+
+      <motion.div
+        custom={1}
+        initial="hidden"
+        animate="visible"
+        variants={sectionVariants}
+      >
+        <SetBreakdown sets={setSummaries} p1Short={p1Short} p2Short={p2Short} />
+      </motion.div>
+
+      <div className="h-px bg-[#F0F0F0] my-5" />
+
+      <motion.div
+        custom={2}
+        initial="hidden"
+        animate="visible"
+        variants={sectionVariants}
+      >
+        <PressureSection stats={pressureStats} p1Short={p1Short} p2Short={p2Short} />
+      </motion.div>
+
+      <div className="h-px bg-[#F0F0F0] my-5" />
+
+      <motion.div
+        custom={3}
+        initial="hidden"
+        animate="visible"
+        variants={sectionVariants}
+      >
+        <RallySection buckets={rallyBuckets} p1Short={p1Short} p2Short={p2Short} />
+      </motion.div>
     </motion.div>
   );
 }
