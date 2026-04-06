@@ -51,10 +51,10 @@ export function MatchTabSidebar({ match, matchId, statsResult, points }: MatchTa
     <AnimatePresence mode="wait">
       <motion.div
         key={tabKey}
-        initial={{ opacity: 0, y: 10 }}
+        initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -10 }}
-        transition={{ duration: 0.25, ease: [...EASE_CURVE] }}
+        exit={{ opacity: 0, y: -8 }}
+        transition={{ duration: 0.3, ease: [...EASE_CURVE] }}
       >
         {content}
       </motion.div>
