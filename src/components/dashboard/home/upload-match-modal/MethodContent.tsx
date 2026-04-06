@@ -51,7 +51,7 @@ export function MethodContent({ selectedMethod, onMethodSelect }: MethodContentP
           <div className="absolute inset-0 bg-gradient-to-t from-black/[0.20] to-transparent" />
           <div className="absolute bottom-0 left-0 right-0 px-4 pb-4 space-y-1.5">
             <p className="italic font-medium text-xs text-[#0D0D0D]">Coming Soon</p>
-            <p className="text-[10px] text-normal text-[#999999]">
+            <p className="text-[10px] text-normal text-[#888888]">
               Choose to label with Advantage Intelligence or traditional labeling techniques.
             </p>
           </div>

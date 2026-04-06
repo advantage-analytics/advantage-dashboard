@@ -18,8 +18,8 @@ export function MatchMetadataRow({
     <div className="flex flex-row gap-4 items-center">
       {date && (
         <div className="flex items-center gap-1">
-          <Calendar className="size-[14px] text-[#999999]" strokeWidth={1.5} aria-hidden="true" />
-          <p className="text-[10px] font-normal text-[#999999] leading-[16px]">{date}</p>
+          <Calendar className="size-[14px] text-[#888888]" strokeWidth={1.5} aria-hidden="true" />
+          <p className="text-[10px] font-normal text-[#888888] leading-[16px]">{date}</p>
         </div>
       )}
 
@@ -34,9 +34,9 @@ export function MatchMetadataRow({
               aria-hidden="true"
             />
           ) : (
-            <GraduationCap className="size-[14px] text-[#999999]" strokeWidth={1.5} aria-hidden="true" />
+            <GraduationCap className="size-[14px] text-[#888888]" strokeWidth={1.5} aria-hidden="true" />
           )}
-          <p className="text-[10px] font-normal text-[#999999] leading-[16px]">{matchType}</p>
+          <p className="text-[10px] font-normal text-[#888888] leading-[16px]">{matchType}</p>
         </div>
       )}
 
@@ -49,7 +49,7 @@ export function MatchMetadataRow({
             height={14}
             aria-hidden="true"
           />
-          <p className="text-[10px] font-normal text-[#999999] leading-[16px]">{courtType}</p>
+          <p className="text-[10px] font-normal text-[#888888] leading-[16px]">{courtType}</p>
         </div>
       )}
 
@@ -62,7 +62,7 @@ export function MatchMetadataRow({
           className={verificationStatus ? "" : "grayscale"}
           aria-hidden="true"
         />
-        <p className="text-[10px] font-normal text-[#999999] leading-[16px]">
+        <p className="text-[10px] font-normal text-[#888888] leading-[16px]">
           {verificationStatus || "Unverified Result"}
         </p>
       </div>

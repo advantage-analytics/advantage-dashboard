@@ -12,7 +12,7 @@ interface ActivityItem {
 
 const INDICATOR_COLORS: Record<ActivityItem["type"], string> = {
   milestone: "bg-[#3B82F6]",
-  alert: "bg-[#FF453A]",
+  alert: "bg-[#E51837]",
   system: "bg-[#AAAAAA]",
 };
 
@@ -163,7 +163,7 @@ export default function ActivityFeed() {
               <p className="text-[12px] font-light text-[#71717A] leading-[1.5]">
                 {item.message}
               </p>
-              <p className="text-[10px] font-normal text-[#AAAAAA]">
+              <p className="text-[10px] font-normal text-[#AAAAAA] capitalize">
                 {item.timeAgo}
               </p>
             </div>

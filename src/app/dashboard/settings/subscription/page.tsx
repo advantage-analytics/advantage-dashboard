@@ -91,13 +91,13 @@ function PlanCard({
       className={cn(
         "relative flex flex-col text-left p-5 rounded-xl border-2 transition-all duration-200 cursor-pointer group w-full",
         isSelected
-          ? "border-[#3986F3] bg-white shadow-[0_0_0_3px_rgba(57,134,243,0.08)]"
+          ? "border-[#3B82F6] bg-white shadow-[0_0_0_3px_rgba(57,134,243,0.08)]"
           : "border-[#E5E5E5] bg-[#FAFAFA] hover:border-[#CCCCCC] hover:bg-white"
       )}
     >
       {/* Popular Badge */}
       {showPopularBadge && (
-        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-[#3986F3] rounded-full flex items-center gap-1.5">
+        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-[#3B82F6] rounded-full flex items-center gap-1.5">
           <Sparkles className="w-2.5 h-2.5 text-white" />
           <span className="text-[9px] font-semibold text-white uppercase tracking-wide">
             Recommended
@@ -111,7 +111,7 @@ function PlanCard({
           className={cn(
             "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-200",
             isSelected
-              ? "border-[#3986F3] bg-[#3986F3]"
+              ? "border-[#3B82F6] bg-[#3B82F6]"
               : "border-[#D0D0D0] bg-white group-hover:border-[#999]"
           )}
         >
@@ -174,7 +174,7 @@ function PlanCard({
               <span
                 className={cn(
                   "flex-shrink-0 w-3.5 h-3.5 rounded-full flex items-center justify-center",
-                  isSelected ? "bg-[#3986F3]" : "bg-[#E5E5E5]"
+                  isSelected ? "bg-[#3B82F6]" : "bg-[#E5E5E5]"
                 )}
               >
                 <Check

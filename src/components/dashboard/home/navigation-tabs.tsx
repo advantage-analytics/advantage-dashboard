@@ -33,7 +33,7 @@ export default function NavigationTabs({
               onClick={() => onTabChange(id)}
               className={cn(
                 "relative flex items-center justify-center rounded-full px-5 h-7 text-xs font-medium transition-colors duration-200",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3986F3] focus-visible:ring-offset-1"
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-1"
               )}
             >
               {isActive && (
@@ -51,7 +51,7 @@ export default function NavigationTabs({
                   "relative z-10 transition-colors duration-200",
                   isActive
                     ? "text-white"
-                    : "text-[#999999] hover:text-[#525252]"
+                    : "text-[#888888] hover:text-[#525252]"
                 )}
               >
                 {name}

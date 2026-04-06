@@ -31,7 +31,7 @@ export function RecentPerformance({
         ease: [0.25, 0.46, 0.45, 0.94],
       }}
     >
-      <div className="w-0.5 h-12 bg-[#3986F3] rounded-full shrink-0" />
+      <div className="w-0.5 h-12 bg-[#3B82F6] rounded-full shrink-0" />
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2">
           <p className="text-xl font-medium text-[#525252] tabular-nums">
@@ -50,7 +50,7 @@ export function RecentPerformance({
             {changeText}
           </motion.span>
         </div>
-        <p className="text-xs font-normal text-[#999999]">{label}</p>
+        <p className="text-xs font-normal text-[#888888]">{label}</p>
       </div>
     </motion.div>
   );

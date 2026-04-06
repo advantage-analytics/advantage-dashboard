@@ -240,7 +240,7 @@ export function UploadMatchModal({
                   disabled={isCreating}
                   className={`w-[110px] h-[31px] rounded-full text-xs ${
                     isCreating
-                      ? "bg-[#F7F7F7] text-[#999999]"
+                      ? "bg-[#F7F7F7] text-[#888888]"
                       : "bg-[#0D0D0D] text-white"
                   }`}
                 >
@@ -260,7 +260,7 @@ export function UploadMatchModal({
                   disabled={continueDisabled}
                   className={`w-[85px] h-[31px] rounded-full text-xs ${
                     continueDisabled
-                      ? "bg-[#F7F7F7] text-[#999999]"
+                      ? "bg-[#F7F7F7] text-[#888888]"
                       : "bg-[#0D0D0D] text-white"
                   }`}
                 >

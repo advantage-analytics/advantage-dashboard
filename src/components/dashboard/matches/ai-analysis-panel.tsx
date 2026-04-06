@@ -69,7 +69,7 @@ function Card({
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#999999] mb-3">
+    <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#888888] mb-3">
       {children}
     </p>
   );
@@ -97,10 +97,10 @@ function KeyMomentsCard({
         <div className="flex items-start justify-between mb-5">
           <div>
             <h2 className="text-base font-medium text-[#0D0D0D]">Key Moments</h2>
-            <p className="text-xs text-[#999999] mt-1">Turning points identified by AI</p>
+            <p className="text-xs text-[#888888] mt-1">Turning points identified by AI</p>
           </div>
           {moments.length > 0 && (
-            <span className="flex items-center gap-1 text-[10px] font-semibold text-[#999999] bg-[#F5F5F5] rounded-full px-2.5 py-1 mt-0.5 shrink-0">
+            <span className="flex items-center gap-1 text-[10px] font-semibold text-[#888888] bg-[#F5F5F5] rounded-full px-2.5 py-1 mt-0.5 shrink-0">
               <Zap className="w-2.5 h-2.5" />
               {moments.length} events
             </span>
@@ -133,7 +133,7 @@ function KeyMomentsCard({
                 {/* Content */}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-[#0D0D0D] leading-snug">{m.moment}</p>
-                  <p className="text-xs text-[#999999] mt-0.5 leading-relaxed">{m.description}</p>
+                  <p className="text-xs text-[#888888] mt-0.5 leading-relaxed">{m.description}</p>
                 </div>
               </motion.div>
             ))}
@@ -192,7 +192,7 @@ function InsightRow({
       </div>
 
       {/* Description */}
-      <p className="text-[11px] text-[#999999] leading-relaxed">{item.description}</p>
+      <p className="text-[11px] text-[#888888] leading-relaxed">{item.description}</p>
     </motion.div>
   );
 }
@@ -229,7 +229,7 @@ function PlayerInsightsCard({
     <Card delay={0.4}>
       <div className="px-6 pt-6">
         <h2 className="text-base font-medium text-[#0D0D0D]">Match Intelligence</h2>
-        <p className="text-xs text-[#999999] mt-1">AI-analyzed strengths and areas to improve</p>
+        <p className="text-xs text-[#888888] mt-1">AI-analyzed strengths and areas to improve</p>
       </div>
 
       {!hasData ? (
@@ -246,7 +246,7 @@ function PlayerInsightsCard({
               className={`h-[34px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
                 selected === "player1"
                   ? "text-[#4A8AF4] border-[#4A8AF4]"
-                  : "text-[#999999] border-transparent hover:text-[#666666]"
+                  : "text-[#888888] border-transparent hover:text-[#666666]"
               }`}
             >
               {p1Short}
@@ -257,7 +257,7 @@ function PlayerInsightsCard({
               className={`h-[34px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
                 selected === "player2"
                   ? "text-[#F38439] border-[#F38439]"
-                  : "text-[#999999] border-transparent hover:text-[#666666]"
+                  : "text-[#888888] border-transparent hover:text-[#666666]"
               }`}
             >
               {p2Short}
@@ -412,9 +412,9 @@ function ChatCard() {
       <div className="flex items-start justify-between px-6 pt-6 pb-4">
         <div>
           <h2 className="text-base font-medium text-[#0D0D0D]">Ask the AI</h2>
-          <p className="text-xs text-[#999999] mt-1">Ask questions about this match</p>
+          <p className="text-xs text-[#888888] mt-1">Ask questions about this match</p>
         </div>
-        <div className="flex items-center gap-1 text-[10px] font-semibold text-[#999999] bg-[#F5F5F5] rounded-full px-2.5 py-1 mt-0.5">
+        <div className="flex items-center gap-1 text-[10px] font-semibold text-[#888888] bg-[#F5F5F5] rounded-full px-2.5 py-1 mt-0.5">
           <MessageSquare className="w-2.5 h-2.5" />
           Beta
         </div>
@@ -529,7 +529,7 @@ export function AIAnalysisPanel() {
           <Sparkles className="w-4 h-4 text-[#4A8AF4]" />
           <h2 className="text-base font-medium text-[#0D0D0D]">Advantage Intelligence</h2>
         </div>
-        <span className="text-[10px] font-semibold text-[#3986F3] uppercase tracking-[0.12em] px-2 py-0.5 rounded-full bg-[#EEF4FE]">
+        <span className="text-[10px] font-semibold text-[#3B82F6] uppercase tracking-[0.12em] px-2 py-0.5 rounded-full bg-[#EEF4FE]">
           AI-Powered
         </span>
       </motion.div>

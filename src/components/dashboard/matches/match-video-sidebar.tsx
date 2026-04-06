@@ -264,7 +264,7 @@ function EventTabs({
         className={`h-[31px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
           activeTab === "events"
             ? "text-[#4A8AF4] border-[#4A8AF4]"
-            : "text-[#999999] border-transparent hover:text-[#666666]"
+            : "text-[#888888] border-transparent hover:text-[#666666]"
         }`}
       >
         Events
@@ -275,7 +275,7 @@ function EventTabs({
         className={`h-[31px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
           activeTab === "saved"
             ? "text-[#4A8AF4] border-[#4A8AF4]"
-            : "text-[#999999] border-transparent hover:text-[#666666]"
+            : "text-[#888888] border-transparent hover:text-[#666666]"
         }`}
       >
         Saved
@@ -293,10 +293,10 @@ function GameHeader({
 }) {
   return (
     <div className="sticky top-0 z-10 flex flex-row justify-between items-center px-2 pt-4 pb-2 border-b border-[#D9D9D9] bg-white shadow-[0_1px_0_0_white]">
-      <span className="text-xs font-medium text-[#999999]">
+      <span className="text-xs font-medium text-[#888888]">
         Set {setNumber}
       </span>
-      <span className="text-xs font-medium text-[#999999]">{gameScore}</span>
+      <span className="text-xs font-medium text-[#888888]">{gameScore}</span>
     </div>
   );
 }
@@ -377,7 +377,7 @@ function EventRow({
         "flex flex-col gap-1 rounded-sm transition-colors",
         isDisabled
           ? "opacity-40 cursor-default"
-          : "cursor-pointer hover:bg-[#FAFAFA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3986F3] focus-visible:ring-offset-1",
+          : "cursor-pointer hover:bg-[#FAFAFA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-1",
       )}
       onMouseEnter={() => { if (!isDisabled) setIsHovered(true); }}
       onMouseLeave={() => setIsHovered(false)}
@@ -407,7 +407,7 @@ function EventRow({
           <span className="text-xs font-medium text-[#0D0D0D] truncate">
             {point.eventType}
           </span>
-          <span className="text-[10px] font-normal text-[#999999] truncate">
+          <span className="text-[10px] font-normal text-[#888888] truncate">
             {point.description}
           </span>
         </div>
@@ -599,7 +599,7 @@ export function MatchVideoSidebar({
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-8">
-            <span className="text-xs text-[#999999]">
+            <span className="text-xs text-[#888888]">
               {activeTab === "saved"
                 ? "No saved events yet"
                 : "No events available"}

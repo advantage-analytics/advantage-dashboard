@@ -88,7 +88,7 @@ function RadarChart({ dimensions }: { dimensions: PerformanceProfileDimension[] 
         <polygon
           points={buildPolygon(currentValues)}
           fill="rgba(57,134,243,0.15)"
-          stroke="#3986F3"
+          stroke="#3B82F6"
           strokeWidth={1.5}
         />
       )}
@@ -103,7 +103,7 @@ function RadarChart({ dimensions }: { dimensions: PerformanceProfileDimension[] 
             cx={pt.x}
             cy={pt.y}
             r={2.5}
-            fill="#3986F3"
+            fill="#3B82F6"
           />
         );
       })}
@@ -128,7 +128,7 @@ export default function PerformanceProfile({
       <div className="p-6 flex flex-col gap-4">
         {isEmpty ? (
           <div className="flex items-center justify-center py-8">
-            <p className="text-[12px] text-[#999999]">
+            <p className="text-[12px] text-[#888888]">
               Upload matches to build your profile
             </p>
           </div>
@@ -156,7 +156,7 @@ export default function PerformanceProfile({
         {/* Legend */}
         <div className="flex items-center justify-center gap-6 pt-3 pb-4 px-5">
           <div className="flex items-center gap-1.5">
-            <div className="w-[7px] h-[7px] rounded-full bg-[#3986F3]" />
+            <div className="w-[7px] h-[7px] rounded-full bg-[#3B82F6]" />
             <span className="text-[10px] font-normal text-[#AAAAAA] tracking-[1px]">
               CURRENT
             </span>

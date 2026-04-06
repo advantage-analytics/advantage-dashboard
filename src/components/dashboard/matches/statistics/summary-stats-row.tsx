@@ -80,17 +80,17 @@ export function SummaryStatsRow({
           >
             <div className="w-[2px] h-12 bg-[#D9D9D9] mr-6" />
             <div className="flex flex-col items-start justify-start">
-              <p className="text-xs font-normal text-[#999999] mb-1 text-center">
+              <p className="text-xs font-normal text-[#888888] mb-1 text-center">
                 {stat.label}
               </p>
               {stat.isFormatted ? (
                 <p className="text-2xl font-medium text-[#0D0D0D]">
                   {stat.hours}
-                  <span className="text-xs font-medium text-[#999999] ml-0.5">
+                  <span className="text-xs font-medium text-[#888888] ml-0.5">
                     HR
                   </span>{" "}
                   {stat.mins}
-                  <span className="text-xs font-medium text-[#999999] ml-0.5">
+                  <span className="text-xs font-medium text-[#888888] ml-0.5">
                     MIN
                   </span>
                 </p>

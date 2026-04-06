@@ -87,7 +87,7 @@ function StatRow({ item, color, index }: StatRowProps): React.JSX.Element {
         <span className={`text-sm font-semibold ${textColor}`}>{item.value}%</span>
       </div>
       <ProgressBar value={item.value} color={color} />
-      <p className="text-xs text-[#999999]">{item.description}</p>
+      <p className="text-xs text-[#888888]">{item.description}</p>
     </motion.div>
   );
 }
@@ -109,12 +109,12 @@ function KeyMomentCard({ moment, index }: KeyMomentCardProps): React.JSX.Element
       <div className="flex items-start justify-between gap-2">
         <span className="text-sm font-medium text-[#0D0D0D] leading-tight">{moment.title}</span>
         {moment.score && (
-          <span className="text-[10px] font-medium text-[#999999] bg-[#F5F5F5] px-2 py-0.5 rounded-full uppercase tracking-wide whitespace-nowrap shrink-0">
+          <span className="text-[10px] font-medium text-[#888888] bg-[#F5F5F5] px-2 py-0.5 rounded-full uppercase tracking-wide whitespace-nowrap shrink-0">
             {moment.score}
           </span>
         )}
       </div>
-      <span className="text-xs text-[#999999] leading-relaxed">{moment.description}</span>
+      <span className="text-xs text-[#888888] leading-relaxed">{moment.description}</span>
     </motion.div>
   );
 }
@@ -135,17 +135,17 @@ export function MatchInsights({
       <motion.div className="px-6 pt-6 pb-5" variants={itemVariants}>
         <div className="flex items-center gap-2 mb-1">
           <h2 className="text-base font-medium text-[#0D0D0D]">Advantage Intelligence</h2>
-          <span className="text-[10px] font-semibold text-[#3986F3] uppercase tracking-[0.12em] px-2 py-0.5 rounded-full bg-[#EEF4FE]">
+          <span className="text-[10px] font-semibold text-[#3B82F6] uppercase tracking-[0.12em] px-2 py-0.5 rounded-full bg-[#EEF4FE]">
             AI-Powered Analysis
           </span>
         </div>
-        <p className="text-xs text-[#999999]">Game-by-game momentum tracking throughout the match</p>
+        <p className="text-xs text-[#888888]">Game-by-game momentum tracking throughout the match</p>
       </motion.div>
 
       <div className="px-6 pb-6 flex flex-col gap-8">
         {/* Key Moments */}
         <motion.div variants={itemVariants}>
-          <p className="text-[10px] font-semibold text-[#999999] uppercase tracking-[0.15em] mb-4">
+          <p className="text-[10px] font-semibold text-[#888888] uppercase tracking-[0.15em] mb-4">
             Key Moments
           </p>
           <div className="grid grid-cols-2 gap-x-6 gap-y-5">
@@ -157,7 +157,7 @@ export function MatchInsights({
 
         {/* Strengths */}
         <motion.div variants={itemVariants}>
-          <p className="text-[10px] font-semibold text-[#999999] uppercase tracking-[0.15em] mb-4">
+          <p className="text-[10px] font-semibold text-[#888888] uppercase tracking-[0.15em] mb-4">
             Strengths
           </p>
           <div className="flex flex-col gap-5">
@@ -169,7 +169,7 @@ export function MatchInsights({
 
         {/* Weaknesses */}
         <motion.div variants={itemVariants}>
-          <p className="text-[10px] font-semibold text-[#999999] uppercase tracking-[0.15em] mb-4">
+          <p className="text-[10px] font-semibold text-[#888888] uppercase tracking-[0.15em] mb-4">
             Weaknesses
           </p>
           <div className="flex flex-col gap-5">

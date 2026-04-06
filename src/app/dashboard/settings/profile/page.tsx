@@ -98,7 +98,7 @@ function ProfilePicture({
           className={cn(
             "px-4 py-2 text-xs font-medium rounded-lg",
             "border border-[#E5E5E5] text-[#0D0D0D]",
-            "hover:border-[#3986F3] hover:text-[#3986F3]",
+            "hover:border-[#3B82F6] hover:text-[#3B82F6]",
             "transition-colors duration-200"
           )}
         >

@@ -85,7 +85,7 @@ export function MatchesGrid({
                 {col.field ? (
                   <button
                     onClick={() => onSort(col.field!)}
-                    className="inline-flex items-center gap-0.5 text-[10px] font-medium text-[#D9D9D9] uppercase tracking-[0.5px] hover:text-[#999999] transition-colors"
+                    className="inline-flex items-center gap-0.5 text-[10px] font-medium text-[#D9D9D9] uppercase tracking-[0.5px] hover:text-[#888888] transition-colors"
                   >
                     {col.label}
                     <SortIcon field={col.field} sortField={sortField} sortDir={sortDir} />

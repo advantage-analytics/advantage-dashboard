@@ -158,13 +158,13 @@ export function UploadContent({
                         <p className="text-[#0D0D0D] font-medium text-sm">
                           Drag your file here
                         </p>
-                        <p className="text-[#999999] text-xs leading-relaxed">
+                        <p className="text-[#888888] text-xs leading-relaxed">
                           or click the button below to browse
                         </p>
                       </div>
 
                       {/* File Info */}
-                      <p className="text-[#999999] text-xs pt-1">
+                      <p className="text-[#888888] text-xs pt-1">
                         {fileConfig.description} •{" "}
                         <span className="font-medium">Max 50MB</span>
                       </p>
@@ -270,21 +270,21 @@ export function UploadContent({
                       <p className="text-[#0D0D0D] font-medium text-sm truncate">
                         {uploadedFile.name}
                       </p>
-                      <p className="text-[#999999] text-xs">{uploadedFile.size}</p>
+                      <p className="text-[#888888] text-xs">{uploadedFile.size}</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Card Footer - Action */}
                 <div className="px-4 py-3 flex items-center justify-between bg-white">
-                  <p className="text-[#999999] text-xs">
+                  <p className="text-[#888888] text-xs">
                     Ready to proceed to next step
                   </p>
                   <button
                     type="button"
                     onClick={onRemoveFile}
                     disabled={isUploading}
-                    className="p-2 text-[#999999] hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="p-2 text-[#888888] hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                     aria-label="Remove file"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -293,7 +293,7 @@ export function UploadContent({
               </div>
 
               {/* Info Text */}
-              <p className="text-[#999999] text-xs pt-1">
+              <p className="text-[#888888] text-xs pt-1">
                 You can change this file at any time before creating the match.
               </p>
             </div>

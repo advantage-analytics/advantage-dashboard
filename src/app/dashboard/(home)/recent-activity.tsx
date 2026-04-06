@@ -61,6 +61,7 @@ export interface MatchRow {
   errors: number | null;
   breakpointsWon: number | null;
   breakpointsTotal: number | null;
+  opponentMeta?: string[];
 }
 
 function formatDisplayDate(isoDate: string): string {
@@ -144,6 +145,8 @@ function groupMatchesIntoEvents(
         breakpointsTotal: stat
           ? (stat.break_point_opportunities ?? stat.break_points_faced ?? null)
           : null,
+        // TODO: Replace with real data from users table once upload flow collects hand/backhand
+        opponentMeta: ["LEFT HANDED", "2-HANDED BACKHAND"],
       });
     }
 
@@ -245,7 +248,7 @@ export default function RecentActivity() {
         </p>
         <Link
           href="/dashboard/matches"
-          className="text-[10px] font-medium text-[#3B82F6] uppercase tracking-[2px] transition-colors duration-200 hover:text-[#2D6FD9]"
+          className="text-[10px] font-medium text-[#3B82F6] uppercase tracking-[2px] transition-colors duration-200 hover:text-[#2563EB]"
         >
           VIEW ALL
         </Link>
@@ -254,7 +257,7 @@ export default function RecentActivity() {
       {/* Content */}
       <div className="pb-5">
         {loading && (
-          <div className="flex items-center justify-center py-12 text-[#999999] text-sm">
+          <div className="flex items-center justify-center py-12 text-[#888888] text-sm">
             Loading...
           </div>
         )}
@@ -268,17 +271,17 @@ export default function RecentActivity() {
         {!loading && !error && events.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
             <div className="rounded-full bg-[#F5F5F5] p-4 mb-4">
-              <Inbox className="h-8 w-8 text-[#999999]" aria-hidden />
+              <Inbox className="h-8 w-8 text-[#888888]" aria-hidden />
             </div>
-            <p className="font-medium text-[#000000] mb-1">No matches yet</p>
-            <p className="text-sm text-[#999999] max-w-[260px]">
+            <p className="font-medium text-[#0D0D0D] mb-1">No matches yet</p>
+            <p className="text-sm text-[#888888] max-w-[260px]">
               Upload your first match to see your recent activity here.
             </p>
           </div>
         )}
 
         {!loading && !error && events.length > 0 && (
-          <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-8">
             {events.map((event) => (
               <RecentMatches key={event.id} event={event} />
             ))}

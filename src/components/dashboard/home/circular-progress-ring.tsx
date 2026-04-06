@@ -73,7 +73,7 @@ export function CircularProgressRing({
                   <motion.circle
                     r={radius}
                     fill="none"
-                    stroke="#3986F3"
+                    stroke="#3B82F6"
                     strokeWidth={strokeWidth}
                     strokeLinecap="butt"
                     strokeDasharray={circumference}
@@ -106,7 +106,7 @@ export function CircularProgressRing({
             <p>
               Wins: {wins} | Losses: {losses}
             </p>
-            <p className="text-[#999999]">Total: {total} matches</p>
+            <p className="text-[#888888]">Total: {total} matches</p>
           </div>
         </TooltipContent>
       </Tooltip>

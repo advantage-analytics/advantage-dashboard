@@ -30,10 +30,10 @@ export default function OverallPerformance({
       {/* Heading */}
       <div className="flex flex-row justify-between items-center">
         <div className="flex flex-col gap-2">
-          <p className="font-medium text-[16px] text-black">
+          <p className="font-medium text-[16px] text-[#0D0D0D]">
             Overall Performance
           </p>
-          <p className="text-[12px] text-[#999999]">
+          <p className="text-[12px] text-[#888888]">
             Your Recent Performance
           </p>
         </div>
@@ -52,10 +52,10 @@ export default function OverallPerformance({
           data-state="empty"
         >
           <div className="rounded-full bg-[#F5F5F5] p-4 mb-4">
-            <Inbox className="h-8 w-8 text-[#999999]" aria-hidden />
+            <Inbox className="h-8 w-8 text-[#888888]" aria-hidden />
           </div>
           <p className="font-medium text-[#000000] mb-1">No matches yet</p>
-          <p className="text-sm text-[#999999] max-w-[260px]">
+          <p className="text-sm text-[#888888] max-w-[260px]">
             Upload your first match to see your performance stats here.
           </p>
         </div>
@@ -76,9 +76,9 @@ export default function OverallPerformance({
                   key={index}
                   type="button"
                   onClick={() => setCurrentViewIndex(index)}
-                  className={`rounded-full transition-[width,background-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#3986F3] ${
+                  className={`rounded-full transition-[width,background-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#3B82F6] ${
                     index === currentViewIndex
-                      ? "w-3 h-1 bg-[#3986F3]"
+                      ? "w-3 h-1 bg-[#3B82F6]"
                       : "w-1 h-1 bg-[#D9D9D9]"
                   }`}
                   aria-label={`View ${index + 1}: ${views[index].label}`}

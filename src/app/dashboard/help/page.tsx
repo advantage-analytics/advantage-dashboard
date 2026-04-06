@@ -8,7 +8,7 @@ export default function HelpCenterPage() {
           <Info className="h-8 w-8 text-gray-400" />
         </div>
         <h1 className="font-medium text-2xl text-[#0D0D0D]">Help Center</h1>
-        <p className="font-normal text-base text-[#999999] max-w-md">
+        <p className="font-normal text-base text-[#888888] max-w-md">
           Get support and learn how to make the most of Advantage Analytics.
         </p>
       </div>

@@ -17,7 +17,7 @@ export function PerformanceRatingsCard({
     <div className="bg-white border border-[rgba(0,0,0,0.06)] rounded-2xl p-6 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
       <div className="mb-4">
         <h2 className="text-sm font-semibold text-[#0D0D0D]">Performance Ratings</h2>
-        <p className="text-xs text-[#999999] mt-0.5">
+        <p className="text-xs text-[#888888] mt-0.5">
           {hasData ? "Averaged across all tracked matches" : "No stats data yet"}
         </p>
       </div>

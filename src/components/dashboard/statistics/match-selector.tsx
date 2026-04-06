@@ -68,12 +68,12 @@ export function MatchSelector({
             : `All ${matches.length} matches`}
         </span>
         {isFiltered && (
-          <span className="w-1.5 h-1.5 rounded-full bg-[#3986F3] shrink-0" />
+          <span className="w-1.5 h-1.5 rounded-full bg-[#3B82F6] shrink-0" />
         )}
         {isOpen ? (
-          <ChevronUp className="w-3.5 h-3.5 text-[#999999]" />
+          <ChevronUp className="w-3.5 h-3.5 text-[#888888]" />
         ) : (
-          <ChevronDown className="w-3.5 h-3.5 text-[#999999]" />
+          <ChevronDown className="w-3.5 h-3.5 text-[#888888]" />
         )}
       </button>
 
@@ -82,7 +82,7 @@ export function MatchSelector({
         <div className="mt-2 bg-white border border-[rgba(0,0,0,0.06)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.06)] overflow-hidden">
           {/* Date range row */}
           <div className="flex items-center gap-3 px-5 py-4 border-b border-[#F0F0F0]">
-            <span className="text-xs font-medium text-[#999999] shrink-0">
+            <span className="text-xs font-medium text-[#888888] shrink-0">
               Filter by date
             </span>
             <div className="flex items-center gap-2">
@@ -90,7 +90,7 @@ export function MatchSelector({
                 type="date"
                 value={fromDate}
                 onChange={(e) => setFromDate(e.target.value)}
-                className="text-xs text-[#0D0D0D] bg-[#F7F7F7] border border-[rgba(0,0,0,0.06)] rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#3986F3]"
+                className="text-xs text-[#0D0D0D] bg-[#F7F7F7] border border-[rgba(0,0,0,0.06)] rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
                 aria-label="From date"
               />
               <span className="text-xs text-[#CCCCCC]">→</span>
@@ -98,12 +98,12 @@ export function MatchSelector({
                 type="date"
                 value={toDate}
                 onChange={(e) => setToDate(e.target.value)}
-                className="text-xs text-[#0D0D0D] bg-[#F7F7F7] border border-[rgba(0,0,0,0.06)] rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#3986F3]"
+                className="text-xs text-[#0D0D0D] bg-[#F7F7F7] border border-[rgba(0,0,0,0.06)] rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
                 aria-label="To date"
               />
             </div>
             {(fromDate || toDate) && (
-              <span className="text-xs text-[#999999]">
+              <span className="text-xs text-[#888888]">
                 {dateFiltered.length} matches in range
               </span>
             )}
@@ -112,7 +112,7 @@ export function MatchSelector({
           {/* Match list */}
           <div className="max-h-64 overflow-y-auto">
             {dateFiltered.length === 0 ? (
-              <p className="text-xs text-[#999999] text-center py-8">
+              <p className="text-xs text-[#888888] text-center py-8">
                 No matches in this date range.
               </p>
             ) : (
@@ -127,7 +127,7 @@ export function MatchSelector({
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => toggleMatch(m.id)}
-                      className="w-3.5 h-3.5 rounded accent-[#3986F3] shrink-0"
+                      className="w-3.5 h-3.5 rounded accent-[#3B82F6] shrink-0"
                       aria-label={`${m.tournamentName} vs ${m.player2Name}`}
                     />
                     <span
@@ -161,7 +161,7 @@ export function MatchSelector({
                 type="button"
                 onClick={selectAllFiltered}
                 disabled={allDateFilteredSelected}
-                className="text-xs font-medium text-[#3986F3] hover:underline disabled:opacity-40 disabled:no-underline"
+                className="text-xs font-medium text-[#3B82F6] hover:underline disabled:opacity-40 disabled:no-underline"
               >
                 Select all
               </button>
@@ -169,7 +169,7 @@ export function MatchSelector({
               <button
                 type="button"
                 onClick={reset}
-                className="text-xs font-medium text-[#999999] hover:text-[#0D0D0D] transition-colors"
+                className="text-xs font-medium text-[#888888] hover:text-[#0D0D0D] transition-colors"
               >
                 Reset
               </button>

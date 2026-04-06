@@ -31,7 +31,7 @@ export function FeaturedMatchCard({
                 <p className="text-xl font-medium text-[#000000]">
                   {match.tournamentName}
                 </p>
-                <span className="text-[10px] font-medium text-[#3986F3] bg-[#EBF2FD] px-2.5 py-1 rounded-xl">
+                <span className="text-[10px] font-medium text-[#3B82F6] bg-[#EBF2FD] px-2.5 py-1 rounded-xl">
                   Latest Match
                 </span>
               </div>
@@ -49,7 +49,7 @@ export function FeaturedMatchCard({
           {/* Hover CTA — expands into view */}
           <div className="grid grid-rows-[0fr] group-hover:grid-rows-[1fr] transition-[grid-template-rows] duration-300">
             <div className="overflow-hidden">
-              <p className="text-xs font-medium text-[#3986F3] pt-6 pb-1">
+              <p className="text-xs font-medium text-[#3B82F6] pt-6 pb-1">
                 View match details →
               </p>
             </div>

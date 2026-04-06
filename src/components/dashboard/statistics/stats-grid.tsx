@@ -48,7 +48,7 @@ export function StatsGrid({ data }: StatsGridProps) {
     <div className="bg-white border border-[rgba(0,0,0,0.06)] rounded-2xl p-6 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
       <div className="mb-5">
         <h2 className="text-sm font-semibold text-[#0D0D0D]">Key Stats</h2>
-        <p className="text-xs text-[#999999] mt-0.5">
+        <p className="text-xs text-[#888888] mt-0.5">
           {hasData ? "Averages across all tracked matches" : "Upload matches with stats to see averages"}
         </p>
       </div>
@@ -61,7 +61,7 @@ export function StatsGrid({ data }: StatsGridProps) {
           >
             <Icon className="w-4 h-4 text-[#CCCCCC]" />
             <div>
-              <p className="text-[10px] font-medium text-[#999999] uppercase tracking-wide leading-tight mb-1">
+              <p className="text-[10px] font-medium text-[#888888] uppercase tracking-wide leading-tight mb-1">
                 {label}
               </p>
               <p className="text-2xl font-semibold tabular-nums text-[#0D0D0D] leading-none">

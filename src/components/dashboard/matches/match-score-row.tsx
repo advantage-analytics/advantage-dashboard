@@ -22,7 +22,7 @@ export function MatchScoreRow({ match }: MatchScoreRowProps) {
             {match.player1.name}
           </span>
           {match.player1.school && (
-            <span className="text-[10px] text-[#999999]">
+            <span className="text-[10px] text-[#888888]">
               {match.player1.school}
             </span>
           )}
@@ -72,7 +72,7 @@ export function MatchScoreRow({ match }: MatchScoreRowProps) {
             {match.player2.name}
           </span>
           {match.player2.school && (
-            <span className="text-[10px] text-[#999999]">
+            <span className="text-[10px] text-[#888888]">
               {match.player2.school}
             </span>
           )}

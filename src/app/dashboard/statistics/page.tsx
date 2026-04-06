@@ -15,7 +15,7 @@ export default async function StatisticsPage(): Promise<React.JSX.Element> {
           <h1 className="text-3xl font-semibold tracking-tight text-[#0D0D0D] mb-1.5">
             Statistics
           </h1>
-          <p className="text-sm text-[#999999]">
+          <p className="text-sm text-[#888888]">
             Dive deep into your performance analytics and discover patterns to
             improve your game.
           </p>

@@ -469,7 +469,7 @@ export function CourtVisualization({
         <h2 className="text-base font-medium text-[#0D0D0D] mb-6">
           {title}
         </h2>
-        <p className="text-sm text-[#999999] text-center">
+        <p className="text-sm text-[#888888] text-center">
           Point data not available for this match.
         </p>
       </div>
@@ -499,7 +499,7 @@ export function CourtVisualization({
               {courtLabel}
             </span>
           </div>
-          <p className="text-xs font-normal italic text-[#999999]">{subtitle}</p>
+          <p className="text-xs font-normal italic text-[#888888]">{subtitle}</p>
         </div>
 
         {/* Right — tab switcher + gear */}
@@ -520,7 +520,7 @@ export function CourtVisualization({
                 )}
                 <span
                   className={`relative z-10 ${
-                    visualizationType === tab.value ? "text-black" : "text-[#525252]"
+                    visualizationType === tab.value ? "text-[#0D0D0D]" : "text-[#525252]"
                   }`}
                 >
                   {tab.label}
@@ -530,7 +530,7 @@ export function CourtVisualization({
           </div>
           <Settings
             size={16}
-            className="text-[#999999] cursor-pointer hover:text-[#666666]"
+            className="text-[#888888] cursor-pointer hover:text-[#666666]"
           />
         </div>
       </div>

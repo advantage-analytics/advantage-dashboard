@@ -20,7 +20,7 @@ interface AnalysisSidebarProps {
 function StatPill({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="flex items-center justify-between py-2.5 border-b border-[#F0F0F0] last:border-0">
-      <span className="text-xs text-[#999999]">{label}</span>
+      <span className="text-xs text-[#888888]">{label}</span>
       <span className="text-xs font-semibold text-[#0D0D0D]">{value}</span>
     </div>
   );
@@ -69,7 +69,7 @@ export function AnalysisSidebar({
             {aiReady ? "Ready" : "No Data"}
           </span>
         </div>
-        <p className="text-[11px] text-[#999999] leading-relaxed">
+        <p className="text-[11px] text-[#888888] leading-relaxed">
           {aiReady
             ? `${hasKeyMoments ? keyMoments.length + " key moments" : ""}${hasKeyMoments && hasInsights ? " · " : ""}${hasInsights ? "insights available" : ""}`
             : "No AI data has been processed for this match yet."}
@@ -80,8 +80,8 @@ export function AnalysisSidebar({
       {p1 && p2 && (
         <div className="px-5 py-4">
           <div className="flex items-center gap-1.5 mb-3">
-            <Zap className="w-3 h-3 text-[#999999]" />
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#999999]">
+            <Zap className="w-3 h-3 text-[#888888]" />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#888888]">
               Quick Stats
             </p>
           </div>

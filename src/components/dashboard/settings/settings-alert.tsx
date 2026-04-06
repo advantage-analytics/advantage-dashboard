@@ -38,9 +38,9 @@ const alertConfig: Record<AlertType, AlertConfig> = {
   info: {
     icon: Info,
     bg: "bg-[#EBF3FE]",
-    border: "border-[#3986F3]/20",
+    border: "border-[#3B82F6]/20",
     text: "text-[#2563eb]",
-    iconColor: "text-[#3986F3]",
+    iconColor: "text-[#3B82F6]",
   },
 };
 

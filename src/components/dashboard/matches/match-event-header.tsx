@@ -22,7 +22,7 @@ export function MatchEventHeader({
       <div className="flex flex-row justify-between items-center gap-2">
         <p className="text-xl font-medium text-[#0D0D0D]">{tournamentName}</p>
         <button className="p-1 rounded hover:bg-gray-100 transition-colors">
-          <MoreVertical className="h-4 w-4 text-[#999999]" />
+          <MoreVertical className="h-4 w-4 text-[#888888]" />
         </button>
       </div>
 

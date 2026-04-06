@@ -143,7 +143,7 @@ function StatRow({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: 0.06 + index * 0.04, ease: EASE_CURVE }}
     >
-      <span className="text-[10px] font-medium uppercase tracking-[0.5px] text-[#999999]">
+      <span className="text-[10px] font-medium uppercase tracking-[0.5px] text-[#888888]">
         {label}
       </span>
 
@@ -179,7 +179,7 @@ export function MatchStatistics({
         <h2 className="text-base font-medium text-[#0D0D0D] mb-6">
           Match Statistics
         </h2>
-        <p className="text-sm text-[#999999] text-center">
+        <p className="text-sm text-[#888888] text-center">
           Statistics not available for this match.
         </p>
       </div>
@@ -202,7 +202,7 @@ export function MatchStatistics({
         <h2 className="text-base font-medium text-[#0D0D0D]">
           Match Statistics
         </h2>
-        <p className="text-xs text-[#999999] mt-1">
+        <p className="text-xs text-[#888888] mt-1">
           Compare {player1Name} and {player2Name} Match Statistics
         </p>
       </div>

@@ -13,7 +13,7 @@ const EASE = [0.25, 0.46, 0.45, 0.94] as const;
 
 function SectionHeader({ children }: { children: string }) {
   return (
-    <div className="text-[10px] font-medium tracking-[0.16em] uppercase text-[#999999]">
+    <div className="text-[10px] font-medium tracking-[0.16em] uppercase text-[#888888]">
       {children}
     </div>
   );
@@ -38,7 +38,7 @@ function PlayerTabs({
         className={`h-[31px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
           selectedPlayer === "player1"
             ? "text-[#4A8AF4] border-[#4A8AF4]"
-            : "text-[#999999] border-transparent hover:text-[#666666]"
+            : "text-[#888888] border-transparent hover:text-[#666666]"
         }`}
       >
         {shortName(match.player1.name)}
@@ -49,7 +49,7 @@ function PlayerTabs({
         className={`h-[31px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
           selectedPlayer === "player2"
             ? "text-[#F38439] border-[#F38439]"
-            : "text-[#999999] border-transparent hover:text-[#666666]"
+            : "text-[#888888] border-transparent hover:text-[#666666]"
         }`}
       >
         {shortName(match.player2.name)}
@@ -73,7 +73,7 @@ function PercentageBarRow({
   return (
     <div className="flex flex-col gap-3 self-stretch">
       <div className="flex flex-row justify-between items-end self-stretch">
-        <span className="text-[10px] font-normal text-[#999999] leading-[1.1]">{label}</span>
+        <span className="text-[10px] font-normal text-[#888888] leading-[1.1]">{label}</span>
         <span className="text-[16px] leading-[1.1] font-medium text-[#0D0D0D] tabular-nums">
           {valuePct}%
         </span>
@@ -267,7 +267,7 @@ function StatHero({
         >
           {clampedPct.toFixed(1)}%
         </motion.span>
-        <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-[#999999] text-center">
+        <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-[#888888] text-center">
           {label}
         </span>
         <span className="text-xs tabular-nums text-[#BBBBBB] font-medium">
@@ -334,7 +334,7 @@ export function MatchOverallSidebar({
     <div className={cardClass}>
       <div>
         <h2 className="text-base font-medium text-[#0D0D0D]">Match Summary</h2>
-        <p className="text-xs text-[#999999] mt-1">
+        <p className="text-xs text-[#888888] mt-1">
           Points won and performance ratings comparison
         </p>
       </div>
@@ -416,7 +416,7 @@ export function MatchVisualsSidebar({
     <div className="w-[320px] flex flex-col gap-6 px-6 py-4 bg-white rounded-[16px] border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)]">
       <div>
         <h2 className="text-base font-medium text-[#0D0D0D]">Shot Analysis</h2>
-        <p className="text-xs text-[#999999] mt-1">
+        <p className="text-xs text-[#888888] mt-1">
           Points won and shot placement breakdown by player
         </p>
       </div>

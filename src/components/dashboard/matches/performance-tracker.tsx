@@ -453,7 +453,7 @@ function SetBreakdown({
 
   return (
     <div className="mb-8">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#999999] mb-4">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#888888] mb-4">
         Points Per Set
       </p>
 
@@ -483,13 +483,13 @@ function SetBreakdown({
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35, delay: 0.1 + index * 0.07, ease: EASE_CURVE }}
             >
-              <span className="text-xs font-medium text-[#999999] w-12">Set {s.set}</span>
+              <span className="text-xs font-medium text-[#888888] w-12">Set {s.set}</span>
 
               {/* P1: count then bar */}
               <div className="flex items-center gap-2">
                 <span
                   className={`text-sm tabular-nums font-semibold w-6 ${
-                    p1Wins ? "text-[#4A8AF4]" : "text-[#999999]"
+                    p1Wins ? "text-[#4A8AF4]" : "text-[#888888]"
                   }`}
                 >
                   {s.p1Points}
@@ -508,7 +508,7 @@ function SetBreakdown({
               <div className="flex items-center gap-2">
                 <span
                   className={`text-sm tabular-nums font-semibold w-6 ${
-                    p2Wins ? "text-[#F38439]" : "text-[#999999]"
+                    p2Wins ? "text-[#F38439]" : "text-[#888888]"
                   }`}
                 >
                   {s.p2Points}
@@ -562,7 +562,7 @@ function PressureSection({
 
   return (
     <div className="mb-8">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#999999] mb-4">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#888888] mb-4">
         Pressure Situations
       </p>
       <TableHeader p1Short={p1Short} p2Short={p2Short} />
@@ -617,7 +617,7 @@ function RallySection({
 
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#999999] mb-4">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#888888] mb-4">
         Rally Length Win %
       </p>
       <TableHeader p1Short={p1Short} p2Short={p2Short} />
@@ -760,7 +760,7 @@ export function PerformanceTracker({
     return (
       <div className="bg-white p-6 rounded-[16px] border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)]">
         <h2 className="text-base font-medium text-[#0D0D0D] mb-6">Performance Tracker</h2>
-        <p className="text-sm text-[#999999] text-center">
+        <p className="text-sm text-[#888888] text-center">
           Point data not available for this match.
         </p>
       </div>
@@ -777,7 +777,7 @@ export function PerformanceTracker({
       {/* Header */}
       <div className="mb-5">
         <h2 className="text-base font-medium text-[#0D0D0D]">Performance Tracker</h2>
-        <p className="text-xs text-[#999999] mt-1">
+        <p className="text-xs text-[#888888] mt-1">
           Game-by-game momentum tracking throughout the match
         </p>
       </div>

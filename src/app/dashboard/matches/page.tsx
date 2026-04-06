@@ -42,7 +42,7 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
             <h1 className="text-3xl font-semibold tracking-tight text-[#0D0D0D] mb-1.5">
               Matches
             </h1>
-            <p className="text-sm text-[#999999]">
+            <p className="text-sm text-[#888888]">
               Your match history, scores, and performance over time.
             </p>
           </div>

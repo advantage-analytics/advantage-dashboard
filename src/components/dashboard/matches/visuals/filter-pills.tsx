@@ -41,7 +41,7 @@ export function FilterPills({
 
   return (
     <div className={`flex flex-col gap-2 min-w-0 ${className ?? ""}`}>
-      <span className="text-xs font-medium text-[#999999] whitespace-nowrap">{label}</span>
+      <span className="text-xs font-medium text-[#888888] whitespace-nowrap">{label}</span>
       <div className="flex flex-wrap gap-2">
         {options.map((option) => {
           const isSelected = selected.includes(option.value);

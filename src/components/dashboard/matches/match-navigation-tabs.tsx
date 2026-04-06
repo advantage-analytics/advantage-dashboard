@@ -28,10 +28,10 @@ export function MatchNavigationTabs({ matchId }: MatchNavigationTabsProps) {
             key={tab.slug}
             href={href}
             aria-current={isActive ? "page" : undefined}
-            className={`py-2 px-4 text-xs font-medium transition-colors flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3986F3] focus-visible:ring-offset-1 ${
+            className={`py-2 px-4 text-xs font-medium transition-colors flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-1 ${
               isActive
-                ? "text-[#3986F3] border-b-2 border-[#3986F3]"
-                : "text-[#999999] border-b-2 border-transparent hover:text-[#666666]"
+                ? "text-[#3B82F6] border-b-2 border-[#3B82F6]"
+                : "text-[#888888] border-b-2 border-transparent hover:text-[#666666]"
             }`}
           >
             {tab.label}

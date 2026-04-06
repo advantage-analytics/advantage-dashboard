@@ -60,7 +60,7 @@ export default function WinRateCard({
         WIN RATE
       </p>
       <div className="flex items-end justify-between overflow-hidden">
-        <p className="text-[28px] font-light text-[#0A0A0C] tracking-[-0.5px] leading-none">
+        <p className="text-[28px] font-light text-[#0D0D0D] tracking-[-0.5px] leading-none">
           {value}%
         </p>
         <Sparkline data={sparkline} positive={change >= 0} />

@@ -28,14 +28,14 @@ function ScoreRow({
       <div className="flex items-center gap-2.5 min-w-0">
         <div
           className={`w-[2px] self-stretch rounded-full shrink-0 ${
-            isWinner ? "bg-[#3986F3]" : "bg-transparent"
+            isWinner ? "bg-[#3B82F6]" : "bg-transparent"
           }`}
         />
         <span
           className={`text-[13px] truncate ${
             isWinner
               ? "font-semibold text-[#0D0D0D]"
-              : "font-normal text-[#999999]"
+              : "font-normal text-[#888888]"
           }`}
         >
           {playerName}
@@ -119,7 +119,7 @@ export function MatchCardGallery({
           {match.courtType && (
             <div className="flex items-center gap-1">
               <MapPin className="w-3 h-3 text-[#D9D9D9]" strokeWidth={2} />
-              <span className="text-[11px] text-[#999999] capitalize">
+              <span className="text-[11px] text-[#888888] capitalize">
                 {match.courtType}
               </span>
             </div>
@@ -127,7 +127,7 @@ export function MatchCardGallery({
           {match.matchType && (
             <div className="flex items-center gap-1">
               <Layers className="w-3 h-3 text-[#D9D9D9]" strokeWidth={2} />
-              <span className="text-[11px] text-[#999999]">
+              <span className="text-[11px] text-[#888888]">
                 {match.matchType}
               </span>
             </div>
@@ -135,7 +135,7 @@ export function MatchCardGallery({
           {match.date && (
             <div className="flex items-center gap-1 ml-auto">
               <Calendar className="w-3 h-3 text-[#D9D9D9]" strokeWidth={2} />
-              <span className="text-[11px] text-[#999999] tabular-nums">
+              <span className="text-[11px] text-[#888888] tabular-nums">
                 {match.date}
               </span>
             </div>

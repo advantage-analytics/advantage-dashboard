@@ -31,13 +31,13 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   return (
     <div className="bg-white border border-[rgba(0,0,0,0.08)] rounded-xl px-3 py-2.5 shadow-[0_4px_16px_rgba(0,0,0,0.1)]">
       <p className="text-xs font-semibold text-[#0D0D0D] mb-1">{label}</p>
-      <p className="text-xs text-[#999999]">
-        Wins: <span className="font-semibold text-[#3986F3]">{wins}</span>
+      <p className="text-xs text-[#888888]">
+        Wins: <span className="font-semibold text-[#3B82F6]">{wins}</span>
       </p>
-      <p className="text-xs text-[#999999]">
+      <p className="text-xs text-[#888888]">
         Losses: <span className="font-semibold text-[#888888]">{losses}</span>
       </p>
-      <p className="text-xs text-[#999999] mt-1 border-t border-[#F0F0F0] pt-1">
+      <p className="text-xs text-[#888888] mt-1 border-t border-[#F0F0F0] pt-1">
         Win rate: <span className="font-semibold text-[#0D0D0D]">{winRate}%</span>
       </p>
     </div>
@@ -52,7 +52,7 @@ export function SurfaceChart({ data }: SurfaceChartProps) {
     <div className="bg-white border border-[rgba(0,0,0,0.06)] rounded-2xl p-6 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
       <div className="mb-5">
         <h2 className="text-sm font-semibold text-[#0D0D0D]">Surface Breakdown</h2>
-        <p className="text-xs text-[#999999] mt-0.5">Wins and losses by court type</p>
+        <p className="text-xs text-[#888888] mt-0.5">Wins and losses by court type</p>
       </div>
 
       {filtered.length === 0 ? (
@@ -72,7 +72,7 @@ export function SurfaceChart({ data }: SurfaceChartProps) {
               <CartesianGrid strokeDasharray="3 3" stroke="#F0F0F0" horizontal={false} />
               <XAxis
                 type="number"
-                tick={{ fontSize: 11, fill: "#999999" }}
+                tick={{ fontSize: 11, fill: "#888888" }}
                 axisLine={false}
                 tickLine={false}
                 allowDecimals={false}
@@ -86,7 +86,7 @@ export function SurfaceChart({ data }: SurfaceChartProps) {
                 width={72}
               />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(0,0,0,0.03)" }} />
-              <Bar dataKey="wins" name="wins" fill="#3986F3" radius={[0, 4, 4, 0]} animationDuration={500} />
+              <Bar dataKey="wins" name="wins" fill="#3B82F6" radius={[0, 4, 4, 0]} animationDuration={500} />
               <Bar dataKey="losses" name="losses" fill="#E5E5E5" radius={[0, 4, 4, 0]} animationDuration={500} />
             </BarChart>
           </ResponsiveContainer>
@@ -94,12 +94,12 @@ export function SurfaceChart({ data }: SurfaceChartProps) {
           {/* Legend */}
           <div className="flex items-center gap-4 mt-3">
             <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-[#3986F3]" />
-              <span className="text-xs text-[#999999]">Wins</span>
+              <span className="w-2 h-2 rounded-full bg-[#3B82F6]" />
+              <span className="text-xs text-[#888888]">Wins</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-[#E5E5E5]" />
-              <span className="text-xs text-[#999999]">Losses</span>
+              <span className="text-xs text-[#888888]">Losses</span>
             </div>
           </div>
         </>

@@ -196,7 +196,7 @@ export function Header() {
         <button
           onClick={toggleSidebar}
           className={cn(
-            "flex items-center justify-center w-8 h-8 rounded-lg cursor-pointer transition-colors duration-150 active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[#3986F3]/40 focus-visible:outline-none",
+            "flex items-center justify-center w-8 h-8 rounded-lg cursor-pointer transition-colors duration-150 active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none",
             isDarkPage
               ? "text-white/60 hover:text-white hover:bg-white/[0.07]"
               : "text-[#8A8A8E] hover:text-[#3C3C43] hover:bg-[#F5F5F5]"
@@ -230,7 +230,7 @@ export function Header() {
                       "transition-colors duration-200 shrink-0",
                       isDarkPage
                         ? "text-white/40 hover:text-white/70"
-                        : "text-[#999999] hover:text-[#525252]"
+                        : "text-[#888888] hover:text-[#525252]"
                     )}
                   >
                     {crumb.label}
@@ -245,7 +245,7 @@ export function Header() {
                           : "text-[#0D0D0D]"
                         : isDarkPage
                           ? "text-white/40"
-                          : "text-[#999999]"
+                          : "text-[#888888]"
                     )}
                   >
                     {crumb.label}
@@ -262,7 +262,7 @@ export function Header() {
         {/* Search trigger — compact pill */}
         <button
           className={cn(
-            "flex items-center gap-1.5 h-7 pl-2 pr-1.5 rounded-lg cursor-pointer transition-colors duration-150 active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[#3986F3]/40 focus-visible:outline-none",
+            "flex items-center gap-1.5 h-7 pl-2 pr-1.5 rounded-lg cursor-pointer transition-colors duration-150 active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none",
             isDarkPage
               ? "text-white/40 hover:text-white/60 hover:bg-white/[0.07]"
               : "text-[#8A8A8E] hover:text-[#3C3C43] hover:bg-[#F5F5F5]"
@@ -287,7 +287,7 @@ export function Header() {
           <button
             onClick={() => setIsProfileOpen(!isProfileOpen)}
             className={cn(
-              "h-8 w-8 rounded-lg flex items-center justify-center text-[11px] font-semibold tracking-wide cursor-pointer transition-colors duration-150 active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[#3986F3]/40 focus-visible:outline-none",
+              "h-8 w-8 rounded-lg flex items-center justify-center text-[11px] font-semibold tracking-wide cursor-pointer transition-colors duration-150 active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none",
               isDarkPage
                 ? "text-white/70 hover:bg-white/[0.07]"
                 : "text-[#8A8A8E] hover:bg-[#F5F5F5]"

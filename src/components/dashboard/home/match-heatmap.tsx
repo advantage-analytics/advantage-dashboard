@@ -12,7 +12,7 @@ function getCellColor(count: number): string {
   if (count === 0) return "bg-[#F2F2F2]";
   if (count === 1) return "bg-[#B8D4F9]";
   if (count === 2) return "bg-[#6AABFF]";
-  return "bg-[#3986F3]";
+  return "bg-[#3B82F6]";
 }
 
 const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
@@ -80,7 +80,7 @@ export default function MatchHeatmap({
             return (
               <div
                 key={cell.date}
-                className={`aspect-square rounded-[4px] ${getCellColor(cell.count)} flex items-center justify-center relative transition-colors duration-200 ${isToday ? "ring-1 ring-[#3986F3] ring-offset-1" : ""}`}
+                className={`aspect-square rounded-[4px] ${getCellColor(cell.count)} flex items-center justify-center relative transition-colors duration-200 ${isToday ? "ring-1 ring-[#3B82F6] ring-offset-1" : ""}`}
                 title={`${cell.date}: ${cell.count} match${cell.count !== 1 ? "es" : ""}`}
               >
                 <span
@@ -102,7 +102,7 @@ export default function MatchHeatmap({
             <span className="text-[11px] font-medium text-[#525252]">
               {matchCount} match{matchCount !== 1 ? "es" : ""}
             </span>
-            <span className="text-[11px] font-normal text-[#999999]">
+            <span className="text-[11px] font-normal text-[#888888]">
               {wins}W – {losses}L
             </span>
           </div>

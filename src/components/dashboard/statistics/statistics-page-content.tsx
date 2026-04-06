@@ -60,7 +60,7 @@ export function StatisticsPageContent({
           <ChartColumnIncreasing className="h-8 w-8 text-[#CCCCCC]" />
         </div>
         <p className="font-semibold text-[#0D0D0D] mb-1">No statistics yet</p>
-        <p className="text-sm text-[#999999] max-w-xs">
+        <p className="text-sm text-[#888888] max-w-xs">
           Upload your first match to see your performance analytics here.
         </p>
       </div>
@@ -76,7 +76,7 @@ export function StatisticsPageContent({
             key={item.label}
             className="flex flex-col gap-1 bg-[#F7F7F7] rounded-xl px-4 py-3 min-w-[120px]"
           >
-            <span className="text-[10px] font-medium text-[#999999] uppercase tracking-wide">
+            <span className="text-[10px] font-medium text-[#888888] uppercase tracking-wide">
               {item.label}
             </span>
             <div className="flex items-center gap-1.5">

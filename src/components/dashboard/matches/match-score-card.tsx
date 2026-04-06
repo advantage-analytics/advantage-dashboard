@@ -24,7 +24,7 @@ export function MatchScoreCard({ match }: MatchScoreCardProps) {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, delay: 0.03, ease: [...EASE_CURVE] }}
       >
-        <span className="text-xs font-medium text-[#999999]">
+        <span className="text-xs font-medium text-[#888888]">
           {match.matchContext}
         </span>
         <span className="px-1.5 py-0.5 rounded-[10px] bg-[#6AABFF] text-xs font-medium text-white">
@@ -50,7 +50,7 @@ export function MatchScoreCard({ match }: MatchScoreCardProps) {
               className={`text-sm font-semibold truncate ${
                 match.score.winner === "player1"
                   ? "text-[#0D0D0D]"
-                  : "text-[#999999]"
+                  : "text-[#888888]"
               }`}
             >
               {shortName(match.player1.name)}
@@ -63,7 +63,7 @@ export function MatchScoreCard({ match }: MatchScoreCardProps) {
                 className={`text-lg font-semibold ${
                   set.player1 > set.player2
                     ? "text-[#0D0D0D]"
-                    : "text-[#999999]"
+                    : "text-[#888888]"
                 }`}
               >
                 {set.player1}
@@ -89,7 +89,7 @@ export function MatchScoreCard({ match }: MatchScoreCardProps) {
               className={`text-sm font-semibold truncate ${
                 match.score.winner === "player2"
                   ? "text-[#0D0D0D]"
-                  : "text-[#999999]"
+                  : "text-[#888888]"
               }`}
             >
               {shortName(match.player2.name)}
@@ -102,7 +102,7 @@ export function MatchScoreCard({ match }: MatchScoreCardProps) {
                 className={`text-lg font-semibold ${
                   set.player2 > set.player1
                     ? "text-[#0D0D0D]"
-                    : "text-[#999999]"
+                    : "text-[#888888]"
                 }`}
               >
                 {set.player2}

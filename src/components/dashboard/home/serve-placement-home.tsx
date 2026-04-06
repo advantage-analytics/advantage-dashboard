@@ -223,11 +223,11 @@ export default function ServePlacementHome() {
       </div>
 
       {/* Court area */}
-      <div className="bg-[#F7FAFC] h-[415px] rounded-[4px]">
+      <div className="bg-[#F7FAFC] h-[415px]">
         <div className="flex items-center justify-center p-6 h-full">
           {loading ? (
             <div className="w-full flex items-center justify-center">
-              <p className="text-[12px] text-[#999999]">Loading&hellip;</p>
+              <p className="text-[12px] text-[#888888]">Loading&hellip;</p>
             </div>
           ) : (
             <div className="w-full max-w-[447px]">
@@ -255,7 +255,7 @@ export default function ServePlacementHome() {
         </div>
         <Link
           href="/dashboard/matches"
-          className="text-[9px] font-medium text-[#3B82F6] uppercase tracking-[1.5px] transition-[color,transform] duration-200 ease-out hover:text-[#2D6FD9] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#3986F3] focus-visible:ring-offset-2 rounded-sm"
+          className="text-[9px] font-medium text-[#3B82F6] uppercase tracking-[1.5px] transition-[color,transform] duration-200 ease-out hover:text-[#2563EB] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2 rounded-sm"
         >
           FULL COURT VIEW
         </Link>

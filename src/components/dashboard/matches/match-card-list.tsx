@@ -57,7 +57,7 @@ export function MatchCardList({ match }: MatchCardListProps): React.JSX.Element 
       {/* Match Type */}
       <div className="min-w-0">
         {match.matchType ? (
-          <span className="text-[12px] text-[#999999] capitalize truncate block">{match.matchType}</span>
+          <span className="text-[12px] text-[#888888] capitalize truncate block">{match.matchType}</span>
         ) : (
           <span className="text-[12px] text-[#D9D9D9]">&mdash;</span>
         )}
@@ -66,7 +66,7 @@ export function MatchCardList({ match }: MatchCardListProps): React.JSX.Element 
       {/* Court Type */}
       <div className="min-w-0">
         {match.courtType ? (
-          <span className="text-[12px] text-[#999999] capitalize truncate block">{match.courtType}</span>
+          <span className="text-[12px] text-[#888888] capitalize truncate block">{match.courtType}</span>
         ) : (
           <span className="text-[12px] text-[#D9D9D9]">&mdash;</span>
         )}
@@ -74,13 +74,13 @@ export function MatchCardList({ match }: MatchCardListProps): React.JSX.Element 
 
       {/* Date */}
       <div className="min-w-0">
-        <span className="text-[12px] text-[#999999] tabular-nums whitespace-nowrap">{match.date}</span>
+        <span className="text-[12px] text-[#888888] tabular-nums whitespace-nowrap">{match.date}</span>
       </div>
 
       {/* Duration */}
       <div className="min-w-0">
         {match.duration ? (
-          <span className="text-[12px] text-[#999999] tabular-nums">{match.duration}</span>
+          <span className="text-[12px] text-[#888888] tabular-nums">{match.duration}</span>
         ) : (
           <span className="text-[12px] text-[#D9D9D9]">&mdash;</span>
         )}
@@ -89,7 +89,7 @@ export function MatchCardList({ match }: MatchCardListProps): React.JSX.Element 
       {/* Source */}
       <div className="min-w-0">
         {provider ? (
-          <span className="text-[12px] text-[#999999] truncate block">{provider.name}</span>
+          <span className="text-[12px] text-[#888888] truncate block">{provider.name}</span>
         ) : (
           <span className="text-[12px] text-[#D9D9D9]">&mdash;</span>
         )}

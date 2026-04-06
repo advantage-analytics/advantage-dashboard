@@ -42,7 +42,7 @@ export default function AIInsight() {
           <div className="flex items-center gap-4">
             <button
               type="button"
-              className="text-[9px] font-medium uppercase tracking-[1.5px] text-[#3986F3] transition-colors duration-200 hover:text-[#2D6FD9] active:scale-[0.97]"
+              className="text-[9px] font-medium uppercase tracking-[1.5px] text-[#3B82F6] transition-colors duration-200 hover:text-[#2563EB] active:scale-[0.97]"
             >
               View Analysis
             </button>

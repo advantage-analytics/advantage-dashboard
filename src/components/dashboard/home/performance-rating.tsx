@@ -7,7 +7,7 @@ export function PerformanceRating({
 }) {
   return (
     <div className="flex items-center justify-between px-1 py-4">
-      <span className="text-xs font-medium text-[#999999] uppercase tracking-[1.6px]">
+      <span className="text-xs font-medium text-[#888888] uppercase tracking-[1.6px]">
         {label}
       </span>
       <span className="text-xl font-medium text-[#525252] leading-[1.1] tabular-nums">

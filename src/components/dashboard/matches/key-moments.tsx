@@ -66,11 +66,11 @@ export function KeyMoments({ points, match }: KeyMomentsProps) {
     <div className="w-[320px] bg-white rounded-[16px] border border-[#E7E7E7] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)] px-6 py-4">
       <div className="mb-4">
         <h3 className="text-base font-medium text-[#0D0D0D]">Key Moments</h3>
-        <p className="text-xs text-[#999999] mt-0.5">Game-by-game momentum</p>
+        <p className="text-xs text-[#888888] mt-0.5">Game-by-game momentum</p>
       </div>
 
       {moments.length === 0 ? (
-        <p className="text-sm text-[#999999] text-center py-6">
+        <p className="text-sm text-[#888888] text-center py-6">
           No key moments available for this match.
         </p>
       ) : (
@@ -95,10 +95,10 @@ export function KeyMoments({ points, match }: KeyMomentsProps) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-[#0D0D0D]">{moment.title}</p>
-                  <p className="text-xs text-[#999999] mt-0.5 line-clamp-2">
+                  <p className="text-xs text-[#888888] mt-0.5 line-clamp-2">
                     {moment.description}
                   </p>
-                  <span className="inline-block mt-1 text-[10px] font-medium text-[#999999] bg-[#F5F5F5] px-2 py-0.5 rounded-full uppercase tracking-wide">
+                  <span className="inline-block mt-1 text-[10px] font-medium text-[#888888] bg-[#F5F5F5] px-2 py-0.5 rounded-full uppercase tracking-wide">
                     {moment.context}
                   </span>
                 </div>

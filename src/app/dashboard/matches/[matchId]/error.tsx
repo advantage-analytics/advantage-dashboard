@@ -24,7 +24,7 @@ export default function Error({
           <h1 className="font-medium text-2xl text-[#0D0D0D]">
             Something went wrong
           </h1>
-          <p className="font-normal text-base text-[#999999]">
+          <p className="font-normal text-base text-[#888888]">
             We couldn't load this match. Please try again.
           </p>
           <button

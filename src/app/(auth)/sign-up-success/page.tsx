@@ -50,7 +50,7 @@ export default function Page() {
         <button
           type="button"
           onClick={() => window.open("mailto:", "_blank")}
-          className="flex h-[44px] w-full items-center justify-center rounded-[6px] border border-[rgba(59,130,246,0.25)] bg-[rgba(59,130,246,0.08)] text-[13px] font-medium tracking-[1px] text-[var(--color-accent-blue)] transition-all duration-200 hover:border-[var(--color-accent-blue)] active:scale-[0.98]"
+          className="flex h-[44px] w-full items-center justify-center rounded-[6px] border border-[rgba(59,130,246,0.25)] bg-[rgba(59,130,246,0.08)] text-[13px] font-medium tracking-[1px] text-[var(--color-accent-blue)] transition-all duration-200 hover:border-[var(--color-accent-blue)] active:scale-[0.97]"
         >
           Open Email App
         </button>

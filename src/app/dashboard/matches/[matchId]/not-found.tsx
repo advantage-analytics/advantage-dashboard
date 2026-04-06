@@ -10,7 +10,7 @@ export default function NotFound() {
             <Calendars className="h-8 w-8 text-gray-400" />
           </div>
           <h1 className="font-medium text-2xl text-[#0D0D0D]">Match Not Found</h1>
-          <p className="font-normal text-base text-[#999999]">
+          <p className="font-normal text-base text-[#888888]">
             The match you're looking for doesn't exist or has been removed.
           </p>
           <Link

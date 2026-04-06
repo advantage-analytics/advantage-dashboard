@@ -31,7 +31,7 @@ export const SettingsInput = forwardRef<HTMLInputElement, SettingsInputProps>(
             "border bg-[#FAFAFA]",
             disabled
               ? "text-[#999] border-[#E5E5E5] cursor-not-allowed"
-              : "text-[#0D0D0D] border-[#E5E5E5] hover:border-[#CCCCCC] focus:border-[#3986F3] focus:ring-2 focus:ring-[#3986F3]/10 focus:bg-white placeholder:text-[#999]",
+              : "text-[#0D0D0D] border-[#E5E5E5] hover:border-[#CCCCCC] focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/10 focus:bg-white placeholder:text-[#999]",
             className
           )}
           {...props}
