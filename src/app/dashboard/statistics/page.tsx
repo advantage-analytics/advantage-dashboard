@@ -15,7 +15,7 @@ export default async function StatisticsPage(): Promise<React.JSX.Element> {
           <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[3px]">
             {allMatches.length} {allMatches.length === 1 ? "MATCH" : "MATCHES"} ANALYZED
           </p>
-          <h1 className="font-light text-[30px] text-[#0D0D0D] tracking-[-0.6px] leading-[30px] mt-2">
+          <h1 className="font-light text-[30px] text-[#0D0D0D] tracking-[-0.6px] leading-[36px] mt-3">
             Statistics
           </h1>
           <p className="text-[12px] font-normal text-[#71717A] mt-1.5">
