@@ -72,6 +72,28 @@
   --color-error: #FF453A;
   --color-error-bg: rgba(255, 69, 58, 0.08);
   --color-accent-blue-glow: rgba(59, 130, 246, 0.15);
+  --color-text-tertiary: #525252;
+  --color-text-change: #777777;
+  --color-icon-inactive: #8A8A8E;
+  --color-text-loser: #B3B3B3;
+  --color-text-disabled: #BFBFBF;
+  --color-text-separator: #CCCCCC;
+  --color-bg-page: #FFFFFF;
+  --color-bg-subtle: #FAFAFA;
+  --color-bg-muted: #F5F5F5;
+  --color-bg-input: #F2F2F2;
+  --color-bg-disabled: #F7F7F7;
+  --color-border-card: #F3F3F3;
+  --color-border-default: #E7E7E7;
+  --color-divider: #F0F0F0;
+  --color-border-active: #EBEBEB;
+  --color-accent-blue-light: #EBF2FD;
+  --color-success: #5DB955;
+  --color-success-bg: rgba(93,185,85,0.1);
+  --color-danger: #E51837;
+  --color-danger-bg: rgba(229,24,55,0.1);
+  --color-dark-action: #1D1D1F;
+  --color-dark-hover: #3C3C43;
 
   --radius: 0.625rem;
   --background: oklch(1 0 0);

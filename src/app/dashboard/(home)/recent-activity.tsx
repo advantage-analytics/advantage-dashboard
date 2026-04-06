@@ -241,7 +241,7 @@ export default function RecentActivity() {
           className="flex flex-col items-center justify-center py-12 px-4 text-center"
           data-state="empty"
         >
-          <div className="rounded-full bg-[#F5F5F5] p-4 mb-4">
+          <div className="rounded-full bg-[var(--color-bg-muted)] p-4 mb-4">
             <Inbox className="h-8 w-8 text-[#999999]" aria-hidden />
           </div>
           <p className="font-medium text-[#000000] mb-1">No matches yet</p>

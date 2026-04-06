@@ -85,7 +85,7 @@ export default function RecentMatches({
                     </>
                   )}
                 </div>
-                <span className="rounded-[10px] px-1.5 py-0.5 text-xs font-medium bg-[#F3F3F3] text-[#999999] group-hover:bg-[#6AABFF] group-hover:text-white transition-colors">
+                <span className="rounded-[10px] px-1.5 py-0.5 text-xs font-medium bg-[var(--color-border-card)] text-[#999999] group-hover:bg-[#6AABFF] group-hover:text-white transition-colors">
                   {match.duration}
                 </span>
               </div>
@@ -99,7 +99,7 @@ export default function RecentMatches({
                       </span>
                     </div>
                     <p
-                      className={`font-semibold text-sm ${match.score.winner === "player1" ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}`}
+                      className={`font-semibold text-sm ${match.score.winner === "player1" ? "text-[var(--color-text-primary)]" : "text-[#B3B3B3]"}`}
                     >
                       {match.player1.name}
                     </p>
@@ -110,7 +110,7 @@ export default function RecentMatches({
                         key={idx}
                         className={
                           set.player1 > set.player2
-                            ? "text-[#0D0D0D]"
+                            ? "text-[var(--color-text-primary)]"
                             : "text-[#B3B3B3]"
                         }
                       >
@@ -127,7 +127,7 @@ export default function RecentMatches({
                       </span>
                     </div>
                     <p
-                      className={`font-semibold text-sm ${match.score.winner === "player2" ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}`}
+                      className={`font-semibold text-sm ${match.score.winner === "player2" ? "text-[var(--color-text-primary)]" : "text-[#B3B3B3]"}`}
                     >
                       {match.player2.name}
                     </p>
@@ -138,7 +138,7 @@ export default function RecentMatches({
                         key={idx}
                         className={
                           set.player2 > set.player1
-                            ? "text-[#0D0D0D]"
+                            ? "text-[var(--color-text-primary)]"
                             : "text-[#B3B3B3]"
                         }
                       >
