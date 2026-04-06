@@ -1,12 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { motion, useReducedMotion } from "framer-motion";
 import type { Match } from "@/lib/data/types";
 import type { MatchStatisticsResult } from "@/lib/data/match-stats-server";
 import { shortName, PLAYER_COLORS } from "@/lib/data/match-utils";
 
-/* ── Private sub-components ───────────────────────────────── */
+const EASE = [0.25, 0.46, 0.45, 0.94] as const;
+
+const CARD_CLASS =
+  "bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5";
+
+/* ── Private sub-components (shared) ─────────────────────── */
+
+function SectionHeader({ children }: { children: string }) {
+  return (
+    <div className="text-[10px] font-medium tracking-[2.5px] uppercase text-[#AAAAAA]">
+      {children}
+    </div>
+  );
+}
 
 function PlayerTabs({
   match,
@@ -18,114 +32,22 @@ function PlayerTabs({
   onSelectPlayer: (p: "player1" | "player2") => void;
 }) {
   return (
-    <div className="flex flex-row shadow-[inset_0_-1px_0_0_#D9D9D9]">
-      <button
-        type="button"
-        onClick={() => onSelectPlayer("player1")}
-        className={`h-[31px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
-          selectedPlayer === "player1"
-            ? "text-[#3986F3] border-[#3986F3]"
-            : "text-[#999999] border-transparent hover:text-[#666666]"
-        }`}
-      >
-        {shortName(match.player1.name)}
-      </button>
-      <button
-        type="button"
-        onClick={() => onSelectPlayer("player2")}
-        className={`h-[31px] flex-1 py-2 px-4 text-xs font-medium border-b-2 transition-colors ${
-          selectedPlayer === "player2"
-            ? "text-[#F38439] border-[#F38439]"
-            : "text-[#999999] border-transparent hover:text-[#666666]"
-        }`}
-      >
-        {shortName(match.player2.name)}
-      </button>
-    </div>
-  );
-}
-
-function WinningPercentageCircle({
-  percentage,
-  won,
-  total,
-  label,
-  barColor,
-}: {
-  percentage: number;
-  won: number;
-  total: number;
-  label: string;
-  barColor: string;
-}) {
-  const r = 45;
-  const circumference = 2 * Math.PI * r;
-  const strokeDashoffset = circumference - (percentage / 100) * circumference;
-
-  return (
-    <div className="flex flex-row py-3 items-center gap-4">
-      <div className="relative w-[100px] h-[100px] shrink-0">
-        <svg
-          className="w-full h-full -rotate-90"
-          viewBox="0 0 100 100"
-          aria-hidden
+    <div className="flex flex-row gap-2">
+      {(["player1", "player2"] as const).map((p) => (
+        <button
+          key={p}
+          type="button"
+          onClick={() => onSelectPlayer(p)}
+          className={`h-8 rounded-full px-3.5 text-xs font-medium ring-1 ring-inset transition-colors duration-200 ${
+            selectedPlayer === p
+              ? "ring-[#3B82F6] text-[#3B82F6] bg-[#EBF2FD]"
+              : "ring-[#D9D9D9] text-[#525252] bg-white"
+          }`}
         >
-          <circle
-            cx="50"
-            cy="50"
-            r={r}
-            fill="none"
-            stroke="#D9D9D9"
-            strokeWidth="10"
-          />
-          <circle
-            cx="50"
-            cy="50"
-            r={r}
-            fill="none"
-            stroke={barColor}
-            strokeWidth="10"
-            strokeLinecap="round"
-            strokeDasharray={circumference}
-            strokeDashoffset={strokeDashoffset}
-            className="transition-[stroke-dashoffset] duration-500"
-          />
-        </svg>
-      </div>
-      <div className="flex flex-col justify-center gap-1">
-        <span className="font-medium text-2xl leading-tight uppercase text-black">
-          {percentage.toFixed(1)}%{" "}
-          <span className="text-xs">{`(${won}/${total})`}</span>
-        </span>
-        <span className="text-sm font-normal text-[#999999]">{label}</span>
-      </div>
+          {shortName(match[p].name)}
+        </button>
+      ))}
     </div>
-  );
-}
-
-function SectionHeader({ children }: { children: string }) {
-  return (
-    <div className="text-xs font-medium tracking-[0.16em] uppercase text-[#525252]">
-      {children}
-    </div>
-  );
-}
-
-function ViewMoreButton({
-  showMore,
-  onToggle,
-}: {
-  showMore: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className="block text-center text-xs font-medium text-[#999999] hover:text-[#666666] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#999999] rounded-sm"
-    >
-      {showMore ? "View less" : "View more"}
-    </button>
   );
 }
 
@@ -134,67 +56,109 @@ function PercentageBarRow({
   valuePct,
   fillPct,
   barColor,
+  index = 0,
+  reduceMotion = false,
 }: {
   label: string;
   valuePct: number;
   fillPct: number;
   barColor: string;
+  index?: number;
+  reduceMotion?: boolean;
 }) {
   const pct = Math.min(100, Math.max(0, fillPct));
-
   return (
-    <div className="flex flex-col gap-3 self-stretch">
+    <motion.div
+      className="flex flex-col gap-3 self-stretch"
+      initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: EASE, delay: index * 0.04 }}
+    >
       <div className="flex flex-row justify-between items-end self-stretch">
-        <span className="text-xs font-normal text-[#999999] leading-[1.1]">
-          {label}
-        </span>
-        <span className="text-[16px] leading-[1.1] font-medium text-[#525252] tabular-nums">
+        <span className="text-[12px] text-[#525252]">{label}</span>
+        <span className="text-[13px] font-medium text-[#0D0D0D] tabular-nums">
           {valuePct}%
         </span>
       </div>
-      <div className="h-[6px] w-full bg-[#D9D9D9] rounded-full overflow-hidden">
+      <div className="h-2 w-full bg-[#F3F3F3] rounded-full overflow-hidden">
         <div
           className="h-full rounded-full"
           style={{ width: `${pct}%`, backgroundColor: barColor }}
         />
       </div>
-    </div>
+    </motion.div>
   );
 }
 
 function MetricRow({
   label,
   value,
+  index = 0,
+  reduceMotion = false,
 }: {
   label: string;
   value: string;
+  index?: number;
+  reduceMotion?: boolean;
 }) {
   return (
-    <div className="flex flex-row justify-between items-center self-stretch">
-      <div className="flex flex-row items-center gap-2">
-        <span className="text-xs font-normal leading-none text-[#999999]">
-          {label}
-        </span>
-      </div>
-      <span className="text-xl leading-none font-medium text-[#525252] tabular-nums">
+    <motion.div
+      className="flex flex-row justify-between items-center self-stretch"
+      initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: EASE, delay: index * 0.04 }}
+    >
+      <span className="text-[12px] text-[#525252]">{label}</span>
+      <span className="text-[13px] font-medium text-[#0D0D0D] tabular-nums">
         {value}
       </span>
-    </div>
+    </motion.div>
   );
 }
 
-function PerformanceRow({ label, value }: { label: string; value: number }) {
-  const displayValue = value.toFixed(1);
-
+function StatHero({
+  pct,
+  won,
+  total,
+  label,
+  barColor,
+}: {
+  pct: number;
+  won: number;
+  total: number;
+  label: string;
+  barColor: string;
+}) {
+  const clampedPct = Math.min(100, Math.max(0, pct));
   return (
-    <div className="flex flex-col gap-3 w-full self-stretch">
-      <div className="h-[15px] flex flex-row justify-between items-center self-stretch">
-        <span className="text-xs font-regular text-[#999999] leading-none">
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col items-center gap-1 py-2">
+        <motion.span
+          key={`${barColor}-${pct}`}
+          className="text-[48px] font-bold tabular-nums leading-none"
+          style={{ color: barColor }}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: EASE }}
+        >
+          {clampedPct.toFixed(1)}%
+        </motion.span>
+        <span className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] text-center">
           {label}
         </span>
-        <span className="font-medium text-xl items-center leading-none uppercase text-[#525252]">
-          {displayValue}
+        <span className="text-[12px] tabular-nums text-[#525252] font-medium">
+          {won} / {total} pts
         </span>
+      </div>
+      <div className="h-2 w-full bg-[#F3F3F3] rounded-full overflow-hidden">
+        <motion.div
+          key={`bar-${barColor}-${pct}`}
+          className="h-full rounded-full"
+          style={{ backgroundColor: barColor }}
+          initial={{ width: 0 }}
+          animate={{ width: `${clampedPct}%` }}
+          transition={{ duration: 0.85, ease: EASE }}
+        />
       </div>
     </div>
   );
@@ -211,10 +175,12 @@ export function MatchOverallSidebar({
   match,
   statsResult,
 }: MatchOverallSidebarProps) {
+  const prefersReducedMotion = useReducedMotion();
+  const reduced = !!prefersReducedMotion;
+
   const [selectedPlayer, setSelectedPlayer] = useState<"player1" | "player2">(
     "player1",
   );
-  const [showMore, setShowMore] = useState(false);
 
   const playerStats = statsResult?.statistics
     ? selectedPlayer === "player1"
@@ -228,71 +194,84 @@ export function MatchOverallSidebar({
 
   const barColor = PLAYER_COLORS[selectedPlayer];
 
-  const serveRating = playerStats?.serveRating ?? 0;
-  const returnRating = playerStats?.returnRating ?? 0;
-  const underPressureRating = playerStats?.underPressureRating ?? 0;
-
   return (
-    <div className="w-[320px] flex flex-col gap-6 px-6 py-4 bg-white rounded-2xl border border-[rgba(0,0,0,0.06)] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
-      <PlayerTabs
-        match={match}
-        selectedPlayer={selectedPlayer}
-        onSelectPlayer={setSelectedPlayer}
-      />
+    <div className="w-[320px] flex flex-col gap-5">
+      {/* Points Won card */}
+      <div className={`flex flex-col gap-5 ${CARD_CLASS}`}>
+        <PlayerTabs
+          match={match}
+          selectedPlayer={selectedPlayer}
+          onSelectPlayer={setSelectedPlayer}
+        />
 
-      <WinningPercentageCircle
-        percentage={winningPct}
-        won={totalPointsWon}
-        total={totalPoints}
-        label="Winning Percentage"
-        barColor={barColor}
-      />
+        <StatHero
+          pct={winningPct}
+          won={totalPointsWon}
+          total={totalPoints}
+          label="Winning Percentage"
+          barColor={barColor}
+        />
+      </div>
 
-      <div className="flex flex-col items-stretch gap-5">
-        <SectionHeader>Performance breakdown</SectionHeader>
-        <div className="flex flex-col gap-4">
-          <PerformanceRow label="Serve Rating" value={serveRating} />
-          <div className="h-px w-full bg-[#D9D9D9] self-stretch" />
-          <PerformanceRow label="Return Rating" value={returnRating} />
-          <div className="h-px w-full bg-[#D9D9D9] self-stretch" />
-          <PerformanceRow
-            label="Under Pressure Rating"
-            value={underPressureRating}
+      {/* Performance breakdown card */}
+      <div className={`flex flex-col gap-5 ${CARD_CLASS}`}>
+        <SectionHeader>Performance Breakdown</SectionHeader>
+        <div className="flex flex-col gap-2.5">
+          <MetricRow
+            label="Serve Rating"
+            value={(playerStats?.serveRating ?? 0).toFixed(1)}
+            index={0}
+            reduceMotion={reduced}
           />
-          <div className="h-px w-full bg-[#D9D9D9] self-stretch" />
+          <div className="h-px bg-[#F0F0F0]" />
+          <MetricRow
+            label="Return Rating"
+            value={(playerStats?.returnRating ?? 0).toFixed(1)}
+            index={1}
+            reduceMotion={reduced}
+          />
+          <div className="h-px bg-[#F0F0F0]" />
+          <MetricRow
+            label="Under Pressure Rating"
+            value={(playerStats?.underPressureRating ?? 0).toFixed(1)}
+            index={2}
+            reduceMotion={reduced}
+          />
         </div>
       </div>
 
-      {showMore && (
-        <div className="flex flex-col gap-5">
-          <SectionHeader>Rally Win Percentage</SectionHeader>
-          <div className="flex flex-col gap-4">
-            <PercentageBarRow
-              label="1-4 shots"
-              valuePct={playerStats?.shortRallyWonPct ?? 0}
-              fillPct={playerStats?.shortRallyWonPct ?? 0}
-              barColor={barColor}
-            />
-            <PercentageBarRow
-              label="5-9 shots"
-              valuePct={playerStats?.mediumRallyWonPct ?? 0}
-              fillPct={playerStats?.mediumRallyWonPct ?? 0}
-              barColor={barColor}
-            />
-            <PercentageBarRow
-              label="10+ shots"
-              valuePct={playerStats?.longRallyWonPct ?? 0}
-              fillPct={playerStats?.longRallyWonPct ?? 0}
-              barColor={barColor}
-            />
-          </div>
+      {/* Rally Win Percentage card */}
+      <div className={`flex flex-col gap-5 ${CARD_CLASS}`}>
+        <SectionHeader>Rally Win Percentage</SectionHeader>
+        <div className="flex flex-col gap-4">
+          <PercentageBarRow
+            label="1-4 shots"
+            valuePct={playerStats?.shortRallyWonPct ?? 0}
+            fillPct={playerStats?.shortRallyWonPct ?? 0}
+            barColor={barColor}
+            index={0}
+            reduceMotion={reduced}
+          />
+          <div className="h-px bg-[#F0F0F0]" />
+          <PercentageBarRow
+            label="5-9 shots"
+            valuePct={playerStats?.mediumRallyWonPct ?? 0}
+            fillPct={playerStats?.mediumRallyWonPct ?? 0}
+            barColor={barColor}
+            index={1}
+            reduceMotion={reduced}
+          />
+          <div className="h-px bg-[#F0F0F0]" />
+          <PercentageBarRow
+            label="10+ shots"
+            valuePct={playerStats?.longRallyWonPct ?? 0}
+            fillPct={playerStats?.longRallyWonPct ?? 0}
+            barColor={barColor}
+            index={2}
+            reduceMotion={reduced}
+          />
         </div>
-      )}
-
-      <ViewMoreButton
-        showMore={showMore}
-        onToggle={() => setShowMore((v) => !v)}
-      />
+      </div>
     </div>
   );
 }
@@ -306,22 +285,16 @@ export function MatchVisualsSidebar({
   match,
   statsResult,
 }: MatchVisualsSidebarProps) {
+  const prefersReducedMotion = useReducedMotion();
+  const reduced = !!prefersReducedMotion;
   const searchParams = useSearchParams();
   const vizParam = searchParams.get("viz");
   const breakdownView: "serve" | "return" =
     vizParam === "return" ? "return" : "serve";
 
   const [selectedPlayer, setSelectedPlayer] = useState<"player1" | "player2">(
-    "player1"
+    "player1",
   );
-  const [showMore, setShowMore] = useState(false);
-  const [prevBreakdownView, setPrevBreakdownView] = useState(breakdownView);
-
-  // Derive state during render instead of useEffect
-  if (prevBreakdownView !== breakdownView) {
-    setPrevBreakdownView(breakdownView);
-    setShowMore(false);
-  }
 
   const playerStats = statsResult?.statistics
     ? selectedPlayer === "player1"
@@ -331,21 +304,6 @@ export function MatchVisualsSidebar({
 
   const barColor = PLAYER_COLORS[selectedPlayer];
 
-  // Serve breakdown values
-  const firstServeInPct = playerStats?.firstServeInPct ?? 0;
-  const firstServeWonPct = playerStats?.firstServeWinPct ?? 0;
-  const secondServeWonPct = playerStats?.secondServeWinPct ?? 0;
-  const serviceGamesWonPct = playerStats?.serviceGamesWonPct ?? 0;
-  const aces = playerStats?.aces ?? 0;
-  const doubleFaults = playerStats?.doubleFaults ?? 0;
-
-  // Return breakdown values (percentages)
-  const firstReturnWonPct = playerStats?.firstReturnWonPct ?? 0;
-  const secondReturnWonPct = playerStats?.secondReturnWonPct ?? 0;
-  const returnGamesWonPct = playerStats?.returnGamesWonPct ?? 0;
-  const breakpointsWonPct = playerStats?.breakpointsWonPct ?? 0;
-
-  // Circle values
   const totalPoints = playerStats?.totalPoints ?? 0;
   const servicePointsWon = playerStats?.servicePointsWon ?? 0;
   const returnPointsWon = playerStats?.returnPointsWon ?? 0;
@@ -357,96 +315,105 @@ export function MatchVisualsSidebar({
       ? "Total Serve Points Won"
       : "Total Return Points Won";
 
+  const serveMetrics = [
+    { label: "First Serve Points In", value: `${Math.round(playerStats?.firstServeInPct ?? 0)}%` },
+    { label: "First Serve Points Won", value: `${Math.round(playerStats?.firstServeWinPct ?? 0)}%` },
+    { label: "Second Serve Points Won", value: `${Math.round(playerStats?.secondServeWinPct ?? 0)}%` },
+    { label: "Service Games Won", value: `${playerStats?.serviceGamesWonPct ?? 0}%` },
+    { label: "Aces", value: (playerStats?.aces ?? 0).toFixed(1) },
+    { label: "Double Faults", value: (playerStats?.doubleFaults ?? 0).toFixed(1) },
+  ];
+
+  const returnMetrics = [
+    { label: "First Serve Returns Won", value: `${playerStats?.firstReturnWonPct ?? 0}%` },
+    { label: "Second Serve Returns Won", value: `${playerStats?.secondReturnWonPct ?? 0}%` },
+    { label: "Return Games Won", value: `${playerStats?.returnGamesWonPct ?? 0}%` },
+    { label: "Break Points Won", value: `${playerStats?.breakpointsWonPct ?? 0}%` },
+  ];
+
+  const metrics = breakdownView === "serve" ? serveMetrics : returnMetrics;
+
   return (
-    <div className="w-[320px] flex flex-col gap-6 px-6 py-4 bg-white rounded-2xl border border-[rgba(0,0,0,0.06)] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
-      <PlayerTabs
-        match={match}
-        selectedPlayer={selectedPlayer}
-        onSelectPlayer={setSelectedPlayer}
-      />
+    <div className="w-[320px] flex flex-col gap-5">
+      {/* Player selection + stat hero card */}
+      <div className={`flex flex-col gap-5 ${CARD_CLASS}`}>
+        <SectionHeader>Shot Analysis</SectionHeader>
 
-      <WinningPercentageCircle
-        percentage={circlePct}
-        won={circleWon}
-        total={totalPoints}
-        label={circleLabel}
-        barColor={barColor}
-      />
+        <PlayerTabs
+          match={match}
+          selectedPlayer={selectedPlayer}
+          onSelectPlayer={setSelectedPlayer}
+        />
 
-      <div className="flex flex-col items-stretch gap-5">
+        <StatHero
+          key={`${selectedPlayer}-${breakdownView}`}
+          pct={circlePct}
+          won={circleWon}
+          total={totalPoints}
+          label={circleLabel}
+          barColor={barColor}
+        />
+      </div>
+
+      {/* Breakdown card */}
+      <div className={`flex flex-col gap-5 ${CARD_CLASS}`}>
         <SectionHeader>
           {breakdownView === "serve" ? "Serve Breakdown" : "Return Breakdown"}
         </SectionHeader>
-
-        <div className="flex flex-col gap-4 self-stretch">
-          {breakdownView === "serve" ? (
-            <>
-              <MetricRow label="First Serve Points In" value={`${Math.round(firstServeInPct)}%`} />
-              <div className="h-px w-full bg-[#D9D9D9] self-stretch" />
-              <MetricRow label="First Serve Points Won" value={`${Math.round(firstServeWonPct)}%`} />
-              <div className="h-px w-full bg-[#D9D9D9] self-stretch" />
-              <MetricRow label="Second Serve Points Won" value={`${Math.round(secondServeWonPct)}%`} />
-              <div className="h-px w-full bg-[#D9D9D9] self-stretch" />
-              <MetricRow label="Service Games Won" value={`${serviceGamesWonPct}%`} />
-              <div className="h-px w-full bg-[#D9D9D9] self-stretch" />
-              <MetricRow label="Aces" value={aces.toFixed(1)} />
-              <div className="h-px w-full bg-[#D9D9D9] self-stretch" />
-              <MetricRow label="Double Faults" value={doubleFaults.toFixed(1)} />
-            </>
-          ) : (
-            <>
-              <MetricRow label="First Serve Returns Won" value={`${firstReturnWonPct}%`} />
-              <div className="h-px w-full bg-[#D9D9D9] self-stretch" />
-              <MetricRow label="Second Serve Returns Won" value={`${secondReturnWonPct}%`} />
-              <div className="h-px w-full bg-[#D9D9D9] self-stretch" />
-              <MetricRow label="Return Games Won" value={`${returnGamesWonPct}%`} />
-              <div className="h-px w-full bg-[#D9D9D9] self-stretch" />
-              <MetricRow label="Break Points Won" value={`${breakpointsWonPct}%`} />
-            </>
-          )}
+        <div className="flex flex-col gap-2.5">
+          {metrics.map((m, i) => (
+            <Fragment key={m.label}>
+              {i > 0 && <div className="h-px bg-[#F0F0F0]" />}
+              <MetricRow
+                label={m.label}
+                value={m.value}
+                index={i}
+                reduceMotion={reduced}
+              />
+            </Fragment>
+          ))}
         </div>
       </div>
 
-      {breakdownView === "return" && showMore && (
-        <div className="flex flex-col items-stretch gap-5">
-          <SectionHeader>Return Placement Distribution</SectionHeader>
-
-          <div className="flex flex-col gap-5 self-stretch">
-            <PercentageBarRow label="Cross Court" valuePct={playerStats?.returnCrossCourtPct ?? 0} fillPct={playerStats?.returnCrossCourtPct ?? 0} barColor={barColor} />
-            <PercentageBarRow label="Down The Line" valuePct={playerStats?.returnDownTheLinePct ?? 0} fillPct={playerStats?.returnDownTheLinePct ?? 0} barColor={barColor} />
-            <PercentageBarRow label="Middle" valuePct={playerStats?.returnMiddlePct ?? 0} fillPct={playerStats?.returnMiddlePct ?? 0} barColor={barColor} />
-          </div>
-        </div>
-      )}
-
-      {breakdownView === "return" && showMore && (
-        <div className="flex flex-col items-stretch gap-5">
-          <SectionHeader>Return Contact Distribution</SectionHeader>
-
-          <div className="flex flex-col gap-5 self-stretch">
-            <PercentageBarRow label="Inside" valuePct={playerStats?.returnContactInsidePct ?? 0} fillPct={playerStats?.returnContactInsidePct ?? 0} barColor={barColor} />
-            <PercentageBarRow label="Middle" valuePct={playerStats?.returnContactMiddlePct ?? 0} fillPct={playerStats?.returnContactMiddlePct ?? 0} barColor={barColor} />
-            <PercentageBarRow label="Deep" valuePct={playerStats?.returnContactDeepPct ?? 0} fillPct={playerStats?.returnContactDeepPct ?? 0} barColor={barColor} />
-          </div>
-        </div>
-      )}
-
-      {breakdownView === "serve" && showMore && (
-        <div className="flex flex-col items-stretch gap-5">
+      {/* Placement distribution cards */}
+      {breakdownView === "serve" && (
+        <div className={`flex flex-col gap-5 ${CARD_CLASS}`}>
           <SectionHeader>Serve Placement Distribution</SectionHeader>
-
-          <div className="flex flex-col gap-5 self-stretch">
-            <PercentageBarRow label="Wide" valuePct={playerStats?.serveWidePct ?? 0} fillPct={playerStats?.serveWidePct ?? 0} barColor={barColor} />
-            <PercentageBarRow label="Body" valuePct={playerStats?.serveBodyPct ?? 0} fillPct={playerStats?.serveBodyPct ?? 0} barColor={barColor} />
-            <PercentageBarRow label="T" valuePct={playerStats?.serveTpct ?? 0} fillPct={playerStats?.serveTpct ?? 0} barColor={barColor} />
+          <div className="flex flex-col gap-4">
+            <PercentageBarRow label="Wide" valuePct={playerStats?.serveWidePct ?? 0} fillPct={playerStats?.serveWidePct ?? 0} barColor={barColor} index={0} reduceMotion={reduced} />
+            <div className="h-px bg-[#F0F0F0]" />
+            <PercentageBarRow label="Body" valuePct={playerStats?.serveBodyPct ?? 0} fillPct={playerStats?.serveBodyPct ?? 0} barColor={barColor} index={1} reduceMotion={reduced} />
+            <div className="h-px bg-[#F0F0F0]" />
+            <PercentageBarRow label="T" valuePct={playerStats?.serveTpct ?? 0} fillPct={playerStats?.serveTpct ?? 0} barColor={barColor} index={2} reduceMotion={reduced} />
           </div>
         </div>
       )}
 
-      <ViewMoreButton
-        showMore={showMore}
-        onToggle={() => setShowMore((v) => !v)}
-      />
+      {breakdownView === "return" && (
+        <>
+          <div className={`flex flex-col gap-5 ${CARD_CLASS}`}>
+            <SectionHeader>Return Placement Distribution</SectionHeader>
+            <div className="flex flex-col gap-4">
+              <PercentageBarRow label="Cross Court" valuePct={playerStats?.returnCrossCourtPct ?? 0} fillPct={playerStats?.returnCrossCourtPct ?? 0} barColor={barColor} index={0} reduceMotion={reduced} />
+              <div className="h-px bg-[#F0F0F0]" />
+              <PercentageBarRow label="Down The Line" valuePct={playerStats?.returnDownTheLinePct ?? 0} fillPct={playerStats?.returnDownTheLinePct ?? 0} barColor={barColor} index={1} reduceMotion={reduced} />
+              <div className="h-px bg-[#F0F0F0]" />
+              <PercentageBarRow label="Middle" valuePct={playerStats?.returnMiddlePct ?? 0} fillPct={playerStats?.returnMiddlePct ?? 0} barColor={barColor} index={2} reduceMotion={reduced} />
+            </div>
+          </div>
+
+          <div className={`flex flex-col gap-5 ${CARD_CLASS}`}>
+            <SectionHeader>Return Contact Distribution</SectionHeader>
+            <div className="flex flex-col gap-4">
+              <PercentageBarRow label="Inside" valuePct={playerStats?.returnContactInsidePct ?? 0} fillPct={playerStats?.returnContactInsidePct ?? 0} barColor={barColor} index={0} reduceMotion={reduced} />
+              <div className="h-px bg-[#F0F0F0]" />
+              <PercentageBarRow label="Middle" valuePct={playerStats?.returnContactMiddlePct ?? 0} fillPct={playerStats?.returnContactMiddlePct ?? 0} barColor={barColor} index={1} reduceMotion={reduced} />
+              <div className="h-px bg-[#F0F0F0]" />
+              <PercentageBarRow label="Deep" valuePct={playerStats?.returnContactDeepPct ?? 0} fillPct={playerStats?.returnContactDeepPct ?? 0} barColor={barColor} index={2} reduceMotion={reduced} />
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
