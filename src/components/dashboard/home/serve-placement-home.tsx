@@ -211,13 +211,13 @@ export default function ServePlacementHome() {
   }, [load]);
 
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] overflow-clip">
+    <div className="bg-white border border-[var(--color-border-card)] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] overflow-clip">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4">
-        <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
+        <p className="text-[10px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px]">
           SERVE PLACEMENT
         </p>
-        <p className="text-[10px] font-normal text-[#AAAAAA] uppercase tracking-[1px]">
+        <p className="text-[10px] font-normal text-[var(--color-text-dim)] uppercase tracking-[1px]">
           LAST 4 MATCHES
         </p>
       </div>
@@ -242,20 +242,20 @@ export default function ServePlacementHome() {
         <div className="flex gap-4 items-start">
           <div className="flex gap-1.5 items-center">
             <div className="w-[7px] h-[7px] rounded-full bg-[rgba(59,130,246,0.5)]" aria-hidden="true" />
-            <span className="text-[10px] font-normal text-[#AAAAAA] tracking-[1px]">
+            <span className="text-[10px] font-normal text-[var(--color-text-dim)] tracking-[1px]">
               FIRST SERVE
             </span>
           </div>
           <div className="flex gap-1.5 items-center">
             <div className="w-[7px] h-[7px] rounded-full bg-[rgba(129,140,248,0.5)]" aria-hidden="true" />
-            <span className="text-[10px] font-normal text-[#AAAAAA] tracking-[1px]">
+            <span className="text-[10px] font-normal text-[var(--color-text-dim)] tracking-[1px]">
               SECOND SERVE
             </span>
           </div>
         </div>
         <Link
           href="/dashboard/matches"
-          className="text-[9px] font-medium text-[#3B82F6] uppercase tracking-[1.5px] transition-[color,transform] duration-200 ease-out hover:text-[#2D6FD9] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#3986F3] focus-visible:ring-offset-2 rounded-sm"
+          className="text-[9px] font-medium text-[var(--color-accent-blue)] uppercase tracking-[1.5px] transition-[color,transform] duration-200 ease-out hover:text-[#2D6FD9] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#3986F3] focus-visible:ring-offset-2 rounded-sm"
         >
           FULL COURT VIEW
         </Link>

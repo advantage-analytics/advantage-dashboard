@@ -43,13 +43,13 @@ export default function MatchHeatmap({
   }
 
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-[16px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] overflow-hidden">
+    <div className="bg-white border border-[var(--color-border-card)] rounded-[16px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] overflow-hidden">
       {/* Header */}
       <div className="px-5 py-4 flex items-center justify-between">
-        <p className="text-[10px] font-medium text-[#AAAAAA] tracking-[2.5px] uppercase">
+        <p className="text-[10px] font-medium text-[var(--color-text-dim)] tracking-[2.5px] uppercase">
           MATCH ACTIVITY
         </p>
-        <p className="text-[10px] font-medium text-[#AAAAAA]">
+        <p className="text-[10px] font-medium text-[var(--color-text-dim)]">
           {monthName} {year}
         </p>
       </div>
@@ -62,7 +62,7 @@ export default function MatchHeatmap({
               key={i}
               className="flex items-center justify-center"
             >
-              <span className="text-[8px] font-medium text-[#AAAAAA]">
+              <span className="text-[8px] font-medium text-[var(--color-text-dim)]">
                 {label}
               </span>
             </div>
@@ -94,12 +94,12 @@ export default function MatchHeatmap({
         </div>
 
         {/* Divider */}
-        <div className="h-px bg-[#F0F0F0]" />
+        <div className="h-px bg-[var(--color-divider)]" />
 
         {/* Summary row */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="text-[11px] font-medium text-[#525252]">
+            <span className="text-[11px] font-medium text-[var(--color-text-tertiary)]">
               {matchCount} match{matchCount !== 1 ? "es" : ""}
             </span>
             <span className="text-[11px] font-normal text-[#999999]">
@@ -110,7 +110,7 @@ export default function MatchHeatmap({
           {/* Form pills */}
           {form.length > 0 && (
             <div className="flex items-center gap-1">
-              <span className="text-[9px] font-medium text-[#AAAAAA] uppercase tracking-[1px] mr-1">
+              <span className="text-[9px] font-medium text-[var(--color-text-dim)] uppercase tracking-[1px] mr-1">
                 Form
               </span>
               {form.map((result, i) => (
@@ -118,8 +118,8 @@ export default function MatchHeatmap({
                   key={i}
                   className={`w-5 h-5 rounded-[3px] flex items-center justify-center text-[9px] font-semibold ${
                     result === "W"
-                      ? "bg-[rgba(115,230,104,0.15)] text-[#5DB955]"
-                      : "bg-[rgba(229,24,55,0.15)] text-[#E51837]"
+                      ? "bg-[rgba(115,230,104,0.15)] text-[var(--color-success)]"
+                      : "bg-[rgba(229,24,55,0.15)] text-[var(--color-danger)]"
                   }`}
                 >
                   {result}
