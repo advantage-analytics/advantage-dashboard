@@ -82,7 +82,7 @@ Filter configs: `src/components/dashboard/matches/visuals/configs/` (serve, retu
 
 ## Design System
 
-**Read `.claude/skills/advantage-analytics-design/SKILL.md` before building any UI.** It defines the complete Advantage Analytics design language — every typography token, color value, spacing unit, border radius, shadow, animation curve, and component pattern extracted from the live codebase. The SKILL.md is authoritative.
+**Read `.skills/advantage-analytics-design/SKILL.md` before building any UI.** It defines the complete Advantage Analytics design language — every typography token, color value, spacing unit, border radius, shadow, animation curve, and component pattern extracted from the live codebase. The SKILL.md is authoritative.
 
 Key principles: Inter font only (weights 300/400/500/600), strict type scale (9–56px), blue accent `#3B82F6`, semantic success `#5DB955` / error `#E51837`, Lucide React icons only, two Framer Motion curves (`[0.25, 0.46, 0.45, 0.94]` primary, `[0.23, 1, 0.32, 1]` spring-like), no bounce/glassmorphism.
 
