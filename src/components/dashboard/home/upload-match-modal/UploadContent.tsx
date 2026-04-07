@@ -11,18 +11,31 @@
 
 import { Button } from "@/components/ui/button";
 import {
-  FolderOpen,
   AlertCircle,
   Loader2,
   CheckCircle2,
-  File,
   Upload,
   Trash2,
   FileSpreadsheet,
   AlertTriangle,
 } from "lucide-react";
+import { motion } from "framer-motion";
 import { UploadedFile, ParsingState } from "./types";
 import { ProviderId } from "@/lib/services/upload";
+
+const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
+
+const fadeIn = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.3, ease: EASE_CURVE },
+};
+
+const slideDown = {
+  initial: { opacity: 0, y: -8 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.3, ease: EASE_CURVE },
+};
 
 /** File type configuration per provider */
 const PROVIDER_FILE_CONFIG: Record<
@@ -75,18 +88,21 @@ export function UploadContent({
   const hasFile = !!uploadedFile;
 
   return (
-    <div className="flex flex-col h-full gap-3 animate-fadeIn">
+    <motion.div
+      className="flex flex-col h-full gap-3"
+      {...fadeIn}
+    >
       {/* Error State - Compact and at top */}
       {uploadError && (
-        <div className="animate-slideDown">
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2.5">
-            <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+        <motion.div {...slideDown}>
+          <div className="p-3 bg-[#FEF2F2] border border-[#FECACA] rounded-lg flex items-start gap-2.5">
+            <AlertCircle className="h-4 w-4 text-[#EF4444] mt-0.5 flex-shrink-0" />
             <div>
-              <p className="text-red-600 text-xs font-medium">Upload Error</p>
-              <p className="text-red-600 text-xs mt-0.5">{uploadError}</p>
+              <p className="text-[#DC2626] text-xs font-medium">Upload Error</p>
+              <p className="text-[#DC2626] text-xs mt-0.5">{uploadError}</p>
             </div>
           </div>
-        </div>
+        </motion.div>
       )}
 
       {/* Main Content Area - Grows to fill space */}
@@ -100,7 +116,7 @@ export function UploadContent({
               onDrop={onDrop}
               className={`relative flex-1 border-2 border-dashed rounded-2xl transition-all duration-300 group flex flex-col items-center justify-center ${
                 isUploading
-                  ? "border-gray-300 bg-gray-50"
+                  ? "border-[#F3F3F3] bg-[#FAFAFA]"
                   : isOver
                     ? "border-[#3B82F6] bg-[#3B82F6]/5"
                     : "border-[#EAECF0] hover:border-[#3B82F6] hover:bg-[#F0F7FF]"
@@ -122,7 +138,10 @@ export function UploadContent({
                 {isUploading ? (
                   <>
                     {/* Loading State */}
-                    <div className="flex flex-col items-center gap-3 animate-fadeIn">
+                    <motion.div
+                      className="flex flex-col items-center gap-3"
+                      {...fadeIn}
+                    >
                       <div className="relative w-14 h-14 flex items-center justify-center">
                         <div className="absolute inset-0 bg-gradient-to-r from-[#3B82F6]/20 to-transparent rounded-full animate-spin" />
                         <Loader2 className="h-7 w-7 text-[#3B82F6] animate-spin" />
@@ -130,7 +149,7 @@ export function UploadContent({
                       <p className="text-[#0D0D0D] font-medium text-sm">
                         Validating file...
                       </p>
-                    </div>
+                    </motion.div>
                   </>
                 ) : (
                   <>
@@ -138,10 +157,10 @@ export function UploadContent({
                     <div className="flex flex-col items-center gap-3 text-center">
                       {/* Icon */}
                       <div
-                        className={`relative w-16 h-16 flex items-center justify-center rounded-2xl transition-all duration-300 ${
+                        className={`relative w-16 h-16 flex items-center justify-center rounded-full transition-all duration-300 ${
                           isOver
                             ? "bg-[#3B82F6] scale-110"
-                            : "bg-[#F0F4FF] group-hover:bg-[#3B82F6]"
+                            : "bg-[#F5F5F5] group-hover:bg-[#3B82F6]"
                         }`}
                       >
                         <Upload
@@ -175,7 +194,7 @@ export function UploadContent({
                       <label htmlFor="upload-input-modal" className="block">
                         <Button
                           type="button"
-                          className="bg-[#0D0D0D] hover:bg-[#1D1D1D] text-white text-xs font-medium rounded-lg px-6 py-2 transition-all duration-200 active:scale-95"
+                          className="bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-medium uppercase tracking-[1.5px] rounded-full px-6 py-2 transition-all duration-200 active:scale-95"
                           onClick={() =>
                             document.getElementById("upload-input-modal")?.click()
                           }
@@ -201,67 +220,79 @@ export function UploadContent({
         ) : (
           <>
             {/* File Uploaded State */}
-            <div className="animate-fadeIn space-y-3 flex flex-col">
+            <motion.div className="space-y-3 flex flex-col" {...fadeIn}>
               {/* Upload Progress & Status */}
               {parsingState && (
                 <>
                   {parsingState.isParsing && (
-                    <div className="animate-slideDown flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
-                      <Loader2 className="h-4 w-4 text-blue-500 animate-spin flex-shrink-0" />
-                      <p className="text-blue-600 text-xs font-medium">
+                    <motion.div
+                      className="flex items-center gap-2 px-3 py-2 bg-[#EFF6FF] border border-[#BFDBFE] rounded-lg"
+                      {...slideDown}
+                    >
+                      <Loader2 className="h-4 w-4 text-[#3B82F6] animate-spin flex-shrink-0" />
+                      <p className="text-[#2563EB] text-xs font-medium">
                         Extracting match data...
                       </p>
-                    </div>
+                    </motion.div>
                   )}
 
                   {parsingState.parseSuccess && (
-                    <div className="animate-slideDown flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />
-                      <p className="text-emerald-600 text-xs font-medium">
+                    <motion.div
+                      className="flex items-center gap-2 px-3 py-2 bg-[#F0FDF4] border border-[#BBF7D0] rounded-lg"
+                      {...slideDown}
+                    >
+                      <CheckCircle2 className="h-4 w-4 text-[#10B981] flex-shrink-0" />
+                      <p className="text-[#16A34A] text-xs font-medium">
                         Match data extracted, ready to proceed!
                       </p>
-                    </div>
+                    </motion.div>
                   )}
 
                   {parsingState.parseWarnings.length > 0 && (
-                    <div className="animate-slideDown flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
-                      <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                    <motion.div
+                      className="flex items-start gap-2 px-3 py-2 bg-[#FFFBEB] border border-[#FDE68A] rounded-lg"
+                      {...slideDown}
+                    >
+                      <AlertTriangle className="h-4 w-4 text-[#F59E0B] mt-0.5 flex-shrink-0" />
                       <div>
-                        <p className="text-amber-600 text-xs font-medium">
+                        <p className="text-[#D97706] text-xs font-medium">
                           Parsing warnings
                         </p>
-                        <ul className="text-amber-600 text-xs mt-1 space-y-0.5">
+                        <ul className="text-[#D97706] text-xs mt-1 space-y-0.5">
                           {parsingState.parseWarnings.map((warning, idx) => (
                             <li key={idx}>• {warning}</li>
                           ))}
                         </ul>
                       </div>
-                    </div>
+                    </motion.div>
                   )}
 
                   {parsingState.parseError && (
-                    <div className="animate-slideDown p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2.5">
-                      <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+                    <motion.div
+                      className="p-3 bg-[#FEF2F2] border border-[#FECACA] rounded-lg flex items-start gap-2.5"
+                      {...slideDown}
+                    >
+                      <AlertCircle className="h-4 w-4 text-[#EF4444] mt-0.5 flex-shrink-0" />
                       <div>
-                        <p className="text-red-600 text-xs font-medium">
+                        <p className="text-[#DC2626] text-xs font-medium">
                           Parsing Error
                         </p>
-                        <p className="text-red-600 text-xs mt-0.5">
+                        <p className="text-[#DC2626] text-xs mt-0.5">
                           {parsingState.parseError}
                         </p>
-                        <p className="text-red-600 text-xs mt-1">
+                        <p className="text-[#DC2626] text-xs mt-1">
                           You can still enter data manually in the next step.
                         </p>
                       </div>
-                    </div>
+                    </motion.div>
                   )}
                 </>
               )}
 
               {/* File Card */}
-              <div className="border border-[#EAECF0] rounded-xl bg-white overflow-hidden hover:border-[#3B82F6]/30 transition-all duration-300">
+              <div className="border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] bg-white overflow-hidden hover:border-[#3B82F6]/30 transition-all duration-300">
                 {/* Card Header */}
-                <div className="px-4 py-3 border-b border-[#EAECF0] bg-[#FAFBFC] flex items-center justify-between">
+                <div className="px-4 py-3 border-b border-[#F3F3F3] bg-[#FAFAFA] flex items-center justify-between">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <div className="w-10 h-10 bg-[#3B82F6] rounded-lg flex items-center justify-center flex-shrink-0">
                       <FileSpreadsheet className="h-5 w-5 text-white" />
@@ -284,7 +315,7 @@ export function UploadContent({
                     type="button"
                     onClick={onRemoveFile}
                     disabled={isUploading}
-                    className="p-2 text-[#888888] hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="p-2 text-[#888888] hover:text-[#DC2626] hover:bg-[#FEF2F2] rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                     aria-label="Remove file"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -296,41 +327,10 @@ export function UploadContent({
               <p className="text-[#888888] text-xs pt-1">
                 You can change this file at any time before creating the match.
               </p>
-            </div>
+            </motion.div>
           </>
         )}
       </div>
-
-      {/* CSS Animations */}
-      <style>{`
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-          }
-          to {
-            opacity: 1;
-          }
-        }
-
-        @keyframes slideDown {
-          from {
-            opacity: 0;
-            transform: translateY(-8px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .animate-fadeIn {
-          animation: fadeIn 300ms ease-out;
-        }
-
-        .animate-slideDown {
-          animation: slideDown 300ms ease-out;
-        }
-      `}</style>
-    </div>
+    </motion.div>
   );
 }
