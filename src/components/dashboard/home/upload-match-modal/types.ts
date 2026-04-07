@@ -32,6 +32,8 @@ export interface FormData {
   matchType?: string;
   courtType?: string;
   duration?: number;
+  opponentHand?: string;
+  opponentBackhand?: string;
 }
 
 /** Uploaded file metadata and data */
@@ -89,6 +91,8 @@ export interface MatchData {
   court_type?: string;
   verified?: boolean;
   duration?: number;
+  opponent_hand?: string;
+  opponent_backhand?: string;
 }
 
 /** Default form data values */
@@ -109,7 +113,9 @@ export const DEFAULT_FORM_DATA: FormData = {
   opponentTiebreaks: [null, null, null],
   matchType: "",
   courtType: "",
-  duration: 0
+  duration: 0,
+  opponentHand: "",
+  opponentBackhand: "",
 };
 
 /** Step order for navigation and indicator */
