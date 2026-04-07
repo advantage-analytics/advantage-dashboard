@@ -32,6 +32,11 @@ import { ConfirmContent } from "./ConfirmContent";
 
 const HINT_STEPS = new Set<Step>(["details", "confirm"]);
 
+const BTN_TEXT = "text-[10px] font-medium uppercase tracking-[1.5px]";
+const BTN_GHOST = `rounded-full ${BTN_TEXT} bg-white border border-[#EAECF0] text-[#525252] hover:bg-[#F5F5F5] shadow-none`;
+const BTN_PRIMARY = `rounded-full ${BTN_TEXT} bg-[#3B82F6] text-white hover:bg-[#2563EB]`;
+const BTN_DISABLED = `rounded-full ${BTN_TEXT} bg-[#F3F3F3] text-[#AAAAAA]`;
+
 export function UploadMatchModal({
   open,
   onOpenChange,
@@ -135,14 +140,14 @@ export function UploadMatchModal({
               {step !== "method" && (
                 <button
                   onClick={handleBack}
-                  className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-6 rounded-full bg-[#1D1D1F] flex items-center justify-center hover:bg-[#2D2D2D] transition-colors z-10"
+                  className="group absolute left-0 top-1/2 -translate-y-1/2 h-6 w-6 rounded-full bg-[#F5F5F5] flex items-center justify-center hover:bg-[#3B82F6] transition-colors z-10"
                 >
-                  <ChevronLeft className="h-3 w-3 text-white" />
+                  <ChevronLeft className="h-3 w-3 text-[#525252] group-hover:text-white" />
                 </button>
               )}
               <DialogHeader className="space-y-2">
                 <DialogTitle>{title}</DialogTitle>
-                <DialogDescription>{description}</DialogDescription>
+                <DialogDescription className="text-[12px] text-[#525252]">{description}</DialogDescription>
               </DialogHeader>
             </div>
           </div>
@@ -210,10 +215,10 @@ export function UploadMatchModal({
               <div className="absolute bottom-0 left-0 right-4 flex justify-center pb-1">
                 <button
                   onClick={() => scrollRef.current?.scrollBy({ top: scrollRef.current.clientHeight, behavior: "smooth" })}
-                  className="flex items-center gap-1 bg-white/90 backdrop-blur-sm rounded-full px-2.5 py-1 border border-gray-100 cursor-pointer"
+                  className="flex items-center gap-1 bg-white/90 backdrop-blur-sm rounded-full px-2.5 py-1 border border-[#F3F3F3] cursor-pointer"
                 >
-                  <ChevronDown className="h-3 w-3 text-gray-400" />
-                  <span className="text-[10px] text-gray-400 font-medium tracking-wide">scroll</span>
+                  <ChevronDown className="h-3 w-3 text-[#AAAAAA]" />
+                  <span className="text-[10px] text-[#AAAAAA] font-medium tracking-wide">scroll</span>
                 </button>
               </div>
             )}
@@ -225,24 +230,20 @@ export function UploadMatchModal({
               <>
                 <Button
                   onClick={handleClose}
-                  className="w-[65px] h-[31px] rounded-full text-xs bg-white border border-[#EAECF0] text-[#0D0D0D] hover:bg-[#F7F7F7] shadow-none"
+                  className={`w-[65px] h-[31px] ${BTN_GHOST}`}
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handleBack}
-                  className="w-[55px] h-[31px] rounded-full text-xs bg-[#3B82F6] text-white hover:bg-[#2563EB]"
+                  className={`w-[55px] h-[31px] ${BTN_PRIMARY}`}
                 >
                   Edit
                 </Button>
                 <Button
                   onClick={handleCreateMatch}
                   disabled={isCreating}
-                  className={`w-[110px] h-[31px] rounded-full text-xs ${
-                    isCreating
-                      ? "bg-[#F7F7F7] text-[#888888]"
-                      : "bg-[#0D0D0D] text-white"
-                  }`}
+                  className={`w-[110px] h-[31px] ${isCreating ? BTN_DISABLED : BTN_PRIMARY}`}
                 >
                   {isCreating ? "Creating..." : "Create Match"}
                 </Button>
@@ -251,18 +252,14 @@ export function UploadMatchModal({
               <>
                 <Button
                   onClick={handleClose}
-                  className="w-[65px] h-[31px] rounded-full text-xs bg-white border border-[#EAECF0] text-[#0D0D0D] hover:bg-[#F7F7F7] shadow-none"
+                  className={`w-[65px] h-[31px] ${BTN_GHOST}`}
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={continueHandler}
                   disabled={continueDisabled}
-                  className={`w-[85px] h-[31px] rounded-full text-xs ${
-                    continueDisabled
-                      ? "bg-[#F7F7F7] text-[#888888]"
-                      : "bg-[#0D0D0D] text-white"
-                  }`}
+                  className={`w-[85px] h-[31px] ${continueDisabled ? BTN_DISABLED : BTN_PRIMARY}`}
                 >
                   {continueLabel}
                 </Button>
