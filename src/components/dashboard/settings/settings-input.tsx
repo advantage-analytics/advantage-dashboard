@@ -16,8 +16,8 @@ export const SettingsInput = forwardRef<HTMLInputElement, SettingsInputProps>(
         <label
           htmlFor={id}
           className={cn(
-            "block text-xs font-medium transition-colors",
-            disabled ? "text-[#999]" : "text-[#0D0D0D]"
+            "block text-[12px] font-medium transition-colors",
+            disabled ? "text-[#888888]" : "text-[#0D0D0D]"
           )}
         >
           {label}
@@ -27,17 +27,17 @@ export const SettingsInput = forwardRef<HTMLInputElement, SettingsInputProps>(
           id={id}
           disabled={disabled}
           className={cn(
-            "w-full h-10 px-3 text-xs rounded-lg outline-none transition-all duration-200",
-            "border bg-[#FAFAFA]",
+            "w-full h-10 px-3.5 text-[13px] rounded-lg outline-none transition-all duration-200",
+            "border bg-white",
             disabled
-              ? "text-[#999] border-[#E5E5E5] cursor-not-allowed"
-              : "text-[#0D0D0D] border-[#E5E5E5] hover:border-[#CCCCCC] focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/10 focus:bg-white placeholder:text-[#999]",
+              ? "text-[#888888] bg-[#F7F7F7] border-[#F3F3F3] cursor-not-allowed"
+              : "text-[#0D0D0D] border-[#EAECF0] hover:border-[#CCCCCC] focus:border-[#3B82F6] focus-visible:ring-2 focus-visible:ring-[#3B82F6]/10 placeholder:text-[#AAAAAA]",
             className
           )}
           {...props}
         />
         {hint && (
-          <p className="text-xs text-[#999] leading-relaxed">{hint}</p>
+          <p className="text-[11px] text-[#AAAAAA] leading-relaxed">{hint}</p>
         )}
       </div>
     );

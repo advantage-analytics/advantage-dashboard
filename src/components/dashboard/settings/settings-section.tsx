@@ -16,10 +16,10 @@ export function SettingsSection({
   return (
     <div className={cn("space-y-4", className)}>
       <div className="flex items-center gap-3">
-        <p className="text-[10px] font-semibold text-[#999] uppercase tracking-[0.1em]">
+        <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
           {title}
         </p>
-        <div className="flex-1 h-px bg-[#F0F0F0]" />
+        <div className="flex-1 h-px bg-[#F3F3F3]" />
       </div>
       {children}
     </div>

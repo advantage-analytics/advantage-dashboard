@@ -11,21 +11,18 @@ const TABS = [
   {
     id: "profile" as TabId,
     label: "Profile",
-    description: "Personal info",
     href: "/dashboard/settings/profile",
     icon: User,
   },
   {
     id: "account" as TabId,
     label: "Account",
-    description: "Security",
     href: "/dashboard/settings/account",
     icon: Shield,
   },
   {
     id: "subscription" as TabId,
     label: "Subscription",
-    description: "Billing",
     href: "/dashboard/settings/subscription",
     icon: CreditCard,
   },
@@ -34,51 +31,36 @@ const TABS = [
 export function SettingsNavigation(): React.ReactElement {
   const pathname = usePathname();
 
-  const activeTab = TABS.find((tab) => pathname?.includes(tab.id))?.id ?? "profile";
+  const activeTab =
+    TABS.find((tab) => pathname?.includes(tab.id))?.id ?? "profile";
 
   return (
-    <nav className="w-full md:w-52 flex-shrink-0">
-      <div className="flex md:flex-col gap-1.5 overflow-x-auto pb-2 md:pb-0 -mx-2 px-2 md:mx-0 md:px-0 scrollbar-hide">
-        {TABS.map(({ id, label, description, href, icon: Icon }) => {
+    <nav className="w-full md:w-44 flex-shrink-0" aria-label="Settings">
+      <div className="flex md:flex-col gap-1 overflow-x-auto pb-2 md:pb-0 -mx-2 px-2 md:mx-0 md:px-0 scrollbar-hide">
+        {TABS.map(({ id, label, href, icon: Icon }) => {
           const isActive = activeTab === id;
 
           return (
             <Link
               key={id}
               href={href}
+              aria-current={isActive ? "page" : undefined}
               className={cn(
-                "group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 whitespace-nowrap",
+                "flex items-center gap-3 h-9 pl-[13px] pr-3.5 rounded-lg text-[13px] whitespace-nowrap transition-colors duration-200",
                 isActive
-                  ? "bg-[#0D0D0D] text-white"
-                  : "text-[#666] hover:bg-[#F5F5F5] hover:text-[#0D0D0D]"
+                  ? "bg-[#EBF2FD] text-[#3B82F6] font-medium"
+                  : "text-[#8A8A8E] hover:text-[#3C3C43] hover:bg-[#F5F5F5]"
               )}
             >
-              <span
+              <Icon
                 className={cn(
-                  "flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-colors",
-                  isActive
-                    ? "bg-white/10"
-                    : "bg-[#F0F0F0] group-hover:bg-[#E8E8E8]"
+                  "size-3.5 flex-shrink-0",
+                  isActive ? "text-[#3B82F6]" : "text-[#8A8A8E]"
                 )}
-              >
-                <Icon
-                  className={cn(
-                    "h-4 w-4",
-                    isActive ? "text-white" : "text-[#666]"
-                  )}
-                />
-              </span>
-              <div className="flex flex-col">
-                <span className="text-xs font-medium">{label}</span>
-                <span
-                  className={cn(
-                    "text-[10px] hidden md:block",
-                    isActive ? "text-white/60" : "text-[#999]"
-                  )}
-                >
-                  {description}
-                </span>
-              </div>
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+              {label}
             </Link>
           );
         })}

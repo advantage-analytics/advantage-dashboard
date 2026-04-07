@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, Sparkles } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { SettingsAlert } from "@/components/dashboard/settings/settings-alert";
 import { SettingsButton } from "@/components/dashboard/settings/settings-button";
+import { SettingsSection } from "@/components/dashboard/settings/settings-section";
 
 type PlanType = "starter" | "pro" | "elite";
 
@@ -16,16 +18,17 @@ interface Plan {
   priceNote?: string;
   description: string;
   features: string[];
-  popular?: boolean;
+  recommended?: boolean;
 }
+
+const EASE_CURVE: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
 
 const plans: Plan[] = [
   {
     id: "starter",
     name: "Starter",
     price: "Free",
-    description:
-      "Perfect for players getting started with match analysis and basic performance tracking.",
+    description: "Basic match analysis and performance tracking.",
     features: [
       "Upload and store match data",
       "Up to 5 file uploads",
@@ -37,9 +40,8 @@ const plans: Plan[] = [
     id: "pro",
     name: "Pro",
     price: "$14.99",
-    priceNote: "month",
-    description:
-      "Advanced analytics and coaching insights for serious competitors looking to level up.",
+    priceNote: "/mo",
+    description: "Advanced analytics for serious competitors.",
     features: [
       "Unlimited match uploads",
       "Unlimited reports",
@@ -48,15 +50,14 @@ const plans: Plan[] = [
       "Trend analysis",
       "Priority support",
     ],
-    popular: true,
+    recommended: true,
   },
   {
     id: "elite",
     name: "Elite",
     price: "$24.99",
-    priceNote: "month",
-    description:
-      "The ultimate package for professionals and academies with custom reporting and API access.",
+    priceNote: "/mo",
+    description: "Full suite for professionals and academies.",
     features: [
       "Everything in Pro",
       "Custom report builder",
@@ -73,123 +74,102 @@ function PlanCard({
   isSelected,
   isCurrentPlan,
   onSelect,
+  index,
 }: {
   plan: Plan;
   isSelected: boolean;
   isCurrentPlan: boolean;
   onSelect: () => void;
+  index: number;
 }) {
-  const showPopularBadge = plan.popular && !isCurrentPlan;
-
   return (
     <motion.button
       type="button"
       onClick={onSelect}
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+      transition={{ duration: 0.35, delay: index * 0.06, ease: EASE_CURVE }}
       className={cn(
-        "relative flex flex-col text-left p-5 rounded-xl border-2 transition-all duration-200 cursor-pointer group w-full",
+        "relative flex flex-col text-left p-5 rounded-[14px] border transition-all duration-200 cursor-pointer group w-full h-full",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40",
         isSelected
-          ? "border-[#3B82F6] bg-white shadow-[0_0_0_3px_rgba(57,134,243,0.08)]"
-          : "border-[#E5E5E5] bg-[#FAFAFA] hover:border-[#CCCCCC] hover:bg-white"
+          ? "border-[#3B82F6] bg-white shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06),0_0_0_3px_rgba(59,130,246,0.08)]"
+          : "border-[#F3F3F3] bg-white hover:border-[#CCCCCC] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)]"
       )}
     >
-      {/* Popular Badge */}
-      {showPopularBadge && (
+      {/* Recommended Badge */}
+      {plan.recommended && !isCurrentPlan && (
         <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-[#3B82F6] rounded-full flex items-center gap-1.5">
-          <Sparkles className="w-2.5 h-2.5 text-white" />
-          <span className="text-[9px] font-semibold text-white uppercase tracking-wide">
+          <Sparkles
+            className="size-2.5 text-white"
+            strokeWidth={1.5}
+            aria-hidden="true"
+          />
+          <span className="text-[8px] font-medium text-white uppercase tracking-[1.5px]">
             Recommended
           </span>
         </div>
       )}
 
-      {/* Radio Indicator */}
-      <div className="absolute top-4 right-4">
-        <div
-          className={cn(
-            "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-200",
-            isSelected
-              ? "border-[#3B82F6] bg-[#3B82F6]"
-              : "border-[#D0D0D0] bg-white group-hover:border-[#999]"
-          )}
-        >
-          {isSelected && (
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: "spring", stiffness: 500, damping: 30 }}
-              className="w-2 h-2 rounded-full bg-white"
-            />
-          )}
-        </div>
-      </div>
-
-      {/* Current Plan Badge */}
+      {/* Current Plan Indicator */}
       {isCurrentPlan && (
-        <div className="absolute top-4 right-11">
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-semibold text-emerald-700 bg-emerald-50 rounded-full">
-            <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />
+        <div className="absolute top-4 right-4">
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-medium text-[#5DB955] bg-[rgba(115,230,104,0.12)] rounded-full uppercase tracking-[1px]">
+            <span className="size-1 rounded-full bg-[#5DB955] animate-pulse" />
             Current
           </span>
         </div>
       )}
 
-      {/* Content */}
-      <div className="flex flex-col sm:flex-row sm:items-start gap-4 pr-16">
-        {/* Left: Name + Price */}
-        <div className="sm:w-40 flex-shrink-0">
-          <h3 className="text-xs font-semibold text-[#0D0D0D] mb-2">
-            {plan.name}
-          </h3>
-          <div className="flex items-baseline gap-0.5">
-            {plan.price !== "Free" && (
-              <span className="text-xs font-medium text-[#666]">$</span>
-            )}
-            <span className="text-2xl font-semibold text-[#0D0D0D] tracking-tight tabular-nums">
-              {plan.price === "Free" ? "Free" : plan.price.replace("$", "")}
-            </span>
-            {plan.priceNote && (
-              <span className="text-xs text-[#999] ml-0.5">
-                /{plan.priceNote}
-              </span>
-            )}
-          </div>
-        </div>
+      {/* Plan Name */}
+      <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] mb-3">
+        {plan.name}
+      </p>
 
-        {/* Right: Description */}
-        <div className="flex-1">
-          <p className="text-xs text-[#666] leading-relaxed">
-            {plan.description}
-          </p>
-        </div>
+      {/* Price */}
+      <div className="flex items-baseline gap-0.5 mb-2">
+        <span className="text-[28px] font-light text-[#0D0D0D] tracking-[-0.5px] tabular-nums">
+          {plan.price === "Free" ? "Free" : plan.price}
+        </span>
+        {plan.priceNote && (
+          <span className="text-[12px] text-[#888888] ml-0.5">
+            {plan.priceNote}
+          </span>
+        )}
       </div>
+
+      {/* Description */}
+      <p className="text-[12px] text-[#888888] leading-[1.5] mb-5">
+        {plan.description}
+      </p>
+
+      {/* Divider */}
+      <div className="h-px bg-[#F3F3F3] mb-4" />
 
       {/* Features */}
-      <div className="mt-4 pt-4 border-t border-[#F0F0F0]">
-        <ul className="grid grid-cols-2 gap-x-4 gap-y-2">
-          {plan.features.map((feature, index) => (
-            <li key={index} className="flex items-center gap-2">
-              <span
+      <ul className="space-y-2.5 flex-1">
+        {plan.features.map((feature, i) => (
+          <li key={i} className="flex items-start gap-2.5">
+            <span
+              className={cn(
+                "flex-shrink-0 size-4 rounded-full flex items-center justify-center mt-px",
+                isSelected ? "bg-[#3B82F6]" : "bg-[#F5F5F5]"
+              )}
+            >
+              <Check
                 className={cn(
-                  "flex-shrink-0 w-3.5 h-3.5 rounded-full flex items-center justify-center",
-                  isSelected ? "bg-[#3B82F6]" : "bg-[#E5E5E5]"
+                  "size-2.5",
+                  isSelected ? "text-white" : "text-[#888888]"
                 )}
-              >
-                <Check
-                  className={cn(
-                    "w-2 h-2",
-                    isSelected ? "text-white" : "text-[#666]"
-                  )}
-                  strokeWidth={2.5}
-                />
-              </span>
-              <span className="text-[11px] text-[#666]">{feature}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
+                strokeWidth={2.5}
+              />
+            </span>
+            <span className="text-[12px] text-[#525252] leading-[1.4]">
+              {feature}
+            </span>
+          </li>
+        ))}
+      </ul>
     </motion.button>
   );
 }
@@ -197,8 +177,7 @@ function PlanCard({
 const planOrder: PlanType[] = ["starter", "pro", "elite"];
 
 function getPlanName(planId: PlanType): string {
-  const plan = plans.find((p) => p.id === planId);
-  return plan?.name ?? planId;
+  return plans.find((p) => p.id === planId)?.name ?? planId;
 }
 
 export default function SubscriptionPage() {
@@ -231,14 +210,17 @@ export default function SubscriptionPage() {
   const currentPlanIndex = planOrder.indexOf(currentPlan);
   const selectedPlanIndex = planOrder.indexOf(selectedPlan);
   const canUpgrade = selectedPlanIndex > currentPlanIndex;
-  const canDowngrade = selectedPlanIndex < currentPlanIndex && selectedPlan !== "starter";
+  const canDowngrade =
+    selectedPlanIndex < currentPlanIndex && selectedPlan !== "starter";
 
   return (
     <div className="space-y-8">
-      {/* Section Header */}
+      {/* Page Heading */}
       <div>
-        <h2 className="text-sm font-medium text-[#0D0D0D]">Subscription</h2>
-        <p className="text-xs text-[#999] mt-1">
+        <h2 className="text-[14px] font-medium text-[#0D0D0D]">
+          Subscription
+        </h2>
+        <p className="text-[11px] text-[#888888] mt-0.5">
           Choose the plan that fits your training needs
         </p>
       </div>
@@ -247,9 +229,10 @@ export default function SubscriptionPage() {
       <AnimatePresence mode="wait">
         {message && (
           <motion.div
-            initial={{ opacity: 0, y: -8 }}
+            initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2, ease: EASE_CURVE }}
           >
             <SettingsAlert
               type={message.type}
@@ -260,26 +243,23 @@ export default function SubscriptionPage() {
         )}
       </AnimatePresence>
 
-      {/* Plans - Stacked Vertically */}
-      <div className="space-y-4">
-        {plans.map((plan, index) => (
-          <motion.div
-            key={plan.id}
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: index * 0.08 }}
-          >
+      {/* Plans */}
+      <SettingsSection title="Choose Your Plan">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+          {plans.map((plan, index) => (
             <PlanCard
+              key={plan.id}
               plan={plan}
               isSelected={selectedPlan === plan.id}
               isCurrentPlan={currentPlan === plan.id}
               onSelect={() => setSelectedPlan(plan.id)}
+              index={index}
             />
-          </motion.div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </SettingsSection>
 
-      {/* CTA Button */}
+      {/* CTA */}
       <div className="space-y-3">
         <SettingsButton
           onClick={handleUpgrade}
@@ -297,21 +277,21 @@ export default function SubscriptionPage() {
                 : `Select a plan to change`}
         </SettingsButton>
 
-        <p className="text-[10px] text-[#999] text-center">
+        <p className="text-[10px] text-[#AAAAAA] text-center tracking-[0.3px]">
           Secure payment powered by Stripe
         </p>
       </div>
 
       {/* Footer */}
-      <div className="pt-5 border-t border-[#F0F0F0]">
-        <p className="text-xs text-[#999]">
+      <div className="pt-4 border-t border-[#F3F3F3]">
+        <p className="text-[12px] text-[#888888]">
           Questions about billing?{" "}
-          <a
-            href="#"
-            className="text-[#0D0D0D] font-medium hover:underline underline-offset-2 transition-colors"
+          <Link
+            href="/dashboard/help"
+            className="text-[#3B82F6] font-medium hover:text-[#2563EB] underline-offset-2 transition-colors duration-200"
           >
             Contact support
-          </a>
+          </Link>
         </p>
       </div>
     </div>

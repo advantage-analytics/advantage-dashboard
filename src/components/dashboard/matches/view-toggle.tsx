@@ -10,14 +10,14 @@ interface ViewToggleProps {
   onViewChange: (view: MatchView) => void;
 }
 
-const VIEW_OPTIONS: { value: MatchView; icon: typeof LayoutGrid }[] = [
-  { value: "gallery", icon: LayoutGrid },
-  { value: "list", icon: List },
+const VIEW_OPTIONS: { value: MatchView; icon: typeof LayoutGrid; label: string }[] = [
+  { value: "gallery", icon: LayoutGrid, label: "Grid" },
+  { value: "list", icon: List, label: "List" },
 ];
 
 export function ViewToggle({ view, onViewChange }: ViewToggleProps): React.JSX.Element {
   return (
-    <div className="flex items-center h-8 rounded-full ring-1 ring-inset ring-[#D9D9D9] bg-white p-[3px]">
+    <div className="flex items-center h-8 rounded-full ring-1 ring-inset ring-[#D9D9D9] bg-white p-[3px] gap-0.5">
       {VIEW_OPTIONS.map((option) => {
         const isActive = view === option.value;
         const Icon = option.icon;
@@ -26,7 +26,7 @@ export function ViewToggle({ view, onViewChange }: ViewToggleProps): React.JSX.E
           <button
             key={option.value}
             onClick={() => onViewChange(option.value)}
-            className="relative flex items-center justify-center w-[26px] h-[26px] rounded-full transition-[color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/50"
+            className="relative flex items-center justify-center gap-1.5 h-[26px] px-2.5 rounded-full transition-[color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/50"
             aria-label={`${option.value} view`}
           >
             {isActive && (
@@ -42,6 +42,13 @@ export function ViewToggle({ view, onViewChange }: ViewToggleProps): React.JSX.E
               }`}
               strokeWidth={1.5}
             />
+            <span
+              className={`relative z-10 text-[11px] font-medium transition-[color] duration-200 ${
+                isActive ? "text-[#0D0D0D]" : "text-[#CCCCCC]"
+              }`}
+            >
+              {option.label}
+            </span>
           </button>
         );
       })}

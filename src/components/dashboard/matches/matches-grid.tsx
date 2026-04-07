@@ -4,7 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import type { MatchView } from "./view-toggle";
 import { MatchCardGallery } from "./match-card-gallery";
-import { MatchCardList } from "./match-card-list";
+import { MatchCardList, LIST_GRID_COLS } from "./match-card-list";
 import { ArrowUp, ArrowDown } from "lucide-react";
 
 type SortField = "date" | "opponent" | "event" | "result";
@@ -18,20 +18,16 @@ interface MatchesGridProps {
   onSort: (field: SortField) => void;
 }
 
-const LIST_GRID_CLASSES = "grid gap-x-4" as const;
-const LIST_GRID_COLS = { gridTemplateColumns: "1.5fr 55px 1fr 1.2fr 0.6fr 0.6fr 0.7fr 0.7fr 1fr 0.7fr" } as const;
+const STAGGER_CAP = 5;
+const STAGGER_DELAY = 0.03;
 
 const COLUMNS: { label: string; field?: SortField }[] = [
   { label: "Event", field: "event" },
   { label: "Result", field: "result" },
   { label: "Score" },
   { label: "Opponent", field: "opponent" },
-  { label: "Hand" },
-  { label: "BH" },
   { label: "Type" },
-  { label: "Court" },
   { label: "Date", field: "date" },
-  { label: "Source" },
 ];
 
 function SortIcon({ field, sortField, sortDir }: { field?: SortField; sortField: SortField; sortDir: SortDir }) {
@@ -65,7 +61,7 @@ export function MatchesGrid({
                 key={match.id}
                 initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.4, delay: i * 0.07, ease: [0.25, 0.46, 0.45, 0.94] }}
+                transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.4, delay: Math.min(i, STAGGER_CAP) * STAGGER_DELAY, ease: [0.25, 0.46, 0.45, 0.94] }}
               >
                 <MatchCardGallery match={match} />
               </motion.div>
@@ -81,13 +77,13 @@ export function MatchesGrid({
           transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
         >
           {/* Column headers */}
-          <div className={`${LIST_GRID_CLASSES} items-center px-4 py-2.5 border-b border-[#F0F0F0] mb-4`} style={LIST_GRID_COLS} role="row">
+          <div className="grid gap-x-4 items-center px-4 py-2.5 border-b border-[#F0F0F0] mb-4" style={LIST_GRID_COLS} role="row">
             {COLUMNS.map((col) => (
               <div key={col.label} className="min-w-0" role="columnheader" aria-sort={col.field === sortField ? (sortDir === "asc" ? "ascending" : "descending") : undefined}>
                 {col.field ? (
                   <button
                     onClick={() => onSort(col.field!)}
-                    className="inline-flex items-center gap-0.5 text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] hover:text-[#525252] transition-[color] duration-200"
+                    className="inline-flex items-center gap-0.5 text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] hover:text-[#525252] hover:underline underline-offset-2 cursor-pointer transition-[color] duration-200"
                   >
                     {col.label}
                     <SortIcon field={col.field} sortField={sortField} sortDir={sortDir} />
@@ -107,7 +103,7 @@ export function MatchesGrid({
               key={match.id}
               initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.4, delay: i * 0.07, ease: [0.25, 0.46, 0.45, 0.94] }}
+              transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.4, delay: Math.min(i, STAGGER_CAP) * STAGGER_DELAY, ease: [0.25, 0.46, 0.45, 0.94] }}
             >
               <MatchCardList match={match} />
             </motion.div>

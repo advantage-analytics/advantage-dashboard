@@ -2,11 +2,12 @@
 
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { Inbox, Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
+import { Inbox, Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown, X, Plus } from "lucide-react";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { providers } from "@/lib/providers";
 import { MatchesGrid } from "./matches-grid";
 import { ViewToggle, type MatchView } from "./view-toggle";
+import { UploadMatchModal } from "@/components/dashboard/home/upload-match-modal";
 
 function providerName(id: string): string {
   return providers.find((p) => p.id === id)?.name ?? id;
@@ -25,7 +26,7 @@ interface ActiveFilter {
   value: string;
 }
 
-const FILTER_CHIPS: { key: FilterKey; label: string; getValues: (matches: DisplayMatch[]) => string[]; displayValue?: (val: string) => string }[] = [
+const FILTER_CHIPS: { key: FilterKey; label: string; title?: string; getValues: (matches: DisplayMatch[]) => string[]; displayValue?: (val: string) => string }[] = [
   {
     key: "result",
     label: "Result",
@@ -44,6 +45,7 @@ const FILTER_CHIPS: { key: FilterKey; label: string; getValues: (matches: Displa
   {
     key: "source",
     label: "Source",
+    title: "Data source provider",
     getValues: (matches) => [...new Set(matches.map((m) => m.sourceProvider).filter(Boolean) as string[])].sort(),
     displayValue: providerName,
   },
@@ -55,6 +57,7 @@ const PAGE_SIZES = [10, 25, 50] as const;
 function FilterChip({
   filterKey,
   label,
+  title,
   values,
   activeValues,
   onToggle,
@@ -62,13 +65,16 @@ function FilterChip({
 }: {
   filterKey: FilterKey;
   label: string;
+  title?: string;
   values: string[];
   activeValues: string[];
   onToggle: (key: FilterKey, value: string) => void;
   displayValue?: (val: string) => string;
 }) {
   const [open, setOpen] = useState(false);
+  const [focusIdx, setFocusIdx] = useState(-1);
   const ref = useRef<HTMLDivElement>(null);
+  const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -81,12 +87,29 @@ function FilterChip({
   }, [open]);
 
   useEffect(() => {
+    if (!open) { setFocusIdx(-1); return; }
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") { setOpen(false); return; }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setFocusIdx((prev) => {
+          const next = prev < values.length - 1 ? prev + 1 : 0;
+          optionRefs.current[next]?.focus();
+          return next;
+        });
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setFocusIdx((prev) => {
+          const next = prev > 0 ? prev - 1 : values.length - 1;
+          optionRefs.current[next]?.focus();
+          return next;
+        });
+      }
     }
-    if (open) document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open]);
+  }, [open, values.length]);
 
   if (values.length === 0) return null;
 
@@ -98,6 +121,7 @@ function FilterChip({
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         aria-haspopup="listbox"
+        title={title}
         className={`flex items-center gap-1.5 h-8 px-3.5 rounded-full text-xs font-medium transition-[color,background-color] duration-200 ${
           hasActive
             ? "ring-1 ring-inset ring-[#3B82F6] text-[#3B82F6] bg-[#EBF2FD]"
@@ -119,13 +143,15 @@ function FilterChip({
 
       {open && (
         <div role="listbox" aria-label={`${label} options`} className="absolute top-full left-0 mt-1.5 min-w-[160px] bg-white border border-[#E7E7E7] rounded-xl shadow-[0px_4px_16px_rgba(0,0,0,0.08)] z-20 py-1.5 px-1.5">
-          {values.map((val) => {
+          {values.map((val, idx) => {
             const isActive = activeValues.includes(val);
             return (
               <button
                 key={val}
+                ref={(el) => { optionRefs.current[idx] = el; }}
                 role="option"
                 aria-selected={isActive}
+                tabIndex={idx === focusIdx ? 0 : -1}
                 onClick={() => onToggle(filterKey, val)}
                 className={`flex items-center gap-2 w-full px-2.5 py-2 text-xs rounded-lg transition-[background-color,color] duration-200 ${
                   isActive
@@ -156,6 +182,110 @@ function FilterChip({
   );
 }
 
+/* ─── Sort dropdown ─── */
+const SORT_OPTIONS: { field: SortField; label: string }[] = [
+  { field: "date", label: "Date" },
+  { field: "event", label: "Event" },
+  { field: "opponent", label: "Opponent" },
+  { field: "result", label: "Result" },
+];
+
+function SortDropdown({
+  sortField,
+  sortDir,
+  onSort,
+}: {
+  sortField: SortField;
+  sortDir: SortDir;
+  onSort: (field: SortField) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [focusIdx, setFocusIdx] = useState(-1);
+  const ref = useRef<HTMLDivElement>(null);
+  const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    if (open) document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) { setFocusIdx(-1); return; }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") { setOpen(false); return; }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setFocusIdx((prev) => {
+          const next = prev < SORT_OPTIONS.length - 1 ? prev + 1 : 0;
+          optionRefs.current[next]?.focus();
+          return next;
+        });
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setFocusIdx((prev) => {
+          const next = prev > 0 ? prev - 1 : SORT_OPTIONS.length - 1;
+          optionRefs.current[next]?.focus();
+          return next;
+        });
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [open]);
+
+  const activeLabel = SORT_OPTIONS.find((o) => o.field === sortField)?.label ?? "Date";
+  const dirLabel = sortDir === "asc" ? "A–Z" : "Z–A";
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        title={`Sorted by ${activeLabel}, ${dirLabel}`}
+        className="flex items-center gap-1.5 h-8 px-3.5 rounded-full ring-1 ring-inset ring-[#D9D9D9] text-xs font-medium text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6] transition-[color,background-color] duration-200"
+      >
+        <ArrowUpDown className="w-3.5 h-3.5" />
+        {activeLabel}
+        <span className="text-[10px] text-[#AAAAAA]">{dirLabel}</span>
+        <ChevronDown className={`w-3 h-3 text-[#888888] transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div role="listbox" aria-label="Sort options" className="absolute top-full right-0 mt-1.5 min-w-[160px] bg-white border border-[#E7E7E7] rounded-xl shadow-[0px_4px_16px_rgba(0,0,0,0.08)] z-20 py-1.5 px-1.5">
+          {SORT_OPTIONS.map((opt, idx) => {
+            const isActive = sortField === opt.field;
+            return (
+              <button
+                key={opt.field}
+                ref={(el) => { optionRefs.current[idx] = el; }}
+                role="option"
+                aria-selected={isActive}
+                tabIndex={idx === focusIdx ? 0 : -1}
+                onClick={() => { onSort(opt.field); setOpen(false); }}
+                className={`flex items-center justify-between w-full px-2.5 py-2 text-xs rounded-lg transition-[background-color,color] duration-200 ${
+                  isActive
+                    ? "bg-[#EBF2FD] text-[#3B82F6] font-medium"
+                    : "text-[#525252] hover:bg-[#F7F7F7]"
+                }`}
+              >
+                {opt.label}
+                {isActive && (
+                  <span className="text-[10px] text-[#3B82F6]">{sortDir === "asc" ? "↑" : "↓"}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Main content ─── */
 export function MatchesPageContent({ matches }: MatchesPageContentProps): React.JSX.Element {
   const searchParams = useSearchParams();
@@ -163,6 +293,25 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
   const pathname = usePathname();
 
   const [view, setView] = useState<MatchView>(() => (searchParams.get("view") as MatchView) || "list");
+  const [userSetView, setUserSetView] = useState(false);
+
+  // Auto-switch to gallery on narrow screens (< 1024px) unless user explicitly chose a view
+  useEffect(() => {
+    const mql = window.matchMedia("(max-width: 1023px)");
+    function handleChange(e: MediaQueryListEvent | MediaQueryList) {
+      if (!userSetView) {
+        setView(e.matches ? "gallery" : "list");
+      }
+    }
+    handleChange(mql);
+    mql.addEventListener("change", handleChange);
+    return () => mql.removeEventListener("change", handleChange);
+  }, [userSetView]);
+
+  const handleViewChange = useCallback((v: MatchView) => {
+    setView(v);
+    setUserSetView(true);
+  }, []);
   const [search, setSearch] = useState(() => searchParams.get("q") || "");
   const [sortField, setSortField] = useState<SortField>(() => (searchParams.get("sort") as SortField) || "date");
   const [sortDir, setSortDir] = useState<SortDir>(() => (searchParams.get("dir") as SortDir) || "desc");
@@ -325,24 +474,36 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
     return filters.filter((f) => f.key === key).map((f) => f.value);
   }
 
+  const [uploadOpen, setUploadOpen] = useState(false);
+
   if (matches.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[40vh]">
-        <div className="rounded-full bg-[#F5F5F5] p-4 mb-4">
-          <Inbox className="h-8 w-8 text-[#888888]" />
+      <>
+        <div className="flex flex-col items-center justify-center min-h-[40vh]">
+          <div className="rounded-full bg-[#F5F5F5] p-4 mb-4">
+            <Inbox className="h-8 w-8 text-[#888888]" />
+          </div>
+          <p className="font-medium text-[#0D0D0D] mb-1">No matches yet</p>
+          <p className="text-[14px] text-[#888888] mb-5 text-center max-w-[280px]">
+            Upload a SwingVision match file to see your stats, scores, and analysis here.
+          </p>
+          <button
+            onClick={() => setUploadOpen(true)}
+            className="flex items-center gap-1.5 h-9 pl-3.5 pr-4.5 rounded-[6px] bg-[#3B82F6] hover:bg-[#2563EB] active:bg-[#2563EB] text-white text-[13px] font-medium tracking-[0.5px] shadow-[0_1px_3px_rgba(57,134,243,0.25)] hover:shadow-[0_1px_3px_rgba(57,134,243,0.25),0_0_16px_rgba(57,134,243,0.2)] active:scale-[0.97] transition-[color,background-color,transform,box-shadow] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(57,134,243,0.5)] focus-visible:ring-offset-1"
+          >
+            <Plus className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
+            Create Match
+          </button>
         </div>
-        <p className="font-medium text-[#0D0D0D] mb-1">No matches yet</p>
-        <p className="text-[14px] text-[#888888]">
-          Upload your first match to see it here.
-        </p>
-      </div>
+        <UploadMatchModal open={uploadOpen} onOpenChange={setUploadOpen} />
+      </>
     );
   }
 
   return (
     <div>
-      {/* Toolbar: filters, search, sort, view toggle — single row */}
-      <div className="flex items-center justify-between gap-3 mb-5">
+      {/* Toolbar: filters, search, sort, view toggle — wraps on medium screens */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-5">
         {/* Left: filter chips */}
         <div className="flex items-center gap-2">
           {FILTER_CHIPS.map((chip) => (
@@ -350,6 +511,7 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
               key={chip.key}
               filterKey={chip.key}
               label={chip.label}
+              title={chip.title}
               values={chip.getValues(matches)}
               activeValues={activeValuesFor(chip.key)}
               onToggle={toggleFilter}
@@ -387,16 +549,9 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
             />
           </div>
 
-          <button
-            onClick={() => toggleSort(sortField)}
-            aria-label={`Sort by ${sortField}, ${sortDir === "asc" ? "ascending" : "descending"}`}
-            className="flex items-center gap-1.5 h-8 px-3.5 rounded-full ring-1 ring-inset ring-[#D9D9D9] text-xs font-medium text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6] transition-[color,background-color] duration-200"
-          >
-            <ArrowUpDown className="w-3.5 h-3.5" />
-            Sort order
-          </button>
+          <SortDropdown sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
 
-          <ViewToggle view={view} onViewChange={setView} />
+          <ViewToggle view={view} onViewChange={handleViewChange} />
         </div>
       </div>
 
@@ -405,9 +560,35 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
         <div className="flex flex-col items-center justify-center py-16">
           <Search className="h-8 w-8 text-[#D9D9D9] mb-3" />
           <p className="text-[14px] font-medium text-[#0D0D0D] mb-1">No matches found</p>
-          <p className="text-[12px] text-[#888888]">
-            Try adjusting your filters or search query.
-          </p>
+          {(filters.length > 0 || search) && (
+            <div className="flex flex-col items-center gap-2 mt-1">
+              <div className="flex items-center gap-1.5 flex-wrap justify-center">
+                {search && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#F5F5F5] text-[11px] text-[#525252]">
+                    &ldquo;{search}&rdquo;
+                  </span>
+                )}
+                {filters.map((f) => (
+                  <span key={`${f.key}-${f.value}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#EBF2FD] text-[11px] text-[#3B82F6]">
+                    {f.value}
+                    <button
+                      onClick={() => toggleFilter(f.key, f.value)}
+                      className="hover:text-[#1D4ED8] transition-[color] duration-200"
+                      aria-label={`Remove ${f.value} filter`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <button
+                onClick={() => { setFilters([]); setSearch(""); }}
+                className="text-xs text-[#888888] hover:text-[#3B82F6] underline underline-offset-2 transition-[color] duration-200"
+              >
+                Clear all filters
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <MatchesGrid
@@ -442,7 +623,9 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
                   />
                 </button>
                 {pageSizeOpen && (
-                  <div className="absolute bottom-full left-0 mb-1.5 min-w-[56px] bg-white border border-[#E7E7E7] rounded-xl shadow-[0px_4px_16px_rgba(0,0,0,0.08)] z-20 py-1 px-1">
+                  <div className="absolute bottom-full left-0 mb-2 min-w-[56px] bg-white border border-[#E7E7E7] rounded-xl shadow-[0px_4px_16px_rgba(0,0,0,0.08)] z-20 py-1 px-1">
+                    {/* Caret */}
+                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-white border-r border-b border-[#E7E7E7] rotate-45" />
                     {PAGE_SIZES.map((size) => (
                       <button
                         key={size}
