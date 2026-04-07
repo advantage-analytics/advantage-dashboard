@@ -402,6 +402,18 @@ h-px bg-[#E5E5EA] mx-2.5 my-1
 
 ## Layout Patterns
 
+### Page Heading (Label + Title)
+
+```
+flex flex-col gap-3
+// Label
+text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]
+// Title
+font-light text-[30px] text-[#0D0D0D] tracking-[-0.6px] leading-[36px]
+```
+
+Used on Home (date + greeting), Matches (count + title), Statistics (count + title). The `gap-3` (12px) between label and title is required.
+
 ### Page Container
 
 ```
