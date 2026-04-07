@@ -15,34 +15,41 @@ export interface ProviderContentProps {
 export function ProviderContent({ selectedProvider, onProviderSelect }: ProviderContentProps) {
   return (
     <div className="h-full flex items-center justify-center">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-[24px]">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-[600px] px-4">
       {providers.map((provider) => {
         const isAvailable = provider.available !== false;
+        const isSelected = selectedProvider === provider.id;
         return (
           <div
             key={provider.id}
-            className={`w-[280px] h-[140px] transition-all duration-200 rounded-xl bg-white border overflow-visible relative group ${
+            className={`w-full aspect-[2/1] transition-all duration-200 rounded-[14px] bg-white border shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none ${
               isAvailable
-                ? 'cursor-pointer border-[#EAECF0] hover:scale-[1.02]'
-                : 'cursor-not-allowed border-[#EAECF0]'
+                ? 'cursor-pointer border-[#F3F3F3] hover:border-[#3B82F6]/40 hover:shadow-[0px_2px_12px_0px_rgba(0,0,0,0.08)]'
+                : 'opacity-50 cursor-not-allowed border-[#F3F3F3]'
             } ${
-              selectedProvider === provider.id ? 'ring-2 ring-[#3B82F6] ring-offset-2' : ''
+              isSelected ? 'border-[#3B82F6] shadow-[0px_2px_8px_0px_rgba(59,130,246,0.15)]' : ''
             }`}
+            tabIndex={isAvailable ? 0 : -1}
+            role="button"
+            aria-label={`Select ${provider.name}${!isAvailable ? ' (unavailable)' : ''}`}
+            aria-pressed={isSelected}
             onClick={() => {
               if (isAvailable) {
-                onProviderSelect(selectedProvider === provider.id ? null : provider.id);
+                onProviderSelect(isSelected ? null : provider.id);
+              }
+            }}
+            onKeyDown={(e) => {
+              if (isAvailable && (e.key === 'Enter' || e.key === ' ')) {
+                e.preventDefault();
+                onProviderSelect(isSelected ? null : provider.id);
               }
             }}
           >
-            {/* Hover overlay for available providers */}
-            {isAvailable && (
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/1 transition-all duration-200 z-[5] rounded-xl" />
-            )}
             <div className="w-full h-full flex items-center justify-center p-6">
               <img
                 src={provider.logo}
                 alt={provider.name}
-                className="w-[232px] h-[92px] object-contain"
+                className="max-w-[232px] max-h-[92px] object-contain"
               />
             </div>
           </div>
