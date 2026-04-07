@@ -5,56 +5,64 @@
  * Two cards for selecting analysis method
  */
 
+import { Sparkles } from "lucide-react";
+
 export interface MethodContentProps {
   selectedMethod: string | null;
   onMethodSelect: (methodId: string | null) => void;
 }
 
 export function MethodContent({ selectedMethod, onMethodSelect }: MethodContentProps) {
+  const isSelected = selectedMethod === "elc";
+
   return (
     <div className="h-full flex items-center justify-center gap-6">
+      {/* ELC Card */}
       <div
-        className={`w-[240px] h-[252px] cursor-pointer transition-all duration-200 rounded-2xl relative overflow-visible group hover:scale-[1.02] ${
-          selectedMethod === "elc" ? "ring-2 ring-[#3B82F6] ring-offset-2" : ""
+        className={`flex-1 max-w-[280px] cursor-pointer transition-all duration-200 rounded-[14px] overflow-hidden bg-white border shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] hover:border-[#3B82F6]/40 hover:shadow-[0px_2px_12px_0px_rgba(0,0,0,0.08)] focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none ${
+          isSelected
+            ? "border-[#3B82F6] shadow-[0px_2px_8px_0px_rgba(59,130,246,0.15)]"
+            : "border-[#F3F3F3]"
         }`}
-        onClick={() => onMethodSelect(selectedMethod === "elc" ? null : "elc")}
+        onClick={() => onMethodSelect(isSelected ? null : "elc")}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onMethodSelect(isSelected ? null : "elc");
+          }
+        }}
+        aria-label="Select Electronic Line Calling method"
       >
-        <div className="absolute inset-0 overflow-hidden rounded-2xl" style={{ clipPath: "inset(0 round 16px)" }}>
-          <img
-            src="/marketing/elc-image.png"
-            alt="Electronic Line Calling"
-            className="absolute inset-0 w-full h-full object-cover scale-100 origin-top"
-          />
-          {/* Hover overlay */}
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-white/5 transition-all duration-200 z-[5]" />
-          <div className="absolute bottom-0 left-0 right-0 h-32 z-10 rounded-b-2xl overflow-hidden" style={{ clipPath: "inset(0 0 0 0 round 0 0 16px 16px)" }}>
-            <div className="absolute inset-0 backdrop-blur-[24px]" style={{ maskImage: 'linear-gradient(to top, black, transparent)', WebkitMaskImage: 'linear-gradient(to top, black, transparent)' }} />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/[0.60] to-transparent" />
-            <div className="absolute bottom-0 left-0 right-0 px-4 pb-4 space-y-1.5">
-              <p className="italic font-medium text-xs text-white">Electronic Line Calling</p>
-              <p className="text-[10px] text-normal text-white/80">
-                Choose from a variety of providers such as SwingVision, BaselineVision, and many more.
-              </p>
-            </div>
-          </div>
+        <img
+          src="/marketing/elc-image.png"
+          alt="Electronic Line Calling"
+          className="w-full h-24 object-cover"
+        />
+        <div className="px-4 py-3 space-y-1">
+          <p className="text-[13px] font-medium text-[#0D0D0D]">Electronic Line Calling</p>
+          <p className="text-[12px] font-normal text-[#525252] leading-[1.5]">
+            Choose from a variety of providers such as SwingVision, BaselineVision, and many more.
+          </p>
         </div>
       </div>
 
-      <div className="w-[240px] h-[252px] cursor-not-allowed rounded-2xl relative overflow-hidden bg-white border-[0.5px] border-[#EAECF0]" style={{ clipPath: "inset(0 round 16px)" }}>
-        <img
-          src="/logos/logo.svg"
-          alt="Advantage"
-          className="absolute top-[92px] left-1/2 -translate-x-1/2 w-[78px] h-[14px]"
-        />
-        <div className="absolute bottom-0 left-0 right-0 h-32 z-10 rounded-b-2xl overflow-hidden" style={{ clipPath: "inset(0 0 0 0 round 0 0 16px 16px)" }}>
-          <div className="absolute inset-0 backdrop-blur-[24px]" style={{ maskImage: 'linear-gradient(to top, black, transparent)', WebkitMaskImage: 'linear-gradient(to top, black, transparent)' }} />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/[0.20] to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 px-4 pb-4 space-y-1.5">
-            <p className="italic font-medium text-xs text-[#0D0D0D]">Coming Soon</p>
-            <p className="text-[10px] text-normal text-[#888888]">
-              Choose to label with Advantage Intelligence or traditional labeling techniques.
-            </p>
+      {/* Coming Soon Card */}
+      <div
+        className="flex-1 max-w-[280px] cursor-not-allowed rounded-[14px] overflow-hidden bg-white border border-[#F3F3F3] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] opacity-50"
+        aria-label="Coming soon"
+      >
+        <div className="flex items-center justify-center h-24">
+          <div className="bg-[#F5F5F5] p-4 rounded-full">
+            <Sparkles className="size-8 text-[#888888]" strokeWidth={1.5} aria-hidden="true" />
           </div>
+        </div>
+        <div className="px-4 py-3 space-y-1">
+          <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">Coming Soon</p>
+          <p className="text-[12px] font-normal text-[#525252] leading-[1.5]">
+            Choose to label with Advantage Intelligence or traditional labeling techniques.
+          </p>
         </div>
       </div>
     </div>
