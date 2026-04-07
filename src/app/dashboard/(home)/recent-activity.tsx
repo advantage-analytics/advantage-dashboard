@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Inbox } from "lucide-react";
+import { createPortal } from "react-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { AlertCircle, Inbox, RefreshCw } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import RecentMatches from "@/components/dashboard/home/recent-matches";
 import { createClient } from "@/lib/supabase/client";
@@ -168,6 +171,16 @@ export default function RecentActivity() {
   const [events, setEvents] = useState<EventGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  // Hydrate processing state from sessionStorage on mount
+  useEffect(() => {
+    setMounted(true);
+    if (sessionStorage.getItem("match-processing") === "true") {
+      setProcessing(true);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -234,13 +247,54 @@ export default function RecentActivity() {
   }, [load]);
 
   useEffect(() => {
-    const handler = () => load();
+    const handler = () => {
+      sessionStorage.setItem("match-processing", "true");
+      setProcessing(true);
+      load();
+    };
     window.addEventListener("match-created", handler);
     return () => window.removeEventListener("match-created", handler);
   }, [load]);
 
+  // Poll for stats once processing starts, auto-dismiss when stats arrive
+  useEffect(() => {
+    if (!processing) return;
+    const interval = setInterval(async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: matches } = await supabase
+        .from("matches")
+        .select("id")
+        .eq("created_by", user.id)
+        .order("date", { ascending: false })
+        .limit(1);
+      if (!matches?.[0]) return;
+      const { data: stats } = await supabase
+        .from("match_stats_with_percentages")
+        .select("match_id")
+        .eq("match_id", matches[0].id)
+        .limit(1);
+      if (stats && stats.length > 0) {
+        sessionStorage.removeItem("match-processing");
+        setProcessing(false);
+        load();
+      }
+    }, 3000);
+    // Safety timeout — dismiss after 60s regardless
+    const timeout = setTimeout(() => {
+      sessionStorage.removeItem("match-processing");
+      setProcessing(false);
+    }, 60000);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, [processing, load]);
+
   return (
-    <div className="bg-white border border-[#F3F3F3] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] rounded-[14px] overflow-hidden">
+    <>
+    <div className="bg-white border border-[#F3F3F3] shadow-[0px_6px_20px_0px_rgba(0,0,0,0.12)] rounded-[14px] overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between h-14 px-5">
         <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
@@ -248,7 +302,7 @@ export default function RecentActivity() {
         </p>
         <Link
           href="/dashboard/matches"
-          className="text-[10px] font-medium text-[#3B82F6] uppercase tracking-[2px] transition-colors duration-200 hover:text-[#2563EB]"
+          className="text-[10px] font-medium text-[#3B82F6] uppercase tracking-[2.5px] transition-colors duration-200 hover:text-[#2563EB]"
         >
           VIEW ALL
         </Link>
@@ -257,26 +311,74 @@ export default function RecentActivity() {
       {/* Content */}
       <div className="pb-5">
         {loading && (
-          <div className="flex items-center justify-center py-12 text-[#888888] text-sm">
-            Loading...
+          <div className="flex flex-col gap-8 px-5 py-4">
+            {[0, 1].map((i) => (
+              <div key={i} className="flex flex-col gap-3">
+                <Skeleton className="h-5 w-40" />
+                <Skeleton className="h-3 w-56" />
+                <div className="flex flex-col gap-5 mt-2">
+                  {[0, 1].map((j) => (
+                    <div key={j} className="flex items-center justify-between">
+                      <div className="flex gap-3 items-center">
+                        <Skeleton className="w-px h-10" />
+                        <div className="flex flex-col gap-2">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-3 w-24" />
+                        </div>
+                      </div>
+                      <div className="flex gap-4">
+                        <Skeleton className="h-8 w-14" />
+                        <Skeleton className="h-8 w-14" />
+                        <Skeleton className="h-8 w-14" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
         {error && (
-          <div className="py-6 text-center text-sm text-red-600" role="alert">
-            {error}
+          <div className="flex flex-col items-center justify-center py-8 px-4 text-center" role="alert">
+            <AlertCircle className="text-[#E51837] size-6 mb-2" aria-hidden />
+            <p className="text-[13px] font-medium text-[#0D0D0D] mb-1">Failed to load matches</p>
+            <p className="text-[12px] text-[#888888] mb-4">Something went wrong. Please try again.</p>
+            <button
+              type="button"
+              onClick={load}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-medium uppercase tracking-[1.5px] rounded-full transition-colors duration-200"
+            >
+              <RefreshCw className="size-3" aria-hidden />
+              Retry
+            </button>
           </div>
         )}
 
         {!loading && !error && events.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+          <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
             <div className="rounded-full bg-[#F5F5F5] p-4 mb-4">
               <Inbox className="h-8 w-8 text-[#888888]" aria-hidden />
             </div>
             <p className="font-medium text-[#0D0D0D] mb-1">No matches yet</p>
-            <p className="text-sm text-[#888888] max-w-[260px]">
-              Upload your first match to see your recent activity here.
+            <p className="text-[12px] text-[#888888] max-w-[300px] leading-[1.6] mb-5">
+              Upload a SwingVision match file (.xlsx) to see your stats,
+              serve placement, and AI-powered analysis here.
             </p>
+            <div className="flex flex-col gap-2 text-[10px] text-[#AAAAAA] uppercase tracking-[1.5px]">
+              <div className="flex items-center gap-2">
+                <span className="w-4 h-px bg-[#E7E7E7]" aria-hidden />
+                <span>KPI breakdown</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-4 h-px bg-[#E7E7E7]" aria-hidden />
+                <span>Serve placement court map</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-4 h-px bg-[#E7E7E7]" aria-hidden />
+                <span>Match-by-match trends</span>
+              </div>
+            </div>
           </div>
         )}
 
@@ -289,5 +391,51 @@ export default function RecentActivity() {
         )}
       </div>
     </div>
+
+    {/* Floating processing popup */}
+    {mounted && createPortal(
+      <AnimatePresence>
+        {processing && (
+          <motion.div
+            initial={{ opacity: 0, y: 24, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.98 }}
+            transition={{
+              duration: 0.35,
+              ease: [0.25, 0.46, 0.45, 0.94],
+              exit: { duration: 0.2 },
+            }}
+            role="status"
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 pl-4 pr-5 py-3 bg-[#0D0D0D] rounded-[12px] shadow-[0px_8px_32px_rgba(0,0,0,0.25),0px_0px_0px_1px_rgba(255,255,255,0.06)_inset]"
+          >
+            {/* Animated progress dot */}
+            <div className="relative flex items-center justify-center size-5 shrink-0">
+              <motion.div
+                className="absolute inset-0 rounded-full border-[1.5px] border-[#3B82F6]/30"
+                aria-hidden
+              />
+              <motion.div
+                className="absolute inset-0 rounded-full border-[1.5px] border-transparent border-t-[#3B82F6]"
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, ease: "linear", repeat: Infinity }}
+                aria-hidden
+              />
+              <div className="size-1.5 rounded-full bg-[#3B82F6]" aria-hidden />
+            </div>
+
+            <div className="flex flex-col gap-0.5">
+              <p className="text-[12px] font-medium text-white leading-none">
+                Analyzing match data
+              </p>
+              <p className="text-[10px] font-normal text-[#888888] leading-none">
+                Stats will refresh automatically
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>,
+      document.body
+    )}
+    </>
   );
 }

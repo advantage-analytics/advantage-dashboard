@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useRef } from "react";
 import Link from "next/link";
 import { MatchMetadataRow } from "@/components/dashboard/matches/match-metadata-row";
 import type { EventGroup, MatchRow } from "@/app/dashboard/(home)/recent-activity";
@@ -38,7 +39,7 @@ function MatchRowItem({ match }: { match: MatchRow }) {
 
           {/* Opponent metadata (handedness, backhand) */}
           {match.opponentMeta && match.opponentMeta.length > 0 && (
-            <div className="flex items-start gap-2 text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2px] leading-[13.5px] overflow-hidden whitespace-nowrap">
+            <div className="flex items-start gap-2 text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2.5px] leading-[13.5px] overflow-hidden whitespace-nowrap">
               {match.opponentMeta.map((meta, i) => (
                 <span key={i} className="shrink-0">
                   {i > 0 && <span className="mr-2">·</span>}
@@ -53,7 +54,7 @@ function MatchRowItem({ match }: { match: MatchRow }) {
       {/* Right: Stat columns */}
       <div className="flex items-center gap-4">
         <div className="flex flex-col gap-2 items-end shrink-0">
-          <span className="text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2px] leading-[13.5px]">
+          <span className="text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2.5px] leading-[13.5px]">
             FIRST SERVE
           </span>
           <span className="text-[13px] font-light text-[#0D0D0D] tabular-nums">
@@ -61,7 +62,7 @@ function MatchRowItem({ match }: { match: MatchRow }) {
           </span>
         </div>
         <div className="flex flex-col gap-2 items-end shrink-0">
-          <span className="text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2px] leading-[13.5px]">
+          <span className="text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2.5px] leading-[13.5px]">
             WINNERS / ERRORS
           </span>
           <span className="text-[13px] font-light text-[#0D0D0D] tabular-nums">
@@ -71,7 +72,7 @@ function MatchRowItem({ match }: { match: MatchRow }) {
           </span>
         </div>
         <div className="flex flex-col gap-2 items-end shrink-0">
-          <span className="text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2px] leading-[13.5px]">
+          <span className="text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2.5px] leading-[13.5px]">
             BREAKPOINTS
           </span>
           <span className="text-[13px] font-light text-[#0D0D0D] tabular-nums">
@@ -86,6 +87,20 @@ function MatchRowItem({ match }: { match: MatchRow }) {
 }
 
 export default function RecentMatches({ event }: RecentMatchesProps) {
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const handleArrowNav = useCallback((e: React.KeyboardEvent) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    const list = listRef.current;
+    if (!list) return;
+    const links = Array.from(list.querySelectorAll<HTMLAnchorElement>("a"));
+    const idx = links.indexOf(document.activeElement as HTMLAnchorElement);
+    if (idx === -1) return;
+    e.preventDefault();
+    const next = e.key === "ArrowDown" ? idx + 1 : idx - 1;
+    links[next]?.focus();
+  }, []);
+
   return (
     <div className="flex flex-col gap-3 px-5">
       {/* Event Header */}
@@ -101,8 +116,12 @@ export default function RecentMatches({ event }: RecentMatchesProps) {
         />
       </div>
 
-      {/* Match Rows */}
-      <div className="flex flex-col gap-5">
+      {/* Match Rows — arrow key navigation within group */}
+      <div
+        className="flex flex-col gap-5"
+        onKeyDown={handleArrowNav}
+        ref={listRef}
+      >
         {event.matches.map((match) => (
           <MatchRowItem key={match.id} match={match} />
         ))}

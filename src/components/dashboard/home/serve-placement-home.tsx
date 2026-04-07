@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { Skeleton } from "@/components/ui/skeleton";
 import { createClient } from "@/lib/supabase/client";
 
 interface ServeDot {
@@ -49,7 +50,7 @@ function HalfCourtSVG({ dots }: { dots: ServeDot[] }) {
       aria-label="Serve placement court diagram showing where serves landed in the last 4 matches"
     >
       {/* Court background */}
-      <rect x="0" y="0" width={COURT_W} height={COURT_H} fill="#F7FAFC" />
+      <rect x="0" y="0" width={COURT_W} height={COURT_H} fill="#EFF4FF" />
 
       {/* Doubles court outline */}
       <rect
@@ -223,11 +224,11 @@ export default function ServePlacementHome() {
       </div>
 
       {/* Court area */}
-      <div className="bg-[#F7FAFC] h-[415px]">
+      <div className="bg-[#EFF4FF] h-[415px]">
         <div className="flex items-center justify-center p-6 h-full">
           {loading ? (
-            <div className="w-full flex items-center justify-center">
-              <p className="text-[12px] text-[#888888]">Loading&hellip;</p>
+            <div className="w-full flex flex-col items-center justify-center gap-4">
+              <Skeleton className="w-full max-w-[400px] h-[300px] rounded-[8px]" />
             </div>
           ) : (
             <div className="w-full max-w-[447px]">

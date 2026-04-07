@@ -367,7 +367,6 @@ function calculateKpiCards(
   return [
     buildCard("1ST SERVE PERCENTAGE", "firstServePct"),
     buildCard("SERVICE GAMES WON", "serviceGamesWon"),
-    buildCard("BREAKPOINTS SAVED", "bpSaved"),
     buildCard("SERVICE RETURNS WON", "serviceReturnsWon"),
     buildCard("BREAKPOINTS CONVERTED", "bpConverted"),
   ];

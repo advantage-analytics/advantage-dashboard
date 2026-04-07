@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { AlertCircle, RefreshCw } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { createClient } from "@/lib/supabase/client";
 
 interface ActivityItem {
@@ -28,10 +30,12 @@ function formatTimeAgo(date: Date): string {
 export default function ActivityFeed() {
   const [items, setItems] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const supabase = createClient();
     setLoading(true);
+    setError(null);
     try {
       const {
         data: { user },
@@ -121,7 +125,8 @@ export default function ActivityFeed() {
       }
 
       setItems(activities.slice(0, 3));
-    } catch {
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load activity");
       setItems([]);
     } finally {
       setLoading(false);
@@ -138,10 +143,50 @@ export default function ActivityFeed() {
     return () => window.removeEventListener("match-created", handler);
   }, [load]);
 
-  if (loading || items.length === 0) return null;
+  if (loading) {
+    return (
+      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden py-5">
+        <div className="px-5 mb-4">
+          <Skeleton className="h-3 w-16" />
+        </div>
+        <div className="flex flex-col gap-4 px-5">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex gap-3 items-center">
+              <Skeleton className="w-px h-8" />
+              <div className="flex flex-col gap-1.5 flex-1">
+                <Skeleton className="h-3 w-full" />
+                <Skeleton className="h-2.5 w-12" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden py-5">
+        <div className="flex flex-col items-center justify-center py-6 px-4 text-center" role="alert">
+          <AlertCircle className="text-[#E51837] size-5 mb-2" aria-hidden />
+          <p className="text-[12px] font-medium text-[#0D0D0D] mb-1">Failed to load activity</p>
+          <button
+            type="button"
+            onClick={load}
+            className="flex items-center gap-1.5 mt-2 px-3 py-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-medium uppercase tracking-[1.5px] rounded-full transition-colors duration-200"
+          >
+            <RefreshCw className="size-3" aria-hidden />
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (items.length === 0) return null;
 
   return (
-    <div className="bg-white border border-[#F0F0F0] rounded-[16px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] overflow-hidden py-5">
+    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden py-5">
       <div className="px-5 mb-4">
         <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
           ACTIVITY

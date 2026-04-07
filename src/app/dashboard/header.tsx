@@ -10,9 +10,26 @@ import {
   Settings,
   LogOut,
   User,
+  Loader2,
 } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useSidebar } from "@/components/ui/sidebar";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { SearchCommandPalette } from "@/components/dashboard/search/search-command-palette";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 
@@ -44,15 +61,20 @@ export function Header() {
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [initials, setInitials] = useState("P");
+  const [initials, setInitials] = useState<string | null>(null);
   const [matchCrumb, setMatchCrumb] = useState<MatchCrumb | null>(null);
+  const [matchCrumbLoading, setMatchCrumbLoading] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [isMac, setIsMac] = useState(true);
+  const [isMac, setIsMac] = useState<boolean | null>(null);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isLogoutOpen, setIsLogoutOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
 
   const isMatchDetailPage = /^\/dashboard\/matches\/[^/]+/.test(pathname);
-  const isDarkPage = isMatchDetailPage;
 
   const matchId = isMatchDetailPage
     ? pathname.match(/^\/dashboard\/matches\/([^/]+)/)?.[1]
@@ -60,28 +82,35 @@ export function Header() {
 
   // Platform detection for shortcut display
   useEffect(() => {
-    setIsMac(/Mac|iPod|iPhone|iPad/.test(navigator.platform));
+    const platform = (navigator as Navigator & { userAgentData?: { platform: string } }).userAgentData?.platform ?? navigator.platform;
+    setIsMac(/mac/i.test(platform));
   }, []);
 
   // Fetch match breadcrumb data
   useEffect(() => {
     if (!matchId) {
       setMatchCrumb(null);
+      setMatchCrumbLoading(false);
       return;
     }
+    setMatchCrumbLoading(true);
     async function fetchMatchCrumb() {
-      const supabase = createClient();
-      const { data } = await supabase
-        .from("matches")
-        .select("tournament_name, player1_name, player2_name")
-        .eq("id", matchId)
-        .single();
-      if (data) {
-        setMatchCrumb({
-          tournamentName: data.tournament_name ?? "Unknown Event",
-          player1Name: data.player1_name,
-          player2Name: data.player2_name,
-        });
+      try {
+        const supabase = createClient();
+        const { data } = await supabase
+          .from("matches")
+          .select("tournament_name, player1_name, player2_name")
+          .eq("id", matchId)
+          .single();
+        if (data) {
+          setMatchCrumb({
+            tournamentName: data.tournament_name ?? "Unknown Event",
+            player1Name: data.player1_name,
+            player2Name: data.player2_name,
+          });
+        }
+      } finally {
+        setMatchCrumbLoading(false);
       }
     }
     fetchMatchCrumb();
@@ -101,22 +130,27 @@ export function Header() {
   // Fetch user initials
   useEffect(() => {
     async function fetchUserInitials() {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
+      try {
+        const supabase = createClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return;
 
-      const { data } = await supabase
-        .from("users")
-        .select("first_name, last_name")
-        .eq("id", user.id)
-        .single();
+        const { data } = await supabase
+          .from("users")
+          .select("first_name, last_name")
+          .eq("id", user.id)
+          .single();
 
-      if (data) {
-        const firstInitial = data.first_name?.[0] || "";
-        const lastInitial = data.last_name?.[0] || "";
-        setInitials((firstInitial + lastInitial).toUpperCase() || "P");
+        if (data) {
+          const firstInitial = data.first_name?.[0] || "";
+          const lastInitial = data.last_name?.[0] || "";
+          const computed = (firstInitial + lastInitial).toUpperCase();
+          if (computed) setInitials(computed);
+        }
+      } catch {
+        // Keep initials as null — will show fallback icon
       }
     }
     fetchUserInitials();
@@ -143,22 +177,77 @@ export function Header() {
     };
   }, []);
 
+  // Trap focus inside profile dropdown when open
+  useEffect(() => {
+    if (!isProfileOpen || !menuRef.current) return;
+
+    const menu = menuRef.current;
+    const focusableEls = menu.querySelectorAll<HTMLElement>(
+      "a[href], button:not([disabled])"
+    );
+    if (focusableEls.length === 0) return;
+
+    const first = focusableEls[0];
+    const last = focusableEls[focusableEls.length - 1];
+
+    // Focus the first item when opened
+    first.focus();
+
+    function handleMenuKeys(event: KeyboardEvent) {
+      const items = Array.from(focusableEls);
+      const index = items.indexOf(document.activeElement as HTMLElement);
+
+      if (event.key === "Tab") {
+        if (event.shiftKey) {
+          if (document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+          }
+        }
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        items[(index + 1) % items.length].focus();
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        items[(index - 1 + items.length) % items.length].focus();
+      } else if (event.key === "Home") {
+        event.preventDefault();
+        first.focus();
+      } else if (event.key === "End") {
+        event.preventDefault();
+        last.focus();
+      }
+    }
+
+    menu.addEventListener("keydown", handleMenuKeys);
+    return () => menu.removeEventListener("keydown", handleMenuKeys);
+  }, [isProfileOpen]);
+
   // Close dropdown on route change
   useEffect(() => {
     setIsProfileOpen(false);
   }, [pathname]);
 
-  // Cmd+K / Ctrl+K search shortcut
+  // Keyboard shortcuts: Cmd+K (search), Cmd+B (sidebar)
   useEffect(() => {
-    function handleSearchShortcut(event: KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.key === "k") {
+    function handleShortcuts(event: KeyboardEvent) {
+      if (!(event.metaKey || event.ctrlKey)) return;
+      if (event.key === "k") {
         event.preventDefault();
-        // Future: open command palette
+        setIsSearchOpen(true);
+      } else if (event.key === "b") {
+        event.preventDefault();
+        toggleSidebar();
       }
     }
-    document.addEventListener("keydown", handleSearchShortcut);
-    return () => document.removeEventListener("keydown", handleSearchShortcut);
-  }, []);
+    document.addEventListener("keydown", handleShortcuts);
+    return () => document.removeEventListener("keydown", handleShortcuts);
+  }, [toggleSidebar]);
 
   // Scroll detection for border
   const handleScroll = useCallback(() => {
@@ -174,39 +263,67 @@ export function Header() {
   }, [handleScroll]);
 
   const handleLogout = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
+    setIsLoggingOut(true);
+    setLogoutError(false);
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+      router.push("/login");
+    } catch {
+      setIsLoggingOut(false);
+      setLogoutError(true);
+    }
   };
 
   return (
+    <>
     <header
       ref={headerRef}
       className={cn(
         "sticky top-0 z-30 flex items-center justify-between h-11 py-4 px-4 bg-white border-b transition-colors duration-200",
-        scrolled
-          ? isDarkPage
-            ? "border-white/[0.06]"
-            : "border-[#EBEBEB]"
-          : "border-transparent"
+        scrolled ? "border-[#EBEBEB]" : "border-transparent"
       )}
     >
       {/* Left: toggle + breadcrumbs */}
       <div className="flex items-center flex-1 min-w-0">
-        <button
-          onClick={toggleSidebar}
-          className={cn(
-            "flex items-center justify-center w-8 h-8 rounded-lg cursor-pointer transition-colors duration-150 active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none",
-            isDarkPage
-              ? "text-white/60 hover:text-white hover:bg-white/[0.07]"
-              : "text-[#8A8A8E] hover:text-[#3C3C43] hover:bg-[#F5F5F5]"
-          )}
-          aria-label="Toggle sidebar"
-        >
-          <PanelLeft className="h-[15px] w-[15px]" strokeWidth={1.5} aria-hidden="true" />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={toggleSidebar}
+              className="flex items-center justify-center w-8 h-8 rounded-lg cursor-pointer transition-colors duration-150 text-[#8A8A8E] hover:text-[#3C3C43] hover:bg-[#F5F5F5] active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none"
+              aria-label="Toggle sidebar"
+            >
+              <PanelLeft className="h-[15px] w-[15px]" strokeWidth={1.5} aria-hidden="true" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={4}>
+            Toggle sidebar
+            {isMac !== null && (
+              <span className="ml-1.5 text-white/50">{isMac ? "\u2318B" : "\u2303B"}</span>
+            )}
+          </TooltipContent>
+        </Tooltip>
 
-        {breadcrumbs.length > 0 && (
+        {/* Breadcrumb skeleton while loading match detail */}
+        {isMatchDetailPage && matchCrumbLoading && !matchCrumb && (
+          <div className="flex items-center gap-1.5 ml-1">
+            <span className="inline-block h-3 w-14 rounded animate-pulse bg-[#F0F0F0]" />
+            <ChevronRight
+              className="h-3 w-3 shrink-0 text-[#CCCCCC]"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+            <span className="inline-block h-3 w-24 rounded animate-pulse bg-[#F0F0F0]" />
+            <ChevronRight
+              className="h-3 w-3 shrink-0 text-[#CCCCCC]"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+            <span className="inline-block h-3 w-32 rounded animate-pulse bg-[#F0F0F0]" />
+          </div>
+        )}
+
+        {breadcrumbs.length > 0 && !(isMatchDetailPage && matchCrumbLoading) && (
           <nav
             aria-label="Breadcrumb"
             className="flex items-center gap-0.5 ml-1 text-[11px] font-normal min-w-0"
@@ -215,10 +332,7 @@ export function Header() {
               <span key={i} className="flex items-center gap-0.5 min-w-0">
                 {i > 0 && (
                   <ChevronRight
-                    className={cn(
-                      "h-3 w-3 shrink-0",
-                      isDarkPage ? "text-white/20" : "text-[#CCCCCC]"
-                    )}
+                    className="h-3 w-3 shrink-0 text-[#CCCCCC]"
                     strokeWidth={1.5}
                     aria-hidden="true"
                   />
@@ -226,12 +340,7 @@ export function Header() {
                 {crumb.href ? (
                   <Link
                     href={crumb.href}
-                    className={cn(
-                      "transition-colors duration-200 shrink-0",
-                      isDarkPage
-                        ? "text-white/40 hover:text-white/70"
-                        : "text-[#888888] hover:text-[#525252]"
-                    )}
+                    className="transition-colors duration-200 shrink-0 text-[#888888] hover:text-[#525252]"
                   >
                     {crumb.label}
                   </Link>
@@ -240,12 +349,8 @@ export function Header() {
                     className={cn(
                       "truncate",
                       i === breadcrumbs.length - 1
-                        ? isDarkPage
-                          ? "text-white/70"
-                          : "text-[#0D0D0D]"
-                        : isDarkPage
-                          ? "text-white/40"
-                          : "text-[#888888]"
+                        ? "text-[#0D0D0D]"
+                        : "text-[#888888]"
                     )}
                   >
                     {crumb.label}
@@ -260,48 +365,55 @@ export function Header() {
       {/* Right: search + profile */}
       <div className="flex items-center gap-1 shrink-0">
         {/* Search trigger — compact pill */}
-        <button
-          className={cn(
-            "flex items-center gap-1.5 h-7 pl-2 pr-1.5 rounded-lg cursor-pointer transition-colors duration-150 active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none",
-            isDarkPage
-              ? "text-white/40 hover:text-white/60 hover:bg-white/[0.07]"
-              : "text-[#8A8A8E] hover:text-[#3C3C43] hover:bg-[#F5F5F5]"
-          )}
-          aria-label="Search"
-        >
-          <Search className="h-[14px] w-[14px]" strokeWidth={1.5} aria-hidden="true" />
-          <kbd
-            className={cn(
-              "text-[10px] font-medium leading-none px-1 py-0.5 rounded",
-              isDarkPage
-                ? "text-white/25 bg-white/[0.06]"
-                : "text-[#AEAEB2] bg-[#F0F0F0]"
-            )}
-          >
-            {isMac ? "\u2318K" : "\u2303K"}
-          </kbd>
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => setIsSearchOpen(true)}
+              className="flex items-center gap-1.5 h-7 pl-2 pr-1.5 rounded-lg cursor-pointer transition-colors duration-150 text-[#8A8A8E] hover:text-[#3C3C43] hover:bg-[#F5F5F5] active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none"
+              aria-label="Search"
+            >
+              <Search className="h-[14px] w-[14px]" strokeWidth={1.5} aria-hidden="true" />
+              {isMac !== null && (
+                <kbd className="text-[10px] font-medium leading-none px-1 py-0.5 rounded text-[#AEAEB2] bg-[#F0F0F0]">
+                  {isMac ? "\u2318K" : "\u2303K"}
+                </kbd>
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={4}>
+            Search
+          </TooltipContent>
+        </Tooltip>
 
         {/* Profile */}
         <div className="relative" ref={profileRef}>
-          <button
-            onClick={() => setIsProfileOpen(!isProfileOpen)}
-            className={cn(
-              "h-8 w-8 rounded-lg flex items-center justify-center text-[11px] font-semibold tracking-wide cursor-pointer transition-colors duration-150 active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none",
-              isDarkPage
-                ? "text-white/70 hover:bg-white/[0.07]"
-                : "text-[#8A8A8E] hover:bg-[#F5F5F5]"
-            )}
-            aria-label="Profile menu"
-            aria-expanded={isProfileOpen}
-            aria-haspopup="menu"
-          >
-            {initials}
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => setIsProfileOpen(!isProfileOpen)}
+                className="h-8 w-8 rounded-lg flex items-center justify-center text-[11px] font-semibold tracking-wide cursor-pointer transition-colors duration-150 text-[#8A8A8E] hover:bg-[#F5F5F5] active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none"
+                aria-label="Profile menu"
+                aria-expanded={isProfileOpen}
+                aria-haspopup="menu"
+              >
+                {initials ?? (
+                  <User
+                    className="h-[15px] w-[15px]"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" sideOffset={4}>
+              Profile
+            </TooltipContent>
+          </Tooltip>
 
           <AnimatePresence>
             {isProfileOpen && (
               <motion.div
+                ref={menuRef}
                 initial={{
                   opacity: 0,
                   transform: shouldReduceMotion
@@ -357,7 +469,10 @@ export function Header() {
                   </Link>
                   <div className="h-px bg-[#E5E5EA] mx-2.5 my-1" />
                   <button
-                    onClick={handleLogout}
+                    onClick={() => {
+                      setIsProfileOpen(false);
+                      setIsLogoutOpen(true);
+                    }}
                     className="flex items-center gap-2.5 px-3 py-2 text-[13px] text-[#1D1D1F] hover:bg-[#F5F5F5] active:bg-[#EBEBEB] transition-colors duration-100 w-full cursor-pointer"
                     role="menuitem"
                   >
@@ -375,5 +490,57 @@ export function Header() {
         </div>
       </div>
     </header>
+
+    <SearchCommandPalette open={isSearchOpen} onOpenChange={setIsSearchOpen} />
+
+    {/* Logout confirmation */}
+    <AlertDialog open={isLogoutOpen} onOpenChange={(open) => { setIsLogoutOpen(open); if (!open) { setLogoutError(false); setIsLoggingOut(false); } }}>
+      <AlertDialogContent className="sm:max-w-[320px] sm:rounded-2xl p-5 gap-0 border border-[#E5E5EA] shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]">
+        <AlertDialogHeader className="space-y-0 text-left mb-5">
+          <div className="flex items-center gap-2.5 mb-2">
+            <div className="h-7 w-7 rounded-full bg-[rgba(229,24,55,0.15)] flex items-center justify-center shrink-0">
+              <LogOut className="h-3 w-3 text-[#E51837]" strokeWidth={1.5} />
+            </div>
+            <AlertDialogTitle className="text-[15px] font-semibold text-[#1D1D1F]">
+              Log out
+            </AlertDialogTitle>
+          </div>
+          <AlertDialogDescription className="text-[13px] text-[#8A8A8E] leading-[1.5]">
+            You&#39;ll need to sign in again to access your matches and statistics.
+          </AlertDialogDescription>
+          {logoutError && (
+            <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-[6px] bg-[rgba(229,24,55,0.15)]">
+              <div className="h-1 w-1 rounded-full bg-[#E51837] shrink-0" />
+              <p className="text-[12px] font-normal text-[#E51837]">
+                Could not log out. Please try again.
+              </p>
+            </div>
+          )}
+        </AlertDialogHeader>
+        <div className="flex items-center justify-end gap-2.5">
+          <AlertDialogCancel
+            disabled={isLoggingOut}
+            className="h-8 rounded-full px-4 border border-[#EAECF0] bg-transparent text-[10px] font-medium uppercase tracking-[1.5px] text-[#525252] hover:bg-[#F5F5F5] active:scale-[0.97] transition-colors duration-200 cursor-pointer m-0"
+          >
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+            className="h-8 rounded-full px-4 border-none bg-[#E51837] hover:bg-[#CC1530] text-[10px] font-medium uppercase tracking-[1.5px] text-white active:scale-[0.97] transition-colors duration-200 cursor-pointer shadow-none disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isLoggingOut ? (
+              <>
+                <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
+                <span>Logging out</span>
+              </>
+            ) : (
+              "Log out"
+            )}
+          </AlertDialogAction>
+        </div>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

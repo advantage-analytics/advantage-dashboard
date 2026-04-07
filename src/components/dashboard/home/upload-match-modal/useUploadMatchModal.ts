@@ -592,6 +592,7 @@ export function useUploadMatchModal({
       }
 
       clearStorageData();
+      sessionStorage.setItem("match-processing", "true");
       onOpenChange(false);
       router.push("/dashboard");
       window.dispatchEvent(new Event("match-created"));

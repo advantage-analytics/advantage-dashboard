@@ -117,9 +117,9 @@ export default function PerformanceProfile({
   const isEmpty = dimensions.every((d) => d.current === 0 && d.previous === 0);
 
   return (
-    <div className="bg-white border border-[#F0F0F0] rounded-[16px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] overflow-hidden">
+    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden">
       {/* Header */}
-      <div className="border-b border-[#F2F2F2] px-5 py-4">
+      <div className="border-b border-[#F3F3F3] px-5 py-4">
         <p className="text-[10px] font-medium text-[#888888] tracking-[2.5px]">
           PERFORMANCE PROFILE
         </p>

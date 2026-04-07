@@ -43,7 +43,7 @@ export default function MatchHeatmap({
   }
 
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-[16px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] overflow-hidden">
+    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden">
       {/* Header */}
       <div className="px-5 py-4 flex items-center justify-between">
         <p className="text-[10px] font-medium text-[#AAAAAA] tracking-[2.5px] uppercase">
@@ -70,7 +70,7 @@ export default function MatchHeatmap({
         </div>
 
         {/* Calendar grid */}
-        <div className="grid grid-cols-7 gap-[6px]">
+        <div className="grid grid-cols-7 gap-[6px]" role="grid" aria-label="Match activity calendar">
           {gridCells.map((cell, i) => {
             if (!cell) {
               return <div key={`empty-${i}`} className="aspect-square rounded-[4px]" />;
@@ -81,6 +81,8 @@ export default function MatchHeatmap({
               <div
                 key={cell.date}
                 className={`aspect-square rounded-[4px] ${getCellColor(cell.count)} flex items-center justify-center relative transition-colors duration-200 ${isToday ? "ring-1 ring-[#3B82F6] ring-offset-1" : ""}`}
+                role="gridcell"
+                aria-label={`${cell.date}: ${cell.count} match${cell.count !== 1 ? "es" : ""}`}
                 title={`${cell.date}: ${cell.count} match${cell.count !== 1 ? "es" : ""}`}
               >
                 <span
@@ -94,7 +96,7 @@ export default function MatchHeatmap({
         </div>
 
         {/* Divider */}
-        <div className="h-px bg-[#F0F0F0]" />
+        <div className="h-px bg-[#F3F3F3]" />
 
         {/* Summary row */}
         <div className="flex items-center justify-between">

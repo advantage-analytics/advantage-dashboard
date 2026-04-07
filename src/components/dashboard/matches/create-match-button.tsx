@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import { UploadMatchModal } from "@/components/dashboard/home/upload-match-modal";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,23 @@ const iconStyles = {
 
 export function CreateMatchButton({ variant = "dark" }: CreateMatchButtonProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
+  const [isMac, setIsMac] = useState(true);
+
+  useEffect(() => {
+    setIsMac(/Mac|iPod|iPhone|iPad/.test(navigator.platform));
+  }, []);
+
+  // Listen for global keyboard shortcut (Cmd+U / Ctrl+U)
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "u") {
+        e.preventDefault();
+        setOpen(true);
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   return (
     <>
@@ -33,6 +50,9 @@ export function CreateMatchButton({ variant = "dark" }: CreateMatchButtonProps):
       >
         <Plus className={iconStyles[variant]} strokeWidth={2} aria-hidden="true" />
         Create Match
+        <kbd className="ml-1 text-[10px] font-medium leading-none px-1 py-0.5 rounded bg-white/20">
+          {isMac ? "\u2318U" : "\u2303U"}
+        </kbd>
       </button>
 
       <UploadMatchModal open={open} onOpenChange={setOpen} />

@@ -2,11 +2,12 @@ import { redirect } from "next/navigation";
 import HomeContent from "./home-content";
 import KpiCards from "@/components/dashboard/home/kpi-cards";
 import AIInsight from "@/components/dashboard/home/ai-insight";
-import WinRateCard from "@/components/dashboard/home/win-rate-card";
+
 import MatchHeatmap from "@/components/dashboard/home/match-heatmap";
 import ActivityFeed from "@/components/dashboard/home/activity-feed";
 import { createClient } from "@/lib/supabase/server";
 import { getOverallPerformance } from "@/lib/data/performance-server";
+import type { KpiCardData } from "@/lib/data/performance-server";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -38,12 +39,28 @@ export default async function Home() {
 
   const overallView = views[0];
 
+  const allKpiCards: KpiCardData[] = [
+    ...kpiCards,
+    {
+      label: "Win Rate",
+      value: `${winRate.value}%`,
+      change: winRate.change,
+      changeLabel: "last 30 days",
+      sparkline: winRate.sparkline,
+    },
+  ];
+
+  // Compute greeting server-side to avoid hydration flash
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+
   return (
     <div className="flex-1 w-full bg-white">
       <div className="px-8 py-10">
         <HomeContent
           displayName={displayName}
-          kpiStrip={kpiCards.length > 0 ? <KpiCards cards={kpiCards} /> : undefined}
+          greeting={greeting}
+          kpiStrip={allKpiCards.length > 0 ? <KpiCards cards={allKpiCards} /> : undefined}
           sidebar={
             <>
               <AIInsight />
@@ -55,11 +72,6 @@ export default async function Home() {
                 form={form}
               />
               <ActivityFeed />
-              <WinRateCard
-                value={winRate.value}
-                change={winRate.change}
-                sparkline={winRate.sparkline}
-              />
             </>
           }
         />
