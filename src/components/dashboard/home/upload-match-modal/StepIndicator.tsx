@@ -1,9 +1,6 @@
 "use client";
 
-/**
- * StepIndicator - Visual progress dots for the wizard
- * Shows current step with blue dot, others in gray
- */
+import { motion } from "framer-motion";
 
 interface StepIndicatorProps {
   currentStep: number;
@@ -14,14 +11,16 @@ export function StepIndicator({ currentStep, totalSteps }: StepIndicatorProps) {
   return (
     <div className="flex justify-center gap-1">
       {Array.from({ length: totalSteps }, (_, index) => (
-        <div
+        <motion.div
           key={index}
-          className={`h-1 rounded-full transition-all ${
+          layout
+          transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+          className={`h-1 rounded-full ${
             index === currentStep
-              ? "w-10 bg-[#7BABED]"
+              ? "w-10 bg-[#3B82F6]"
               : index < currentStep
-              ? "w-3 bg-[#7BABED]"
-              : "w-3 bg-gray-200"
+              ? "w-3 bg-[#3B82F6]"
+              : "w-3 bg-[#F3F3F3]"
           }`}
         />
       ))}
