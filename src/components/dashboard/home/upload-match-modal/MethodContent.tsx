@@ -5,6 +5,10 @@
  * Two cards for selecting analysis method
  */
 
+import { motion } from "framer-motion";
+
+const EASE_CURVE = [0.25, 0.46, 0.45, 0.94];
+
 export interface MethodContentProps {
   selectedMethod: string | null;
   onMethodSelect: (methodId: string | null) => void;
@@ -13,50 +17,70 @@ export interface MethodContentProps {
 export function MethodContent({ selectedMethod, onMethodSelect }: MethodContentProps) {
   return (
     <div className="h-full flex items-center justify-center gap-6">
-      <div
-        className={`w-[240px] h-[252px] cursor-pointer transition-all duration-200 rounded-2xl relative overflow-visible group hover:scale-[1.02] ${
-          selectedMethod === "elc" ? "ring-2 ring-[#3B82F6] ring-offset-2" : ""
-        }`}
-        onClick={() => onMethodSelect(selectedMethod === "elc" ? null : "elc")}
+      {/* ELC Card (selectable) */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: EASE_CURVE }}
       >
-        <div className="absolute inset-0 overflow-hidden rounded-2xl" style={{ clipPath: "inset(0 round 16px)" }}>
+        <div
+          className={`w-[260px] h-[260px] bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] cursor-pointer overflow-hidden transition-colors duration-200 hover:border-[#3B82F6]/30 ${
+            selectedMethod === "elc" ? "ring-2 ring-[#3B82F6] ring-offset-2" : ""
+          }`}
+          onClick={() => onMethodSelect(selectedMethod === "elc" ? null : "elc")}
+          role="button"
+          tabIndex={0}
+          aria-label="Select Electronic Line Calling method"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onMethodSelect(selectedMethod === "elc" ? null : "elc");
+            }
+          }}
+        >
           <img
             src="/marketing/elc-image.png"
             alt="Electronic Line Calling"
-            className="absolute inset-0 w-full h-full object-cover scale-100 origin-top"
+            className="h-[156px] w-full object-cover rounded-t-[14px]"
           />
-          {/* Hover overlay */}
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-white/5 transition-all duration-200 z-[5]" />
-          <div className="absolute bottom-0 left-0 right-0 h-32 z-10 rounded-b-2xl overflow-hidden" style={{ clipPath: "inset(0 0 0 0 round 0 0 16px 16px)" }}>
-            <div className="absolute inset-0 backdrop-blur-[24px]" style={{ maskImage: 'linear-gradient(to top, black, transparent)', WebkitMaskImage: 'linear-gradient(to top, black, transparent)' }} />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/[0.60] to-transparent" />
-            <div className="absolute bottom-0 left-0 right-0 px-4 pb-4 space-y-1.5">
-              <p className="italic font-medium text-xs text-white">Electronic Line Calling</p>
-              <p className="text-[10px] text-normal text-white/80">
-                Choose from a variety of providers such as SwingVision, BaselineVision, and many more.
-              </p>
-            </div>
+          <div className="px-4 py-4 space-y-1.5">
+            <p className="text-[13px] font-medium text-[#0D0D0D]">Electronic Line Calling</p>
+            <p className="text-[11px] font-normal text-[#888888] leading-[1.5]">
+              Choose from a variety of providers such as SwingVision, BaselineVision, and many more.
+            </p>
           </div>
         </div>
-      </div>
+      </motion.div>
 
-      <div className="w-[240px] h-[252px] cursor-not-allowed rounded-2xl relative overflow-hidden bg-white border-[0.5px] border-[#EAECF0]" style={{ clipPath: "inset(0 round 16px)" }}>
-        <img
-          src="/logos/logo.svg"
-          alt="Advantage"
-          className="absolute top-[92px] left-1/2 -translate-x-1/2 w-[78px] h-[14px]"
-        />
-        <div className="absolute bottom-0 left-0 right-0 h-32 z-10 rounded-b-2xl overflow-hidden" style={{ clipPath: "inset(0 0 0 0 round 0 0 16px 16px)" }}>
-          <div className="absolute inset-0 backdrop-blur-[24px]" style={{ maskImage: 'linear-gradient(to top, black, transparent)', WebkitMaskImage: 'linear-gradient(to top, black, transparent)' }} />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/[0.20] to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 px-4 pb-4 space-y-1.5">
-            <p className="italic font-medium text-xs text-[#0D0D0D]">Coming Soon</p>
-            <p className="text-[10px] text-normal text-[#888888]">
+      {/* Coming Soon Card (disabled) */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 1 * 0.05, ease: EASE_CURVE }}
+      >
+        <div
+          className="w-[260px] h-[260px] bg-[#FAFAFA] border border-[#F3F3F3] rounded-[14px] cursor-not-allowed overflow-hidden relative"
+          aria-disabled="true"
+          aria-label="Coming soon analysis method"
+        >
+          <span className="absolute top-3 right-3 px-2 py-0.5 rounded-[6px] bg-[#F5F5F5] text-[9px] font-medium text-[#888888] uppercase tracking-[1.5px] z-10">
+            Coming Soon
+          </span>
+          <div className="h-[156px] w-full flex items-center justify-center">
+            <img
+              src="/logos/logo.svg"
+              alt="Advantage"
+              className="w-[78px] h-[14px]"
+            />
+          </div>
+          <div className="px-4 py-4 space-y-1.5">
+            <p className="text-[13px] font-medium text-[#888888]">Coming Soon</p>
+            <p className="text-[11px] font-normal text-[#888888] leading-[1.5]">
               Choose to label with Advantage Intelligence or traditional labeling techniques.
             </p>
           </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
