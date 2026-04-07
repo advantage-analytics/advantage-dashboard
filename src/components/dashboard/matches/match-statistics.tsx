@@ -237,7 +237,7 @@ export function MatchStatistics({
                 "rounded-full h-8 px-3.5 text-[11px] font-medium transition-colors duration-200 active:scale-[0.97]",
                 isActive
                   ? "ring-1 ring-inset ring-[#3B82F6] text-[#3B82F6] bg-[#EBF2FD]"
-                  : "ring-1 ring-inset ring-[#D9D9D9] text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6]"
+                  : "ring-1 ring-inset ring-[#EAECF0] text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#3B82F6]/30 hover:text-[#3B82F6]"
               )}
             >
               {option.label}

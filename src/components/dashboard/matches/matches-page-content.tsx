@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { Inbox, Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown, X, Plus } from "lucide-react";
+import { useSearchParams, usePathname } from "next/navigation";
+import { Inbox, Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown, X } from "lucide-react";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { providers } from "@/lib/providers";
 import { MatchesGrid } from "./matches-grid";
 import { ViewToggle, type MatchView } from "./view-toggle";
-import { UploadMatchModal } from "@/components/dashboard/home/upload-match-modal";
+import { CreateMatchButton } from "./create-match-button";
 
 function providerName(id: string): string {
   return providers.find((p) => p.id === id)?.name ?? id;
@@ -30,16 +30,19 @@ const FILTER_CHIPS: { key: FilterKey; label: string; title?: string; getValues: 
   {
     key: "result",
     label: "Result",
+    title: "Filter by match result",
     getValues: () => ["Won", "Loss"],
   },
   {
     key: "matchType",
     label: "Match Type",
+    title: "Filter by match type",
     getValues: (matches) => [...new Set(matches.map((m) => m.matchType))].sort(),
   },
   {
     key: "courtType",
     label: "Court Type",
+    title: "Filter by court surface",
     getValues: (matches) => [...new Set(matches.map((m) => m.courtType).filter(Boolean) as string[])].sort(),
   },
   {
@@ -125,7 +128,7 @@ function FilterChip({
         className={`flex items-center gap-1.5 h-8 px-3.5 rounded-full text-xs font-medium transition-[color,background-color] duration-200 ${
           hasActive
             ? "ring-1 ring-inset ring-[#3B82F6] text-[#3B82F6] bg-[#EBF2FD]"
-            : "ring-1 ring-inset ring-[#D9D9D9] text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6]"
+            : "ring-1 ring-inset ring-[#EAECF0] text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#3B82F6]/30 hover:text-[#3B82F6]"
         }`}
       >
         {label}
@@ -142,7 +145,7 @@ function FilterChip({
       </button>
 
       {open && (
-        <div role="listbox" aria-label={`${label} options`} className="absolute top-full left-0 mt-1.5 min-w-[160px] bg-white border border-[#E7E7E7] rounded-xl shadow-[0px_4px_16px_rgba(0,0,0,0.08)] z-20 py-1.5 px-1.5">
+        <div role="listbox" aria-label={`${label} options`} className="absolute top-full left-0 mt-1.5 min-w-[160px] bg-white border border-[#E5E5EA] rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)] z-20 py-1.5 px-1.5">
           {values.map((val, idx) => {
             const isActive = activeValues.includes(val);
             return (
@@ -156,14 +159,14 @@ function FilterChip({
                 className={`flex items-center gap-2 w-full px-2.5 py-2 text-xs rounded-lg transition-[background-color,color] duration-200 ${
                   isActive
                     ? "bg-[#EBF2FD] text-[#3B82F6] font-medium"
-                    : "text-[#525252] hover:bg-[#F7F7F7]"
+                    : "text-[#525252] hover:bg-[#F5F5F5]"
                 }`}
               >
                 <span
                   className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${
                     isActive
                       ? "border-[#3B82F6] bg-[#3B82F6]"
-                      : "border-[#D9D9D9]"
+                      : "border-[#EAECF0]"
                   }`}
                 >
                   {isActive && (
@@ -247,7 +250,7 @@ function SortDropdown({
         aria-expanded={open}
         aria-haspopup="listbox"
         title={`Sorted by ${activeLabel}, ${dirLabel}`}
-        className="flex items-center gap-1.5 h-8 px-3.5 rounded-full ring-1 ring-inset ring-[#D9D9D9] text-xs font-medium text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6] transition-[color,background-color] duration-200"
+        className="flex items-center gap-1.5 h-8 px-3.5 rounded-full ring-1 ring-inset ring-[#EAECF0] text-xs font-medium text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#3B82F6]/30 hover:text-[#3B82F6] transition-[color,background-color] duration-200"
       >
         <ArrowUpDown className="w-3.5 h-3.5" />
         {activeLabel}
@@ -256,7 +259,7 @@ function SortDropdown({
       </button>
 
       {open && (
-        <div role="listbox" aria-label="Sort options" className="absolute top-full right-0 mt-1.5 min-w-[160px] bg-white border border-[#E7E7E7] rounded-xl shadow-[0px_4px_16px_rgba(0,0,0,0.08)] z-20 py-1.5 px-1.5">
+        <div role="listbox" aria-label="Sort options" className="absolute top-full right-0 mt-1.5 min-w-[160px] bg-white border border-[#E5E5EA] rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)] z-20 py-1.5 px-1.5">
           {SORT_OPTIONS.map((opt, idx) => {
             const isActive = sortField === opt.field;
             return (
@@ -270,7 +273,7 @@ function SortDropdown({
                 className={`flex items-center justify-between w-full px-2.5 py-2 text-xs rounded-lg transition-[background-color,color] duration-200 ${
                   isActive
                     ? "bg-[#EBF2FD] text-[#3B82F6] font-medium"
-                    : "text-[#525252] hover:bg-[#F7F7F7]"
+                    : "text-[#525252] hover:bg-[#F5F5F5]"
                 }`}
               >
                 {opt.label}
@@ -289,7 +292,6 @@ function SortDropdown({
 /* ─── Main content ─── */
 export function MatchesPageContent({ matches }: MatchesPageContentProps): React.JSX.Element {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const pathname = usePathname();
 
   const [view, setView] = useState<MatchView>(() => (searchParams.get("view") as MatchView) || "list");
@@ -474,29 +476,18 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
     return filters.filter((f) => f.key === key).map((f) => f.value);
   }
 
-  const [uploadOpen, setUploadOpen] = useState(false);
-
   if (matches.length === 0) {
     return (
-      <>
-        <div className="flex flex-col items-center justify-center min-h-[40vh]">
-          <div className="rounded-full bg-[#F5F5F5] p-4 mb-4">
-            <Inbox className="h-8 w-8 text-[#888888]" />
-          </div>
-          <p className="font-medium text-[#0D0D0D] mb-1">No matches yet</p>
-          <p className="text-[14px] text-[#888888] mb-5 text-center max-w-[280px]">
-            Upload a SwingVision match file to see your stats, scores, and analysis here.
-          </p>
-          <button
-            onClick={() => setUploadOpen(true)}
-            className="flex items-center gap-1.5 h-9 pl-3.5 pr-4.5 rounded-[6px] bg-[#3B82F6] hover:bg-[#2563EB] active:bg-[#2563EB] text-white text-[13px] font-medium tracking-[0.5px] shadow-[0_1px_3px_rgba(57,134,243,0.25)] hover:shadow-[0_1px_3px_rgba(57,134,243,0.25),0_0_16px_rgba(57,134,243,0.2)] active:scale-[0.97] transition-[color,background-color,transform,box-shadow] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(57,134,243,0.5)] focus-visible:ring-offset-1"
-          >
-            <Plus className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
-            Create Match
-          </button>
+      <div className="flex flex-col items-center justify-center min-h-[40vh]">
+        <div className="rounded-full bg-[#F5F5F5] p-4 mb-4">
+          <Inbox className="h-8 w-8 text-[#888888]" />
         </div>
-        <UploadMatchModal open={uploadOpen} onOpenChange={setUploadOpen} />
-      </>
+        <p className="font-medium text-[#0D0D0D] mb-1">No matches yet</p>
+        <p className="text-[14px] text-[#888888] mb-5 text-center max-w-[280px]">
+          Upload a SwingVision match file to see your stats, scores, and analysis here.
+        </p>
+        <CreateMatchButton variant="blue" />
+      </div>
     );
   }
 
@@ -529,7 +520,7 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
             </button>
           )}
           {(search || filters.length > 0) && (
-            <p className="text-xs text-[#BBBBBB] ml-1">
+            <p className="text-xs text-[#AAAAAA] ml-1">
               {sorted.length} {sorted.length === 1 ? "match" : "matches"}
             </p>
           )}
@@ -543,9 +534,10 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
               type="text"
               placeholder="Search"
               aria-label="Search matches"
+              title="Search by event, opponent, or round"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-8 w-48 pl-8 pr-3 rounded-full ring-1 ring-inset ring-[#D9D9D9] text-xs text-[#0D0D0D] placeholder:text-[#CCCCCC] focus:outline-none focus:ring-[#3B82F6] focus:ring-2 transition-[color,background-color] duration-200 bg-white"
+              className="h-8 w-48 pl-8 pr-3 rounded-full ring-1 ring-inset ring-[#EAECF0] text-xs text-[#0D0D0D] placeholder:text-[#CCCCCC] focus:outline-none focus:ring-[#3B82F6] focus:ring-2 transition-[color,background-color] duration-200 bg-white"
             />
           </div>
 
@@ -613,7 +605,7 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
               <div className="relative" ref={pageSizeRef}>
                 <button
                   onClick={() => setPageSizeOpen(!pageSizeOpen)}
-                  className="flex items-center gap-1 h-7 px-2.5 rounded-full ring-1 ring-inset ring-[#D9D9D9] bg-white text-xs font-medium text-[#525252] hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6] transition-[color,background-color] duration-200 tabular-nums"
+                  className="flex items-center gap-1 h-7 px-2.5 rounded-full ring-1 ring-inset ring-[#EAECF0] bg-white text-xs font-medium text-[#525252] hover:bg-[#EFF6FF] hover:ring-[#3B82F6]/30 hover:text-[#3B82F6] transition-[color,background-color] duration-200 tabular-nums"
                 >
                   {pageSize}
                   <ChevronDown
@@ -623,9 +615,9 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
                   />
                 </button>
                 {pageSizeOpen && (
-                  <div className="absolute bottom-full left-0 mb-2 min-w-[56px] bg-white border border-[#E7E7E7] rounded-xl shadow-[0px_4px_16px_rgba(0,0,0,0.08)] z-20 py-1 px-1">
+                  <div className="absolute bottom-full left-0 mb-2 min-w-[56px] bg-white border border-[#E5E5EA] rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)] z-20 py-1 px-1">
                     {/* Caret */}
-                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-white border-r border-b border-[#E7E7E7] rotate-45" />
+                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-white border-r border-b border-[#E5E5EA] rotate-45" />
                     {PAGE_SIZES.map((size) => (
                       <button
                         key={size}
@@ -636,7 +628,7 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
                         className={`flex items-center justify-center w-full px-2 py-1.5 text-xs tabular-nums rounded-lg transition-[background-color,color] duration-200 ${
                           pageSize === size
                             ? "bg-[#EBF2FD] text-[#3B82F6] font-medium"
-                            : "text-[#525252] hover:bg-[#F7F7F7]"
+                            : "text-[#525252] hover:bg-[#F5F5F5]"
                         }`}
                       >
                         {size}
@@ -653,7 +645,8 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={safePage <= 1}
               aria-label="Previous page"
-              className="flex items-center justify-center w-7 h-7 rounded-full ring-1 ring-inset ring-[#D9D9D9] text-[#525252] hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6] disabled:opacity-30 disabled:pointer-events-none transition-[color,background-color] duration-200"
+              title="Previous page"
+              className="flex items-center justify-center w-7 h-7 rounded-full ring-1 ring-inset ring-[#EAECF0] text-[#525252] hover:bg-[#EFF6FF] hover:ring-[#3B82F6]/30 hover:text-[#3B82F6] disabled:opacity-30 disabled:pointer-events-none transition-[color,background-color] duration-200"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
@@ -664,7 +657,8 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={safePage >= totalPages}
               aria-label="Next page"
-              className="flex items-center justify-center w-7 h-7 rounded-full ring-1 ring-inset ring-[#D9D9D9] text-[#525252] hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6] disabled:opacity-30 disabled:pointer-events-none transition-[color,background-color] duration-200"
+              title="Next page"
+              className="flex items-center justify-center w-7 h-7 rounded-full ring-1 ring-inset ring-[#EAECF0] text-[#525252] hover:bg-[#EFF6FF] hover:ring-[#3B82F6]/30 hover:text-[#3B82F6] disabled:opacity-30 disabled:pointer-events-none transition-[color,background-color] duration-200"
             >
               <ChevronRight className="w-3.5 h-3.5" />
             </button>

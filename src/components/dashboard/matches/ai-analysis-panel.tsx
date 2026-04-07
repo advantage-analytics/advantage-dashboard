@@ -252,7 +252,7 @@ function PlayerInsightsCard({
               className={`px-4 py-1.5 text-[12px] font-medium rounded-full transition-colors duration-200 ${
                 selected === "player1"
                   ? "ring-1 ring-inset ring-[#3B82F6] text-[#3B82F6] bg-[#EBF2FD]"
-                  : "ring-1 ring-inset ring-[#D9D9D9] text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6]"
+                  : "ring-1 ring-inset ring-[#EAECF0] text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#3B82F6]/30 hover:text-[#3B82F6]"
               }`}
             >
               {p1Short}
@@ -263,7 +263,7 @@ function PlayerInsightsCard({
               className={`px-4 py-1.5 text-[12px] font-medium rounded-full transition-colors duration-200 ${
                 selected === "player2"
                   ? "ring-1 ring-inset ring-[#3B82F6] text-[#3B82F6] bg-[#EBF2FD]"
-                  : "ring-1 ring-inset ring-[#D9D9D9] text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6]"
+                  : "ring-1 ring-inset ring-[#EAECF0] text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#3B82F6]/30 hover:text-[#3B82F6]"
               }`}
             >
               {p2Short}

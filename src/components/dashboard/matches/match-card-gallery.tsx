@@ -70,13 +70,13 @@ export function MatchCardGallery({
   return (
     <Link
       href={`/dashboard/matches/${match.id}`}
-      className="group block w-full bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_12px_0px_rgba(0,0,0,0.05)] hover:shadow-[0px_6px_20px_0px_rgba(0,0,0,0.08)] hover:border-[#E7E7E7] hover:scale-[1.008] transition-[box-shadow,border-color,transform] duration-200 overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/50 focus-visible:ring-offset-1"
+      className="group block w-full bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] hover:shadow-[0px_6px_20px_0px_rgba(0,0,0,0.12)] hover:border-[#E5E5EA] hover:scale-[1.008] transition-[box-shadow,border-color,transform] duration-200 overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1"
     >
       <div className="p-5">
         {/* Header: match context + verified + duration */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2px]">
+            <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
               {match.matchContext ?? "Final Score"}
             </span>
             {match.verificationStatus && (

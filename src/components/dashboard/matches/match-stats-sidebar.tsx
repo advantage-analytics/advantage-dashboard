@@ -38,7 +38,7 @@ function PlayerTabs({
         className={`h-8 rounded-full px-3.5 text-xs font-medium ring-1 ring-inset transition-colors duration-200 ${
           selectedPlayer === "player1"
             ? "ring-[#3B82F6] text-[#3B82F6] bg-[#EBF2FD]"
-            : "ring-[#D9D9D9] text-[#525252] bg-white"
+            : "ring-[#EAECF0] text-[#525252] bg-white"
         }`}
       >
         {shortName(match.player1.name)}
@@ -49,7 +49,7 @@ function PlayerTabs({
         className={`h-8 rounded-full px-3.5 text-xs font-medium ring-1 ring-inset transition-colors duration-200 ${
           selectedPlayer === "player2"
             ? "ring-[#3B82F6] text-[#3B82F6] bg-[#EBF2FD]"
-            : "ring-[#D9D9D9] text-[#525252] bg-white"
+            : "ring-[#EAECF0] text-[#525252] bg-white"
         }`}
       >
         {shortName(match.player2.name)}

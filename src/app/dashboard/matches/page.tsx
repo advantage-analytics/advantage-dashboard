@@ -67,7 +67,7 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
         {/* Header */}
         <div className="flex items-end justify-between">
           <div className="flex flex-col gap-2">
-            <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[3px]">
+            <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
               {matches.length} {matches.length === 1 ? "MATCH" : "MATCHES"} RECORDED
             </p>
             <h1 className="font-light text-[30px] text-[#0D0D0D] tracking-[-0.6px] leading-[36px]">

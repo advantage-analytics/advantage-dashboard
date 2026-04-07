@@ -21,7 +21,7 @@ export function MatchCardList({ match }: MatchCardListProps): React.JSX.Element 
     <Link
       href={`/dashboard/matches/${match.id}`}
       role="row"
-      className="group grid gap-x-4 items-center px-4 h-11 rounded-lg hover:bg-[#FAFAFA] transition-[background-color,transform] duration-200 ease-out active:scale-[0.998] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/50 focus-visible:ring-offset-1"
+      className="group grid gap-x-4 items-center px-4 h-11 rounded-lg hover:bg-[#FAFAFA] transition-[background-color,transform] duration-200 ease-out active:scale-[0.998] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1"
       style={LIST_GRID_COLS}
     >
       {/* Event */}
@@ -44,8 +44,8 @@ export function MatchCardList({ match }: MatchCardListProps): React.JSX.Element 
         <span
           className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-[10px] font-medium ${
             isWin
-              ? "bg-[rgba(93,185,85,0.1)] text-[#5DB955]"
-              : "bg-[rgba(229,24,55,0.1)] text-[#E51837]"
+              ? "bg-[rgba(115,230,104,0.15)] text-[#5DB955]"
+              : "bg-[rgba(229,24,55,0.15)] text-[#E51837]"
           }`}
         >
           {isWin ? "Won" : "Loss"}
