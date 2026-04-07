@@ -6,7 +6,6 @@
  */
 
 import { useState, useRef, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -19,14 +18,6 @@ import { Separator } from "@/components/ui/separator";
 import { Calendar, ChevronDown, CircleMinus, CirclePlus, Clock, SquarePen, Info } from "lucide-react";
 import { FormData, ParsingState } from "./types";
 import { getAdjustedScores, formatDuration, parseDuration } from "./utils";
-
-const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
-
-const SCORE_INPUT_CLASS =
-  "!w-8 h-9 text-center text-[13px] text-[#0D0D0D] tabular-nums bg-[#F7F7F7] border border-[#EAECF0] rounded-[6px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#3B82F6]/40 focus-visible:border-[#3B82F6] placeholder:text-[#CCCCCC]";
-
-const SELECT_CONTENT_CLASS =
-  "shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)] border-[#E5E5EA] rounded-xl text-[#888888] text-xs";
 
 export interface DetailsContentProps {
   formData: FormData;
@@ -213,12 +204,7 @@ export function DetailsContent({
     <div className="flex flex-col gap-9">
       {/* Auto-fill Banner */}
       {parsingState?.parseSuccess && (
-        <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: [...EASE_CURVE] }}
-          className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2.5"
-        >
+        <div className="animate-slideDown p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2.5">
           <Info className="h-4 w-4 text-blue-500 mt-0 flex-shrink-0" />
           <div>
             <p className="text-blue-600 text-xs font-medium">
@@ -228,7 +214,7 @@ export function DetailsContent({
               Please review the information below and make any necessary corrections.
             </p>
           </div>
-        </motion.div>
+        </div>
       )}
 
       <div className="space-y-4">
@@ -243,7 +229,7 @@ export function DetailsContent({
                 type="button"
                 onClick={() => handleSetsChange(-1)}
                 disabled={displayedSets <= 1}
-                className="min-w-[28px] min-h-[28px] flex items-center justify-center text-[#3B82F6] disabled:opacity-50 disabled:cursor-not-allowed hover:text-[#2563EB] transition-colors"
+                className="text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed hover:text-blue-600 transition-colors"
               >
                 <CircleMinus className="h-3.5 w-3.5" />
               </button>
@@ -251,14 +237,14 @@ export function DetailsContent({
                 type="button"
                 onClick={() => handleSetsChange(1)}
                 disabled={displayedSets >= bestOfNum}
-                className="min-w-[28px] min-h-[28px] flex items-center justify-center text-[#3B82F6] disabled:opacity-50 disabled:cursor-not-allowed hover:text-[#2563EB] transition-colors"
+                className="text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed hover:text-blue-600 transition-colors"
               >
                 <CirclePlus className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
 
-          <Separator className="bg-[#F3F3F3]" />
+          <Separator className="bg-[#E5E5E5]" />
         </div>
 
         {/* Player Rows with Set Headers */}
@@ -269,11 +255,11 @@ export function DetailsContent({
               const hasTiebreak = needsTiebreak(score, opponentScores[i]);
               return (
                 <div key={i} className="flex items-center gap-1">
-                  <div className="w-8 text-center text-sm text-[#888888] font-normal">
+                  <div className="w-6 text-center text-sm text-[#888888] font-normal">
                     {i + 1}
                   </div>
                   {hasTiebreak && (
-                    <span className="w-8 text-center text-[8px] text-[#888888] font-normal">
+                    <span className="w-6 text-center text-[8px] text-[#888888] font-normal">
                       TIE
                     </span>
                   )}
@@ -286,7 +272,7 @@ export function DetailsContent({
             {/* Player 1 */}
             <div className="flex justify-between items-start">
               <div className="flex gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#F7F7F7] flex items-center justify-center text-[11px] font-semibold text-[#888888]">
+                <div className="w-10 h-10 rounded-full bg-[#F7F7F7] flex items-center justify-center text-sm font-medium text-[#888888]">
                   {getInitials(playerName)}
                 </div>
                 <div className="flex-1 flex items-center gap-2">
@@ -298,7 +284,7 @@ export function DetailsContent({
                       onBlur={() => setEditingPlayer(false)}
                       onKeyDown={(e) => e.key === "Enter" && setEditingPlayer(false)}
                       autoFocus
-                      className="w-40 h-7 bg-white border-[#EAECF0] border rounded-full text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3"
+                      className="w-40 h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3"
                     />
                   ) : (
                     <span className="w-40 text-[#0D0D0D] font-medium text-xs">
@@ -330,7 +316,7 @@ export function DetailsContent({
                         placeholder="-"
                         inputMode="numeric"
                         pattern="\d*"
-                        className={SCORE_INPUT_CLASS}
+                        className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#888888]"
                         value={score === null ? "" : score}
                         onChange={(e) => {
                           const newValue = e.target.value;
@@ -372,7 +358,7 @@ export function DetailsContent({
                           placeholder="-"
                           inputMode="numeric"
                           pattern="\d*"
-                          className={SCORE_INPUT_CLASS}
+                          className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#888888]"
                           value={formData.playerTiebreaks[i] === null ? "" : String(formData.playerTiebreaks[i])}
                           onChange={(e) => {
                             const newValue = e.target.value;
@@ -403,7 +389,7 @@ export function DetailsContent({
             {/* Player 2 */}
             <div className="flex justify-between items-start">
               <div className="flex gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#F7F7F7] flex items-center justify-center text-[11px] font-semibold text-[#888888]">
+                <div className="w-10 h-10 rounded-full bg-[#F7F7F7] flex items-center justify-center text-sm font-medium text-[#888888]">
                   {getInitials(opponentName)}
                 </div>
                 <div className="flex-1 flex items-center gap-2">
@@ -415,7 +401,7 @@ export function DetailsContent({
                       onBlur={() => setEditingOpponent(false)}
                       onKeyDown={(e) => e.key === "Enter" && setEditingOpponent(false)}
                       autoFocus
-                      className="w-40 h-7 bg-white border-[#EAECF0] border rounded-full text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3"
+                      className="w-40 h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3"
                     />
                   ) : (
                     <span className="w-40 text-[#0D0D0D] font-medium text-xs">
@@ -447,7 +433,7 @@ export function DetailsContent({
                         placeholder="-"
                         inputMode="numeric"
                         pattern="\d*"
-                        className={SCORE_INPUT_CLASS}
+                        className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#888888]"
                         value={score === null ? "" : score}
                         onChange={(e) => {
                           const newValue = e.target.value;
@@ -489,7 +475,7 @@ export function DetailsContent({
                           placeholder="-"
                           inputMode="numeric"
                           pattern="\d*"
-                          className={SCORE_INPUT_CLASS}
+                          className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#888888]"
                           value={formData.opponentTiebreaks[i] === null ? "" : String(formData.opponentTiebreaks[i])}
                           onChange={(e) => {
                             const newValue = e.target.value;
@@ -520,51 +506,18 @@ export function DetailsContent({
         </div>
       </div>
 
-      {/* Opponent Details */}
-      <div className="space-y-3">
-        <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
-          Opponent Details
-        </span>
-        <div className="flex flex-wrap gap-3">
-          <Select
-            value={formData.opponentHand || undefined}
-            onValueChange={(value) => onInputChange("opponentHand", value)}
-          >
-            <SelectTrigger className="w-[120px] h-7 bg-white border-[#EAECF0] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
-              <SelectValue placeholder="Hand..." />
-            </SelectTrigger>
-            <SelectContent className={SELECT_CONTENT_CLASS}>
-              <SelectItem value="Right" className="text-[#888888] text-xs">Right</SelectItem>
-              <SelectItem value="Left" className="text-[#888888] text-xs">Left</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select
-            value={formData.opponentBackhand || undefined}
-            onValueChange={(value) => onInputChange("opponentBackhand", value)}
-          >
-            <SelectTrigger className="w-[150px] h-7 bg-white border-[#EAECF0] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
-              <SelectValue placeholder="Backhand..." />
-            </SelectTrigger>
-            <SelectContent className={SELECT_CONTENT_CLASS}>
-              <SelectItem value="One-Handed" className="text-[#888888] text-xs">One-Handed</SelectItem>
-              <SelectItem value="Two-Handed" className="text-[#888888] text-xs">Two-Handed</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
       {/* Result Section */}
       <div className="flex items-end justify-between">
         <div className="flex flex-col gap-2">
-          <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">Result</span>
+          <span className="text-[#0D0D0D] font-medium text-xs">Result</span>
           <Select
             value={formData.result || undefined}
             onValueChange={(value) => onInputChange("result", value)}
           >
-            <SelectTrigger className="w-[180px] h-7 bg-white border-[#EAECF0] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
+            <SelectTrigger className="w-[180px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
               <SelectValue placeholder="Select Result..." />
             </SelectTrigger>
-            <SelectContent className={SELECT_CONTENT_CLASS}>
+            <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
               {resultOptions.map((option) => (
                 <SelectItem key={option.value} value={option.value} className="text-[#888888] text-xs">
                   {option.label}
@@ -586,171 +539,185 @@ export function DetailsContent({
       </div>
 
       {/* Advanced Settings Section */}
-      <AnimatePresence initial={false}>
-        {showAdvanced && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: [...EASE_CURVE] }}
-            className="overflow-hidden"
-          >
-            <div className="flex flex-col gap-6 pt-2">
-              {/* Event Information */}
-              <div className="space-y-3">
-                <h4 className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">Event Information</h4>
-                <div className="flex flex-wrap gap-3">
-                  <Input
-                    placeholder="Type Event Name..."
-                    value={formData.eventName}
-                    onChange={(e) => onInputChange("eventName", e.target.value)}
-                    className="w-[200px] h-7 bg-white border-[#EAECF0] border rounded-full text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3"
-                  />
-                  <Select
-                    value={formData.round || undefined}
-                    onValueChange={(value) => onInputChange("round", value)}
-                  >
-                    <SelectTrigger className="w-[130px] h-7 bg-white border-[#EAECF0] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
-                      <SelectValue placeholder="Round of..." />
-                    </SelectTrigger>
-                    <SelectContent className={SELECT_CONTENT_CLASS}>
-                      <SelectItem value="None" className="text-[#888888] text-xs">None</SelectItem>
-                      <SelectItem value="Round of 128" className="text-[#888888] text-xs">Round of 128</SelectItem>
-                      <SelectItem value="Round of 64" className="text-[#888888] text-xs">Round of 64</SelectItem>
-                      <SelectItem value="Round of 32" className="text-[#888888] text-xs">Round of 32</SelectItem>
-                      <SelectItem value="Round of 16" className="text-[#888888] text-xs">Round of 16</SelectItem>
-                      <SelectItem value="Quarterfinals" className="text-[#888888] text-xs">Quarterfinals</SelectItem>
-                      <SelectItem value="Semifinals" className="text-[#888888] text-xs">Semifinals</SelectItem>
-                      <SelectItem value="Finals" className="text-[#888888] text-xs">Finals</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  <div
-                    className="relative w-fit cursor-pointer"
-                    onClick={() => dateInputRef.current?.showPicker()}
-                  >
-                    <Input
-                      ref={dateInputRef}
-                      type="date"
-                      value={formData.date}
-                      onChange={(e) => onInputChange("date", e.target.value)}
-                      className="w-auto h-7 bg-white border-[#EAECF0] border rounded-full text-[#888888] text-xs shadow-none pl-3 pr-7 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:p-0 [&::-webkit-datetime-edit-fields-wrapper]:p-0"
-                    />
-                    <Calendar className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-[#888888]" />
-                  </div>
-                  <div
-                    className="relative w-fit cursor-pointer"
-                    onClick={() => timeInputRef.current?.showPicker()}
-                  >
-                    <Input
-                      ref={timeInputRef}
-                      type="time"
-                      value={formData.time}
-                      onChange={(e) => onInputChange("time", e.target.value)}
-                      className="w-auto h-7 bg-white border-[#EAECF0] border rounded-full text-[#888888] text-xs shadow-none pl-3 pr-7 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:p-0 [&::-webkit-datetime-edit-fields-wrapper]:p-0"
-                    />
-                    <Clock className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-[#888888]" />
-                  </div>
-                  <Select
-                    value={formData.matchType || undefined}
-                    onValueChange={(value) => onInputChange("matchType", value)}
-                  >
-                    <SelectTrigger className="w-[130px] h-7 bg-white border-[#EAECF0] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
-                      <SelectValue placeholder="Match Type..." />
-                    </SelectTrigger>
-                    <SelectContent className={SELECT_CONTENT_CLASS}>
-                      <SelectItem value="None" className="text-[#888888] text-xs">None</SelectItem>
-                      <SelectItem value="Tournament" className="text-[#888888] text-xs">Tournament</SelectItem>
-                      <SelectItem value="Dual Match" className="text-[#888888] text-xs">Dual Match</SelectItem>
-                      <SelectItem value="Practice" className="text-[#888888] text-xs">Practice</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select
-                    value={formData.courtType || undefined}
-                    onValueChange={(value) => onInputChange("courtType", value)}
-                  >
-                    <SelectTrigger className="w-[160px] h-7 bg-white border-[#EAECF0] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
-                      <SelectValue placeholder="Court Type..." />
-                    </SelectTrigger>
-                    <SelectContent className={SELECT_CONTENT_CLASS}>
-                      <SelectItem value="None" className="text-[#888888] text-xs">None</SelectItem>
-                      <SelectItem value="Indoor Hard Court" className="text-[#888888] text-xs">Indoor Hard Court</SelectItem>
-                      <SelectItem value="Outdoor Hard Court" className="text-[#888888] text-xs">Outdoor Hard Court</SelectItem>
-                      <SelectItem value="Clay Court" className="text-[#888888] text-xs">Clay Court</SelectItem>
-                      <SelectItem value="Grass Court" className="text-[#888888] text-xs">Grass Court</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Scoring Format */}
-              <div className="space-y-3">
-                <h4 className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">Scoring Format</h4>
-                <div className="flex flex-wrap gap-3">
-                  <Select
-                    value={formData.bestOf || undefined}
-                    onValueChange={(value) => onInputChange("bestOf", value)}
-                  >
-                    <SelectTrigger className="w-[130px] h-7 bg-white border-[#EAECF0] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
-                      <SelectValue placeholder="Best of..." />
-                    </SelectTrigger>
-                    <SelectContent className={SELECT_CONTENT_CLASS}>
-                      <SelectItem value="1" className="text-[#888888] text-xs">Best of 1 Set</SelectItem>
-                      <SelectItem value="3" className="text-[#888888] text-xs">Best of 3 Sets</SelectItem>
-                      <SelectItem value="5" className="text-[#888888] text-xs">Best of 5 Sets</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select
-                    value={formData.adScoring === undefined ? undefined : (formData.adScoring ? "ad" : "no-ad")}
-                    onValueChange={(value) => onInputChange("adScoring", value === "ad")}
-                  >
-                    <SelectTrigger className="w-[140px] h-7 bg-white border-[#EAECF0] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
-                      <SelectValue placeholder="Ad Scoring..." />
-                    </SelectTrigger>
-                    <SelectContent className={SELECT_CONTENT_CLASS}>
-                      <SelectItem value="ad" className="text-[#888888] text-xs">Ad Scoring</SelectItem>
-                      <SelectItem value="no-ad" className="text-[#888888] text-xs">No-Ad Scoring</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select
-                    value={formData.playOnLets === undefined ? undefined : (formData.playOnLets ? "play-on" : "lets")}
-                    onValueChange={(value) => onInputChange("playOnLets", value === "play-on")}
-                  >
-                    <SelectTrigger className="w-[130px] h-7 bg-white border-[#EAECF0] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
-                      <SelectValue placeholder="Lets..." />
-                    </SelectTrigger>
-                    <SelectContent className={SELECT_CONTENT_CLASS}>
-                      <SelectItem value="lets" className="text-[#888888] text-xs">Lets</SelectItem>
-                      <SelectItem value="play-on" className="text-[#888888] text-xs">Play on Lets</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Match Duration */}
-              <div className="space-y-3">
-                <h4 className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">Match Duration (Hours:Minutes)</h4>
-                <Input
-                  type="text"
-                  placeholder="-:--"
-                  value={formatDuration(formData.duration)}
-                  onChange={(e) => {
-                    const displayValue = e.target.value;
-                    if (displayValue === "" || displayValue === "-") {
-                      onInputChange("duration", 0);
-                    } else {
-                      const seconds = parseDuration(displayValue);
-                      onInputChange("duration", seconds);
-                    }
-                  }}
-                  className="w-[200px] h-7 bg-white border-[#EAECF0] border rounded-full text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3 font-mono"
-                />
-              </div>
+      <div
+        className={`grid transition-all duration-300 ease-in-out ${
+          showAdvanced ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+        }`}
+      >
+        <div className="overflow-hidden">
+          <div className="flex flex-col gap-6 pt-2">
+          {/* Event Information */}
+          <div className="space-y-3">
+            <h4 className="text-[#0D0D0D] font-medium text-xs">Event Information</h4>
+            <div className="flex flex-wrap gap-3">
+              <Input
+                placeholder="Type Event Name..."
+                value={formData.eventName}
+                onChange={(e) => onInputChange("eventName", e.target.value)}
+                className="w-[200px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3"
+              />
+              <Select
+                value={formData.round || undefined}
+                onValueChange={(value) => onInputChange("round", value)}
+              >
+                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
+                  <SelectValue placeholder="Round of..." />
+                </SelectTrigger>
+                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
+                  <SelectItem value="None" className="text-[#888888] text-xs">None</SelectItem>
+                  <SelectItem value="Round of 128" className="text-[#888888] text-xs">Round of 128</SelectItem>
+                  <SelectItem value="Round of 64" className="text-[#888888] text-xs">Round of 64</SelectItem>
+                  <SelectItem value="Round of 32" className="text-[#888888] text-xs">Round of 32</SelectItem>
+                  <SelectItem value="Round of 16" className="text-[#888888] text-xs">Round of 16</SelectItem>
+                  <SelectItem value="Quarterfinals" className="text-[#888888] text-xs">Quarterfinals</SelectItem>
+                  <SelectItem value="Semifinals" className="text-[#888888] text-xs">Semifinals</SelectItem>
+                  <SelectItem value="Finals" className="text-[#888888] text-xs">Finals</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            <div className="flex flex-wrap gap-3">
+              <div
+                className="relative w-fit cursor-pointer"
+                onClick={() => dateInputRef.current?.showPicker()}
+              >
+                <Input
+                  ref={dateInputRef}
+                  type="date"
+                  value={formData.date}
+                  onChange={(e) => onInputChange("date", e.target.value)}
+                  className="w-auto h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none pl-3 pr-7 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:p-0 [&::-webkit-datetime-edit-fields-wrapper]:p-0"
+                />
+                <Calendar className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-[#888888]" />
+              </div>
+              <div
+                className="relative w-fit cursor-pointer"
+                onClick={() => timeInputRef.current?.showPicker()}
+              >
+                <Input
+                  ref={timeInputRef}
+                  type="time"
+                  value={formData.time}
+                  onChange={(e) => onInputChange("time", e.target.value)}
+                  className="w-auto h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none pl-3 pr-7 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:p-0 [&::-webkit-datetime-edit-fields-wrapper]:p-0"
+                />
+                <Clock className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-[#888888]" />
+              </div>
+              <Select
+                value={formData.matchType || undefined}
+                onValueChange={(value) => onInputChange("matchType", value)}
+              >
+                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
+                  <SelectValue placeholder="Match Type..." />
+                </SelectTrigger>
+                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
+                  <SelectItem value="None" className="text-[#888888] text-xs">None</SelectItem>
+                  <SelectItem value="Tournament" className="text-[#888888] text-xs">Tournament</SelectItem>
+                  <SelectItem value="Dual Match" className="text-[#888888] text-xs">Dual Match</SelectItem>
+                  <SelectItem value="Practice" className="text-[#888888] text-xs">Practice</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={formData.courtType || undefined}
+                onValueChange={(value) => onInputChange("courtType", value)}
+              >
+                <SelectTrigger className="w-[160px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
+                  <SelectValue placeholder="Court Type..." />
+                </SelectTrigger>
+                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
+                  <SelectItem value="None" className="text-[#888888] text-xs">None</SelectItem>
+                  <SelectItem value="Indoor Hard Court" className="text-[#888888] text-xs">Indoor Hard Court</SelectItem>
+                  <SelectItem value="Outdoor Hard Court" className="text-[#888888] text-xs">Outdoor Hard Court</SelectItem>
+                  <SelectItem value="Clay Court" className="text-[#888888] text-xs">Clay Court</SelectItem>
+                  <SelectItem value="Grass Court" className="text-[#888888] text-xs">Grass Court</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Scoring Format */}
+          <div className="space-y-3">
+            <h4 className="text-[#0D0D0D] font-medium text-xs">Scoring Format</h4>
+            <div className="flex flex-wrap gap-3">
+              <Select
+                value={formData.bestOf || undefined}
+                onValueChange={(value) => onInputChange("bestOf", value)}
+              >
+                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
+                  <SelectValue placeholder="Best of..." />
+                </SelectTrigger>
+                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
+                  <SelectItem value="1" className="text-[#888888] text-xs">Best of 1 Set</SelectItem>
+                  <SelectItem value="3" className="text-[#888888] text-xs">Best of 3 Sets</SelectItem>
+                  <SelectItem value="5" className="text-[#888888] text-xs">Best of 5 Sets</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={formData.adScoring === undefined ? undefined : (formData.adScoring ? "ad" : "no-ad")}
+                onValueChange={(value) => onInputChange("adScoring", value === "ad")}
+              >
+                <SelectTrigger className="w-[140px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
+                  <SelectValue placeholder="Ad Scoring..." />
+                </SelectTrigger>
+                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
+                  <SelectItem value="ad" className="text-[#888888] text-xs">Ad Scoring</SelectItem>
+                  <SelectItem value="no-ad" className="text-[#888888] text-xs">No-Ad Scoring</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={formData.playOnLets === undefined ? undefined : (formData.playOnLets ? "play-on" : "lets")}
+                onValueChange={(value) => onInputChange("playOnLets", value === "play-on")}
+              >
+                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
+                  <SelectValue placeholder="Lets..." />
+                </SelectTrigger>
+                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
+                  <SelectItem value="lets" className="text-[#888888] text-xs">Lets</SelectItem>
+                  <SelectItem value="play-on" className="text-[#888888] text-xs">Play on Lets</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Match Duration */}
+          <div className="space-y-3">
+            <h4 className="text-[#0D0D0D] font-medium text-xs">Match Duration (Hours:Minutes)</h4>
+            <Input
+              type="text"
+              placeholder="-:--"
+              value={formatDuration(formData.duration)}
+              onChange={(e) => {
+                const displayValue = e.target.value;
+                if (displayValue === "" || displayValue === "-") {
+                  onInputChange("duration", 0);
+                } else {
+                  const seconds = parseDuration(displayValue);
+                  onInputChange("duration", seconds);
+                }
+              }}
+              className="w-[200px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3 font-mono"
+            />
+          </div>
+          </div>
+        </div>
+      </div>
+
+      {/* CSS Animations */}
+      <style>{`
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-8px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .animate-slideDown {
+          animation: slideDown 300ms ease-out;
+        }
+      `}</style>
     </div>
   );
 }

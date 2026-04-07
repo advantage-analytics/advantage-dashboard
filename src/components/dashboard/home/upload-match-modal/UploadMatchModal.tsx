@@ -15,7 +15,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { useRef, useState, useEffect } from "react";
 import { ChevronLeft, ChevronDown } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   Step,
   UploadMatchModalProps,
@@ -32,8 +31,6 @@ import { DetailsContent } from "./DetailsContent";
 import { ConfirmContent } from "./ConfirmContent";
 
 const HINT_STEPS = new Set<Step>(["details", "confirm"]);
-const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
-const STEP_TRANSITION = { duration: 0.25, ease: EASE_CURVE } as const;
 
 export function UploadMatchModal({
   open,
@@ -138,10 +135,9 @@ export function UploadMatchModal({
               {step !== "method" && (
                 <button
                   onClick={handleBack}
-                  aria-label="Go back"
-                  className="absolute left-0 top-1/2 -translate-y-1/2 h-8 w-8 rounded-lg flex items-center justify-center text-[#888888] hover:text-[#0D0D0D] hover:bg-[#F5F5F5] transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none z-10"
+                  className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-6 rounded-full bg-[#1D1D1F] flex items-center justify-center hover:bg-[#2D2D2D] transition-colors z-10"
                 >
-                  <ChevronLeft className="h-4 w-4" strokeWidth={1.5} />
+                  <ChevronLeft className="h-3 w-3 text-white" />
                 </button>
               )}
               <DialogHeader className="space-y-2">
@@ -155,112 +151,69 @@ export function UploadMatchModal({
           <div className="relative w-full flex-1 min-h-0">
             <div ref={scrollRef} className="h-full overflow-y-auto py-6 -mr-4 pr-4 upload-modal-scroll">
             <div className="min-h-0 h-full">
-            <AnimatePresence mode="wait">
-              {step === "method" && (
-                <motion.div
-                  key="method"
-                  initial={{ opacity: 0, x: 12 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -12 }}
-                  transition={STEP_TRANSITION}
-                >
-                  <MethodContent
-                    selectedMethod={selectedMethod}
-                    onMethodSelect={handleMethodSelect}
-                  />
-                </motion.div>
-              )}
+            {step === "method" && (
+              <MethodContent
+                selectedMethod={selectedMethod}
+                onMethodSelect={handleMethodSelect}
+              />
+            )}
 
-              {step === "provider" && (
-                <motion.div
-                  key="provider"
-                  initial={{ opacity: 0, x: 12 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -12 }}
-                  transition={STEP_TRANSITION}
-                >
-                  <ProviderContent
-                    selectedProvider={selectedProvider}
-                    onProviderSelect={handleProviderSelect}
-                  />
-                </motion.div>
-              )}
+            {step === "provider" && (
+              <ProviderContent
+                selectedProvider={selectedProvider}
+                onProviderSelect={handleProviderSelect}
+              />
+            )}
 
-              {step === "upload" && (
-                <motion.div
-                  key="upload"
-                  initial={{ opacity: 0, x: 12 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -12 }}
-                  transition={STEP_TRANSITION}
-                >
-                  <UploadContent
-                    sourceType={sourceType}
-                    selectedProvider={selectedProvider}
-                    uploadedFile={uploadedFile}
-                    isOver={isOver}
-                    isUploading={isUploading}
-                    uploadError={uploadError}
-                    parsingState={parsingState}
-                    onSourceTypeChange={setSourceType}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      setIsOver(true);
-                    }}
-                    onDragLeave={() => setIsOver(false)}
-                    onDrop={handleDrop}
-                    onFileChange={handleFileChange}
-                    onRemoveFile={handleRemoveFile}
-                  />
-                </motion.div>
-              )}
+            {step === "upload" && (
+              <UploadContent
+                sourceType={sourceType}
+                selectedProvider={selectedProvider}
+                uploadedFile={uploadedFile}
+                isOver={isOver}
+                isUploading={isUploading}
+                uploadError={uploadError}
+                parsingState={parsingState}
+                onSourceTypeChange={setSourceType}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsOver(true);
+                }}
+                onDragLeave={() => setIsOver(false)}
+                onDrop={handleDrop}
+                onFileChange={handleFileChange}
+                onRemoveFile={handleRemoveFile}
+              />
+            )}
 
-              {step === "details" && (
-                <motion.div
-                  key="details"
-                  initial={{ opacity: 0, x: 12 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -12 }}
-                  transition={STEP_TRANSITION}
-                >
-                  <DetailsContent
-                    formData={formData}
-                    onInputChange={handleInputChange}
-                    onScoreChange={handleScoreChange}
-                    onTiebreakChange={handleTiebreakChange}
-                    parsingState={parsingState}
-                  />
-                </motion.div>
-              )}
+            {step === "details" && (
+              <DetailsContent
+                formData={formData}
+                onInputChange={handleInputChange}
+                onScoreChange={handleScoreChange}
+                onTiebreakChange={handleTiebreakChange}
+                parsingState={parsingState}
+              />
+            )}
 
-              {step === "confirm" && (
-                <motion.div
-                  key="confirm"
-                  initial={{ opacity: 0, x: 12 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -12 }}
-                  transition={STEP_TRANSITION}
-                >
-                  <ConfirmContent
-                    formData={formData}
-                    uploadedFile={uploadedFile}
-                    isPrivateMatch={isPrivateMatch}
-                    error={error}
-                  />
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {step === "confirm" && (
+              <ConfirmContent
+                formData={formData}
+                uploadedFile={uploadedFile}
+                isPrivateMatch={isPrivateMatch}
+                error={error}
+              />
+            )}
             </div>
             </div>
             {showScrollHint && (
               <div className="absolute bottom-0 left-0 right-4 flex justify-center pb-1">
                 <button
                   onClick={() => scrollRef.current?.scrollBy({ top: scrollRef.current.clientHeight, behavior: "smooth" })}
-                  aria-label="Scroll down for more content"
-                  className="flex items-center gap-1 bg-white border border-[#F3F3F3] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] rounded-full px-2.5 py-1 cursor-pointer"
+                  className="flex items-center gap-1 bg-white/90 backdrop-blur-sm rounded-full px-2.5 py-1 border border-gray-100 cursor-pointer"
                 >
-                  <ChevronDown className="h-3 w-3 text-[#888888]" />
-                  <span className="text-[9px] text-[#888888] font-normal tracking-wide">scroll</span>
+                  <ChevronDown className="h-3 w-3 text-gray-400" />
+                  <span className="text-[10px] text-gray-400 font-medium tracking-wide">scroll</span>
                 </button>
               </div>
             )}
@@ -272,23 +225,23 @@ export function UploadMatchModal({
               <>
                 <Button
                   onClick={handleClose}
-                  className="min-h-[34px] rounded-full px-4 py-1.5 text-[10px] font-medium uppercase tracking-[1.5px] border border-[#EAECF0] text-[#525252] bg-white hover:bg-[#F5F5F5] transition-colors duration-200 shadow-none"
+                  className="w-[65px] h-[31px] rounded-full text-xs bg-white border border-[#EAECF0] text-[#0D0D0D] hover:bg-[#F7F7F7] shadow-none"
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handleBack}
-                  className="min-h-[34px] rounded-full px-4 py-1.5 text-[10px] font-medium uppercase tracking-[1.5px] bg-[#3B82F6] text-white hover:bg-[#2563EB] transition-colors duration-200 shadow-none"
+                  className="w-[55px] h-[31px] rounded-full text-xs bg-[#3B82F6] text-white hover:bg-[#2563EB]"
                 >
                   Edit
                 </Button>
                 <Button
                   onClick={handleCreateMatch}
                   disabled={isCreating}
-                  className={`min-h-[34px] rounded-full px-4 py-1.5 text-[10px] font-medium uppercase tracking-[1.5px] transition-colors duration-200 shadow-none ${
+                  className={`w-[110px] h-[31px] rounded-full text-xs ${
                     isCreating
                       ? "bg-[#F7F7F7] text-[#888888]"
-                      : "bg-[#0D0D0D] text-white hover:bg-[#1D1D1F]"
+                      : "bg-[#0D0D0D] text-white"
                   }`}
                 >
                   {isCreating ? "Creating..." : "Create Match"}
@@ -298,17 +251,17 @@ export function UploadMatchModal({
               <>
                 <Button
                   onClick={handleClose}
-                  className="min-h-[34px] rounded-full px-4 py-1.5 text-[10px] font-medium uppercase tracking-[1.5px] border border-[#EAECF0] text-[#525252] bg-white hover:bg-[#F5F5F5] transition-colors duration-200 shadow-none"
+                  className="w-[65px] h-[31px] rounded-full text-xs bg-white border border-[#EAECF0] text-[#0D0D0D] hover:bg-[#F7F7F7] shadow-none"
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={continueHandler}
                   disabled={continueDisabled}
-                  className={`min-h-[34px] rounded-full px-4 py-1.5 text-[10px] font-medium uppercase tracking-[1.5px] transition-colors duration-200 shadow-none ${
+                  className={`w-[85px] h-[31px] rounded-full text-xs ${
                     continueDisabled
                       ? "bg-[#F7F7F7] text-[#888888]"
-                      : "bg-[#0D0D0D] text-white hover:bg-[#1D1D1F]"
+                      : "bg-[#0D0D0D] text-white"
                   }`}
                 >
                   {continueLabel}
