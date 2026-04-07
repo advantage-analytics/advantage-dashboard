@@ -88,7 +88,7 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
     <div className="space-y-6">
       {/* Event Name and Metadata Row */}
       <div className="flex flex-col gap-4">
-        <p className="text-xl font-medium text-[#000000]">
+        <p className="text-[16px] font-medium text-[#0D0D0D]">
           {formData.eventName || `${formData.playerName} vs ${formData.opponentName}`}
         </p>
         <MatchMetadataRow
@@ -106,7 +106,7 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
           {/* Match Header */}
           <div className="flex flex-row justify-between items-center font-normal text-xs text-[#888888]">
             <p>{getMatchStatus(formData.result)} | {formData.round || "Round of 16"}</p>
-            <span className="rounded-[10px] px-1.5 py-0.5 text-xs font-medium bg-[#6AABFF] text-white">
+            <span className="rounded-full px-1.5 py-0.5 text-xs font-medium bg-[#6AABFF] text-white">
               {formatDuration(formData.duration)}
             </span>
           </div>
@@ -116,12 +116,12 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
             {/* Player 1 */}
             <div className="flex flex-row justify-between items-center">
               <div className="flex flex-row items-center gap-4">
-                <div className="w-10 h-10 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
-                  <span className="text-xs font-medium text-[#BFBFBF]">
+                <div className="w-10 h-10 rounded-full bg-[#F5F5F5] flex items-center justify-center shrink-0">
+                  <span className="text-xs font-medium text-[#AAAAAA]">
                     {getInitials(playerName)}
                   </span>
                 </div>
-                <p className={`font-semibold text-sm ${winner === "player" ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}`}>
+                <p className={`font-semibold text-sm ${winner === "player" ? "text-[#0D0D0D]" : "text-[#AAAAAA]"}`}>
                   {playerName}
                 </p>
               </div>
@@ -132,7 +132,7 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
                   return (
                     <p
                       key={idx}
-                      className={pScore > oScore ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}
+                      className={pScore > oScore ? "text-[#0D0D0D]" : "text-[#AAAAAA]"}
                     >
                       {pScore}
                     </p>
@@ -144,12 +144,12 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
             {/* Player 2 (Opponent) */}
             <div className="flex flex-row justify-between items-center">
               <div className="flex flex-row items-center gap-4">
-                <div className="w-10 h-10 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
-                  <span className="text-xs font-medium text-[#BFBFBF]">
+                <div className="w-10 h-10 rounded-full bg-[#F5F5F5] flex items-center justify-center shrink-0">
+                  <span className="text-xs font-medium text-[#AAAAAA]">
                     {getInitials(opponentName)}
                   </span>
                 </div>
-                <p className={`font-semibold text-sm ${winner === "opponent" ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}`}>
+                <p className={`font-semibold text-sm ${winner === "opponent" ? "text-[#0D0D0D]" : "text-[#AAAAAA]"}`}>
                   {opponentName}
                 </p>
               </div>
@@ -160,7 +160,7 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
                   return (
                     <p
                       key={idx}
-                      className={oScore > pScore ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}
+                      className={oScore > pScore ? "text-[#0D0D0D]" : "text-[#AAAAAA]"}
                     >
                       {oScore}
                     </p>
@@ -174,16 +174,16 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
 
       {/* Scoring Format Section */}
       <div className="space-y-3">
-        <h4 className="text-[#0D0D0D] font-medium text-sm">Scoring Format</h4>
+        <h4 className="text-[#0D0D0D] font-medium text-xs">Scoring Format</h4>
         <div className="flex flex-row gap-3">
-          <div className="px-3 py-2 bg-[#F7F7F7] rounded-lg">
-            <p className="text-xs font-medium text-[#666666]">Best of {formData.bestOf} Sets</p>
+          <div className="px-3 py-2 bg-[#F5F5F5] rounded-full">
+            <p className="text-xs font-medium text-[#525252]">Best of {formData.bestOf} Sets</p>
           </div>
-          <div className="px-3 py-2 bg-[#F7F7F7] rounded-lg">
-            <p className="text-xs font-medium text-[#666666]">{formData.adScoring ? "Ad Scoring" : "No-Ad Scoring"}</p>
+          <div className="px-3 py-2 bg-[#F5F5F5] rounded-full">
+            <p className="text-xs font-medium text-[#525252]">{formData.adScoring ? "Ad Scoring" : "No-Ad Scoring"}</p>
           </div>
-          <div className="px-3 py-2 bg-[#F7F7F7] rounded-lg">
-            <p className="text-xs font-medium text-[#666666]">{formData.playOnLets ? "Play on Lets" : "Lets"}</p>
+          <div className="px-3 py-2 bg-[#F5F5F5] rounded-full">
+            <p className="text-xs font-medium text-[#525252]">{formData.playOnLets ? "Play on Lets" : "Lets"}</p>
           </div>
         </div>
       </div>
@@ -191,7 +191,7 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
       {/* Public/Private Toggle */}
       <div className="flex items-center justify-between">
         <div className="flex flex-col gap-1">
-          <h4 className="text-[#0D0D0D] font-medium text-sm">Public</h4>
+          <h4 className="text-[#0D0D0D] font-medium text-xs">Public</h4>
           <p className="text-[#888888] font-normal text-xs">
             Note: All matches will be private during our Beta Testing
           </p>
@@ -205,8 +205,8 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
 
       {/* Error Display */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-sm text-red-600">{error}</p>
+        <div className="bg-[#FEF2F2] border border-[#FECACA] rounded-lg p-4">
+          <p className="text-sm text-[#DC2626]">{error}</p>
         </div>
       )}
     </div>

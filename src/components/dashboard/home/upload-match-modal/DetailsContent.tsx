@@ -6,6 +6,7 @@
  */
 
 import { useState, useRef, useCallback } from "react";
+import { motion } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -204,17 +205,22 @@ export function DetailsContent({
     <div className="flex flex-col gap-9">
       {/* Auto-fill Banner */}
       {parsingState?.parseSuccess && (
-        <div className="animate-slideDown p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2.5">
-          <Info className="h-4 w-4 text-blue-500 mt-0 flex-shrink-0" />
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+          className="p-3 bg-[#EFF6FF] border border-[#BFDBFE] rounded-lg flex items-start gap-2.5"
+        >
+          <Info className="h-4 w-4 text-[#3B82F6] mt-0 flex-shrink-0" />
           <div>
-            <p className="text-blue-600 text-xs font-medium">
+            <p className="text-[#2563EB] text-xs font-medium">
               Data auto-filled from file
             </p>
-            <p className="text-blue-600 text-xs mt-1">
+            <p className="text-[#2563EB] text-xs mt-1">
               Please review the information below and make any necessary corrections.
             </p>
           </div>
-        </div>
+        </motion.div>
       )}
 
       <div className="space-y-4">
@@ -229,7 +235,7 @@ export function DetailsContent({
                 type="button"
                 onClick={() => handleSetsChange(-1)}
                 disabled={displayedSets <= 1}
-                className="text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed hover:text-blue-600 transition-colors"
+                className="text-[#3B82F6] disabled:text-[#AAAAAA] disabled:cursor-not-allowed hover:text-[#2563EB] transition-colors duration-200"
               >
                 <CircleMinus className="h-3.5 w-3.5" />
               </button>
@@ -237,7 +243,7 @@ export function DetailsContent({
                 type="button"
                 onClick={() => handleSetsChange(1)}
                 disabled={displayedSets >= bestOfNum}
-                className="text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed hover:text-blue-600 transition-colors"
+                className="text-[#3B82F6] disabled:text-[#AAAAAA] disabled:cursor-not-allowed hover:text-[#2563EB] transition-colors duration-200"
               >
                 <CirclePlus className="h-3.5 w-3.5" />
               </button>
@@ -529,7 +535,7 @@ export function DetailsContent({
         <button
           type="button"
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className="flex items-center gap-1 text-[10px] text-[#888888] hover:text-[#666666] transition-colors"
+          className="flex items-center gap-1 text-[10px] text-[#888888] hover:text-[#525252] transition-colors duration-200"
         >
           <span className="underline underline-offset-[19.89%]">Advanced Settings (Optional)</span>
           <ChevronDown
@@ -701,23 +707,6 @@ export function DetailsContent({
         </div>
       </div>
 
-      {/* CSS Animations */}
-      <style>{`
-        @keyframes slideDown {
-          from {
-            opacity: 0;
-            transform: translateY(-8px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .animate-slideDown {
-          animation: slideDown 300ms ease-out;
-        }
-      `}</style>
     </div>
   );
 }
