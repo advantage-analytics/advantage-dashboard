@@ -11,11 +11,9 @@
 
 import { Button } from "@/components/ui/button";
 import {
-  FolderOpen,
   AlertCircle,
   Loader2,
   CheckCircle2,
-  File,
   Upload,
   Trash2,
   FileSpreadsheet,
@@ -23,6 +21,21 @@ import {
 } from "lucide-react";
 import { UploadedFile, ParsingState } from "./types";
 import { ProviderId } from "@/lib/services/upload";
+import { motion } from "framer-motion";
+
+const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
+
+const FADE_IN = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1 },
+  transition: { duration: 0.3, ease: EASE_CURVE },
+} as const;
+
+const SLIDE_DOWN = {
+  initial: { opacity: 0, y: -8 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.3, ease: EASE_CURVE },
+} as const;
 
 /** File type configuration per provider */
 const PROVIDER_FILE_CONFIG: Record<
@@ -75,10 +88,13 @@ export function UploadContent({
   const hasFile = !!uploadedFile;
 
   return (
-    <div className="flex flex-col h-full gap-3 animate-fadeIn">
+    <motion.div
+      className="flex flex-col h-full gap-3"
+      {...FADE_IN}
+    >
       {/* Error State - Compact and at top */}
       {uploadError && (
-        <div className="animate-slideDown">
+        <motion.div {...SLIDE_DOWN}>
           <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2.5">
             <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
             <div>
@@ -86,7 +102,7 @@ export function UploadContent({
               <p className="text-red-600 text-xs mt-0.5">{uploadError}</p>
             </div>
           </div>
-        </div>
+        </motion.div>
       )}
 
       {/* Main Content Area - Grows to fill space */}
@@ -98,39 +114,30 @@ export function UploadContent({
               onDragOver={onDragOver}
               onDragLeave={onDragLeave}
               onDrop={onDrop}
-              className={`relative flex-1 border-2 border-dashed rounded-2xl transition-all duration-300 group flex flex-col items-center justify-center ${
+              className={`flex-1 border-2 border-dashed rounded-2xl transition-colors duration-200 group flex flex-col items-center justify-center ${
                 isUploading
-                  ? "border-gray-300 bg-gray-50"
+                  ? "border-[#E5E5EA] bg-[#FAFAFA]"
                   : isOver
-                    ? "border-[#3B82F6] bg-[#3B82F6]/5"
-                    : "border-[#EAECF0] hover:border-[#3B82F6] hover:bg-[#F0F7FF]"
+                    ? "border-[#3B82F6] bg-[#EBF2FD]"
+                    : "border-[#E5E5EA] hover:border-[#3B82F6] hover:bg-[#EFF4FF]"
               }`}
             >
-              {/* Background gradient effect on hover */}
-              <div
-                className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none ${
-                  isOver ? "opacity-100" : ""
-                }`}
-                style={{
-                  background:
-                    "radial-gradient(circle 400px at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(59, 130, 246, 0.1), transparent)",
-                }}
-              />
-
               {/* Content - Properly centered */}
-              <div className="relative z-10 flex flex-col items-center justify-center gap-4 px-6 py-6">
+              <div className="flex flex-col items-center justify-center gap-4 px-6 py-6">
                 {isUploading ? (
                   <>
                     {/* Loading State */}
-                    <div className="flex flex-col items-center gap-3 animate-fadeIn">
+                    <motion.div
+                      className="flex flex-col items-center gap-3"
+                      {...FADE_IN}
+                    >
                       <div className="relative w-14 h-14 flex items-center justify-center">
-                        <div className="absolute inset-0 bg-gradient-to-r from-[#3B82F6]/20 to-transparent rounded-full animate-spin" />
                         <Loader2 className="h-7 w-7 text-[#3B82F6] animate-spin" />
                       </div>
                       <p className="text-[#0D0D0D] font-medium text-sm">
                         Validating file...
                       </p>
-                    </div>
+                    </motion.div>
                   </>
                 ) : (
                   <>
@@ -138,16 +145,16 @@ export function UploadContent({
                     <div className="flex flex-col items-center gap-3 text-center">
                       {/* Icon */}
                       <div
-                        className={`relative w-16 h-16 flex items-center justify-center rounded-2xl transition-all duration-300 ${
+                        className={`w-16 h-16 flex items-center justify-center rounded-2xl transition-colors duration-200 ${
                           isOver
-                            ? "bg-[#3B82F6] scale-110"
-                            : "bg-[#F0F4FF] group-hover:bg-[#3B82F6]"
+                            ? "bg-[#3B82F6]"
+                            : "bg-[#F5F5F5] group-hover:bg-[#3B82F6]"
                         }`}
                       >
                         <Upload
-                          className={`h-8 w-8 transition-all duration-300 ${
+                          className={`h-8 w-8 transition-colors duration-200 ${
                             isOver
-                              ? "text-white scale-110"
+                              ? "text-white"
                               : "text-[#3B82F6] group-hover:text-white"
                           }`}
                         />
@@ -155,16 +162,16 @@ export function UploadContent({
 
                       {/* Text Content */}
                       <div className="space-y-1.5">
-                        <p className="text-[#0D0D0D] font-medium text-sm">
+                        <p className="text-[14px] font-normal text-[#0D0D0D]">
                           Drag your file here
                         </p>
-                        <p className="text-[#888888] text-xs leading-relaxed">
+                        <p className="text-[12px] font-normal text-[#888888]">
                           or click the button below to browse
                         </p>
                       </div>
 
                       {/* File Info */}
-                      <p className="text-[#888888] text-xs pt-1">
+                      <p className="text-[11px] font-normal text-[#888888] pt-1">
                         {fileConfig.description} •{" "}
                         <span className="font-medium">Max 50MB</span>
                       </p>
@@ -175,7 +182,7 @@ export function UploadContent({
                       <label htmlFor="upload-input-modal" className="block">
                         <Button
                           type="button"
-                          className="bg-[#0D0D0D] hover:bg-[#1D1D1D] text-white text-xs font-medium rounded-lg px-6 py-2 transition-all duration-200 active:scale-95"
+                          className="min-h-[34px] rounded-full px-5 py-1.5 text-[10px] font-medium uppercase tracking-[1.5px] bg-[#0D0D0D] text-white hover:bg-[#1D1D1F] transition-colors duration-200 shadow-none active:scale-[0.97]"
                           onClick={() =>
                             document.getElementById("upload-input-modal")?.click()
                           }
@@ -201,30 +208,42 @@ export function UploadContent({
         ) : (
           <>
             {/* File Uploaded State */}
-            <div className="animate-fadeIn space-y-3 flex flex-col">
+            <motion.div
+              className="space-y-3 flex flex-col"
+              {...FADE_IN}
+            >
               {/* Upload Progress & Status */}
               {parsingState && (
                 <>
                   {parsingState.isParsing && (
-                    <div className="animate-slideDown flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                    <motion.div
+                      {...SLIDE_DOWN}
+                      className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg"
+                    >
                       <Loader2 className="h-4 w-4 text-blue-500 animate-spin flex-shrink-0" />
                       <p className="text-blue-600 text-xs font-medium">
                         Extracting match data...
                       </p>
-                    </div>
+                    </motion.div>
                   )}
 
                   {parsingState.parseSuccess && (
-                    <div className="animate-slideDown flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg">
+                    <motion.div
+                      {...SLIDE_DOWN}
+                      className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg"
+                    >
                       <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />
                       <p className="text-emerald-600 text-xs font-medium">
                         Match data extracted, ready to proceed!
                       </p>
-                    </div>
+                    </motion.div>
                   )}
 
                   {parsingState.parseWarnings.length > 0 && (
-                    <div className="animate-slideDown flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+                    <motion.div
+                      {...SLIDE_DOWN}
+                      className="flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg"
+                    >
                       <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
                       <div>
                         <p className="text-amber-600 text-xs font-medium">
@@ -236,11 +255,14 @@ export function UploadContent({
                           ))}
                         </ul>
                       </div>
-                    </div>
+                    </motion.div>
                   )}
 
                   {parsingState.parseError && (
-                    <div className="animate-slideDown p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2.5">
+                    <motion.div
+                      {...SLIDE_DOWN}
+                      className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2.5"
+                    >
                       <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
                       <div>
                         <p className="text-red-600 text-xs font-medium">
@@ -253,24 +275,26 @@ export function UploadContent({
                           You can still enter data manually in the next step.
                         </p>
                       </div>
-                    </div>
+                    </motion.div>
                   )}
                 </>
               )}
 
               {/* File Card */}
-              <div className="border border-[#EAECF0] rounded-xl bg-white overflow-hidden hover:border-[#3B82F6]/30 transition-all duration-300">
+              <div className="border border-[#F3F3F3] rounded-[14px] bg-white shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden">
                 {/* Card Header */}
-                <div className="px-4 py-3 border-b border-[#EAECF0] bg-[#FAFBFC] flex items-center justify-between">
+                <div className="px-4 py-3 border-b border-[#F3F3F3] bg-[#FAFAFA] flex items-center justify-between">
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <div className="w-10 h-10 bg-[#3B82F6] rounded-lg flex items-center justify-center flex-shrink-0">
                       <FileSpreadsheet className="h-5 w-5 text-white" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-[#0D0D0D] font-medium text-sm truncate">
+                      <p className="text-[13px] font-medium text-[#0D0D0D] truncate">
                         {uploadedFile.name}
                       </p>
-                      <p className="text-[#888888] text-xs">{uploadedFile.size}</p>
+                      <p className="text-[12px] font-normal text-[#888888]">
+                        {uploadedFile.size}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -284,7 +308,7 @@ export function UploadContent({
                     type="button"
                     onClick={onRemoveFile}
                     disabled={isUploading}
-                    className="p-2 text-[#888888] hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="p-2 text-[#888888] hover:text-[#E51837] hover:bg-[rgba(229,24,55,0.15)] rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                     aria-label="Remove file"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -296,41 +320,10 @@ export function UploadContent({
               <p className="text-[#888888] text-xs pt-1">
                 You can change this file at any time before creating the match.
               </p>
-            </div>
+            </motion.div>
           </>
         )}
       </div>
-
-      {/* CSS Animations */}
-      <style>{`
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-          }
-          to {
-            opacity: 1;
-          }
-        }
-
-        @keyframes slideDown {
-          from {
-            opacity: 0;
-            transform: translateY(-8px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .animate-fadeIn {
-          animation: fadeIn 300ms ease-out;
-        }
-
-        .animate-slideDown {
-          animation: slideDown 300ms ease-out;
-        }
-      `}</style>
-    </div>
+    </motion.div>
   );
 }
