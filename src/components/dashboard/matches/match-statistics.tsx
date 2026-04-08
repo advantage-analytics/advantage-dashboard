@@ -93,7 +93,7 @@ function StatBadge({
     display = (
       <>
         <span className="text-[12px] font-medium tabular-nums">{value}%</span>{" "}
-        <span className="text-[10px] text-[#888888]">
+        <span className="text-[8px] font-medium">
           ({fraction.made}/{fraction.attempts})
         </span>
       </>
@@ -119,7 +119,7 @@ function StatBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2.5 py-1 whitespace-nowrap",
+        "inline-flex items-center gap-1 rounded-[4px] px-1.5 py-1 whitespace-nowrap",
         styles
       )}
     >
@@ -153,7 +153,7 @@ function StatRow({
 }) {
   return (
     <motion.div
-      className="grid grid-cols-[1fr_120px_120px] sm:grid-cols-[1fr_140px_140px] items-center border-b border-[#F0F0F0] py-3"
+      className="grid grid-cols-[1fr_100px_100px] sm:grid-cols-[1fr_120px_120px] items-center h-10"
       initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
       animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
       transition={{
@@ -162,7 +162,7 @@ function StatRow({
         delay: index * 0.04,
       }}
     >
-      <span className="text-[12px] text-[#525252]">{label}</span>
+      <span className="text-[9px] uppercase tracking-[2px] text-[#AAAAAA]">{label}</span>
 
       <div className="flex justify-start">
         <StatBadge value={player1Value} isPercentage={isPercentage} isFraction={isFraction} fraction={player1Fraction} color="blue" />
@@ -193,7 +193,7 @@ export function MatchStatistics({
 
   if (!statistics) {
     return (
-      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5">
+      <div className="bg-white border border-[#F3F3F3] rounded-[16px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)] p-5">
         <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-6">
           Match Statistics
         </h2>
@@ -210,7 +210,7 @@ export function MatchStatistics({
 
   return (
     <motion.div
-      className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5"
+      className="bg-white border border-[#F3F3F3] rounded-[16px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)] p-5"
       initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 20 }}
       animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: 0.3, ease: EASE_CURVE }}
@@ -220,9 +220,6 @@ export function MatchStatistics({
         <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
           Match Statistics
         </h2>
-        <p className="text-[12px] text-[#525252] mt-1">
-          Compare {player1Name} and {player2Name} Match Statistics
-        </p>
       </div>
 
       {/* Tab pills */}
@@ -234,10 +231,10 @@ export function MatchStatistics({
               key={option.value}
               onClick={() => setActiveTab(option.value as Tab)}
               className={cn(
-                "rounded-full h-8 px-3.5 text-[11px] font-medium transition-colors duration-200 active:scale-[0.97]",
+                "rounded-[16px] px-4 py-1.5 text-[12px] font-medium transition-colors duration-200 active:scale-[0.97]",
                 isActive
-                  ? "ring-1 ring-inset ring-[#3B82F6] text-[#3B82F6] bg-[#EBF2FD]"
-                  : "ring-1 ring-inset ring-[#EAECF0] text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#3B82F6]/30 hover:text-[#3B82F6]"
+                  ? "bg-[#60A5FA] text-white"
+                  : "bg-white border border-[#D9D9D9] text-[#525252] hover:bg-[#EFF6FF] hover:border-[#3B82F6]/30 hover:text-[#3B82F6]"
               )}
             >
               {option.label}
@@ -247,20 +244,20 @@ export function MatchStatistics({
       </div>
 
       {/* Table header */}
-      <div className="grid grid-cols-[1fr_120px_120px] sm:grid-cols-[1fr_140px_140px] pb-2 mb-1">
-        <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
+      <div className="grid grid-cols-[1fr_100px_100px] sm:grid-cols-[1fr_120px_120px] h-9 items-center">
+        <span className="text-[10px] text-[#888888]">
           Statistic
         </span>
-        <span className="text-[12px] font-medium text-[#0D0D0D] text-left whitespace-nowrap truncate">
+        <span className="text-[10px] text-[#888888] capitalize text-left whitespace-nowrap truncate">
           {p1Short}
         </span>
-        <span className="text-[12px] font-medium text-[#0D0D0D] text-left whitespace-nowrap truncate">
+        <span className="text-[10px] text-[#888888] text-left whitespace-nowrap truncate">
           {p2Short}
         </span>
       </div>
 
       {/* Stat rows — re-mount on tab change to replay entrance animation */}
-      <div key={activeTab} className="min-h-[320px] [&>:last-child]:border-b-0">
+      <div key={activeTab} className="min-h-[320px]">
         {activeStats.map((stat, index) => (
           <StatRow
             key={stat.key}

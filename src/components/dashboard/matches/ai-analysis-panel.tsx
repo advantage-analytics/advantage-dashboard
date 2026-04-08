@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
-  Sparkles,
   Send,
   Bot,
   User,
@@ -523,28 +522,9 @@ function ChatCard() {
 
 export function AIAnalysisPanel() {
   const { keyMoments, insights, match } = useMatchData();
-  const prefersReduced = useReducedMotion();
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Tab header */}
-      <motion.div
-        className="flex items-center gap-3"
-        initial={prefersReduced ? { opacity: 0 } : { opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: EASE_CURVE }}
-      >
-        <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-[#3B82F6]" />
-          <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
-            Advantage Intelligence
-          </h2>
-        </div>
-        <span className="text-[10px] font-medium text-[#3B82F6] uppercase tracking-[2px] px-2 py-0.5 rounded-full bg-[#EBF2FD]">
-          AI-Powered
-        </span>
-      </motion.div>
-
       <KeyMomentsCard moments={keyMoments} />
       <PlayerInsightsCard match={match} insights={insights} />
       <ChatCard />

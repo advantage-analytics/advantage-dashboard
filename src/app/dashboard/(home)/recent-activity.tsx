@@ -428,7 +428,6 @@ export default function RecentActivity({ userId }: { userId: string }) {
             transition={{
               duration: 0.35,
               ease: [0.25, 0.46, 0.45, 0.94],
-              exit: { duration: 0.2 },
             }}
             role="status"
             className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 pl-4 pr-5 py-3 bg-[#0D0D0D] rounded-[12px] shadow-[0px_8px_32px_rgba(0,0,0,0.25),0px_0px_0px_1px_rgba(255,255,255,0.06)_inset]"

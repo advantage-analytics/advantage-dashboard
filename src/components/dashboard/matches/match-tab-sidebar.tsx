@@ -7,6 +7,7 @@ import type { MatchStatisticsResult } from "@/lib/data/match-stats-server";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { MatchOverallSidebar, MatchVisualsSidebar } from "./match-stats-sidebar";
 import { MatchVideoSidebar } from "./match-video-sidebar";
+import { DEFAULT_FILTERS } from "./video-filters";
 import { AnalysisSidebar } from "./analysis-sidebar";
 import { useMatchData } from "./match-data-provider";
 
@@ -38,7 +39,7 @@ export function MatchTabSidebar({ match, matchId, statsResult, points }: MatchTa
     );
   } else if (pathname.includes("/video")) {
     tabKey = "video";
-    content = <MatchVideoSidebar match={match} matchId={matchId} statsResult={statsResult} points={points} />;
+    content = <MatchVideoSidebar match={match} points={points} filters={DEFAULT_FILTERS} />;
   } else if (pathname.includes("/visuals")) {
     tabKey = "visuals";
     content = <MatchVisualsSidebar match={match} statsResult={statsResult} />;
