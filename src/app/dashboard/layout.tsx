@@ -6,6 +6,7 @@ import { Header } from "@/app/dashboard/header";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
 import { PageTransition } from "@/components/dashboard/page-transition";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { UnsavedChangesProvider } from "@/components/dashboard/settings/unsaved-changes-context";
 
 /**
  * Dashboard Layout Component
@@ -33,16 +34,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   return (
-    <SidebarProvider defaultOpen={false} style={{ "--sidebar-width": "240px" } as React.CSSProperties}>
-      <AppSidebar />
-      <SidebarInset className="bg-white h-screen overflow-y-auto">
-        <Header />
-        <main>
-          <PageTransition>
-            {children}
-          </PageTransition>
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+    <UnsavedChangesProvider>
+      <SidebarProvider defaultOpen={false} style={{ "--sidebar-width": "240px" } as React.CSSProperties}>
+        <AppSidebar />
+        <SidebarInset className="bg-white h-screen overflow-y-auto">
+          <Header />
+          <main>
+            <PageTransition>
+              {children}
+            </PageTransition>
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
+    </UnsavedChangesProvider>
   );
 }

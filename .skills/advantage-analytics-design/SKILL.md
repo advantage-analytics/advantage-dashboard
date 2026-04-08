@@ -170,10 +170,12 @@ Use `tabular-nums` for all numeric data (stats, scores, percentages) to ensure a
 | radius-card | `rounded-[14px]` | Cards (primary) |
 | radius-modal | `rounded-2xl` (16px) | Modals, large cards |
 | radius-dropdown | `rounded-xl` (12px) | Dropdowns, smaller modals |
-| radius-element | `rounded-lg` (8px) | Buttons, nav items, rows |
+| radius-element | `rounded-lg` (8px) | Nav items, sidebar items, rows |
+| radius-button | `rounded-[6px]` | All action buttons and CTAs (primary, secondary, outline, danger) |
+| radius-input | `rounded-[6px]` | Form inputs, selects, textareas (matches button radius) |
 | radius-badge | `rounded-[6px]` | Change badges, small tags |
 | radius-cell | `rounded-[4px]` | Heatmap cells, tiny elements |
-| radius-pill | `rounded-full` | Pills, circular buttons, avatars |
+| radius-pill | `rounded-full` | Filter pills, tab pill containers, avatars, dots, indicators (NOT buttons) |
 
 ---
 
@@ -384,18 +386,18 @@ text-[11px] font-normal
 ## Dropdown / Menu
 
 ```
-// Container
+// Container (p-1 gives inset gap for rounded item highlights)
 absolute right-0 top-full mt-1.5 w-44 rounded-xl
-overflow-hidden border border-[#E5E5EA] bg-white
+overflow-hidden border border-[#E5E5EA] bg-white p-1
 shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]
 
-// Item
-flex items-center gap-2.5 px-3 py-2 text-[13px] text-[#1D1D1F]
-hover:bg-[#F5F5F5] active:bg-[#EBEBEB]
+// Item (inset rounded — matches sidebar nav highlight pattern)
+flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] text-[#1D1D1F]
+hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5] focus-visible:outline-none active:bg-[#EBEBEB]
 transition-colors duration-100
 
 // Divider
-h-px bg-[#E5E5EA] mx-2.5 my-1
+h-px bg-[#E5E5EA] mx-2 my-1
 ```
 
 ---

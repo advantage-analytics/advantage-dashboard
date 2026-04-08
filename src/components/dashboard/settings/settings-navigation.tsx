@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { CreditCard, Shield, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useUnsavedChanges } from "@/components/dashboard/settings/unsaved-changes-context";
 
 type TabId = "profile" | "account" | "subscription";
 
@@ -30,9 +31,21 @@ const TABS = [
 
 export function SettingsNavigation(): React.ReactElement {
   const pathname = usePathname();
+  const router = useRouter();
+  const { confirmNavigation } = useUnsavedChanges();
 
   const activeTab =
     TABS.find((tab) => pathname?.includes(tab.id))?.id ?? "profile";
+
+  const handleClick = (e: React.MouseEvent, href: string, isActive: boolean) => {
+    if (isActive) return;
+    if (!confirmNavigation()) {
+      e.preventDefault();
+      return;
+    }
+    e.preventDefault();
+    router.push(href);
+  };
 
   return (
     <nav className="w-full md:w-44 flex-shrink-0" aria-label="Settings">
@@ -44,6 +57,7 @@ export function SettingsNavigation(): React.ReactElement {
             <Link
               key={id}
               href={href}
+              onClick={(e) => handleClick(e, href, isActive)}
               aria-current={isActive ? "page" : undefined}
               className={cn(
                 "flex items-center gap-3 h-9 pl-[13px] pr-3.5 rounded-lg text-[13px] whitespace-nowrap transition-colors duration-200",

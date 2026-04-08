@@ -284,7 +284,7 @@ export function DetailsContent({
                       onBlur={() => setEditingPlayer(false)}
                       onKeyDown={(e) => e.key === "Enter" && setEditingPlayer(false)}
                       autoFocus
-                      className="w-40 h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3"
+                      className="w-40 h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3"
                     />
                   ) : (
                     <span className="w-40 text-[#0D0D0D] font-medium text-xs">
@@ -401,7 +401,7 @@ export function DetailsContent({
                       onBlur={() => setEditingOpponent(false)}
                       onKeyDown={(e) => e.key === "Enter" && setEditingOpponent(false)}
                       autoFocus
-                      className="w-40 h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3"
+                      className="w-40 h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3"
                     />
                   ) : (
                     <span className="w-40 text-[#0D0D0D] font-medium text-xs">
@@ -514,7 +514,7 @@ export function DetailsContent({
             value={formData.result || undefined}
             onValueChange={(value) => onInputChange("result", value)}
           >
-            <SelectTrigger className="w-[180px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
+            <SelectTrigger className="w-[180px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none [&_svg]:size-3">
               <SelectValue placeholder="Select Result..." />
             </SelectTrigger>
             <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
@@ -554,13 +554,13 @@ export function DetailsContent({
                 placeholder="Type Event Name..."
                 value={formData.eventName}
                 onChange={(e) => onInputChange("eventName", e.target.value)}
-                className="w-[200px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3"
+                className="w-[200px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3"
               />
               <Select
                 value={formData.round || undefined}
                 onValueChange={(value) => onInputChange("round", value)}
               >
-                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
+                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none [&_svg]:size-3">
                   <SelectValue placeholder="Round of..." />
                 </SelectTrigger>
                 <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
@@ -585,7 +585,7 @@ export function DetailsContent({
                   type="date"
                   value={formData.date}
                   onChange={(e) => onInputChange("date", e.target.value)}
-                  className="w-auto h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none pl-3 pr-7 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:p-0 [&::-webkit-datetime-edit-fields-wrapper]:p-0"
+                  className="w-auto h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none pl-3 pr-7 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:p-0 [&::-webkit-datetime-edit-fields-wrapper]:p-0"
                 />
                 <Calendar className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-[#888888]" />
               </div>
@@ -598,7 +598,7 @@ export function DetailsContent({
                   type="time"
                   value={formData.time}
                   onChange={(e) => onInputChange("time", e.target.value)}
-                  className="w-auto h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none pl-3 pr-7 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:p-0 [&::-webkit-datetime-edit-fields-wrapper]:p-0"
+                  className="w-auto h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none pl-3 pr-7 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:p-0 [&::-webkit-datetime-edit-fields-wrapper]:p-0"
                 />
                 <Clock className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-[#888888]" />
               </div>
@@ -606,7 +606,7 @@ export function DetailsContent({
                 value={formData.matchType || undefined}
                 onValueChange={(value) => onInputChange("matchType", value)}
               >
-                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
+                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none [&_svg]:size-3">
                   <SelectValue placeholder="Match Type..." />
                 </SelectTrigger>
                 <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
@@ -620,7 +620,7 @@ export function DetailsContent({
                 value={formData.courtType || undefined}
                 onValueChange={(value) => onInputChange("courtType", value)}
               >
-                <SelectTrigger className="w-[160px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
+                <SelectTrigger className="w-[160px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none [&_svg]:size-3">
                   <SelectValue placeholder="Court Type..." />
                 </SelectTrigger>
                 <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
@@ -642,7 +642,7 @@ export function DetailsContent({
                 value={formData.bestOf || undefined}
                 onValueChange={(value) => onInputChange("bestOf", value)}
               >
-                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
+                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none [&_svg]:size-3">
                   <SelectValue placeholder="Best of..." />
                 </SelectTrigger>
                 <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
@@ -655,7 +655,7 @@ export function DetailsContent({
                 value={formData.adScoring === undefined ? undefined : (formData.adScoring ? "ad" : "no-ad")}
                 onValueChange={(value) => onInputChange("adScoring", value === "ad")}
               >
-                <SelectTrigger className="w-[140px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
+                <SelectTrigger className="w-[140px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none [&_svg]:size-3">
                   <SelectValue placeholder="Ad Scoring..." />
                 </SelectTrigger>
                 <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
@@ -667,7 +667,7 @@ export function DetailsContent({
                 value={formData.playOnLets === undefined ? undefined : (formData.playOnLets ? "play-on" : "lets")}
                 onValueChange={(value) => onInputChange("playOnLets", value === "play-on")}
               >
-                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none [&_svg]:size-3">
+                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none [&_svg]:size-3">
                   <SelectValue placeholder="Lets..." />
                 </SelectTrigger>
                 <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
@@ -694,7 +694,7 @@ export function DetailsContent({
                   onInputChange("duration", seconds);
                 }
               }}
-              className="w-[200px] h-7 bg-white border-[#E5E5E5] border rounded-full text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3 font-mono"
+              className="w-[200px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3 font-mono"
             />
           </div>
           </div>

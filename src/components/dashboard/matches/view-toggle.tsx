@@ -17,7 +17,11 @@ const VIEW_OPTIONS: { value: MatchView; icon: typeof LayoutGrid; label: string }
 
 export function ViewToggle({ view, onViewChange }: ViewToggleProps): React.JSX.Element {
   return (
-    <div className="flex items-center h-8 rounded-full ring-1 ring-inset ring-[#EAECF0] bg-white p-[3px] gap-0.5">
+    <div
+      role="radiogroup"
+      aria-label="Match view"
+      className="flex items-center h-8 rounded-full ring-1 ring-inset ring-[#EAECF0] bg-white p-[3px] gap-0.5"
+    >
       {VIEW_OPTIONS.map((option) => {
         const isActive = view === option.value;
         const Icon = option.icon;
@@ -25,15 +29,17 @@ export function ViewToggle({ view, onViewChange }: ViewToggleProps): React.JSX.E
         return (
           <button
             key={option.value}
+            role="radio"
+            aria-checked={isActive}
             onClick={() => onViewChange(option.value)}
             className="relative flex items-center justify-center gap-1.5 h-[26px] px-2.5 rounded-full transition-[color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
-            aria-label={`${option.value} view`}
+            aria-label={`${option.label} view`}
           >
             {isActive && (
               <motion.div
                 layoutId="matchViewToggle"
                 className="absolute inset-0 bg-[#F5F5F5] rounded-full"
-                transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                transition={{ duration: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
               />
             )}
             <Icon

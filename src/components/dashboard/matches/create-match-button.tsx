@@ -24,7 +24,10 @@ export function CreateMatchButton({ variant = "dark" }: CreateMatchButtonProps):
   const [isMac, setIsMac] = useState(true);
 
   useEffect(() => {
-    setIsMac(/Mac|iPod|iPhone|iPad/.test(navigator.platform));
+    const platform =
+      (navigator as Navigator & { userAgentData?: { platform: string } })
+        .userAgentData?.platform ?? navigator.platform;
+    setIsMac(/mac/i.test(platform));
   }, []);
 
   // Listen for global keyboard shortcut (Cmd+U / Ctrl+U)

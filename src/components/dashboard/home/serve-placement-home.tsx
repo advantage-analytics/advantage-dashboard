@@ -141,29 +141,26 @@ function HalfCourtSVG({ dots }: { dots: ServeDot[] }) {
   );
 }
 
-export default function ServePlacementHome() {
+export default function ServePlacementHome({ userId }: { userId: string }) {
   const [dots, setDots] = useState<ServeDot[]>([]);
   const [loading, setLoading] = useState(true);
+  const [latestMatchId, setLatestMatchId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const supabase = createClient();
     setLoading(true);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-
       // Get last 4 matches
       const { data: matches } = await supabase
         .from("matches")
         .select("id, player1_id")
-        .eq("created_by", user.id)
+        .eq("created_by", userId)
         .order("date", { ascending: false })
         .limit(4);
 
       if (!matches || matches.length === 0) return;
 
+      setLatestMatchId(matches[0].id);
       const matchIds = matches.map((m) => m.id);
 
       // Fetch serve shots from the shots table
@@ -199,20 +196,21 @@ export default function ServePlacementHome() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     load();
   }, [load]);
 
+  // Refetch only when match processing completes (stats/shots are ready)
   useEffect(() => {
     const handler = () => load();
-    window.addEventListener("match-created", handler);
-    return () => window.removeEventListener("match-created", handler);
+    window.addEventListener("match-processed", handler);
+    return () => window.removeEventListener("match-processed", handler);
   }, [load]);
 
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] overflow-clip">
+    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-clip">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4">
         <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
@@ -224,7 +222,7 @@ export default function ServePlacementHome() {
       </div>
 
       {/* Court area */}
-      <div className="bg-[#EFF4FF] h-[415px]">
+      <div className="bg-[#EFF4FF] h-[300px] sm:h-[350px] md:h-[415px]">
         <div className="flex items-center justify-center p-6 h-full">
           {loading ? (
             <div className="w-full flex flex-col items-center justify-center gap-4">
@@ -255,7 +253,7 @@ export default function ServePlacementHome() {
           </div>
         </div>
         <Link
-          href="/dashboard/matches"
+          href={latestMatchId ? `/dashboard/matches/${latestMatchId}/visuals` : "/dashboard/matches"}
           className="text-[9px] font-medium text-[#3B82F6] uppercase tracking-[1.5px] transition-[color,transform] duration-200 ease-out hover:text-[#2563EB] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2 rounded-sm"
         >
           FULL COURT VIEW

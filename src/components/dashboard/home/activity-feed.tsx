@@ -27,7 +27,7 @@ function formatTimeAgo(date: Date): string {
   return `${diffDays}d ago`;
 }
 
-export default function ActivityFeed() {
+export default function ActivityFeed({ userId }: { userId: string }) {
   const [items, setItems] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,19 +37,11 @@ export default function ActivityFeed() {
     setLoading(true);
     setError(null);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        setItems([]);
-        return;
-      }
-
       // Fetch recent matches to generate activity items
       const { data: matches } = await supabase
         .from("matches")
         .select("id, player2_name, date, score, player1_id")
-        .eq("created_by", user.id)
+        .eq("created_by", userId)
         .order("date", { ascending: false })
         .limit(10);
 
@@ -72,7 +64,7 @@ export default function ActivityFeed() {
         const userStats = stats.filter((s) => {
           const match = matches.find((m) => m.id === s.match_id);
           if (!match) return false;
-          const isPlayer1 = match.player1_id === user.id;
+          const isPlayer1 = match.player1_id === userId;
           return s.is_player1 === isPlayer1;
         });
 
@@ -131,16 +123,17 @@ export default function ActivityFeed() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     load();
   }, [load]);
 
+  // Refetch only when match processing completes (stats are ready)
   useEffect(() => {
     const handler = () => load();
-    window.addEventListener("match-created", handler);
-    return () => window.removeEventListener("match-created", handler);
+    window.addEventListener("match-processed", handler);
+    return () => window.removeEventListener("match-processed", handler);
   }, [load]);
 
   if (loading) {
@@ -173,7 +166,7 @@ export default function ActivityFeed() {
           <button
             type="button"
             onClick={load}
-            className="flex items-center gap-1.5 mt-2 px-3 py-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-medium uppercase tracking-[1.5px] rounded-full transition-colors duration-200"
+            className="flex items-center gap-1.5 mt-2 px-3 py-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-medium uppercase tracking-[1.5px] rounded-[6px] transition-colors duration-200"
           >
             <RefreshCw className="size-3" aria-hidden />
             Retry
@@ -199,7 +192,7 @@ export default function ActivityFeed() {
             key={item.id}
             className="flex gap-3 items-stretch px-5 py-1.5"
           >
-            <div className="flex flex-row items-center">
+            <div className="flex flex-row items-center" aria-hidden="true">
               <div
                 className={`w-px self-stretch rounded-full ${INDICATOR_COLORS[item.type]}`}
               />

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, Sparkles } from "lucide-react";
+import { Check } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { SettingsAlert } from "@/components/dashboard/settings/settings-alert";
@@ -99,12 +99,7 @@ function PlanCard({
     >
       {/* Recommended Badge */}
       {plan.recommended && !isCurrentPlan && (
-        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-[#3B82F6] rounded-full flex items-center gap-1.5">
-          <Sparkles
-            className="size-2.5 text-white"
-            strokeWidth={1.5}
-            aria-hidden="true"
-          />
+        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-[#3B82F6] rounded-full">
           <span className="text-[8px] font-medium text-white uppercase tracking-[1.5px]">
             Recommended
           </span>

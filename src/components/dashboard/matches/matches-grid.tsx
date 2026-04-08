@@ -16,6 +16,7 @@ interface MatchesGridProps {
   sortField: SortField;
   sortDir: SortDir;
   onSort: (field: SortField) => void;
+  newMatchId?: string | null;
 }
 
 const STAGGER_CAP = 5;
@@ -42,6 +43,7 @@ export function MatchesGrid({
   sortField,
   sortDir,
   onSort,
+  newMatchId,
 }: MatchesGridProps): React.JSX.Element {
   const shouldReduceMotion = useReducedMotion();
 
@@ -63,7 +65,7 @@ export function MatchesGrid({
                 animate={{ opacity: 1, y: 0 }}
                 transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.4, delay: Math.min(i, STAGGER_CAP) * STAGGER_DELAY, ease: [0.25, 0.46, 0.45, 0.94] }}
               >
-                <MatchCardGallery match={match} />
+                <MatchCardGallery match={match} isNew={match.id === newMatchId} />
               </motion.div>
             ))}
           </div>
@@ -105,7 +107,7 @@ export function MatchesGrid({
               animate={{ opacity: 1, y: 0 }}
               transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.4, delay: Math.min(i, STAGGER_CAP) * STAGGER_DELAY, ease: [0.25, 0.46, 0.45, 0.94] }}
             >
-              <MatchCardList match={match} />
+              <MatchCardList match={match} isNew={match.id === newMatchId} />
             </motion.div>
           ))}
         </motion.div>

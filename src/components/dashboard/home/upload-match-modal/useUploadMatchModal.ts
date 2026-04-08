@@ -594,8 +594,8 @@ export function useUploadMatchModal({
       clearStorageData();
       sessionStorage.setItem("match-processing", "true");
       onOpenChange(false);
-      router.push("/dashboard");
-      window.dispatchEvent(new Event("match-created"));
+      window.dispatchEvent(new CustomEvent("match-created", { detail: { matchId } }));
+      router.refresh();
     } catch (e: any) {
       console.error("Error creating match:", e);
       const errorMessage =

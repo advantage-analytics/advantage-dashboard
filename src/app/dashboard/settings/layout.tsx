@@ -9,7 +9,7 @@ interface SettingsLayoutProps {
   children: ReactNode;
 }
 
-const EASE_CURVE = [0.25, 0.46, 0.45, 0.94];
+const EASE_CURVE: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
 
 export default function SettingsLayout({ children }: SettingsLayoutProps) {
   const pathname = usePathname();

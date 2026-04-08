@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { AlertCircle, Inbox, RefreshCw } from "lucide-react";
@@ -167,10 +167,47 @@ function groupMatchesIntoEvents(
   return events;
 }
 
-export default function RecentActivity() {
+function EventsList({
+  events,
+  seenEventIdsRef,
+}: {
+  events: EventGroup[];
+  seenEventIdsRef: React.MutableRefObject<Set<string> | null>;
+}) {
+  const currentIds = events.map((e) => e.id);
+  const newEventIds = new Set<string>();
+
+  if (seenEventIdsRef.current === null) {
+    // First render — mark all as seen
+    seenEventIdsRef.current = new Set(currentIds);
+  } else {
+    for (const id of currentIds) {
+      if (!seenEventIdsRef.current.has(id)) {
+        newEventIds.add(id);
+      }
+    }
+    seenEventIdsRef.current = new Set(currentIds);
+  }
+
+  return (
+    <div className="flex flex-col gap-8">
+      {events.map((event) => (
+        <RecentMatches
+          key={event.id}
+          event={event}
+          isNewEvent={newEventIds.has(event.id)}
+        />
+      ))}
+    </div>
+  );
+}
+
+export default function RecentActivity({ userId }: { userId: string }) {
   const [events, setEvents] = useState<EventGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
+  const seenEventIdsRef = useRef<Set<string> | null>(null);
   const [processing, setProcessing] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -184,23 +221,16 @@ export default function RecentActivity() {
 
   const load = useCallback(async () => {
     const supabase = createClient();
-    setLoading(true);
+    // Only show skeleton on initial load — subsequent fetches update in-place
+    if (!hasLoadedRef.current) setLoading(true);
     setError(null);
     try {
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
-      if (authError || !user) {
-        setEvents([]);
-        return;
-      }
       const { data: rows, error: fetchError } = await supabase
         .from("matches")
         .select(
           "id, created_by, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, player1_id, player2_id"
         )
-        .eq("created_by", user.id)
+        .eq("created_by", userId)
         .order("date", { ascending: false })
         .limit(50);
 
@@ -226,21 +256,22 @@ export default function RecentActivity() {
         for (const stat of stats as MatchStats[]) {
           const match = list.find((m) => m.id === stat.match_id);
           if (!match) continue;
-          const isUserPlayer1 = match.player1_id === user.id;
+          const isUserPlayer1 = match.player1_id === userId;
           if (stat.is_player1 === isUserPlayer1) {
             statsMap.set(stat.match_id, stat);
           }
         }
       }
 
-      setEvents(groupMatchesIntoEvents(list, user.id, statsMap));
+      setEvents(groupMatchesIntoEvents(list, userId, statsMap));
+      hasLoadedRef.current = true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load matches");
       setEvents([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     load();
@@ -250,7 +281,6 @@ export default function RecentActivity() {
     const handler = () => {
       sessionStorage.setItem("match-processing", "true");
       setProcessing(true);
-      load();
     };
     window.addEventListener("match-created", handler);
     return () => window.removeEventListener("match-created", handler);
@@ -259,14 +289,12 @@ export default function RecentActivity() {
   // Poll for stats once processing starts, auto-dismiss when stats arrive
   useEffect(() => {
     if (!processing) return;
+    const supabase = createClient();
     const interval = setInterval(async () => {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
       const { data: matches } = await supabase
         .from("matches")
         .select("id")
-        .eq("created_by", user.id)
+        .eq("created_by", userId)
         .order("date", { ascending: false })
         .limit(1);
       if (!matches?.[0]) return;
@@ -279,6 +307,7 @@ export default function RecentActivity() {
         sessionStorage.removeItem("match-processing");
         setProcessing(false);
         load();
+        window.dispatchEvent(new Event("match-processed"));
       }
     }, 3000);
     // Safety timeout — dismiss after 60s regardless
@@ -290,11 +319,11 @@ export default function RecentActivity() {
       clearInterval(interval);
       clearTimeout(timeout);
     };
-  }, [processing, load]);
+  }, [processing, load, userId]);
 
   return (
     <>
-    <div className="bg-white border border-[#F3F3F3] shadow-[0px_6px_20px_0px_rgba(0,0,0,0.12)] rounded-[14px] overflow-hidden">
+    <div className="bg-white border border-[#F3F3F3] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] rounded-[14px] overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between h-14 px-5">
         <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
@@ -347,7 +376,7 @@ export default function RecentActivity() {
             <button
               type="button"
               onClick={load}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-medium uppercase tracking-[1.5px] rounded-full transition-colors duration-200"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-medium uppercase tracking-[1.5px] rounded-[6px] transition-colors duration-200"
             >
               <RefreshCw className="size-3" aria-hidden />
               Retry
@@ -383,11 +412,7 @@ export default function RecentActivity() {
         )}
 
         {!loading && !error && events.length > 0 && (
-          <div className="flex flex-col gap-8">
-            {events.map((event) => (
-              <RecentMatches key={event.id} event={event} />
-            ))}
-          </div>
+          <EventsList events={events} seenEventIdsRef={seenEventIdsRef} />
         )}
       </div>
     </div>

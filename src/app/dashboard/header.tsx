@@ -20,7 +20,6 @@ import {
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
-  AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
@@ -32,6 +31,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { useUnsavedChanges } from "@/components/dashboard/settings/unsaved-changes-context";
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
@@ -70,6 +70,7 @@ export function Header() {
   const [isLogoutOpen, setIsLogoutOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState(false);
+  const { hasUnsavedChanges } = useUnsavedChanges();
   const profileRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
@@ -233,21 +234,19 @@ export function Header() {
     setIsProfileOpen(false);
   }, [pathname]);
 
-  // Keyboard shortcuts: Cmd+K (search), Cmd+B (sidebar)
+  // Keyboard shortcut: Cmd+K (search)
+  // Note: Cmd+B (sidebar) is handled by SidebarProvider in sidebar.tsx
   useEffect(() => {
     function handleShortcuts(event: KeyboardEvent) {
       if (!(event.metaKey || event.ctrlKey)) return;
       if (event.key === "k") {
         event.preventDefault();
         setIsSearchOpen(true);
-      } else if (event.key === "b") {
-        event.preventDefault();
-        toggleSidebar();
       }
     }
     document.addEventListener("keydown", handleShortcuts);
     return () => document.removeEventListener("keydown", handleShortcuts);
-  }, [toggleSidebar]);
+  }, []);
 
   // Scroll detection for border
   const handleScroll = useCallback(() => {
@@ -391,7 +390,10 @@ export function Header() {
             <TooltipTrigger asChild>
               <button
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
-                className="h-8 w-8 rounded-lg flex items-center justify-center text-[11px] font-semibold tracking-wide cursor-pointer transition-colors duration-150 text-[#8A8A8E] hover:bg-[#F5F5F5] active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none"
+                className={cn(
+                  "h-8 w-8 rounded-lg flex items-center justify-center text-[11px] font-semibold tracking-wide cursor-pointer transition-colors duration-150 text-[#8A8A8E] hover:bg-[#F5F5F5] active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none",
+                  isProfileOpen ? "bg-[#F5F5F5]" : "bg-transparent"
+                )}
                 aria-label="Profile menu"
                 aria-expanded={isProfileOpen}
                 aria-haspopup="menu"
@@ -406,7 +408,7 @@ export function Header() {
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom" sideOffset={4}>
-              Profile
+              Account
             </TooltipContent>
           </Tooltip>
 
@@ -442,10 +444,10 @@ export function Header() {
                 className="absolute right-0 top-full mt-1.5 w-44 rounded-xl overflow-hidden border border-[#E5E5EA] bg-white shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]"
                 role="menu"
               >
-                <div className="py-1">
+                <div className="p-1">
                   <Link
                     href="/dashboard/settings/profile"
-                    className="flex items-center gap-2.5 px-3 py-2 text-[13px] text-[#1D1D1F] hover:bg-[#F5F5F5] active:bg-[#EBEBEB] transition-colors duration-100 cursor-pointer"
+                    className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] text-[#1D1D1F] hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5] focus-visible:outline-none active:bg-[#EBEBEB] transition-colors duration-100 cursor-pointer"
                     role="menuitem"
                   >
                     <User
@@ -457,7 +459,7 @@ export function Header() {
                   </Link>
                   <Link
                     href="/dashboard/settings/account"
-                    className="flex items-center gap-2.5 px-3 py-2 text-[13px] text-[#1D1D1F] hover:bg-[#F5F5F5] active:bg-[#EBEBEB] transition-colors duration-100 cursor-pointer"
+                    className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] text-[#1D1D1F] hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5] focus-visible:outline-none active:bg-[#EBEBEB] transition-colors duration-100 cursor-pointer"
                     role="menuitem"
                   >
                     <Settings
@@ -467,17 +469,17 @@ export function Header() {
                     />
                     Account
                   </Link>
-                  <div className="h-px bg-[#E5E5EA] mx-2.5 my-1" />
+                  <div className="h-px bg-[#E5E5EA] mx-2 my-1" />
                   <button
                     onClick={() => {
                       setIsProfileOpen(false);
                       setIsLogoutOpen(true);
                     }}
-                    className="flex items-center gap-2.5 px-3 py-2 text-[13px] text-[#1D1D1F] hover:bg-[#F5F5F5] active:bg-[#EBEBEB] transition-colors duration-100 w-full cursor-pointer"
+                    className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] text-[#E51837] hover:bg-[rgba(229,24,55,0.05)] focus-visible:bg-[rgba(229,24,55,0.05)] focus-visible:outline-none active:bg-[rgba(229,24,55,0.1)] transition-colors duration-100 w-full cursor-pointer"
                     role="menuitem"
                   >
                     <LogOut
-                      className="h-[15px] w-[15px] text-[#8A8A8E]"
+                      className="h-[15px] w-[15px] text-[#E51837]"
                       strokeWidth={1.5}
                       aria-hidden="true"
                     />
@@ -499,13 +501,16 @@ export function Header() {
         <AlertDialogHeader className="space-y-0 text-left mb-5">
           <div className="flex items-center gap-2.5 mb-2">
             <div className="h-7 w-7 rounded-full bg-[rgba(229,24,55,0.15)] flex items-center justify-center shrink-0">
-              <LogOut className="h-3 w-3 text-[#E51837]" strokeWidth={1.5} />
+              <LogOut className="h-3 w-3 text-[#E51837]" strokeWidth={1.5} aria-hidden="true" />
             </div>
-            <AlertDialogTitle className="text-[15px] font-semibold text-[#1D1D1F]">
+            <AlertDialogTitle className="text-[16px] font-medium text-[#1D1D1F] tracking-[-0.4px]">
               Log out
             </AlertDialogTitle>
           </div>
-          <AlertDialogDescription className="text-[13px] text-[#8A8A8E] leading-[1.5]">
+          <AlertDialogDescription className="text-[13px] text-[#888888] leading-[1.5]">
+            {hasUnsavedChanges
+              ? "You have unsaved changes that will be lost. "
+              : ""}
             You&#39;ll need to sign in again to access your matches and statistics.
           </AlertDialogDescription>
           {logoutError && (
@@ -520,20 +525,22 @@ export function Header() {
         <div className="flex items-center justify-end gap-2.5">
           <AlertDialogCancel
             disabled={isLoggingOut}
-            className="h-8 rounded-full px-4 border border-[#EAECF0] bg-transparent text-[10px] font-medium uppercase tracking-[1.5px] text-[#525252] hover:bg-[#F5F5F5] active:scale-[0.97] transition-colors duration-200 cursor-pointer m-0"
+            className="h-8 rounded-[6px] px-4 border border-[#EAECF0] bg-transparent text-[10px] font-medium uppercase tracking-[1.5px] text-[#525252] hover:bg-[#F5F5F5] active:scale-[0.97] transition-colors duration-200 cursor-pointer m-0 focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none"
           >
             Cancel
           </AlertDialogCancel>
           <AlertDialogAction
             onClick={handleLogout}
             disabled={isLoggingOut}
-            className="h-8 rounded-full px-4 border-none bg-[#E51837] hover:bg-[#CC1530] text-[10px] font-medium uppercase tracking-[1.5px] text-white active:scale-[0.97] transition-colors duration-200 cursor-pointer shadow-none disabled:opacity-50 disabled:cursor-not-allowed"
+            className="h-8 rounded-[6px] px-4 border-none bg-[#E51837] hover:bg-[#CC1530] text-[10px] font-medium uppercase tracking-[1.5px] text-white active:scale-[0.97] transition-colors duration-200 cursor-pointer shadow-none disabled:opacity-50 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none"
           >
             {isLoggingOut ? (
-              <>
-                <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
-                <span>Logging out</span>
-              </>
+              <span className="inline-flex items-center gap-1.5">
+                <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+                Logging out
+              </span>
+            ) : logoutError ? (
+              "Try again"
             ) : (
               "Log out"
             )}

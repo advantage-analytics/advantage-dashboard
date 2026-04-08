@@ -60,7 +60,7 @@ export function SettingsButton({
     <button
       disabled={isDisabled}
       className={cn(
-        "h-10 px-5 text-[10px] font-medium uppercase tracking-[1.5px] rounded-full transition-all duration-200 inline-flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40",
+        "h-10 px-5 text-[10px] font-medium uppercase tracking-[1.5px] rounded-[6px] transition-all duration-200 inline-flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40",
         fullWidth && "w-full",
         isDisabled ? styles.disabled : styles.enabled,
         className

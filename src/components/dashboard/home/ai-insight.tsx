@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { MessageSquare } from "lucide-react";
+import { Lightbulb, MessageSquare } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 
 const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
@@ -11,7 +11,6 @@ export default function AIInsight() {
   const [visible, setVisible] = useState(false);
   const shouldReduceMotion = useReducedMotion();
 
-  // Hydrate dismiss state from localStorage
   useEffect(() => {
     const dismissed = localStorage.getItem(DISMISS_KEY);
     setVisible(dismissed !== "true");
@@ -51,38 +50,32 @@ export default function AIInsight() {
               AI Insight
             </p>
 
-            <p className="text-[12px] font-normal text-[#525252] leading-[1.65]">
-              Your backhand depth has improved 11% over three matches. Next focus:
-              second serve placement to the ad court, where you&apos;re losing 62%
-              of points. Shifting 5% more serves to the T could save an extra
-              break per match.
-            </p>
-
-            <div className="flex items-center gap-4">
-              <button
-                type="button"
-                className="text-[9px] font-medium uppercase tracking-[1.5px] text-[#3B82F6] transition-colors duration-200 hover:text-[#2563EB] active:scale-[0.97]"
-              >
-                View Analysis
-              </button>
-              <button
-                type="button"
-                onClick={dismiss}
-                className="text-[9px] font-medium uppercase tracking-[1.5px] text-[#AAAAAA] transition-colors duration-200 hover:text-[#525252] active:scale-[0.97]"
-              >
-                Dismiss
-              </button>
+            <div className="flex items-center gap-3 py-2">
+              <div className="rounded-full bg-[#F5F5F5] p-2.5 shrink-0">
+                <Lightbulb className="size-4 text-[#AAAAAA]" strokeWidth={1.5} aria-hidden />
+              </div>
+              <p className="text-[12px] font-normal text-[#888888] leading-[1.6]">
+                AI-powered match insights are coming soon. Once connected, you&apos;ll get
+                actionable analysis of your recent performance here.
+              </p>
             </div>
+
+            <button
+              type="button"
+              onClick={dismiss}
+              className="text-[9px] font-medium uppercase tracking-[1.5px] text-[#AAAAAA] transition-colors duration-200 hover:text-[#525252] active:scale-[0.97] self-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 rounded-sm"
+            >
+              Dismiss
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Recovery button when dismissed */}
       {!visible && (
         <button
           type="button"
           onClick={restore}
-          className="flex items-center gap-1.5 self-start px-3 py-2 text-[9px] font-medium uppercase tracking-[1.5px] text-[#AAAAAA] transition-colors duration-200 hover:text-[#525252]"
+          className="flex items-center gap-1.5 self-start px-3 py-2 text-[9px] font-medium uppercase tracking-[1.5px] text-[#AAAAAA] transition-colors duration-200 hover:text-[#525252] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 rounded-sm"
         >
           <MessageSquare className="size-3" aria-hidden />
           Show AI Insight

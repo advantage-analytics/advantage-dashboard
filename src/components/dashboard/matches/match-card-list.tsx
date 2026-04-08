@@ -12,16 +12,17 @@ function formatScore(sets: DisplayMatch["score"]["sets"]): string {
 
 interface MatchCardListProps {
   match: DisplayMatch;
+  isNew?: boolean;
 }
 
-export function MatchCardList({ match }: MatchCardListProps): React.JSX.Element {
+export function MatchCardList({ match, isNew }: MatchCardListProps): React.JSX.Element {
   const isWin = match.score.winner === "player1";
 
   return (
     <Link
       href={`/dashboard/matches/${match.id}`}
       role="row"
-      className="group grid gap-x-4 items-center px-4 h-11 rounded-lg hover:bg-[#FAFAFA] transition-[background-color,transform] duration-200 ease-out active:scale-[0.998] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1"
+      className={`group grid gap-x-4 items-center px-4 h-11 rounded-lg hover:bg-[#FAFAFA] transition-[background-color,transform] duration-200 ease-out active:scale-[0.998] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1${isNew ? " animate-[highlight-new-match_1.5s_ease-out_0.4s_both]" : ""}`}
       style={LIST_GRID_COLS}
     >
       {/* Event */}

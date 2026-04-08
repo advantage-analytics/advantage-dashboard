@@ -38,6 +38,7 @@ export default async function Home() {
     performanceData;
 
   const overallView = views[0];
+  const hasMatches = matchCount > 0;
 
   const allKpiCards: KpiCardData[] = [
     ...kpiCards,
@@ -60,8 +61,10 @@ export default async function Home() {
         <HomeContent
           displayName={displayName}
           greeting={greeting}
-          kpiStrip={allKpiCards.length > 0 ? <KpiCards cards={allKpiCards} /> : undefined}
-          sidebar={
+          hasMatches={hasMatches}
+          userId={userId}
+          kpiStrip={allKpiCards.length > 0 ? <KpiCards cards={allKpiCards} matchCount={matchCount} /> : undefined}
+          sidebar={hasMatches ? (
             <>
               <AIInsight />
               <MatchHeatmap
@@ -71,9 +74,9 @@ export default async function Home() {
                 losses={overallView.losses}
                 form={form}
               />
-              <ActivityFeed />
+              <ActivityFeed userId={userId} />
             </>
-          }
+          ) : undefined}
         />
       </div>
     </div>

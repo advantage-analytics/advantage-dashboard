@@ -2,8 +2,8 @@
 
 import { useState, useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { ChartColumnIncreasing } from "lucide-react";
 import type { SelectableMatch, StatisticsPageData } from "@/lib/data/statistics-server";
+import { EmptyStatistics } from "./empty-statistics";
 import { computeStatistics } from "@/lib/data/statistics-client";
 import { MatchSelector } from "./match-selector";
 import { WinRateChart } from "./win-rate-chart";
@@ -77,17 +77,7 @@ export function StatisticsPageContent({
   }
 
   if (isEmpty) {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 text-center">
-        <div className="h-16 w-16 rounded-full bg-[#F5F5F5] flex items-center justify-center mb-4">
-          <ChartColumnIncreasing className="h-8 w-8 text-[#CCCCCC]" aria-hidden="true" />
-        </div>
-        <p className="font-medium text-[#0D0D0D] mb-1">No statistics yet</p>
-        <p className="text-[12px] font-normal text-[#71717A] max-w-xs">
-          Upload your first match to see your performance analytics here.
-        </p>
-      </div>
-    );
+    return <EmptyStatistics />;
   }
 
   return (

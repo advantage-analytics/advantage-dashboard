@@ -21,13 +21,16 @@ export const SettingsInput = forwardRef<HTMLInputElement, SettingsInputProps>(
           )}
         >
           {label}
+          {props.required && (
+            <span className="text-[#3B82F6] ml-0.5" aria-hidden="true">*</span>
+          )}
         </label>
         <input
           ref={ref}
           id={id}
           disabled={disabled}
           className={cn(
-            "w-full h-10 px-3.5 text-[13px] rounded-lg outline-none transition-all duration-200",
+            "w-full h-10 px-3.5 text-[13px] rounded-[6px] outline-none transition-all duration-200",
             "border bg-white",
             disabled
               ? "text-[#888888] bg-[#F7F7F7] border-[#F3F3F3] cursor-not-allowed"

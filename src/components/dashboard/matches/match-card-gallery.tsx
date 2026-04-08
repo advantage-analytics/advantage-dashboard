@@ -28,7 +28,7 @@ function ScoreRow({
     >
       <div className="flex items-center gap-2.5 min-w-0">
         <div
-          className={`w-px self-stretch rounded-full shrink-0 ${
+          className={`w-0.5 self-stretch rounded-full shrink-0 ${
             isWinner ? "bg-[#3B82F6]" : "bg-transparent"
           }`}
         />
@@ -62,15 +62,17 @@ function ScoreRow({
 
 interface MatchCardGalleryProps {
   match: DisplayMatch;
+  isNew?: boolean;
 }
 
 export function MatchCardGallery({
   match,
+  isNew,
 }: MatchCardGalleryProps): React.JSX.Element {
   return (
     <Link
       href={`/dashboard/matches/${match.id}`}
-      className="group block w-full bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] hover:shadow-[0px_6px_20px_0px_rgba(0,0,0,0.12)] hover:border-[#E5E5EA] hover:scale-[1.008] transition-[box-shadow,border-color,transform] duration-200 overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1"
+      className={`group block w-full bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:shadow-[0px_6px_20px_0px_rgba(0,0,0,0.10)] hover:border-[#E5E5EA] transition-[box-shadow,border-color] duration-200 overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1${isNew ? " animate-[highlight-new-match_1.5s_ease-out_0.4s_both]" : ""}`}
     >
       <div className="p-5">
         {/* Header: match context + verified + duration */}

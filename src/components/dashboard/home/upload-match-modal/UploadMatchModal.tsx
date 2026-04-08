@@ -225,20 +225,20 @@ export function UploadMatchModal({
               <>
                 <Button
                   onClick={handleClose}
-                  className="w-[65px] h-[31px] rounded-full text-xs bg-white border border-[#EAECF0] text-[#0D0D0D] hover:bg-[#F7F7F7] shadow-none"
+                  className="w-[65px] h-[31px] rounded-[6px] text-xs bg-white border border-[#EAECF0] text-[#0D0D0D] hover:bg-[#F7F7F7] shadow-none"
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handleBack}
-                  className="w-[55px] h-[31px] rounded-full text-xs bg-[#3B82F6] text-white hover:bg-[#2563EB]"
+                  className="w-[55px] h-[31px] rounded-[6px] text-xs bg-[#3B82F6] text-white hover:bg-[#2563EB]"
                 >
                   Edit
                 </Button>
                 <Button
                   onClick={handleCreateMatch}
                   disabled={isCreating}
-                  className={`w-[110px] h-[31px] rounded-full text-xs ${
+                  className={`w-[110px] h-[31px] rounded-[6px] text-xs ${
                     isCreating
                       ? "bg-[#F7F7F7] text-[#888888]"
                       : "bg-[#0D0D0D] text-white"
@@ -251,14 +251,14 @@ export function UploadMatchModal({
               <>
                 <Button
                   onClick={handleClose}
-                  className="w-[65px] h-[31px] rounded-full text-xs bg-white border border-[#EAECF0] text-[#0D0D0D] hover:bg-[#F7F7F7] shadow-none"
+                  className="w-[65px] h-[31px] rounded-[6px] text-xs bg-white border border-[#EAECF0] text-[#0D0D0D] hover:bg-[#F7F7F7] shadow-none"
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={continueHandler}
                   disabled={continueDisabled}
-                  className={`w-[85px] h-[31px] rounded-full text-xs ${
+                  className={`w-[85px] h-[31px] rounded-[6px] text-xs ${
                     continueDisabled
                       ? "bg-[#F7F7F7] text-[#888888]"
                       : "bg-[#0D0D0D] text-white"

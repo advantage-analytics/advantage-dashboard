@@ -1,18 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Mail } from "lucide-react";
 import { SettingsInput } from "@/components/dashboard/settings/settings-input";
 import { SettingsSection } from "@/components/dashboard/settings/settings-section";
 import { SettingsButton } from "@/components/dashboard/settings/settings-button";
 import { SettingsAlert } from "@/components/dashboard/settings/settings-alert";
 import { deleteAccount } from "@/components/dashboard/settings/actions";
+import { cn } from "@/lib/utils";
 
 export default function AccountPage() {
   const [email] = useState("clajerson@example.com");
-  const [phone, setPhone] = useState("+1 555 123 4567");
-  const [hasChanges, setHasChanges] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -20,20 +18,6 @@ export default function AccountPage() {
     type: "success" | "error";
     text: string;
   } | null>(null);
-
-  const handlePhoneChange = (value: string) => {
-    setPhone(value);
-    setHasChanges(true);
-    setMessage(null);
-  };
-
-  const handleSave = async () => {
-    setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    setMessage({ type: "success", text: "Account updated successfully" });
-    setHasChanges(false);
-    setLoading(false);
-  };
 
   const handlePasswordReset = async () => {
     setResetLoading(true);
@@ -88,14 +72,33 @@ export default function AccountPage() {
           disabled
           hint="Contact support to change your email address"
         />
-        <SettingsInput
-          id="phone"
-          label="Phone Number"
-          type="tel"
-          value={phone}
-          onChange={(e) => handlePhoneChange(e.target.value)}
-          placeholder="+1 555 000 0000"
-        />
+      </SettingsSection>
+
+      {/* Sign-in Method */}
+      {/* TODO: Detect actual auth provider (Google, Apple, email) and show the correct icon/label */}
+      <SettingsSection title="Sign-in Method">
+        <div className="flex items-center gap-3">
+          <div
+            className={cn(
+              "size-8 rounded-lg flex items-center justify-center flex-shrink-0",
+              "bg-[#F5F5F5] border border-[#F3F3F3]"
+            )}
+          >
+            <Mail
+              className="size-3.5 text-[#525252]"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[12px] font-medium text-[#0D0D0D]">
+              Email & password
+            </p>
+            <p className="text-[11px] text-[#AAAAAA]">
+              Signed in with {email}
+            </p>
+          </div>
+        </div>
       </SettingsSection>
 
       {/* Security */}
@@ -117,20 +120,8 @@ export default function AccountPage() {
         </div>
       </SettingsSection>
 
-      {/* Save */}
-      <div className="pt-2">
-        <SettingsButton
-          onClick={handleSave}
-          disabled={!hasChanges}
-          loading={loading}
-          fullWidth
-        >
-          Save changes
-        </SettingsButton>
-      </div>
-
-      {/* Danger Zone */}
-      <SettingsSection title="Danger Zone">
+      {/* Delete Account */}
+      <SettingsSection title="Delete Account" titleClassName="text-[#E51837]/50">
         <div className="rounded-[14px] border border-[#E51837]/10 bg-[rgba(229,24,55,0.02)] p-5">
           <div className="flex items-start gap-3">
             <div className="size-8 rounded-lg bg-[rgba(229,24,55,0.08)] flex items-center justify-center flex-shrink-0">
@@ -141,10 +132,7 @@ export default function AccountPage() {
               />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[12px] font-medium text-[#0D0D0D]">
-                Delete account
-              </p>
-              <p className="text-[11px] text-[#888888] mt-0.5 leading-relaxed">
+              <p className="text-[11px] text-[#888888] leading-relaxed">
                 Permanently remove your account and all associated data. This
                 action cannot be undone.
               </p>
