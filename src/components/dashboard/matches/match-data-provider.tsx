@@ -14,6 +14,7 @@ interface MatchDataContextValue {
     player1?: { strengths?: Array<{ name: string; value: number; description: string }>; weaknesses?: Array<{ name: string; value: number; description: string }> };
     player2?: { strengths?: Array<{ name: string; value: number; description: string }>; weaknesses?: Array<{ name: string; value: number; description: string }> };
   } | null;
+  playerAverages: Partial<import("@/lib/data/types").PlayerStatistics> | null;
 }
 
 const MatchDataContext = createContext<MatchDataContextValue | null>(null);
@@ -35,6 +36,7 @@ interface MatchDataProviderProps {
     player1?: { strengths?: Array<{ name: string; value: number; description: string }>; weaknesses?: Array<{ name: string; value: number; description: string }> };
     player2?: { strengths?: Array<{ name: string; value: number; description: string }>; weaknesses?: Array<{ name: string; value: number; description: string }> };
   } | null;
+  playerAverages?: Partial<import("@/lib/data/types").PlayerStatistics> | null;
   children: React.ReactNode;
 }
 
@@ -44,10 +46,11 @@ export function MatchDataProvider({
   points,
   keyMoments = [],
   insights = null,
+  playerAverages = null,
   children,
 }: MatchDataProviderProps) {
   return (
-    <MatchDataContext.Provider value={{ match, statsResult, points, keyMoments, insights }}>
+    <MatchDataContext.Provider value={{ match, statsResult, points, keyMoments, insights, playerAverages }}>
       {children}
     </MatchDataContext.Provider>
   );

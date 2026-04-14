@@ -1,16 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { shortName } from "@/lib/data/match-utils";
 import type { MatchDetailedStats, PlayerStatistics, StatFraction } from "@/lib/data/types";
-import { cn } from "@/lib/utils";
-
-/* ── Animation constants ─────────────────────────────────── */
 
 const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
-
-/* ── Stat configuration ──────────────────────────────────── */
 
 interface StatConfig {
   key: keyof PlayerStatistics;
@@ -52,130 +46,97 @@ const OTHER_STATS: StatConfig[] = [
   { key: "totalPointsWon", label: "Total Points Won" },
 ];
 
-const TAB_STATS = {
-  serve: SERVE_STATS,
-  return: RETURN_STATS,
-  other: OTHER_STATS,
-} as const;
+const SECTIONS = [
+  { id: "serve", label: "Serve", stats: SERVE_STATS },
+  { id: "return", label: "Return", stats: RETURN_STATS },
+  { id: "other", label: "Other", stats: OTHER_STATS },
+] as const;
 
-type Tab = keyof typeof TAB_STATS;
-
-const TAB_OPTIONS = [
-  { value: "serve", label: "Serve" },
-  { value: "return", label: "Return" },
-  { value: "other", label: "Other" },
-];
-
-/* ── Helpers ──────────────────────────────────────────────── */
-
-/* ── StatBadge ────────────────────────────────────────────── */
-
-function StatBadge({
-  value,
-  isPercentage = false,
-  isFraction = false,
-  fraction,
-  color,
-}: {
-  value: number;
-  isPercentage?: boolean;
-  isFraction?: boolean;
-  fraction?: StatFraction;
-  color: "blue" | "orange";
-}) {
-  const styles =
-    color === "blue"
-      ? "bg-[#EBF0FE] text-[#4A8AF4]"
-      : "bg-[#FEF0E6] text-[#F38439]";
-
-  let display: React.ReactNode;
-  if (isPercentage && fraction) {
-    display = (
+function formatValue(
+  value: number,
+  stat: StatConfig,
+  fraction?: StatFraction
+): React.ReactNode {
+  if (stat.isFraction && fraction) {
+    return <span className="tabular-nums">{fraction.made}/{fraction.attempts}</span>;
+  }
+  if (stat.isPercentage) {
+    return fraction ? (
       <>
-        <span className="text-[12px] font-medium tabular-nums">{value}%</span>{" "}
-        <span className="text-[8px] font-medium">
-          ({fraction.made}/{fraction.attempts})
-        </span>
+        <span className="tabular-nums">{value}%</span>
+        <span className="text-[8px] text-[#AAAAAA] ml-0.5">({fraction.made}/{fraction.attempts})</span>
       </>
-    );
-  } else if (isFraction && fraction) {
-    display = (
-      <span className="text-[12px] font-medium tabular-nums">
-        {fraction.made}/{fraction.attempts}
-      </span>
-    );
-  } else if (isPercentage) {
-    display = (
-      <span className="text-[12px] font-medium tabular-nums">{value}%</span>
-    );
-  } else {
-    display = (
-      <span className="text-[12px] font-medium tabular-nums">
-        {value}
-      </span>
+    ) : (
+      <span className="tabular-nums">{value}%</span>
     );
   }
-
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-[4px] px-1.5 py-1 whitespace-nowrap",
-        styles
-      )}
-    >
-      {display}
-    </span>
-  );
+  return <span className="tabular-nums">{value}</span>;
 }
 
-/* ── Stat row ─────────────────────────────────────────────── */
-
 function StatRow({
-  label,
-  player1Value,
-  player2Value,
-  player1Fraction,
-  player2Fraction,
-  index,
-  isPercentage = false,
-  isFraction = false,
-  prefersReducedMotion = false,
+  stat,
+  p1Stats,
+  p2Stats,
+  delay,
+  reduced,
 }: {
-  label: string;
-  player1Value: number;
-  player2Value: number;
-  player1Fraction?: StatFraction;
-  player2Fraction?: StatFraction;
-  index: number;
-  isPercentage?: boolean;
-  isFraction?: boolean;
-  prefersReducedMotion?: boolean;
+  stat: StatConfig;
+  p1Stats: PlayerStatistics;
+  p2Stats: PlayerStatistics;
+  delay: number;
+  reduced: boolean;
 }) {
+  const p1Value = p1Stats[stat.key] as number;
+  const p2Value = p2Stats[stat.key] as number;
+  const maxVal = stat.isPercentage ? 100 : Math.max(p1Value, p2Value, 1);
+  const p1Pct = Math.max((p1Value / maxVal) * 100, 1.5);
+  const p2Pct = Math.max((p2Value / maxVal) * 100, 1.5);
+
+  const barTransition = reduced
+    ? { duration: 0 }
+    : { duration: 0.5, ease: EASE_CURVE, delay: delay + 0.1 };
+
   return (
     <motion.div
-      className="grid grid-cols-[1fr_100px_100px] sm:grid-cols-[1fr_120px_120px] items-center h-10"
-      initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
-      animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-      transition={{
-        duration: 0.3,
-        ease: EASE_CURVE,
-        delay: index * 0.04,
-      }}
+      className="flex flex-col gap-0.5"
+      initial={{ opacity: 0, y: reduced ? 0 : 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: EASE_CURVE, delay }}
     >
-      <span className="text-[9px] uppercase tracking-[2px] text-[#AAAAAA]">{label}</span>
+      <span className="text-[11px] text-[#525252] text-center leading-none">{stat.label}</span>
 
-      <div className="flex justify-start">
-        <StatBadge value={player1Value} isPercentage={isPercentage} isFraction={isFraction} fraction={player1Fraction} color="blue" />
-      </div>
+      <div className="grid grid-cols-[1fr_1fr] items-center gap-1.5">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] font-semibold text-[#3B82F6] min-w-[60px] text-left shrink-0">
+            {formatValue(p1Value, stat, p1Stats.fractions[stat.key])}
+          </span>
+          <div className="flex-1 h-[4px] rounded-full bg-[#F0F0F0] overflow-hidden flex justify-end">
+            <motion.div
+              className="h-full rounded-full bg-[#3B82F6]"
+              initial={{ width: 0 }}
+              animate={{ width: `${p1Pct}%` }}
+              transition={barTransition}
+            />
+          </div>
+        </div>
 
-      <div className="flex justify-start">
-        <StatBadge value={player2Value} isPercentage={isPercentage} isFraction={isFraction} fraction={player2Fraction} color="orange" />
+        <div className="flex items-center gap-1.5">
+          <div className="flex-1 h-[4px] rounded-full bg-[#F0F0F0] overflow-hidden">
+            <motion.div
+              className="h-full rounded-full bg-[#F38439]"
+              initial={{ width: 0 }}
+              animate={{ width: `${p2Pct}%` }}
+              transition={barTransition}
+            />
+          </div>
+          <span className="text-[10px] font-semibold text-[#F38439] min-w-[60px] text-right shrink-0">
+            {formatValue(p2Value, stat, p2Stats.fractions[stat.key])}
+          </span>
+        </div>
       </div>
     </motion.div>
   );
 }
-
-/* ── Main component ───────────────────────────────────────── */
 
 interface MatchStatisticsProps {
   statistics: MatchDetailedStats | null;
@@ -188,15 +149,11 @@ export function MatchStatistics({
   player1Name,
   player2Name,
 }: MatchStatisticsProps) {
-  const [activeTab, setActiveTab] = useState<Tab>("serve");
-  const prefersReducedMotion = useReducedMotion() ?? false;
+  const reduced = useReducedMotion() ?? false;
 
   if (!statistics) {
     return (
-      <div className="bg-white border border-[#F3F3F3] rounded-[16px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)] p-5">
-        <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-6">
-          Match Statistics
-        </h2>
+      <div className="py-16">
         <p className="text-[12px] text-[#525252] text-center">
           Statistics not available for this match.
         </p>
@@ -206,73 +163,55 @@ export function MatchStatistics({
 
   const p1Short = shortName(player1Name, 18);
   const p2Short = shortName(player2Name, 18);
-  const activeStats = TAB_STATS[activeTab];
+
+  let rowIndex = 0;
 
   return (
     <motion.div
-      className="bg-white border border-[#F3F3F3] rounded-[16px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.06)] p-5"
-      initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 20 }}
-      animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: 0.3, ease: EASE_CURVE }}
+      className="flex flex-col"
+      initial={{ opacity: 0, y: reduced ? 0 : 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: EASE_CURVE }}
     >
-      {/* Card header */}
-      <div className="mb-5">
-        <h2 className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
-          Match Statistics
-        </h2>
+      {/* Player legend — anchored to the grid alignment */}
+      <div className="grid grid-cols-[1fr_1fr] gap-1.5 mb-6">
+        <div className="flex items-center justify-end gap-1.5 pr-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#3B82F6]" />
+          <span className="text-[10px] font-medium text-[#0D0D0D]">{p1Short}</span>
+        </div>
+        <div className="flex items-center gap-1.5 pl-1">
+          <span className="text-[10px] font-medium text-[#0D0D0D]">{p2Short}</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-[#F38439]" />
+        </div>
       </div>
 
-      {/* Tab pills */}
-      <div className="flex gap-2 mb-5">
-        {TAB_OPTIONS.map((option) => {
-          const isActive = activeTab === option.value;
-          return (
-            <button
-              key={option.value}
-              onClick={() => setActiveTab(option.value as Tab)}
-              className={cn(
-                "rounded-[16px] px-4 py-1.5 text-[12px] font-medium transition-colors duration-200 active:scale-[0.97]",
-                isActive
-                  ? "bg-[#60A5FA] text-white"
-                  : "bg-white border border-[#D9D9D9] text-[#525252] hover:bg-[#EFF6FF] hover:border-[#3B82F6]/30 hover:text-[#3B82F6]"
-              )}
-            >
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Table header */}
-      <div className="grid grid-cols-[1fr_100px_100px] sm:grid-cols-[1fr_120px_120px] h-9 items-center">
-        <span className="text-[10px] text-[#888888]">
-          Statistic
-        </span>
-        <span className="text-[10px] text-[#888888] capitalize text-left whitespace-nowrap truncate">
-          {p1Short}
-        </span>
-        <span className="text-[10px] text-[#888888] text-left whitespace-nowrap truncate">
-          {p2Short}
-        </span>
-      </div>
-
-      {/* Stat rows — re-mount on tab change to replay entrance animation */}
-      <div key={activeTab} className="min-h-[320px]">
-        {activeStats.map((stat, index) => (
-          <StatRow
-            key={stat.key}
-            label={stat.label}
-            player1Value={statistics.player1Stats[stat.key] as number}
-            player2Value={statistics.player2Stats[stat.key] as number}
-            player1Fraction={statistics.player1Stats.fractions[stat.key]}
-            player2Fraction={statistics.player2Stats.fractions[stat.key]}
-            index={index}
-            isPercentage={stat.isPercentage}
-            isFraction={stat.isFraction}
-            prefersReducedMotion={prefersReducedMotion}
-          />
-        ))}
-      </div>
+      {/* Sections */}
+      {SECTIONS.map((section, sectionIdx) => (
+        <section key={section.id} className="flex flex-col">
+          {sectionIdx > 0 && (
+            <div className="h-px bg-[#F0F0F0] mx-auto w-12 mb-6" />
+          )}
+          <h3 className="text-[9px] font-semibold uppercase tracking-[2.5px] text-[#AAAAAA] text-center mb-3.5">
+            {section.label}
+          </h3>
+          <div className="flex flex-col gap-3">
+            {section.stats.map((stat) => {
+              const delay = rowIndex++ * 0.04;
+              return (
+                <StatRow
+                  key={stat.key}
+                  stat={stat}
+                  p1Stats={statistics.player1Stats}
+                  p2Stats={statistics.player2Stats}
+                  delay={delay}
+                  reduced={reduced}
+                />
+              );
+            })}
+          </div>
+          {sectionIdx < SECTIONS.length - 1 && <div className="h-6" />}
+        </section>
+      ))}
     </motion.div>
   );
 }

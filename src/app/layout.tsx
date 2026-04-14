@@ -52,7 +52,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${mono.variable}`}>
-      <body className="min-h-dvh bg-background text-foreground">{children}</body>
+<body className="min-h-dvh bg-background text-foreground">{children}</body>
     </html>
   );
 }

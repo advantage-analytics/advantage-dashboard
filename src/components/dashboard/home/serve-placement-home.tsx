@@ -253,7 +253,7 @@ export default function ServePlacementHome({ userId }: { userId: string }) {
           </div>
         </div>
         <Link
-          href={latestMatchId ? `/dashboard/matches/${latestMatchId}/visuals` : "/dashboard/matches"}
+          href={latestMatchId ? `/dashboard/matches/${latestMatchId}` : "/dashboard/matches"}
           className="text-[9px] font-medium text-[#3B82F6] uppercase tracking-[1.5px] transition-[color,transform] duration-200 ease-out hover:text-[#2563EB] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2 rounded-sm"
         >
           FULL COURT VIEW

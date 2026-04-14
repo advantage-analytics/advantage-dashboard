@@ -25,7 +25,7 @@ Tests use Playwright but no test files exist yet. The scripts (`npm run test`, `
 **Dashboard** (`src/app/dashboard/`): Protected area with sidebar + header layout.
 - `(home)/` — Home dashboard (KPIs, charts, activity feed, recent matches)
 - `matches/` — Match list with gallery/list views
-- `matches/[matchId]/(tabs)/` — Match detail with tab routing: `overall`, `video`, `analysis`, `visuals`. The layout at `matches/[matchId]/layout.tsx` fetches match data and provides it via `MatchDataProvider` context so all tab pages share the same data without re-fetching.
+- `matches/[matchId]/` — Match detail page. The main `page.tsx` renders all sections inline (overview, performance, court, statistics, video) with a Table of Contents sidebar. The layout at `matches/[matchId]/layout.tsx` fetches match data and provides it via `MatchDataProvider` context. Sub-routes (`insights/`, `performance/`, `statistics/`, `video/`, `visuals/`) exist as deep-link destinations from home page widgets.
 - `statistics/` — Aggregate stats across matches with match selector filters
 - `settings/{account,profile,subscription}/` — Settings sub-pages
 - `help/` — Help page
@@ -51,7 +51,7 @@ Key tables: `matches`, `match_stats`, `points`, `shots`, `users`. The `match_sta
 
 ### Match Detail Data Sharing
 
-`MatchDataProvider` (`src/components/dashboard/matches/match-data-provider.tsx`) is a React Context that holds match metadata, statistics, and points. The match detail layout fetches everything server-side and passes it into the provider. Tab pages (`overall`, `video`, `analysis`, `visuals`) consume the context — no re-fetching per tab.
+`MatchDataProvider` (`src/components/dashboard/matches/match-data-provider.tsx`) is a React Context that holds match metadata, statistics, and points. The match detail layout fetches everything server-side and passes it into the provider. The main page and sub-route pages consume the context — no re-fetching per route.
 
 ### Statistics Data Layer
 

@@ -6,8 +6,8 @@ import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 const tabs = [
-  { label: "Analysis", slug: "analysis" },
-  { label: "Statistics", slug: "overall" },
+  { label: "Analysis", slug: "" },
+  { label: "Statistics", slug: "statistics" },
   { label: "Visuals", slug: "visuals" },
   { label: "Video", slug: "video" },
 ] as const;
@@ -21,9 +21,11 @@ export function MatchNavigationTabs({ matchId }: MatchNavigationTabsProps) {
   const prefersReducedMotion = useReducedMotion();
 
   return (
-    <div className="flex gap-2 border-b border-[#F0F0F0]">
+    <nav aria-label="Match detail tabs" className="flex gap-2 border-b border-[#D9D9D9]">
       {tabs.map((tab) => {
-        const href = `/dashboard/matches/${matchId}/${tab.slug}`;
+        const href = tab.slug
+          ? `/dashboard/matches/${matchId}/${tab.slug}`
+          : `/dashboard/matches/${matchId}`;
         const isActive = pathname === href;
 
         return (
@@ -32,10 +34,10 @@ export function MatchNavigationTabs({ matchId }: MatchNavigationTabsProps) {
             href={href}
             aria-current={isActive ? "page" : undefined}
             className={cn(
-              "relative py-2.5 px-4 text-[11px] font-medium uppercase tracking-[1.5px] flex items-center justify-center",
-              "transition-colors duration-200 hover:bg-[#FAFAFA] rounded-t-lg",
+              "relative w-[80px] py-2 px-4 text-[12px] font-medium flex items-center justify-center",
+              "transition-colors duration-200",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/50 focus-visible:ring-offset-1",
-              isActive ? "text-[#3B82F6]" : "text-[#AAAAAA] hover:text-[#525252]"
+              isActive ? "text-[#3B82F6]" : "text-[#999999] hover:text-[#525252]"
             )}
           >
             {tab.label}
@@ -56,6 +58,6 @@ export function MatchNavigationTabs({ matchId }: MatchNavigationTabsProps) {
           </Link>
         );
       })}
-    </div>
+    </nav>
   );
 }

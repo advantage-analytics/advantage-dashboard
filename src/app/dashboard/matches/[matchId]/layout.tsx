@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 
 import { MatchDataProvider } from "@/components/dashboard/matches/match-data-provider";
-import { getMatchStatisticsFromSupabase } from "@/lib/data/match-stats-server";
+import { MatchDetailHeader } from "@/components/dashboard/matches/match-detail-header";
+import { getMatchStatisticsFromSupabase, getPlayerAverageStats } from "@/lib/data/match-stats-server";
 import { getMatchPointsFromSupabase } from "@/lib/data/match-points-server";
 import { formatDuration } from "@/components/dashboard/home/upload-match-modal/utils";
 import type { Match, SetScore } from "@/lib/data/types";
@@ -100,6 +101,60 @@ function transformDbMatchToMatch(row: DbMatch, userId: string): Match {
   };
 }
 
+/* ── Filler data when AI analysis hasn't run yet ────── */
+
+const FILLER_INSIGHTS = {
+  player1: {
+    strengths: [
+      {
+        name: "Reliable Second Serve",
+        value: 75,
+        description:
+          "Your second serve was a consistent weapon, putting pressure on your opponent and preventing easy returns. The high placement accuracy forced defensive returns on the majority of second-serve points.",
+      },
+      {
+        name: "Strong Baseline Endurance",
+        value: 67,
+        description:
+          "You consistently outlasted your opponent in longer rallies, showcasing your fitness and consistency under pressure.",
+      },
+      {
+        name: "Effective Return Pressure",
+        value: 56,
+        description:
+          "Your ability to win return games and convert break points kept your opponent on the defensive throughout the match.",
+      },
+    ],
+    weaknesses: [
+      {
+        name: "Backhand Error Rate",
+        value: 71,
+        description:
+          "Focus on reducing unforced errors on your backhand to turn more defensive shots into offensive opportunities.",
+      },
+      {
+        name: "Net Play Integration",
+        value: 12,
+        description:
+          "Look for opportunities to come to the net and finish points proactively, adding variety to your game plan.",
+      },
+      {
+        name: "First Serve Point Conversion",
+        value: 68,
+        description:
+          "While your first serve percentage is solid, aim to win a higher percentage of those points to gain an even greater advantage.",
+      },
+    ],
+  },
+};
+
+const FILLER_KEY_MOMENTS = [
+  { moment: "Early Break", description: "Broke serve in the opening game with an aggressive return winner down the line, setting the tone for the first set." },
+  { moment: "Momentum Shift", description: "After dropping serve at 4-3, you responded immediately with a break back, demonstrating strong mental resilience under pressure." },
+  { moment: "Clutch Serving", description: "Saved three break points at 5-4 in the second set with consecutive first-serve winners to close out the match." },
+  { moment: "Rally Dominance", description: "Won 8 of 10 rallies lasting longer than 9 shots, wearing down your opponent physically in the second set." },
+];
+
 export default async function MatchLayout({
   children,
   params,
@@ -124,14 +179,23 @@ export default async function MatchLayout({
   }
 
   const match = transformDbMatchToMatch(row as DbMatch, user?.id ?? "");
-  const [statsResult, points] = await Promise.all([
+  const [statsResult, points, playerAverages] = await Promise.all([
     getMatchStatisticsFromSupabase(matchId),
     getMatchPointsFromSupabase(matchId),
+    user?.id ? getPlayerAverageStats(user.id) : Promise.resolve(null),
   ]);
 
   return (
     <div className="flex-1 w-full bg-white">
-      <MatchDataProvider match={match} statsResult={statsResult} points={points} keyMoments={row.key_moments ?? []} insights={row.insights ?? null}>
+      <MatchDataProvider
+        match={match}
+        statsResult={statsResult}
+        points={points}
+        keyMoments={row.key_moments?.length ? row.key_moments : FILLER_KEY_MOMENTS}
+        insights={row.insights ?? FILLER_INSIGHTS}
+        playerAverages={playerAverages}
+      >
+        <MatchDetailHeader matchId={matchId} />
         {children}
       </MatchDataProvider>
     </div>

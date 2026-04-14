@@ -1,15 +1,53 @@
-import { PerformanceRating } from "@/components/dashboard/home/performance-rating";
+import type { TrendData, StatTrend } from "./trend-utils";
 
 interface PerformanceRatingsCardProps {
   serveRating: number;
   returnRating: number;
   underPressureRating: number;
+  trends: TrendData;
+}
+
+function RatingRow({
+  label,
+  value,
+  trend,
+}: {
+  label: string;
+  value: number;
+  trend: StatTrend | null;
+}) {
+  const showTrend = trend && trend.direction !== "flat";
+  const trendColor = showTrend
+    ? (trend.direction === "up") === trend.isPositive
+      ? "text-[#5DB955]"
+      : "text-[#E51837]"
+    : "";
+
+  return (
+    <div className="flex items-center justify-between px-1 py-4">
+      <span className="text-xs font-medium text-[#888888] uppercase tracking-[1.6px]">
+        {label}
+      </span>
+      <div className="flex items-center gap-2">
+        {showTrend && (
+          <span className={`text-[10px] font-medium tabular-nums ${trendColor}`}>
+            {trend.direction === "up" ? "+" : "−"}
+            {trend.delta}
+          </span>
+        )}
+        <span className="text-xl font-medium text-[#525252] leading-[1.1] tabular-nums">
+          {value.toFixed(0)}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 export function PerformanceRatingsCard({
   serveRating,
   returnRating,
   underPressureRating,
+  trends,
 }: PerformanceRatingsCardProps) {
   const hasData = serveRating > 0 || returnRating > 0 || underPressureRating > 0;
 
@@ -25,9 +63,21 @@ export function PerformanceRatingsCard({
       </div>
 
       <div className="divide-y divide-[#F0F0F0]">
-        <PerformanceRating label="Serve Rating" value={serveRating} />
-        <PerformanceRating label="Return Rating" value={returnRating} />
-        <PerformanceRating label="Under Pressure" value={underPressureRating} />
+        <RatingRow
+          label="Serve Rating"
+          value={serveRating}
+          trend={trends.serveRating}
+        />
+        <RatingRow
+          label="Return Rating"
+          value={returnRating}
+          trend={trends.returnRating}
+        />
+        <RatingRow
+          label="Under Pressure"
+          value={underPressureRating}
+          trend={trends.underPressureRating}
+        />
       </div>
     </div>
   );

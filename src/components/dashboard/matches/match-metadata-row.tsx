@@ -1,4 +1,4 @@
-import { Calendar, GraduationCap } from "lucide-react";
+import { Calendar, Swords } from "lucide-react";
 import Image from "next/image";
 
 interface MatchMetadataRowProps {
@@ -34,7 +34,7 @@ export function MatchMetadataRow({
               aria-hidden="true"
             />
           ) : (
-            <GraduationCap className="size-[14px] text-[#888888]" strokeWidth={1.5} aria-hidden="true" />
+            <Swords className="size-[14px] text-[#888888]" strokeWidth={1.5} aria-hidden="true" />
           )}
           <p className="text-[10px] font-normal text-[#888888] leading-[16px]">{matchType}</p>
         </div>
