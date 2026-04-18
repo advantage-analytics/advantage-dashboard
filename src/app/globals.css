@@ -54,6 +54,9 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --shadow-card: 0px 2px 8px 0px rgba(0,0,0,0.06);
+  --shadow-card-elevated: 0px 6px 20px 0px rgba(0,0,0,0.12);
+  --shadow-tooltip: 0px 4px 12px 0px rgba(0,0,0,0.12);
 }
 
 :root {

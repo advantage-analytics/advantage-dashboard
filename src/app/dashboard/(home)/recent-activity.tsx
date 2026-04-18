@@ -323,7 +323,7 @@ export default function RecentActivity({ userId }: { userId: string }) {
 
   return (
     <>
-    <div className="bg-white border border-[#F3F3F3] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] rounded-[14px] overflow-hidden">
+    <div className="bg-white border border-[#F3F3F3] shadow-card-elevated rounded-[14px] overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between h-14 px-5">
         <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">

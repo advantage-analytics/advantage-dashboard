@@ -44,7 +44,7 @@ export default function AIInsight() {
               duration: shouldReduceMotion ? 0.15 : 0.3,
               ease: EASE_CURVE,
             }}
-            className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] p-5 overflow-hidden flex flex-col gap-4"
+            className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-card p-5 overflow-hidden flex flex-col gap-4"
           >
             <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
               AI Insight

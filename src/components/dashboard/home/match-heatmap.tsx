@@ -127,7 +127,7 @@ export default function MatchHeatmap({
   return (
     <div
       ref={containerRef}
-      className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)]"
+      className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-card"
     >
       {/* Header */}
       <div className="flex items-center justify-between h-14 px-5">
@@ -202,7 +202,7 @@ export default function MatchHeatmap({
                   : { top: `calc(${((selectedRow + 1) / totalRows) * 100}% + 28px)` }),
               }}
             >
-              <div className="bg-white border border-[#F3F3F3] rounded-xl shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] py-2.5 px-3 flex flex-col gap-2 w-[230px]">
+              <div className="bg-white border border-[#F3F3F3] rounded-xl shadow-tooltip py-2.5 px-3 flex flex-col gap-2 w-[230px]">
                 <div className="flex items-baseline justify-between">
                   <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[1.5px]">
                     {new Date(selectedDay.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}

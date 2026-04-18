@@ -151,7 +151,7 @@ export default function KpiCards({ cards, matchCount }: KpiCardsProps) {
   if (cards.length === 0) return null;
 
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden">
+    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-card overflow-hidden">
       <div className="flex flex-wrap sm:flex-nowrap">
         {cards.map((card, index) => (
           <motion.div

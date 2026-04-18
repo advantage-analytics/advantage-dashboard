@@ -264,7 +264,7 @@ function HalfCourtSVG({ dots }: { dots: ServeDot[] }) {
 
         return (
           <div
-            className="absolute pointer-events-none z-10 bg-white rounded-xl shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] py-2.5 px-3 flex flex-col gap-2 w-[168px] overflow-hidden"
+            className="absolute pointer-events-none z-10 bg-white rounded-xl shadow-tooltip py-2.5 px-3 flex flex-col gap-2 w-[168px] overflow-hidden"
             style={{
               left: `${xPct}%`,
               top: `${yPct}%`,
@@ -397,7 +397,7 @@ export default function ServePlacementHome({ userId }: { userId: string }) {
   }, [load]);
 
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden">
+    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-card-elevated overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between h-14 px-5">
         <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">

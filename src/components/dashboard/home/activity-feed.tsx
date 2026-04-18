@@ -138,7 +138,7 @@ export default function ActivityFeed({ userId }: { userId: string }) {
 
   if (loading) {
     return (
-      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden">
+      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-card overflow-hidden">
         <div className="flex items-center h-14 px-5">
           <Skeleton className="h-3 w-16" />
         </div>
@@ -159,7 +159,7 @@ export default function ActivityFeed({ userId }: { userId: string }) {
 
   if (error) {
     return (
-      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden">
+      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-card overflow-hidden">
         <div className="flex items-center h-14 px-5">
           <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">ACTIVITY</p>
         </div>
@@ -181,7 +181,7 @@ export default function ActivityFeed({ userId }: { userId: string }) {
 
   if (items.length === 0) {
     return (
-      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden">
+      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-card overflow-hidden">
         <div className="flex items-center h-14 px-5">
           <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">ACTIVITY</p>
         </div>
@@ -193,7 +193,7 @@ export default function ActivityFeed({ userId }: { userId: string }) {
   }
 
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden">
+    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-card overflow-hidden">
       <div className="flex items-center h-14 px-5">
         <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
           ACTIVITY
