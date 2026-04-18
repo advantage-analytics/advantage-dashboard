@@ -32,9 +32,18 @@ export interface PerformanceProfileDimension {
   previous: number;
 }
 
+export interface HeatmapMatchSummary {
+  id: string;
+  opponent: string;
+  won: boolean;
+  score: string;
+}
+
 export interface HeatmapDay {
   date: string;
   count: number;
+  matchIds: string[];
+  matches: HeatmapMatchSummary[];
 }
 
 export interface OverallPerformanceData {
@@ -53,6 +62,8 @@ interface DbMatch {
   id: string;
   date: string;
   player1_id: string | null;
+  player1_name: string | null;
+  player2_name: string | null;
   score: {
     player1: number[];
     player2: number[];
@@ -273,28 +284,48 @@ function calculateForm(
     const isUserPlayer1 = match.player1_id === userId;
     form.push((isUserPlayer1 ? player1Won : !player1Won) ? "W" : "L");
   }
-  return form;
+  // Reverse so oldest is first (left) and newest is last (right)
+  return form.reverse();
 }
 
-function calculateHeatmap(matches: DbMatch[]): HeatmapDay[] {
+function calculateHeatmap(matches: DbMatch[], userId: string): HeatmapDay[] {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  const countMap = new Map<string, number>();
+  const dayMap = new Map<string, DbMatch[]>();
   for (const match of matches) {
     const d = new Date(match.date);
     if (d.getFullYear() === year && d.getMonth() === month) {
       const key = match.date.slice(0, 10);
-      countMap.set(key, (countMap.get(key) ?? 0) + 1);
+      const list = dayMap.get(key) ?? [];
+      list.push(match);
+      dayMap.set(key, list);
     }
   }
 
   const result: HeatmapDay[] = [];
   for (let day = 1; day <= daysInMonth; day++) {
     const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    result.push({ date: dateStr, count: countMap.get(dateStr) ?? 0 });
+    const dayMatches = dayMap.get(dateStr) ?? [];
+    const summaries: HeatmapMatchSummary[] = dayMatches.map((m) => {
+      const isP1 = m.player1_id === userId;
+      const opponent = isP1 ? (m.player2_name ?? "Opponent") : (m.player1_name ?? "Opponent");
+      const p1Sets = m.score?.player1 ?? [];
+      const p2Sets = m.score?.player2 ?? [];
+      const p1Won = p1Sets.filter((s, i) => s > (p2Sets[i] ?? 0)).length;
+      const p2Won = p2Sets.filter((s, i) => s > (p1Sets[i] ?? 0)).length;
+      const won = isP1 ? p1Won > p2Won : p2Won > p1Won;
+      const scoreStr = p1Sets.map((s, i) => `${s}-${p2Sets[i] ?? 0}`).join(", ");
+      return { id: m.id, opponent, won, score: scoreStr || "–" };
+    });
+    result.push({
+      date: dateStr,
+      count: dayMatches.length,
+      matchIds: dayMatches.map((m) => m.id),
+      matches: summaries,
+    });
   }
   return result;
 }
@@ -526,7 +557,7 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
 
   const { data: matches } = await supabase
     .from("matches")
-    .select("id, date, player1_id, score")
+    .select("id, date, player1_id, player1_name, player2_name, score")
     .eq("created_by", user.id)
     .order("date", { ascending: false });
 
@@ -576,7 +607,7 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
     winRate: calculateWinRateSparkline(typedMatches, user.id),
     form: calculateForm(typedMatches, user.id, 5),
     matchCount: typedMatches.length,
-    heatmap: calculateHeatmap(typedMatches),
+    heatmap: calculateHeatmap(typedMatches, user.id),
     performanceProfile: calculatePerformanceProfile(
       typedStats,
       matchPlayerMap,

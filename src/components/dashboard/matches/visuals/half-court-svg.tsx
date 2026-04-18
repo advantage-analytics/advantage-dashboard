@@ -336,15 +336,11 @@ export function HalfCourtSVG({
       {/* Service line */}
       <line x1={SINGLES_LEFT} y1={SERVICE_Y} x2={SINGLES_RIGHT} y2={SERVICE_Y} {...lineProps} />
 
-      {/* Net/baseline — shadow + main line */}
-      <line x1={0} y1={BASELINE_Y + 2} x2={COURT_W} y2={BASELINE_Y + 2} stroke={COURT_LINE} strokeWidth={1.5} opacity={0.4} strokeLinecap="round" />
-      <line x1={0} y1={BASELINE_Y} x2={COURT_W} y2={BASELINE_Y} stroke={COURT_LINE} strokeWidth={2.5} strokeLinecap="round" />
+      {/* Baseline */}
+      <line x1={DOUBLES_LEFT} y1={BASELINE_Y} x2={DOUBLES_RIGHT} y2={BASELINE_Y} {...lineProps} />
 
       {/* Center service line */}
       <line x1={CENTER_X} y1={SERVICE_Y} x2={CENTER_X} y2={BASELINE_Y} {...lineProps} />
-
-      {/* Center mark at baseline */}
-      <line x1={CENTER_X} y1={BASELINE_Y} x2={CENTER_X} y2={BASELINE_Y + 4} {...lineProps} />
 
       {/* Dots */}
       {renderDots(dots, interactive)}

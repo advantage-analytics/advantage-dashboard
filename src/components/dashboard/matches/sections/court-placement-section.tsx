@@ -395,7 +395,7 @@ function FullscreenCourt({
         <div
           ref={courtRef}
           className={cn(
-            "flex-1 bg-[#EFF4FF] overflow-hidden relative select-none",
+            "flex-1 bg-[#F7FAFC] overflow-hidden relative select-none",
             zoom > 1 ? (isDragging ? "cursor-grabbing" : "cursor-grab") : "cursor-default",
           )}
           onWheel={handleWheel}
@@ -708,7 +708,7 @@ export function CourtPlacementSection() {
           exit={prefersReduced ? undefined : { opacity: 0 }}
           transition={{ duration: 0.2, ease: EASE }}
           className={cn(
-            "bg-[#EFF4FF] flex items-center justify-center px-6",
+            "bg-[#F7FAFC] flex items-center justify-center px-6",
             isReturn ? "min-h-[520px] py-6" : "h-[450px]",
           )}
         >

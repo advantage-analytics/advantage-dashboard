@@ -237,6 +237,35 @@
   40%, 80% { transform: translateX(4px); }
 }
 
+/* Page enter transition — CSS-based so server HTML is visible at paint time */
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-page-enter {
+  animation: page-enter 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+/* Upload modal animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 300ms ease-out;
+}
+
+.animate-slideDown {
+  animation: slideDown 300ms ease-out;
+}
+
 /* New match highlight pulse */
 @keyframes highlight-new-match {
   0% { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3); }

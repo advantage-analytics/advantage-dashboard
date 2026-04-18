@@ -568,8 +568,6 @@ export function useUploadMatchModal({
 
       const matchData = buildMatchData(matchId, { ...formData, eventName }, winner, loser, isPrivateMatch, metadata);
 
-      console.log("Attempting to insert match data:", matchData);
-
       const { error: matchError } = await supabase.from("matches").insert(matchData);
 
       if (matchError) {

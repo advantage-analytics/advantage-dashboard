@@ -10,7 +10,7 @@ import { shortName } from "@/lib/data/match-utils";
 
 const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
 const P1_COLOR = "#3B82F6";
-const P2_COLOR = "#F38439";
+const P2_COLOR = "#6366F1";
 const P1_LINE_COLOR = "#2563EB";
 const P2_LINE_COLOR = "#D97218";
 const CHART_W = 600;
@@ -601,7 +601,7 @@ function SetBreakdown({
           {p1Short}
         </span>
         <div className="w-12" />
-        <span className="text-[11px] font-medium text-[#F38439] whitespace-nowrap truncate">
+        <span className="text-[11px] font-medium text-[#6366F1] whitespace-nowrap truncate">
           {p2Short}
         </span>
       </div>
@@ -649,14 +649,14 @@ function SetBreakdown({
               <div className="flex items-center gap-2.5">
                 <span
                   className={`text-[14px] tabular-nums font-medium w-7 ${
-                    p2Wins ? "text-[#F38439]" : "text-[#888888]"
+                    p2Wins ? "text-[#6366F1]" : "text-[#888888]"
                   }`}
                 >
                   {s.p2Points}
                 </span>
                 <div className="flex-1 h-[4px] bg-[#F0F0F0] rounded-full overflow-hidden">
                   <motion.div
-                    className="h-full rounded-full bg-[#F38439]"
+                    className="h-full rounded-full bg-[#6366F1]"
                     initial={{ width: "0%" }}
                     animate={{ width: `${p2Pct}%` }}
                     transition={{ duration: 0.6, delay: 0.2 + index * 0.07, ease: EASE_CURVE }}
@@ -680,7 +680,7 @@ function TableHeader({ p1Short, p2Short }: { p1Short: string; p2Short: string })
       <span className="text-[11px] font-medium text-[#3B82F6] text-center whitespace-nowrap truncate">
         {p1Short}
       </span>
-      <span className="text-[11px] font-medium text-[#F38439] text-center whitespace-nowrap truncate">
+      <span className="text-[11px] font-medium text-[#6366F1] text-center whitespace-nowrap truncate">
         {p2Short}
       </span>
     </div>
@@ -748,12 +748,12 @@ function PressureSection({
             <div className="text-center flex flex-col items-center gap-1.5">
               {s.p2Total > 0 ? (
                 <>
-                  <span className={`text-[14px] tabular-nums font-medium ${p2Leads ? "text-[#F38439]" : "text-[#525252]"}`}>
+                  <span className={`text-[14px] tabular-nums font-medium ${p2Leads ? "text-[#6366F1]" : "text-[#525252]"}`}>
                     {p2Pct}%
                   </span>
                   <div className="w-20 h-[4px] rounded-full bg-[#F0F0F0] overflow-hidden">
                     <motion.div
-                      className="h-full rounded-full bg-[#F38439]"
+                      className="h-full rounded-full bg-[#6366F1]"
                       initial={{ width: "0%" }}
                       animate={{ width: `${p2Pct}%` }}
                       transition={{ duration: 0.6, delay: 0.2 + index * 0.07, ease: EASE_CURVE }}
@@ -829,14 +829,14 @@ function RallySection({
             <div className="text-center flex flex-col items-center gap-1.5">
               <span
                 className={`text-[14px] tabular-nums ${
-                  p2Leads ? "font-medium text-[#F38439]" : "text-[#525252]"
+                  p2Leads ? "font-medium text-[#6366F1]" : "text-[#525252]"
                 }`}
               >
                 {b.p2WonPct}%
               </span>
               <div className="w-20 h-[4px] rounded-full bg-[#F0F0F0] overflow-hidden">
                 <motion.div
-                  className="h-full rounded-full bg-[#F38439]"
+                  className="h-full rounded-full bg-[#6366F1]"
                   initial={{ width: "0%" }}
                   animate={{ width: `${b.p2WonPct}%` }}
                   transition={{ duration: 0.6, delay: 0.3 + index * 0.07, ease: EASE_CURVE }}
@@ -1020,7 +1020,7 @@ export function PerformanceTracker({
             <span className="text-[10px] font-medium text-[#888888] uppercase tracking-[2px]">{p2Short}</span>
             <span
               className={`text-[20px] font-light tabular-nums leading-none tracking-[-0.5px] ${
-                p2Total > p1Total ? "text-[#F38439]" : "text-[#888888]"
+                p2Total > p1Total ? "text-[#6366F1]" : "text-[#888888]"
               }`}
             >
               {p2Total}

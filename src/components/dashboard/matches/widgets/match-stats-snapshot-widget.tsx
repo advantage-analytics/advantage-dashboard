@@ -20,7 +20,7 @@ import type { PlayerStatistics, StatFraction } from "@/lib/data/types";
 /* ── Colors ────────────────────────────────────────────────── */
 
 const P1_COLOR = "#4A8AF4";
-const P2_COLOR = "#F38439";
+const P2_COLOR = "#6366F1";
 
 /* ── Radar stats (all percentage-based for comparable axes) ── */
 

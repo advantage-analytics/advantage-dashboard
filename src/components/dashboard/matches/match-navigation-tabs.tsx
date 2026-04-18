@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 
 const tabs = [
   { label: "Analysis", slug: "" },
-  { label: "Statistics", slug: "statistics" },
   { label: "Visuals", slug: "visuals" },
   { label: "Video", slug: "video" },
 ] as const;
@@ -21,7 +20,7 @@ export function MatchNavigationTabs({ matchId }: MatchNavigationTabsProps) {
   const prefersReducedMotion = useReducedMotion();
 
   return (
-    <nav aria-label="Match detail tabs" className="flex gap-2 border-b border-[#D9D9D9]">
+    <nav aria-label="Match detail tabs" className="flex gap-2 border-b border-[#E5E5EA]">
       {tabs.map((tab) => {
         const href = tab.slug
           ? `/dashboard/matches/${matchId}/${tab.slug}`
@@ -34,24 +33,25 @@ export function MatchNavigationTabs({ matchId }: MatchNavigationTabsProps) {
             href={href}
             aria-current={isActive ? "page" : undefined}
             className={cn(
-              "relative w-[80px] py-2 px-4 text-[12px] font-medium flex items-center justify-center",
+              "relative py-2 px-4 text-[12px] rounded-lg flex items-center justify-center",
               "transition-colors duration-200",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/50 focus-visible:ring-offset-1",
-              isActive ? "text-[#3B82F6]" : "text-[#999999] hover:text-[#525252]"
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1",
+              isActive
+                ? "font-normal text-[#3B82F6]"
+                : "font-normal text-[#71717A] hover:text-[#525252]",
             )}
           >
             {tab.label}
             {isActive &&
               (prefersReducedMotion ? (
-                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#3B82F6]" />
+                <div className="absolute -bottom-px left-0 right-0 h-[2px] bg-[#3B82F6]" />
               ) : (
                 <motion.div
                   layoutId="match-tab-indicator"
-                  className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#3B82F6]"
+                  className="absolute -bottom-px left-0 right-0 h-[2px] bg-[#3B82F6]"
                   transition={{
-                    type: "spring",
-                    stiffness: 500,
-                    damping: 35,
+                    duration: 0.25,
+                    ease: [0.25, 0.46, 0.45, 0.94],
                   }}
                 />
               ))}

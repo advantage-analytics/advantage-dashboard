@@ -317,6 +317,7 @@ export function DetailsContent({
                         inputMode="numeric"
                         pattern="\d*"
                         className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#888888]"
+                        maxLength={2}
                         value={score === null ? "" : score}
                         onChange={(e) => {
                           const newValue = e.target.value;
@@ -434,6 +435,7 @@ export function DetailsContent({
                         inputMode="numeric"
                         pattern="\d*"
                         className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#888888]"
+                        maxLength={2}
                         value={score === null ? "" : score}
                         onChange={(e) => {
                           const newValue = e.target.value;
@@ -701,23 +703,6 @@ export function DetailsContent({
         </div>
       </div>
 
-      {/* CSS Animations */}
-      <style>{`
-        @keyframes slideDown {
-          from {
-            opacity: 0;
-            transform: translateY(-8px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .animate-slideDown {
-          animation: slideDown 300ms ease-out;
-        }
-      `}</style>
     </div>
   );
 }

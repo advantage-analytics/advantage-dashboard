@@ -5,10 +5,10 @@ import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   AlertTriangle,
+  ChevronRight,
   Expand,
   Play,
   RefreshCw,
-  Upload,
   Video,
   X,
 } from "lucide-react";
@@ -75,7 +75,7 @@ export function VideoSection({ matchId }: VideoSectionProps) {
     return (
       <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden">
         <div className="flex items-center h-12 px-5">
-          <p className="text-[10px] font-medium text-[#767676] uppercase tracking-[2.5px]">
+          <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
             Match Video
           </p>
         </div>
@@ -91,7 +91,7 @@ export function VideoSection({ matchId }: VideoSectionProps) {
       initial={prefersReduced ? { opacity: 1 } : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: EASE }}
-      className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden"
+      className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden flex flex-col"
       aria-label="Match video"
     >
       <input
@@ -108,7 +108,7 @@ export function VideoSection({ matchId }: VideoSectionProps) {
 
       {/* Header */}
       <div className="flex items-center justify-between h-12 px-5">
-        <p className="text-[10px] font-medium text-[#767676] uppercase tracking-[2.5px]">
+        <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
           Match Video
         </p>
         <div className="flex items-center gap-3">
@@ -229,11 +229,11 @@ export function VideoSection({ matchId }: VideoSectionProps) {
 
       {/* Content area */}
       {videoUrl && !videoError ? (
-        <div className="relative group">
+        <div className="relative group flex-1 min-h-0">
           <video
             ref={videoRef}
             src={videoUrl}
-            className="w-full aspect-video object-cover bg-black"
+            className="w-full h-full object-cover bg-black"
             preload="metadata"
             playsInline
             muted
@@ -260,7 +260,7 @@ export function VideoSection({ matchId }: VideoSectionProps) {
         </div>
       ) : videoUrl && videoError ? (
         /* Video failed to load (e.g. expired signed URL) */
-        <div className="flex flex-col items-center justify-center aspect-video px-8 bg-[#FAFAFA]">
+        <div className="flex flex-col items-center justify-center flex-1 min-h-0 px-8 py-14 bg-[#FAFAFA]">
           <div className="w-12 h-12 rounded-full bg-[#FEF2F2] flex items-center justify-center mb-4">
             <AlertTriangle className="w-5 h-5 text-[#DC2626]" />
           </div>
@@ -284,31 +284,27 @@ export function VideoSection({ matchId }: VideoSectionProps) {
           </Button>
         </div>
       ) : !busy && !largeFileWarning ? (
-        /* Empty state — upload prompt */
-        <div className="flex flex-col items-center justify-center py-14 px-8">
-          <div className="w-12 h-12 rounded-full bg-[#F5F5F5] flex items-center justify-center mb-4">
-            <Video className="w-5 h-5 text-[#AAAAAA]" />
+        /* Empty state — distilled link-row pointing to the full video page */
+        <Link
+          href={`/dashboard/matches/${matchId}/video`}
+          className="group flex-1 flex items-center gap-3 px-5 py-5 hover:bg-[#FAFAFA] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-inset"
+        >
+          <div className="size-8 rounded-[10px] bg-[#F5F5F5] flex items-center justify-center shrink-0">
+            <Video className="size-4 text-[#525252]" strokeWidth={1.5} aria-hidden />
           </div>
-          <p className="text-[13px] font-medium text-[#0D0D0D] mb-1">
-            No video uploaded
-          </p>
-          <p className="text-[11px] text-[#AAAAAA] text-center max-w-[300px] leading-[17px] mb-5">
-            Upload your match recording to review individual points and jump to
-            key moments.
-          </p>
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => fileInputRef.current?.click()}
-            className="h-9 rounded-full text-[11px] font-medium bg-[#0D0D0D] text-white hover:bg-[#2D2D2D] px-5"
-          >
-            <Upload className="h-3.5 w-3.5 mr-2" />
-            Upload video
-          </Button>
-          <p className="mt-3 text-[10px] text-[#AAAAAA]">
-            Videos under 2 GB are auto-compressed to 720p
-          </p>
-        </div>
+          <div className="flex-1 min-w-0 flex flex-col">
+            <p className="text-[13px] font-medium text-[#0D0D0D] leading-[19.5px]">
+              Video Review
+            </p>
+            <p className="text-[11px] font-normal text-[#888888] leading-[16.5px]">
+              Match footage &amp; point replay
+            </p>
+          </div>
+          <ChevronRight
+            className="size-3.5 text-[#AAAAAA] shrink-0 transition-transform duration-200 group-hover:translate-x-0.5"
+            aria-hidden
+          />
+        </Link>
       ) : null}
     </motion.div>
   );

@@ -10,7 +10,7 @@ import { getInitials } from "@/lib/data/match-utils";
 const EASE_CURVE: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
 
 const P1_COLOR = "#4A8AF4";
-const P2_COLOR = "#F38439";
+const P2_COLOR = "#6366F1";
 const P1_TINT = "rgba(74,138,244,0.12)";
 const P2_TINT = "rgba(243,132,57,0.12)";
 

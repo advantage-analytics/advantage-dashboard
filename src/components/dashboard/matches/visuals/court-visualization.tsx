@@ -404,7 +404,7 @@ export function CourtVisualization({
         <TooltipContent
           side="top"
           sideOffset={10}
-          className="!bg-white !rounded-xl !px-0 !py-0 !text-left !w-auto !border !border-[#E7E7E7] !shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]"
+          className="!bg-white !rounded-xl !px-0 !py-0 !text-left !w-auto !border !border-[#F3F3F3] !shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)]"
         >
           <div className="flex flex-col w-[200px]">
             <div
@@ -493,7 +493,7 @@ export function CourtVisualization({
             <span
               className={`text-white text-[10px] font-medium px-2 py-0.5 rounded-full ${
                 visualizationType === "return"
-                  ? "bg-[#F38439]"
+                  ? "bg-[#6366F1]"
                   : "bg-[rgba(106,171,255,0.9)]"
               }`}
             >

@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { motion, AnimatePresence } from "framer-motion";
-import { AlertCircle, Inbox, RefreshCw } from "lucide-react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { AlertCircle, Inbox, RefreshCw, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import RecentMatches from "@/components/dashboard/home/recent-matches";
@@ -148,7 +148,6 @@ function groupMatchesIntoEvents(
         breakpointsTotal: stat
           ? (stat.break_point_opportunities ?? stat.break_points_faced ?? null)
           : null,
-        // TODO: Replace with real data from users table once upload flow collects hand/backhand
         opponentMeta: ["LEFT HANDED", "2-HANDED BACKHAND"],
       });
     }
@@ -210,6 +209,7 @@ export default function RecentActivity({ userId }: { userId: string }) {
   const seenEventIdsRef = useRef<Set<string> | null>(null);
   const [processing, setProcessing] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const shouldReduceMotion = useReducedMotion();
 
   // Hydrate processing state from sessionStorage on mount
   useEffect(() => {
@@ -331,7 +331,7 @@ export default function RecentActivity({ userId }: { userId: string }) {
         </p>
         <Link
           href="/dashboard/matches"
-          className="text-[10px] font-medium text-[#3B82F6] uppercase tracking-[2.5px] transition-colors duration-200 hover:text-[#2563EB]"
+          className="text-[10px] font-medium text-[#3B82F6] uppercase tracking-[2.5px] transition-colors duration-200 hover:text-[#2563EB] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 rounded-sm"
         >
           VIEW ALL
         </Link>
@@ -376,7 +376,7 @@ export default function RecentActivity({ userId }: { userId: string }) {
             <button
               type="button"
               onClick={load}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-medium uppercase tracking-[1.5px] rounded-[6px] transition-colors duration-200"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-medium uppercase tracking-[1.5px] rounded-[6px] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
             >
               <RefreshCw className="size-3" aria-hidden />
               Retry
@@ -422,11 +422,11 @@ export default function RecentActivity({ userId }: { userId: string }) {
       <AnimatePresence>
         {processing && (
           <motion.div
-            initial={{ opacity: 0, y: 24, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 12, scale: 0.98 }}
+            initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 24, scale: 0.95 }}
+            animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+            exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 12, scale: 0.98 }}
             transition={{
-              duration: 0.35,
+              duration: shouldReduceMotion ? 0.15 : 0.35,
               ease: [0.25, 0.46, 0.45, 0.94],
             }}
             role="status"
@@ -438,12 +438,14 @@ export default function RecentActivity({ userId }: { userId: string }) {
                 className="absolute inset-0 rounded-full border-[1.5px] border-[#3B82F6]/30"
                 aria-hidden
               />
-              <motion.div
-                className="absolute inset-0 rounded-full border-[1.5px] border-transparent border-t-[#3B82F6]"
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, ease: "linear", repeat: Infinity }}
-                aria-hidden
-              />
+              {!shouldReduceMotion && (
+                <motion.div
+                  className="absolute inset-0 rounded-full border-[1.5px] border-transparent border-t-[#3B82F6]"
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, ease: "linear", repeat: Infinity }}
+                  aria-hidden
+                />
+              )}
               <div className="size-1.5 rounded-full bg-[#3B82F6]" aria-hidden />
             </div>
 
@@ -455,6 +457,18 @@ export default function RecentActivity({ userId }: { userId: string }) {
                 Stats will refresh automatically
               </p>
             </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                sessionStorage.removeItem("match-processing");
+                setProcessing(false);
+              }}
+              className="ml-1 p-1 rounded-full text-white/60 hover:text-white/80 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+              aria-label="Dismiss processing notification"
+            >
+              <X className="size-3.5" />
+            </button>
           </motion.div>
         )}
       </AnimatePresence>,

@@ -123,13 +123,13 @@ function StatRow({
         <div className="flex items-center gap-1.5">
           <div className="flex-1 h-[4px] rounded-full bg-[#F0F0F0] overflow-hidden">
             <motion.div
-              className="h-full rounded-full bg-[#F38439]"
+              className="h-full rounded-full bg-[#6366F1]"
               initial={{ width: 0 }}
               animate={{ width: `${p2Pct}%` }}
               transition={barTransition}
             />
           </div>
-          <span className="text-[10px] font-semibold text-[#F38439] min-w-[60px] text-right shrink-0">
+          <span className="text-[10px] font-semibold text-[#6366F1] min-w-[60px] text-right shrink-0">
             {formatValue(p2Value, stat, p2Stats.fractions[stat.key])}
           </span>
         </div>
@@ -181,7 +181,7 @@ export function MatchStatistics({
         </div>
         <div className="flex items-center gap-1.5 pl-1">
           <span className="text-[10px] font-medium text-[#0D0D0D]">{p2Short}</span>
-          <span className="w-1.5 h-1.5 rounded-full bg-[#F38439]" />
+          <span className="w-1.5 h-1.5 rounded-full bg-[#6366F1]" />
         </div>
       </div>
 

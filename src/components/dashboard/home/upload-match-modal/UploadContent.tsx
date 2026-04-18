@@ -301,36 +301,6 @@ export function UploadContent({
         )}
       </div>
 
-      {/* CSS Animations */}
-      <style>{`
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-          }
-          to {
-            opacity: 1;
-          }
-        }
-
-        @keyframes slideDown {
-          from {
-            opacity: 0;
-            transform: translateY(-8px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .animate-fadeIn {
-          animation: fadeIn 300ms ease-out;
-        }
-
-        .animate-slideDown {
-          animation: slideDown 300ms ease-out;
-        }
-      `}</style>
     </div>
   );
 }

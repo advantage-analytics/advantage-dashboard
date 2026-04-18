@@ -37,14 +37,14 @@ export function StatSnapshotCard({
   const deltaSign = delta !== null && delta > 0 ? "+" : "";
   const deltaColor =
     delta === null || delta === 0
-      ? "text-[#767676]"
+      ? "text-[#71717A]"
       : delta > 0
         ? "text-[#5DB955]"
         : "text-[#E51837]";
 
   return (
     <motion.div
-      className="flex flex-col gap-2 bg-[#FAFAFA] rounded-xl p-4"
+      className="flex flex-col gap-2 bg-[#FAFAFA] rounded-lg p-4"
       initial={prefersReduced ? false : FADE_INITIAL}
       animate={FADE_ANIMATE}
       transition={{ duration: 0.3, delay: index * 0.05, ease: EASE }}
@@ -83,7 +83,7 @@ export function StatSnapshotCard({
       </div>
       <div className="flex items-center gap-3 mt-auto">
         {averageValue !== null && (
-          <p className="text-[10px] text-[#767676]">
+          <p className="text-[10px] text-[#71717A]">
             Avg{" "}
             <span className="font-medium text-[#71717A] tabular-nums">
               {Math.round(averageValue)}
@@ -91,7 +91,7 @@ export function StatSnapshotCard({
             </span>
           </p>
         )}
-        <p className="text-[10px] text-[#767676]">
+        <p className="text-[10px] text-[#71717A]">
           Opp{" "}
           <span className="font-medium text-[#71717A] tabular-nums">
             {Math.round(opponentValue)}

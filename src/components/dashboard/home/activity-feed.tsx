@@ -138,11 +138,11 @@ export default function ActivityFeed({ userId }: { userId: string }) {
 
   if (loading) {
     return (
-      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden py-5">
-        <div className="px-5 mb-4">
+      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden">
+        <div className="flex items-center h-14 px-5">
           <Skeleton className="h-3 w-16" />
         </div>
-        <div className="flex flex-col gap-4 px-5">
+        <div className="flex flex-col gap-4 px-5 pb-5">
           {[0, 1, 2].map((i) => (
             <div key={i} className="flex gap-3 items-center">
               <Skeleton className="w-px h-8" />
@@ -159,14 +159,17 @@ export default function ActivityFeed({ userId }: { userId: string }) {
 
   if (error) {
     return (
-      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden py-5">
+      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden">
+        <div className="flex items-center h-14 px-5">
+          <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">ACTIVITY</p>
+        </div>
         <div className="flex flex-col items-center justify-center py-6 px-4 text-center" role="alert">
           <AlertCircle className="text-[#E51837] size-5 mb-2" aria-hidden />
           <p className="text-[12px] font-medium text-[#0D0D0D] mb-1">Failed to load activity</p>
           <button
             type="button"
             onClick={load}
-            className="flex items-center gap-1.5 mt-2 px-3 py-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-medium uppercase tracking-[1.5px] rounded-[6px] transition-colors duration-200"
+            className="flex items-center gap-1.5 mt-2 px-3 py-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-medium uppercase tracking-[1.5px] rounded-[6px] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
           >
             <RefreshCw className="size-3" aria-hidden />
             Retry
@@ -176,17 +179,28 @@ export default function ActivityFeed({ userId }: { userId: string }) {
     );
   }
 
-  if (items.length === 0) return null;
+  if (items.length === 0) {
+    return (
+      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden">
+        <div className="flex items-center h-14 px-5">
+          <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">ACTIVITY</p>
+        </div>
+        <div className="flex items-center justify-center py-6 px-5">
+          <p className="text-[12px] text-[#888888]">No recent activity</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden py-5">
-      <div className="px-5 mb-4">
+    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden">
+      <div className="flex items-center h-14 px-5">
         <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
           ACTIVITY
         </p>
       </div>
 
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4 pb-5">
         {items.map((item) => (
           <div
             key={item.id}
@@ -198,7 +212,7 @@ export default function ActivityFeed({ userId }: { userId: string }) {
               />
             </div>
             <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-              <p className="text-[12px] font-light text-[#71717A] leading-[1.5]">
+              <p className="text-[12px] font-light text-[#888888] leading-[1.5]">
                 {item.message}
               </p>
               <p className="text-[10px] font-normal text-[#AAAAAA] capitalize">

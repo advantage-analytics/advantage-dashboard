@@ -88,6 +88,22 @@ Key principles: Inter font only (weights 300/400/500/600), strict type scale (9�
 
 Auth pages use CSS variables from `globals.css`. Dashboard pages use Tailwind utilities directly — two distinct styling paradigms.
 
+### Widgetless by default
+
+When redesigning pages, default to **flat/widgetless** layouts (hairline dividers, generous whitespace, no card wrappers) unless:
+- The user explicitly asks for cards, or
+- The surrounding page is dashboard-like (home) where sibling content already lives in cards — then mimic that pattern for cohesion.
+
+If unsure, ask the user "widgetless or card-wrapped?" before starting.
+
+## Workflow
+
+### Trace the route before editing components
+
+When the user references a page (e.g., "the match detail page", "the home dashboard", "the video section"), **open the route file first** and follow the import chain to identify the exact rendered component. State the file path before proposing edits.
+
+Do NOT assume based on filename similarity — this project has multiple components with overlapping names that render in different routes (e.g., `serve-placement-home.tsx` vs `CourtPlacementSection`, the full video page at `matches/[matchId]/video/` vs the video widget inside the match detail page). Picking the wrong one wastes a cycle.
+
 ## Key Conventions
 
 - `@/` path alias for all imports from `src/`

@@ -30,7 +30,7 @@ The canonical source of truth for all UI across the app. Read this before buildi
 
 ## Typography
 
-**Font**: Inter only. Weights: 300 (light), 400 (normal), 500 (medium), 600 (semibold).
+**Font**: Inter only. Weights: 300 (light), 400 (normal), 500 (medium), 600 (semibold), 700 (bold — scores only).
 
 ### Type Scale
 
@@ -45,6 +45,8 @@ The canonical source of truth for all UI across the app. Read this before buildi
 | label-lg | `text-[11px] font-semibold` | 600 | Stat values, emphasis labels |
 | label | `text-[10px] font-medium uppercase tracking-[2.5px]` | 500 | Section headers, card headers |
 | label-sm | `text-[9px] font-normal` | 400 | Metadata labels |
+| heading-score | `text-[40px] font-bold tracking-[-1px]` | 700 | Match result scores (match detail page) |
+| heading-brand | `text-[56px] font-light tracking-[-1px] leading-[1.05]` | 300 | Brand panel hero heading (auth pages only) |
 | caption | `text-[8px] font-medium` | 500 | Chart labels, minimal text |
 
 ### Line Heights
@@ -54,15 +56,19 @@ The canonical source of truth for all UI across the app. Read this before buildi
 - `leading-[1.65]` — AI insight / long-form text
 - `leading-[1.6]` — Empty state text
 - `leading-[1.5]` — Activity messages
+- `leading-[1.1]` — Stat values, tight numbers
+- `leading-[1.05]` — Brand heading (auth only)
 - `leading-none` — Compact inline text
 
 ### Letter Spacing
 
+- `tracking-[-1px]` — Brand heading, large scores (tightest)
 - `tracking-[-0.6px]` — Hero headings (tight)
 - `tracking-[-0.5px]` — Large numbers
 - `tracking-[-0.4px]` — Medium headings
 - `tracking-[0.3px]` — Score text
-- `tracking-[1px]` — Legend labels
+- `tracking-[0.5px]` — Button text (CTA buttons)
+- `tracking-[1px]` — Legend labels, compact uppercase
 - `tracking-[1.5px]` — Button text (uppercase)
 - `tracking-[1.6px]` — Performance rating labels
 - `tracking-[2.5px]` — Section headers (uppercase)
@@ -91,6 +97,8 @@ Use `tabular-nums` for all numeric data (stats, scores, percentages) to ensure a
 | text-success | `text-[#5DB955]` | Wins, positive changes |
 | text-error | `text-[#E51837]` | Losses, negative changes |
 | text-inverse | `text-white` | Text on dark backgrounds |
+| text-muted-alt | `text-[#71717A]` | Tertiary metadata, match detail timestamps |
+| text-muted-dim | `text-[#777777]` | KPI change labels |
 | text-inverse-muted | `text-white/50` | Muted text on dark backgrounds |
 
 ### Background Colors
@@ -110,6 +118,8 @@ Use `tabular-nums` for all numeric data (stats, scores, percentages) to ensure a
 | bg-dark | `bg-[#0D0D0D]` | Dark surfaces (processing notification) |
 | bg-success-tint | `bg-[rgba(115,230,104,0.15)]` | Win badge background |
 | bg-error-tint | `bg-[rgba(229,24,55,0.15)]` | Loss badge background |
+| bg-success-soft | `bg-[rgba(93,185,85,0.06)]` | Subtle win background tint |
+| bg-error-soft | `bg-[rgba(229,24,55,0.06)]` | Subtle loss background tint |
 | bg-accent-15 | `rgba(59,130,246,0.15)` | Blue tint backgrounds |
 
 ### Border Colors
@@ -134,6 +144,24 @@ Use `tabular-nums` for all numeric data (stats, scores, percentages) to ensure a
 - First serve dot: `rgba(59,130,246,0.5)`
 - Second serve dot: `rgba(129,140,248,0.5)`
 
+### Match Detail Colors
+
+Match detail and video sections use additional colors for multi-player differentiation and status:
+
+| Token | Value | Use |
+|-------|-------|-----|
+| player-2 | `#6366F1` | Secondary player/opponent color in charts |
+| player-2-text | `#4338CA` | Player 2 text on white or soft-indigo bg (WCAG AA) |
+| player-2-soft | `#EEF2FF` | Player 2 soft pill/highlight background |
+| player-1-text | `#1D4ED8` | Player 1 text on white or soft-blue bg (WCAG AA) |
+| player-1-soft | `#EFF4FF` | Player 1 soft pill/highlight background |
+| alt-success | `#22C55E` | Progress bar success (Tailwind green-500) |
+| alt-error | `#EF4444` | Video/inline error states (Tailwind red-500) |
+| alt-error-dark | `#DC2626` | Darker error emphasis (Tailwind red-600) |
+| warning-bg | `#FFFBEB` | Warning banner background |
+| warning-border | `#FDE68A` | Warning banner border |
+| warning-text | `#92400E` | Warning banner text |
+
 ---
 
 ## Spacing
@@ -142,12 +170,14 @@ Use `tabular-nums` for all numeric data (stats, scores, percentages) to ensure a
 
 | Gap | Value | Use |
 |-----|-------|-----|
+| `gap-0.5` | 2px | Tight inline spacing |
 | `gap-1` | 4px | Minimal (inline elements) |
 | `gap-1.5` | 6px | Small (icon + label) |
 | `gap-2` | 8px | Small-medium |
 | `gap-2.5` | 10px | Icon + text pairs |
 | `gap-3` | 12px | Medium (list items) |
 | `gap-4` | 16px | Medium-large |
+| `gap-5` | 20px | Match row spacing |
 | `gap-6` | 24px | Section spacing |
 | `gap-8` | 32px | Major section spacing |
 
@@ -175,6 +205,7 @@ Use `tabular-nums` for all numeric data (stats, scores, percentages) to ensure a
 | radius-input | `rounded-[6px]` | Form inputs, selects, textareas (matches button radius) |
 | radius-badge | `rounded-[6px]` | Change badges, small tags |
 | radius-cell | `rounded-[4px]` | Heatmap cells, tiny elements |
+| radius-score-card | `rounded-[10px]` | Score cards, upload modal panels, video section |
 | radius-pill | `rounded-full` | Filter pills, tab pill containers, avatars, dots, indicators (NOT buttons) |
 
 ---
@@ -189,6 +220,11 @@ Use `tabular-nums` for all numeric data (stats, scores, percentages) to ensure a
 | shadow-dropdown | `shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]` | Dropdowns, popovers |
 | shadow-floating | `shadow-[0px_8px_32px_rgba(0,0,0,0.25),0px_0px_0px_1px_rgba(255,255,255,0.06)_inset]` | Dark floating UI |
 
+Tailwind utility shadows are also used in specific contexts:
+- `shadow-none` — Explicit shadow removal (buttons, flat elements)
+- `shadow-xs` — Upload modal cards, subtle elevation
+- `shadow-sm` — UI component defaults (shadcn/ui base)
+
 ---
 
 ## Animation & Motion
@@ -199,6 +235,7 @@ Use `tabular-nums` for all numeric data (stats, scores, percentages) to ensure a
 |------|-------|-----|
 | EASE_CURVE | `[0.25, 0.46, 0.45, 0.94]` | Primary custom easing |
 | EASE (spring-like) | `[0.23, 1, 0.32, 1]` | Header, layout transitions |
+| EASE_CHART | `[0.2, 0, 0.4, 1]` | Chart/data transitions |
 
 **Forbidden**: bounce, elastic, glassmorphism effects.
 
@@ -210,8 +247,11 @@ Use `tabular-nums` for all numeric data (stats, scores, percentages) to ensure a
 | `0.12s` – `0.15s` | Fast UI responses |
 | `0.2s` – `0.25s` | Button animations, hovers |
 | `0.3s` – `0.35s` | Page transitions, fade-ins |
+| `0.4s` | Component transitions, stagger groups |
 | `0.5s` | Slower reveals |
+| `0.6s` | Larger reveals, chart animations |
 | `0.8s` – `1s` | Progress rings, loaders |
+| `1.2s` | Sparkline path draw |
 | `200ms` | Default CSS hover transition (`transition-colors duration-200`) |
 
 ### Standard Motions (Framer Motion)
@@ -258,6 +298,16 @@ text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]
 
 ```
 text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]
+```
+
+### Button (Primary, CTA)
+
+```
+text-[13px] font-medium
+rounded-[6px] h-9 px-4
+bg-[#3B82F6] hover:bg-[#2563EB] text-white
+transition-colors duration-200
+shadow-[0_1px_3px_rgba(57,134,243,0.25)]
 ```
 
 ### Button (Primary, Small)
@@ -328,6 +378,25 @@ w-px h-10 rounded-full shrink-0
 // SVG circle, radius = 46, strokeWidth = 8
 // Background: stroke-[#D9D9D9]
 // Progress: stroke-[#3B82F6], animated strokeDashoffset
+```
+
+### Data Tooltip
+
+Tooltips over visualizations (court dots, heatmap cells, serve zones) use a consistent floating box — no caret/arrow.
+
+```
+bg-white border border-[#F3F3F3] rounded-xl
+shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)]
+py-2.5 px-3
+// No caret. The interaction highlight (ring, hover scale) anchors the tooltip.
+// Fixed width per context: w-[168px] (compact), w-[200px] (standard), w-[230px] (wide)
+```
+
+When used with Radix `<TooltipContent>`, override defaults with `!` utilities:
+```
+!bg-white !rounded-xl !px-0 !py-0 !border !border-[#F3F3F3]
+!shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] !text-left !w-auto
+// Apply padding inside inner wrapper, not on TooltipContent
 ```
 
 ### Loading Skeleton
