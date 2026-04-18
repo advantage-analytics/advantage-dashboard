@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Calendar, GraduationCap, BadgeCheck } from "lucide-react";
+import { Calendar, Swords, BadgeCheck } from "lucide-react";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 
 interface ScoreRowProps {
@@ -149,7 +149,7 @@ export function MatchCardGallery({
                   aria-hidden="true"
                 />
               ) : (
-                <GraduationCap className="size-[14px] text-[#888888]" strokeWidth={1.5} aria-hidden="true" />
+                <Swords className="size-[14px] text-[#888888]" strokeWidth={1.5} aria-hidden="true" />
               )}
               <span className="text-[10px] font-normal text-[#888888] leading-[16px]">
                 {match.matchType}

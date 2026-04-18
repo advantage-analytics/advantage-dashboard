@@ -59,7 +59,7 @@ export function MatchSelector({
   }
 
   return (
-    <div className="mb-6">
+    <div>
       {/* Collapsed pill */}
       <button
         type="button"

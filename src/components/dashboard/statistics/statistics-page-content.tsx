@@ -1,16 +1,22 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import type { SelectableMatch, StatisticsPageData } from "@/lib/data/statistics-server";
 import { EmptyStatistics } from "./empty-statistics";
 import { computeStatistics } from "@/lib/data/statistics-client";
 import { MatchSelector } from "./match-selector";
-import { WinRateChart } from "./win-rate-chart";
-import { SurfaceChart } from "./surface-chart";
-import { StatsGrid } from "./stats-grid";
-import { RallyBreakdown } from "./rally-breakdown";
-import { PerformanceRatingsCard } from "./performance-ratings-card";
+import { PeriodToggle, type Period } from "./period-toggle";
+import { computeTrends } from "./trend-utils";
+
+import { RollingFormStrip } from "./rolling-form-strip";
+import { StatSummaryStrip } from "./stat-summary-strip";
+import { StatProgressionChart } from "./stat-progression-chart";
+import { ServePlacementStats } from "./serve-placement-stats";
+import { EfficiencyMatrix } from "./efficiency-matrix";
+import { OpponentLedger } from "./opponent-ledger";
+import { SurfaceDna } from "./surface-dna";
+import { InsightsCard } from "./insights-card";
 
 const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
 
@@ -24,10 +30,35 @@ export function StatisticsPageContent({
   allMatches,
 }: StatisticsPageContentProps): React.JSX.Element {
   const shouldReduceMotion = useReducedMotion();
+  const [period, setPeriod] = useState<Period>("all");
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
     () => new Set(allMatches.map((m) => m.id))
   );
+
+  const sortedMatches = useMemo(
+    () => [...allMatches].sort((a, b) => b.isoDate.localeCompare(a.isoDate)),
+    [allMatches]
+  );
+
+  const handlePeriodChange = useCallback(
+    (newPeriod: Period) => {
+      setPeriod(newPeriod);
+      if (newPeriod === "all") {
+        setSelectedIds(new Set(allMatches.map((m) => m.id)));
+      } else {
+        const n = newPeriod === "last5" ? 5 : 10;
+        const recentIds = sortedMatches.slice(0, n).map((m) => m.id);
+        setSelectedIds(new Set(recentIds));
+      }
+    },
+    [allMatches, sortedMatches]
+  );
+
+  const handleMatchSelectionChange = useCallback((ids: Set<string>) => {
+    setSelectedIds(ids);
+    setPeriod("all");
+  }, []);
 
   const isFiltered = selectedIds.size < allMatches.length;
 
@@ -41,111 +72,107 @@ export function StatisticsPageContent({
     [filteredMatches, isFiltered, initialData]
   );
 
-  const isEmpty = allMatches.length === 0;
+  const trends = useMemo(
+    () => computeTrends(sortedMatches, initialData),
+    [sortedMatches, initialData]
+  );
 
-  const kpiItems = [
-    { label: "Total Matches", value: String(data.totalMatches), accent: false },
-    { label: "Win Rate", value: `${data.winRate}%`, accent: data.winRate >= 50 },
-    {
-      label: "Current Streak",
-      value: data.currentStreak,
-      accent: data.currentStreak.includes("W"),
-    },
-    {
-      label: "Avg Duration",
-      value: data.avgDurationMinutes ? `${data.avgDurationMinutes}m` : "—",
-      accent: false,
-    },
-  ];
+  const serveMatchIds = useMemo(
+    () =>
+      [...filteredMatches]
+        .sort((a, b) => b.isoDate.localeCompare(a.isoDate))
+        .slice(0, 10)
+        .map((m) => m.id),
+    [filteredMatches]
+  );
 
-  function kpiAnim(i: number) {
-    if (shouldReduceMotion) return { initial: false, animate: { opacity: 1 }, transition: { duration: 0 } };
-    return {
-      initial: { opacity: 0, y: 12 },
-      animate: { opacity: 1, y: 0 },
-      transition: { duration: 0.4, delay: i * 0.07, ease: EASE_CURVE },
-    };
-  }
-
-  function sectionAnim(i: number) {
-    if (shouldReduceMotion) return { initial: false, animate: { opacity: 1 }, transition: { duration: 0 } };
-    return {
-      initial: { opacity: 0, y: 12 },
-      animate: { opacity: 1, y: 0 },
-      transition: { duration: 0.4, delay: 0.15 + i * 0.07, ease: EASE_CURVE },
-    };
-  }
-
-  if (isEmpty) {
+  if (allMatches.length === 0) {
     return <EmptyStatistics />;
+  }
+
+  function anim(i: number) {
+    if (shouldReduceMotion)
+      return { initial: false as const, animate: { opacity: 1 }, transition: { duration: 0 } };
+    return {
+      initial: { opacity: 0, y: 12 },
+      animate: { opacity: 1, y: 0 },
+      transition: { duration: 0.3, delay: i * 0.06, ease: EASE_CURVE },
+    };
   }
 
   return (
     <>
-      {/* KPI row */}
-      <div className="flex gap-3 w-full mb-6">
-        {kpiItems.map((item, i) => (
-          <motion.div
-            key={item.label}
-            {...kpiAnim(i)}
-            className="flex-1 flex flex-col gap-3 bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5 overflow-hidden min-w-0 transition-[box-shadow,border-color,transform] duration-200 hover:shadow-[0px_8px_24px_0px_rgba(0,0,0,0.12)] hover:border-[#E7E7E7] hover:scale-[1.008]"
-          >
-            <p className="text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2px] whitespace-nowrap">
-              {item.label}
-            </p>
-            <div className="flex items-center gap-1.5">
-              {item.accent && (
-                <span className="w-1.5 h-1.5 rounded-full bg-[#5DB955] shrink-0" />
-              )}
-              <p className="text-[28px] font-light text-[#0D0D0D] tracking-[-0.5px] leading-none tabular-nums">
-                {item.value}
-              </p>
-            </div>
-          </motion.div>
-        ))}
-      </div>
-
-      {/* Match selector */}
-      <motion.div {...sectionAnim(0)}>
+      {/* Controls */}
+      <div className="flex items-start justify-between gap-4 mb-5">
         <MatchSelector
           matches={allMatches}
           selectedIds={selectedIds}
-          onSelectionChange={setSelectedIds}
+          onSelectionChange={handleMatchSelectionChange}
+        />
+        <PeriodToggle
+          value={period}
+          onChange={handlePeriodChange}
+          matchCount={allMatches.length}
+        />
+      </div>
+
+      {/* Match Form */}
+      <motion.div className="pb-5 mb-5 border-b border-[#F0F0F0]" {...anim(0)}>
+        <RollingFormStrip
+          matches={filteredMatches}
+          totalMatches={data.totalMatches}
+          winRate={data.winRate}
+          currentStreak={data.currentStreak}
         />
       </motion.div>
 
-      {/* Charts + sidebar */}
-      <div className="grid grid-cols-1 lg:grid-cols-[5fr_2fr] gap-8">
-        {/* Left column */}
-        <div className="flex flex-col gap-6 min-w-0">
-          <motion.div {...sectionAnim(1)}>
-            <WinRateChart data={data.monthlyTrend} />
-          </motion.div>
-          <motion.div {...sectionAnim(2)}>
-            <SurfaceChart data={data.surfaceBreakdown} />
-          </motion.div>
-          <motion.div {...sectionAnim(3)}>
-            <StatsGrid data={data} />
-          </motion.div>
-        </div>
+      {/* Key Averages */}
+      <motion.div className="pb-5 mb-6 border-b border-[#F0F0F0]" {...anim(1)}>
+        <StatSummaryStrip data={data} trends={trends} />
+      </motion.div>
 
-        {/* Right column */}
-        <div className="flex flex-col gap-5">
-          <motion.div {...sectionAnim(4)}>
-            <PerformanceRatingsCard
-              serveRating={data.serveRating}
-              returnRating={data.returnRating}
-              underPressureRating={data.underPressureRating}
-            />
-          </motion.div>
-          <motion.div {...sectionAnim(5)}>
-            <RallyBreakdown
-              shortPct={data.shortRallyWonPct}
-              mediumPct={data.mediumRallyWonPct}
-              longPct={data.longRallyWonPct}
-            />
-          </motion.div>
-        </div>
+      {/* Progression */}
+      <motion.div className="mb-8" {...anim(2)}>
+        <StatProgressionChart matches={filteredMatches} />
+      </motion.div>
+
+      {/* Shot Quality */}
+      <motion.p
+        className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-4"
+        {...anim(3)}
+      >
+        Shot Quality
+      </motion.p>
+      <div className="grid grid-cols-12 gap-5 mb-8">
+        <motion.div className="col-span-12 lg:col-span-7" {...anim(3)}>
+          <ServePlacementStats matchIds={serveMatchIds} />
+        </motion.div>
+        <motion.div className="col-span-12 lg:col-span-5" {...anim(4)}>
+          <EfficiencyMatrix matches={filteredMatches} />
+        </motion.div>
+      </div>
+
+      {/* Context */}
+      <motion.p
+        className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-4"
+        {...anim(5)}
+      >
+        Context
+      </motion.p>
+      <div className="grid grid-cols-12 gap-5">
+        <motion.div className="col-span-12 lg:col-span-4" {...anim(5)}>
+          <OpponentLedger matches={filteredMatches} />
+        </motion.div>
+        <motion.div className="col-span-12 lg:col-span-4" {...anim(6)}>
+          <SurfaceDna
+            surfaceBreakdown={data.surfaceBreakdown}
+            totalMatches={data.totalMatches}
+            winRate={data.winRate}
+          />
+        </motion.div>
+        <motion.div className="col-span-12 lg:col-span-4" {...anim(7)}>
+          <InsightsCard data={data} trends={trends} />
+        </motion.div>
       </div>
     </>
   );

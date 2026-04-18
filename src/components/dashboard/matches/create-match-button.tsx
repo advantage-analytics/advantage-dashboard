@@ -47,7 +47,7 @@ export function CreateMatchButton({ variant = "dark" }: CreateMatchButtonProps):
       <button
         onClick={() => setOpen(true)}
         className={cn(
-          "flex items-center rounded-[6px] text-white cursor-pointer transition-[color,background-color,transform,box-shadow] duration-200 ease-out shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(57,134,243,0.5)] focus-visible:ring-offset-1",
+          "flex items-center rounded-[6px] text-white cursor-pointer transition-[color,background-color,transform,box-shadow] duration-200 ease-out shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1",
           variantStyles[variant]
         )}
       >

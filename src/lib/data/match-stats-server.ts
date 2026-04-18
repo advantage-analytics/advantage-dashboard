@@ -81,6 +81,84 @@ interface TiebreakCounts {
   player2Tiebreaks: number;
 }
 
+/* ── Cross-match averages for player1 ──────────────────── */
+
+export async function getPlayerAverageStats(
+  userId: string,
+): Promise<Partial<PlayerStatistics> | null> {
+  const supabase = await createClient();
+
+  const { data: matches } = await supabase
+    .from("matches")
+    .select("id")
+    .eq("player1_id", userId);
+
+  if (!matches?.length) return null;
+
+  const matchIds = matches.map((m) => m.id);
+
+  const { data: rows } = await supabase
+    .from("match_stats_with_percentages")
+    .select(
+      "first_serve_pct, first_serve_won_pct, second_serve_won_pct, service_games_won_pct, break_points_converted_pct, first_return_won_pct, second_return_won_pct, return_games_won_pct, net_points_won, net_points_appearances, short_rally_won_pct, medium_rally_won_pct, long_rally_won_pct, aces, double_faults, winners, unforced_errors, total_points_won, total_points",
+    )
+    .in("match_id", matchIds)
+    .eq("is_player1", true);
+
+  if (!rows?.length) return null;
+
+  const avgPct = (field: string) => {
+    const vals = rows
+      .map((r) => parseFloat((r as Record<string, string | null>)[field] ?? "0"))
+      .filter((v) => !isNaN(v) && v > 0);
+    return vals.length
+      ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)
+      : 0;
+  };
+
+  const avgNum = (field: string) => {
+    const vals = rows
+      .map((r) => Number((r as Record<string, number | null>)[field] ?? 0))
+      .filter((v) => !isNaN(v));
+    return vals.length
+      ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)
+      : 0;
+  };
+
+  const netWon = rows.reduce(
+    (a, r) => a + ((r as Record<string, number | null>).net_points_won ?? 0),
+    0,
+  );
+  const netTotal = rows.reduce(
+    (a, r) =>
+      a + ((r as Record<string, number | null>).net_points_appearances ?? 0),
+    0,
+  );
+
+  return {
+    firstServeInPct: avgPct("first_serve_pct"),
+    firstServeWinPct: avgPct("first_serve_won_pct"),
+    secondServeWinPct: avgPct("second_serve_won_pct"),
+    serviceGamesWonPct: avgPct("service_games_won_pct"),
+    breakpointsWonPct: avgPct("break_points_converted_pct"),
+    firstReturnWonPct: avgPct("first_return_won_pct"),
+    secondReturnWonPct: avgPct("second_return_won_pct"),
+    returnGamesWonPct: avgPct("return_games_won_pct"),
+    netPointsWonPct: netTotal > 0 ? Math.round((netWon / netTotal) * 100) : 0,
+    shortRallyWonPct: avgPct("short_rally_won_pct"),
+    mediumRallyWonPct: avgPct("medium_rally_won_pct"),
+    longRallyWonPct: avgPct("long_rally_won_pct"),
+    aces: avgNum("aces"),
+    doubleFaults: avgNum("double_faults"),
+    winners: avgNum("winners"),
+    unforcedErrors: avgNum("unforced_errors"),
+    totalPointsWon: avgNum("total_points_won"),
+    totalPoints: avgNum("total_points"),
+  } as Partial<PlayerStatistics>;
+}
+
+/* ── Single-match stats ────────────────────────────────── */
+
 export async function getMatchStatisticsFromSupabase(
   matchId: string
 ): Promise<MatchStatisticsResult | null> {

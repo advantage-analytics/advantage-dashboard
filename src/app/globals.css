@@ -54,6 +54,9 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --shadow-card: 0px 2px 8px 0px rgba(0,0,0,0.06);
+  --shadow-card-elevated: 0px 6px 20px 0px rgba(0,0,0,0.12);
+  --shadow-tooltip: 0px 4px 12px 0px rgba(0,0,0,0.12);
 }
 
 :root {
@@ -235,6 +238,35 @@
   0%, 100% { transform: translateX(0); }
   20%, 60% { transform: translateX(-4px); }
   40%, 80% { transform: translateX(4px); }
+}
+
+/* Page enter transition — CSS-based so server HTML is visible at paint time */
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-page-enter {
+  animation: page-enter 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+/* Upload modal animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 300ms ease-out;
+}
+
+.animate-slideDown {
+  animation: slideDown 300ms ease-out;
 }
 
 /* New match highlight pulse */

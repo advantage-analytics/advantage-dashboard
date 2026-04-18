@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useId, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { shortName } from "@/lib/data/match-utils";
@@ -8,17 +9,16 @@ import { shortName } from "@/lib/data/match-utils";
 /* ── Constants ───────────────────────────────────────────── */
 
 const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
-const P1_COLOR = "#4A8AF4";
-const P2_COLOR = "#F38439";
-const P1_LINE_COLOR = "#3570D4";
-const P2_LINE_COLOR = "#D06A20";
+const P1_COLOR = "#3B82F6";
+const P2_COLOR = "#6366F1";
+const P1_LINE_COLOR = "#2563EB";
+const P2_LINE_COLOR = "#D97218";
 const CHART_W = 600;
 const CHART_H = 140;
 
 /* ── Types ───────────────────────────────────────────────── */
 
 interface MomentumPoint {
-  index: number;
   diff: number;
   setNumber: number;
 }
@@ -68,6 +68,7 @@ function toSmoothPath(points: [number, number][]): string {
 interface BreakInfo {
   index: number;
   brokenPlayer1: boolean;
+  setNumber: number;
 }
 
 function detectBreaks(points: MatchPoint[]): BreakInfo[] {
@@ -78,47 +79,143 @@ function detectBreaks(points: MatchPoint[]): BreakInfo[] {
     if (curr.gameNumber !== prev.gameNumber || curr.setNumber !== prev.setNumber) {
       const serverWon = prev.serverIsPlayer1 ? prev.wonByPlayer1 : !prev.wonByPlayer1;
       if (!serverWon) {
-        breaks.push({ index: i - 1, brokenPlayer1: prev.serverIsPlayer1 });
+        breaks.push({
+          index: i - 1,
+          brokenPlayer1: prev.serverIsPlayer1,
+          setNumber: prev.setNumber,
+        });
       }
     }
   }
   return breaks;
 }
 
+/* ── Set filter chips ────────────────────────────────────── */
+
+function SetFilterChips({
+  sets,
+  activeSet,
+  onSetChange,
+}: {
+  sets: number[];
+  activeSet: number | null;
+  onSetChange: (set: number | null) => void;
+}) {
+  if (sets.length <= 1) return null;
+
+  return (
+    <div className="flex items-center gap-2 mb-5" role="group" aria-label="Filter by set">
+      <motion.button
+        onClick={() => onSetChange(null)}
+        whileTap={{ scale: 0.95 }}
+        transition={{ duration: 0.1 }}
+        className={`h-7 px-3 rounded-full text-[10px] font-medium uppercase tracking-[1.5px] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 ${
+          activeSet === null
+            ? "bg-[#0D0D0D] text-white"
+            : "bg-[#F5F5F5] text-[#888888] hover:bg-[#F0F0F0]"
+        }`}
+      >
+        All Sets
+      </motion.button>
+      {sets.map((s) => (
+        <motion.button
+          key={s}
+          onClick={() => onSetChange(s)}
+          whileTap={{ scale: 0.95 }}
+          transition={{ duration: 0.1 }}
+          className={`h-7 px-3 rounded-full text-[10px] font-medium uppercase tracking-[1.5px] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 ${
+            activeSet === s
+              ? "bg-[#0D0D0D] text-white"
+              : "bg-[#F5F5F5] text-[#888888] hover:bg-[#F0F0F0]"
+          }`}
+        >
+          Set {s}
+        </motion.button>
+      ))}
+    </div>
+  );
+}
+
 /* ── Momentum chart ──────────────────────────────────────── */
 
-function MomentumChart({
+export function MomentumChart({
   data,
   rawPoints,
   p1Short,
   p2Short,
+  hideHeading = false,
+  activeSet,
+  onSetChange,
+  allSets,
 }: {
   data: MomentumPoint[];
   rawPoints: MatchPoint[];
   p1Short: string;
   p2Short: string;
+  hideHeading?: boolean;
+  activeSet?: number | null;
+  onSetChange?: (set: number | null) => void;
+  allSets?: number[];
 }) {
   const uid = useId();
   const clipAbove = `momentum-above-${uid}`;
   const clipBelow = `momentum-below-${uid}`;
   const svgRef = useRef<SVGSVGElement>(null);
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [isKeyboardNav, setIsKeyboardNav] = useState(false);
 
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent<SVGRectElement>) => {
+  const selectFromClientX = useCallback(
+    (clientX: number) => {
       const svg = svgRef.current;
       if (!svg || data.length < 2) return;
       const rect = svg.getBoundingClientRect();
-      const mouseX = ((e.clientX - rect.left) / rect.width) * CHART_W;
-      const idx = Math.round((mouseX / CHART_W) * (data.length - 1));
-      setHoveredIndex(Math.max(0, Math.min(data.length - 1, idx)));
+      const x = ((clientX - rect.left) / rect.width) * CHART_W;
+      const idx = Math.round((x / CHART_W) * (data.length - 1));
+      setIsKeyboardNav(false);
+      setSelectedIndex(Math.max(0, Math.min(data.length - 1, idx)));
     },
     [data],
   );
 
-  const handleMouseLeave = useCallback(() => setHoveredIndex(null), []);
+  const handleMouseLeave = useCallback(() => {
+    if (!isKeyboardNav) setSelectedIndex(null);
+  }, [isKeyboardNav]);
 
-  if (data.length < 2) return null;
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (data.length < 2) return;
+      const current = selectedIndex ?? -1;
+      let next: number | null = null;
+
+      if (e.key === "ArrowRight") {
+        next = Math.min(current + 1, data.length - 1);
+      } else if (e.key === "ArrowLeft") {
+        next = Math.max(current - 1, 0);
+      } else if (e.key === "Home") {
+        next = 0;
+      } else if (e.key === "End") {
+        next = data.length - 1;
+      } else if (e.key === "Escape") {
+        setIsKeyboardNav(false);
+        setSelectedIndex(null);
+        e.preventDefault();
+        return;
+      }
+
+      if (next !== null) {
+        e.preventDefault();
+        setIsKeyboardNav(true);
+        setSelectedIndex(next);
+      }
+    },
+    [data, selectedIndex],
+  );
+
+  if (data.length < 2) {
+    return hideHeading ? null : (
+      <div className="h-[140px] bg-[#FAFAFA] rounded-lg animate-pulse" />
+    );
+  }
 
   const maxAbs = Math.max(...data.map((d) => Math.abs(d.diff)), 1);
   const yMid = CHART_H / 2;
@@ -134,7 +231,7 @@ function MomentumChart({
   // Unique set numbers
   const sets = [...new Set(data.map((d) => d.setNumber))].sort((a, b) => a - b);
 
-  // Break indices
+  // Break indices (rawPoints is already set-filtered by parent when activeSet is set)
   const breakIndices = detectBreaks(rawPoints);
 
   // Coordinate pairs for smooth path
@@ -145,23 +242,66 @@ function MomentumChart({
   const areaPath = smoothLine + ` L ${xScale(data.length - 1)},${yMid} L ${xScale(0)},${yMid} Z`;
 
   // Tooltip data
-  const hoveredPt = hoveredIndex !== null ? rawPoints[hoveredIndex] : null;
-  const hoveredCoord = hoveredIndex !== null ? coords[hoveredIndex] : null;
+  const selectedPt = selectedIndex !== null ? rawPoints[selectedIndex] : null;
+  const selectedCoord = selectedIndex !== null ? coords[selectedIndex] : null;
+
+  // Y-axis tick values
+  const yTicks: number[] = [];
+  if (maxAbs >= 3) {
+    const step = maxAbs >= 10 ? 5 : maxAbs >= 6 ? 3 : 2;
+    for (let v = step; v <= maxAbs; v += step) {
+      yTicks.push(v);
+      yTicks.push(-v);
+    }
+  }
+
+  // Aria description for selected point
+  const ariaDescription = selectedPt
+    ? `${selectedPt.wonByPlayer1 ? p1Short : p2Short} won point. Score: ${selectedPt.pointScore}. Set ${selectedPt.setNumber}${selectedPt.gameScore ? `, ${selectedPt.gameScore}` : ""}. ${selectedPt.rallyLength > 0 ? `${selectedPt.rallyLength} shots.` : ""} ${selectedPt.isMatchPoint ? "Match point." : selectedPt.isSetPoint ? "Set point." : selectedPt.isBreakPoint ? "Break point." : ""}`
+    : "";
 
   return (
     <div>
-      <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] mb-3">
-        Point Momentum
-      </p>
+      {!hideHeading && (
+        <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] mb-4" title="Cumulative point difference — above the line means the first player is leading, below means the second player is leading">
+          Point Momentum
+        </p>
+      )}
 
-      <div className="relative overflow-visible">
+      {/* Set filter chips */}
+      {!hideHeading && allSets && onSetChange && (
+        <SetFilterChips
+          sets={allSets}
+          activeSet={activeSet ?? null}
+          onSetChange={onSetChange}
+        />
+      )}
+
+      {/* Aria live region for screen readers */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {ariaDescription}
+      </div>
+
+      <div
+        className="relative overflow-visible"
+        role="figure"
+        aria-label={`Point momentum chart. ${p1Short} vs ${p2Short}. ${data.length} points.`}
+        tabIndex={0}
+        onKeyDown={handleKeyDown}
+        onBlur={() => {
+          if (isKeyboardNav) {
+            setIsKeyboardNav(false);
+            setSelectedIndex(null);
+          }
+        }}
+      >
         <svg
           ref={svgRef}
           viewBox={`0 0 ${CHART_W} ${CHART_H}`}
           className="w-full"
           style={{ height: 140 }}
           preserveAspectRatio="none"
-          aria-label="Point momentum chart"
+          aria-hidden="true"
         >
           <defs>
             <clipPath id={clipAbove}>
@@ -171,6 +311,19 @@ function MomentumChart({
               <rect x={0} y={yMid} width={CHART_W} height={CHART_H} />
             </clipPath>
           </defs>
+
+          {/* Y-axis reference lines */}
+          {yTicks.map((v) => (
+            <line
+              key={`ytick-${v}`}
+              x1={0}
+              y1={yScale(v)}
+              x2={CHART_W}
+              y2={yScale(v)}
+              stroke="#F5F5F5"
+              strokeWidth={0.5}
+            />
+          ))}
 
           {/* Set dividers */}
           {dividers.map((idx, i) => (
@@ -231,82 +384,74 @@ function MomentumChart({
             clipPath={`url(#${clipBelow})`}
           />
 
-          {/* Hover guide line (vertical lines render correctly even with preserveAspectRatio=none) */}
-          {hoveredIndex !== null && hoveredCoord && (
+          {/* Hover guide line */}
+          {selectedIndex !== null && selectedCoord && (
             <line
-              x1={hoveredCoord[0]}
+              x1={selectedCoord[0]}
               y1={0}
-              x2={hoveredCoord[0]}
+              x2={selectedCoord[0]}
               y2={CHART_H}
-              stroke={data[hoveredIndex].diff >= 0 ? P1_LINE_COLOR : P2_LINE_COLOR}
+              stroke={data[selectedIndex].diff >= 0 ? P1_LINE_COLOR : P2_LINE_COLOR}
               strokeWidth={0.5}
               strokeOpacity={0.3}
             />
           )}
 
-          {/* Invisible overlay rect for mouse events */}
+          {/* Invisible overlay rect for mouse/touch events */}
           <rect
             x={0}
             y={0}
             width={CHART_W}
             height={CHART_H}
             fill="transparent"
-            onMouseMove={handleMouseMove}
+            onMouseMove={(e) => selectFromClientX(e.clientX)}
             onMouseLeave={handleMouseLeave}
+            onTouchMove={(e) => e.touches[0] && selectFromClientX(e.touches[0].clientX)}
+            onTouchEnd={() => { if (!isKeyboardNav) setSelectedIndex(null); }}
           />
         </svg>
 
+        {/* Y-axis labels — rendered in HTML to avoid SVG distortion */}
+        {yTicks.map((v) => {
+          const yPct = (yScale(v) / CHART_H) * 100;
+          return (
+            <span
+              key={`ylabel-${v}`}
+              className="absolute left-0 text-[9px] tabular-nums text-[#CCCCCC] font-normal pointer-events-none -translate-y-1/2"
+              style={{ top: `${yPct}%` }}
+            >
+              {v > 0 ? `+${v}` : v}
+            </span>
+          );
+        })}
+
         {/* Hover dot — rendered in HTML to avoid SVG aspect-ratio distortion */}
-        {hoveredIndex !== null && hoveredCoord && (() => {
-          const dotColor = data[hoveredIndex].diff >= 0 ? P1_LINE_COLOR : P2_LINE_COLOR;
+        {selectedIndex !== null && selectedCoord && (() => {
+          const dotColor = data[selectedIndex].diff >= 0 ? P1_LINE_COLOR : P2_LINE_COLOR;
           return (
             <div
-              className="absolute pointer-events-none z-[5]"
+              className="absolute pointer-events-none z-[5] size-[7px] rounded-full"
               style={{
-                left: `${(hoveredCoord[0] / CHART_W) * 100}%`,
-                top: `${(hoveredCoord[1] / CHART_H) * 100}%`,
+                left: `${(selectedCoord[0] / CHART_W) * 100}%`,
+                top: `${(selectedCoord[1] / CHART_H) * 100}%`,
                 transform: "translate(-50%, -50%)",
+                background: dotColor,
+                boxShadow: "0 0 0 2px #fff, 0 1px 3px rgba(0,0,0,0.1)",
               }}
-            >
-              {/* Glow ring */}
-              <div
-                className="absolute inset-0 rounded-full"
-                style={{
-                  width: 18,
-                  height: 18,
-                  margin: "-9px 0 0 -9px",
-                  left: "50%",
-                  top: "50%",
-                  background: dotColor,
-                  opacity: 0.1,
-                }}
-              />
-              {/* Solid dot */}
-              <div
-                className="rounded-full"
-                style={{
-                  width: 7,
-                  height: 7,
-                  background: dotColor,
-                  boxShadow: `0 0 0 2px #fff, 0 0 8px ${dotColor}40`,
-                }}
-              />
-            </div>
+            />
           );
         })()}
 
         {/* Tooltip */}
         <AnimatePresence>
-          {hoveredIndex !== null && hoveredPt && hoveredCoord && (() => {
-            const accentColor = hoveredPt.wonByPlayer1 ? P1_COLOR : P2_COLOR;
-            const xPct = (hoveredCoord[0] / CHART_W) * 100;
-            const yPct = (hoveredCoord[1] / CHART_H) * 100;
-            // Position tooltip above the point; flip below if in upper 25% of chart
-            const showBelow = hoveredCoord[1] < CHART_H * 0.25;
-            // Horizontal alignment: shift tooltip to avoid clipping at edges
-            const translateX = hoveredCoord[0] > CHART_W * 0.8 ? "-92%" : hoveredCoord[0] < CHART_W * 0.2 ? "-8%" : "-50%";
-            const durationSec = hoveredPt.duration != null ? hoveredPt.duration : null;
-            const pressureLabel = hoveredPt.isMatchPoint ? "Match Point" : hoveredPt.isSetPoint ? "Set Point" : hoveredPt.isBreakPoint ? "Break Point" : null;
+          {selectedIndex !== null && selectedPt && selectedCoord && (() => {
+            const accentColor = selectedPt.wonByPlayer1 ? P1_COLOR : P2_COLOR;
+            const xPct = (selectedCoord[0] / CHART_W) * 100;
+            const yPct = (selectedCoord[1] / CHART_H) * 100;
+            const showBelow = selectedCoord[1] < CHART_H * 0.25;
+            const translateX = selectedCoord[0] > CHART_W * 0.8 ? "-92%" : selectedCoord[0] < CHART_W * 0.2 ? "-8%" : "-50%";
+            const durationSec = selectedPt.duration != null ? selectedPt.duration : null;
+            const pressureLabel = selectedPt.isMatchPoint ? "Match Point" : selectedPt.isSetPoint ? "Set Point" : selectedPt.isBreakPoint ? "Break Point" : null;
 
             return (
               <motion.div
@@ -323,26 +468,18 @@ function MomentumChart({
                 }}
               >
                 <div
-                  className="relative rounded-lg overflow-hidden"
-                  style={{
-                    background: "rgba(15, 17, 21, 0.92)",
-                    backdropFilter: "blur(16px)",
-                    boxShadow: "0 12px 40px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.12)",
-                    minWidth: 172,
-                  }}
+                  className="relative rounded-xl overflow-hidden bg-white border border-[#F3F3F3] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]"
+                  style={{ minWidth: 172 }}
                 >
-                  {/* Top accent line */}
-                  <div className="h-[2px]" style={{ background: `linear-gradient(90deg, ${accentColor}, ${accentColor}88 70%, transparent)` }} />
-
                   {/* Primary: score + context */}
-                  <div className="px-3 pt-2 pb-1.5">
+                  <div className="px-3 pt-2.5 pb-1.5">
                     <div className="flex items-baseline justify-between gap-4">
-                      <span className="text-[15px] font-semibold tabular-nums text-white tracking-tight leading-none">
-                        {hoveredPt.pointScore}
+                      <span className="text-[14px] font-semibold tabular-nums text-[#0D0D0D] tracking-tight leading-none">
+                        {selectedPt.pointScore}
                       </span>
                       {pressureLabel && (
                         <span
-                          className="text-[9px] font-bold uppercase tracking-wider leading-none px-1.5 py-[3px] rounded"
+                          className="text-[9px] font-semibold uppercase tracking-wider leading-none px-1.5 py-[3px] rounded"
                           style={{
                             color: accentColor,
                             background: `${accentColor}18`,
@@ -354,13 +491,13 @@ function MomentumChart({
                       )}
                     </div>
                     <div className="flex items-center gap-1.5 mt-1">
-                      <span className="text-[10px] font-medium text-white/40 tracking-wider">
-                        Set {hoveredPt.setNumber}{hoveredPt.gameScore ? ` ${hoveredPt.gameScore}` : ""}
+                      <span className="text-[10px] font-medium text-[#71717A] tracking-wider">
+                        Set {selectedPt.setNumber}{selectedPt.gameScore ? ` ${selectedPt.gameScore}` : ""}
                       </span>
                       {durationSec !== null && (
                         <>
-                          <span className="text-white/20 text-[10px]">/</span>
-                          <span className="text-[10px] tabular-nums text-white/40 font-medium">
+                          <span className="text-[#CCCCCC] text-[10px]">/</span>
+                          <span className="text-[10px] tabular-nums text-[#71717A] font-medium">
                             {Math.floor(durationSec / 60)}:{String(Math.round(durationSec % 60)).padStart(2, "0")}
                           </span>
                         </>
@@ -369,21 +506,21 @@ function MomentumChart({
                   </div>
 
                   {/* Divider */}
-                  <div className="h-px mx-2.5" style={{ background: "rgba(255,255,255,0.06)" }} />
+                  <div className="h-px mx-2.5 bg-[#F3F3F3]" />
 
-                  {/* Secondary: winner, server, rally, game score */}
+                  {/* Secondary: winner, server, rally */}
                   <div className="px-3 pt-1.5 pb-2 flex flex-col gap-1.5">
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[11px] font-medium" style={{ color: accentColor }}>
-                        {hoveredPt.wonByPlayer1 ? p1Short : p2Short} won point
+                        {selectedPt.wonByPlayer1 ? p1Short : p2Short} won point
                       </span>
-                      <span className="text-[10px] text-white/30 font-medium">
-                        {hoveredPt.serverIsPlayer1 ? p1Short : p2Short} serving
+                      <span className="text-[10px] text-[#71717A] font-medium">
+                        {selectedPt.serverIsPlayer1 ? p1Short : p2Short} serving
                       </span>
                     </div>
-                    {hoveredPt.rallyLength > 0 && (
-                      <span className="text-[10px] tabular-nums text-white/45 font-medium">
-                        {hoveredPt.rallyLength} shot{hoveredPt.rallyLength !== 1 ? "s" : ""}
+                    {selectedPt.rallyLength > 0 && (
+                      <span className="text-[10px] tabular-nums text-[#71717A] font-medium">
+                        {selectedPt.rallyLength} shot{selectedPt.rallyLength !== 1 ? "s" : ""}
                       </span>
                     )}
                   </div>
@@ -406,7 +543,7 @@ function MomentumChart({
           return (
             <span
               key={s}
-              className="absolute text-[9px] font-medium text-[#CCCCCC] uppercase tracking-wider -translate-x-1/2"
+              className="absolute text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2.5px] -translate-x-1/2"
               style={{ left: `${xPct}%` }}
             >
               Set {s}
@@ -418,19 +555,19 @@ function MomentumChart({
       {/* Legend */}
       <div className="flex items-center justify-center gap-5 mt-3">
         <div className="flex items-center gap-1.5">
-          <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: P1_COLOR, opacity: 0.6 }} />
-          <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">{p1Short} leading</span>
+          <div className="size-2.5 rounded-full" style={{ backgroundColor: P1_COLOR }} />
+          <span className="text-[10px] font-normal text-[#888888] uppercase tracking-[2px]">{p1Short} leading</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: P2_COLOR, opacity: 0.6 }} />
-          <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">{p2Short} leading</span>
+          <div className="size-2.5 rounded-full" style={{ backgroundColor: P2_COLOR }} />
+          <span className="text-[10px] font-normal text-[#888888] uppercase tracking-[2px]">{p2Short} leading</span>
         </div>
         {breakIndices.length > 0 && (
           <div className="flex items-center gap-1.5">
-            <svg width="10" height="10" className="shrink-0">
+            <svg width="10" height="10" className="shrink-0" aria-hidden="true">
               <line x1={0} y1={5} x2={10} y2={5} stroke="#E51837" strokeWidth={1.5} strokeDasharray="2 1.5" />
             </svg>
-            <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">Break of Serve</span>
+            <span className="text-[10px] font-normal text-[#888888] uppercase tracking-[2px]">Break of Serve</span>
           </div>
         )}
       </div>
@@ -449,26 +586,27 @@ function SetBreakdown({
   p1Short: string;
   p2Short: string;
 }) {
+  const prefersReduced = useReducedMotion();
   const maxPts = Math.max(...sets.flatMap((s) => [s.p1Points, s.p2Points]), 1);
 
   return (
     <div>
-      <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-4">
+      <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] mb-5" title="Total points won by each player in each set">
         Points Per Set
       </p>
 
-      {/* Column headers */}
-      <div className="grid grid-cols-[auto_1fr_1fr] gap-x-3 mb-3">
-        <div className="w-12" />
-        <span className="text-[12px] font-medium text-[#4A8AF4] whitespace-nowrap truncate">
+      {/* H2H column headers */}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-4 mb-3">
+        <span className="text-[11px] font-medium text-[#3B82F6] text-right whitespace-nowrap truncate">
           {p1Short}
         </span>
-        <span className="text-[12px] font-medium text-[#F38439] whitespace-nowrap truncate">
+        <div className="w-12" />
+        <span className="text-[11px] font-medium text-[#6366F1] whitespace-nowrap truncate">
           {p2Short}
         </span>
       </div>
 
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3.5">
         {sets.map((s, index) => {
           const p1Pct = (s.p1Points / maxPts) * 100;
           const p2Pct = (s.p2Points / maxPts) * 100;
@@ -478,44 +616,47 @@ function SetBreakdown({
           return (
             <motion.div
               key={s.set}
-              className="grid grid-cols-[auto_1fr_1fr] items-center gap-x-3"
-              initial={{ opacity: 0, y: 6 }}
+              className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-4"
+              initial={prefersReduced ? false : { opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35, delay: 0.1 + index * 0.07, ease: EASE_CURVE }}
             >
-              <span className="text-[12px] font-medium text-[#525252] w-12">Set {s.set}</span>
-
-              {/* P1: count then bar */}
-              <div className="flex items-center gap-2">
-                <span
-                  className={`text-[13px] tabular-nums font-medium w-6 ${
-                    p1Wins ? "text-[#4A8AF4]" : "text-[#888888]"
-                  }`}
-                >
-                  {s.p1Points}
-                </span>
-                <div className="flex-1 h-1.5 bg-[#F3F3F3] rounded-full overflow-hidden">
+              {/* P1: bar growing from right + count */}
+              <div className="flex items-center gap-2.5">
+                <div className="flex-1 h-[4px] bg-[#F0F0F0] rounded-full overflow-hidden flex justify-end">
                   <motion.div
-                    className="h-full rounded-full bg-[#4A8AF4]"
+                    className="h-full rounded-full bg-[#3B82F6]"
                     initial={{ width: "0%" }}
                     animate={{ width: `${p1Pct}%` }}
                     transition={{ duration: 0.6, delay: 0.2 + index * 0.07, ease: EASE_CURVE }}
                   />
                 </div>
+                <span
+                  className={`text-[14px] tabular-nums font-medium w-7 text-right ${
+                    p1Wins ? "text-[#3B82F6]" : "text-[#888888]"
+                  }`}
+                >
+                  {s.p1Points}
+                </span>
               </div>
 
-              {/* P2: count then bar */}
-              <div className="flex items-center gap-2">
+              {/* Center: set label */}
+              <span className="text-[11px] font-medium text-[#71717A] w-12 text-center">
+                Set {s.set}
+              </span>
+
+              {/* P2: count + bar growing from left */}
+              <div className="flex items-center gap-2.5">
                 <span
-                  className={`text-[13px] tabular-nums font-medium w-6 ${
-                    p2Wins ? "text-[#F38439]" : "text-[#888888]"
+                  className={`text-[14px] tabular-nums font-medium w-7 ${
+                    p2Wins ? "text-[#6366F1]" : "text-[#888888]"
                   }`}
                 >
                   {s.p2Points}
                 </span>
-                <div className="flex-1 h-1.5 bg-[#F3F3F3] rounded-full overflow-hidden">
+                <div className="flex-1 h-[4px] bg-[#F0F0F0] rounded-full overflow-hidden">
                   <motion.div
-                    className="h-full rounded-full bg-[#F38439]"
+                    className="h-full rounded-full bg-[#6366F1]"
                     initial={{ width: "0%" }}
                     animate={{ width: `${p2Pct}%` }}
                     transition={{ duration: 0.6, delay: 0.2 + index * 0.07, ease: EASE_CURVE }}
@@ -534,12 +675,12 @@ function SetBreakdown({
 
 function TableHeader({ p1Short, p2Short }: { p1Short: string; p2Short: string }) {
   return (
-    <div className="grid grid-cols-[1fr_130px_130px] sm:grid-cols-[1fr_150px_150px] border-b border-[#F0F0F0] pb-2 mb-1">
+    <div className="grid grid-cols-[1fr_130px_130px] sm:grid-cols-[1fr_150px_150px] pb-2.5 mb-1">
       <span />
-      <span className="text-[12px] font-medium text-[#4A8AF4] text-center whitespace-nowrap truncate">
+      <span className="text-[11px] font-medium text-[#3B82F6] text-center whitespace-nowrap truncate">
         {p1Short}
       </span>
-      <span className="text-[12px] font-medium text-[#F38439] text-center whitespace-nowrap truncate">
+      <span className="text-[11px] font-medium text-[#6366F1] text-center whitespace-nowrap truncate">
         {p2Short}
       </span>
     </div>
@@ -557,46 +698,78 @@ function PressureSection({
   p1Short: string;
   p2Short: string;
 }) {
+  const prefersReduced = useReducedMotion();
   const visible = stats.filter((s) => s.p1Total > 0 || s.p2Total > 0);
   if (visible.length === 0) return null;
 
   return (
     <div>
-      <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-4">
+      <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] mb-5" title="Conversion rates on break points, set points, and match points">
         Pressure Situations
       </p>
       <TableHeader p1Short={p1Short} p2Short={p2Short} />
-      {visible.map((s, index) => (
-        <motion.div
-          key={s.label}
-          className="grid grid-cols-[1fr_130px_130px] sm:grid-cols-[1fr_150px_150px] items-center border-b border-[#F0F0F0] py-3"
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, delay: 0.1 + index * 0.07, ease: EASE_CURVE }}
-        >
-          <span className="text-[12px] text-[#525252]">{s.label}</span>
-          <div className="text-center">
-            {s.p1Total > 0 ? (
-              <>
-                <span className="text-[13px] tabular-nums font-medium text-[#4A8AF4]">{s.p1Won}</span>
-                <span className="text-[12px] text-[#BBBBBB]">/{s.p1Total}</span>
-              </>
-            ) : (
-              <span className="text-[13px] text-[#CCCCCC]">—</span>
-            )}
-          </div>
-          <div className="text-center">
-            {s.p2Total > 0 ? (
-              <>
-                <span className="text-[13px] tabular-nums font-medium text-[#F38439]">{s.p2Won}</span>
-                <span className="text-[12px] text-[#BBBBBB]">/{s.p2Total}</span>
-              </>
-            ) : (
-              <span className="text-[13px] text-[#CCCCCC]">—</span>
-            )}
-          </div>
-        </motion.div>
-      ))}
+      {visible.map((s, index) => {
+        const p1Pct = s.p1Total > 0 ? Math.round((s.p1Won / s.p1Total) * 100) : 0;
+        const p2Pct = s.p2Total > 0 ? Math.round((s.p2Won / s.p2Total) * 100) : 0;
+        const p1Leads = p1Pct > p2Pct;
+        const p2Leads = p2Pct > p1Pct;
+
+        return (
+          <motion.div
+            key={s.label}
+            className="grid grid-cols-[1fr_130px_130px] sm:grid-cols-[1fr_150px_150px] items-center py-3 first:pt-0 border-b border-[#F3F3F3] last:border-0"
+            initial={prefersReduced ? false : { opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: 0.1 + index * 0.07, ease: EASE_CURVE }}
+          >
+            <span className="text-[12px] text-[#888888]">{s.label}</span>
+            <div className="text-center flex flex-col items-center gap-1.5">
+              {s.p1Total > 0 ? (
+                <>
+                  <span className={`text-[14px] tabular-nums font-medium ${p1Leads ? "text-[#3B82F6]" : "text-[#525252]"}`}>
+                    {p1Pct}%
+                  </span>
+                  <div className="w-20 h-[4px] rounded-full bg-[#F0F0F0] overflow-hidden">
+                    <motion.div
+                      className="h-full rounded-full bg-[#3B82F6]"
+                      initial={{ width: "0%" }}
+                      animate={{ width: `${p1Pct}%` }}
+                      transition={{ duration: 0.6, delay: 0.2 + index * 0.07, ease: EASE_CURVE }}
+                    />
+                  </div>
+                  <span className="text-[10px] tabular-nums text-[#CCCCCC]">
+                    {s.p1Won}/{s.p1Total}
+                  </span>
+                </>
+              ) : (
+                <span className="text-[13px] text-[#CCCCCC]">—</span>
+              )}
+            </div>
+            <div className="text-center flex flex-col items-center gap-1.5">
+              {s.p2Total > 0 ? (
+                <>
+                  <span className={`text-[14px] tabular-nums font-medium ${p2Leads ? "text-[#6366F1]" : "text-[#525252]"}`}>
+                    {p2Pct}%
+                  </span>
+                  <div className="w-20 h-[4px] rounded-full bg-[#F0F0F0] overflow-hidden">
+                    <motion.div
+                      className="h-full rounded-full bg-[#6366F1]"
+                      initial={{ width: "0%" }}
+                      animate={{ width: `${p2Pct}%` }}
+                      transition={{ duration: 0.6, delay: 0.2 + index * 0.07, ease: EASE_CURVE }}
+                    />
+                  </div>
+                  <span className="text-[10px] tabular-nums text-[#CCCCCC]">
+                    {s.p2Won}/{s.p2Total}
+                  </span>
+                </>
+              ) : (
+                <span className="text-[13px] text-[#CCCCCC]">—</span>
+              )}
+            </div>
+          </motion.div>
+        );
+      })}
     </div>
   );
 }
@@ -612,12 +785,13 @@ function RallySection({
   p1Short: string;
   p2Short: string;
 }) {
+  const prefersReduced = useReducedMotion();
   const visible = buckets.filter((b) => b.hasData);
   if (visible.length === 0) return null;
 
   return (
     <div>
-      <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-4">
+      <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] mb-5" title="Win percentage grouped by how many shots were in the rally">
         Rally Length Win %
       </p>
       <TableHeader p1Short={p1Short} p2Short={p2Short} />
@@ -627,24 +801,24 @@ function RallySection({
         return (
           <motion.div
             key={b.label}
-            className="grid grid-cols-[1fr_130px_130px] sm:grid-cols-[1fr_150px_150px] items-center border-b border-[#F0F0F0] py-3"
-            initial={{ opacity: 0, y: 6 }}
+            className="grid grid-cols-[1fr_130px_130px] sm:grid-cols-[1fr_150px_150px] items-center py-3 first:pt-0 border-b border-[#F3F3F3] last:border-0"
+            initial={prefersReduced ? false : { opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, delay: 0.1 + index * 0.07, ease: EASE_CURVE }}
           >
-            <span className="text-[12px] text-[#525252]">{b.label}</span>
+            <span className="text-[12px] text-[#888888]">{b.label}</span>
 
-            <div className="text-center">
+            <div className="text-center flex flex-col items-center gap-1.5">
               <span
-                className={`text-[13px] tabular-nums ${
-                  p1Leads ? "font-medium text-[#4A8AF4]" : "text-[#525252]"
+                className={`text-[14px] tabular-nums ${
+                  p1Leads ? "font-medium text-[#3B82F6]" : "text-[#525252]"
                 }`}
               >
                 {b.p1WonPct}%
               </span>
-              <div className="mt-1.5 mx-auto w-16 h-1 rounded-full bg-[#F3F3F3] overflow-hidden">
+              <div className="w-20 h-[4px] rounded-full bg-[#F0F0F0] overflow-hidden">
                 <motion.div
-                  className="h-full rounded-full bg-[#4A8AF4]"
+                  className="h-full rounded-full bg-[#3B82F6]"
                   initial={{ width: "0%" }}
                   animate={{ width: `${b.p1WonPct}%` }}
                   transition={{ duration: 0.6, delay: 0.3 + index * 0.07, ease: EASE_CURVE }}
@@ -652,17 +826,17 @@ function RallySection({
               </div>
             </div>
 
-            <div className="text-center">
+            <div className="text-center flex flex-col items-center gap-1.5">
               <span
-                className={`text-[13px] tabular-nums ${
-                  p2Leads ? "font-medium text-[#F38439]" : "text-[#525252]"
+                className={`text-[14px] tabular-nums ${
+                  p2Leads ? "font-medium text-[#6366F1]" : "text-[#525252]"
                 }`}
               >
                 {b.p2WonPct}%
               </span>
-              <div className="mt-1.5 mx-auto w-16 h-1 rounded-full bg-[#F3F3F3] overflow-hidden">
+              <div className="w-20 h-[4px] rounded-full bg-[#F0F0F0] overflow-hidden">
                 <motion.div
-                  className="h-full rounded-full bg-[#F38439]"
+                  className="h-full rounded-full bg-[#6366F1]"
                   initial={{ width: "0%" }}
                   animate={{ width: `${b.p2WonPct}%` }}
                   transition={{ duration: 0.6, delay: 0.3 + index * 0.07, ease: EASE_CURVE }}
@@ -682,24 +856,33 @@ interface PerformanceTrackerProps {
   points: MatchPoint[];
   player1Name: string;
   player2Name: string;
+  matchId?: string;
 }
 
 export function PerformanceTracker({
   points,
   player1Name,
   player2Name,
+  matchId,
 }: PerformanceTrackerProps) {
   const p1Short = shortName(player1Name, 18);
   const p2Short = shortName(player2Name, 18);
   const prefersReducedMotion = useReducedMotion();
+  const [activeSet, setActiveSet] = useState<number | null>(null);
 
-  const { momentumData, setSummaries, pressureStats, rallyBuckets } = useMemo(() => {
-    // ── Momentum ──────────────────────────────
+  const { allSets, filteredMomentumData, filteredPoints, setSummaries, pressureStats, rallyBuckets } = useMemo(() => {
+    const allSets = [...new Set(points.map((pt) => pt.setNumber))].sort((a, b) => a - b);
+
+    const filteredPoints = activeSet != null
+      ? points.filter((pt) => pt.setNumber === activeSet)
+      : points;
+
+    // ── Filtered momentum ────────────────────
     let p1Cum = 0;
     let p2Cum = 0;
-    const momentumData: MomentumPoint[] = points.map((pt, i) => {
+    const filteredMomentumData: MomentumPoint[] = filteredPoints.map((pt, i) => {
       if (pt.wonByPlayer1) p1Cum++; else p2Cum++;
-      return { index: i, diff: p1Cum - p2Cum, setNumber: pt.setNumber };
+      return { diff: p1Cum - p2Cum, setNumber: pt.setNumber };
     });
 
     // ── Set breakdown ──────────────────────────
@@ -713,32 +896,35 @@ export function PerformanceTracker({
       .sort(([a], [b]) => a - b)
       .map(([set, { p1, p2 }]) => ({ set, p1Points: p1, p2Points: p2 }));
 
-    // ── Pressure situations ────────────────────
-    // Break points: player wins a break point by winning the rally on opponent's serve
-    const bpP1Won = points.filter((pt) => pt.isBreakPoint && !pt.serverIsPlayer1 && pt.wonByPlayer1).length;
-    const bpP1Total = points.filter((pt) => pt.isBreakPoint && !pt.serverIsPlayer1).length;
-    const bpP2Won = points.filter((pt) => pt.isBreakPoint && pt.serverIsPlayer1 && !pt.wonByPlayer1).length;
-    const bpP2Total = points.filter((pt) => pt.isBreakPoint && pt.serverIsPlayer1).length;
+    // ── Pressure situations (fixed per-player totals) ──
+    const bpP1Won = filteredPoints.filter((pt) => pt.isBreakPoint && !pt.serverIsPlayer1 && pt.wonByPlayer1).length;
+    const bpP1Total = filteredPoints.filter((pt) => pt.isBreakPoint && !pt.serverIsPlayer1).length;
+    const bpP2Won = filteredPoints.filter((pt) => pt.isBreakPoint && pt.serverIsPlayer1 && !pt.wonByPlayer1).length;
+    const bpP2Total = filteredPoints.filter((pt) => pt.isBreakPoint && pt.serverIsPlayer1).length;
 
-    const spPts = points.filter((pt) => pt.isSetPoint);
-    const spP1Won = spPts.filter((pt) => pt.wonByPlayer1).length;
-    const spP2Won = spPts.filter((pt) => !pt.wonByPlayer1).length;
+    // Set points — each player's opportunities counted separately
+    const spForP1 = filteredPoints.filter((pt) => pt.isSetPoint && !pt.serverIsPlayer1);
+    const spForP2 = filteredPoints.filter((pt) => pt.isSetPoint && pt.serverIsPlayer1);
+    const spP1Won = spForP1.filter((pt) => pt.wonByPlayer1).length;
+    const spP2Won = spForP2.filter((pt) => !pt.wonByPlayer1).length;
 
-    const mpPts = points.filter((pt) => pt.isMatchPoint);
-    const mpP1Won = mpPts.filter((pt) => pt.wonByPlayer1).length;
-    const mpP2Won = mpPts.filter((pt) => !pt.wonByPlayer1).length;
+    // Match points — each player's opportunities counted separately
+    const mpForP1 = filteredPoints.filter((pt) => pt.isMatchPoint && !pt.serverIsPlayer1);
+    const mpForP2 = filteredPoints.filter((pt) => pt.isMatchPoint && pt.serverIsPlayer1);
+    const mpP1Won = mpForP1.filter((pt) => pt.wonByPlayer1).length;
+    const mpP2Won = mpForP2.filter((pt) => !pt.wonByPlayer1).length;
 
     const pressureStats: PressureStat[] = [
       { label: "Break Points Won", p1Won: bpP1Won, p1Total: bpP1Total, p2Won: bpP2Won, p2Total: bpP2Total },
-      { label: "Set Points Won", p1Won: spP1Won, p1Total: spPts.length, p2Won: spP2Won, p2Total: spPts.length },
-      ...(mpPts.length > 0
-        ? [{ label: "Match Points Won", p1Won: mpP1Won, p1Total: mpPts.length, p2Won: mpP2Won, p2Total: mpPts.length }]
+      { label: "Set Points Won", p1Won: spP1Won, p1Total: spForP1.length, p2Won: spP2Won, p2Total: spForP2.length },
+      ...((mpForP1.length > 0 || mpForP2.length > 0)
+        ? [{ label: "Match Points Won", p1Won: mpP1Won, p1Total: mpForP1.length, p2Won: mpP2Won, p2Total: mpForP2.length }]
         : []),
     ];
 
     // ── Rally length buckets ───────────────────
     function calcBucket(filter: (pt: MatchPoint) => boolean): Omit<RallyBucket, "label"> {
-      const pts = points.filter(filter);
+      const pts = filteredPoints.filter(filter);
       if (pts.length === 0) return { p1WonPct: 0, p2WonPct: 0, hasData: false };
       const p1Won = pts.filter((pt) => pt.wonByPlayer1).length;
       return {
@@ -754,21 +940,29 @@ export function PerformanceTracker({
       { label: "Long (10+ shots)", ...calcBucket((pt) => pt.rallyLength >= 10) },
     ];
 
-    return { momentumData, setSummaries, pressureStats, rallyBuckets };
-  }, [points]);
+    return { allSets, filteredMomentumData, filteredPoints, setSummaries, pressureStats, rallyBuckets };
+  }, [points, activeSet]);
 
   const sectionAnimate = { opacity: 1, y: 0 };
   const sectionInitial = prefersReducedMotion ? sectionAnimate : { opacity: 0, y: 12 };
 
   if (points.length === 0) {
     return (
-      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5">
-        <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-4">
-          Performance Tracker
+      <div className="py-16 text-center flex flex-col items-center gap-3">
+        <p className="text-[13px] text-[#888888]">
+          Point-level data isn&apos;t available for this match.
         </p>
-        <p className="text-[12px] text-[#888888] text-center">
-          Point data not available for this match.
+        <p className="text-[12px] text-[#CCCCCC] max-w-[320px]">
+          This match may have been uploaded before point tracking was supported, or the data is still processing.
         </p>
+        {matchId && (
+          <Link
+            href={`/dashboard/matches/${matchId}`}
+            className="mt-2 text-[11px] font-medium text-[#3B82F6] uppercase tracking-[1.5px] hover:text-[#2563EB] transition-colors duration-200"
+          >
+            Back to match
+          </Link>
+        )}
       </div>
     );
   }
@@ -776,64 +970,158 @@ export function PerformanceTracker({
   const hasPressure = pressureStats.some((s) => s.p1Total > 0 || s.p2Total > 0);
   const hasRally = rallyBuckets.some((b) => b.hasData);
 
-  return (
-    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-5">
-      <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] mb-5">
-        Performance Tracker
-      </p>
+  // Total points for summary strip
+  const p1Total = setSummaries.reduce((sum, s) => sum + s.p1Points, 0);
+  const p2Total = setSummaries.reduce((sum, s) => sum + s.p2Points, 0);
+  const totalAll = p1Total + p2Total;
+  const p1SplitPct = totalAll > 0 ? (p1Total / totalAll) * 100 : 50;
 
-      {/* Momentum chart sub-section */}
+  return (
+    <div className="flex flex-col">
+      {/* Momentum chart — hero section, full width */}
       <motion.div
-        className="bg-[#FAFAFA] rounded-xl p-4"
         initial={sectionInitial}
         animate={sectionAnimate}
         transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, ease: EASE_CURVE }}
       >
-        <MomentumChart data={momentumData} rawPoints={points} p1Short={p1Short} p2Short={p2Short} />
+        <MomentumChart
+          data={filteredMomentumData}
+          rawPoints={filteredPoints}
+          p1Short={p1Short}
+          p2Short={p2Short}
+          activeSet={activeSet}
+          onSetChange={setActiveSet}
+          allSets={allSets}
+        />
       </motion.div>
 
-      {/* Divider */}
-      <div className="h-px bg-[#F0F0F0] my-5" />
-
-      {/* Set breakdown sub-section */}
+      {/* Total points summary strip */}
       <motion.div
-        className="bg-[#FAFAFA] rounded-xl p-4"
+        className="mt-8 mb-2"
         initial={sectionInitial}
         animate={sectionAnimate}
-        transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, ease: EASE_CURVE, delay: 1 * 0.07 }}
+        transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, ease: EASE_CURVE, delay: 0.05 }}
+      >
+        <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-3">
+          <div className="flex flex-col items-end gap-0.5">
+            <span className="text-[10px] font-medium text-[#888888] uppercase tracking-[2px]">{p1Short}</span>
+            <span
+              className={`text-[20px] font-light tabular-nums leading-none tracking-[-0.5px] ${
+                p1Total > p2Total ? "text-[#3B82F6]" : "text-[#888888]"
+              }`}
+            >
+              {p1Total}
+            </span>
+          </div>
+          <div className="flex flex-col items-center gap-0.5 pb-[2px]">
+            <span className="text-[9px] font-medium text-[#CCCCCC] uppercase tracking-[2px]">Points</span>
+          </div>
+          <div className="flex flex-col items-start gap-0.5">
+            <span className="text-[10px] font-medium text-[#888888] uppercase tracking-[2px]">{p2Short}</span>
+            <span
+              className={`text-[20px] font-light tabular-nums leading-none tracking-[-0.5px] ${
+                p2Total > p1Total ? "text-[#6366F1]" : "text-[#888888]"
+              }`}
+            >
+              {p2Total}
+            </span>
+          </div>
+        </div>
+
+        {/* Animated split bar */}
+        <div className="mt-3 flex h-[4px] w-full rounded-full overflow-hidden">
+          <motion.div
+            className="h-full"
+            style={{ backgroundColor: P1_COLOR }}
+            initial={{ width: "50%" }}
+            animate={{ width: `${p1SplitPct}%` }}
+            transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.7, ease: EASE_CURVE }}
+          />
+          <div className="h-full flex-1" style={{ backgroundColor: P2_COLOR }} />
+        </div>
+      </motion.div>
+
+      {/* Section divider */}
+      <div className="mt-8 mb-6">
+        <div className="h-px bg-[#F0F0F0]" />
+        <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] mt-3">
+          Breakdown{activeSet != null ? ` — Set ${activeSet}` : ""}
+        </p>
+      </div>
+
+      {/* Set breakdown — full width for H2H bars */}
+      <motion.div
+        initial={sectionInitial}
+        animate={sectionAnimate}
+        transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, ease: EASE_CURVE, delay: 0.07 }}
       >
         <SetBreakdown sets={setSummaries} p1Short={p1Short} p2Short={p2Short} />
       </motion.div>
 
-      {/* Pressure situations sub-section */}
-      {hasPressure && (
-        <>
-          <div className="h-px bg-[#F0F0F0] my-5" />
-          <motion.div
-            className="bg-[#FAFAFA] rounded-xl p-4"
-            initial={sectionInitial}
-            animate={sectionAnimate}
-            transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, ease: EASE_CURVE, delay: 2 * 0.07 }}
-          >
-            <PressureSection stats={pressureStats} p1Short={p1Short} p2Short={p2Short} />
-          </motion.div>
-        </>
-      )}
+      {/* Pressure + Rally in two columns */}
+      {(hasPressure || hasRally) && (
+        <div className="mt-8 pt-6 border-t border-[#F3F3F3] grid grid-cols-1 lg:grid-cols-2 gap-x-8">
+          {hasPressure && (
+            <motion.div
+              initial={sectionInitial}
+              animate={sectionAnimate}
+              transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, ease: EASE_CURVE, delay: 0.14 }}
+            >
+              <PressureSection stats={pressureStats} p1Short={p1Short} p2Short={p2Short} />
+            </motion.div>
+          )}
 
-      {/* Rally length sub-section */}
-      {hasRally && (
-        <>
-          <div className="h-px bg-[#F0F0F0] my-5" />
-          <motion.div
-            className="bg-[#FAFAFA] rounded-xl p-4"
-            initial={sectionInitial}
-            animate={sectionAnimate}
-            transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, ease: EASE_CURVE, delay: 3 * 0.07 }}
-          >
-            <RallySection buckets={rallyBuckets} p1Short={p1Short} p2Short={p2Short} />
-          </motion.div>
-        </>
+          {hasRally && (
+            <motion.div
+              className={hasPressure ? "mt-10 lg:mt-0" : ""}
+              initial={sectionInitial}
+              animate={sectionAnimate}
+              transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, ease: EASE_CURVE, delay: 0.21 }}
+            >
+              <RallySection buckets={rallyBuckets} p1Short={p1Short} p2Short={p2Short} />
+            </motion.div>
+          )}
+        </div>
       )}
     </div>
+  );
+}
+
+/* ── Compact momentum-only chart for widget use ──────────── */
+
+interface MomentumChartCompactProps {
+  points: MatchPoint[];
+  player1Name: string;
+  player2Name: string;
+}
+
+export function MomentumChartCompact({
+  points,
+  player1Name,
+  player2Name,
+}: MomentumChartCompactProps) {
+  const p1Short = shortName(player1Name, 18);
+  const p2Short = shortName(player2Name, 18);
+
+  const momentumData: MomentumPoint[] = useMemo(() => {
+    let p1Cum = 0;
+    let p2Cum = 0;
+    return points.map((pt, i) => {
+      if (pt.wonByPlayer1) p1Cum++;
+      else p2Cum++;
+      return { diff: p1Cum - p2Cum, setNumber: pt.setNumber };
+    });
+  }, [points]);
+
+  if (momentumData.length < 2) return null;
+
+  return (
+    <MomentumChart
+      data={momentumData}
+      rawPoints={points}
+      p1Short={p1Short}
+      p2Short={p2Short}
+      hideHeading
+    />
   );
 }

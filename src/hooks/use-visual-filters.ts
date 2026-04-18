@@ -58,10 +58,26 @@ export function useVisualFilters(
     (type: VisualizationType) => {
       setVisualizationType(type);
       const newConfig = getFilterConfig(type);
-      const currentPlayer = filters.player?.[0] ?? DEFAULT_PLAYER;
-      setFilters(createDefaultState(newConfig, currentPlayer));
+      const newState = getDefaultFilterState(newConfig);
+
+      // Collect valid keys from the new config
+      const newKeys = new Set<string>();
+      for (const row of newConfig.rows) {
+        for (const group of row) {
+          if (group) newKeys.add(group.key);
+        }
+      }
+
+      // Preserve filter values for keys shared between old and new configs
+      for (const [key, values] of Object.entries(filters)) {
+        if (newKeys.has(key) && values.length > 0) {
+          newState[key] = values;
+        }
+      }
+
+      setFilters(newState);
     },
-    [filters.player]
+    [filters]
   );
 
   const updateFilter = useCallback((key: string, value: string[]) => {

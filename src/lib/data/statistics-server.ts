@@ -24,23 +24,34 @@ export interface StatisticsPageData {
   monthlyTrend: MonthlyTrendPoint[];
   surfaceBreakdown: SurfaceBreakdownItem[];
 
-  // Key Stats Grid (averages)
+  // Serve averages
   avgAces: number | null;
   avgDoubleFaults: number | null;
+  avgFirstServePct: number | null;
+  avgFirstServeWonPct: number | null;
+  avgSecondServeWonPct: number | null;
+  avgBreakPointsSavedPct: number | null;
+  avgServiceGamesWonPct: number | null;
+
+  // Return averages
+  avgBreakPointsConvertedPct: number | null;
+  avgFirstReturnWonPct: number | null;
+  avgSecondReturnWonPct: number | null;
+  avgReturnGamesWonPct: number | null;
+
+  // Other averages
   avgWinners: number | null;
   avgUnforcedErrors: number | null;
-  avgFirstServePct: number | null;
-  avgBreakPointsConvertedPct: number | null;
+  avgNetPointsWonPct: number | null;
+  avgTotalPointsWonPct: number | null;
+  shortRallyWonPct: number | null;
+  mediumRallyWonPct: number | null;
+  longRallyWonPct: number | null;
 
   // Ratings
   serveRating: number;
   returnRating: number;
   underPressureRating: number;
-
-  // Rally breakdown
-  shortRallyWonPct: number | null;
-  mediumRallyWonPct: number | null;
-  longRallyWonPct: number | null;
 }
 
 const DEFAULT_DATA: StatisticsPageData = {
@@ -52,16 +63,25 @@ const DEFAULT_DATA: StatisticsPageData = {
   surfaceBreakdown: [],
   avgAces: null,
   avgDoubleFaults: null,
+  avgFirstServePct: null,
+  avgFirstServeWonPct: null,
+  avgSecondServeWonPct: null,
+  avgBreakPointsSavedPct: null,
+  avgServiceGamesWonPct: null,
+  avgBreakPointsConvertedPct: null,
+  avgFirstReturnWonPct: null,
+  avgSecondReturnWonPct: null,
+  avgReturnGamesWonPct: null,
   avgWinners: null,
   avgUnforcedErrors: null,
-  avgFirstServePct: null,
-  avgBreakPointsConvertedPct: null,
-  serveRating: 0,
-  returnRating: 0,
-  underPressureRating: 0,
+  avgNetPointsWonPct: null,
+  avgTotalPointsWonPct: null,
   shortRallyWonPct: null,
   mediumRallyWonPct: null,
   longRallyWonPct: null,
+  serveRating: 0,
+  returnRating: 0,
+  underPressureRating: 0,
 };
 
 const MONTH_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"] as const;
@@ -83,7 +103,17 @@ interface DbStat {
   winners: number | null;
   unforced_errors: number | null;
   first_serve_pct: string | null;
+  first_serve_won_pct: string | null;
+  second_serve_won_pct: string | null;
   break_points_converted_pct: string | null;
+  break_points_saved_pct: string | null;
+  service_games_won_pct: string | null;
+  first_return_won_pct: string | null;
+  second_return_won_pct: string | null;
+  return_games_won_pct: string | null;
+  net_points_appearances: number | null;
+  net_points_won: number | null;
+  total_points_won_pct: string | null;
   serve_rating: string | null;
   return_rating: string | null;
   under_pressure_rating: string | null;
@@ -185,18 +215,31 @@ export interface SelectableMatch {
   tournamentName: string;
   courtType: string | null;
   durationSeconds: number | null;
+  // Serve
   aces: number | null;
   doubleFaults: number | null;
+  firstServePct: number | null;
+  firstServeWonPct: number | null;
+  secondServeWonPct: number | null;
+  breakPointsSavedPct: number | null;
+  serviceGamesWonPct: number | null;
+  // Return
+  breakPointsConvertedPct: number | null;
+  firstReturnWonPct: number | null;
+  secondReturnWonPct: number | null;
+  returnGamesWonPct: number | null;
+  // Other
   winners: number | null;
   unforcedErrors: number | null;
-  firstServePct: number | null;
-  breakPointsConvertedPct: number | null;
-  serveRating: number | null;
-  returnRating: number | null;
-  underPressureRating: number | null;
+  netPointsWonPct: number | null;
+  totalPointsWonPct: number | null;
   shortRallyWonPct: number | null;
   mediumRallyWonPct: number | null;
   longRallyWonPct: number | null;
+  // Ratings
+  serveRating: number | null;
+  returnRating: number | null;
+  underPressureRating: number | null;
 }
 
 interface DbMatchFull extends DbMatch {
@@ -230,7 +273,7 @@ export async function getSelectableMatches(): Promise<SelectableMatch[]> {
   const { data: statRows } = await supabase
     .from("match_stats_with_percentages")
     .select(
-      "match_id, is_player1, aces, double_faults, winners, unforced_errors, first_serve_pct, break_points_converted_pct, serve_rating, return_rating, under_pressure_rating, short_rally_won_pct, medium_rally_won_pct, long_rally_won_pct"
+      "match_id, is_player1, aces, double_faults, winners, unforced_errors, first_serve_pct, first_serve_won_pct, second_serve_won_pct, break_points_converted_pct, break_points_saved_pct, service_games_won_pct, first_return_won_pct, second_return_won_pct, return_games_won_pct, net_points_appearances, net_points_won, total_points_won_pct, serve_rating, return_rating, under_pressure_rating, short_rally_won_pct, medium_rally_won_pct, long_rally_won_pct"
     )
     .in("match_id", matchIds);
 
@@ -266,16 +309,28 @@ export async function getSelectableMatches(): Promise<SelectableMatch[]> {
       durationSeconds: m.duration,
       aces: s?.aces ?? null,
       doubleFaults: s?.double_faults ?? null,
+      firstServePct: parseNum(s?.first_serve_pct),
+      firstServeWonPct: parseNum(s?.first_serve_won_pct),
+      secondServeWonPct: parseNum(s?.second_serve_won_pct),
+      breakPointsSavedPct: parseNum(s?.break_points_saved_pct),
+      serviceGamesWonPct: parseNum(s?.service_games_won_pct),
+      breakPointsConvertedPct: parseNum(s?.break_points_converted_pct),
+      firstReturnWonPct: parseNum(s?.first_return_won_pct),
+      secondReturnWonPct: parseNum(s?.second_return_won_pct),
+      returnGamesWonPct: parseNum(s?.return_games_won_pct),
       winners: s?.winners ?? null,
       unforcedErrors: s?.unforced_errors ?? null,
-      firstServePct: parseNum(s?.first_serve_pct),
-      breakPointsConvertedPct: parseNum(s?.break_points_converted_pct),
-      serveRating: parseNum(s?.serve_rating),
-      returnRating: parseNum(s?.return_rating),
-      underPressureRating: parseNum(s?.under_pressure_rating),
+      netPointsWonPct:
+        s?.net_points_appearances && s.net_points_appearances > 0
+          ? Math.round(((s.net_points_won ?? 0) / s.net_points_appearances) * 100)
+          : null,
+      totalPointsWonPct: parseNum(s?.total_points_won_pct),
       shortRallyWonPct: parseNum(s?.short_rally_won_pct),
       mediumRallyWonPct: parseNum(s?.medium_rally_won_pct),
       longRallyWonPct: parseNum(s?.long_rally_won_pct),
+      serveRating: parseNum(s?.serve_rating),
+      returnRating: parseNum(s?.return_rating),
+      underPressureRating: parseNum(s?.under_pressure_rating),
     };
   });
 }
@@ -310,7 +365,7 @@ export async function getStatisticsPageData(): Promise<StatisticsPageData> {
   const { data: statRows } = await supabase
     .from("match_stats_with_percentages")
     .select(
-      "match_id, is_player1, aces, double_faults, winners, unforced_errors, first_serve_pct, break_points_converted_pct, serve_rating, return_rating, under_pressure_rating, short_rally_won_pct, medium_rally_won_pct, long_rally_won_pct"
+      "match_id, is_player1, aces, double_faults, winners, unforced_errors, first_serve_pct, first_serve_won_pct, second_serve_won_pct, break_points_converted_pct, break_points_saved_pct, service_games_won_pct, first_return_won_pct, second_return_won_pct, return_games_won_pct, net_points_appearances, net_points_won, total_points_won_pct, serve_rating, return_rating, under_pressure_rating, short_rally_won_pct, medium_rally_won_pct, long_rally_won_pct"
     )
     .in("match_id", matchIds);
 
@@ -344,25 +399,40 @@ export async function getStatisticsPageData(): Promise<StatisticsPageData> {
   const monthlyTrend = buildMonthlyTrend(matches, user.id);
   const surfaceBreakdown = buildSurfaceBreakdown(matches, user.id);
 
-  // Stats grid averages
+  // Serve averages
   const avgAces = avgOrNull(userStats.map((s) => s.aces));
   const avgDoubleFaults = avgOrNull(userStats.map((s) => s.double_faults));
+  const avgFirstServePct = avgPctOrNull(userStats.map((s) => s.first_serve_pct));
+  const avgFirstServeWonPct = avgPctOrNull(userStats.map((s) => s.first_serve_won_pct));
+  const avgSecondServeWonPct = avgPctOrNull(userStats.map((s) => s.second_serve_won_pct));
+  const avgBreakPointsSavedPct = avgPctOrNull(userStats.map((s) => s.break_points_saved_pct));
+  const avgServiceGamesWonPct = avgPctOrNull(userStats.map((s) => s.service_games_won_pct));
+
+  // Return averages
+  const avgBreakPointsConvertedPct = avgPctOrNull(userStats.map((s) => s.break_points_converted_pct));
+  const avgFirstReturnWonPct = avgPctOrNull(userStats.map((s) => s.first_return_won_pct));
+  const avgSecondReturnWonPct = avgPctOrNull(userStats.map((s) => s.second_return_won_pct));
+  const avgReturnGamesWonPct = avgPctOrNull(userStats.map((s) => s.return_games_won_pct));
+
+  // Other averages
   const avgWinners = avgOrNull(userStats.map((s) => s.winners));
   const avgUnforcedErrors = avgOrNull(userStats.map((s) => s.unforced_errors));
-  const avgFirstServePct = avgPctOrNull(userStats.map((s) => s.first_serve_pct));
-  const avgBreakPointsConvertedPct = avgPctOrNull(
-    userStats.map((s) => s.break_points_converted_pct)
+  const avgNetPointsWonPct = avgPctOrNull(
+    userStats.map((s) =>
+      s.net_points_appearances && s.net_points_appearances > 0
+        ? String(Math.round(((s.net_points_won ?? 0) / s.net_points_appearances) * 100))
+        : null
+    )
   );
+  const avgTotalPointsWonPct = avgPctOrNull(userStats.map((s) => s.total_points_won_pct));
+  const shortRallyWonPct = avgPctOrNull(userStats.map((s) => s.short_rally_won_pct));
+  const mediumRallyWonPct = avgPctOrNull(userStats.map((s) => s.medium_rally_won_pct));
+  const longRallyWonPct = avgPctOrNull(userStats.map((s) => s.long_rally_won_pct));
 
   // Ratings
   const serveRating = avgPctOrNull(userStats.map((s) => s.serve_rating)) ?? 0;
   const returnRating = avgPctOrNull(userStats.map((s) => s.return_rating)) ?? 0;
   const underPressureRating = avgPctOrNull(userStats.map((s) => s.under_pressure_rating)) ?? 0;
-
-  // Rally breakdown
-  const shortRallyWonPct = avgPctOrNull(userStats.map((s) => s.short_rally_won_pct));
-  const mediumRallyWonPct = avgPctOrNull(userStats.map((s) => s.medium_rally_won_pct));
-  const longRallyWonPct = avgPctOrNull(userStats.map((s) => s.long_rally_won_pct));
 
   return {
     totalMatches,
@@ -373,15 +443,24 @@ export async function getStatisticsPageData(): Promise<StatisticsPageData> {
     surfaceBreakdown,
     avgAces,
     avgDoubleFaults,
+    avgFirstServePct,
+    avgFirstServeWonPct,
+    avgSecondServeWonPct,
+    avgBreakPointsSavedPct,
+    avgServiceGamesWonPct,
+    avgBreakPointsConvertedPct,
+    avgFirstReturnWonPct,
+    avgSecondReturnWonPct,
+    avgReturnGamesWonPct,
     avgWinners,
     avgUnforcedErrors,
-    avgFirstServePct,
-    avgBreakPointsConvertedPct,
-    serveRating,
-    returnRating,
-    underPressureRating,
+    avgNetPointsWonPct,
+    avgTotalPointsWonPct,
     shortRallyWonPct,
     mediumRallyWonPct,
     longRallyWonPct,
+    serveRating,
+    returnRating,
+    underPressureRating,
   };
 }

@@ -25,7 +25,7 @@ Tests use Playwright but no test files exist yet. The scripts (`npm run test`, `
 **Dashboard** (`src/app/dashboard/`): Protected area with sidebar + header layout.
 - `(home)/` — Home dashboard (KPIs, charts, activity feed, recent matches)
 - `matches/` — Match list with gallery/list views
-- `matches/[matchId]/(tabs)/` — Match detail with tab routing: `overall`, `video`, `analysis`, `visuals`. The layout at `matches/[matchId]/layout.tsx` fetches match data and provides it via `MatchDataProvider` context so all tab pages share the same data without re-fetching.
+- `matches/[matchId]/` — Match detail page. The main `page.tsx` renders all sections inline (overview, performance, court, statistics, video) with a Table of Contents sidebar. The layout at `matches/[matchId]/layout.tsx` fetches match data and provides it via `MatchDataProvider` context. Sub-routes (`insights/`, `performance/`, `statistics/`, `video/`, `visuals/`) exist as deep-link destinations from home page widgets.
 - `statistics/` — Aggregate stats across matches with match selector filters
 - `settings/{account,profile,subscription}/` — Settings sub-pages
 - `help/` — Help page
@@ -51,7 +51,7 @@ Key tables: `matches`, `match_stats`, `points`, `shots`, `users`. The `match_sta
 
 ### Match Detail Data Sharing
 
-`MatchDataProvider` (`src/components/dashboard/matches/match-data-provider.tsx`) is a React Context that holds match metadata, statistics, and points. The match detail layout fetches everything server-side and passes it into the provider. Tab pages (`overall`, `video`, `analysis`, `visuals`) consume the context — no re-fetching per tab.
+`MatchDataProvider` (`src/components/dashboard/matches/match-data-provider.tsx`) is a React Context that holds match metadata, statistics, and points. The match detail layout fetches everything server-side and passes it into the provider. The main page and sub-route pages consume the context — no re-fetching per route.
 
 ### Statistics Data Layer
 
@@ -87,6 +87,22 @@ Filter configs: `src/components/dashboard/matches/visuals/configs/` (serve, retu
 Key principles: Inter font only (weights 300/400/500/600), strict type scale (9–56px), blue accent `#3B82F6`, semantic success `#5DB955` / error `#E51837`, Lucide React icons only, two Framer Motion curves (`[0.25, 0.46, 0.45, 0.94]` primary, `[0.23, 1, 0.32, 1]` spring-like), no bounce/glassmorphism.
 
 Auth pages use CSS variables from `globals.css`. Dashboard pages use Tailwind utilities directly — two distinct styling paradigms.
+
+### Widgetless by default
+
+When redesigning pages, default to **flat/widgetless** layouts (hairline dividers, generous whitespace, no card wrappers) unless:
+- The user explicitly asks for cards, or
+- The surrounding page is dashboard-like (home) where sibling content already lives in cards — then mimic that pattern for cohesion.
+
+If unsure, ask the user "widgetless or card-wrapped?" before starting.
+
+## Workflow
+
+### Trace the route before editing components
+
+When the user references a page (e.g., "the match detail page", "the home dashboard", "the video section"), **open the route file first** and follow the import chain to identify the exact rendered component. State the file path before proposing edits.
+
+Do NOT assume based on filename similarity — this project has multiple components with overlapping names that render in different routes (e.g., `serve-placement-home.tsx` vs `CourtPlacementSection`, the full video page at `matches/[matchId]/video/` vs the video widget inside the match detail page). Picking the wrong one wastes a cycle.
 
 ## Key Conventions
 

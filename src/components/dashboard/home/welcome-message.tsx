@@ -16,7 +16,7 @@ function getFormattedDate(): string {
       month: "long",
       day: "numeric",
     })
-    .replace(",", ",");
+;
 }
 
 export default function WelcomeMessage({ name = "Player", greeting }: WelcomeMessageProps) {

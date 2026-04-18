@@ -117,6 +117,19 @@ export function Header() {
     fetchMatchCrumb();
   }, [matchId]);
 
+  // Map match sub-route slugs to display labels
+  const matchSubRouteLabels: Record<string, string> = {
+    insights: "Insights",
+    performance: "Performance",
+    statistics: "Statistics",
+    video: "Video",
+    visuals: "Visuals",
+  };
+
+  const matchSubRoute = isMatchDetailPage && matchId
+    ? pathname.match(new RegExp(`^/dashboard/matches/${matchId}/([^/]+)$`))?.[1]
+    : null;
+
   const breadcrumbs: { label: string; href?: string }[] =
     isMatchDetailPage && matchCrumb
       ? [
@@ -124,7 +137,11 @@ export function Header() {
           { label: matchCrumb.tournamentName },
           {
             label: `${matchCrumb.player1Name} vs ${matchCrumb.player2Name}`,
+            ...(matchSubRoute ? { href: `/dashboard/matches/${matchId}` } : {}),
           },
+          ...(matchSubRoute && matchSubRouteLabels[matchSubRoute]
+            ? [{ label: matchSubRouteLabels[matchSubRoute] }]
+            : []),
         ]
       : (getStaticBreadcrumbs(pathname) ?? []);
 

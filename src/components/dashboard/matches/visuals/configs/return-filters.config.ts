@@ -16,7 +16,7 @@ export const returnFiltersConfig: FilterConfig = {
         multiSelect: false,
       },
       {
-        key: "serveType",
+        key: "type",
         label: "Type",
         options: [
           { value: "first", label: "First Serve" },

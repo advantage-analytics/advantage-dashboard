@@ -151,7 +151,7 @@ export default function KpiCards({ cards, matchCount }: KpiCardsProps) {
   if (cards.length === 0) return null;
 
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden">
+    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-card overflow-hidden">
       <div className="flex flex-wrap sm:flex-nowrap">
         {cards.map((card, index) => (
           <motion.div
@@ -164,7 +164,7 @@ export default function KpiCards({ cards, matchCount }: KpiCardsProps) {
           >
             <Tooltip>
               <TooltipTrigger asChild>
-                <p className="text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2.5px] whitespace-nowrap cursor-help w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 rounded-sm" tabIndex={0}>
+                <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] whitespace-nowrap cursor-help w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 rounded-sm" tabIndex={0}>
                   {card.label}
                 </p>
               </TooltipTrigger>
@@ -200,7 +200,7 @@ export default function KpiCards({ cards, matchCount }: KpiCardsProps) {
                   {card.change >= 0 ? "+" : ""}
                   {card.change}%
                 </ValueTransition>
-                <span className="text-[10px] font-normal text-[#777777]">
+                <span className="text-[10px] font-normal text-[#888888]">
                   {card.changeLabel}
                 </span>
               </div>

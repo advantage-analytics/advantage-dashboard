@@ -19,7 +19,7 @@ function MatchLink({ match }: { match: MatchRow }) {
     <Link
       href={`/dashboard/matches/${match.id}`}
       aria-label={`${match.won ? "Win" : "Loss"} vs ${match.opponentName}, ${match.score}`}
-      className="flex items-center justify-between rounded-lg px-2 py-2.5 -mx-2 transition-[background-color,transform] duration-200 ease-out hover:bg-[#FAFAFA] active:scale-[0.998] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/50 focus-visible:ring-offset-1"
+      className="flex items-center justify-between rounded-lg px-2 py-2.5 -mx-2 transition-[background-color,transform] duration-200 ease-out hover:bg-[#FAFAFA] active:scale-[0.998] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1"
     >
       {/* Left: Vertical indicator + opponent info */}
       <div className="flex gap-3 items-center">
@@ -33,7 +33,7 @@ function MatchLink({ match }: { match: MatchRow }) {
             <span className="text-[14px] font-normal text-[#0D0D0D]">
               {match.opponentName}
             </span>
-            <span className="text-[12px] font-normal text-[#71717A] tracking-[0.3px]">
+            <span className="text-[12px] font-normal text-[#888888] tracking-[0.3px]">
               {match.score}
             </span>
           </div>
@@ -226,6 +226,7 @@ export default function RecentMatches({ event, isNewEvent = false }: RecentMatch
         className="flex flex-col gap-5"
         onKeyDown={handleArrowNav}
         ref={listRef}
+        role="list"
         aria-label="Match results, use arrow keys to navigate"
       >
         {event.matches.map((match) => {

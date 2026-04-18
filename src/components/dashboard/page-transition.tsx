@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
 import { useMemo } from "react";
 
@@ -31,21 +30,21 @@ function getAnimationKey(pathname: string): string {
   return pathname;
 }
 
+/**
+ * Page transition using CSS @keyframes instead of Framer Motion.
+ * CSS animations are applied by the browser after paint, so the server-rendered
+ * HTML is present in the DOM at full opacity for tools that read the initial state.
+ */
 export function PageTransition({ children }: PageTransitionProps) {
   const pathname = usePathname();
   const animationKey = useMemo(() => getAnimationKey(pathname), [pathname]);
 
   return (
-    <motion.div
+    <div
       key={animationKey}
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{
-        duration: 0.3,
-        ease: [0.25, 0.46, 0.45, 0.94],
-      }}
+      className="animate-page-enter"
     >
       {children}
-    </motion.div>
+    </div>
   );
 }

@@ -34,6 +34,8 @@ export interface MatchPoint {
   firstShotLandingY?: number | null;
   secondShotLandingX?: number | null;
   secondShotLandingY?: number | null;
+  secondShotContactX?: number | null;
+  secondShotContactY?: number | null;
 }
 
 interface DbPoint {
@@ -206,6 +208,14 @@ export async function getMatchPointsFromSupabase(
       secondLandY = COURT_LENGTH - secondLandY;
     }
 
+    // Second shot contact position (where returner stood)
+    let secondContactX = secondShot?.contact_x ?? null;
+    let secondContactY = secondShot?.contact_y ?? null;
+    if (!serverAtNearEnd && secondContactX != null && secondContactY != null) {
+      secondContactX = -secondContactX;
+      secondContactY = COURT_LENGTH - secondContactY;
+    }
+
     return {
       id: point.id,
       pointNumber: point.point_number,
@@ -239,6 +249,8 @@ export async function getMatchPointsFromSupabase(
       firstShotLandingY: firstLandY,
       secondShotLandingX: secondLandX,
       secondShotLandingY: secondLandY,
+      secondShotContactX: secondContactX,
+      secondShotContactY: secondContactY,
     };
   });
 }
