@@ -1,14 +1,15 @@
 "use client";
 
 /**
- * ConfirmContent - Step 5 content
- * Summary display of all entered data
+ * ConfirmContent — Step 5.
+ * Aligned to home card chrome: white surface, `border-[#F3F3F3]`, `shadow-card`,
+ * Accent rail keeps the editorial signature.
  */
 
 import { Switch } from "@/components/ui/switch";
-import { MatchMetadataRow } from "@/components/dashboard/matches/match-metadata-row";
 import { FormData, UploadedFile } from "./types";
 import { getAdjustedScores, formatDuration } from "./utils";
+import { AlertCircle, Calendar, Clock, MapPin, Trophy } from "lucide-react";
 
 export interface ConfirmContentProps {
   formData: FormData;
@@ -17,19 +18,19 @@ export interface ConfirmContentProps {
   error: string | null;
 }
 
-// Helper function to get initials from a name
 function getInitials(name: string): string {
-  return name
-    .split(/\s+/)
-    .map((s) => s[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+  return (
+    name
+      .split(/\s+/)
+      .map((s) => s[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2) || "—"
+  );
 }
 
-// Helper to format date as "Month Day, Year"
 function formatDate(dateString: string): string {
-  if (!dateString) return "";
+  if (!dateString) return "Date pending";
   const date = new Date(dateString);
   return date.toLocaleDateString("en-US", {
     year: "numeric",
@@ -38,37 +39,36 @@ function formatDate(dateString: string): string {
   });
 }
 
-// Helper to determine winner based on scores
-function determineWinner(playerScores: (number | null)[], opponentScores: (number | null)[]): "player" | "opponent" | null {
-  let playerSetsWon = 0;
-  let opponentSetsWon = 0;
-
+function determineWinner(
+  playerScores: (number | null)[],
+  opponentScores: (number | null)[]
+): "player" | "opponent" | null {
+  let p = 0,
+    o = 0;
   for (let i = 0; i < playerScores.length; i++) {
-    const pScore = playerScores[i] ?? 0;
-    const oScore = opponentScores[i] ?? 0;
-    if (pScore > oScore) {
-      playerSetsWon++;
-    } else if (oScore > pScore) {
-      opponentSetsWon++;
-    }
+    const ps = playerScores[i] ?? 0;
+    const os = opponentScores[i] ?? 0;
+    if (ps > os) p++;
+    else if (os > ps) o++;
   }
-
-  if (playerSetsWon > opponentSetsWon) return "player";
-  if (opponentSetsWon > playerSetsWon) return "opponent";
+  if (p > o) return "player";
+  if (o > p) return "opponent";
   return null;
 }
 
-// Helper to determine match status from result
 function getMatchStatus(result: string | undefined): string {
-  if (!result) return "Final Score";
+  if (!result) return "Final";
   if (result === "Unfinished") return "Unfinished";
   if (result.includes("Withdrew")) return "Withdrew";
   if (result.includes("Defaulted")) return "Defaulted";
-  if (result.includes("Wins")) return "Final Score";
-  return "Final Score";
+  return "Final";
 }
 
-export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }: ConfirmContentProps) {
+export function ConfirmContent({
+  formData,
+  isPrivateMatch,
+  error,
+}: ConfirmContentProps) {
   const playerScores = getAdjustedScores(
     formData.playerScores,
     formData.bestOf,
@@ -80,135 +80,196 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
     formData.numberOfSets
   );
 
-  const playerName = formData.playerName || "N/A";
-  const opponentName = formData.opponentName || "N/A";
+  const playerName = formData.playerName || "Player";
+  const opponentName = formData.opponentName || "Opponent";
   const winner = determineWinner(playerScores, opponentScores);
+  const status = getMatchStatus(formData.result);
+  const eventTitle =
+    formData.eventName || `${playerName} vs ${opponentName}`;
+
+  const meta: { icon: typeof Calendar; label: string }[] = [];
+  if (formData.date) meta.push({ icon: Calendar, label: formatDate(formData.date) });
+  if (formData.duration)
+    meta.push({ icon: Clock, label: formatDuration(formData.duration) });
+  if (formData.courtType) meta.push({ icon: MapPin, label: formData.courtType });
+  if (formData.matchType) meta.push({ icon: Trophy, label: formData.matchType });
 
   return (
-    <div className="space-y-6">
-      {/* Event Name and Metadata Row */}
-      <div className="flex flex-col gap-4">
-        <p className="text-xl font-medium text-[#000000]">
-          {formData.eventName || `${formData.playerName} vs ${formData.opponentName}`}
-        </p>
-        <MatchMetadataRow
-          date={formatDate(formData.date)}
-          matchType={formData.matchType}
-          courtType={formData.courtType}
+    <div className="flex flex-col gap-6 pt-2">
+      {/* Hero scoreboard — home card chrome */}
+      <div className="relative overflow-hidden rounded-[14px] bg-white border border-[#F3F3F3] shadow-card p-6">
+        <span
+          aria-hidden
+          className="absolute top-6 bottom-6 left-0 w-[3px] bg-[#3B82F6] rounded-r-full"
         />
-      </div>
 
-      {/* Match Score Section */}
-      <div className="pl-2 pr-4 py-3 flex flex-row gap-6">
-        {/* Vertical Separator */}
-        <div className="w-0.5 bg-[#6AABFF] self-stretch rounded-full"></div>
-        <div className="flex flex-col space-y-4 flex-1">
-          {/* Match Header */}
-          <div className="flex flex-row justify-between items-center font-normal text-xs text-[#888888]">
-            <p>{getMatchStatus(formData.result)} | {formData.round || "Round of 16"}</p>
-            <span className="rounded-[10px] px-1.5 py-0.5 text-xs font-medium bg-[#6AABFF] text-white">
-              {formatDuration(formData.duration)}
+        <div className="relative">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
+              {status} · {formData.round || "Match"}
             </span>
+            {formData.duration ? (
+              <span className="rounded-full bg-[#F5F5F5] border border-[#F3F3F3] px-2 py-0.5 text-[10px] font-medium tabular-nums text-[#0D0D0D]">
+                {formatDuration(formData.duration)}
+              </span>
+            ) : null}
           </div>
 
-          {/* Player Names + Scores */}
-          <div className="flex flex-col space-y-2">
-            {/* Player 1 */}
-            <div className="flex flex-row justify-between items-center">
-              <div className="flex flex-row items-center gap-4">
-                <div className="w-10 h-10 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
-                  <span className="text-xs font-medium text-[#BFBFBF]">
-                    {getInitials(playerName)}
-                  </span>
-                </div>
-                <p className={`font-semibold text-sm ${winner === "player" ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}`}>
-                  {playerName}
-                </p>
-              </div>
-              <div className="flex flex-row gap-4 font-semibold text-[18px]">
-                {playerScores.map((score, idx) => {
-                  const pScore = score ?? 0;
-                  const oScore = opponentScores[idx] ?? 0;
-                  return (
-                    <p
-                      key={idx}
-                      className={pScore > oScore ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}
-                    >
-                      {pScore}
-                    </p>
-                  );
-                })}
-              </div>
-            </div>
+          <h3 className="mt-2 text-[16px] font-normal text-[#0D0D0D] tracking-[-0.4px] leading-[24px]">
+            {eventTitle}
+          </h3>
 
-            {/* Player 2 (Opponent) */}
-            <div className="flex flex-row justify-between items-center">
-              <div className="flex flex-row items-center gap-4">
-                <div className="w-10 h-10 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
-                  <span className="text-xs font-medium text-[#BFBFBF]">
-                    {getInitials(opponentName)}
-                  </span>
-                </div>
-                <p className={`font-semibold text-sm ${winner === "opponent" ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}`}>
-                  {opponentName}
-                </p>
-              </div>
-              <div className="flex flex-row gap-4 font-semibold text-[18px]">
-                {opponentScores.map((score, idx) => {
-                  const oScore = score ?? 0;
-                  const pScore = playerScores[idx] ?? 0;
-                  return (
-                    <p
-                      key={idx}
-                      className={oScore > pScore ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}
-                    >
-                      {oScore}
-                    </p>
-                  );
-                })}
-              </div>
-            </div>
+          <div className="mt-4 space-y-2.5">
+            <PlayerRow
+              name={playerName}
+              isWinner={winner === "player"}
+              scores={playerScores}
+              opponentScores={opponentScores}
+              tag="You"
+            />
+            <div className="h-px w-full bg-[#F3F3F3]" />
+            <PlayerRow
+              name={opponentName}
+              isWinner={winner === "opponent"}
+              scores={opponentScores}
+              opponentScores={playerScores}
+            />
           </div>
         </div>
       </div>
 
-      {/* Scoring Format Section */}
-      <div className="space-y-3">
-        <h4 className="text-[#0D0D0D] font-medium text-sm">Scoring Format</h4>
-        <div className="flex flex-row gap-3">
-          <div className="px-3 py-2 bg-[#F7F7F7] rounded-lg">
-            <p className="text-xs font-medium text-[#666666]">Best of {formData.bestOf} Sets</p>
-          </div>
-          <div className="px-3 py-2 bg-[#F7F7F7] rounded-lg">
-            <p className="text-xs font-medium text-[#666666]">{formData.adScoring ? "Ad Scoring" : "No-Ad Scoring"}</p>
-          </div>
-          <div className="px-3 py-2 bg-[#F7F7F7] rounded-lg">
-            <p className="text-xs font-medium text-[#666666]">{formData.playOnLets ? "Play on Lets" : "Lets"}</p>
-          </div>
+      {meta.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {meta.map(({ icon: Icon, label }, i) => (
+            <span
+              key={i}
+              className="inline-flex items-center gap-1.5 rounded-full bg-[#F5F5F5] border border-[#F3F3F3] px-2.5 py-1 text-[11px] font-normal text-[#525252]"
+            >
+              <Icon className="size-3 text-[#888888]" strokeWidth={1.5} />
+              {label}
+            </span>
+          ))}
         </div>
-      </div>
+      )}
 
-      {/* Public/Private Toggle */}
-      <div className="flex items-center justify-between">
-        <div className="flex flex-col gap-1">
-          <h4 className="text-[#0D0D0D] font-medium text-sm">Public</h4>
-          <p className="text-[#888888] font-normal text-xs">
-            Note: All matches will be private during our Beta Testing
+      {/* Format */}
+      <section>
+        <h4 className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
+          Format
+        </h4>
+        <div className="mt-2.5 grid grid-cols-3 gap-2">
+          <FormatChip
+            label="Sets"
+            value={formData.bestOf ? `Best of ${formData.bestOf}` : "—"}
+          />
+          <FormatChip
+            label="Scoring"
+            value={formData.adScoring ? "Ad" : "No-Ad"}
+          />
+          <FormatChip
+            label="Lets"
+            value={formData.playOnLets ? "Play on" : "Standard"}
+          />
+        </div>
+      </section>
+
+      {/* Privacy */}
+      <section className="flex items-center justify-between rounded-[10px] bg-white border border-[#F3F3F3] px-4 py-3.5">
+        <div>
+          <p className="text-[13px] font-normal text-[#0D0D0D]">
+            Make this match public
+          </p>
+          <p className="mt-0.5 text-[12px] font-light text-[#888888] leading-[1.5]">
+            All matches are private during Beta — public sharing comes later.
           </p>
         </div>
         <Switch
           checked={!isPrivateMatch}
-          disabled={true}
+          disabled
           className="opacity-50 cursor-not-allowed"
         />
-      </div>
+      </section>
 
-      {/* Error Display */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-sm text-red-600">{error}</p>
+        <div className="flex items-start gap-2.5 rounded-[10px] border border-[#FECACA] bg-[var(--color-error-bg)] px-3 py-2.5">
+          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-[var(--color-error)]" />
+          <p className="text-[12px] text-[var(--color-error)]">{error}</p>
         </div>
       )}
+    </div>
+  );
+}
+
+function PlayerRow({
+  name,
+  scores,
+  opponentScores,
+  isWinner,
+  tag,
+}: {
+  name: string;
+  scores: (number | null)[];
+  opponentScores: (number | null)[];
+  isWinner: boolean;
+  tag?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center gap-3 min-w-0">
+        <div
+          className={`flex h-9 w-9 flex-none items-center justify-center rounded-full text-[10px] font-semibold tracking-[0.5px] transition ${
+            isWinner
+              ? "bg-[#0D0D0D] text-white"
+              : "bg-[#FAFAFA] text-[#AAAAAA] border border-[#F3F3F3]"
+          }`}
+        >
+          {getInitials(name)}
+        </div>
+        <div className="min-w-0 flex items-baseline gap-1.5">
+          <p
+            className={`truncate text-[14px] font-normal tracking-[-0.4px] ${
+              isWinner ? "text-[#0D0D0D]" : "text-[#888888]"
+            }`}
+          >
+            {name}
+          </p>
+          {tag && (
+            <span className="flex-none text-[9px] font-normal uppercase tracking-[2.5px] text-[#3B82F6]">
+              {tag}
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-4 tabular-nums">
+        {scores.map((score, idx) => {
+          const ps = score ?? 0;
+          const os = opponentScores[idx] ?? 0;
+          const setWon = ps > os;
+          return (
+            <span
+              key={idx}
+              className={`text-[24px] font-light tracking-[-0.5px] leading-none ${
+                setWon ? "text-[#0D0D0D]" : "text-[#CCCCCC]"
+              }`}
+            >
+              {ps}
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function FormatChip({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[10px] bg-[#FAFAFA] border border-[#F3F3F3] px-3 py-2.5">
+      <p className="text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2.5px]">
+        {label}
+      </p>
+      <p className="mt-1.5 text-[13px] font-light text-[#0D0D0D] tracking-[-0.2px]">
+        {value}
+      </p>
     </div>
   );
 }
