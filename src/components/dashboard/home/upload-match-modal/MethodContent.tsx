@@ -5,56 +5,59 @@
  * Two cards for selecting analysis method
  */
 
+import { motion } from "framer-motion";
+import { Cpu, Clock } from "lucide-react";
+
 export interface MethodContentProps {
   selectedMethod: string | null;
   onMethodSelect: (methodId: string | null) => void;
 }
 
-export function MethodContent({ selectedMethod, onMethodSelect }: MethodContentProps) {
-  return (
-    <div className="h-full flex items-center justify-center gap-6">
-      <button
-        type="button"
-        className={`w-[240px] h-[252px] cursor-pointer transition-all duration-200 rounded-2xl relative overflow-visible group hover:scale-[1.02] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 ${
-          selectedMethod === "elc" ? "ring-2 ring-[#3B82F6] ring-offset-2" : ""
-        }`}
-        onClick={() => onMethodSelect(selectedMethod === "elc" ? null : "elc")}
-      >
-        <div className="absolute inset-0 overflow-hidden rounded-2xl" style={{ clipPath: "inset(0 round 16px)" }}>
-          <img
-            src="/marketing/elc-image.png"
-            alt="Electronic Line Calling"
-            className="absolute inset-0 w-full h-full object-cover scale-100 origin-top"
-          />
-          {/* Hover overlay */}
-          <div className="absolute inset-0 bg-[#0D0D0D]/0 group-hover:bg-white/5 transition-all duration-200 z-[5]" />
-          <div className="absolute bottom-0 left-0 right-0 h-32 z-10 rounded-b-2xl overflow-hidden" style={{ clipPath: "inset(0 0 0 0 round 0 0 16px 16px)" }}>
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0D0D0D]/80 to-transparent" />
-            <div className="absolute bottom-0 left-0 right-0 px-4 pb-4 space-y-1.5">
-              <p className="italic font-medium text-xs text-white">Electronic Line Calling</p>
-              <p className="text-[10px] text-normal text-white/80">
-                Choose from a variety of providers such as SwingVision, BaselineVision, and many more.
-              </p>
-            </div>
-          </div>
-        </div>
-      </button>
+const EASE = [0.25, 0.46, 0.45, 0.94] as const;
 
-      <div className="w-[240px] h-[252px] cursor-not-allowed rounded-2xl relative overflow-hidden bg-white border-[0.5px] border-[#F3F3F3]" aria-disabled="true" style={{ clipPath: "inset(0 round 16px)" }}>
-        <img
-          src="/logos/logo.svg"
-          alt="Advantage"
-          className="absolute top-[92px] left-1/2 -translate-x-1/2 w-[78px] h-[14px]"
-        />
-        <div className="absolute bottom-0 left-0 right-0 h-32 z-10 rounded-b-2xl overflow-hidden" style={{ clipPath: "inset(0 0 0 0 round 0 0 16px 16px)" }}>
-          <div className="absolute inset-0 bg-gradient-to-t from-white/90 to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 px-4 pb-4 space-y-1.5">
-            <p className="italic font-medium text-xs text-[#0D0D0D]">Coming Soon</p>
-            <p className="text-[10px] text-normal text-[#888888]">
-              Choose to label with Advantage Intelligence or traditional labeling techniques.
-            </p>
-          </div>
+export function MethodContent({ selectedMethod, onMethodSelect }: MethodContentProps) {
+  const isElcSelected = selectedMethod === "elc";
+
+  return (
+    <div className="h-full flex items-center justify-center gap-5">
+      <motion.button
+        type="button"
+        whileHover={{ y: -2 }}
+        transition={{ duration: 0.2, ease: EASE }}
+        onClick={() => onMethodSelect(isElcSelected ? null : "elc")}
+        className={`w-[260px] h-[200px] rounded-2xl bg-white p-5 text-left flex flex-col cursor-pointer transition-colors transition-shadow duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 ${
+          isElcSelected
+            ? "border border-[#3B82F6] ring-2 ring-[#3B82F6]/15 shadow-[0px_4px_12px_rgba(0,0,0,0.08)]"
+            : "border border-[#EAECF0] hover:border-[#D5D5D5] hover:shadow-[0px_4px_12px_rgba(0,0,0,0.08)]"
+        }`}
+      >
+        <div className="w-10 h-10 rounded-xl bg-[#3B82F6]/10 text-[#3B82F6] flex items-center justify-center">
+          <Cpu className="w-5 h-5" strokeWidth={2} />
         </div>
+        <div className="mt-4 space-y-1.5 flex-1">
+          <p className="text-sm font-medium text-[#0D0D0D]">Electronic Line Calling</p>
+          <p className="text-xs text-[#666] leading-relaxed">
+            Choose from a variety of providers such as SwingVision, BaselineVision, and many more.
+          </p>
+        </div>
+      </motion.button>
+
+      <div
+        className="w-[260px] h-[200px] rounded-2xl bg-[#FAFAFA] border border-[#EAECF0] p-5 flex flex-col cursor-not-allowed relative"
+        aria-disabled="true"
+      >
+        <div className="w-10 h-10 rounded-xl bg-[#F0F0F0] text-[#999] flex items-center justify-center">
+          <Clock className="w-5 h-5" strokeWidth={2} />
+        </div>
+        <div className="mt-4 space-y-1.5 flex-1">
+          <p className="text-sm font-medium text-[#999]">Advantage Intelligence</p>
+          <p className="text-xs text-[#999] leading-relaxed">
+            Choose to label with Advantage Intelligence or traditional labeling techniques.
+          </p>
+        </div>
+        <span className="absolute bottom-4 right-4 bg-white border border-[#EAECF0] rounded-full px-2 py-0.5 text-[10px] text-[#666] font-medium">
+          Coming soon
+        </span>
       </div>
     </div>
   );
