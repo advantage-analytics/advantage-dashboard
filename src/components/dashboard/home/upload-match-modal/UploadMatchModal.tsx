@@ -120,7 +120,7 @@ export function UploadMatchModal({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
         hideCloseButton
-        className="min-w-180 h-120 overflow-y-auto px-12 py-6 rounded-2xl flex-1 flex items-center justify-center"
+        className="min-w-180 h-120 overflow-y-auto px-8 py-6 rounded-2xl flex-1 flex items-center justify-center"
       >
         <div className="flex flex-col justify-between h-full w-full">
           <div className="flex flex-col space-y-4">
@@ -133,16 +133,18 @@ export function UploadMatchModal({
             {/* Header */}
             <div className="relative">
               {step !== "method" && (
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon"
                   onClick={handleBack}
-                  className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-6 rounded-full bg-[#1D1D1F] flex items-center justify-center hover:bg-[#2D2D2D] transition-colors z-10"
+                  className="absolute left-0 top-1/2 -translate-y-1/2 h-7 w-7 rounded-full text-[#0D0D0D] hover:bg-[#F4F4F5] z-10"
                 >
-                  <ChevronLeft className="h-3 w-3 text-white" />
-                </button>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
               )}
               <DialogHeader className="space-y-2">
-                <DialogTitle>{title}</DialogTitle>
-                <DialogDescription>{description}</DialogDescription>
+                <DialogTitle className="text-lg font-medium text-[#0D0D0D]">{title}</DialogTitle>
+                <DialogDescription className="text-sm text-[#666]">{description}</DialogDescription>
               </DialogHeader>
             </div>
           </div>
@@ -210,10 +212,10 @@ export function UploadMatchModal({
               <div className="absolute bottom-0 left-0 right-4 flex justify-center pb-1">
                 <button
                   onClick={() => scrollRef.current?.scrollBy({ top: scrollRef.current.clientHeight, behavior: "smooth" })}
-                  className="flex items-center gap-1 bg-white/90 backdrop-blur-sm rounded-full px-2.5 py-1 border border-gray-100 cursor-pointer"
+                  className="flex items-center gap-1 bg-white border border-[#EAECF0] rounded-full px-3 py-1 text-xs text-[#666] shadow-[0px_2px_8px_rgba(0,0,0,0.06)] cursor-pointer"
                 >
-                  <ChevronDown className="h-3 w-3 text-gray-400" />
-                  <span className="text-[10px] text-gray-400 font-medium tracking-wide">scroll</span>
+                  <ChevronDown className="h-3 w-3 text-[#666]" />
+                  <span className="font-medium tracking-wide">scroll</span>
                 </button>
               </div>
             )}
@@ -225,23 +227,23 @@ export function UploadMatchModal({
               <>
                 <Button
                   onClick={handleClose}
-                  className="w-[65px] h-[31px] rounded-[6px] text-xs bg-white border border-[#EAECF0] text-[#0D0D0D] hover:bg-[#F7F7F7] shadow-none"
+                  className="h-9 px-4 rounded-[8px] text-sm bg-white border border-[#EAECF0] text-[#0D0D0D] hover:bg-[#FAFAFA] shadow-none"
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handleBack}
-                  className="w-[55px] h-[31px] rounded-[6px] text-xs bg-[#3B82F6] text-white hover:bg-[#2563EB]"
+                  className="h-9 px-4 rounded-[8px] text-sm bg-[#3B82F6] text-white hover:bg-[#2563EB]"
                 >
                   Edit
                 </Button>
                 <Button
                   onClick={handleCreateMatch}
                   disabled={isCreating}
-                  className={`w-[110px] h-[31px] rounded-[6px] text-xs ${
+                  className={`h-9 px-4 rounded-[8px] text-sm ${
                     isCreating
                       ? "bg-[#F7F7F7] text-[#888888]"
-                      : "bg-[#0D0D0D] text-white"
+                      : "bg-[#0D0D0D] text-white hover:bg-[#1D1D1D]"
                   }`}
                 >
                   {isCreating ? "Creating..." : "Create Match"}
@@ -251,17 +253,17 @@ export function UploadMatchModal({
               <>
                 <Button
                   onClick={handleClose}
-                  className="w-[65px] h-[31px] rounded-[6px] text-xs bg-white border border-[#EAECF0] text-[#0D0D0D] hover:bg-[#F7F7F7] shadow-none"
+                  className="h-9 px-4 rounded-[8px] text-sm bg-white border border-[#EAECF0] text-[#0D0D0D] hover:bg-[#FAFAFA] shadow-none"
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={continueHandler}
                   disabled={continueDisabled}
-                  className={`w-[85px] h-[31px] rounded-[6px] text-xs ${
+                  className={`h-9 px-4 rounded-[8px] text-sm ${
                     continueDisabled
                       ? "bg-[#F7F7F7] text-[#888888]"
-                      : "bg-[#0D0D0D] text-white"
+                      : "bg-[#0D0D0D] text-white hover:bg-[#1D1D1D]"
                   }`}
                 >
                   {continueLabel}
