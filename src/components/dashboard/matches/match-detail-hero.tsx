@@ -3,21 +3,28 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { Match } from "@/lib/data/types";
 
 interface MatchDetailHeroProps {
   match: Match;
+  previousMatchId?: string | null;
+  nextMatchId?: string | null;
 }
 
 const MATCHES_HREF = "/dashboard/matches";
 
-export function MatchDetailHero({ match }: MatchDetailHeroProps) {
+export function MatchDetailHero({
+  match,
+  previousMatchId,
+  nextMatchId,
+}: MatchDetailHeroProps) {
   const router = useRouter();
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented) return;
+      if (e.defaultPrevented) return;
 
       const target = e.target as HTMLElement | null;
       if (target) {
@@ -26,15 +33,21 @@ export function MatchDetailHero({ match }: MatchDetailHeroProps) {
         if (target.isContentEditable) return;
       }
       // Skip if any Radix overlay (popover, menu, dialog, tooltip, combobox) is open —
-      // Radix sets data-state="open" on triggers; Esc should close those first.
+      // Esc should close those first, and arrow keys should navigate within.
       if (document.querySelector('[role="dialog"], [data-state="open"]')) return;
 
-      router.push(MATCHES_HREF);
+      if (e.key === "Escape") {
+        router.push(MATCHES_HREF);
+      } else if (e.key === "ArrowLeft" && previousMatchId) {
+        router.push(`/dashboard/matches/${previousMatchId}`);
+      } else if (e.key === "ArrowRight" && nextMatchId) {
+        router.push(`/dashboard/matches/${nextMatchId}`);
+      }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [router]);
+  }, [router, previousMatchId, nextMatchId]);
 
   const dateLabel = match.date ? formatHeroDate(match.date) : null;
   const hasTournament = Boolean(match.tournamentName?.trim());
@@ -63,21 +76,93 @@ export function MatchDetailHero({ match }: MatchDetailHeroProps) {
         </h1>
       </div>
 
-      <Link
-        href={MATCHES_HREF}
-        aria-label="Back to all matches"
-        className="shrink-0 inline-flex items-center gap-1.5 min-h-[44px] sm:min-h-0 sm:h-7 px-2 -mr-2 rounded text-[10px] font-medium uppercase tracking-[1.5px] text-[#525252] hover:text-[#0D0D0D] hover:bg-[#0D0D0D]/[0.05] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
-      >
-        <ArrowLeft className="size-3" strokeWidth={1.75} aria-hidden="true" />
-        Back
-        <kbd
-          aria-hidden="true"
-          className="hidden sm:inline-flex items-center justify-center ml-0.5 text-[10px] font-medium leading-none tracking-normal normal-case pl-1 pr-[3px] py-0.5 rounded text-[#AEAEB2] bg-[#F0F0F0]"
+      <div className="shrink-0 flex items-center gap-2">
+        <div
+          role="group"
+          aria-label="Match navigation"
+          className="inline-flex items-stretch h-11 sm:h-7 rounded border border-[var(--color-border-subtle)] overflow-hidden"
         >
-          ESC
-        </kbd>
-      </Link>
+          <NavSegment
+            href={previousMatchId ? `/dashboard/matches/${previousMatchId}` : null}
+            label="Previous match"
+            title="Previous match (←)"
+            shortcut="ArrowLeft"
+            icon={<ChevronLeft className="size-3.5" strokeWidth={1.75} aria-hidden="true" />}
+          />
+          <span
+            aria-hidden="true"
+            className="w-px self-stretch bg-[var(--color-border-subtle)]"
+          />
+          <NavSegment
+            href={nextMatchId ? `/dashboard/matches/${nextMatchId}` : null}
+            label="Next match"
+            title="Next match (→)"
+            shortcut="ArrowRight"
+            icon={<ChevronRight className="size-3.5" strokeWidth={1.75} aria-hidden="true" />}
+          />
+        </div>
+        <span
+          aria-hidden="true"
+          className="hidden sm:inline-block text-[9px] font-medium text-[var(--color-text-dim)] tracking-[2.5px] tabular-nums"
+        >
+          ← →
+        </span>
+        <Link
+          href={MATCHES_HREF}
+          aria-label="Back to all matches"
+          className="inline-flex items-center gap-1.5 min-h-[44px] sm:min-h-0 sm:h-7 px-2 -mr-2 rounded text-[10px] font-medium uppercase tracking-[1.5px] text-[#525252] hover:text-[#0D0D0D] hover:bg-[#0D0D0D]/[0.05] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+        >
+          <ArrowLeft className="size-3" strokeWidth={1.75} aria-hidden="true" />
+          Back
+          <kbd
+            aria-hidden="true"
+            className="hidden sm:inline-flex items-center justify-center ml-0.5 text-[10px] font-medium leading-none tracking-normal normal-case pl-1 pr-[3px] py-0.5 rounded text-[#AEAEB2] bg-[#F0F0F0]"
+          >
+            ESC
+          </kbd>
+        </Link>
+      </div>
     </div>
+  );
+}
+
+function NavSegment({
+  href,
+  label,
+  title,
+  shortcut,
+  icon,
+}: {
+  href: string | null;
+  label: string;
+  title: string;
+  shortcut: string;
+  icon: React.ReactNode;
+}) {
+  const baseClass =
+    "inline-flex items-center justify-center w-11 sm:w-7 h-full text-[#525252] transition-colors duration-200 focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#3B82F6]/40";
+  if (!href) {
+    return (
+      <span
+        aria-label={label}
+        aria-disabled="true"
+        role="button"
+        className={cn(baseClass, "opacity-30 cursor-not-allowed")}
+      >
+        {icon}
+      </span>
+    );
+  }
+  return (
+    <Link
+      href={href}
+      aria-label={label}
+      title={title}
+      aria-keyshortcuts={shortcut}
+      className={cn(baseClass, "hover:text-[#0D0D0D] hover:bg-[#0D0D0D]/[0.05]")}
+    >
+      {icon}
+    </Link>
   );
 }
 

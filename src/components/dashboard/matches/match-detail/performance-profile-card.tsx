@@ -46,9 +46,9 @@ export function PerformanceProfileCard({
   return (
     <section
       aria-labelledby={headingId}
-      className="surface-card flex flex-col gap-4 py-[21px]"
+      className="surface-card flex flex-col"
     >
-      <div className="px-5 flex items-center gap-1.5">
+      <div className="flex items-center justify-between h-14 px-5">
         <h2
           id={headingId}
           className="text-[10px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[15px]"
@@ -74,7 +74,7 @@ export function PerformanceProfileCard({
               collisionPadding={16}
               role="dialog"
               aria-label="All stats"
-              className="!bg-white !text-[var(--color-text-primary)] !rounded-xl !p-0 !border !border-[#F3F3F3] !shadow-[0px_4px_16px_0px_rgba(0,0,0,0.08)] !w-auto"
+              className="!bg-white !text-[var(--color-text-primary)] !rounded-xl !p-0 !border !border-[var(--color-border-card)] !shadow-[0px_4px_16px_0px_rgba(0,0,0,0.08)] !w-auto"
             >
               <div className="w-[260px] py-4 px-4 flex flex-col gap-3.5">
                 <div className="flex flex-col gap-2">
@@ -97,7 +97,7 @@ export function PerformanceProfileCard({
                     </span>
                   </div>
                 </div>
-                <div className="h-px bg-[#F3F3F3] -mx-4" />
+                <div className="h-px bg-[var(--color-border-card)] -mx-4" />
                 <ul className="flex flex-col gap-1.5 max-h-[228px] overflow-y-auto -mx-0.5 px-0.5">
                   {data.map((d) => {
                     const leader =
@@ -142,7 +142,7 @@ export function PerformanceProfileCard({
                     );
                   })}
                 </ul>
-                <div className="h-px bg-[#F3F3F3] -mx-4" />
+                <div className="h-px bg-[var(--color-border-card)] -mx-4" />
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-[9px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[13px]">
                     Stats Leading
@@ -181,40 +181,42 @@ export function PerformanceProfileCard({
         )}
       </div>
 
-      <div className="px-2">
-        {hasData ? (
-          <RadarChartSection data={data} p1Name={p1Name} p2Name={p2Name} />
-        ) : (
-          <EmptyState />
+      <div className="flex flex-col gap-4 pb-[21px]">
+        <div className="px-2">
+          {hasData ? (
+            <RadarChartSection data={data} p1Name={p1Name} p2Name={p2Name} />
+          ) : (
+            <EmptyState />
+          )}
+        </div>
+
+        {hasData && (
+          <>
+            <div className="px-5 flex justify-end">
+              <span className="text-[10px] font-normal text-[var(--color-text-faint)] leading-[14px]">
+                Select an axis for detail
+              </span>
+            </div>
+
+            <div className="px-5">
+              <div
+                aria-hidden="true"
+                className="h-px bg-[var(--color-border-card)]"
+              />
+            </div>
+
+            <div className="px-5 flex items-center justify-end sm:justify-between gap-x-3 gap-y-2 flex-wrap">
+              <span className="hidden sm:inline text-[10px] font-normal text-[var(--color-text-faint)]">
+                {data.length} Categories
+              </span>
+              <div className="flex items-center gap-3">
+                <LegendDot color="var(--color-player-1)" name={p1Name} />
+                <LegendDot color="var(--color-player-2)" name={p2Name} />
+              </div>
+            </div>
+          </>
         )}
       </div>
-
-      {hasData && (
-        <>
-          <div className="px-5 flex justify-end">
-            <span className="text-[10px] font-normal text-[var(--color-text-faint)] leading-[14px]">
-              Select an axis for detail
-            </span>
-          </div>
-
-          <div className="px-5">
-            <div
-              aria-hidden="true"
-              className="h-px bg-[var(--color-border-card)]"
-            />
-          </div>
-
-          <div className="px-5 flex items-center justify-end sm:justify-between gap-x-3 gap-y-2 flex-wrap">
-            <span className="hidden sm:inline text-[10px] font-normal text-[var(--color-text-faint)]">
-              {data.length} Categories
-            </span>
-            <div className="flex items-center gap-3">
-              <LegendDot color="var(--color-player-1)" name={p1Name} />
-              <LegendDot color="var(--color-player-2)" name={p2Name} />
-            </div>
-          </div>
-        </>
-      )}
     </section>
   );
 }

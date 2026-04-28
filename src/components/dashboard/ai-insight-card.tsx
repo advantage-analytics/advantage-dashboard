@@ -38,7 +38,7 @@ export function AiInsightCard({
 
   const cardShell =
     className ??
-    "bg-white border border-[#F3F3F3] rounded-[14px] shadow-card overflow-hidden flex flex-col gap-4 p-[21px]";
+    "bg-white border border-[#F3F3F3] rounded-[14px] shadow-card overflow-hidden flex flex-col";
 
   return (
     <>
@@ -63,26 +63,30 @@ export function AiInsightCard({
           >
             <section
               aria-labelledby="ai-insight-heading"
-              className="flex flex-col gap-4"
+              className="flex flex-col"
             >
-              <h2
-                id="ai-insight-heading"
-                className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] leading-[15px]"
-              >
-                AI Insight
-              </h2>
-
-              {children}
-
-              <div className="flex items-center gap-4">
-                {extraActions}
-                <button
-                  type="button"
-                  onClick={dismiss}
-                  className="text-[9px] font-medium uppercase tracking-[1.5px] text-[#AAAAAA] transition-colors duration-200 hover:text-[#525252] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-sm"
+              <div className="flex items-center h-14 px-5">
+                <h2
+                  id="ai-insight-heading"
+                  className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] leading-[15px]"
                 >
-                  Dismiss
-                </button>
+                  AI Insight
+                </h2>
+              </div>
+
+              <div className="px-5 pb-5 flex flex-col gap-4">
+                {children}
+
+                <div className="flex items-center gap-4">
+                  {extraActions}
+                  <button
+                    type="button"
+                    onClick={dismiss}
+                    className="text-[9px] font-medium uppercase tracking-[1.5px] text-[#AAAAAA] transition-colors duration-200 hover:text-[#525252] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-sm"
+                  >
+                    Dismiss
+                  </button>
+                </div>
               </div>
             </section>
           </motion.div>

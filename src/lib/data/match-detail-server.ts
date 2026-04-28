@@ -138,6 +138,35 @@ const FILLER_KEY_MOMENTS = [
 ];
 
 /**
+ * Returns the user's previous/next match ids in the same chronological order
+ * as the matches list page (date desc). Used for arrow-key navigation between
+ * adjacent matches. Returns null on either side at the list bounds.
+ */
+export const getAdjacentMatchIds = cache(async (currentMatchId: string) => {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { previousId: null, nextId: null };
+
+  const { data } = await supabase
+    .from("matches")
+    .select("id")
+    .eq("created_by", user.id)
+    .order("date", { ascending: false });
+
+  if (!data) return { previousId: null, nextId: null };
+
+  const idx = data.findIndex((m) => m.id === currentMatchId);
+  if (idx === -1) return { previousId: null, nextId: null };
+
+  return {
+    previousId: idx > 0 ? data[idx - 1].id : null,
+    nextId: idx < data.length - 1 ? data[idx + 1].id : null,
+  };
+});
+
+/**
  * Cached data fetcher for match detail pages.
  * React.cache deduplicates calls within the same request,
  * so both layout.tsx and page.tsx can call this without double-fetching.

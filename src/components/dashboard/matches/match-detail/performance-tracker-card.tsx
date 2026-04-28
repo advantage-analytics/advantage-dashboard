@@ -95,9 +95,9 @@ export function PerformanceTrackerCard({
     <section
       id="match-performance"
       aria-labelledby="performance-tracker-heading"
-      className="surface-card rounded-[14px] p-[21px] scroll-mt-6"
+      className="surface-card scroll-mt-6 flex flex-col"
     >
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 mb-[14px]">
+      <div className="flex items-center justify-between gap-x-4 h-14 px-5">
         <div className="flex items-center gap-1.5">
           <h2
             id="performance-tracker-heading"
@@ -119,7 +119,7 @@ export function PerformanceTrackerCard({
               side="top"
               sideOffset={8}
               showArrow={false}
-              className="!bg-white !text-[var(--color-text-primary)] !rounded-xl !px-0 !py-0 !border !border-[#F3F3F3] !shadow-[0px_4px_16px_0px_rgba(0,0,0,0.08)] !text-left !w-auto"
+              className="!bg-white !text-[var(--color-text-primary)] !rounded-xl !px-0 !py-0 !border !border-[var(--color-border-card)] !shadow-[0px_4px_16px_0px_rgba(0,0,0,0.08)] !text-left !w-auto"
             >
               <div className="w-[260px] py-3 px-3.5 flex flex-col gap-2.5">
                 <div className="flex flex-col gap-1">
@@ -130,7 +130,7 @@ export function PerformanceTrackerCard({
                     Running point differential across the match. Each step shows who won the next point.
                   </p>
                 </div>
-                <div className="h-px bg-[#F3F3F3]" />
+                <div className="h-px bg-[var(--color-border-card)]" />
                 <dl className="flex flex-col gap-1.5 text-[11px] leading-[16px]">
                   <TooltipLegendRow
                     swatch={<TooltipSwatch color={PLAYER_1} />}
@@ -147,7 +147,7 @@ export function PerformanceTrackerCard({
                     term="Break of serve"
                   />
                 </dl>
-                <div className="h-px bg-[#F3F3F3]" />
+                <div className="h-px bg-[var(--color-border-card)]" />
                 <p className="text-[10px] leading-[14px] text-[var(--color-text-dim)]">
                   Hover the chart for point-by-point detail.
                 </p>
@@ -174,31 +174,32 @@ export function PerformanceTrackerCard({
         </button>
       </div>
 
-      <div className="min-w-0">
-        <ChartErrorBoundary minHeight={160}>
-          <MomentumChartCompact
-            points={points}
-            player1Name={p1Name}
-            player2Name={p2Name}
-            matchDurationSec={matchDurationSec}
-          />
-        </ChartErrorBoundary>
-      </div>
+      <div className="px-5 pb-5">
+        <div className="min-w-0">
+          <ChartErrorBoundary minHeight={160}>
+            <MomentumChartCompact
+              points={points}
+              player1Name={p1Name}
+              player2Name={p2Name}
+              matchDurationSec={matchDurationSec}
+            />
+          </ChartErrorBoundary>
+        </div>
 
-      <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
-        <LegendSwatch color={PLAYER_1} label={p1Short} />
-        <LegendSwatch color={PLAYER_2} label={p2Short} />
-        <span aria-hidden="true" className="h-3 w-px bg-[var(--color-border-card)]" />
-        <LegendDash color={EVENT_ACCENT} label="Break of Serve" />
-      </div>
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
+          <LegendSwatch color={PLAYER_1} label={p1Short} />
+          <LegendSwatch color={PLAYER_2} label={p2Short} />
+          <span aria-hidden="true" className="h-3 w-px bg-[var(--color-border-card)]" />
+          <LegendDash color={EVENT_ACCENT} label="Break of Serve" />
+        </div>
 
-      <div
-        id={detailsId}
-        className={cn(
-          "grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none",
-          isDetailsOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-        )}
-      >
+        <div
+          id={detailsId}
+          className={cn(
+            "grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none",
+            isDetailsOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+          )}
+        >
         <div className="overflow-hidden">
           <div className="pt-7">
             <table className="w-full border-collapse">
@@ -238,6 +239,7 @@ export function PerformanceTrackerCard({
           </tbody>
         </table>
           </div>
+        </div>
         </div>
       </div>
     </section>

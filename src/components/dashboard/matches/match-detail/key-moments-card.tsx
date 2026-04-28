@@ -115,21 +115,23 @@ export function KeyMomentsCard({
     <section
       id="match-key-moments"
       aria-labelledby={headingId}
-      className="surface-card scroll-mt-6 flex flex-col gap-5 overflow-hidden py-5"
+      className="surface-card scroll-mt-6 flex flex-col overflow-hidden"
     >
-      <h2
-        id={headingId}
-        className="text-[10px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[15px] px-5"
-      >
-        Key Moments
-      </h2>
+      <div className="flex items-center h-14 px-5">
+        <h2
+          id={headingId}
+          className="text-[10px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[15px]"
+        >
+          Key Moments
+        </h2>
+      </div>
 
       {moments.length === 0 ? (
-        <p className="text-[11px] font-normal text-[var(--color-text-muted)] leading-[1.6] px-5">
+        <p className="text-[11px] font-normal text-[var(--color-text-muted)] leading-[1.6] px-5 pb-5">
           Key moments appear after your match is analyzed.
         </p>
       ) : (
-        <ul className="flex flex-col gap-4">
+        <ul className="flex flex-col gap-4 pb-5">
           {moments.map((m, i) => {
             const color = m.player === "player1" ? PLAYER_1 : PLAYER_2;
             return (

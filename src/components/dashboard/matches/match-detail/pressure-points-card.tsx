@@ -66,7 +66,7 @@ export function PressurePointsCard({ points }: PressurePointsCardProps) {
       aria-labelledby={headingId}
       className="surface-card flex flex-col"
     >
-      <div className="px-5 py-4">
+      <div className="flex items-center h-14 px-5">
         <h2
           id={headingId}
           className="text-[10px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[15px]"
@@ -75,7 +75,7 @@ export function PressurePointsCard({ points }: PressurePointsCardProps) {
         </h2>
       </div>
 
-      <div className="flex flex-col gap-2.5 px-5 pb-4">
+      <div className="flex flex-col gap-2.5 px-5 pb-5">
         {rows.map((r) => {
           const pct = r.total > 0 ? Math.round((r.won / r.total) * 100) : null;
           return (

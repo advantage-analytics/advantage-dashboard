@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
 
-import { getMatchDetailData } from "@/lib/data/match-detail-server";
+import {
+  getAdjacentMatchIds,
+  getMatchDetailData,
+} from "@/lib/data/match-detail-server";
 import { shortName } from "@/lib/data/match-utils";
 
 import { MatchSummaryRow } from "@/components/dashboard/matches/match-detail/match-summary-row";
@@ -39,33 +42,33 @@ type StatConfig = {
 const SERVE_STATS: StatConfig[] = [
   { key: "aces", label: "Aces", isPercentage: false },
   { key: "doubleFaults", label: "Double Faults", isPercentage: false },
-  { key: "firstServeInPct", label: "First Serve In %", isPercentage: true, fractionKey: "firstServeInPct" },
-  { key: "firstServeWinPct", label: "First Serve Won %", isPercentage: true, fractionKey: "firstServeWinPct" },
-  { key: "secondServeWinPct", label: "Second Serve Won %", isPercentage: true, fractionKey: "secondServeWinPct" },
+  { key: "firstServeInPct", label: "First Serves In", isPercentage: true, fractionKey: "firstServeInPct" },
+  { key: "firstServeWinPct", label: "First Serve Points Won", isPercentage: true, fractionKey: "firstServeWinPct" },
+  { key: "secondServeWinPct", label: "Second Serve Points Won", isPercentage: true, fractionKey: "secondServeWinPct" },
   { key: "breakpointsSaved", label: "Break Points Saved", isPercentage: false, fractionKey: "breakpointsSaved" },
-  { key: "servicePointsWon", label: "Total Serve Points Won", isPercentage: false, fractionKey: "servicePointsWon" },
-  { key: "serviceGamesWon", label: "Total Service Games Won", isPercentage: false },
+  { key: "servicePointsWon", label: "Service Points Won", isPercentage: false, fractionKey: "servicePointsWon" },
+  { key: "serviceGamesWon", label: "Service Games Won", isPercentage: false },
 ];
 
 const RETURN_STATS: StatConfig[] = [
-  { key: "firstReturnInPct", label: "First Serve Return In %", isPercentage: false },
-  { key: "firstReturnWonPct", label: "First Serve Returns Won %", isPercentage: false },
-  { key: "secondReturnInPct", label: "Second Serve Return In %", isPercentage: true, fractionKey: "secondReturnInPct" },
-  { key: "secondReturnWonPct", label: "Second Serve Return Points Won %", isPercentage: true, fractionKey: "secondReturnWonPct" },
+  { key: "firstReturnInPct", label: "First Returns In Play", isPercentage: false },
+  { key: "firstReturnWonPct", label: "First Return Points Won", isPercentage: false },
+  { key: "secondReturnInPct", label: "Second Returns In Play", isPercentage: true, fractionKey: "secondReturnInPct" },
+  { key: "secondReturnWonPct", label: "Second Return Points Won", isPercentage: true, fractionKey: "secondReturnWonPct" },
   { key: "breakpointsWonPct", label: "Break Points Converted", isPercentage: true, fractionKey: "breakpointsWonPct" },
-  { key: "returnPointsWon", label: "Total Return Points Won", isPercentage: false, fractionKey: "returnPointsWon" },
+  { key: "returnPointsWon", label: "Return Points Won", isPercentage: false, fractionKey: "returnPointsWon" },
   { key: "returnGamesWonPct", label: "Return Games Won %", isPercentage: true, fractionKey: "returnGamesWonPct" },
-  { key: "returnGamesWon", label: "Return Games Won", isPercentage: false },
+  { key: "returnGamesWon", label: "Service Breaks", isPercentage: false },
 ];
 
 const OTHER_STATS: StatConfig[] = [
   { key: "winners", label: "Winners", isPercentage: false },
-  { key: "unforcedErrors", label: "Errors", isPercentage: false },
-  { key: "netPointsAppearances", label: "Net Points Appearances", isPercentage: false },
-  { key: "netPointsWonPct", label: "Net Points Won", isPercentage: true, fractionKey: "netPointsWonPct" },
-  { key: "shortRallyWonPct", label: "Short (1-4 Shots)", isPercentage: true, fractionKey: "shortRallyWonPct" },
-  { key: "mediumRallyWonPct", label: "Medium (5-8 Shots)", isPercentage: true, fractionKey: "mediumRallyWonPct" },
-  { key: "longRallyWonPct", label: "Long (9+ Shots)", isPercentage: true, fractionKey: "longRallyWonPct" },
+  { key: "unforcedErrors", label: "Unforced Errors", isPercentage: false },
+  { key: "netPointsAppearances", label: "Net Approaches", isPercentage: false },
+  { key: "netPointsWonPct", label: "Net Points Won %", isPercentage: true, fractionKey: "netPointsWonPct" },
+  { key: "shortRallyWonPct", label: "Short Rallies (1\u20134)", isPercentage: true, fractionKey: "shortRallyWonPct" },
+  { key: "mediumRallyWonPct", label: "Medium Rallies (5\u20138)", isPercentage: true, fractionKey: "mediumRallyWonPct" },
+  { key: "longRallyWonPct", label: "Long Rallies (9+)", isPercentage: true, fractionKey: "longRallyWonPct" },
   { key: "totalPointsWon", label: "Total Points Won", isPercentage: false },
 ];
 
@@ -96,7 +99,10 @@ interface PageProps {
 
 export default async function MatchDetailPage({ params }: PageProps) {
   const { matchId } = await params;
-  const data = await getMatchDetailData(matchId);
+  const [data, adjacent] = await Promise.all([
+    getMatchDetailData(matchId),
+    getAdjacentMatchIds(matchId),
+  ]);
 
   if (!data) notFound();
 
@@ -143,7 +149,11 @@ export default async function MatchDetailPage({ params }: PageProps) {
     <div className="flex-1 w-full bg-white">
       <div className="px-8 py-10">
         <SectionsStagger className="flex flex-col">
-        <MatchDetailHero match={match} />
+        <MatchDetailHero
+          match={match}
+          previousMatchId={adjacent.previousId}
+          nextMatchId={adjacent.nextId}
+        />
 
         <div className="mt-8">
           <MatchSummaryRow match={match} p1Name={p1Name} p2Name={p2Name} />
