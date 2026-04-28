@@ -164,10 +164,10 @@ export function KpiTile({
       : trend.change >= 0
     : true;
   const trendColor = isNeutral
-    ? "text-[var(--color-text-muted)]"
+    ? "text-[#888888]"
     : isGood
-      ? "text-[var(--color-success)]"
-      : "text-[var(--color-error-strong)]";
+      ? "text-[#5DB955]"
+      : "text-[#E51837]";
   const arrow = !trend ? "" : isNeutral ? "→" : trend.change > 0 ? "↑" : "↓";
   const sign = !trend || isNeutral ? "" : trend.change > 0 ? "+" : "";
 
@@ -266,7 +266,7 @@ export function KpiTile({
 
 export function KpiTileStrip({ children }: { children: ReactNode }) {
   return (
-    <div className="bg-white border border-[var(--color-border-card)] rounded-[14px] shadow-card overflow-hidden">
+    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-card overflow-hidden">
       <div className="flex flex-wrap sm:flex-nowrap">{children}</div>
     </div>
   );
