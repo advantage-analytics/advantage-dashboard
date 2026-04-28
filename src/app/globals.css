@@ -183,23 +183,21 @@
   @apply px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition;
 }
 
-@utility surface-card {
+.surface-card {
   background-color: var(--color-surface-card);
   border: 1px solid var(--color-border-card);
   border-radius: 14px;
   box-shadow: var(--shadow-card);
 }
 
-@utility surface-card-elevated {
+.surface-card-elevated {
   background-color: var(--color-surface-card);
   border: 1px solid var(--color-border-card);
   border-radius: 14px;
   box-shadow: var(--shadow-card-elevated);
 }
 
-/* Demoted card variant — flat, hairline-only. Faint inner tint + no shadow
-   so it reads as deliberate supporting content, not a loading skeleton. */
-@utility surface-card-ghost {
+.surface-card-ghost {
   background-color: var(--color-surface-muted);
   border: 1px solid var(--color-border-card);
   border-radius: 14px;

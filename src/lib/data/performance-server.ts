@@ -29,6 +29,7 @@ export interface KpiCardData {
   sparkline: number[];
   description?: string;
   category: KpiCategory;
+  lowerIsBetter?: boolean;
 }
 
 export interface PerformanceProfileDimension {
@@ -352,6 +353,7 @@ interface KpiSpec {
   format: KpiFormat;
   description: string;
   pick: (s: DbMatchStats) => number;
+  lowerIsBetter?: boolean;
 }
 
 const KPI_SPECS: KpiSpec[] = [
@@ -411,6 +413,7 @@ const KPI_SPECS: KpiSpec[] = [
     format: "count",
     description: "Missed second serves; point lost",
     pick: (s) => s.double_faults ?? 0,
+    lowerIsBetter: true,
   },
   // Return
   {
@@ -469,6 +472,7 @@ const KPI_SPECS: KpiSpec[] = [
     format: "count",
     description: "Shots into the net or out of bounds",
     pick: (s) => s.unforced_errors ?? 0,
+    lowerIsBetter: true,
   },
   {
     key: "avg-rally-length",
@@ -523,6 +527,7 @@ function calculateKpiCards(
       sparkline,
       description: spec.description,
       category: spec.category,
+      lowerIsBetter: spec.lowerIsBetter,
     };
   });
 }

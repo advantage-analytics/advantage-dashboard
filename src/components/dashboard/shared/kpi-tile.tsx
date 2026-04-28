@@ -23,7 +23,7 @@ function Sparkline({
   const shouldReduceMotion = useReducedMotion();
   const width = 80;
   const height = 28;
-  const color = positive ? "var(--color-success)" : "var(--color-error-strong)";
+  const color = positive ? "#5DB955" : "#E51837";
 
   if (data.length < 2) return null;
   const points = data;

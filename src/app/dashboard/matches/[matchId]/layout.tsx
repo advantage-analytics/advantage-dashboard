@@ -31,7 +31,7 @@ export default async function MatchLayout({
         keyMoments={keyMoments}
         insights={insights}
         playerAverages={playerAverages}
-      >
+        >
         <ClearRetryOnSuccess matchId={matchId} />
         {children}
       </MatchDataProvider>

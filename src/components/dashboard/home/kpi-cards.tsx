@@ -109,7 +109,11 @@ export default function KpiCards({ cards, matchCount }: KpiCardsProps) {
             sparkline={card.sparkline}
             trend={
               showTrends
-                ? { change: card.change, changeLabel: card.changeLabel }
+                ? {
+                    change: card.change,
+                    changeLabel: card.changeLabel,
+                    lowerIsBetter: card.lowerIsBetter,
+                  }
                 : undefined
             }
             hintText={showTrends ? undefined : "1 more match for trends"}
