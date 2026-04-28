@@ -14,8 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
-import { Calendar, ChevronDown, CircleMinus, CirclePlus, Clock, SquarePen, Info } from "lucide-react";
+import { Calendar, ChevronDown, Clock, Minus, Plus, SquarePen, Info } from "lucide-react";
 import { FormData, ParsingState } from "./types";
 import { getAdjustedScores, formatDuration, parseDuration } from "./utils";
 
@@ -34,6 +33,19 @@ export interface DetailsContentProps {
   ) => void;
   parsingState?: ParsingState;
 }
+
+// Shared input/select class strings
+const INPUT_CLASS =
+  "h-9 rounded-[8px] border border-[#EAECF0] bg-white text-sm text-[#0D0D0D] placeholder:text-[#888] shadow-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/20 focus-visible:border-[#3B82F6]";
+const SELECT_TRIGGER_CLASS =
+  "h-9 rounded-[8px] border border-[#EAECF0] bg-white text-sm text-[#0D0D0D] shadow-none data-[placeholder]:text-[#888] focus:ring-2 focus:ring-[#3B82F6]/20 focus:border-[#3B82F6]";
+const SELECT_CONTENT_CLASS =
+  "border border-[#EAECF0] shadow-md text-sm text-[#0D0D0D]";
+const SELECT_ITEM_CLASS = "text-sm text-[#0D0D0D]";
+const SCORE_CHIP_CLASS =
+  "!w-9 h-9 rounded-[6px] border border-[#EAECF0] bg-white text-sm font-medium text-[#0D0D0D] text-center px-0 shadow-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/20 focus-visible:border-[#3B82F6] placeholder:text-[#888]";
+const SECTION_LABEL_CLASS =
+  "text-xs font-medium text-[#666] uppercase tracking-wide";
 
 // Helper function to get initials from a name
 function getInitials(name: string): string {
@@ -91,24 +103,20 @@ export function DetailsContent({
     setTimeout(() => {
       switch (currentType) {
         case "playerScore":
-          // From player score → opponent score (same set)
           if (opponentScoreRefs.current[setIndex]) {
             opponentScoreRefs.current[setIndex]?.focus();
           }
           break;
 
         case "opponentScore":
-          // From opponent score → next player score OR player tiebreak if 7-6/6-7
           const playerScore = playerScores[setIndex];
           const opponentScore = opponentScores[setIndex];
 
           if (needsTiebreak(playerScore, opponentScore)) {
-            // Jump to player tiebreak
             if (playerTiebreakRefs.current[setIndex]) {
               playerTiebreakRefs.current[setIndex]?.focus();
             }
           } else if (setIndex < numSets - 1) {
-            // Jump to next set's player score
             if (playerScoreRefs.current[setIndex + 1]) {
               playerScoreRefs.current[setIndex + 1]?.focus();
             }
@@ -116,14 +124,12 @@ export function DetailsContent({
           break;
 
         case "playerTiebreak":
-          // From player tiebreak → opponent tiebreak (same set)
           if (opponentTiebreakRefs.current[setIndex]) {
             opponentTiebreakRefs.current[setIndex]?.focus();
           }
           break;
 
         case "opponentTiebreak":
-          // From opponent tiebreak → next set's player score
           if (setIndex < numSets - 1) {
             if (playerScoreRefs.current[setIndex + 1]) {
               playerScoreRefs.current[setIndex + 1]?.focus();
@@ -139,7 +145,6 @@ export function DetailsContent({
     setTimeout(() => {
       switch (currentType) {
         case "playerScore":
-          // From player score → previous opponent tiebreak (if exists)
           if (setIndex > 0) {
             const prevPlayerScore = playerScores[setIndex - 1];
             const prevOpponentScore = opponentScores[setIndex - 1];
@@ -157,21 +162,18 @@ export function DetailsContent({
           break;
 
         case "opponentScore":
-          // From opponent score → player score (same set)
           if (playerScoreRefs.current[setIndex]) {
             playerScoreRefs.current[setIndex]?.focus();
           }
           break;
 
         case "playerTiebreak":
-          // From player tiebreak → opponent score (same set)
           if (opponentScoreRefs.current[setIndex]) {
             opponentScoreRefs.current[setIndex]?.focus();
           }
           break;
 
         case "opponentTiebreak":
-          // From opponent tiebreak → player tiebreak (same set)
           if (playerTiebreakRefs.current[setIndex]) {
             playerTiebreakRefs.current[setIndex]?.focus();
           }
@@ -201,65 +203,63 @@ export function DetailsContent({
   ];
 
   return (
-    <div className="flex flex-col gap-9">
+    <div className="flex flex-col gap-8">
       {/* Auto-fill Banner */}
       {parsingState?.parseSuccess && (
-        <div className="animate-slideDown p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2.5">
-          <Info className="h-4 w-4 text-blue-500 mt-0 flex-shrink-0" />
-          <div>
-            <p className="text-blue-600 text-xs font-medium">
-              Data auto-filled from file
-            </p>
-            <p className="text-blue-600 text-xs mt-1">
+        <div className="animate-slideDown rounded-xl bg-[#3B82F6]/[0.06] border border-[#3B82F6]/20 text-[#1D4ED8] px-4 py-3 text-sm flex items-start gap-3">
+          <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          <div className="flex flex-col gap-0.5">
+            <p className="font-medium">Data auto-filled from file</p>
+            <p className="text-[13px] text-[#1D4ED8]/80">
               Please review the information below and make any necessary corrections.
             </p>
           </div>
         </div>
       )}
 
-      <div className="space-y-4">
-        <div className="space-y-3">
-          {/* Sets Configuration */}
-          <div className="flex justify-between items-center">
-            <span className="text-[#888888] font-normal text-xs">
-              {displayedSets} Sets
-            </span>
-            <div className="flex items-center gap-6">
-              <button
-                type="button"
-                onClick={() => handleSetsChange(-1)}
-                disabled={displayedSets <= 1}
-                className="text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed hover:text-blue-600 transition-colors"
-              >
-                <CircleMinus className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSetsChange(1)}
-                disabled={displayedSets >= bestOfNum}
-                className="text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed hover:text-blue-600 transition-colors"
-              >
-                <CirclePlus className="h-3.5 w-3.5" />
-              </button>
-            </div>
+      <div className="flex flex-col gap-5">
+        {/* Sets Configuration */}
+        <div className="flex justify-between items-center">
+          <span className={SECTION_LABEL_CLASS}>
+            {displayedSets} {displayedSets === 1 ? "Set" : "Sets"}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => handleSetsChange(-1)}
+              disabled={displayedSets <= 1}
+              aria-label="Decrease sets"
+              className="w-7 h-7 rounded-md flex items-center justify-center text-[#3B82F6] hover:bg-[#3B82F6]/10 disabled:text-[#CCC] disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors"
+            >
+              <Minus className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSetsChange(1)}
+              disabled={displayedSets >= bestOfNum}
+              aria-label="Increase sets"
+              className="w-7 h-7 rounded-md flex items-center justify-center text-[#3B82F6] hover:bg-[#3B82F6]/10 disabled:text-[#CCC] disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
           </div>
-
-          <Separator className="bg-[#E5E5E5]" />
         </div>
 
+        <div className="border-t border-[#EAECF0]" />
+
         {/* Player Rows with Set Headers */}
-        <div className="space-y-1 justify-end">
+        <div className="flex flex-col gap-2">
           {/* Set Headers - mirrors the score row structure */}
-          <div className="flex items-center justify-end gap-4">
+          <div className="flex items-center justify-end gap-3">
             {playerScores.map((score, i) => {
               const hasTiebreak = needsTiebreak(score, opponentScores[i]);
               return (
                 <div key={i} className="flex items-center gap-1">
-                  <div className="w-6 text-center text-sm text-[#888888] font-normal">
+                  <div className="w-9 text-center text-[11px] font-medium text-[#888] uppercase tracking-wide">
                     {i + 1}
                   </div>
                   {hasTiebreak && (
-                    <span className="w-6 text-center text-[8px] text-[#888888] font-normal">
+                    <span className="w-9 text-center text-[9px] font-medium text-[#888] uppercase tracking-wide">
                       TIE
                     </span>
                   )}
@@ -268,14 +268,14 @@ export function DetailsContent({
             })}
           </div>
 
-          <div className="space-y-3">
+          <div className="flex flex-col gap-3">
             {/* Player 1 */}
-            <div className="flex justify-between items-start">
-              <div className="flex gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#F7F7F7] flex items-center justify-center text-sm font-medium text-[#888888]">
+            <div className="flex justify-between items-center gap-3">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="w-10 h-10 rounded-full bg-[#F4F4F4] text-[#666] text-sm font-medium flex items-center justify-center flex-shrink-0">
                   {getInitials(playerName)}
                 </div>
-                <div className="flex-1 flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
                   {editingPlayer ? (
                     <Input
                       placeholder="Enter your name..."
@@ -284,24 +284,25 @@ export function DetailsContent({
                       onBlur={() => setEditingPlayer(false)}
                       onKeyDown={(e) => e.key === "Enter" && setEditingPlayer(false)}
                       autoFocus
-                      className="w-40 h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3"
+                      className={`${INPUT_CLASS} max-w-[220px] px-3`}
                     />
                   ) : (
-                    <span className="w-40 text-[#0D0D0D] font-medium text-xs">
-                      {playerName} (You)
+                    <span className="text-sm font-medium text-[#0D0D0D] truncate">
+                      {playerName} <span className="text-[#888] font-normal">(You)</span>
                     </span>
                   )}
                   <button
                     type="button"
                     onClick={() => setEditingPlayer(!editingPlayer)}
-                    className="w-4 h-4 flex items-center justify-center text-[#888888] hover:text-[#0D0D0D] transition-colors"
+                    aria-label="Edit player name"
+                    className="w-6 h-6 flex items-center justify-center rounded-md text-[#888] hover:text-[#0D0D0D] hover:bg-[#F4F4F4] transition-colors flex-shrink-0"
                   >
                     <SquarePen className="h-3.5 w-3.5" />
                   </button>
                 </div>
               </div>
 
-              <div className="flex gap-4">
+              <div className="flex gap-3">
                 {playerScores.map((score, i) => {
                   const opponentScore = opponentScores[i];
                   const hasTiebreak = needsTiebreak(score, opponentScore);
@@ -316,7 +317,7 @@ export function DetailsContent({
                         placeholder="-"
                         inputMode="numeric"
                         pattern="\d*"
-                        className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#888888]"
+                        className={SCORE_CHIP_CLASS}
                         maxLength={2}
                         value={score === null ? "" : score}
                         onChange={(e) => {
@@ -328,22 +329,18 @@ export function DetailsContent({
                             const newValue = e.currentTarget.value;
 
                             if (newValue === "") {
-                              // User is deleting - focus previous
                               focusPreviousInput("playerScore", i);
                             } else if (newValue.length > 0) {
-                              // Check if this creates a tiebreak situation (7-6 or 6-7)
                               const playerNum = Number(newValue);
                               const currentOpponentScore = opponentScores[i];
 
                               if (needsTiebreak(playerNum, currentOpponentScore)) {
-                                // Jump directly to player tiebreak
                                 setTimeout(() => {
                                   if (playerTiebreakRefs.current[i]) {
                                     playerTiebreakRefs.current[i]?.focus();
                                   }
                                 }, 0);
                               } else {
-                                // User pressed enter - focus next
                                 focusNextInput("playerScore", i);
                               }
                             }
@@ -359,7 +356,7 @@ export function DetailsContent({
                           placeholder="-"
                           inputMode="numeric"
                           pattern="\d*"
-                          className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#888888]"
+                          className={SCORE_CHIP_CLASS}
                           value={formData.playerTiebreaks[i] === null ? "" : String(formData.playerTiebreaks[i])}
                           onChange={(e) => {
                             const newValue = e.target.value;
@@ -370,10 +367,8 @@ export function DetailsContent({
                               const newValue = e.currentTarget.value;
 
                               if (newValue === "") {
-                                // User is deleting - focus previous
                                 focusPreviousInput("playerTiebreak", i);
                               } else if (newValue.length > 0) {
-                                // User pressed enter - focus next
                                 focusNextInput("playerTiebreak", i);
                               }
                             }
@@ -388,12 +383,12 @@ export function DetailsContent({
             </div>
 
             {/* Player 2 */}
-            <div className="flex justify-between items-start">
-              <div className="flex gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#F7F7F7] flex items-center justify-center text-sm font-medium text-[#888888]">
+            <div className="flex justify-between items-center gap-3">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="w-10 h-10 rounded-full bg-[#F4F4F4] text-[#666] text-sm font-medium flex items-center justify-center flex-shrink-0">
                   {getInitials(opponentName)}
                 </div>
-                <div className="flex-1 flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
                   {editingOpponent ? (
                     <Input
                       placeholder="Enter opponent name..."
@@ -402,24 +397,25 @@ export function DetailsContent({
                       onBlur={() => setEditingOpponent(false)}
                       onKeyDown={(e) => e.key === "Enter" && setEditingOpponent(false)}
                       autoFocus
-                      className="w-40 h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3"
+                      className={`${INPUT_CLASS} max-w-[220px] px-3`}
                     />
                   ) : (
-                    <span className="w-40 text-[#0D0D0D] font-medium text-xs">
+                    <span className="text-sm font-medium text-[#0D0D0D] truncate">
                       {opponentName}
                     </span>
                   )}
                   <button
                     type="button"
                     onClick={() => setEditingOpponent(!editingOpponent)}
-                    className="w-4 h-4 flex items-center justify-center text-[#888888] hover:text-[#0D0D0D] transition-colors"
+                    aria-label="Edit opponent name"
+                    className="w-6 h-6 flex items-center justify-center rounded-md text-[#888] hover:text-[#0D0D0D] hover:bg-[#F4F4F4] transition-colors flex-shrink-0"
                   >
                     <SquarePen className="h-3.5 w-3.5" />
                   </button>
                 </div>
               </div>
 
-              <div className="flex gap-4">
+              <div className="flex gap-3">
                 {opponentScores.map((score, i) => {
                   const playerScore = playerScores[i];
                   const hasTiebreak = needsTiebreak(playerScore, score);
@@ -434,7 +430,7 @@ export function DetailsContent({
                         placeholder="-"
                         inputMode="numeric"
                         pattern="\d*"
-                        className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#888888]"
+                        className={SCORE_CHIP_CLASS}
                         maxLength={2}
                         value={score === null ? "" : score}
                         onChange={(e) => {
@@ -446,22 +442,18 @@ export function DetailsContent({
                             const newValue = e.currentTarget.value;
 
                             if (newValue === "") {
-                              // User is deleting - focus previous
                               focusPreviousInput("opponentScore", i);
                             } else if (newValue.length > 0) {
-                              // Check if this creates a tiebreak situation (7-6 or 6-7)
                               const opponentNum = Number(newValue);
                               const currentPlayerScore = playerScores[i];
 
                               if (needsTiebreak(currentPlayerScore, opponentNum)) {
-                                // Jump directly to player tiebreak (since player tiebreak comes before opponent tiebreak in the flow)
                                 setTimeout(() => {
                                   if (playerTiebreakRefs.current[i]) {
                                     playerTiebreakRefs.current[i]?.focus();
                                   }
                                 }, 0);
                               } else {
-                                // User pressed enter - focus next
                                 focusNextInput("opponentScore", i);
                               }
                             }
@@ -477,7 +469,7 @@ export function DetailsContent({
                           placeholder="-"
                           inputMode="numeric"
                           pattern="\d*"
-                          className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#888888]"
+                          className={SCORE_CHIP_CLASS}
                           value={formData.opponentTiebreaks[i] === null ? "" : String(formData.opponentTiebreaks[i])}
                           onChange={(e) => {
                             const newValue = e.target.value;
@@ -488,10 +480,8 @@ export function DetailsContent({
                               const newValue = e.currentTarget.value;
 
                               if (newValue === "") {
-                                // User is deleting - focus previous
                                 focusPreviousInput("opponentTiebreak", i);
                               } else if (newValue.length > 0) {
-                                // User pressed enter - focus next
                                 focusNextInput("opponentTiebreak", i);
                               }
                             }
@@ -509,196 +499,213 @@ export function DetailsContent({
       </div>
 
       {/* Result Section */}
-      <div className="flex items-end justify-between">
-        <div className="flex flex-col gap-2">
-          <span className="text-[#0D0D0D] font-medium text-xs">Result</span>
-          <Select
-            value={formData.result || undefined}
-            onValueChange={(value) => onInputChange("result", value)}
-          >
-            <SelectTrigger className="w-[180px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none [&_svg]:size-3">
-              <SelectValue placeholder="Select Result..." />
-            </SelectTrigger>
-            <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
-              {resultOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value} className="text-[#888888] text-xs">
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="flex flex-col gap-2">
+        <span className={SECTION_LABEL_CLASS}>Result</span>
+        <Select
+          value={formData.result || undefined}
+          onValueChange={(value) => onInputChange("result", value)}
+        >
+          <SelectTrigger className={`${SELECT_TRIGGER_CLASS} w-[220px]`}>
+            <SelectValue placeholder="Select Result..." />
+          </SelectTrigger>
+          <SelectContent className={SELECT_CONTENT_CLASS}>
+            {resultOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value} className={SELECT_ITEM_CLASS}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Advanced Settings disclosure */}
+      <div className="flex flex-col">
+        <div className="border-t border-[#EAECF0]" />
         <button
           type="button"
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className="flex items-center gap-1 text-[10px] text-[#888888] hover:text-[#666666] transition-colors"
+          aria-expanded={showAdvanced}
+          className="flex items-center justify-between py-3 text-left group"
         >
-          <span className="underline underline-offset-[19.89%]">Advanced Settings (Optional)</span>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-sm font-medium text-[#0D0D0D]">
+              Advanced Settings
+            </span>
+            <span className="text-xs text-[#888]">
+              Optional event, scoring, and duration details
+            </span>
+          </div>
           <ChevronDown
-            className={`h-3 w-3 transition-transform duration-300 ${showAdvanced ? 'rotate-180' : ''}`}
+            className="h-4 w-4 text-[#666] group-hover:text-[#0D0D0D] transition-transform"
+            style={{
+              transform: showAdvanced ? "rotate(180deg)" : "rotate(0deg)",
+              transitionDuration: "300ms",
+              transitionTimingFunction: "cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+            }}
           />
         </button>
-      </div>
 
-      {/* Advanced Settings Section */}
-      <div
-        className={`grid transition-all duration-300 ease-in-out ${
-          showAdvanced ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-        }`}
-      >
-        <div className="overflow-hidden">
-          <div className="flex flex-col gap-6 pt-2">
-          {/* Event Information */}
-          <div className="space-y-3">
-            <h4 className="text-[#0D0D0D] font-medium text-xs">Event Information</h4>
-            <div className="flex flex-wrap gap-3">
-              <Input
-                placeholder="Type Event Name..."
-                value={formData.eventName}
-                onChange={(e) => onInputChange("eventName", e.target.value)}
-                className="w-[200px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3"
-              />
-              <Select
-                value={formData.round || undefined}
-                onValueChange={(value) => onInputChange("round", value)}
-              >
-                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none [&_svg]:size-3">
-                  <SelectValue placeholder="Round of..." />
-                </SelectTrigger>
-                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
-                  <SelectItem value="None" className="text-[#888888] text-xs">None</SelectItem>
-                  <SelectItem value="Round of 128" className="text-[#888888] text-xs">Round of 128</SelectItem>
-                  <SelectItem value="Round of 64" className="text-[#888888] text-xs">Round of 64</SelectItem>
-                  <SelectItem value="Round of 32" className="text-[#888888] text-xs">Round of 32</SelectItem>
-                  <SelectItem value="Round of 16" className="text-[#888888] text-xs">Round of 16</SelectItem>
-                  <SelectItem value="Quarterfinals" className="text-[#888888] text-xs">Quarterfinals</SelectItem>
-                  <SelectItem value="Semifinals" className="text-[#888888] text-xs">Semifinals</SelectItem>
-                  <SelectItem value="Finals" className="text-[#888888] text-xs">Finals</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <div
-                className="relative w-fit cursor-pointer"
-                onClick={() => dateInputRef.current?.showPicker()}
-              >
-                <Input
-                  ref={dateInputRef}
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) => onInputChange("date", e.target.value)}
-                  className="w-auto h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none pl-3 pr-7 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:p-0 [&::-webkit-datetime-edit-fields-wrapper]:p-0"
-                />
-                <Calendar className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-[#888888]" />
+        {/* Advanced Settings Section */}
+        <div
+          className={`grid transition-all duration-300 ${
+            showAdvanced ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+          }`}
+          style={{ transitionTimingFunction: "cubic-bezier(0.25, 0.46, 0.45, 0.94)" }}
+        >
+          <div className="overflow-hidden">
+            <div className="flex flex-col gap-6 pt-2 pb-1">
+              {/* Event Information */}
+              <div className="flex flex-col gap-3">
+                <h4 className={SECTION_LABEL_CLASS}>Event Information</h4>
+                <div className="flex flex-wrap gap-3">
+                  <Input
+                    placeholder="Type Event Name..."
+                    value={formData.eventName}
+                    onChange={(e) => onInputChange("eventName", e.target.value)}
+                    className={`${INPUT_CLASS} w-[220px] px-3`}
+                  />
+                  <Select
+                    value={formData.round || undefined}
+                    onValueChange={(value) => onInputChange("round", value)}
+                  >
+                    <SelectTrigger className={`${SELECT_TRIGGER_CLASS} w-[150px]`}>
+                      <SelectValue placeholder="Round of..." />
+                    </SelectTrigger>
+                    <SelectContent className={SELECT_CONTENT_CLASS}>
+                      <SelectItem value="None" className={SELECT_ITEM_CLASS}>None</SelectItem>
+                      <SelectItem value="Round of 128" className={SELECT_ITEM_CLASS}>Round of 128</SelectItem>
+                      <SelectItem value="Round of 64" className={SELECT_ITEM_CLASS}>Round of 64</SelectItem>
+                      <SelectItem value="Round of 32" className={SELECT_ITEM_CLASS}>Round of 32</SelectItem>
+                      <SelectItem value="Round of 16" className={SELECT_ITEM_CLASS}>Round of 16</SelectItem>
+                      <SelectItem value="Quarterfinals" className={SELECT_ITEM_CLASS}>Quarterfinals</SelectItem>
+                      <SelectItem value="Semifinals" className={SELECT_ITEM_CLASS}>Semifinals</SelectItem>
+                      <SelectItem value="Finals" className={SELECT_ITEM_CLASS}>Finals</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <div
+                    className="relative w-fit cursor-pointer"
+                    onClick={() => dateInputRef.current?.showPicker()}
+                  >
+                    <Input
+                      ref={dateInputRef}
+                      type="date"
+                      value={formData.date}
+                      onChange={(e) => onInputChange("date", e.target.value)}
+                      className={`${INPUT_CLASS} w-auto pl-3 pr-9 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:p-0 [&::-webkit-datetime-edit-fields-wrapper]:p-0`}
+                    />
+                    <Calendar className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 size-3.5 text-[#888]" />
+                  </div>
+                  <div
+                    className="relative w-fit cursor-pointer"
+                    onClick={() => timeInputRef.current?.showPicker()}
+                  >
+                    <Input
+                      ref={timeInputRef}
+                      type="time"
+                      value={formData.time}
+                      onChange={(e) => onInputChange("time", e.target.value)}
+                      className={`${INPUT_CLASS} w-auto pl-3 pr-9 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:p-0 [&::-webkit-datetime-edit-fields-wrapper]:p-0`}
+                    />
+                    <Clock className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 size-3.5 text-[#888]" />
+                  </div>
+                  <Select
+                    value={formData.matchType || undefined}
+                    onValueChange={(value) => onInputChange("matchType", value)}
+                  >
+                    <SelectTrigger className={`${SELECT_TRIGGER_CLASS} w-[150px]`}>
+                      <SelectValue placeholder="Match Type..." />
+                    </SelectTrigger>
+                    <SelectContent className={SELECT_CONTENT_CLASS}>
+                      <SelectItem value="None" className={SELECT_ITEM_CLASS}>None</SelectItem>
+                      <SelectItem value="Tournament" className={SELECT_ITEM_CLASS}>Tournament</SelectItem>
+                      <SelectItem value="Dual Match" className={SELECT_ITEM_CLASS}>Dual Match</SelectItem>
+                      <SelectItem value="Practice" className={SELECT_ITEM_CLASS}>Practice</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={formData.courtType || undefined}
+                    onValueChange={(value) => onInputChange("courtType", value)}
+                  >
+                    <SelectTrigger className={`${SELECT_TRIGGER_CLASS} w-[180px]`}>
+                      <SelectValue placeholder="Court Type..." />
+                    </SelectTrigger>
+                    <SelectContent className={SELECT_CONTENT_CLASS}>
+                      <SelectItem value="None" className={SELECT_ITEM_CLASS}>None</SelectItem>
+                      <SelectItem value="Indoor Hard Court" className={SELECT_ITEM_CLASS}>Indoor Hard Court</SelectItem>
+                      <SelectItem value="Outdoor Hard Court" className={SELECT_ITEM_CLASS}>Outdoor Hard Court</SelectItem>
+                      <SelectItem value="Clay Court" className={SELECT_ITEM_CLASS}>Clay Court</SelectItem>
+                      <SelectItem value="Grass Court" className={SELECT_ITEM_CLASS}>Grass Court</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div
-                className="relative w-fit cursor-pointer"
-                onClick={() => timeInputRef.current?.showPicker()}
-              >
-                <Input
-                  ref={timeInputRef}
-                  type="time"
-                  value={formData.time}
-                  onChange={(e) => onInputChange("time", e.target.value)}
-                  className="w-auto h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none pl-3 pr-7 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:p-0 [&::-webkit-datetime-edit-fields-wrapper]:p-0"
-                />
-                <Clock className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-[#888888]" />
+
+              {/* Scoring Format */}
+              <div className="flex flex-col gap-3">
+                <h4 className={SECTION_LABEL_CLASS}>Scoring Format</h4>
+                <div className="flex flex-wrap gap-3">
+                  <Select
+                    value={formData.bestOf || undefined}
+                    onValueChange={(value) => onInputChange("bestOf", value)}
+                  >
+                    <SelectTrigger className={`${SELECT_TRIGGER_CLASS} w-[150px]`}>
+                      <SelectValue placeholder="Best of..." />
+                    </SelectTrigger>
+                    <SelectContent className={SELECT_CONTENT_CLASS}>
+                      <SelectItem value="1" className={SELECT_ITEM_CLASS}>Best of 1 Set</SelectItem>
+                      <SelectItem value="3" className={SELECT_ITEM_CLASS}>Best of 3 Sets</SelectItem>
+                      <SelectItem value="5" className={SELECT_ITEM_CLASS}>Best of 5 Sets</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={formData.adScoring === undefined ? undefined : (formData.adScoring ? "ad" : "no-ad")}
+                    onValueChange={(value) => onInputChange("adScoring", value === "ad")}
+                  >
+                    <SelectTrigger className={`${SELECT_TRIGGER_CLASS} w-[160px]`}>
+                      <SelectValue placeholder="Ad Scoring..." />
+                    </SelectTrigger>
+                    <SelectContent className={SELECT_CONTENT_CLASS}>
+                      <SelectItem value="ad" className={SELECT_ITEM_CLASS}>Ad Scoring</SelectItem>
+                      <SelectItem value="no-ad" className={SELECT_ITEM_CLASS}>No-Ad Scoring</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={formData.playOnLets === undefined ? undefined : (formData.playOnLets ? "play-on" : "lets")}
+                    onValueChange={(value) => onInputChange("playOnLets", value === "play-on")}
+                  >
+                    <SelectTrigger className={`${SELECT_TRIGGER_CLASS} w-[150px]`}>
+                      <SelectValue placeholder="Lets..." />
+                    </SelectTrigger>
+                    <SelectContent className={SELECT_CONTENT_CLASS}>
+                      <SelectItem value="lets" className={SELECT_ITEM_CLASS}>Lets</SelectItem>
+                      <SelectItem value="play-on" className={SELECT_ITEM_CLASS}>Play on Lets</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <Select
-                value={formData.matchType || undefined}
-                onValueChange={(value) => onInputChange("matchType", value)}
-              >
-                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none [&_svg]:size-3">
-                  <SelectValue placeholder="Match Type..." />
-                </SelectTrigger>
-                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
-                  <SelectItem value="None" className="text-[#888888] text-xs">None</SelectItem>
-                  <SelectItem value="Tournament" className="text-[#888888] text-xs">Tournament</SelectItem>
-                  <SelectItem value="Dual Match" className="text-[#888888] text-xs">Dual Match</SelectItem>
-                  <SelectItem value="Practice" className="text-[#888888] text-xs">Practice</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={formData.courtType || undefined}
-                onValueChange={(value) => onInputChange("courtType", value)}
-              >
-                <SelectTrigger className="w-[160px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none [&_svg]:size-3">
-                  <SelectValue placeholder="Court Type..." />
-                </SelectTrigger>
-                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
-                  <SelectItem value="None" className="text-[#888888] text-xs">None</SelectItem>
-                  <SelectItem value="Indoor Hard Court" className="text-[#888888] text-xs">Indoor Hard Court</SelectItem>
-                  <SelectItem value="Outdoor Hard Court" className="text-[#888888] text-xs">Outdoor Hard Court</SelectItem>
-                  <SelectItem value="Clay Court" className="text-[#888888] text-xs">Clay Court</SelectItem>
-                  <SelectItem value="Grass Court" className="text-[#888888] text-xs">Grass Court</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
 
-          {/* Scoring Format */}
-          <div className="space-y-3">
-            <h4 className="text-[#0D0D0D] font-medium text-xs">Scoring Format</h4>
-            <div className="flex flex-wrap gap-3">
-              <Select
-                value={formData.bestOf || undefined}
-                onValueChange={(value) => onInputChange("bestOf", value)}
-              >
-                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none [&_svg]:size-3">
-                  <SelectValue placeholder="Best of..." />
-                </SelectTrigger>
-                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
-                  <SelectItem value="1" className="text-[#888888] text-xs">Best of 1 Set</SelectItem>
-                  <SelectItem value="3" className="text-[#888888] text-xs">Best of 3 Sets</SelectItem>
-                  <SelectItem value="5" className="text-[#888888] text-xs">Best of 5 Sets</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={formData.adScoring === undefined ? undefined : (formData.adScoring ? "ad" : "no-ad")}
-                onValueChange={(value) => onInputChange("adScoring", value === "ad")}
-              >
-                <SelectTrigger className="w-[140px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none [&_svg]:size-3">
-                  <SelectValue placeholder="Ad Scoring..." />
-                </SelectTrigger>
-                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
-                  <SelectItem value="ad" className="text-[#888888] text-xs">Ad Scoring</SelectItem>
-                  <SelectItem value="no-ad" className="text-[#888888] text-xs">No-Ad Scoring</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={formData.playOnLets === undefined ? undefined : (formData.playOnLets ? "play-on" : "lets")}
-                onValueChange={(value) => onInputChange("playOnLets", value === "play-on")}
-              >
-                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none [&_svg]:size-3">
-                  <SelectValue placeholder="Lets..." />
-                </SelectTrigger>
-                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
-                  <SelectItem value="lets" className="text-[#888888] text-xs">Lets</SelectItem>
-                  <SelectItem value="play-on" className="text-[#888888] text-xs">Play on Lets</SelectItem>
-                </SelectContent>
-              </Select>
+              {/* Match Duration */}
+              <div className="flex flex-col gap-3">
+                <h4 className={SECTION_LABEL_CLASS}>Match Duration (Hours:Minutes)</h4>
+                <Input
+                  type="text"
+                  placeholder="-:--"
+                  value={formatDuration(formData.duration)}
+                  onChange={(e) => {
+                    const displayValue = e.target.value;
+                    if (displayValue === "" || displayValue === "-") {
+                      onInputChange("duration", 0);
+                    } else {
+                      const seconds = parseDuration(displayValue);
+                      onInputChange("duration", seconds);
+                    }
+                  }}
+                  className={`${INPUT_CLASS} w-[220px] px-3 font-mono`}
+                />
+              </div>
             </div>
-          </div>
-
-          {/* Match Duration */}
-          <div className="space-y-3">
-            <h4 className="text-[#0D0D0D] font-medium text-xs">Match Duration (Hours:Minutes)</h4>
-            <Input
-              type="text"
-              placeholder="-:--"
-              value={formatDuration(formData.duration)}
-              onChange={(e) => {
-                const displayValue = e.target.value;
-                if (displayValue === "" || displayValue === "-") {
-                  onInputChange("duration", 0);
-                } else {
-                  const seconds = parseDuration(displayValue);
-                  onInputChange("duration", seconds);
-                }
-              }}
-              className="w-[200px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3 font-mono"
-            />
-          </div>
           </div>
         </div>
       </div>
