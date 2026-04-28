@@ -49,27 +49,6 @@ export function shortName(name: string, maxLen = 14): string {
   return [`${parts[0][0]}.`, ...midInitials, last].join(" ");
 }
 
-/* ── Player Color Tokens ──────────────────────────────────
- * Cool-palette aligned (blue + indigo) per the design system's
- * cool-neutral rule. Use `PLAYER_COLORS` for dots, chart fills, and
- * dividers; use `PLAYER_TEXT_COLORS` for text on white or soft bg
- * (WCAG AA ≥4.5:1 on both); use `PLAYER_SOFT_COLORS` for pill bgs.
- */
-export const PLAYER_COLORS = {
-  player1: "#3B82F6",
-  player2: "#6366F1",
-} as const;
-
-export const PLAYER_TEXT_COLORS = {
-  player1: "#1D4ED8",
-  player2: "#4338CA",
-} as const;
-
-export const PLAYER_SOFT_COLORS = {
-  player1: "#EFF4FF",
-  player2: "#EEF2FF",
-} as const;
-
 /**
  * Format duration in minutes to "XHR YMIN" format
  */

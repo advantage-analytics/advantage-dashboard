@@ -1,12 +1,16 @@
 export interface Player {
   name: string;
   school: string;
+  hand?: string;
+  backhand?: string;
 }
 
 export interface SetScore {
   player1: number;
   player2: number;
   tiebreak?: boolean;
+  player1Tiebreak?: number | null;
+  player2Tiebreak?: number | null;
 }
 
 export interface MatchScore {
@@ -29,6 +33,7 @@ export interface Match {
   player2: Player;
   score: MatchScore;
   won: boolean;
+  isUserPlayer1: boolean;
 }
 
 export interface UpcomingMatch {

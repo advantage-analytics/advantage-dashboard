@@ -1,6 +1,6 @@
 "use client";
 
-import { Children, useRef } from "react";
+import { Children, useEffect, useRef } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 
 const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
@@ -20,7 +20,9 @@ export function SectionsStagger({ children, className }: SectionsStaggerProps) {
   const shouldReduceMotion = useReducedMotion();
   const hasAnimated = useRef(false);
   const skipAnimation = shouldReduceMotion || hasAnimated.current;
-  hasAnimated.current = true;
+  useEffect(() => {
+    hasAnimated.current = true;
+  }, []);
 
   return (
     <div className={className}>

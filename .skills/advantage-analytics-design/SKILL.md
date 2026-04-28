@@ -150,11 +150,13 @@ Match detail and video sections use additional colors for multi-player different
 
 | Token | Value | Use |
 |-------|-------|-----|
-| player-2 | `#6366F1` | Secondary player/opponent color in charts |
-| player-2-text | `#4338CA` | Player 2 text on white or soft-indigo bg (WCAG AA) |
-| player-2-soft | `#EEF2FF` | Player 2 soft pill/highlight background |
+| player-2 | `#A855F7` | Secondary player/opponent color in charts (purple-500) |
+| player-2-text | `#7E22CE` | Player 2 text on white or soft-purple bg (WCAG AA, purple-700) |
+| player-2-soft | `#FAF5FF` | Player 2 soft pill/highlight background (purple-50) |
 | player-1-text | `#1D4ED8` | Player 1 text on white or soft-blue bg (WCAG AA) |
 | player-1-soft | `#EFF4FF` | Player 1 soft pill/highlight background |
+| player-1-bar-tint | `#BFD5FB` | Player 1 non-leader bar fill (on `#F3F3F3` track) |
+| player-2-bar-tint | `#DDC7F7` | Player 2 non-leader bar fill (on `#F3F3F3` track) |
 | alt-success | `#22C55E` | Progress bar success (Tailwind green-500) |
 | alt-error | `#EF4444` | Video/inline error states (Tailwind red-500) |
 | alt-error-dark | `#DC2626` | Darker error emphasis (Tailwind red-600) |
@@ -416,6 +418,43 @@ flex flex-col items-center justify-center py-12 px-6 text-center
 // Title: text-[#0D0D0D]
 // Description: text-[12px] text-[#888888]
 ```
+
+### Keyboard Shortcut Chip (`<kbd>`)
+
+Always render keyboard hints inside a semantic `<kbd>` element, marked `aria-hidden="true"` when an `aria-label` already conveys the shortcut. Use `inline-flex` so the chip aligns with adjacent text/icons.
+
+**Light surface (default)** — search trigger, dismiss hints, back-to-list affordances:
+
+```
+inline-block px-1 py-0.5 rounded
+text-[10px] font-medium leading-none text-[#AAAAAA] bg-[#F0F0F0]
+```
+
+Let the chip auto-size from its text + padding rather than imposing a fixed height. This is what makes the contents sit in their natural type-metric position — fixed heights center the line-box geometrically, but lowercase letters with no ascenders/descenders (like `esc`) appear visually low inside that box. With `py-0.5` the chip hugs the actual cap-height/x-height of the rendered text, matching the cadence of `⌘K` and `esc` chips throughout the app.
+
+**Inverted surface** — on accent (`#3B82F6`) buttons or other dark backgrounds:
+
+```
+inline-block px-1 py-0.5 rounded
+text-[10px] font-medium leading-none bg-white/20 text-white
+```
+
+**Lowercase word-named keys** (`esc`, `tab`, `enter`) — append `[font-variant-caps:small-caps]` to the chip className. Inter at 10px renders lowercase letters at x-height only, which sit visually low inside the chip because they don't fill the line-box like cap-height letters do; small-caps renders them as small uppercase glyphs at cap-height so they center alongside modifier+letter combos like `⌘K`. Source text stays lowercase; the variant only changes the visual form.
+
+**Inline (in body copy)** — for "or press ⌘S" style hints, no chip background:
+
+```
+text-[#525252] font-medium
+```
+
+**Symbol conventions**
+
+- macOS modifiers: `⌘` (⌘), `⌥` (⌥), `⌃` (⌃), `⇧` (⇧). Concatenate without a `+` (`⌘K`, not `⌘+K`).
+- Windows/Linux modifiers: spell out and join with `+` (`Ctrl+S`, `Alt+K`).
+- **Letter keys in modifier combos stay UPPERCASE** (`⌘U`, `⌘K`, `⌘S`, `Ctrl+S`). They read as a hotkey, not a label.
+- **Standalone word-named keys are lowercase** (`esc`, `enter`, `tab`, `space`). They read as a label, not a glyph.
+- Punctuation keys render as-is (`/`, `?`).
+- Detect platform via `navigator.userAgentData?.platform ?? navigator.platform` and gate render behind `if (isMac !== null)` to avoid SSR mismatches.
 
 ---
 

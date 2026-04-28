@@ -18,12 +18,18 @@ interface RecentPerformanceStat {
   change: number;
 }
 
+export type KpiCategory = "Serve" | "Return" | "Other";
+
 export interface KpiCardData {
+  key: string;
   label: string;
   value: string;
   change: number;
   changeLabel: string;
   sparkline: number[];
+  description?: string;
+  category: KpiCategory;
+  lowerIsBetter?: boolean;
 }
 
 export interface PerformanceProfileDimension {
@@ -81,6 +87,14 @@ interface DbMatchStats {
   second_return_won_pct: string | null;
   break_points_saved_pct: string | null;
   break_points_converted_pct: string | null;
+  service_games_won_pct: string | null;
+  return_games_won_pct: string | null;
+  total_points_won_pct: string | null;
+  aces: number | null;
+  double_faults: number | null;
+  winners: number | null;
+  unforced_errors: number | null;
+  avg_rally_length: number | null;
 }
 
 const DEFAULT_PERFORMANCE: OverallPerformanceData = {
@@ -330,20 +344,157 @@ function calculateHeatmap(matches: DbMatch[], userId: string): HeatmapDay[] {
   return result;
 }
 
+type KpiFormat = "percent" | "count" | "decimal";
+
+interface KpiSpec {
+  key: string;
+  label: string;
+  category: KpiCategory;
+  format: KpiFormat;
+  description: string;
+  pick: (s: DbMatchStats) => number;
+  lowerIsBetter?: boolean;
+}
+
+const KPI_SPECS: KpiSpec[] = [
+  // Serve
+  {
+    key: "first-serve-pct",
+    label: "1ST SERVE PERCENTAGE",
+    category: "Serve",
+    format: "percent",
+    description: "Percentage of first serves that landed in the service box",
+    pick: (s) => parseFloat(s.first_serve_pct ?? "0"),
+  },
+  {
+    key: "first-serve-won",
+    label: "1ST SERVE WON",
+    category: "Serve",
+    format: "percent",
+    description: "Percentage of points won on your first serve",
+    pick: (s) => parseFloat(s.first_serve_won_pct ?? "0"),
+  },
+  {
+    key: "second-serve-won",
+    label: "2ND SERVE WON",
+    category: "Serve",
+    format: "percent",
+    description: "Percentage of points won on your second serve",
+    pick: (s) => parseFloat(s.second_serve_won_pct ?? "0"),
+  },
+  {
+    key: "service-games-won",
+    label: "SERVICE GAMES WON",
+    category: "Serve",
+    format: "percent",
+    description: "Percentage of service games held",
+    pick: (s) => parseFloat(s.service_games_won_pct ?? s.serve_rating ?? "0"),
+  },
+  {
+    key: "breakpoints-saved",
+    label: "BREAKPOINTS SAVED",
+    category: "Serve",
+    format: "percent",
+    description: "Percentage of break points defended on serve",
+    pick: (s) => parseFloat(s.break_points_saved_pct ?? "0"),
+  },
+  {
+    key: "aces",
+    label: "ACES",
+    category: "Serve",
+    format: "count",
+    description: "Serves the returner doesn't touch",
+    pick: (s) => s.aces ?? 0,
+  },
+  {
+    key: "double-faults",
+    label: "DOUBLE FAULTS",
+    category: "Serve",
+    format: "count",
+    description: "Missed second serves; point lost",
+    pick: (s) => s.double_faults ?? 0,
+    lowerIsBetter: true,
+  },
+  // Return
+  {
+    key: "first-return-won",
+    label: "1ST RETURN WON",
+    category: "Return",
+    format: "percent",
+    description: "Percentage of points won returning first serves",
+    pick: (s) => parseFloat(s.first_return_won_pct ?? "0"),
+  },
+  {
+    key: "second-return-won",
+    label: "2ND RETURN WON",
+    category: "Return",
+    format: "percent",
+    description: "Percentage of points won returning second serves",
+    pick: (s) => parseFloat(s.second_return_won_pct ?? "0"),
+  },
+  {
+    key: "return-games-won",
+    label: "RETURN GAMES WON",
+    category: "Return",
+    format: "percent",
+    description: "Percentage of opponent service games broken",
+    pick: (s) => parseFloat(s.return_games_won_pct ?? "0"),
+  },
+  {
+    key: "breakpoints-converted",
+    label: "BREAKPOINTS CONVERTED",
+    category: "Return",
+    format: "percent",
+    description: "Percentage of break point opportunities converted",
+    pick: (s) => parseFloat(s.break_points_converted_pct ?? "0"),
+  },
+  // Other
+  {
+    key: "total-points-won",
+    label: "TOTAL POINTS WON",
+    category: "Other",
+    format: "percent",
+    description: "Percentage of all points won",
+    pick: (s) => parseFloat(s.total_points_won_pct ?? "0"),
+  },
+  {
+    key: "winners",
+    label: "WINNERS",
+    category: "Other",
+    format: "count",
+    description: "Point-ending shots not touched",
+    pick: (s) => s.winners ?? 0,
+  },
+  {
+    key: "unforced-errors",
+    label: "UNFORCED ERRORS",
+    category: "Other",
+    format: "count",
+    description: "Shots into the net or out of bounds",
+    pick: (s) => s.unforced_errors ?? 0,
+    lowerIsBetter: true,
+  },
+  {
+    key: "avg-rally-length",
+    label: "AVG RALLY LENGTH",
+    category: "Other",
+    format: "decimal",
+    description: "Average shots per point",
+    pick: (s) => s.avg_rally_length ?? 0,
+  },
+];
+
+function formatKpiValue(value: number, format: KpiFormat): string {
+  if (format === "percent") return `${Math.round(value)}%`;
+  if (format === "count") return `${Math.round(value)}`;
+  return value.toFixed(1);
+}
+
 function calculateKpiCards(
   stats: DbMatchStats[],
   matchPlayerMap: Map<string, boolean>,
   orderedMatchIds: string[]
 ): KpiCardData[] {
-  // Build per-match stat values for the user, ordered by date (most recent first)
-  const matchStatsList: {
-    firstServePct: number;
-    serviceGamesWon: number;
-    bpSaved: number;
-    serviceReturnsWon: number;
-    bpConverted: number;
-  }[] = [];
-
   const statByMatch = new Map<string, DbMatchStats>();
   for (const stat of stats) {
     const isUserPlayer1 = matchPlayerMap.get(stat.match_id);
@@ -352,55 +503,33 @@ function calculateKpiCards(
     statByMatch.set(stat.match_id, stat);
   }
 
+  const orderedStats: DbMatchStats[] = [];
   for (const matchId of orderedMatchIds) {
     const s = statByMatch.get(matchId);
-    if (!s) continue;
-    matchStatsList.push({
-      firstServePct: parseFloat(s.first_serve_pct ?? "0"),
-      serviceGamesWon: parseFloat(s.serve_rating ?? "0") / 2.5, // scale serve_rating to approx %
-      bpSaved: parseFloat(s.break_points_saved_pct ?? "0"),
-      serviceReturnsWon:
-        (parseFloat(s.first_return_won_pct ?? "0") +
-          parseFloat(s.second_return_won_pct ?? "0")) /
-        2,
-      bpConverted: parseFloat(s.break_points_converted_pct ?? "0"),
-    });
+    if (s) orderedStats.push(s);
   }
+  if (orderedStats.length === 0) return [];
 
-  if (matchStatsList.length === 0) return [];
-
-  const buildCard = (
-    label: string,
-    key: keyof (typeof matchStatsList)[0]
-  ): KpiCardData => {
-    const latest = matchStatsList[0][key];
-    const sparkline = matchStatsList
-      .slice(0, 8)
-      .map((s) => s[key])
-      .reverse();
-
-    // Calculate 30-day change (approximate: compare first half vs second half of recent matches)
-    let change = 0;
-    if (matchStatsList.length >= 2) {
-      change =
-        Math.round((matchStatsList[0][key] - matchStatsList[1][key]) * 10) / 10;
-    }
-
+  return KPI_SPECS.map((spec) => {
+    const values = orderedStats.map(spec.pick);
+    const latest = values[0];
+    const sparkline = values.slice(0, 8).reverse();
+    const change =
+      values.length >= 2
+        ? Math.round((values[0] - values[1]) * 10) / 10
+        : 0;
     return {
-      label,
-      value: `${Math.round(latest)}%`,
+      key: spec.key,
+      label: spec.label,
+      value: formatKpiValue(latest, spec.format),
       change,
       changeLabel: "last 30 days",
       sparkline,
+      description: spec.description,
+      category: spec.category,
+      lowerIsBetter: spec.lowerIsBetter,
     };
-  };
-
-  return [
-    buildCard("1ST SERVE PERCENTAGE", "firstServePct"),
-    buildCard("SERVICE GAMES WON", "serviceGamesWon"),
-    buildCard("SERVICE RETURNS WON", "serviceReturnsWon"),
-    buildCard("BREAKPOINTS CONVERTED", "bpConverted"),
-  ];
+  });
 }
 
 function calculateWinRateSparkline(
@@ -577,7 +706,7 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
   const { data: stats } = await supabase
     .from("match_stats_with_percentages")
     .select(
-      "match_id, is_player1, first_serve_pct, first_serve_won_pct, second_serve_won_pct, serve_rating, first_return_won_pct, second_return_won_pct, break_points_saved_pct, break_points_converted_pct"
+      "match_id, is_player1, first_serve_pct, first_serve_won_pct, second_serve_won_pct, serve_rating, first_return_won_pct, second_return_won_pct, break_points_saved_pct, break_points_converted_pct, service_games_won_pct, return_games_won_pct, total_points_won_pct, aces, double_faults, winners, unforced_errors, avg_rally_length"
     )
     .in("match_id", matchIds);
 

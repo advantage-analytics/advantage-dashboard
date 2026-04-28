@@ -1,8 +1,35 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { useParams } from "next/navigation";
 import { AlertCircle } from "lucide-react";
-import Link from "next/link";
+import { ErrorState } from "@/components/dashboard/matches/error-state";
+import {
+  readRetryCount,
+  writeRetryCount,
+} from "@/components/dashboard/matches/retry-state";
+
+const ESCALATION_THRESHOLD = 3;
+const SUPPORT_EMAIL = "team@advantage-analytics.com";
+
+function buildSupportMailto(
+  matchId: string | undefined,
+  digest: string | undefined,
+) {
+  const subject = "Match detail error";
+  const lines = [
+    "Hi team,",
+    "",
+    "I hit an error loading a match. Details below:",
+    "",
+    matchId ? `Match ID: ${matchId}` : undefined,
+    digest ? `Error ID: ${digest}` : undefined,
+    "",
+    "(Please describe what you were doing when this happened.)",
+  ].filter(Boolean);
+  const body = lines.join("\n");
+  return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
 
 export default function Error({
   error,
@@ -11,33 +38,62 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const params = useParams<{ matchId: string }>();
+  const matchId = params?.matchId;
+  const [isPending, startTransition] = useTransition();
+  const [manualPending, setManualPending] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const loading = isPending || manualPending;
+  const escalated = retryCount >= ESCALATION_THRESHOLD;
+
   useEffect(() => {
-    console.error("Match detail error:", error);
-  }, [error]);
+    console.error("match-detail error", { matchId, error });
+  }, [error, matchId]);
+
+  useEffect(() => {
+    if (!matchId) return;
+    setRetryCount(readRetryCount(matchId));
+  }, [matchId]);
+
+  function handleRetry() {
+    setManualPending(true);
+    if (matchId) {
+      const next = retryCount + 1;
+      writeRetryCount(matchId, next);
+      setRetryCount(next);
+    }
+    startTransition(() => {
+      reset();
+      setManualPending(false);
+    });
+  }
+
+  const meta: { label: string; value: string; copyable?: boolean }[] = [];
+  if (matchId) meta.push({ label: "Match", value: matchId, copyable: true });
+  if (error.digest)
+    meta.push({ label: "Error", value: error.digest, copyable: true });
+
+  const description = escalated
+    ? "We've tried a few times without luck. This might take a moment to resolve — please try again later, or share the error ID below to get help faster."
+    : "Something went wrong on our end. Try again — if it keeps happening, share the error ID below.";
 
   return (
-    <div className="flex-1 w-full bg-white flex items-center justify-center min-h-[60vh]">
-      <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] p-8 flex flex-col items-center text-center max-w-sm">
-        <AlertCircle className="text-[#E51837] size-8" />
-        <h1 className="text-[20px] font-medium text-[#0D0D0D] mt-4">
-          Something went wrong
-        </h1>
-        <p className="text-[12px] text-[#525252] mt-2">
-          We couldn&apos;t load this match. Please try again.
-        </p>
-        <button
-          onClick={reset}
-          className="mt-6 px-4 py-2 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[11px] font-medium uppercase tracking-[1.5px] rounded-[6px] transition-colors duration-200 active:scale-[0.97]"
-        >
-          Try Again
-        </button>
-        <Link
-          href="/dashboard/matches"
-          className="text-[#3B82F6] hover:text-[#2563EB] text-[11px] font-medium mt-3 transition-colors duration-200"
-        >
-          Back to Matches
-        </Link>
-      </div>
-    </div>
+    <ErrorState
+      icon={AlertCircle}
+      title={escalated ? "Still having trouble loading this match" : "This match couldn't load"}
+      description={description}
+      primaryAction={{
+        type: "button",
+        label: "Try again",
+        loading,
+        onClick: handleRetry,
+      }}
+      secondaryAction={{ label: "Back to matches", href: "/dashboard/matches" }}
+      meta={meta.length > 0 ? meta : undefined}
+      helpLink={{
+        label: "Email support",
+        href: buildSupportMailto(matchId, error.digest),
+      }}
+    />
   );
 }

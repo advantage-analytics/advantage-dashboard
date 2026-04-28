@@ -1,69 +1,31 @@
 "use client";
 
 import { useCallback, useId, useMemo, useRef, useState } from "react";
-import Link from "next/link";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { shortName } from "@/lib/data/match-utils";
+import {
+  PLAYER_1,
+  PLAYER_2,
+  EVENT_ACCENT,
+} from "@/lib/design/player-colors";
 
-/* ── Constants ───────────────────────────────────────────── */
-
-const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
-const P1_COLOR = "#3B82F6";
-const P2_COLOR = "#6366F1";
-const P1_LINE_COLOR = "#2563EB";
-const P2_LINE_COLOR = "#D97218";
 const CHART_W = 600;
-const CHART_H = 140;
-
-/* ── Types ───────────────────────────────────────────────── */
+const CHART_H = 200;
 
 interface MomentumPoint {
   diff: number;
   setNumber: number;
 }
 
-interface SetStat {
-  set: number;
-  p1Points: number;
-  p2Points: number;
-}
-
-interface PressureStat {
-  label: string;
-  p1Won: number;
-  p1Total: number;
-  p2Won: number;
-  p2Total: number;
-}
-
-interface RallyBucket {
-  label: string;
-  p1WonPct: number;
-  p2WonPct: number;
-  hasData: boolean;
-}
-
-/* ── Smooth curve helper (Catmull-Rom → cubic Bezier) ──── */
-
-function toSmoothPath(points: [number, number][]): string {
+function toLinearPath(points: [number, number][]): string {
   if (points.length < 2) return "";
   let d = `M ${points[0][0]},${points[0][1]}`;
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = points[Math.max(i - 1, 0)];
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const p3 = points[Math.min(i + 2, points.length - 1)];
-    const cp1x = p1[0] + (p2[0] - p0[0]) / 6;
-    const cp1y = p1[1] + (p2[1] - p0[1]) / 6;
-    const cp2x = p2[0] - (p3[0] - p1[0]) / 6;
-    const cp2y = p2[1] - (p3[1] - p1[1]) / 6;
-    d += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p2[0]},${p2[1]}`;
+  for (let i = 1; i < points.length; i++) {
+    d += ` L ${points[i][0]},${points[i][1]}`;
   }
   return d;
 }
-
-/* ── Break detection ─────────────────────────────────────── */
 
 interface BreakInfo {
   index: number;
@@ -90,73 +52,51 @@ function detectBreaks(points: MatchPoint[]): BreakInfo[] {
   return breaks;
 }
 
-/* ── Set filter chips ────────────────────────────────────── */
-
-function SetFilterChips({
-  sets,
-  activeSet,
-  onSetChange,
-}: {
-  sets: number[];
-  activeSet: number | null;
-  onSetChange: (set: number | null) => void;
-}) {
-  if (sets.length <= 1) return null;
-
-  return (
-    <div className="flex items-center gap-2 mb-5" role="group" aria-label="Filter by set">
-      <motion.button
-        onClick={() => onSetChange(null)}
-        whileTap={{ scale: 0.95 }}
-        transition={{ duration: 0.1 }}
-        className={`h-7 px-3 rounded-full text-[10px] font-medium uppercase tracking-[1.5px] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 ${
-          activeSet === null
-            ? "bg-[#0D0D0D] text-white"
-            : "bg-[#F5F5F5] text-[#888888] hover:bg-[#F0F0F0]"
-        }`}
-      >
-        All Sets
-      </motion.button>
-      {sets.map((s) => (
-        <motion.button
-          key={s}
-          onClick={() => onSetChange(s)}
-          whileTap={{ scale: 0.95 }}
-          transition={{ duration: 0.1 }}
-          className={`h-7 px-3 rounded-full text-[10px] font-medium uppercase tracking-[1.5px] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 ${
-            activeSet === s
-              ? "bg-[#0D0D0D] text-white"
-              : "bg-[#F5F5F5] text-[#888888] hover:bg-[#F0F0F0]"
-          }`}
-        >
-          Set {s}
-        </motion.button>
-      ))}
-    </div>
-  );
+interface MomentumChartCompactProps {
+  points: MatchPoint[];
+  player1Name: string;
+  player2Name: string;
+  matchDurationSec?: number | null;
 }
 
-/* ── Momentum chart ──────────────────────────────────────── */
+export function MomentumChartCompact({
+  points,
+  player1Name,
+  player2Name,
+  matchDurationSec,
+}: MomentumChartCompactProps) {
+  const p1Short = shortName(player1Name, 18);
+  const p2Short = shortName(player2Name, 18);
 
-export function MomentumChart({
-  data,
-  rawPoints,
-  p1Short,
-  p2Short,
-  hideHeading = false,
-  activeSet,
-  onSetChange,
-  allSets,
-}: {
-  data: MomentumPoint[];
-  rawPoints: MatchPoint[];
-  p1Short: string;
-  p2Short: string;
-  hideHeading?: boolean;
-  activeSet?: number | null;
-  onSetChange?: (set: number | null) => void;
-  allSets?: number[];
-}) {
+  const data: MomentumPoint[] = useMemo(() => {
+    let p1Cum = 0;
+    let p2Cum = 0;
+    return points.map((pt) => {
+      if (pt.wonByPlayer1) p1Cum++;
+      else p2Cum++;
+      return { diff: p1Cum - p2Cum, setNumber: pt.setNumber };
+    });
+  }, [points]);
+
+  const matchClock: (number | null)[] = useMemo(() => {
+    const hasVideoTime = points.some((p) => p.videoTime != null);
+    if (hasVideoTime) return points.map((p) => p.videoTime);
+    if (matchDurationSec && matchDurationSec > 0 && points.length > 0) {
+      const cumStart: number[] = [];
+      let acc = 0;
+      for (const p of points) {
+        cumStart.push(acc);
+        acc += p.duration ?? 0;
+      }
+      if (acc > 0) {
+        const scale = matchDurationSec / acc;
+        return cumStart.map((s) => s * scale);
+      }
+      return points.map((_, i) => (i / Math.max(1, points.length - 1)) * matchDurationSec);
+    }
+    return points.map(() => null);
+  }, [points, matchDurationSec]);
+
   const uid = useId();
   const clipAbove = `momentum-above-${uid}`;
   const clipBelow = `momentum-below-${uid}`;
@@ -211,41 +151,28 @@ export function MomentumChart({
     [data, selectedIndex],
   );
 
-  if (data.length < 2) {
-    return hideHeading ? null : (
-      <div className="h-[140px] bg-[#FAFAFA] rounded-lg animate-pulse" />
-    );
-  }
+  if (data.length < 2) return null;
 
   const maxAbs = Math.max(...data.map((d) => Math.abs(d.diff)), 1);
   const yMid = CHART_H / 2;
   const xScale = (i: number) => (i / (data.length - 1)) * CHART_W;
   const yScale = (diff: number) => yMid - (diff / maxAbs) * (yMid - 6);
 
-  // Set boundary indices
   const dividers: number[] = [];
   for (let i = 1; i < data.length; i++) {
     if (data[i].setNumber !== data[i - 1].setNumber) dividers.push(i);
   }
 
-  // Unique set numbers
   const sets = [...new Set(data.map((d) => d.setNumber))].sort((a, b) => a - b);
+  const breakIndices = detectBreaks(points);
 
-  // Break indices (rawPoints is already set-filtered by parent when activeSet is set)
-  const breakIndices = detectBreaks(rawPoints);
-
-  // Coordinate pairs for smooth path
   const coords: [number, number][] = data.map((d, i) => [xScale(i), yScale(d.diff)]);
-  const smoothLine = toSmoothPath(coords);
-
-  // Area path (smooth curve closing to baseline)
+  const smoothLine = toLinearPath(coords);
   const areaPath = smoothLine + ` L ${xScale(data.length - 1)},${yMid} L ${xScale(0)},${yMid} Z`;
 
-  // Tooltip data
-  const selectedPt = selectedIndex !== null ? rawPoints[selectedIndex] : null;
+  const selectedPt = selectedIndex !== null ? points[selectedIndex] : null;
   const selectedCoord = selectedIndex !== null ? coords[selectedIndex] : null;
 
-  // Y-axis tick values
   const yTicks: number[] = [];
   if (maxAbs >= 3) {
     const step = maxAbs >= 10 ? 5 : maxAbs >= 6 ? 3 : 2;
@@ -255,29 +182,12 @@ export function MomentumChart({
     }
   }
 
-  // Aria description for selected point
   const ariaDescription = selectedPt
     ? `${selectedPt.wonByPlayer1 ? p1Short : p2Short} won point. Score: ${selectedPt.pointScore}. Set ${selectedPt.setNumber}${selectedPt.gameScore ? `, ${selectedPt.gameScore}` : ""}. ${selectedPt.rallyLength > 0 ? `${selectedPt.rallyLength} shots.` : ""} ${selectedPt.isMatchPoint ? "Match point." : selectedPt.isSetPoint ? "Set point." : selectedPt.isBreakPoint ? "Break point." : ""}`
     : "";
 
   return (
     <div>
-      {!hideHeading && (
-        <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] mb-4" title="Cumulative point difference — above the line means the first player is leading, below means the second player is leading">
-          Point Momentum
-        </p>
-      )}
-
-      {/* Set filter chips */}
-      {!hideHeading && allSets && onSetChange && (
-        <SetFilterChips
-          sets={allSets}
-          activeSet={activeSet ?? null}
-          onSetChange={onSetChange}
-        />
-      )}
-
-      {/* Aria live region for screen readers */}
       <div aria-live="polite" aria-atomic="true" className="sr-only">
         {ariaDescription}
       </div>
@@ -299,7 +209,7 @@ export function MomentumChart({
           ref={svgRef}
           viewBox={`0 0 ${CHART_W} ${CHART_H}`}
           className="w-full"
-          style={{ height: 140 }}
+          style={{ height: 160 }}
           preserveAspectRatio="none"
           aria-hidden="true"
         >
@@ -312,7 +222,6 @@ export function MomentumChart({
             </clipPath>
           </defs>
 
-          {/* Y-axis reference lines */}
           {yTicks.map((v) => (
             <line
               key={`ytick-${v}`}
@@ -325,7 +234,6 @@ export function MomentumChart({
             />
           ))}
 
-          {/* Set dividers */}
           {dividers.map((idx, i) => (
             <line
               key={`set-${i}`}
@@ -339,7 +247,6 @@ export function MomentumChart({
             />
           ))}
 
-          {/* Break of serve indicators */}
           {breakIndices.map((b, i) => (
             <line
               key={`break-${i}`}
@@ -347,57 +254,48 @@ export function MomentumChart({
               y1={0}
               x2={xScale(b.index)}
               y2={CHART_H}
-              stroke="#E51837"
+              stroke={EVENT_ACCENT}
               strokeWidth={1}
               strokeDasharray="3 2"
             />
           ))}
 
-          {/* Zero baseline */}
           <line x1={0} y1={yMid} x2={CHART_W} y2={yMid} stroke="#F0F0F0" strokeWidth={1} />
 
-          {/* P1 leading fill (blue, above baseline) */}
-          <path d={areaPath} fill={P1_COLOR} fillOpacity={0.12} clipPath={`url(#${clipAbove})`} />
+          <path d={areaPath} fill={PLAYER_1} fillOpacity={0.12} clipPath={`url(#${clipAbove})`} />
+          <path d={areaPath} fill={PLAYER_2} fillOpacity={0.12} clipPath={`url(#${clipBelow})`} />
 
-          {/* P2 leading fill (orange, below baseline) */}
-          <path d={areaPath} fill={P2_COLOR} fillOpacity={0.12} clipPath={`url(#${clipBelow})`} />
-
-          {/* Momentum line — blue above baseline */}
           <path
             d={smoothLine}
             fill="none"
-            stroke={P1_LINE_COLOR}
+            stroke={PLAYER_1}
             strokeWidth={1.5}
             strokeLinejoin="round"
             strokeLinecap="round"
             clipPath={`url(#${clipAbove})`}
           />
-
-          {/* Momentum line — orange below baseline */}
           <path
             d={smoothLine}
             fill="none"
-            stroke={P2_LINE_COLOR}
+            stroke={PLAYER_2}
             strokeWidth={1.5}
             strokeLinejoin="round"
             strokeLinecap="round"
             clipPath={`url(#${clipBelow})`}
           />
 
-          {/* Hover guide line */}
           {selectedIndex !== null && selectedCoord && (
             <line
               x1={selectedCoord[0]}
               y1={0}
               x2={selectedCoord[0]}
               y2={CHART_H}
-              stroke={data[selectedIndex].diff >= 0 ? P1_LINE_COLOR : P2_LINE_COLOR}
+              stroke={data[selectedIndex].diff >= 0 ? PLAYER_1 : PLAYER_2}
               strokeWidth={0.5}
               strokeOpacity={0.3}
             />
           )}
 
-          {/* Invisible overlay rect for mouse/touch events */}
           <rect
             x={0}
             y={0}
@@ -411,13 +309,12 @@ export function MomentumChart({
           />
         </svg>
 
-        {/* Y-axis labels — rendered in HTML to avoid SVG distortion */}
         {yTicks.map((v) => {
           const yPct = (yScale(v) / CHART_H) * 100;
           return (
             <span
               key={`ylabel-${v}`}
-              className="absolute left-0 text-[9px] tabular-nums text-[#CCCCCC] font-normal pointer-events-none -translate-y-1/2"
+              className="absolute left-0 text-[9px] tabular-nums text-[#AAAAAA] font-normal pointer-events-none -translate-y-1/2"
               style={{ top: `${yPct}%` }}
             >
               {v > 0 ? `+${v}` : v}
@@ -425,9 +322,8 @@ export function MomentumChart({
           );
         })}
 
-        {/* Hover dot — rendered in HTML to avoid SVG aspect-ratio distortion */}
         {selectedIndex !== null && selectedCoord && (() => {
-          const dotColor = data[selectedIndex].diff >= 0 ? P1_LINE_COLOR : P2_LINE_COLOR;
+          const dotColor = data[selectedIndex].diff >= 0 ? PLAYER_1 : PLAYER_2;
           return (
             <div
               className="absolute pointer-events-none z-[5] size-[7px] rounded-full"
@@ -442,15 +338,23 @@ export function MomentumChart({
           );
         })()}
 
-        {/* Tooltip */}
         <AnimatePresence>
           {selectedIndex !== null && selectedPt && selectedCoord && (() => {
-            const accentColor = selectedPt.wonByPlayer1 ? P1_COLOR : P2_COLOR;
+            const accentColor = selectedPt.wonByPlayer1 ? PLAYER_1 : PLAYER_2;
             const xPct = (selectedCoord[0] / CHART_W) * 100;
             const yPct = (selectedCoord[1] / CHART_H) * 100;
             const showBelow = selectedCoord[1] < CHART_H * 0.25;
             const translateX = selectedCoord[0] > CHART_W * 0.8 ? "-92%" : selectedCoord[0] < CHART_W * 0.2 ? "-8%" : "-50%";
-            const durationSec = selectedPt.duration != null ? selectedPt.duration : null;
+            const matchTimeSec = matchClock[selectedIndex];
+            const formatMatchTime = (s: number) => {
+              const total = Math.max(0, Math.floor(s));
+              const h = Math.floor(total / 3600);
+              const m = Math.floor((total % 3600) / 60);
+              const sec = total % 60;
+              return h > 0
+                ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`
+                : `${m}:${String(sec).padStart(2, "0")}`;
+            };
             const pressureLabel = selectedPt.isMatchPoint ? "Match Point" : selectedPt.isSetPoint ? "Set Point" : selectedPt.isBreakPoint ? "Break Point" : null;
 
             return (
@@ -471,7 +375,6 @@ export function MomentumChart({
                   className="relative rounded-xl overflow-hidden bg-white border border-[#F3F3F3] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]"
                   style={{ minWidth: 172 }}
                 >
-                  {/* Primary: score + context */}
                   <div className="px-3 pt-2.5 pb-1.5">
                     <div className="flex items-baseline justify-between gap-4">
                       <span className="text-[14px] font-semibold tabular-nums text-[#0D0D0D] tracking-tight leading-none">
@@ -494,21 +397,19 @@ export function MomentumChart({
                       <span className="text-[10px] font-medium text-[#71717A] tracking-wider">
                         Set {selectedPt.setNumber}{selectedPt.gameScore ? ` ${selectedPt.gameScore}` : ""}
                       </span>
-                      {durationSec !== null && (
+                      {matchTimeSec !== null && (
                         <>
                           <span className="text-[#CCCCCC] text-[10px]">/</span>
                           <span className="text-[10px] tabular-nums text-[#71717A] font-medium">
-                            {Math.floor(durationSec / 60)}:{String(Math.round(durationSec % 60)).padStart(2, "0")}
+                            {formatMatchTime(matchTimeSec)}
                           </span>
                         </>
                       )}
                     </div>
                   </div>
 
-                  {/* Divider */}
                   <div className="h-px mx-2.5 bg-[#F3F3F3]" />
 
-                  {/* Secondary: winner, server, rally */}
                   <div className="px-3 pt-1.5 pb-2 flex flex-col gap-1.5">
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[11px] font-medium" style={{ color: accentColor }}>
@@ -525,21 +426,19 @@ export function MomentumChart({
                     )}
                   </div>
                 </div>
-
               </motion.div>
             );
           })()}
         </AnimatePresence>
       </div>
 
-      {/* Set labels */}
-      <div className="relative h-5 mt-1">
+      <div className="relative h-3 mt-5">
         {sets.map((s) => {
           const indices = data
             .map((d, i) => (d.setNumber === s ? i : -1))
             .filter((i) => i >= 0);
           const midIdx = indices[Math.floor(indices.length / 2)];
-          const xPct = (midIdx / (data.length - 1)) * 100;
+          const xPct = (xScale(midIdx) / CHART_W) * 100;
           return (
             <span
               key={s}
@@ -551,577 +450,6 @@ export function MomentumChart({
           );
         })}
       </div>
-
-      {/* Legend */}
-      <div className="flex items-center justify-center gap-5 mt-3">
-        <div className="flex items-center gap-1.5">
-          <div className="size-2.5 rounded-full" style={{ backgroundColor: P1_COLOR }} />
-          <span className="text-[10px] font-normal text-[#888888] uppercase tracking-[2px]">{p1Short} leading</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="size-2.5 rounded-full" style={{ backgroundColor: P2_COLOR }} />
-          <span className="text-[10px] font-normal text-[#888888] uppercase tracking-[2px]">{p2Short} leading</span>
-        </div>
-        {breakIndices.length > 0 && (
-          <div className="flex items-center gap-1.5">
-            <svg width="10" height="10" className="shrink-0" aria-hidden="true">
-              <line x1={0} y1={5} x2={10} y2={5} stroke="#E51837" strokeWidth={1.5} strokeDasharray="2 1.5" />
-            </svg>
-            <span className="text-[10px] font-normal text-[#888888] uppercase tracking-[2px]">Break of Serve</span>
-          </div>
-        )}
-      </div>
     </div>
-  );
-}
-
-/* ── Set breakdown ───────────────────────────────────────── */
-
-function SetBreakdown({
-  sets,
-  p1Short,
-  p2Short,
-}: {
-  sets: SetStat[];
-  p1Short: string;
-  p2Short: string;
-}) {
-  const prefersReduced = useReducedMotion();
-  const maxPts = Math.max(...sets.flatMap((s) => [s.p1Points, s.p2Points]), 1);
-
-  return (
-    <div>
-      <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] mb-5" title="Total points won by each player in each set">
-        Points Per Set
-      </p>
-
-      {/* H2H column headers */}
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-4 mb-3">
-        <span className="text-[11px] font-medium text-[#3B82F6] text-right whitespace-nowrap truncate">
-          {p1Short}
-        </span>
-        <div className="w-12" />
-        <span className="text-[11px] font-medium text-[#6366F1] whitespace-nowrap truncate">
-          {p2Short}
-        </span>
-      </div>
-
-      <div className="flex flex-col gap-3.5">
-        {sets.map((s, index) => {
-          const p1Pct = (s.p1Points / maxPts) * 100;
-          const p2Pct = (s.p2Points / maxPts) * 100;
-          const p1Wins = s.p1Points > s.p2Points;
-          const p2Wins = s.p2Points > s.p1Points;
-
-          return (
-            <motion.div
-              key={s.set}
-              className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-4"
-              initial={prefersReduced ? false : { opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: 0.1 + index * 0.07, ease: EASE_CURVE }}
-            >
-              {/* P1: bar growing from right + count */}
-              <div className="flex items-center gap-2.5">
-                <div className="flex-1 h-[4px] bg-[#F0F0F0] rounded-full overflow-hidden flex justify-end">
-                  <motion.div
-                    className="h-full rounded-full bg-[#3B82F6]"
-                    initial={{ width: "0%" }}
-                    animate={{ width: `${p1Pct}%` }}
-                    transition={{ duration: 0.6, delay: 0.2 + index * 0.07, ease: EASE_CURVE }}
-                  />
-                </div>
-                <span
-                  className={`text-[14px] tabular-nums font-medium w-7 text-right ${
-                    p1Wins ? "text-[#3B82F6]" : "text-[#888888]"
-                  }`}
-                >
-                  {s.p1Points}
-                </span>
-              </div>
-
-              {/* Center: set label */}
-              <span className="text-[11px] font-medium text-[#71717A] w-12 text-center">
-                Set {s.set}
-              </span>
-
-              {/* P2: count + bar growing from left */}
-              <div className="flex items-center gap-2.5">
-                <span
-                  className={`text-[14px] tabular-nums font-medium w-7 ${
-                    p2Wins ? "text-[#6366F1]" : "text-[#888888]"
-                  }`}
-                >
-                  {s.p2Points}
-                </span>
-                <div className="flex-1 h-[4px] bg-[#F0F0F0] rounded-full overflow-hidden">
-                  <motion.div
-                    className="h-full rounded-full bg-[#6366F1]"
-                    initial={{ width: "0%" }}
-                    animate={{ width: `${p2Pct}%` }}
-                    transition={{ duration: 0.6, delay: 0.2 + index * 0.07, ease: EASE_CURVE }}
-                  />
-                </div>
-              </div>
-            </motion.div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/* ── Shared table header ─────────────────────────────────── */
-
-function TableHeader({ p1Short, p2Short }: { p1Short: string; p2Short: string }) {
-  return (
-    <div className="grid grid-cols-[1fr_130px_130px] sm:grid-cols-[1fr_150px_150px] pb-2.5 mb-1">
-      <span />
-      <span className="text-[11px] font-medium text-[#3B82F6] text-center whitespace-nowrap truncate">
-        {p1Short}
-      </span>
-      <span className="text-[11px] font-medium text-[#6366F1] text-center whitespace-nowrap truncate">
-        {p2Short}
-      </span>
-    </div>
-  );
-}
-
-/* ── Pressure situations ─────────────────────────────────── */
-
-function PressureSection({
-  stats,
-  p1Short,
-  p2Short,
-}: {
-  stats: PressureStat[];
-  p1Short: string;
-  p2Short: string;
-}) {
-  const prefersReduced = useReducedMotion();
-  const visible = stats.filter((s) => s.p1Total > 0 || s.p2Total > 0);
-  if (visible.length === 0) return null;
-
-  return (
-    <div>
-      <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] mb-5" title="Conversion rates on break points, set points, and match points">
-        Pressure Situations
-      </p>
-      <TableHeader p1Short={p1Short} p2Short={p2Short} />
-      {visible.map((s, index) => {
-        const p1Pct = s.p1Total > 0 ? Math.round((s.p1Won / s.p1Total) * 100) : 0;
-        const p2Pct = s.p2Total > 0 ? Math.round((s.p2Won / s.p2Total) * 100) : 0;
-        const p1Leads = p1Pct > p2Pct;
-        const p2Leads = p2Pct > p1Pct;
-
-        return (
-          <motion.div
-            key={s.label}
-            className="grid grid-cols-[1fr_130px_130px] sm:grid-cols-[1fr_150px_150px] items-center py-3 first:pt-0 border-b border-[#F3F3F3] last:border-0"
-            initial={prefersReduced ? false : { opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, delay: 0.1 + index * 0.07, ease: EASE_CURVE }}
-          >
-            <span className="text-[12px] text-[#888888]">{s.label}</span>
-            <div className="text-center flex flex-col items-center gap-1.5">
-              {s.p1Total > 0 ? (
-                <>
-                  <span className={`text-[14px] tabular-nums font-medium ${p1Leads ? "text-[#3B82F6]" : "text-[#525252]"}`}>
-                    {p1Pct}%
-                  </span>
-                  <div className="w-20 h-[4px] rounded-full bg-[#F0F0F0] overflow-hidden">
-                    <motion.div
-                      className="h-full rounded-full bg-[#3B82F6]"
-                      initial={{ width: "0%" }}
-                      animate={{ width: `${p1Pct}%` }}
-                      transition={{ duration: 0.6, delay: 0.2 + index * 0.07, ease: EASE_CURVE }}
-                    />
-                  </div>
-                  <span className="text-[10px] tabular-nums text-[#CCCCCC]">
-                    {s.p1Won}/{s.p1Total}
-                  </span>
-                </>
-              ) : (
-                <span className="text-[13px] text-[#CCCCCC]">—</span>
-              )}
-            </div>
-            <div className="text-center flex flex-col items-center gap-1.5">
-              {s.p2Total > 0 ? (
-                <>
-                  <span className={`text-[14px] tabular-nums font-medium ${p2Leads ? "text-[#6366F1]" : "text-[#525252]"}`}>
-                    {p2Pct}%
-                  </span>
-                  <div className="w-20 h-[4px] rounded-full bg-[#F0F0F0] overflow-hidden">
-                    <motion.div
-                      className="h-full rounded-full bg-[#6366F1]"
-                      initial={{ width: "0%" }}
-                      animate={{ width: `${p2Pct}%` }}
-                      transition={{ duration: 0.6, delay: 0.2 + index * 0.07, ease: EASE_CURVE }}
-                    />
-                  </div>
-                  <span className="text-[10px] tabular-nums text-[#CCCCCC]">
-                    {s.p2Won}/{s.p2Total}
-                  </span>
-                </>
-              ) : (
-                <span className="text-[13px] text-[#CCCCCC]">—</span>
-              )}
-            </div>
-          </motion.div>
-        );
-      })}
-    </div>
-  );
-}
-
-/* ── Rally length ────────────────────────────────────────── */
-
-function RallySection({
-  buckets,
-  p1Short,
-  p2Short,
-}: {
-  buckets: RallyBucket[];
-  p1Short: string;
-  p2Short: string;
-}) {
-  const prefersReduced = useReducedMotion();
-  const visible = buckets.filter((b) => b.hasData);
-  if (visible.length === 0) return null;
-
-  return (
-    <div>
-      <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] mb-5" title="Win percentage grouped by how many shots were in the rally">
-        Rally Length Win %
-      </p>
-      <TableHeader p1Short={p1Short} p2Short={p2Short} />
-      {visible.map((b, index) => {
-        const p1Leads = b.p1WonPct > b.p2WonPct;
-        const p2Leads = b.p2WonPct > b.p1WonPct;
-        return (
-          <motion.div
-            key={b.label}
-            className="grid grid-cols-[1fr_130px_130px] sm:grid-cols-[1fr_150px_150px] items-center py-3 first:pt-0 border-b border-[#F3F3F3] last:border-0"
-            initial={prefersReduced ? false : { opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, delay: 0.1 + index * 0.07, ease: EASE_CURVE }}
-          >
-            <span className="text-[12px] text-[#888888]">{b.label}</span>
-
-            <div className="text-center flex flex-col items-center gap-1.5">
-              <span
-                className={`text-[14px] tabular-nums ${
-                  p1Leads ? "font-medium text-[#3B82F6]" : "text-[#525252]"
-                }`}
-              >
-                {b.p1WonPct}%
-              </span>
-              <div className="w-20 h-[4px] rounded-full bg-[#F0F0F0] overflow-hidden">
-                <motion.div
-                  className="h-full rounded-full bg-[#3B82F6]"
-                  initial={{ width: "0%" }}
-                  animate={{ width: `${b.p1WonPct}%` }}
-                  transition={{ duration: 0.6, delay: 0.3 + index * 0.07, ease: EASE_CURVE }}
-                />
-              </div>
-            </div>
-
-            <div className="text-center flex flex-col items-center gap-1.5">
-              <span
-                className={`text-[14px] tabular-nums ${
-                  p2Leads ? "font-medium text-[#6366F1]" : "text-[#525252]"
-                }`}
-              >
-                {b.p2WonPct}%
-              </span>
-              <div className="w-20 h-[4px] rounded-full bg-[#F0F0F0] overflow-hidden">
-                <motion.div
-                  className="h-full rounded-full bg-[#6366F1]"
-                  initial={{ width: "0%" }}
-                  animate={{ width: `${b.p2WonPct}%` }}
-                  transition={{ duration: 0.6, delay: 0.3 + index * 0.07, ease: EASE_CURVE }}
-                />
-              </div>
-            </div>
-          </motion.div>
-        );
-      })}
-    </div>
-  );
-}
-
-/* ── Main component ───────────────────────────────────────── */
-
-interface PerformanceTrackerProps {
-  points: MatchPoint[];
-  player1Name: string;
-  player2Name: string;
-  matchId?: string;
-}
-
-export function PerformanceTracker({
-  points,
-  player1Name,
-  player2Name,
-  matchId,
-}: PerformanceTrackerProps) {
-  const p1Short = shortName(player1Name, 18);
-  const p2Short = shortName(player2Name, 18);
-  const prefersReducedMotion = useReducedMotion();
-  const [activeSet, setActiveSet] = useState<number | null>(null);
-
-  const { allSets, filteredMomentumData, filteredPoints, setSummaries, pressureStats, rallyBuckets } = useMemo(() => {
-    const allSets = [...new Set(points.map((pt) => pt.setNumber))].sort((a, b) => a - b);
-
-    const filteredPoints = activeSet != null
-      ? points.filter((pt) => pt.setNumber === activeSet)
-      : points;
-
-    // ── Filtered momentum ────────────────────
-    let p1Cum = 0;
-    let p2Cum = 0;
-    const filteredMomentumData: MomentumPoint[] = filteredPoints.map((pt, i) => {
-      if (pt.wonByPlayer1) p1Cum++; else p2Cum++;
-      return { diff: p1Cum - p2Cum, setNumber: pt.setNumber };
-    });
-
-    // ── Set breakdown ──────────────────────────
-    const setMap = new Map<number, { p1: number; p2: number }>();
-    for (const pt of points) {
-      const entry = setMap.get(pt.setNumber) ?? { p1: 0, p2: 0 };
-      if (pt.wonByPlayer1) entry.p1++; else entry.p2++;
-      setMap.set(pt.setNumber, entry);
-    }
-    const setSummaries: SetStat[] = [...setMap.entries()]
-      .sort(([a], [b]) => a - b)
-      .map(([set, { p1, p2 }]) => ({ set, p1Points: p1, p2Points: p2 }));
-
-    // ── Pressure situations (fixed per-player totals) ──
-    const bpP1Won = filteredPoints.filter((pt) => pt.isBreakPoint && !pt.serverIsPlayer1 && pt.wonByPlayer1).length;
-    const bpP1Total = filteredPoints.filter((pt) => pt.isBreakPoint && !pt.serverIsPlayer1).length;
-    const bpP2Won = filteredPoints.filter((pt) => pt.isBreakPoint && pt.serverIsPlayer1 && !pt.wonByPlayer1).length;
-    const bpP2Total = filteredPoints.filter((pt) => pt.isBreakPoint && pt.serverIsPlayer1).length;
-
-    // Set points — each player's opportunities counted separately
-    const spForP1 = filteredPoints.filter((pt) => pt.isSetPoint && !pt.serverIsPlayer1);
-    const spForP2 = filteredPoints.filter((pt) => pt.isSetPoint && pt.serverIsPlayer1);
-    const spP1Won = spForP1.filter((pt) => pt.wonByPlayer1).length;
-    const spP2Won = spForP2.filter((pt) => !pt.wonByPlayer1).length;
-
-    // Match points — each player's opportunities counted separately
-    const mpForP1 = filteredPoints.filter((pt) => pt.isMatchPoint && !pt.serverIsPlayer1);
-    const mpForP2 = filteredPoints.filter((pt) => pt.isMatchPoint && pt.serverIsPlayer1);
-    const mpP1Won = mpForP1.filter((pt) => pt.wonByPlayer1).length;
-    const mpP2Won = mpForP2.filter((pt) => !pt.wonByPlayer1).length;
-
-    const pressureStats: PressureStat[] = [
-      { label: "Break Points Won", p1Won: bpP1Won, p1Total: bpP1Total, p2Won: bpP2Won, p2Total: bpP2Total },
-      { label: "Set Points Won", p1Won: spP1Won, p1Total: spForP1.length, p2Won: spP2Won, p2Total: spForP2.length },
-      ...((mpForP1.length > 0 || mpForP2.length > 0)
-        ? [{ label: "Match Points Won", p1Won: mpP1Won, p1Total: mpForP1.length, p2Won: mpP2Won, p2Total: mpForP2.length }]
-        : []),
-    ];
-
-    // ── Rally length buckets ───────────────────
-    function calcBucket(filter: (pt: MatchPoint) => boolean): Omit<RallyBucket, "label"> {
-      const pts = filteredPoints.filter(filter);
-      if (pts.length === 0) return { p1WonPct: 0, p2WonPct: 0, hasData: false };
-      const p1Won = pts.filter((pt) => pt.wonByPlayer1).length;
-      return {
-        p1WonPct: Math.round((p1Won / pts.length) * 100),
-        p2WonPct: Math.round(((pts.length - p1Won) / pts.length) * 100),
-        hasData: true,
-      };
-    }
-
-    const rallyBuckets: RallyBucket[] = [
-      { label: "Short (1\u20134 shots)", ...calcBucket((pt) => pt.rallyLength >= 1 && pt.rallyLength <= 4) },
-      { label: "Medium (5\u20139 shots)", ...calcBucket((pt) => pt.rallyLength >= 5 && pt.rallyLength <= 9) },
-      { label: "Long (10+ shots)", ...calcBucket((pt) => pt.rallyLength >= 10) },
-    ];
-
-    return { allSets, filteredMomentumData, filteredPoints, setSummaries, pressureStats, rallyBuckets };
-  }, [points, activeSet]);
-
-  const sectionAnimate = { opacity: 1, y: 0 };
-  const sectionInitial = prefersReducedMotion ? sectionAnimate : { opacity: 0, y: 12 };
-
-  if (points.length === 0) {
-    return (
-      <div className="py-16 text-center flex flex-col items-center gap-3">
-        <p className="text-[13px] text-[#888888]">
-          Point-level data isn&apos;t available for this match.
-        </p>
-        <p className="text-[12px] text-[#CCCCCC] max-w-[320px]">
-          This match may have been uploaded before point tracking was supported, or the data is still processing.
-        </p>
-        {matchId && (
-          <Link
-            href={`/dashboard/matches/${matchId}`}
-            className="mt-2 text-[11px] font-medium text-[#3B82F6] uppercase tracking-[1.5px] hover:text-[#2563EB] transition-colors duration-200"
-          >
-            Back to match
-          </Link>
-        )}
-      </div>
-    );
-  }
-
-  const hasPressure = pressureStats.some((s) => s.p1Total > 0 || s.p2Total > 0);
-  const hasRally = rallyBuckets.some((b) => b.hasData);
-
-  // Total points for summary strip
-  const p1Total = setSummaries.reduce((sum, s) => sum + s.p1Points, 0);
-  const p2Total = setSummaries.reduce((sum, s) => sum + s.p2Points, 0);
-  const totalAll = p1Total + p2Total;
-  const p1SplitPct = totalAll > 0 ? (p1Total / totalAll) * 100 : 50;
-
-  return (
-    <div className="flex flex-col">
-      {/* Momentum chart — hero section, full width */}
-      <motion.div
-        initial={sectionInitial}
-        animate={sectionAnimate}
-        transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, ease: EASE_CURVE }}
-      >
-        <MomentumChart
-          data={filteredMomentumData}
-          rawPoints={filteredPoints}
-          p1Short={p1Short}
-          p2Short={p2Short}
-          activeSet={activeSet}
-          onSetChange={setActiveSet}
-          allSets={allSets}
-        />
-      </motion.div>
-
-      {/* Total points summary strip */}
-      <motion.div
-        className="mt-8 mb-2"
-        initial={sectionInitial}
-        animate={sectionAnimate}
-        transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, ease: EASE_CURVE, delay: 0.05 }}
-      >
-        <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-3">
-          <div className="flex flex-col items-end gap-0.5">
-            <span className="text-[10px] font-medium text-[#888888] uppercase tracking-[2px]">{p1Short}</span>
-            <span
-              className={`text-[20px] font-light tabular-nums leading-none tracking-[-0.5px] ${
-                p1Total > p2Total ? "text-[#3B82F6]" : "text-[#888888]"
-              }`}
-            >
-              {p1Total}
-            </span>
-          </div>
-          <div className="flex flex-col items-center gap-0.5 pb-[2px]">
-            <span className="text-[9px] font-medium text-[#CCCCCC] uppercase tracking-[2px]">Points</span>
-          </div>
-          <div className="flex flex-col items-start gap-0.5">
-            <span className="text-[10px] font-medium text-[#888888] uppercase tracking-[2px]">{p2Short}</span>
-            <span
-              className={`text-[20px] font-light tabular-nums leading-none tracking-[-0.5px] ${
-                p2Total > p1Total ? "text-[#6366F1]" : "text-[#888888]"
-              }`}
-            >
-              {p2Total}
-            </span>
-          </div>
-        </div>
-
-        {/* Animated split bar */}
-        <div className="mt-3 flex h-[4px] w-full rounded-full overflow-hidden">
-          <motion.div
-            className="h-full"
-            style={{ backgroundColor: P1_COLOR }}
-            initial={{ width: "50%" }}
-            animate={{ width: `${p1SplitPct}%` }}
-            transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.7, ease: EASE_CURVE }}
-          />
-          <div className="h-full flex-1" style={{ backgroundColor: P2_COLOR }} />
-        </div>
-      </motion.div>
-
-      {/* Section divider */}
-      <div className="mt-8 mb-6">
-        <div className="h-px bg-[#F0F0F0]" />
-        <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] mt-3">
-          Breakdown{activeSet != null ? ` — Set ${activeSet}` : ""}
-        </p>
-      </div>
-
-      {/* Set breakdown — full width for H2H bars */}
-      <motion.div
-        initial={sectionInitial}
-        animate={sectionAnimate}
-        transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, ease: EASE_CURVE, delay: 0.07 }}
-      >
-        <SetBreakdown sets={setSummaries} p1Short={p1Short} p2Short={p2Short} />
-      </motion.div>
-
-      {/* Pressure + Rally in two columns */}
-      {(hasPressure || hasRally) && (
-        <div className="mt-8 pt-6 border-t border-[#F3F3F3] grid grid-cols-1 lg:grid-cols-2 gap-x-8">
-          {hasPressure && (
-            <motion.div
-              initial={sectionInitial}
-              animate={sectionAnimate}
-              transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, ease: EASE_CURVE, delay: 0.14 }}
-            >
-              <PressureSection stats={pressureStats} p1Short={p1Short} p2Short={p2Short} />
-            </motion.div>
-          )}
-
-          {hasRally && (
-            <motion.div
-              className={hasPressure ? "mt-10 lg:mt-0" : ""}
-              initial={sectionInitial}
-              animate={sectionAnimate}
-              transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.4, ease: EASE_CURVE, delay: 0.21 }}
-            >
-              <RallySection buckets={rallyBuckets} p1Short={p1Short} p2Short={p2Short} />
-            </motion.div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ── Compact momentum-only chart for widget use ──────────── */
-
-interface MomentumChartCompactProps {
-  points: MatchPoint[];
-  player1Name: string;
-  player2Name: string;
-}
-
-export function MomentumChartCompact({
-  points,
-  player1Name,
-  player2Name,
-}: MomentumChartCompactProps) {
-  const p1Short = shortName(player1Name, 18);
-  const p2Short = shortName(player2Name, 18);
-
-  const momentumData: MomentumPoint[] = useMemo(() => {
-    let p1Cum = 0;
-    let p2Cum = 0;
-    return points.map((pt, i) => {
-      if (pt.wonByPlayer1) p1Cum++;
-      else p2Cum++;
-      return { diff: p1Cum - p2Cum, setNumber: pt.setNumber };
-    });
-  }, [points]);
-
-  if (momentumData.length < 2) return null;
-
-  return (
-    <MomentumChart
-      data={momentumData}
-      rawPoints={points}
-      p1Short={p1Short}
-      p2Short={p2Short}
-      hideHeading
-    />
   );
 }

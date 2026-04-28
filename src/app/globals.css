@@ -59,6 +59,24 @@
   --shadow-tooltip: 0px 4px 12px 0px rgba(0,0,0,0.12);
 }
 
+/* Tokens consumed via Tailwind arbitrary values like `border-[var(--color-border-card)]`.
+   They live in a non-inline @theme so Tailwind v4 tracks them and emits their :root
+   definitions — Turbopack dev mode strips unreferenced/loose :root --color-* vars. */
+@theme {
+  --color-border-card: #F3F3F3;
+  --color-surface-card: #FFFFFF;
+  --color-surface-muted: #FAFAFA;
+  --color-text-body: #525252;
+  --color-success: #5DB955;
+  --color-error-strong: #E51837;
+  --color-radar-grid: #EFEFEF;
+  --color-accent-blue-ring: rgba(59, 130, 246, 0.4);
+  --color-player-1: #3B82F6;
+  --color-player-1-bar-tint: #BFD5FB;
+  --color-player-2: #A855F7;
+  --color-player-2-bar-tint: #DDC7F7;
+}
+
 :root {
   /* Auth design tokens */
   --color-bg-dark: #FAFAFA;
@@ -165,6 +183,30 @@
 
 .btn-primary {
   @apply px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition;
+}
+
+/* Plain-CSS classes outside any @layer get stripped by Tailwind v4 + Turbopack
+   dev pipeline. Wrapping them in @layer components keeps them in the output. */
+@layer components {
+  .surface-card {
+    background-color: var(--color-surface-card);
+    border: 1px solid var(--color-border-card);
+    border-radius: 14px;
+    box-shadow: var(--shadow-card);
+  }
+
+  .surface-card-elevated {
+    background-color: var(--color-surface-card);
+    border: 1px solid var(--color-border-card);
+    border-radius: 14px;
+    box-shadow: var(--shadow-card-elevated);
+  }
+
+  .surface-card-ghost {
+    background-color: var(--color-surface-muted);
+    border: 1px solid var(--color-border-card);
+    border-radius: 14px;
+  }
 }
 
 .report-page {

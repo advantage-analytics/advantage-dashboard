@@ -43,11 +43,14 @@ export default async function Home() {
   const allKpiCards: KpiCardData[] = [
     ...kpiCards,
     {
+      key: "win-rate",
       label: "Win Rate",
       value: `${winRate.value}%`,
       change: winRate.change,
       changeLabel: "last 30 days",
       sparkline: winRate.sparkline,
+      description: "Percentage of matches won overall",
+      category: "Other",
     },
   ];
 

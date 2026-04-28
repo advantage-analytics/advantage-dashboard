@@ -4,7 +4,7 @@ export const returnFiltersConfig: FilterConfig = {
   type: "return",
   courtType: "full",
   rows: [
-    // Row 1: Player, Type (serve), Side
+    // Row 1: Context — who's returning, against which serve, on which side
     [
       {
         key: "player",
@@ -17,10 +17,10 @@ export const returnFiltersConfig: FilterConfig = {
       },
       {
         key: "type",
-        label: "Type",
+        label: "Serve",
         options: [
-          { value: "first", label: "First Serve" },
-          { value: "second", label: "Second Serve" },
+          { value: "first", label: "1st Serve" },
+          { value: "second", label: "2nd Serve" },
         ],
       },
       {
@@ -32,17 +32,8 @@ export const returnFiltersConfig: FilterConfig = {
         ],
       },
     ],
-    // Row 2: Placement, Type (shot), Spin
+    // Row 2: Return shot — stroke, spin, outcome
     [
-      {
-        key: "placement",
-        label: "Placement",
-        options: [
-          { value: "dtl", label: "Down the Line" },
-          { value: "middle", label: "Middle" },
-          { value: "crosscourt", label: "Crosscourt" },
-        ],
-      },
       {
         key: "shotType",
         label: "Stroke",
@@ -55,50 +46,20 @@ export const returnFiltersConfig: FilterConfig = {
         key: "spin",
         label: "Spin",
         options: [
-          { value: "topspin", label: "Topspin" },
+          { value: "flat", label: "Flat" },
           { value: "slice", label: "Slice" },
-        ],
-      },
-    ],
-    // Row 3: Contact, Depth, Result
-    [
-      {
-        key: "contact",
-        label: "Contact",
-        options: [
-          { value: "inside", label: "Inside" },
-          { value: "neutral", label: "Neutral" },
-          { value: "far", label: "Far" },
-        ],
-      },
-      {
-        key: "depth",
-        label: "Depth",
-        options: [
-          { value: "short", label: "Short" },
-          { value: "mid", label: "Mid" },
-          { value: "deep", label: "Deep" },
+          { value: "topspin", label: "Topspin" },
         ],
       },
       {
         key: "result",
         label: "Result",
         options: [
-          { value: "won", label: "Won" },
-          { value: "lost", label: "Lost" },
-          { value: "winner", label: "Winner" },
+          { value: "won", label: "Point Won" },
+          { value: "lost", label: "Point Lost" },
+          { value: "outnet", label: "Out / Net" },
         ],
       },
-    ],
-    // Row 4: Other
-    [
-      {
-        key: "other",
-        label: "Other",
-        options: [{ value: "doubleFault", label: "Double Fault" }],
-      },
-      null,
-      null,
     ],
   ],
 };

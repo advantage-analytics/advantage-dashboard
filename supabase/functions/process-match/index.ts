@@ -272,7 +272,41 @@ async function processMatchToDb({
     console.error("Error calculating match_stats:", statsError);
     throw statsError;
   }
+
+  const { error: backfillError } = await supabase.rpc(
+    "backfill_returns_in_and_net_points",
+    { p_match_id: matchId },
+  );
+  if (backfillError) {
+    console.error("Error computing returns_in/net_points:", backfillError);
+    throw backfillError;
+  }
   console.log("✅ Match statistics calculated successfully");
+
+  console.log("🎬 Generating key moments...");
+  const { data: keyMomentsData, error: keyMomentsError } =
+    await supabase.functions.invoke('generate-key-moments', {
+      body: { match_id: matchId },
+    });
+
+  if (keyMomentsError) {
+    console.error("Error generating key moments:", keyMomentsError);
+    throw keyMomentsError;
+  }
+
+  console.log("✅ Key moments generated successfully:", keyMomentsData);
+
+  console.log("Generating insights:");
+  const { error: insightsError } =
+    await supabase.functions.invoke('generate-insights', {
+      body: { matchId: matchId },
+    });
+
+  if (insightsError) {
+    console.error("Failed to generate and store match insights:", insightsError);
+  }
+
+  console.log("Insights generated successfully.");
 }
 
 // ---------------------------------------------------------------------------
