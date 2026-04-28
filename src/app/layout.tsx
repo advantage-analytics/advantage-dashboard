@@ -1,7 +1,6 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import Script from "next/script";
 import { Inter, Roboto_Mono } from "next/font/google";
 
 const inter = Inter({
@@ -53,7 +52,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${mono.variable}`}>
-<body className="min-h-dvh bg-background text-foreground">{children}<Script src="https://mcp.figma.com/mcp/html-to-design/capture.js" strategy="afterInteractive" /></body>
+<body className="min-h-dvh bg-background text-foreground">{children}</body>
     </html>
   );
 }

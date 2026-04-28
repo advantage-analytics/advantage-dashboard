@@ -48,11 +48,17 @@ function buildSets(row: DbMatch): SetScore[] {
   const tiebreaks1 = row.score?.player1_tiebreaks ?? [];
   const tiebreaks2 = row.score?.player2_tiebreaks ?? [];
 
-  return scores1.map((player1Score, i) => ({
-    player1: player1Score,
-    player2: scores2[i] ?? 0,
-    tiebreak: Boolean(tiebreaks1[i] || tiebreaks2[i]),
-  }));
+  return scores1.map((player1Score, i) => {
+    const t1 = tiebreaks1[i] ?? null;
+    const t2 = tiebreaks2[i] ?? null;
+    return {
+      player1: player1Score,
+      player2: scores2[i] ?? 0,
+      tiebreak: t1 != null || t2 != null,
+      player1Tiebreak: t1,
+      player2Tiebreak: t2,
+    };
+  });
 }
 
 function determineWinner(sets: SetScore[]): "player1" | "player2" {
@@ -65,12 +71,21 @@ function determineWinner(sets: SetScore[]): "player1" | "player2" {
   return player1Sets > player2Sets ? "player1" : "player2";
 }
 
-function transformDbMatchToMatch(row: DbMatch, userId: string): Match {
+type PlayerProfile = { hand: string | null; backhand: string | null };
+
+function transformDbMatchToMatch(
+  row: DbMatch,
+  userId: string,
+  profiles: Map<string, PlayerProfile>,
+): Match {
   const sets = buildSets(row);
   const winner = determineWinner(sets);
   const finalScore = sets.map((s) => `${s.player1}-${s.player2}`).join(", ");
   const isUserPlayer1 = row.player1_id === userId;
   const userWon = isUserPlayer1 ? winner === "player1" : winner === "player2";
+
+  const p1Profile = row.player1_id ? profiles.get(row.player1_id) : undefined;
+  const p2Profile = row.player2_id ? profiles.get(row.player2_id) : undefined;
 
   return {
     id: row.id,
@@ -82,14 +97,25 @@ function transformDbMatchToMatch(row: DbMatch, userId: string): Match {
     round: row.round ?? undefined,
     matchContext: row.result ?? "Final Score",
     duration: formatDuration(row.duration ?? undefined),
-    player1: { name: row.player1_name, school: "" },
-    player2: { name: row.player2_name, school: "" },
+    player1: {
+      name: row.player1_name,
+      school: "",
+      hand: p1Profile?.hand ?? undefined,
+      backhand: p1Profile?.backhand ?? undefined,
+    },
+    player2: {
+      name: row.player2_name,
+      school: "",
+      hand: p2Profile?.hand ?? undefined,
+      backhand: p2Profile?.backhand ?? undefined,
+    },
     score: { sets, winner, finalScore },
     won: userWon,
+    isUserPlayer1,
   };
 }
 
-const FILLER_INSIGHTS = {
+const FILLER_INSIGHTS: NonNullable<DbMatch["insights"]> = {
   player1: {
     strengths: [
       { name: "Reliable Second Serve", value: 75, description: "Your second serve was a consistent weapon, putting pressure on your opponent and preventing easy returns. The high placement accuracy forced defensive returns on the majority of second-serve points." },
@@ -136,7 +162,24 @@ export const getMatchDetailData = cache(async (matchId: string) => {
   }
 
   const dbRow = row as DbMatch;
-  const match = transformDbMatchToMatch(dbRow, user?.id ?? "");
+
+  const playerIds = [dbRow.player1_id, dbRow.player2_id].filter(
+    (id): id is string => id != null,
+  );
+  const profiles = new Map<string, PlayerProfile>();
+  if (playerIds.length > 0) {
+    const { data: users } = await supabase
+      .from("users")
+      .select("id, hand, backhand")
+      .in("id", playerIds);
+    if (users) {
+      for (const u of users) {
+        profiles.set(u.id, { hand: u.hand, backhand: u.backhand });
+      }
+    }
+  }
+
+  const match = transformDbMatchToMatch(dbRow, user?.id ?? "", profiles);
   const [statsResult, points, playerAverages] = await Promise.all([
     getMatchStatisticsFromSupabase(matchId),
     getMatchPointsFromSupabase(matchId),

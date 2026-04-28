@@ -3,29 +3,30 @@ import { notFound } from "next/navigation";
 import { getMatchDetailData } from "@/lib/data/match-detail-server";
 import { shortName } from "@/lib/data/match-utils";
 
-import { Scoreline } from "@/components/dashboard/matches/match-detail/scoreline";
-import { SidebarKeyMoments } from "@/components/dashboard/matches/match-detail/sidebar-key-moments";
-import { MatchKpiStrip } from "@/components/dashboard/matches/match-detail/match-kpi-strip";
-import { PerformanceWidget } from "@/components/dashboard/matches/match-detail/performance-widget";
+import { MatchSummaryRow } from "@/components/dashboard/matches/match-detail/match-summary-row";
+import { MatchDetailHero } from "@/components/dashboard/matches/match-detail-hero";
+import { PerformanceTrackerCard } from "@/components/dashboard/matches/match-detail/performance-tracker-card";
 import {
-  MatchStatisticsTable,
+  MatchStatisticsCard,
   type StatRow,
-} from "@/components/dashboard/matches/match-detail/match-statistics-table";
-import { CourtVideoRow } from "@/components/dashboard/matches/match-detail/court-video-row";
+} from "@/components/dashboard/matches/match-detail/match-statistics-card";
+import { ServePlacementCard } from "@/components/dashboard/matches/match-detail/serve-placement-card";
+import { AiInsightCard } from "@/components/dashboard/ai-insight-card";
+import { PerformanceProfileCard } from "@/components/dashboard/matches/match-detail/performance-profile-card";
+import { KeyMomentsCard } from "@/components/dashboard/matches/match-detail/key-moments-card";
+import { PressurePointsCard } from "@/components/dashboard/matches/match-detail/pressure-points-card";
 import { SectionsStagger } from "@/components/dashboard/matches/match-detail/sections-stagger";
 import type { PlayerStatistics } from "@/lib/data/types";
 
-/* ── Constants ──────────────────────────────────────────── */
-
 const RADAR_STATS: { key: keyof PlayerStatistics; label: string }[] = [
   { key: "firstServeInPct", label: "First Serve In" },
-  { key: "firstServeWinPct", label: "First Serve Points Won" },
-  { key: "secondServeWinPct", label: "Second Serve Points Won" },
+  { key: "firstServeWinPct", label: "First Serve Won" },
+  { key: "secondServeWinPct", label: "Second Serve Won" },
   { key: "serviceGamesWonPct", label: "Service Games Won" },
-  { key: "breakpointsWonPct", label: "Breakpoints Won" },
-  { key: "firstReturnWonPct", label: "First Serve Return Won" },
-  { key: "secondReturnWonPct", label: "Second Return Points Won" },
-  { key: "returnGamesWonPct", label: "Return Games" },
+  { key: "breakpointsWonPct", label: "Break Points Converted" },
+  { key: "firstReturnWonPct", label: "First Serve Returns Won" },
+  { key: "secondReturnWonPct", label: "Second Serve Return Points Won" },
+  { key: "returnGamesWonPct", label: "Return Games Won" },
 ];
 
 type StatConfig = {
@@ -68,19 +69,6 @@ const OTHER_STATS: StatConfig[] = [
   { key: "totalPointsWon", label: "Total Points Won", isPercentage: false },
 ];
 
-/* ── Helpers ────────────────────────────────────────────── */
-
-function getRatingLabel(score: number): string {
-  if (score >= 85) return "Dominant";
-  if (score >= 75) return "Excellent";
-  if (score >= 65) return "Very Good";
-  if (score >= 55) return "Solid";
-  if (score >= 45) return "Average";
-  if (score >= 35) return "Below Average";
-  if (score >= 25) return "Needs Work";
-  return "Poor";
-}
-
 function buildStatRows(
   configs: StatConfig[],
   p1: PlayerStatistics,
@@ -102,8 +90,6 @@ function buildStatRows(
   });
 }
 
-/* ── Page (Server Component) ───────────────────────────── */
-
 interface PageProps {
   params: Promise<{ matchId: string }>;
 }
@@ -114,7 +100,13 @@ export default async function MatchDetailPage({ params }: PageProps) {
 
   if (!data) notFound();
 
-  const { match, statsResult, keyMoments, points } = data;
+  const { match, statsResult, points, keyMoments, insights } = data;
+
+  const userInsights = match.isUserPlayer1
+    ? insights?.player1
+    : insights?.player2;
+  const topInsight =
+    userInsights?.weaknesses?.[0] ?? userInsights?.strengths?.[0] ?? null;
 
   const p1 = statsResult?.statistics?.player1Stats;
   const p2 = statsResult?.statistics?.player2Stats;
@@ -123,7 +115,12 @@ export default async function MatchDetailPage({ params }: PageProps) {
   const p1Short = shortName(p1Name, 14);
   const p2Short = shortName(p2Name, 14);
 
-  /* Radar data */
+  const matchDurationSec = (() => {
+    const m = match.duration?.match(/^(\d+):(\d{1,2})$/);
+    if (!m) return null;
+    return parseInt(m[1], 10) * 3600 + parseInt(m[2], 10) * 60;
+  })();
+
   const radarData =
     p1 && p2
       ? RADAR_STATS.map((stat) => ({
@@ -133,71 +130,83 @@ export default async function MatchDetailPage({ params }: PageProps) {
         }))
       : [];
 
-  /* Rating */
-  const overallRating = p1
-    ? Math.round((p1.serveRating + p1.returnRating + p1.underPressureRating) / 3)
-    : null;
-  const ratingLabel =
-    overallRating !== null ? getRatingLabel(overallRating) : null;
-
-  /* Pre-compute stat rows for the stats table */
-  const serveRows = p1 && p2 ? buildStatRows(SERVE_STATS, p1, p2) : [];
-  const returnRows = p1 && p2 ? buildStatRows(RETURN_STATS, p1, p2) : [];
-  const otherRows = p1 && p2 ? buildStatRows(OTHER_STATS, p1, p2) : [];
-
-  /* Total points */
-  const p1TotalPoints = p1?.totalPointsWon ?? 0;
-  const p2TotalPoints = p2?.totalPointsWon ?? 0;
+  const statSections =
+    p1 && p2
+      ? [
+          { title: "Serve", rows: buildStatRows(SERVE_STATS, p1, p2) },
+          { title: "Return", rows: buildStatRows(RETURN_STATS, p1, p2) },
+          { title: "Other", rows: buildStatRows(OTHER_STATS, p1, p2) },
+        ]
+      : [];
 
   return (
-    <div className="px-8 pt-8 pb-12">
-      <SectionsStagger className="flex flex-col gap-8">
-        {/* At-a-glance KPI strip */}
-        <MatchKpiStrip
-          overallRating={overallRating}
-          ratingLabel={ratingLabel}
-          p1={p1}
-          p1TotalPoints={p1TotalPoints}
-          p2TotalPoints={p2TotalPoints}
-        />
+    <div className="flex-1 w-full bg-white">
+      <div className="px-8 py-10">
+        <SectionsStagger className="flex flex-col">
+        <MatchDetailHero match={match} />
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-8">
-          {/* ── Main content (left column) ───────────────── */}
-          <main className="min-w-0 flex flex-col gap-8">
-            {/* Performance — tabbed (Momentum / Sets / Pressure / Comparison) */}
-            <PerformanceWidget
+        <div className="mt-8">
+          <MatchSummaryRow match={match} p1Name={p1Name} p2Name={p2Name} />
+        </div>
+
+        <div className="mt-10 grid grid-cols-1 lg:grid-cols-[5fr_2fr] gap-8">
+          <main
+            aria-label="Match details"
+            className="min-w-0 flex flex-col gap-6 order-1"
+          >
+            <PerformanceTrackerCard
               points={points}
-              p1Name={p1Name}
-              p2Name={p2Name}
-              p1Short={p1Short}
-              p2Short={p2Short}
-              p1TotalPoints={p1TotalPoints}
-              p2TotalPoints={p2TotalPoints}
-              radarData={radarData}
+              p1Name={p1Short}
+              p2Name={p2Short}
+              matchDurationSec={matchDurationSec}
             />
 
-            {/* Match Statistics Table */}
-            {serveRows.length > 0 ? (
-              <MatchStatisticsTable
-                serveRows={serveRows}
-                returnRows={returnRows}
-                otherRows={otherRows}
+            {statSections.some((s) => s.rows.length > 0) && (
+              <MatchStatisticsCard
+                sections={statSections}
                 p1Name={p1Short}
                 p2Name={p2Short}
               />
-            ) : null}
+            )}
 
-            {/* Visuals finale — Court + Video */}
-            <CourtVideoRow matchId={matchId} />
+            <div id="match-serve-placement" className="scroll-mt-6">
+              <ServePlacementCard />
+            </div>
           </main>
 
-          {/* ── Right column (sidebar) ───────────────────── */}
-          <aside className="hidden lg:flex flex-col gap-8">
-            <Scoreline match={match} p1Name={p1Name} p2Name={p2Name} />
-            <SidebarKeyMoments moments={keyMoments} />
+          <aside
+            aria-label="Match insights"
+            className="flex flex-col gap-6 min-w-0 order-2"
+          >
+            <AiInsightCard
+              storageKey={`advantage-ai-insight-dismissed:${matchId}`}
+            >
+              {topInsight ? (
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-[12px] font-medium text-[var(--color-text-primary)] leading-[18px]">
+                    {topInsight.name}
+                  </p>
+                  <p className="text-[12px] font-normal text-[var(--color-text-body)] leading-[19.8px]">
+                    {topInsight.description}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-[12px] font-normal text-[var(--color-text-body)] leading-[19.8px]">
+                  Insights will appear here once this match is fully analyzed.
+                </p>
+              )}
+            </AiInsightCard>
+            <PerformanceProfileCard
+              data={radarData}
+              p1Name={p1Short}
+              p2Name={p2Short}
+            />
+            <KeyMomentsCard points={points} narrativeMoments={keyMoments} />
+            <PressurePointsCard points={points} />
           </aside>
-        </div>
-      </SectionsStagger>
+          </div>
+        </SectionsStagger>
+      </div>
     </div>
   );
 }

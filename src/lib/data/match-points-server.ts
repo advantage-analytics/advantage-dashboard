@@ -24,9 +24,11 @@ export interface MatchPoint {
   firstShotType?: string | null;
   firstShotSpin?: string | null;
   firstShotZone?: string | null;
+  firstShotResult?: string | null;
   secondShotType?: string | null;
   secondShotSpin?: string | null;
   secondShotZone?: string | null;
+  secondShotResult?: string | null;
   lastShotType?: string | null;
   lastShotSpin?: string | null;
   lastShotZone?: string | null;
@@ -72,8 +74,6 @@ interface DbShot {
   landing_y: number | null;
 }
 
-/** Full court length in meters (baseline to baseline) */
-const COURT_LENGTH = 23.77;
 
 const SERVE_RESULT_TYPES = new Set(["Ace", "Service Winner", "Double Fault"]);
 
@@ -181,40 +181,37 @@ export async function getMatchPointsFromSupabase(
 
   return points.map((point): MatchPoint => {
     const pointShots = shotsByPointId.get(point.id) ?? [];
-    const firstShot = pointShots[0];
-    const secondShot = pointShots.length > 1 ? pointShots[1] : undefined;
+
+    // Pick shots by ROLE, not array position. Raw data includes Feed rows at
+    // shot_number=0 and can carry two serve rows sharing shot_number=1 (first
+    // serve fault + second serve in the same slot). Positional indexing
+    // silently mis-labels ~34% of points.
+    const serveRows = pointShots.filter(
+      (s) => s.shot_type === "First Serve" || s.shot_type === "Second Serve",
+    );
+    const firstShot: DbShot | undefined =
+      serveRows.find((s) => s.shot_type === "Second Serve") ??
+      serveRows.find((s) => s.shot_type === "First Serve") ??
+      pointShots[0];
+    const secondShot: DbShot | undefined = pointShots.find(
+      (s) =>
+        s.shot_type !== "First Serve" &&
+        s.shot_type !== "Second Serve" &&
+        s.shot_type !== "Feed",
+    );
+
     const lastShot = pointShots.length > 0 ? pointShots[pointShots.length - 1] : undefined;
     const resultType = point.result_type ?? "";
 
-    // Determine if coordinates need flipping to normalize to near-side frame
-    const serverAtNearEnd =
-      firstShot != null &&
-      firstShot.contact_y != null &&
-      firstShot.contact_y < 12;
-
-    // First shot (serve): flip if server at near end (ball lands on far side)
-    let firstLandX = firstShot?.landing_x ?? null;
-    let firstLandY = firstShot?.landing_y ?? null;
-    if (serverAtNearEnd && firstLandX != null && firstLandY != null) {
-      firstLandX = -firstLandX;
-      firstLandY = COURT_LENGTH - firstLandY;
-    }
-
-    // Second shot (return): flip if server at far end (returner hits from near to far)
-    let secondLandX = secondShot?.landing_x ?? null;
-    let secondLandY = secondShot?.landing_y ?? null;
-    if (!serverAtNearEnd && secondLandX != null && secondLandY != null) {
-      secondLandX = -secondLandX;
-      secondLandY = COURT_LENGTH - secondLandY;
-    }
-
-    // Second shot contact position (where returner stood)
-    let secondContactX = secondShot?.contact_x ?? null;
-    let secondContactY = secondShot?.contact_y ?? null;
-    if (!serverAtNearEnd && secondContactX != null && secondContactY != null) {
-      secondContactX = -secondContactX;
-      secondContactY = COURT_LENGTH - secondContactY;
-    }
+    // Expose raw world-frame coordinates. Downstream renderers normalize them
+    // (so end-changes between games don't require an extra server-side flip
+    // and the home widget + match-detail both run through the same logic).
+    const firstLandX = firstShot?.landing_x ?? null;
+    const firstLandY = firstShot?.landing_y ?? null;
+    const secondLandX = secondShot?.landing_x ?? null;
+    const secondLandY = secondShot?.landing_y ?? null;
+    const secondContactX = secondShot?.contact_x ?? null;
+    const secondContactY = secondShot?.contact_y ?? null;
 
     return {
       id: point.id,
@@ -239,9 +236,11 @@ export async function getMatchPointsFromSupabase(
       firstShotType: firstShot?.shot_type ?? null,
       firstShotSpin: firstShot?.spin_type ?? null,
       firstShotZone: firstShot?.zone ?? null,
+      firstShotResult: firstShot?.result ?? null,
       secondShotType: secondShot?.shot_type ?? null,
       secondShotSpin: secondShot?.spin_type ?? null,
       secondShotZone: secondShot?.zone ?? null,
+      secondShotResult: secondShot?.result ?? null,
       lastShotType: lastShot?.shot_type ?? null,
       lastShotSpin: lastShot?.spin_type ?? null,
       lastShotZone: lastShot?.zone ?? null,

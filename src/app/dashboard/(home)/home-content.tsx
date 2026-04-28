@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -10,6 +10,9 @@ import RecentActivity from "./recent-activity";
 import ServePlacementHome from "@/components/dashboard/home/serve-placement-home";
 
 const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
+
+// Module-scope so stagger doesn't replay on return navigation within the session.
+let hasAnimatedOnce = false;
 
 interface HomeContentProps {
   displayName: string;
@@ -30,16 +33,17 @@ export default function HomeContent({
 }: HomeContentProps) {
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
-  const hasAnimated = useRef(false);
+  const skipAnimation = shouldReduceMotion || hasAnimatedOnce;
 
-  // Refresh server data (KPIs, heatmap) when a match finishes processing
   useEffect(() => {
     const handler = () => router.refresh();
     window.addEventListener("match-processed", handler);
     return () => window.removeEventListener("match-processed", handler);
   }, [router]);
-  const skipAnimation = shouldReduceMotion || hasAnimated.current;
-  hasAnimated.current = true;
+
+  useEffect(() => {
+    hasAnimatedOnce = true;
+  }, []);
 
   return (
     <>
@@ -57,7 +61,6 @@ export default function HomeContent({
             ? "grid grid-cols-1 lg:grid-cols-[5fr_2fr] gap-8"
             : "flex flex-col gap-6"
           )}>
-            {/* Left Column */}
             <motion.div
               initial={skipAnimation ? false : { opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
@@ -68,7 +71,6 @@ export default function HomeContent({
               <ServePlacementHome userId={userId} />
             </motion.div>
 
-            {/* Right Column */}
             {sidebar && (
               <motion.div
                 initial={skipAnimation ? false : { opacity: 0, y: 8 }}

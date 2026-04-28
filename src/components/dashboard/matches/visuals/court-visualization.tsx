@@ -262,6 +262,9 @@ export function CourtVisualization({
   const REAL_HALF_DOUBLES = 5.485;
   const REAL_SERVICE_LINE_Y = 5.485;
   const REAL_NET_Y = 11.885;
+  const REAL_COURT_LENGTH = 23.77;
+  const normalizeLanding = (lx: number, ly: number): { lx: number; ly: number } =>
+    ly > REAL_NET_Y ? { lx: -lx, ly: REAL_COURT_LENGTH - ly } : { lx, ly };
 
   // Court y offsets
   const courtTop = PAD_TOP;
@@ -287,8 +290,9 @@ export function CourtVisualization({
       if (visualizationType === "return") {
         const retFarBaseline = PAD_TOP;
         if (landingX != null && landingY != null) {
-          x = CX + (landingX / REAL_HALF_DOUBLES) * (COURT_W / 2);
-          y = retFarBaseline + (landingY / REAL_NET_Y) * RET_HALF;
+          const n = normalizeLanding(landingX, landingY);
+          x = CX + (n.lx / REAL_HALF_DOUBLES) * (COURT_W / 2);
+          y = retFarBaseline + (n.ly / REAL_NET_Y) * RET_HALF;
           x = Math.max(4, Math.min(COURT_W - 4, x));
           y = Math.max(retFarBaseline + 4, Math.min(retFarBaseline + RET_HALF - 4, y));
         } else {
@@ -300,10 +304,11 @@ export function CourtVisualization({
           y = retFarBaseline + margin + jy * (RET_HALF - margin * 2);
         }
       } else if (landingX != null && landingY != null) {
-        const absX = Math.abs(landingX);
+        const n = normalizeLanding(landingX, landingY);
+        const absX = Math.abs(n.lx);
         const signedX = side === "deuce" ? -absX : absX;
         x = CX + (signedX / REAL_HALF_DOUBLES) * (COURT_W / 2);
-        const yFraction = (landingY - REAL_SERVICE_LINE_Y) / (REAL_NET_Y - REAL_SERVICE_LINE_Y);
+        const yFraction = (n.ly - REAL_SERVICE_LINE_Y) / (REAL_NET_Y - REAL_SERVICE_LINE_Y);
         y = serviceLineYPos + yFraction * (baselineYPos - serviceLineYPos);
 
         if (result === "doubleFault") {
@@ -493,7 +498,7 @@ export function CourtVisualization({
             <span
               className={`text-white text-[10px] font-medium px-2 py-0.5 rounded-full ${
                 visualizationType === "return"
-                  ? "bg-[#6366F1]"
+                  ? "bg-[#A855F7]"
                   : "bg-[rgba(106,171,255,0.9)]"
               }`}
             >

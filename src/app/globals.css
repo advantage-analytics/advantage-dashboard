@@ -65,16 +65,32 @@
   --color-bg-panel: #FFFFFF;
   --color-accent-blue: #3B82F6;
   --color-accent-blue-hover: #2563EB;
+  /* Two-player comparison palette (codified in SKILL.md § "Additional colors").
+     player-1/2 + -text + -soft already defined there. `-bar-tint` below is
+     new — used for non-leader bar fills in stat comparisons. Solid hex, not
+     opacity, so it renders predictably on white and on #F3F3F3 tracks. */
+  --color-player-1: #3B82F6;
+  --color-player-1-bar-tint: #BFD5FB;
+  --color-player-2: #A855F7;
+  --color-player-2-bar-tint: #DDC7F7;
   --color-text-primary: #0D0D0D;
+  --color-text-body: #525252;
   --color-text-secondary: #71717A;
   --color-text-muted: #888888;
   --color-text-dim: #AAAAAA;
   --color-text-faint: #BBBBBB;
   --color-border-subtle: rgba(0, 0, 0, 0.1);
   --color-border-faint: rgba(0, 0, 0, 0.05);
+  --color-border-card: #F3F3F3;
+  --color-surface-card: #FFFFFF;
+  --color-surface-muted: #FAFAFA;
+  --color-success: #5DB955;
+  --color-error-strong: #E51837;
+  --color-radar-grid: #EFEFEF;
   --color-error: #FF453A;
   --color-error-bg: rgba(255, 69, 58, 0.08);
   --color-accent-blue-glow: rgba(59, 130, 246, 0.15);
+  --color-accent-blue-ring: rgba(59, 130, 246, 0.4);
 
   --radius: 0.625rem;
   --background: oklch(1 0 0);
@@ -165,6 +181,28 @@
 
 .btn-primary {
   @apply px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition;
+}
+
+@utility surface-card {
+  background-color: var(--color-surface-card);
+  border: 1px solid var(--color-border-card);
+  border-radius: 14px;
+  box-shadow: var(--shadow-card);
+}
+
+@utility surface-card-elevated {
+  background-color: var(--color-surface-card);
+  border: 1px solid var(--color-border-card);
+  border-radius: 14px;
+  box-shadow: var(--shadow-card-elevated);
+}
+
+/* Demoted card variant — flat, hairline-only. Faint inner tint + no shadow
+   so it reads as deliberate supporting content, not a loading skeleton. */
+@utility surface-card-ghost {
+  background-color: var(--color-surface-muted);
+  border: 1px solid var(--color-border-card);
+  border-radius: 14px;
 }
 
 .report-page {

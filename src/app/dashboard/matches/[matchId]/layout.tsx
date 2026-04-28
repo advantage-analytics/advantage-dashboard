@@ -1,8 +1,7 @@
 import { notFound } from "next/navigation";
 
+import { ClearRetryOnSuccess } from "@/components/dashboard/matches/clear-retry-on-success";
 import { MatchDataProvider } from "@/components/dashboard/matches/match-data-provider";
-import { MatchDetailHeader } from "@/components/dashboard/matches/match-detail-header";
-import { MatchNavigationTabs } from "@/components/dashboard/matches/match-navigation-tabs";
 import { getMatchDetailData } from "@/lib/data/match-detail-server";
 
 interface MatchLayoutProps {
@@ -33,10 +32,7 @@ export default async function MatchLayout({
         insights={insights}
         playerAverages={playerAverages}
       >
-        <MatchDetailHeader match={match} />
-        <div className="px-8 mt-6">
-          <MatchNavigationTabs matchId={matchId} />
-        </div>
+        <ClearRetryOnSuccess matchId={matchId} />
         {children}
       </MatchDataProvider>
     </div>
