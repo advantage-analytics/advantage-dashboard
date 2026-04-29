@@ -3,7 +3,7 @@
  */
 
 /** Wizard step identifiers */
-export type Step = "provider" | "upload" | "details" | "confirm";
+export type Step = "provider" | "match" | "confirm";
 
 /** Props for the main UploadMatchModal component */
 export interface UploadMatchModalProps {
@@ -113,7 +113,7 @@ export const DEFAULT_FORM_DATA: FormData = {
 };
 
 /** Step order for navigation and indicator */
-export const STEP_ORDER: Step[] = ["provider", "upload", "details", "confirm"];
+export const STEP_ORDER: Step[] = ["provider", "match", "confirm"];
 
 /** Step configuration for titles and descriptions */
 export const STEP_CONFIG: Record<Step, { title: string; description: string }> = {
@@ -121,13 +121,9 @@ export const STEP_CONFIG: Record<Step, { title: string; description: string }> =
     title: "Choose your data source",
     description: "Select the platform you exported from."
   },
-  upload: {
-    title: "Upload your match file",
-    description: "We'll parse your match data the moment it's added."
-  },
-  details: {
-    title: "Match details",
-    description: "Auto-filled from your file. Edit anything that's wrong."
+  match: {
+    title: "Add your match",
+    description: "Drop your file — we'll auto-fill the details for you to review."
   },
   confirm: {
     title: "Ready to save",
@@ -138,9 +134,8 @@ export const STEP_CONFIG: Record<Step, { title: string; description: string }> =
 /** Footer button configuration per step */
 export const STEP_FOOTER_CONFIG: Record<Step, { showBack: boolean; continueLabel: string }> = {
   provider: { showBack: true, continueLabel: "Continue" },
-  upload: { showBack: true, continueLabel: "Continue" },
-  details: { showBack: true, continueLabel: "Continue" },
-  confirm: { showBack: true, continueLabel: "Create Match" }
+  match: { showBack: true, continueLabel: "Continue" },
+  confirm: { showBack: true, continueLabel: "Create match" }
 };
 
 /** File parsing state for auto-population */

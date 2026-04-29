@@ -1,15 +1,15 @@
 "use client";
 
 /**
- * UploadContent — Step 3
- * Drag-and-drop file zone with parse-state feedback.
+ * UploadContent — file zone for the merged Match step.
+ * Renders a full drop zone when no file is loaded; collapses to a slim file
+ * chip once a file is present so the form below it can take the focus.
  */
 
 import { Button } from "@/components/ui/button";
 import {
   AlertCircle,
   Loader2,
-  CheckCircle2,
   Trash2,
   FileSpreadsheet,
   AlertTriangle,
@@ -82,7 +82,7 @@ export function UploadContent({
       : "idle";
 
   return (
-    <div className="flex flex-col h-full gap-3">
+    <div className={`flex flex-col gap-3 ${hasFile ? "" : "h-full"}`}>
       {uploadError && (
         <div className="animate-slideDown p-3 bg-[rgba(229,24,55,0.06)] border border-[rgba(229,24,55,0.15)] rounded-[10px] flex items-start gap-2.5">
           <AlertCircle className="size-3.5 text-[#E51837] mt-0.5 flex-shrink-0" strokeWidth={1.5} />
@@ -93,7 +93,7 @@ export function UploadContent({
         </div>
       )}
 
-      <div className="flex flex-col flex-1 gap-3 min-h-0">
+      <div className={`flex flex-col gap-3 min-h-0 ${hasFile ? "" : "flex-1"}`}>
         {!hasFile ? (
           <div
             onDragOver={onDragOver}
@@ -219,15 +219,6 @@ export function UploadContent({
                   </div>
                 )}
 
-                {parsingState.parseSuccess && (
-                  <div className="animate-slideDown flex items-center gap-2 px-3 py-2 bg-[rgba(93,185,85,0.06)] border border-[rgba(93,185,85,0.18)] rounded-[10px]">
-                    <CheckCircle2 className="size-3.5 text-[#5DB955] flex-shrink-0" strokeWidth={1.5} />
-                    <p className="text-[#5DB955] text-[12px] font-medium">
-                      Match data ready — proceed to next step.
-                    </p>
-                  </div>
-                )}
-
                 {parsingState.parseWarnings.length > 0 && (
                   <div className="animate-slideDown flex items-start gap-2 px-3 py-2 bg-[#FFFBEB] border border-[#FDE68A] rounded-[10px]">
                     <AlertTriangle className="size-3.5 text-[#92400E] mt-0.5 flex-shrink-0" strokeWidth={1.5} />
@@ -259,35 +250,29 @@ export function UploadContent({
               </>
             )}
 
-            {/* File card */}
-            <div className="rounded-[14px] bg-white border border-[#F3F3F3] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden">
-              <div className="px-4 py-3.5 flex items-center gap-3">
-                <div className="size-10 rounded-[10px] bg-[#3B82F6] flex items-center justify-center flex-shrink-0">
-                  <FileSpreadsheet className="size-5 text-white" strokeWidth={1.5} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[#0D0D0D] text-[13px] font-normal truncate">
-                    {uploadedFile.name}
-                  </p>
-                  <p className="text-[#888888] text-[12px] mt-0.5 tabular-nums">
-                    {uploadedFile.size}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={onRemoveFile}
-                  disabled={isUploading}
-                  className="size-9 flex items-center justify-center rounded-[6px] text-[#888888] hover:text-[#E51837] hover:bg-[rgba(229,24,55,0.06)] transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
-                  aria-label="Remove file"
-                >
-                  <Trash2 className="size-4" strokeWidth={1.5} />
-                </button>
+            {/* File chip — slim header for the merged Match step */}
+            <div className="flex items-center gap-3 px-3 py-2 rounded-[10px] bg-[#FAFAFA] border border-[#F3F3F3]">
+              <div className="size-7 rounded-[6px] bg-[#3B82F6] flex items-center justify-center flex-shrink-0">
+                <FileSpreadsheet className="size-3.5 text-white" strokeWidth={1.5} />
               </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[#0D0D0D] text-[12px] font-medium truncate">
+                  {uploadedFile.name}
+                </p>
+                <p className="text-[#888888] text-[10px] tabular-nums">
+                  {uploadedFile.size}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onRemoveFile}
+                disabled={isUploading}
+                className="size-7 flex items-center justify-center rounded-lg text-[#888888] hover:text-[#E51837] hover:bg-[rgba(229,24,55,0.06)] transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+                aria-label="Remove file"
+              >
+                <Trash2 className="size-3.5" strokeWidth={1.5} />
+              </button>
             </div>
-
-            <p className="text-[#888888] text-[12px] pt-1">
-              You can swap this file any time before creating the match.
-            </p>
           </div>
         )}
       </div>

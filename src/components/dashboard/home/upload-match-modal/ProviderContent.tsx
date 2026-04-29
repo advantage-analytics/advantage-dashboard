@@ -5,7 +5,8 @@
  * Vertical list of providers; each row carries logo, name, description, and state.
  */
 
-import { Check, Lock } from "lucide-react";
+import { Check, Lock, ChevronRight } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { providers } from "@/lib/providers";
 
 export interface ProviderContentProps {
@@ -29,14 +30,20 @@ export function ProviderContent({ selectedProvider, onProviderSelect }: Provider
                 onProviderSelect(isSelected ? null : provider.id);
               }
             }}
-            className={`group relative w-full flex items-center gap-6 px-6 py-5 rounded-[14px] bg-white border text-left transition-[background-color,box-shadow,border-color,transform] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-2 ${
-              isSelected
-                ? "border-[#3B82F6] shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] active:scale-[0.998]"
-                : isAvailable
-                ? "border-[#F3F3F3] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] hover:shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] active:scale-[0.998] cursor-pointer"
-                : "border-[#F3F3F3] cursor-not-allowed"
+            className={`group relative w-full flex items-center gap-6 px-6 py-5 rounded-[14px] bg-white border text-left transition-[box-shadow,border-color,transform] duration-200 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-2 ${
+              isAvailable
+                ? "border-[#F3F3F3] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] hover:shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] hover:border-[#EAECF0] active:scale-[0.97] cursor-pointer"
+                : "border-[#F3F3F3] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] cursor-not-allowed"
             }`}
           >
+            {/* Selection accent — sibling overlay so opacity carries the work, not box-shadow */}
+            <span
+              aria-hidden="true"
+              className={`pointer-events-none absolute inset-0 rounded-[14px] ring-1 ring-inset ring-[#3B82F6] transition-opacity ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                isSelected ? "opacity-100 duration-200" : "opacity-0 duration-150"
+              }`}
+            />
+
             {/* Logo column — fixed width so all rows align */}
             <div className="w-[180px] h-20 flex items-center justify-center shrink-0">
               <img
@@ -64,22 +71,55 @@ export function ProviderContent({ selectedProvider, onProviderSelect }: Provider
               )}
             </div>
 
-            {/* State column */}
-            <div className="shrink-0">
-              {isSelected ? (
-                <div className="size-6 rounded-full bg-[#3B82F6] flex items-center justify-center">
-                  <Check className="size-3 text-white" strokeWidth={2.5} />
-                </div>
-              ) : !isAvailable ? (
-                <span className="inline-flex items-center gap-1 px-1.5 py-1 rounded-[6px] bg-[#F5F5F5] text-[10px] font-medium text-[#888888] uppercase tracking-[2.5px]">
-                  <Lock className="size-3" strokeWidth={1.5} />
-                  Soon
-                </span>
-              ) : (
-                <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                  Select
-                </span>
-              )}
+            {/* State column — fixed-height container so exit anims don't push layout */}
+            <div className="shrink-0 relative flex items-center justify-end h-6 min-w-[24px]">
+              <AnimatePresence mode="wait" initial={false}>
+                {isSelected ? (
+                  <motion.div
+                    key="check"
+                    initial={{ opacity: 0, scale: 0.6 }}
+                    animate={{
+                      opacity: 1,
+                      scale: 1,
+                      transition: {
+                        opacity: { duration: 0.16, ease: [0.23, 1, 0.32, 1] },
+                        scale: {
+                          type: "spring",
+                          duration: 0.4,
+                          bounce: 0.4,
+                          delay: 0.06,
+                        },
+                      },
+                    }}
+                    exit={{
+                      opacity: 0,
+                      scale: 0.85,
+                      transition: { duration: 0.12, ease: [0.23, 1, 0.32, 1] },
+                    }}
+                    className="size-6 rounded-full bg-[#3B82F6] flex items-center justify-center"
+                  >
+                    <Check className="size-3 text-white" strokeWidth={2.5} />
+                  </motion.div>
+                ) : !isAvailable ? (
+                  <motion.span
+                    key="lock"
+                    initial={false}
+                    className="inline-flex items-center gap-1 px-1.5 py-1 rounded-[6px] bg-[#F5F5F5] text-[10px] font-medium text-[#888888] uppercase tracking-[2.5px]"
+                  >
+                    <Lock className="size-3" strokeWidth={1.5} />
+                    Soon
+                  </motion.span>
+                ) : (
+                  <motion.span
+                    key="hint"
+                    initial={false}
+                    className="inline-flex items-center gap-1 text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] opacity-0 -translate-x-1 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-hover:translate-x-0 transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]"
+                  >
+                    Select
+                    <ChevronRight className="size-3" strokeWidth={1.5} aria-hidden="true" />
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </div>
           </button>
         );

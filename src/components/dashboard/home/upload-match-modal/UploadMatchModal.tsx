@@ -28,7 +28,7 @@ import { UploadContent } from "./UploadContent";
 import { DetailsContent } from "./DetailsContent";
 import { ConfirmContent } from "./ConfirmContent";
 
-const HINT_STEPS = new Set<Step>(["details", "confirm"]);
+const HINT_STEPS = new Set<Step>(["match", "confirm"]);
 
 export function UploadMatchModal({
   open,
@@ -50,8 +50,7 @@ export function UploadMatchModal({
     parsingState,
     handleProviderSelect,
     handleProviderContinue,
-    handleUploadContinue,
-    handleDetailsContinue,
+    handleMatchContinue,
     handleBack,
     handleClose,
     setIsOver,
@@ -110,14 +109,13 @@ export function UploadMatchModal({
   let continueHandler: () => void = () => {};
   switch (step) {
     case "provider": continueHandler = handleProviderContinue; break;
-    case "upload":   continueHandler = handleUploadContinue; break;
-    case "details":  continueHandler = handleDetailsContinue; break;
+    case "match":    continueHandler = handleMatchContinue; break;
     case "confirm":  continueHandler = handleCreateMatch; break;
   }
 
   const continueDisabled =
     (step === "provider" && !selectedProvider) ||
-    (step === "upload" && (!uploadedFile || isUploading)) ||
+    (step === "match" && (!uploadedFile || isUploading)) ||
     (step === "confirm" && isCreating);
 
   // Enter-to-continue. Ignores presses inside form controls so score-entry & dropdowns keep
@@ -144,9 +142,9 @@ export function UploadMatchModal({
 
   // Disabled-state hints. Only consumed when continueDisabled is true.
   const footerHint =
-    step === "upload" && !uploadedFile
+    step === "match" && !uploadedFile
       ? "Drop or browse a file"
-      : step === "upload" && isUploading
+      : step === "match" && isUploading
       ? "Validating file…"
       : step === "confirm" && isCreating
       ? "Creating match…"
@@ -221,7 +219,7 @@ export function UploadMatchModal({
           <div className="relative flex-1 min-h-0 px-8">
             <div
               ref={scrollRef}
-              className="h-full overflow-y-auto py-6 -mr-4 pr-4 upload-modal-scroll"
+              className="h-full overflow-y-auto py-6 -mx-4 px-4 upload-modal-scroll"
             >
               <div
                 key={step}
@@ -234,35 +232,36 @@ export function UploadMatchModal({
                   />
                 )}
 
-                {step === "upload" && (
-                  <UploadContent
-                    sourceType={sourceType}
-                    selectedProvider={selectedProvider}
-                    uploadedFile={uploadedFile}
-                    isOver={isOver}
-                    isUploading={isUploading}
-                    uploadError={uploadError}
-                    parsingState={parsingState}
-                    onSourceTypeChange={setSourceType}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      setIsOver(true);
-                    }}
-                    onDragLeave={() => setIsOver(false)}
-                    onDrop={handleDrop}
-                    onFileChange={handleFileChange}
-                    onRemoveFile={handleRemoveFile}
-                  />
-                )}
-
-                {step === "details" && (
-                  <DetailsContent
-                    formData={formData}
-                    onInputChange={handleInputChange}
-                    onScoreChange={handleScoreChange}
-                    onTiebreakChange={handleTiebreakChange}
-                    parsingState={parsingState}
-                  />
+                {step === "match" && (
+                  <div className="flex flex-col gap-6">
+                    <UploadContent
+                      sourceType={sourceType}
+                      selectedProvider={selectedProvider}
+                      uploadedFile={uploadedFile}
+                      isOver={isOver}
+                      isUploading={isUploading}
+                      uploadError={uploadError}
+                      parsingState={parsingState}
+                      onSourceTypeChange={setSourceType}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setIsOver(true);
+                      }}
+                      onDragLeave={() => setIsOver(false)}
+                      onDrop={handleDrop}
+                      onFileChange={handleFileChange}
+                      onRemoveFile={handleRemoveFile}
+                    />
+                    {uploadedFile && !parsingState.isParsing && (
+                      <DetailsContent
+                        formData={formData}
+                        onInputChange={handleInputChange}
+                        onScoreChange={handleScoreChange}
+                        onTiebreakChange={handleTiebreakChange}
+                        parsingState={parsingState}
+                      />
+                    )}
+                  </div>
                 )}
 
                 {step === "confirm" && (

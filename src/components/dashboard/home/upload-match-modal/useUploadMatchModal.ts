@@ -64,8 +64,7 @@ export interface UseUploadMatchModalReturn {
   setStep: (step: Step) => void;
   handleProviderSelect: (providerId: string | null) => void;
   handleProviderContinue: () => void;
-  handleUploadContinue: () => void;
-  handleDetailsContinue: () => void;
+  handleMatchContinue: () => void;
   handleBack: () => void;
   handleClose: () => void;
 
@@ -173,16 +172,11 @@ export function useUploadMatchModal({
 
   const handleProviderContinue = useCallback(() => {
     if (selectedProvider) {
-      setStep("upload");
+      setStep("match");
     }
   }, [selectedProvider]);
 
-  const handleUploadContinue = useCallback(() => {
-    saveFormDataToStorage(formData);
-    setStep("details");
-  }, [formData]);
-
-  const handleDetailsContinue = useCallback(() => {
+  const handleMatchContinue = useCallback(() => {
     saveFormDataToStorage(formData);
     setStep("confirm");
   }, [formData]);
@@ -190,9 +184,8 @@ export function useUploadMatchModal({
   const handleBack = useCallback(() => {
     const stepMap: Record<Step, Step | null> = {
       provider: null,
-      upload: "provider",
-      details: "upload",
-      confirm: "details"
+      match: "provider",
+      confirm: "match"
     };
     const prevStep = stepMap[step];
     if (prevStep) {
@@ -619,8 +612,7 @@ export function useUploadMatchModal({
     setStep,
     handleProviderSelect,
     handleProviderContinue,
-    handleUploadContinue,
-    handleDetailsContinue,
+    handleMatchContinue,
     handleBack,
     handleClose,
 
