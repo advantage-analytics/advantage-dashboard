@@ -250,27 +250,32 @@ export function UploadContent({
               </>
             )}
 
-            {/* File chip — slim header for the merged Match step */}
-            <div className="flex items-center gap-3 px-3 py-2 rounded-[10px] bg-[#FAFAFA] border border-[#F3F3F3]">
-              <div className="size-7 rounded-[6px] bg-[#3B82F6] flex items-center justify-center flex-shrink-0">
-                <FileSpreadsheet className="size-3.5 text-white" strokeWidth={1.5} />
+            {/* File chip — compact inline marker */}
+            <div className="inline-flex self-start items-center gap-2 pl-2 pr-1 py-1 rounded-[8px] bg-white border border-[#F3F3F3]">
+              <div className="relative size-5 rounded-[5px] bg-[#3B82F6] flex items-center justify-center flex-shrink-0">
+                <FileSpreadsheet className="size-3 text-white" strokeWidth={1.75} />
+                {parseStatus === "success" && (
+                  <span
+                    className="absolute -bottom-0.5 -right-0.5 size-2 rounded-full bg-[#5DB955] border border-white"
+                    aria-hidden="true"
+                  />
+                )}
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-[#0D0D0D] text-[12px] font-medium truncate">
-                  {uploadedFile.name}
-                </p>
-                <p className="text-[#888888] text-[10px] tabular-nums">
-                  {uploadedFile.size}
-                </p>
-              </div>
+              <span className="text-[#0D0D0D] text-[12px] font-medium truncate max-w-[200px]">
+                {uploadedFile.name}
+              </span>
+              <span className="text-[#CCCCCC] text-[10px]">·</span>
+              <span className="text-[#888888] text-[11px] tabular-nums">
+                {uploadedFile.size}
+              </span>
               <button
                 type="button"
                 onClick={onRemoveFile}
                 disabled={isUploading}
-                className="size-7 flex items-center justify-center rounded-lg text-[#888888] hover:text-[#E51837] hover:bg-[rgba(229,24,55,0.06)] transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+                className="size-6 flex items-center justify-center rounded-md text-[#AAAAAA] hover:text-[#E51837] hover:bg-[rgba(229,24,55,0.06)] transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
                 aria-label="Remove file"
               >
-                <Trash2 className="size-3.5" strokeWidth={1.5} />
+                <Trash2 className="size-3" strokeWidth={1.5} />
               </button>
             </div>
           </div>

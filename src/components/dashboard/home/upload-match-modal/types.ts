@@ -32,6 +32,14 @@ export interface FormData {
   matchType?: string;
   courtType?: string;
   duration?: number;
+  /** Player dominant hand */
+  playerHand?: "right" | "left";
+  /** Opponent dominant hand */
+  opponentHand?: "right" | "left";
+  /** Player backhand style */
+  playerBackhand?: "one-handed" | "two-handed";
+  /** Opponent backhand style */
+  opponentBackhand?: "one-handed" | "two-handed";
 }
 
 /** Uploaded file metadata and data */

@@ -115,7 +115,8 @@ export function UploadMatchModal({
 
   const continueDisabled =
     (step === "provider" && !selectedProvider) ||
-    (step === "match" && (!uploadedFile || isUploading)) ||
+    (step === "match" &&
+      (!uploadedFile || isUploading || !formData.eventName.trim())) ||
     (step === "confirm" && isCreating);
 
   // Enter-to-continue. Ignores presses inside form controls so score-entry & dropdowns keep
@@ -146,6 +147,8 @@ export function UploadMatchModal({
       ? "Drop or browse a file"
       : step === "match" && isUploading
       ? "Validating file…"
+      : step === "match" && !formData.eventName.trim()
+      ? "Add a match name"
       : step === "confirm" && isCreating
       ? "Creating match…"
       : "Make a selection";
@@ -258,7 +261,6 @@ export function UploadMatchModal({
                         onInputChange={handleInputChange}
                         onScoreChange={handleScoreChange}
                         onTiebreakChange={handleTiebreakChange}
-                        parsingState={parsingState}
                       />
                     )}
                   </div>

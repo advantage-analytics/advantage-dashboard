@@ -77,7 +77,7 @@ export interface UseUploadMatchModalReturn {
   handleRemoveFile: () => void;
 
   // Form handling
-  handleInputChange: (field: keyof MatchFormData, value: string | number | boolean) => void;
+  handleInputChange: (field: keyof MatchFormData, value: string | number | boolean | undefined) => void;
   handleScoreChange: (player: "player" | "opponent", index: number, value: string) => void;
   handleTiebreakChange: (player: "player" | "opponent", index: number, value: string) => void;
 
@@ -383,7 +383,7 @@ export function useUploadMatchModal({
   }, []);
 
   // Form handling
-  const handleInputChange = useCallback((field: keyof MatchFormData, value: string | number | boolean) => {
+  const handleInputChange = useCallback((field: keyof MatchFormData, value: string | number | boolean | undefined) => {
     setFormData((prev) => {
       const next = { ...prev, [field]: value };
       // When bestOf changes, reset numberOfSets so it uses the new format's default
