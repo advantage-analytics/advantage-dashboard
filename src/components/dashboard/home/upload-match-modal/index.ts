@@ -10,9 +10,6 @@ export { UploadMatchModal } from "./UploadMatchModal";
 export { StepIndicator } from "./StepIndicator";
 
 // Content components
-export { MethodContent } from "./MethodContent";
-export type { MethodContentProps } from "./MethodContent";
-
 export { ProviderContent } from "./ProviderContent";
 export type { ProviderContentProps } from "./ProviderContent";
 

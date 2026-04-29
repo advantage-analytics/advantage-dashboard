@@ -1,11 +1,10 @@
 "use client";
 
 /**
- * ConfirmContent - Step 5 content
- * Summary display of all entered data
+ * ConfirmContent — Step 4 of 4 (peak-end summary)
  */
 
-import { Switch } from "@/components/ui/switch";
+import { FileSpreadsheet } from "lucide-react";
 import { MatchMetadataRow } from "@/components/dashboard/matches/match-metadata-row";
 import { FormData, UploadedFile } from "./types";
 import { getAdjustedScores, formatDuration } from "./utils";
@@ -17,7 +16,6 @@ export interface ConfirmContentProps {
   error: string | null;
 }
 
-// Helper function to get initials from a name
 function getInitials(name: string): string {
   return name
     .split(/\s+/)
@@ -27,7 +25,6 @@ function getInitials(name: string): string {
     .slice(0, 2);
 }
 
-// Helper to format date as "Month Day, Year"
 function formatDate(dateString: string): string {
   if (!dateString) return "";
   const date = new Date(dateString);
@@ -38,37 +35,39 @@ function formatDate(dateString: string): string {
   });
 }
 
-// Helper to determine winner based on scores
-function determineWinner(playerScores: (number | null)[], opponentScores: (number | null)[]): "player" | "opponent" | null {
-  let playerSetsWon = 0;
-  let opponentSetsWon = 0;
-
+function determineWinner(
+  playerScores: (number | null)[],
+  opponentScores: (number | null)[]
+): "player" | "opponent" | null {
+  let p = 0;
+  let o = 0;
   for (let i = 0; i < playerScores.length; i++) {
-    const pScore = playerScores[i] ?? 0;
-    const oScore = opponentScores[i] ?? 0;
-    if (pScore > oScore) {
-      playerSetsWon++;
-    } else if (oScore > pScore) {
-      opponentSetsWon++;
-    }
+    const ps = playerScores[i] ?? 0;
+    const os = opponentScores[i] ?? 0;
+    if (ps > os) p++;
+    else if (os > ps) o++;
   }
-
-  if (playerSetsWon > opponentSetsWon) return "player";
-  if (opponentSetsWon > playerSetsWon) return "opponent";
+  if (p > o) return "player";
+  if (o > p) return "opponent";
   return null;
 }
 
-// Helper to determine match status from result
 function getMatchStatus(result: string | undefined): string {
-  if (!result) return "Final Score";
+  if (!result) return "Final score";
   if (result === "Unfinished") return "Unfinished";
   if (result.includes("Withdrew")) return "Withdrew";
   if (result.includes("Defaulted")) return "Defaulted";
-  if (result.includes("Wins")) return "Final Score";
-  return "Final Score";
+  return "Final score";
 }
 
-export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }: ConfirmContentProps) {
+const labelCls =
+  "text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]";
+
+export function ConfirmContent({
+  formData,
+  uploadedFile,
+  error,
+}: ConfirmContentProps) {
   const playerScores = getAdjustedScores(
     formData.playerScores,
     formData.bestOf,
@@ -80,17 +79,19 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
     formData.numberOfSets
   );
 
-  const playerName = formData.playerName || "N/A";
-  const opponentName = formData.opponentName || "N/A";
+  const playerName = formData.playerName || "Player";
+  const opponentName = formData.opponentName || "Opponent";
   const winner = determineWinner(playerScores, opponentScores);
+  const eventTitle =
+    formData.eventName?.trim() || `${playerName} vs ${opponentName}`;
 
   return (
-    <div className="space-y-6">
-      {/* Event Name and Metadata Row */}
-      <div className="flex flex-col gap-4">
-        <p className="text-xl font-medium text-[#000000]">
-          {formData.eventName || `${formData.playerName} vs ${formData.opponentName}`}
-        </p>
+    <div className="flex flex-col gap-7">
+      {/* Hero — event title + metadata */}
+      <div className="flex flex-col gap-3">
+        <h3 className="text-[22px] font-light tracking-[-0.5px] leading-[26px] text-[#0D0D0D]">
+          {eventTitle}
+        </h3>
         <MatchMetadataRow
           date={formatDate(formData.date)}
           matchType={formData.matchType}
@@ -98,115 +99,146 @@ export function ConfirmContent({ formData, uploadedFile, isPrivateMatch, error }
         />
       </div>
 
-      {/* Match Score Section */}
-      <div className="pl-2 pr-4 py-3 flex flex-row gap-6">
-        {/* Vertical Separator */}
-        <div className="w-0.5 bg-[#6AABFF] self-stretch rounded-full"></div>
-        <div className="flex flex-col space-y-4 flex-1">
-          {/* Match Header */}
-          <div className="flex flex-row justify-between items-center font-normal text-xs text-[#888888]">
-            <p>{getMatchStatus(formData.result)} | {formData.round || "Round of 16"}</p>
-            <span className="rounded-[10px] px-1.5 py-0.5 text-xs font-medium bg-[#6AABFF] text-white">
+      {/* Scoreboard */}
+      <div className="flex flex-col gap-4">
+        {/* Header row: status + duration */}
+        <div className="flex items-center justify-between">
+          <p className={labelCls}>
+            {getMatchStatus(formData.result)}
+            {formData.round ? ` · ${formData.round}` : ""}
+          </p>
+          {formData.duration ? (
+            <span className="text-[10px] font-medium text-[#525252] tabular-nums">
               {formatDuration(formData.duration)}
             </span>
+          ) : null}
+        </div>
+
+        <div className="h-px bg-[#F3F3F3]" />
+
+        {/* Player rows */}
+        <div className="flex flex-col gap-2.5">
+          {/* Player 1 */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="size-10 rounded-full bg-[#F5F5F5] flex items-center justify-center shrink-0">
+                <span className="text-[12px] font-medium text-[#525252]">
+                  {getInitials(playerName)}
+                </span>
+              </div>
+              <p
+                className={`text-[14px] font-medium truncate ${
+                  winner === "player" ? "text-[#0D0D0D]" : "text-[#AAAAAA]"
+                }`}
+              >
+                {playerName}
+              </p>
+              {winner === "player" && (
+                <span className="text-[10px] font-medium text-[#5DB955] uppercase tracking-[1.5px]">
+                  Won
+                </span>
+              )}
+            </div>
+            <div className="flex gap-4 font-medium text-[18px] tabular-nums tracking-[-0.3px]">
+              {playerScores.map((score, idx) => {
+                const ps = score ?? 0;
+                const os = opponentScores[idx] ?? 0;
+                return (
+                  <p
+                    key={idx}
+                    className={ps > os ? "text-[#0D0D0D]" : "text-[#CCCCCC]"}
+                  >
+                    {ps}
+                  </p>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Player Names + Scores */}
-          <div className="flex flex-col space-y-2">
-            {/* Player 1 */}
-            <div className="flex flex-row justify-between items-center">
-              <div className="flex flex-row items-center gap-4">
-                <div className="w-10 h-10 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
-                  <span className="text-xs font-medium text-[#BFBFBF]">
-                    {getInitials(playerName)}
-                  </span>
-                </div>
-                <p className={`font-semibold text-sm ${winner === "player" ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}`}>
-                  {playerName}
-                </p>
+          {/* Player 2 */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="size-10 rounded-full bg-[#F5F5F5] flex items-center justify-center shrink-0">
+                <span className="text-[12px] font-medium text-[#525252]">
+                  {getInitials(opponentName)}
+                </span>
               </div>
-              <div className="flex flex-row gap-4 font-semibold text-[18px]">
-                {playerScores.map((score, idx) => {
-                  const pScore = score ?? 0;
-                  const oScore = opponentScores[idx] ?? 0;
-                  return (
-                    <p
-                      key={idx}
-                      className={pScore > oScore ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}
-                    >
-                      {pScore}
-                    </p>
-                  );
-                })}
-              </div>
+              <p
+                className={`text-[14px] font-medium truncate ${
+                  winner === "opponent" ? "text-[#0D0D0D]" : "text-[#AAAAAA]"
+                }`}
+              >
+                {opponentName}
+              </p>
+              {winner === "opponent" && (
+                <span className="text-[10px] font-medium text-[#5DB955] uppercase tracking-[1.5px]">
+                  Won
+                </span>
+              )}
             </div>
-
-            {/* Player 2 (Opponent) */}
-            <div className="flex flex-row justify-between items-center">
-              <div className="flex flex-row items-center gap-4">
-                <div className="w-10 h-10 rounded bg-[#F2F2F2] flex items-center justify-center shrink-0">
-                  <span className="text-xs font-medium text-[#BFBFBF]">
-                    {getInitials(opponentName)}
-                  </span>
-                </div>
-                <p className={`font-semibold text-sm ${winner === "opponent" ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}`}>
-                  {opponentName}
-                </p>
-              </div>
-              <div className="flex flex-row gap-4 font-semibold text-[18px]">
-                {opponentScores.map((score, idx) => {
-                  const oScore = score ?? 0;
-                  const pScore = playerScores[idx] ?? 0;
-                  return (
-                    <p
-                      key={idx}
-                      className={oScore > pScore ? "text-[#0D0D0D]" : "text-[#B3B3B3]"}
-                    >
-                      {oScore}
-                    </p>
-                  );
-                })}
-              </div>
+            <div className="flex gap-4 font-medium text-[18px] tabular-nums tracking-[-0.3px]">
+              {opponentScores.map((score, idx) => {
+                const os = score ?? 0;
+                const ps = playerScores[idx] ?? 0;
+                return (
+                  <p
+                    key={idx}
+                    className={os > ps ? "text-[#0D0D0D]" : "text-[#CCCCCC]"}
+                  >
+                    {os}
+                  </p>
+                );
+              })}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Scoring Format Section */}
-      <div className="space-y-3">
-        <h4 className="text-[#0D0D0D] font-medium text-sm">Scoring Format</h4>
-        <div className="flex flex-row gap-3">
-          <div className="px-3 py-2 bg-[#F7F7F7] rounded-lg">
-            <p className="text-xs font-medium text-[#666666]">Best of {formData.bestOf} Sets</p>
-          </div>
-          <div className="px-3 py-2 bg-[#F7F7F7] rounded-lg">
-            <p className="text-xs font-medium text-[#666666]">{formData.adScoring ? "Ad Scoring" : "No-Ad Scoring"}</p>
-          </div>
-          <div className="px-3 py-2 bg-[#F7F7F7] rounded-lg">
-            <p className="text-xs font-medium text-[#666666]">{formData.playOnLets ? "Play on Lets" : "Lets"}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Public/Private Toggle */}
-      <div className="flex items-center justify-between">
+      {/* Format details — each label/value paired so screen readers read in order */}
+      <dl className="grid grid-cols-3 gap-x-4">
         <div className="flex flex-col gap-1">
-          <h4 className="text-[#0D0D0D] font-medium text-sm">Public</h4>
-          <p className="text-[#888888] font-normal text-xs">
-            Note: All matches will be private during our Beta Testing
-          </p>
+          <dt className={labelCls}>Format</dt>
+          <dd className="text-[13px] font-normal text-[#0D0D0D]">
+            Best of {formData.bestOf || "3"}
+          </dd>
         </div>
-        <Switch
-          checked={!isPrivateMatch}
-          disabled={true}
-          className="opacity-50 cursor-not-allowed"
-        />
-      </div>
+        <div className="flex flex-col gap-1">
+          <dt className={labelCls}>Scoring</dt>
+          <dd className="text-[13px] font-normal text-[#0D0D0D]">
+            {formData.adScoring ? "Ad" : "No-Ad"}
+          </dd>
+        </div>
+        <div className="flex flex-col gap-1">
+          <dt className={labelCls}>Lets</dt>
+          <dd className="text-[13px] font-normal text-[#0D0D0D]">
+            {formData.playOnLets ? "Play on" : "Stop"}
+          </dd>
+        </div>
+      </dl>
 
-      {/* Error Display */}
+      {/* Source file */}
+      {uploadedFile && (
+        <div className="flex items-center gap-3 pt-3 border-t border-[#F3F3F3]">
+          <div className="size-8 rounded-[10px] bg-[#3B82F6] flex items-center justify-center shrink-0">
+            <FileSpreadsheet className="size-4 text-white" strokeWidth={1.5} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
+              Source file
+            </p>
+            <p className="text-[12px] text-[#525252] truncate tabular-nums">
+              {uploadedFile.name}
+              <span className="text-[#CCCCCC] mx-1.5">·</span>
+              {uploadedFile.size}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Error */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-sm text-red-600">{error}</p>
+        <div className="bg-[rgba(229,24,55,0.06)] border border-[rgba(229,24,55,0.15)] rounded-[10px] p-3">
+          <p className="text-[12px] text-[#E51837]">{error}</p>
         </div>
       )}
     </div>

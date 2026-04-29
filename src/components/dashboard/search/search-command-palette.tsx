@@ -345,7 +345,7 @@ export function SearchCommandPalette({
               <X className="size-3.5 text-[#AAAAAA]" strokeWidth={1.5} aria-hidden="true" />
             </button>
           ) : (
-            <kbd className="shrink-0 text-[10px] font-medium text-[#AAAAAA] bg-[#F0F0F0] px-1.5 py-0.5 rounded">
+            <kbd className="shrink-0 text-[10px] font-medium leading-none text-[#AAAAAA] bg-[#F0F0F0] px-1 py-0.5 rounded [font-variant-caps:small-caps]">
               esc
             </kbd>
           )}
@@ -611,15 +611,18 @@ export function SearchCommandPalette({
         </div>
 
         {/* Footer hints */}
-        <div className="flex items-center gap-4 px-4 h-9 border-t border-[#F3F3F3]">
-          <span className="text-[10px] text-[#AAAAAA]">
-            <kbd className="font-medium">↑↓</kbd> navigate
+        <div className="flex items-center gap-3 px-4 h-9 border-t border-[#F3F3F3]">
+          <span className="inline-flex items-center gap-1.5 text-[10px] text-[#AAAAAA]">
+            <kbd className="inline-block px-1 py-0.5 rounded text-[10px] font-medium leading-none text-[#AAAAAA] bg-[#F0F0F0]">↑↓</kbd>
+            navigate
           </span>
-          <span className="text-[10px] text-[#AAAAAA]">
-            <kbd className="font-medium">↵</kbd> open
+          <span className="inline-flex items-center gap-1.5 text-[10px] text-[#AAAAAA]">
+            <kbd className="inline-block px-1 py-0.5 rounded text-[10px] font-medium leading-none text-[#AAAAAA] bg-[#F0F0F0]">↵</kbd>
+            open
           </span>
-          <span className="text-[10px] text-[#AAAAAA]">
-            <kbd className="font-medium">esc</kbd> close
+          <span className="inline-flex items-center gap-1.5 text-[10px] text-[#AAAAAA]">
+            <kbd className="inline-block px-1 py-0.5 rounded text-[10px] font-medium leading-none text-[#AAAAAA] bg-[#F0F0F0] [font-variant-caps:small-caps]">esc</kbd>
+            close
           </span>
         </div>
       </DialogContent>

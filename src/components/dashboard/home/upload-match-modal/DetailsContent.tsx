@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * DetailsContent - Step 4 content
- * Match details form with player scores and result
+ * DetailsContent — Step 4
+ * Match details form: names, per-set scores, result, and advanced settings.
  */
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -14,28 +14,33 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
-import { Calendar, ChevronDown, CircleMinus, CirclePlus, Clock, SquarePen, Info } from "lucide-react";
+import {
+  AlertCircle,
+  Calendar,
+  ChevronDown,
+  CircleMinus,
+  CirclePlus,
+  Clock,
+  Sparkles,
+} from "lucide-react";
 import { FormData, ParsingState } from "./types";
-import { getAdjustedScores, formatDuration, parseDuration } from "./utils";
+import {
+  getAdjustedScores,
+  formatDuration,
+  parseDuration,
+  validateSetScore,
+  deriveOutcome,
+  setHasData,
+} from "./utils";
 
 export interface DetailsContentProps {
   formData: FormData;
   onInputChange: (field: keyof FormData, value: string | number | boolean) => void;
-  onScoreChange: (
-    player: "player" | "opponent",
-    index: number,
-    value: string
-  ) => void;
-  onTiebreakChange?: (
-    player: "player" | "opponent",
-    index: number,
-    value: string
-  ) => void;
+  onScoreChange: (player: "player" | "opponent", index: number, value: string) => void;
+  onTiebreakChange?: (player: "player" | "opponent", index: number, value: string) => void;
   parsingState?: ParsingState;
 }
 
-// Helper function to get initials from a name
 function getInitials(name: string): string {
   if (!name) return "";
   const parts = name.trim().split(" ");
@@ -44,10 +49,73 @@ function getInitials(name: string): string {
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
-// Helper function to check if a set needs a tiebreak (7-6 or 6-7)
-function needsTiebreak(playerScore: number | null, opponentScore: number | null): boolean {
-  if (playerScore === null || opponentScore === null) return false;
-  return (playerScore === 7 && opponentScore === 6) || (playerScore === 6 && opponentScore === 7);
+function needsTiebreak(p: number | null, o: number | null): boolean {
+  if (p === null || o === null) return false;
+  return (p === 7 && o === 6) || (p === 6 && o === 7);
+}
+
+const inputCls =
+  "h-7 bg-white border-[#EAECF0] border rounded-[6px] text-[#525252] text-xs shadow-none placeholder:text-[#888888] px-3 focus-visible:ring-1 focus-visible:ring-[#3B82F6]/40";
+
+const selectTriggerCls =
+  "h-7 bg-white border-[#EAECF0] border rounded-[6px] text-[#525252] text-xs shadow-none [&_svg]:size-3 focus-visible:ring-1 focus-visible:ring-[#3B82F6]/40";
+
+const selectContentCls =
+  "shadow-none border-[#EAECF0] text-[#525252] text-xs";
+
+const selectItemCls = "text-[#525252] text-xs";
+
+const sectionLabelCls =
+  "text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]";
+
+interface ScoreCellProps {
+  refMap: React.MutableRefObject<Record<number, HTMLInputElement | null>>;
+  keyPrefix: string;
+  i: number;
+  value: number | null;
+  onValueChange: (v: string) => void;
+  onEnterValue: (raw: string) => void;
+  onEnterEmpty: () => void;
+  maxLength: number;
+  invalid?: boolean;
+}
+
+function ScoreCell({
+  refMap,
+  keyPrefix,
+  i,
+  value,
+  onValueChange,
+  onEnterValue,
+  onEnterEmpty,
+  maxLength,
+  invalid,
+}: ScoreCellProps) {
+  return (
+    <Input
+      ref={(el) => {
+        if (el) refMap.current[i] = el;
+      }}
+      placeholder="–"
+      inputMode="numeric"
+      pattern="\d*"
+      maxLength={maxLength}
+      aria-invalid={invalid || undefined}
+      value={value === null ? "" : value}
+      onChange={(e) => onValueChange(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter") return;
+        const v = e.currentTarget.value;
+        if (v === "") onEnterEmpty();
+        else onEnterValue(v);
+      }}
+      className={`!w-7 h-8 text-center text-[#0D0D0D] bg-white border rounded-[6px] px-0 shadow-none focus-visible:ring-1 placeholder:text-[#CCCCCC] tabular-nums ${
+        invalid
+          ? "border-[#E51837] focus-visible:ring-[#E51837]/40"
+          : "border-[#EAECF0] focus-visible:ring-[#3B82F6]/40"
+      } ${keyPrefix}`}
+    />
+  );
 }
 
 export function DetailsContent({
@@ -58,25 +126,20 @@ export function DetailsContent({
   parsingState,
 }: DetailsContentProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [editingPlayer, setEditingPlayer] = useState(false);
-  const [editingOpponent, setEditingOpponent] = useState(false);
 
   const bestOfNum = parseInt(formData.bestOf) || 3;
   const displayedSets = formData.numberOfSets ?? bestOfNum;
 
-  // Get scores first (needed by focus functions)
-  const playerScores = getAdjustedScores(
-    formData.playerScores,
-    formData.bestOf,
-    formData.numberOfSets
+  const playerScores = useMemo(
+    () => getAdjustedScores(formData.playerScores, formData.bestOf, formData.numberOfSets),
+    [formData.playerScores, formData.bestOf, formData.numberOfSets]
   );
-  const opponentScores = getAdjustedScores(
-    formData.opponentScores,
-    formData.bestOf,
-    formData.numberOfSets
+  const opponentScores = useMemo(
+    () => getAdjustedScores(formData.opponentScores, formData.bestOf, formData.numberOfSets),
+    [formData.opponentScores, formData.bestOf, formData.numberOfSets]
   );
 
-  // Refs for all input fields to manage autofocus
+  // Refs for keyboard-driven focus chain
   const playerScoreRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const opponentScoreRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const playerTiebreakRefs = useRef<Record<number, HTMLInputElement | null>>({});
@@ -84,112 +147,120 @@ export function DetailsContent({
   const dateInputRef = useRef<HTMLInputElement>(null);
   const timeInputRef = useRef<HTMLInputElement>(null);
 
-  // Focus management logic
-  const focusNextInput = useCallback((currentType: "playerScore" | "opponentScore" | "playerTiebreak" | "opponentTiebreak", setIndex: number) => {
-    const numSets = playerScores.length;
-
-    setTimeout(() => {
-      switch (currentType) {
-        case "playerScore":
-          // From player score → opponent score (same set)
-          if (opponentScoreRefs.current[setIndex]) {
-            opponentScoreRefs.current[setIndex]?.focus();
-          }
-          break;
-
-        case "opponentScore":
-          // From opponent score → next player score OR player tiebreak if 7-6/6-7
-          const playerScore = playerScores[setIndex];
-          const opponentScore = opponentScores[setIndex];
-
-          if (needsTiebreak(playerScore, opponentScore)) {
-            // Jump to player tiebreak
-            if (playerTiebreakRefs.current[setIndex]) {
-              playerTiebreakRefs.current[setIndex]?.focus();
+  const focusNextInput = useCallback(
+    (
+      currentType: "playerScore" | "opponentScore" | "playerTiebreak" | "opponentTiebreak",
+      i: number
+    ) => {
+      const numSets = playerScores.length;
+      setTimeout(() => {
+        switch (currentType) {
+          case "playerScore":
+            opponentScoreRefs.current[i]?.focus();
+            break;
+          case "opponentScore":
+            if (needsTiebreak(playerScores[i], opponentScores[i])) {
+              playerTiebreakRefs.current[i]?.focus();
+            } else if (i < numSets - 1) {
+              playerScoreRefs.current[i + 1]?.focus();
             }
-          } else if (setIndex < numSets - 1) {
-            // Jump to next set's player score
-            if (playerScoreRefs.current[setIndex + 1]) {
-              playerScoreRefs.current[setIndex + 1]?.focus();
-            }
-          }
-          break;
+            break;
+          case "playerTiebreak":
+            opponentTiebreakRefs.current[i]?.focus();
+            break;
+          case "opponentTiebreak":
+            if (i < numSets - 1) playerScoreRefs.current[i + 1]?.focus();
+            break;
+        }
+      }, 0);
+    },
+    [playerScores, opponentScores]
+  );
 
-        case "playerTiebreak":
-          // From player tiebreak → opponent tiebreak (same set)
-          if (opponentTiebreakRefs.current[setIndex]) {
-            opponentTiebreakRefs.current[setIndex]?.focus();
-          }
-          break;
-
-        case "opponentTiebreak":
-          // From opponent tiebreak → next set's player score
-          if (setIndex < numSets - 1) {
-            if (playerScoreRefs.current[setIndex + 1]) {
-              playerScoreRefs.current[setIndex + 1]?.focus();
-            }
-          }
-          break;
-      }
-    }, 0);
-  }, [playerScores, opponentScores]);
-
-  // Focus previous input when deleting
-  const focusPreviousInput = useCallback((currentType: "playerScore" | "opponentScore" | "playerTiebreak" | "opponentTiebreak", setIndex: number) => {
-    setTimeout(() => {
-      switch (currentType) {
-        case "playerScore":
-          // From player score → previous opponent tiebreak (if exists)
-          if (setIndex > 0) {
-            const prevPlayerScore = playerScores[setIndex - 1];
-            const prevOpponentScore = opponentScores[setIndex - 1];
-
-            if (needsTiebreak(prevPlayerScore, prevOpponentScore)) {
-              if (opponentTiebreakRefs.current[setIndex - 1]) {
-                opponentTiebreakRefs.current[setIndex - 1]?.focus();
-              }
-            } else {
-              if (opponentScoreRefs.current[setIndex - 1]) {
-                opponentScoreRefs.current[setIndex - 1]?.focus();
+  const focusPreviousInput = useCallback(
+    (
+      currentType: "playerScore" | "opponentScore" | "playerTiebreak" | "opponentTiebreak",
+      i: number
+    ) => {
+      setTimeout(() => {
+        switch (currentType) {
+          case "playerScore":
+            if (i > 0) {
+              if (needsTiebreak(playerScores[i - 1], opponentScores[i - 1])) {
+                opponentTiebreakRefs.current[i - 1]?.focus();
+              } else {
+                opponentScoreRefs.current[i - 1]?.focus();
               }
             }
-          }
-          break;
-
-        case "opponentScore":
-          // From opponent score → player score (same set)
-          if (playerScoreRefs.current[setIndex]) {
-            playerScoreRefs.current[setIndex]?.focus();
-          }
-          break;
-
-        case "playerTiebreak":
-          // From player tiebreak → opponent score (same set)
-          if (opponentScoreRefs.current[setIndex]) {
-            opponentScoreRefs.current[setIndex]?.focus();
-          }
-          break;
-
-        case "opponentTiebreak":
-          // From opponent tiebreak → player tiebreak (same set)
-          if (playerTiebreakRefs.current[setIndex]) {
-            playerTiebreakRefs.current[setIndex]?.focus();
-          }
-          break;
-      }
-    }, 0);
-  }, [playerScores, opponentScores]);
+            break;
+          case "opponentScore":
+            playerScoreRefs.current[i]?.focus();
+            break;
+          case "playerTiebreak":
+            opponentScoreRefs.current[i]?.focus();
+            break;
+          case "opponentTiebreak":
+            playerTiebreakRefs.current[i]?.focus();
+            break;
+        }
+      }, 0);
+    },
+    [playerScores, opponentScores]
+  );
 
   const handleSetsChange = (delta: number) => {
     const newSets = Math.max(1, Math.min(bestOfNum, displayedSets + delta));
+    if (newSets < displayedSets) {
+      const droppedHasData = Array.from(
+        { length: displayedSets - newSets },
+        (_, k) => setHasData(formData, newSets + k)
+      ).some(Boolean);
+      if (droppedHasData) {
+        const ok = window.confirm(
+          `Remove set ${newSets + 1}? Any scores entered there will be cleared.`
+        );
+        if (!ok) return;
+      }
+    }
     onInputChange("numberOfSets", newSets);
   };
 
-  // Determine player names and result options for dropdown
+  const setValidations = useMemo(
+    () => playerScores.map((p, i) => validateSetScore(p, opponentScores[i])),
+    [playerScores, opponentScores]
+  );
+  const firstInvalid = setValidations.findIndex((v) => v.kind === "invalid");
+  const invalidMessage =
+    firstInvalid >= 0 ? setValidations[firstInvalid].message : null;
+
+  const derivedOutcome = useMemo(
+    () =>
+      deriveOutcome(
+        formData.playerName || "Player",
+        formData.opponentName || "Opponent",
+        playerScores,
+        opponentScores,
+        bestOfNum
+      ),
+    [formData.playerName, formData.opponentName, playerScores, opponentScores, bestOfNum]
+  );
+  useEffect(() => {
+    if (derivedOutcome && !formData.result) {
+      onInputChange("result", derivedOutcome);
+    }
+  }, [derivedOutcome, formData.result, onInputChange]);
+
+  const outcomeMismatch =
+    !!derivedOutcome &&
+    !!formData.result &&
+    formData.result !== derivedOutcome &&
+    !formData.result.includes("Withdrew") &&
+    !formData.result.includes("Defaulted") &&
+    formData.result !== "Unfinished";
+
   const playerName = formData.playerName || "Player";
   const opponentName = formData.opponentName || "Opponent";
 
-  // Result options
   const resultOptions = [
     { value: `${playerName} Wins`, label: `${playerName} Wins` },
     { value: `${opponentName} Wins`, label: `${opponentName} Wins` },
@@ -201,508 +272,406 @@ export function DetailsContent({
   ];
 
   return (
-    <div className="flex flex-col gap-9">
-      {/* Auto-fill Banner */}
+    <div className="flex flex-col gap-7">
+      {/* Auto-fill pill */}
       {parsingState?.parseSuccess && (
-        <div className="animate-slideDown p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2.5">
-          <Info className="h-4 w-4 text-blue-500 mt-0 flex-shrink-0" />
-          <div>
-            <p className="text-blue-600 text-xs font-medium">
-              Data auto-filled from file
-            </p>
-            <p className="text-blue-600 text-xs mt-1">
-              Please review the information below and make any necessary corrections.
-            </p>
-          </div>
+        <div className="animate-slideDown inline-flex items-center self-start gap-1.5 pl-2 pr-2.5 py-1 bg-[rgba(59,130,246,0.06)] border border-[rgba(59,130,246,0.15)] rounded-full">
+          <Sparkles className="size-3 text-[#3B82F6]" strokeWidth={1.5} />
+          <span className="text-[#3B82F6] text-[12px] font-medium">
+            Auto-filled from your file
+          </span>
         </div>
       )}
 
-      <div className="space-y-4">
-        <div className="space-y-3">
-          {/* Sets Configuration */}
-          <div className="flex justify-between items-center">
-            <span className="text-[#888888] font-normal text-xs">
-              {displayedSets} Sets
+      {/* Score block: unified players + scores + sets stepper */}
+      <div className="flex flex-col gap-3">
+        {/* Top row: section label (left) + stepper (right) */}
+        <div className="flex items-center justify-between">
+          <span className={sectionLabelCls}>Score</span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleSetsChange(-1)}
+              disabled={displayedSets <= 1}
+              aria-label="Remove a set"
+              className="text-[#3B82F6] disabled:opacity-30 disabled:cursor-not-allowed hover:text-[#2563EB] transition-colors"
+            >
+              <CircleMinus className="h-3.5 w-3.5" />
+            </button>
+            <span className="w-4 text-center text-[12px] font-medium text-[#525252] tabular-nums">
+              {displayedSets}
             </span>
-            <div className="flex items-center gap-6">
-              <button
-                type="button"
-                onClick={() => handleSetsChange(-1)}
-                disabled={displayedSets <= 1}
-                className="text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed hover:text-blue-600 transition-colors"
-              >
-                <CircleMinus className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSetsChange(1)}
-                disabled={displayedSets >= bestOfNum}
-                className="text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed hover:text-blue-600 transition-colors"
-              >
-                <CirclePlus className="h-3.5 w-3.5" />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => handleSetsChange(1)}
+              disabled={displayedSets >= bestOfNum}
+              aria-label="Add a set"
+              className="text-[#3B82F6] disabled:opacity-30 disabled:cursor-not-allowed hover:text-[#2563EB] transition-colors"
+            >
+              <CirclePlus className="h-3.5 w-3.5" />
+            </button>
           </div>
-
-          <Separator className="bg-[#E5E5E5]" />
         </div>
 
-        {/* Player Rows with Set Headers */}
-        <div className="space-y-1 justify-end">
-          {/* Set Headers - mirrors the score row structure */}
-          <div className="flex items-center justify-end gap-4">
+        <div className="h-px bg-[#F3F3F3]" />
+
+        {/* Set number headers (right, aligned with score columns) */}
+        <div className="flex justify-end">
+          <div className="flex gap-4">
             {playerScores.map((score, i) => {
-              const hasTiebreak = needsTiebreak(score, opponentScores[i]);
+              const hasTie = needsTiebreak(score, opponentScores[i]);
               return (
                 <div key={i} className="flex items-center gap-1">
-                  <div className="w-6 text-center text-sm text-[#888888] font-normal">
+                  <div className="w-7 text-center text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[1.5px] tabular-nums">
                     {i + 1}
                   </div>
-                  {hasTiebreak && (
-                    <span className="w-6 text-center text-[8px] text-[#888888] font-normal">
-                      TIE
+                  {hasTie && (
+                    <span className="w-7 text-center text-[9px] font-medium text-[#AAAAAA] uppercase tracking-[1.2px]">
+                      Tie
                     </span>
                   )}
                 </div>
               );
             })}
           </div>
+        </div>
 
-          <div className="space-y-3">
-            {/* Player 1 */}
-            <div className="flex justify-between items-start">
-              <div className="flex gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#F7F7F7] flex items-center justify-center text-sm font-medium text-[#888888]">
-                  {getInitials(playerName)}
-                </div>
-                <div className="flex-1 flex items-center gap-2">
-                  {editingPlayer ? (
-                    <Input
-                      placeholder="Enter your name..."
-                      value={formData.playerName}
-                      onChange={(e) => onInputChange("playerName", e.target.value)}
-                      onBlur={() => setEditingPlayer(false)}
-                      onKeyDown={(e) => e.key === "Enter" && setEditingPlayer(false)}
-                      autoFocus
-                      className="w-40 h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3"
-                    />
-                  ) : (
-                    <span className="w-40 text-[#0D0D0D] font-medium text-xs">
-                      {playerName} (You)
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setEditingPlayer(!editingPlayer)}
-                    className="w-4 h-4 flex items-center justify-center text-[#888888] hover:text-[#0D0D0D] transition-colors"
-                  >
-                    <SquarePen className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+        {/* Player rows */}
+        <div className="space-y-3">
+          {/* Player 1 */}
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <div className="size-9 rounded-full bg-[#F5F5F5] flex items-center justify-center text-[12px] font-medium text-[#525252] shrink-0">
+                {getInitials(playerName)}
               </div>
-
-              <div className="flex gap-4">
-                {playerScores.map((score, i) => {
-                  const opponentScore = opponentScores[i];
-                  const hasTiebreak = needsTiebreak(score, opponentScore);
-
-                  return (
-                    <div key={i} className="flex items-center gap-1">
-                      {/* Set Score */}
-                      <Input
-                        ref={(el) => {
-                          if (el) playerScoreRefs.current[i] = el;
-                        }}
-                        placeholder="-"
-                        inputMode="numeric"
-                        pattern="\d*"
-                        className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#888888]"
-                        maxLength={2}
-                        value={score === null ? "" : score}
-                        onChange={(e) => {
-                          const newValue = e.target.value;
-                          onScoreChange("player", i, newValue);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            const newValue = e.currentTarget.value;
-
-                            if (newValue === "") {
-                              // User is deleting - focus previous
-                              focusPreviousInput("playerScore", i);
-                            } else if (newValue.length > 0) {
-                              // Check if this creates a tiebreak situation (7-6 or 6-7)
-                              const playerNum = Number(newValue);
-                              const currentOpponentScore = opponentScores[i];
-
-                              if (needsTiebreak(playerNum, currentOpponentScore)) {
-                                // Jump directly to player tiebreak
-                                setTimeout(() => {
-                                  if (playerTiebreakRefs.current[i]) {
-                                    playerTiebreakRefs.current[i]?.focus();
-                                  }
-                                }, 0);
-                              } else {
-                                // User pressed enter - focus next
-                                focusNextInput("playerScore", i);
-                              }
-                            }
-                          }
-                        }}
-                      />
-                      {/* Tiebreak Score - inline on the right */}
-                      {hasTiebreak && (
-                        <Input
-                          ref={(el) => {
-                            if (el) playerTiebreakRefs.current[i] = el;
-                          }}
-                          placeholder="-"
-                          inputMode="numeric"
-                          pattern="\d*"
-                          className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#888888]"
-                          value={formData.playerTiebreaks[i] === null ? "" : String(formData.playerTiebreaks[i])}
-                          onChange={(e) => {
-                            const newValue = e.target.value;
-                            onTiebreakChange?.("player", i, newValue);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              const newValue = e.currentTarget.value;
-
-                              if (newValue === "") {
-                                // User is deleting - focus previous
-                                focusPreviousInput("playerTiebreak", i);
-                              } else if (newValue.length > 0) {
-                                // User pressed enter - focus next
-                                focusNextInput("playerTiebreak", i);
-                              }
-                            }
-                          }}
-                          maxLength={3}
-                        />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+              <Input
+                placeholder="Your name"
+                value={formData.playerName}
+                onChange={(e) => onInputChange("playerName", e.target.value)}
+                className="w-44 h-7 bg-transparent border border-transparent rounded-[6px] text-[#0D0D0D] text-[13px] font-medium shadow-none placeholder:text-[#888888] px-2 hover:bg-[#FAFAFA] hover:border-[#F3F3F3] focus:bg-white focus:border-[#EAECF0] focus-visible:ring-0 transition-colors"
+              />
+              <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[1.5px]">You</span>
             </div>
-
-            {/* Player 2 */}
-            <div className="flex justify-between items-start">
-              <div className="flex gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#F7F7F7] flex items-center justify-center text-sm font-medium text-[#888888]">
-                  {getInitials(opponentName)}
-                </div>
-                <div className="flex-1 flex items-center gap-2">
-                  {editingOpponent ? (
-                    <Input
-                      placeholder="Enter opponent name..."
-                      value={formData.opponentName}
-                      onChange={(e) => onInputChange("opponentName", e.target.value)}
-                      onBlur={() => setEditingOpponent(false)}
-                      onKeyDown={(e) => e.key === "Enter" && setEditingOpponent(false)}
-                      autoFocus
-                      className="w-40 h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3"
+            <div className="flex gap-4">
+              {playerScores.map((score, i) => {
+                const hasTie = needsTiebreak(score, opponentScores[i]);
+                return (
+                  <div key={i} className="flex items-center gap-1">
+                    <ScoreCell
+                      refMap={playerScoreRefs}
+                      keyPrefix=""
+                      i={i}
+                      value={score}
+                      maxLength={2}
+                      invalid={setValidations[i]?.kind === "invalid"}
+                      onValueChange={(v) => onScoreChange("player", i, v)}
+                      onEnterEmpty={() => focusPreviousInput("playerScore", i)}
+                      onEnterValue={(v) => {
+                        if (needsTiebreak(Number(v), opponentScores[i])) {
+                          setTimeout(() => playerTiebreakRefs.current[i]?.focus(), 0);
+                        } else {
+                          focusNextInput("playerScore", i);
+                        }
+                      }}
                     />
-                  ) : (
-                    <span className="w-40 text-[#0D0D0D] font-medium text-xs">
-                      {opponentName}
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setEditingOpponent(!editingOpponent)}
-                    className="w-4 h-4 flex items-center justify-center text-[#888888] hover:text-[#0D0D0D] transition-colors"
-                  >
-                    <SquarePen className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex gap-4">
-                {opponentScores.map((score, i) => {
-                  const playerScore = playerScores[i];
-                  const hasTiebreak = needsTiebreak(playerScore, score);
-
-                  return (
-                    <div key={i} className="flex items-center gap-1">
-                      {/* Set Score */}
-                      <Input
-                        ref={(el) => {
-                          if (el) opponentScoreRefs.current[i] = el;
-                        }}
-                        placeholder="-"
-                        inputMode="numeric"
-                        pattern="\d*"
-                        className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#888888]"
-                        maxLength={2}
-                        value={score === null ? "" : score}
-                        onChange={(e) => {
-                          const newValue = e.target.value;
-                          onScoreChange("opponent", i, newValue);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            const newValue = e.currentTarget.value;
-
-                            if (newValue === "") {
-                              // User is deleting - focus previous
-                              focusPreviousInput("opponentScore", i);
-                            } else if (newValue.length > 0) {
-                              // Check if this creates a tiebreak situation (7-6 or 6-7)
-                              const opponentNum = Number(newValue);
-                              const currentPlayerScore = playerScores[i];
-
-                              if (needsTiebreak(currentPlayerScore, opponentNum)) {
-                                // Jump directly to player tiebreak (since player tiebreak comes before opponent tiebreak in the flow)
-                                setTimeout(() => {
-                                  if (playerTiebreakRefs.current[i]) {
-                                    playerTiebreakRefs.current[i]?.focus();
-                                  }
-                                }, 0);
-                              } else {
-                                // User pressed enter - focus next
-                                focusNextInput("opponentScore", i);
-                              }
-                            }
-                          }
-                        }}
+                    {hasTie && (
+                      <ScoreCell
+                        refMap={playerTiebreakRefs}
+                        keyPrefix=""
+                        i={i}
+                        value={formData.playerTiebreaks[i]}
+                        maxLength={3}
+                        onValueChange={(v) => onTiebreakChange?.("player", i, v)}
+                        onEnterEmpty={() => focusPreviousInput("playerTiebreak", i)}
+                        onEnterValue={() => focusNextInput("playerTiebreak", i)}
                       />
-                      {/* Tiebreak Score - inline on the right */}
-                      {hasTiebreak && (
-                        <Input
-                          ref={(el) => {
-                            if (el) opponentTiebreakRefs.current[i] = el;
-                          }}
-                          placeholder="-"
-                          inputMode="numeric"
-                          pattern="\d*"
-                          className="!w-6 h-8 text-center text-[#0D0D0D] bg-[#F7F7F7] border border-[#E5E5E5] rounded-[4px] px-0 shadow-none focus-visible:ring-1 focus-visible:ring-[#E5E5E5] placeholder:text-[#888888]"
-                          value={formData.opponentTiebreaks[i] === null ? "" : String(formData.opponentTiebreaks[i])}
-                          onChange={(e) => {
-                            const newValue = e.target.value;
-                            onTiebreakChange?.("opponent", i, newValue);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              const newValue = e.currentTarget.value;
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
 
-                              if (newValue === "") {
-                                // User is deleting - focus previous
-                                focusPreviousInput("opponentTiebreak", i);
-                              } else if (newValue.length > 0) {
-                                // User pressed enter - focus next
-                                focusNextInput("opponentTiebreak", i);
-                              }
-                            }
-                          }}
-                          maxLength={3}
-                        />
-                      )}
-                    </div>
-                  );
-                })}
+          {/* Player 2 */}
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <div className="size-9 rounded-full bg-[#F5F5F5] flex items-center justify-center text-[12px] font-medium text-[#525252] shrink-0">
+                {getInitials(opponentName)}
               </div>
+              <Input
+                placeholder="Opponent name"
+                value={formData.opponentName}
+                onChange={(e) => onInputChange("opponentName", e.target.value)}
+                className="w-44 h-7 bg-transparent border border-transparent rounded-[6px] text-[#0D0D0D] text-[13px] font-medium shadow-none placeholder:text-[#888888] px-2 hover:bg-[#FAFAFA] hover:border-[#F3F3F3] focus:bg-white focus:border-[#EAECF0] focus-visible:ring-0 transition-colors"
+              />
+            </div>
+            <div className="flex gap-4">
+              {opponentScores.map((score, i) => {
+                const hasTie = needsTiebreak(playerScores[i], score);
+                return (
+                  <div key={i} className="flex items-center gap-1">
+                    <ScoreCell
+                      refMap={opponentScoreRefs}
+                      keyPrefix=""
+                      i={i}
+                      value={score}
+                      maxLength={2}
+                      invalid={setValidations[i]?.kind === "invalid"}
+                      onValueChange={(v) => onScoreChange("opponent", i, v)}
+                      onEnterEmpty={() => focusPreviousInput("opponentScore", i)}
+                      onEnterValue={(v) => {
+                        if (needsTiebreak(playerScores[i], Number(v))) {
+                          setTimeout(() => playerTiebreakRefs.current[i]?.focus(), 0);
+                        } else {
+                          focusNextInput("opponentScore", i);
+                        }
+                      }}
+                    />
+                    {hasTie && (
+                      <ScoreCell
+                        refMap={opponentTiebreakRefs}
+                        keyPrefix=""
+                        i={i}
+                        value={formData.opponentTiebreaks[i]}
+                        maxLength={3}
+                        onValueChange={(v) => onTiebreakChange?.("opponent", i, v)}
+                        onEnterEmpty={() => focusPreviousInput("opponentTiebreak", i)}
+                        onEnterValue={() => focusNextInput("opponentTiebreak", i)}
+                      />
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
+
+        {invalidMessage && (
+          <div className="inline-flex items-center self-start gap-1.5 pl-2 pr-2.5 py-1 bg-[rgba(229,24,55,0.06)] border border-[rgba(229,24,55,0.18)] rounded-full">
+            <AlertCircle className="size-3 text-[#E51837]" strokeWidth={1.75} />
+            <span className="text-[#E51837] text-[12px] font-medium">
+              Set {firstInvalid + 1}: {invalidMessage}
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* Result Section */}
-      <div className="flex items-end justify-between">
-        <div className="flex flex-col gap-2">
-          <span className="text-[#0D0D0D] font-medium text-xs">Result</span>
+      {/* Result */}
+      <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-1.5">
+          <span className={sectionLabelCls}>Outcome</span>
           <Select
             value={formData.result || undefined}
-            onValueChange={(value) => onInputChange("result", value)}
+            onValueChange={(v) => onInputChange("result", v)}
           >
-            <SelectTrigger className="w-[180px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none [&_svg]:size-3">
-              <SelectValue placeholder="Select Result..." />
+            <SelectTrigger className={`w-[200px] ${selectTriggerCls}`}>
+              <SelectValue placeholder="Final score" />
             </SelectTrigger>
-            <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
-              {resultOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value} className="text-[#888888] text-xs">
-                  {option.label}
+            <SelectContent className={selectContentCls}>
+              {resultOptions.map((o) => (
+                <SelectItem key={o.value} value={o.value} className={selectItemCls}>
+                  {o.label}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          {outcomeMismatch && derivedOutcome && (
+            <button
+              type="button"
+              onClick={() => onInputChange("result", derivedOutcome)}
+              className="inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1 bg-[rgba(229,24,55,0.06)] border border-[rgba(229,24,55,0.18)] rounded-full hover:bg-[rgba(229,24,55,0.1)] transition-colors self-start"
+            >
+              <AlertCircle className="size-3 text-[#E51837]" strokeWidth={1.75} />
+              <span className="text-[#E51837] text-[12px] font-medium">
+                Scores show {derivedOutcome} — fix
+              </span>
+            </button>
+          )}
         </div>
         <button
           type="button"
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className="flex items-center gap-1 text-[10px] text-[#888888] hover:text-[#666666] transition-colors"
+          className="flex items-center gap-1.5 text-[12px] text-[#888888] hover:text-[#525252] transition-colors self-end pb-1.5"
         >
-          <span className="underline underline-offset-[19.89%]">Advanced Settings (Optional)</span>
+          <span className="underline underline-offset-2">
+            {showAdvanced ? "Hide advanced" : "Advanced settings"}
+          </span>
           <ChevronDown
-            className={`h-3 w-3 transition-transform duration-300 ${showAdvanced ? 'rotate-180' : ''}`}
+            className={`h-3 w-3 transition-transform duration-300 ${showAdvanced ? "rotate-180" : ""}`}
           />
         </button>
       </div>
 
-      {/* Advanced Settings Section */}
+      {/* Advanced Settings */}
       <div
-        className={`grid transition-all duration-300 ease-in-out ${
-          showAdvanced ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+        className={`grid transition-all duration-300 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] ${
+          showAdvanced ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
         }`}
       >
         <div className="overflow-hidden">
           <div className="flex flex-col gap-6 pt-2">
-          {/* Event Information */}
-          <div className="space-y-3">
-            <h4 className="text-[#0D0D0D] font-medium text-xs">Event Information</h4>
-            <div className="flex flex-wrap gap-3">
-              <Input
-                placeholder="Type Event Name..."
-                value={formData.eventName}
-                onChange={(e) => onInputChange("eventName", e.target.value)}
-                className="w-[200px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3"
-              />
-              <Select
-                value={formData.round || undefined}
-                onValueChange={(value) => onInputChange("round", value)}
-              >
-                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none [&_svg]:size-3">
-                  <SelectValue placeholder="Round of..." />
-                </SelectTrigger>
-                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
-                  <SelectItem value="None" className="text-[#888888] text-xs">None</SelectItem>
-                  <SelectItem value="Round of 128" className="text-[#888888] text-xs">Round of 128</SelectItem>
-                  <SelectItem value="Round of 64" className="text-[#888888] text-xs">Round of 64</SelectItem>
-                  <SelectItem value="Round of 32" className="text-[#888888] text-xs">Round of 32</SelectItem>
-                  <SelectItem value="Round of 16" className="text-[#888888] text-xs">Round of 16</SelectItem>
-                  <SelectItem value="Quarterfinals" className="text-[#888888] text-xs">Quarterfinals</SelectItem>
-                  <SelectItem value="Semifinals" className="text-[#888888] text-xs">Semifinals</SelectItem>
-                  <SelectItem value="Finals" className="text-[#888888] text-xs">Finals</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <div
-                className="relative w-fit cursor-pointer"
-                onClick={() => dateInputRef.current?.showPicker()}
-              >
+            {/* Event Information */}
+            <div className="space-y-3">
+              <h4 className={sectionLabelCls}>Event</h4>
+              <div className="flex flex-wrap gap-2.5">
                 <Input
-                  ref={dateInputRef}
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) => onInputChange("date", e.target.value)}
-                  className="w-auto h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none pl-3 pr-7 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:p-0 [&::-webkit-datetime-edit-fields-wrapper]:p-0"
+                  placeholder="Event name"
+                  value={formData.eventName}
+                  onChange={(e) => onInputChange("eventName", e.target.value)}
+                  className={`w-[220px] ${inputCls}`}
                 />
-                <Calendar className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-[#888888]" />
+                <Select
+                  value={formData.round || undefined}
+                  onValueChange={(v) => onInputChange("round", v)}
+                >
+                  <SelectTrigger className={`w-[140px] ${selectTriggerCls}`}>
+                    <SelectValue placeholder="Round" />
+                  </SelectTrigger>
+                  <SelectContent className={selectContentCls}>
+                    <SelectItem value="None" className={selectItemCls}>None</SelectItem>
+                    <SelectItem value="Round of 128" className={selectItemCls}>Round of 128</SelectItem>
+                    <SelectItem value="Round of 64" className={selectItemCls}>Round of 64</SelectItem>
+                    <SelectItem value="Round of 32" className={selectItemCls}>Round of 32</SelectItem>
+                    <SelectItem value="Round of 16" className={selectItemCls}>Round of 16</SelectItem>
+                    <SelectItem value="Quarterfinals" className={selectItemCls}>Quarterfinals</SelectItem>
+                    <SelectItem value="Semifinals" className={selectItemCls}>Semifinals</SelectItem>
+                    <SelectItem value="Finals" className={selectItemCls}>Finals</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={formData.matchType || undefined}
+                  onValueChange={(v) => onInputChange("matchType", v)}
+                >
+                  <SelectTrigger className={`w-[140px] ${selectTriggerCls}`}>
+                    <SelectValue placeholder="Match type" />
+                  </SelectTrigger>
+                  <SelectContent className={selectContentCls}>
+                    <SelectItem value="None" className={selectItemCls}>None</SelectItem>
+                    <SelectItem value="Tournament" className={selectItemCls}>Tournament</SelectItem>
+                    <SelectItem value="Dual Match" className={selectItemCls}>Dual Match</SelectItem>
+                    <SelectItem value="Practice" className={selectItemCls}>Practice</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <div
-                className="relative w-fit cursor-pointer"
-                onClick={() => timeInputRef.current?.showPicker()}
-              >
+            </div>
+
+            {/* When & Where */}
+            <div className="space-y-3">
+              <h4 className={sectionLabelCls}>When &amp; Where</h4>
+              <div className="flex flex-wrap gap-2.5">
+                <div
+                  className="relative cursor-pointer"
+                  onClick={() => dateInputRef.current?.showPicker()}
+                >
+                  <Input
+                    ref={dateInputRef}
+                    type="date"
+                    value={formData.date}
+                    onChange={(e) => onInputChange("date", e.target.value)}
+                    className={`w-[150px] pr-8 ${inputCls} [&::-webkit-calendar-picker-indicator]:hidden`}
+                  />
+                  <Calendar className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-[#888888]" />
+                </div>
+                <div
+                  className="relative cursor-pointer"
+                  onClick={() => timeInputRef.current?.showPicker()}
+                >
+                  <Input
+                    ref={timeInputRef}
+                    type="time"
+                    value={formData.time}
+                    onChange={(e) => onInputChange("time", e.target.value)}
+                    className={`w-[120px] pr-8 ${inputCls} [&::-webkit-calendar-picker-indicator]:hidden`}
+                  />
+                  <Clock className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-[#888888]" />
+                </div>
+                <Select
+                  value={formData.courtType || undefined}
+                  onValueChange={(v) => onInputChange("courtType", v)}
+                >
+                  <SelectTrigger className={`w-[170px] ${selectTriggerCls}`}>
+                    <SelectValue placeholder="Court type" />
+                  </SelectTrigger>
+                  <SelectContent className={selectContentCls}>
+                    <SelectItem value="None" className={selectItemCls}>None</SelectItem>
+                    <SelectItem value="Indoor Hard Court" className={selectItemCls}>Indoor Hard Court</SelectItem>
+                    <SelectItem value="Outdoor Hard Court" className={selectItemCls}>Outdoor Hard Court</SelectItem>
+                    <SelectItem value="Clay Court" className={selectItemCls}>Clay Court</SelectItem>
+                    <SelectItem value="Grass Court" className={selectItemCls}>Grass Court</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Format */}
+            <div className="space-y-3">
+              <h4 className={sectionLabelCls}>Format</h4>
+              <div className="flex flex-wrap gap-2.5">
+                <Select
+                  value={formData.bestOf || undefined}
+                  onValueChange={(v) => onInputChange("bestOf", v)}
+                >
+                  <SelectTrigger className={`w-[140px] ${selectTriggerCls}`}>
+                    <SelectValue placeholder="Best of" />
+                  </SelectTrigger>
+                  <SelectContent className={selectContentCls}>
+                    <SelectItem value="1" className={selectItemCls}>Best of 1 Set</SelectItem>
+                    <SelectItem value="3" className={selectItemCls}>Best of 3 Sets</SelectItem>
+                    <SelectItem value="5" className={selectItemCls}>Best of 5 Sets</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={
+                    formData.adScoring === undefined
+                      ? undefined
+                      : formData.adScoring
+                      ? "ad"
+                      : "no-ad"
+                  }
+                  onValueChange={(v) => onInputChange("adScoring", v === "ad")}
+                >
+                  <SelectTrigger className={`w-[140px] ${selectTriggerCls}`}>
+                    <SelectValue placeholder="Scoring" />
+                  </SelectTrigger>
+                  <SelectContent className={selectContentCls}>
+                    <SelectItem value="ad" className={selectItemCls}>Ad scoring</SelectItem>
+                    <SelectItem value="no-ad" className={selectItemCls}>No-Ad scoring</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={
+                    formData.playOnLets === undefined
+                      ? undefined
+                      : formData.playOnLets
+                      ? "play-on"
+                      : "lets"
+                  }
+                  onValueChange={(v) => onInputChange("playOnLets", v === "play-on")}
+                >
+                  <SelectTrigger className={`w-[130px] ${selectTriggerCls}`}>
+                    <SelectValue placeholder="Lets" />
+                  </SelectTrigger>
+                  <SelectContent className={selectContentCls}>
+                    <SelectItem value="lets" className={selectItemCls}>Stop on lets</SelectItem>
+                    <SelectItem value="play-on" className={selectItemCls}>Play on lets</SelectItem>
+                  </SelectContent>
+                </Select>
                 <Input
-                  ref={timeInputRef}
-                  type="time"
-                  value={formData.time}
-                  onChange={(e) => onInputChange("time", e.target.value)}
-                  className="w-auto h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none pl-3 pr-7 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:p-0 [&::-webkit-datetime-edit-fields-wrapper]:p-0"
+                  type="text"
+                  placeholder="Duration · h:mm"
+                  value={formatDuration(formData.duration)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === "" || v === "-") onInputChange("duration", 0);
+                    else onInputChange("duration", parseDuration(v));
+                  }}
+                  className={`w-[140px] font-mono ${inputCls}`}
                 />
-                <Clock className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3 text-[#888888]" />
               </div>
-              <Select
-                value={formData.matchType || undefined}
-                onValueChange={(value) => onInputChange("matchType", value)}
-              >
-                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none [&_svg]:size-3">
-                  <SelectValue placeholder="Match Type..." />
-                </SelectTrigger>
-                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
-                  <SelectItem value="None" className="text-[#888888] text-xs">None</SelectItem>
-                  <SelectItem value="Tournament" className="text-[#888888] text-xs">Tournament</SelectItem>
-                  <SelectItem value="Dual Match" className="text-[#888888] text-xs">Dual Match</SelectItem>
-                  <SelectItem value="Practice" className="text-[#888888] text-xs">Practice</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={formData.courtType || undefined}
-                onValueChange={(value) => onInputChange("courtType", value)}
-              >
-                <SelectTrigger className="w-[160px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none [&_svg]:size-3">
-                  <SelectValue placeholder="Court Type..." />
-                </SelectTrigger>
-                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
-                  <SelectItem value="None" className="text-[#888888] text-xs">None</SelectItem>
-                  <SelectItem value="Indoor Hard Court" className="text-[#888888] text-xs">Indoor Hard Court</SelectItem>
-                  <SelectItem value="Outdoor Hard Court" className="text-[#888888] text-xs">Outdoor Hard Court</SelectItem>
-                  <SelectItem value="Clay Court" className="text-[#888888] text-xs">Clay Court</SelectItem>
-                  <SelectItem value="Grass Court" className="text-[#888888] text-xs">Grass Court</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
-          </div>
-
-          {/* Scoring Format */}
-          <div className="space-y-3">
-            <h4 className="text-[#0D0D0D] font-medium text-xs">Scoring Format</h4>
-            <div className="flex flex-wrap gap-3">
-              <Select
-                value={formData.bestOf || undefined}
-                onValueChange={(value) => onInputChange("bestOf", value)}
-              >
-                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none [&_svg]:size-3">
-                  <SelectValue placeholder="Best of..." />
-                </SelectTrigger>
-                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
-                  <SelectItem value="1" className="text-[#888888] text-xs">Best of 1 Set</SelectItem>
-                  <SelectItem value="3" className="text-[#888888] text-xs">Best of 3 Sets</SelectItem>
-                  <SelectItem value="5" className="text-[#888888] text-xs">Best of 5 Sets</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={formData.adScoring === undefined ? undefined : (formData.adScoring ? "ad" : "no-ad")}
-                onValueChange={(value) => onInputChange("adScoring", value === "ad")}
-              >
-                <SelectTrigger className="w-[140px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none [&_svg]:size-3">
-                  <SelectValue placeholder="Ad Scoring..." />
-                </SelectTrigger>
-                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
-                  <SelectItem value="ad" className="text-[#888888] text-xs">Ad Scoring</SelectItem>
-                  <SelectItem value="no-ad" className="text-[#888888] text-xs">No-Ad Scoring</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={formData.playOnLets === undefined ? undefined : (formData.playOnLets ? "play-on" : "lets")}
-                onValueChange={(value) => onInputChange("playOnLets", value === "play-on")}
-              >
-                <SelectTrigger className="w-[130px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none [&_svg]:size-3">
-                  <SelectValue placeholder="Lets..." />
-                </SelectTrigger>
-                <SelectContent className="shadow-none border-[#E5E5E5] text-[#888888] text-xs">
-                  <SelectItem value="lets" className="text-[#888888] text-xs">Lets</SelectItem>
-                  <SelectItem value="play-on" className="text-[#888888] text-xs">Play on Lets</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Match Duration */}
-          <div className="space-y-3">
-            <h4 className="text-[#0D0D0D] font-medium text-xs">Match Duration (Hours:Minutes)</h4>
-            <Input
-              type="text"
-              placeholder="-:--"
-              value={formatDuration(formData.duration)}
-              onChange={(e) => {
-                const displayValue = e.target.value;
-                if (displayValue === "" || displayValue === "-") {
-                  onInputChange("duration", 0);
-                } else {
-                  const seconds = parseDuration(displayValue);
-                  onInputChange("duration", seconds);
-                }
-              }}
-              className="w-[200px] h-7 bg-white border-[#E5E5E5] border rounded-[6px] text-[#888888] text-xs shadow-none placeholder:text-[#888888] px-3 font-mono"
-            />
-          </div>
           </div>
         </div>
       </div>
-
     </div>
   );
 }

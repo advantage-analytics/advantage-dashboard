@@ -47,12 +47,12 @@ export interface UseUploadMatchModalProps {
 export interface UseUploadMatchModalReturn {
   // State
   step: Step;
-  selectedMethod: string | null;
   selectedProvider: ProviderId | null;
   sourceType: string;
   uploadedFile: UploadedFile | null;
   isOver: boolean;
   isCreating: boolean;
+  justCreated: boolean;
   isUploading: boolean;
   error: string | null;
   uploadError: string | null;
@@ -62,8 +62,6 @@ export interface UseUploadMatchModalReturn {
 
   // Step navigation
   setStep: (step: Step) => void;
-  handleMethodSelect: (methodId: string | null) => void;
-  handleMethodContinue: () => void;
   handleProviderSelect: (providerId: string | null) => void;
   handleProviderContinue: () => void;
   handleUploadContinue: () => void;
@@ -117,13 +115,13 @@ export function useUploadMatchModal({
   const supabase = useMemo(() => createClient(), []);
 
   // State
-  const [step, setStep] = useState<Step>("method");
-  const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
+  const [step, setStep] = useState<Step>("provider");
   const [selectedProvider, setSelectedProvider] = useState<ProviderId | null>(null);
   const [sourceType, setSourceType] = useState<string>("swing-vision");
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
   const [isOver, setIsOver] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [justCreated, setJustCreated] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -158,16 +156,6 @@ export function useUploadMatchModal({
   }, [open]);
 
   // Step navigation handlers
-  const handleMethodSelect = useCallback((methodId: string | null) => {
-    setSelectedMethod(methodId);
-  }, []);
-
-  const handleMethodContinue = useCallback(() => {
-    if (selectedMethod) {
-      setStep("provider");
-    }
-  }, [selectedMethod]);
-
   const handleProviderSelect = useCallback((providerId: string | null) => {
     // Validate provider ID before setting
     if (providerId && isProviderSupported(providerId)) {
@@ -201,8 +189,7 @@ export function useUploadMatchModal({
 
   const handleBack = useCallback(() => {
     const stepMap: Record<Step, Step | null> = {
-      method: null,
-      provider: "method",
+      provider: null,
       upload: "provider",
       details: "upload",
       confirm: "details"
@@ -217,11 +204,10 @@ export function useUploadMatchModal({
     clearStorageData();
     onOpenChange(false);
     setTimeout(() => {
-      setStep("method");
+      setStep("provider");
       setSelectedProvider(null);
       setUploadedFile(null);
       setFormData(getDefaultFormData());
-      setSelectedMethod(null);
     }, 200);
   }, [onOpenChange]);
 
@@ -450,8 +436,8 @@ export function useUploadMatchModal({
           [field]: prev[field].map((score, i) => (i === index ? numValue : score))
         }));
       } else if (/^\d+$/.test(value)) {
-        // Only accept positive integers
-        const numValue = Number(value);
+        // Tiebreaks rarely exceed 20; clamp to 99 as a safety bound.
+        const numValue = Math.min(99, Number(value));
         const field = player === "player" ? "playerTiebreaks" : "opponentTiebreaks";
         setFormData((prev) => ({
           ...prev,
@@ -561,7 +547,7 @@ export function useUploadMatchModal({
       const metadata: MatchMetadata = {
         userId: user.id,
         sourceProvider: selectedProvider,
-        analysisMethod: selectedMethod || 'elc', // Default to ELC if not set
+        analysisMethod: 'elc',
         matchType: formData.matchType,
         courtType: formData.courtType
       };
@@ -591,9 +577,13 @@ export function useUploadMatchModal({
 
       clearStorageData();
       sessionStorage.setItem("match-processing", "true");
-      onOpenChange(false);
       window.dispatchEvent(new CustomEvent("match-created", { detail: { matchId } }));
       router.refresh();
+      setJustCreated(true);
+      setTimeout(() => {
+        setJustCreated(false);
+        onOpenChange(false);
+      }, 1100);
     } catch (e: any) {
       console.error("Error creating match:", e);
       const errorMessage =
@@ -607,17 +597,17 @@ export function useUploadMatchModal({
     } finally {
       setIsCreating(false);
     }
-  }, [formData, uploadedFile, selectedProvider, selectedMethod, supabase, isPrivateMatch, onOpenChange, router, uploadFileToStorage]);
+  }, [formData, uploadedFile, selectedProvider, supabase, isPrivateMatch, onOpenChange, router, uploadFileToStorage]);
 
   return {
     // State
     step,
-    selectedMethod,
     selectedProvider,
     sourceType,
     uploadedFile,
     isOver,
     isCreating,
+    justCreated,
     isUploading,
     error,
     uploadError,
@@ -627,8 +617,6 @@ export function useUploadMatchModal({
 
     // Step navigation
     setStep,
-    handleMethodSelect,
-    handleMethodContinue,
     handleProviderSelect,
     handleProviderContinue,
     handleUploadContinue,

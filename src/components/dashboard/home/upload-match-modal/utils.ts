@@ -167,7 +167,7 @@ export function base64ToBlob(base64Data: string, mimeType: string): Blob {
  */
 export function formatFileSize(bytes: number): string {
   const kb = bytes / 1024;
-  return `${kb.toFixed(0)} KB of ${kb.toFixed(0)} KB`;
+  return `${kb.toFixed(0)} KB`;
 }
 
 /**
@@ -197,6 +197,73 @@ export function parseDuration(display: string): number {
 
   if (minutes > 59) return 0;
   return (hours * 3600 + minutes * 60) * 1000;
+}
+
+/**
+ * Validate a single set's score pair against standard tennis rules.
+ * Allowed completed sets: 6–0..6–4, 7–5, 7–6, and the mirror images.
+ * Returns null when the set is empty/incomplete (no error to show yet).
+ */
+export function validateSetScore(
+  p: number | null,
+  o: number | null
+): { kind: "ok" | "incomplete" | "invalid"; message?: string } {
+  if (p === null && o === null) return { kind: "incomplete" };
+  if (p === null || o === null) return { kind: "incomplete" };
+  if (p < 0 || o < 0 || p > 7 || o > 7) {
+    return { kind: "invalid", message: "Games must be 0–7." };
+  }
+  const [hi, lo] = p >= o ? [p, o] : [o, p];
+  // Valid completed combinations
+  if (hi === 6 && lo <= 4) return { kind: "ok" };
+  if (hi === 7 && (lo === 5 || lo === 6)) return { kind: "ok" };
+  // In-progress (e.g. 4–3, 5–5) — accept as incomplete, not invalid
+  if (hi <= 6 && lo <= 6 && !(hi === 6 && lo === 5) && !(hi === 6 && lo === 6)) {
+    if (hi < 6) return { kind: "incomplete" };
+  }
+  // 6–5, 6–6 are transitional but not final scores
+  if ((hi === 6 && lo === 5) || (hi === 6 && lo === 6)) {
+    return { kind: "incomplete" };
+  }
+  return { kind: "invalid", message: "Set must end 6–0..6–4, 7–5, or 7–6." };
+}
+
+/**
+ * Derive the outcome string from completed sets, when the scores produce
+ * a clean winner under best-of rules. Returns null if undecidable.
+ */
+export function deriveOutcome(
+  playerName: string,
+  opponentName: string,
+  playerScores: (number | null)[],
+  opponentScores: (number | null)[],
+  bestOf: number
+): string | null {
+  const setsToWin = Math.ceil(bestOf / 2);
+  let pSets = 0;
+  let oSets = 0;
+  for (let i = 0; i < playerScores.length; i++) {
+    const v = validateSetScore(playerScores[i], opponentScores[i]);
+    if (v.kind !== "ok") continue;
+    if ((playerScores[i] ?? 0) > (opponentScores[i] ?? 0)) pSets++;
+    else oSets++;
+  }
+  if (pSets >= setsToWin && pSets > oSets) return `${playerName} Wins`;
+  if (oSets >= setsToWin && oSets > pSets) return `${opponentName} Wins`;
+  return null;
+}
+
+/**
+ * True when a given set index has any user-entered data (score or tiebreak).
+ * Used to warn before the sets stepper drops it.
+ */
+export function setHasData(formData: FormData, index: number): boolean {
+  return (
+    formData.playerScores[index] != null ||
+    formData.opponentScores[index] != null ||
+    formData.playerTiebreaks[index] != null ||
+    formData.opponentTiebreaks[index] != null
+  );
 }
 
 /**
