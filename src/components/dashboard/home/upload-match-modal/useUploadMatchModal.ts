@@ -52,7 +52,6 @@ export interface UseUploadMatchModalReturn {
   uploadedFile: UploadedFile | null;
   isOver: boolean;
   isCreating: boolean;
-  justCreated: boolean;
   isUploading: boolean;
   error: string | null;
   uploadError: string | null;
@@ -120,7 +119,6 @@ export function useUploadMatchModal({
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
   const [isOver, setIsOver] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [justCreated, setJustCreated] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -574,11 +572,7 @@ export function useUploadMatchModal({
       sessionStorage.setItem("match-processing", "true");
       window.dispatchEvent(new CustomEvent("match-created", { detail: { matchId } }));
       router.refresh();
-      setJustCreated(true);
-      setTimeout(() => {
-        setJustCreated(false);
-        onOpenChange(false);
-      }, 1100);
+      onOpenChange(false);
     } catch (e: any) {
       console.error("Error creating match:", e);
       const errorMessage =
@@ -602,7 +596,6 @@ export function useUploadMatchModal({
     uploadedFile,
     isOver,
     isCreating,
-    justCreated,
     isUploading,
     error,
     uploadError,

@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useRef, useState, useEffect } from "react";
-import { ArrowLeft, ChevronDown, X, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, X } from "lucide-react";
 import {
   Step,
   UploadMatchModalProps,
@@ -41,7 +41,6 @@ export function UploadMatchModal({
     uploadedFile,
     isOver,
     isCreating,
-    justCreated,
     isUploading,
     error,
     uploadError,
@@ -124,7 +123,6 @@ export function UploadMatchModal({
     if (!open) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Enter" || e.shiftKey || e.altKey || e.metaKey || e.ctrlKey) return;
-      if (justCreated) return;
       const target = e.target as HTMLElement | null;
       if (target) {
         const tag = target.tagName;
@@ -138,7 +136,7 @@ export function UploadMatchModal({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, continueDisabled, continueHandler, justCreated]);
+  }, [open, continueDisabled, continueHandler]);
 
   // Disabled-state hints. Only consumed when continueDisabled is true.
   const footerHint =
@@ -164,21 +162,6 @@ export function UploadMatchModal({
         className="flex flex-col gap-0 min-w-[760px] h-[600px] max-h-[85vh] overflow-hidden p-0 rounded-2xl border border-[#F3F3F3] shadow-[0px_6px_20px_0px_rgba(0,0,0,0.12)]"
       >
         <div className="relative flex flex-col h-full w-full bg-white">
-          {/* Success overlay — peak-end moment */}
-          {justCreated && (
-            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white animate-fadeIn">
-              <div className="size-12 rounded-full bg-[rgba(93,185,85,0.06)] border border-[rgba(93,185,85,0.18)] flex items-center justify-center animate-success-pop">
-                <CheckCircle2 className="size-6 text-[#5DB955]" strokeWidth={1.5} />
-              </div>
-              <p className="mt-4 text-[16px] font-normal tracking-[-0.4px] text-[#0D0D0D] animate-success-rise">
-                Match created
-              </p>
-              <p className="mt-1 text-[12px] text-[#888888] animate-success-rise [animation-delay:60ms]">
-                Processing in the background…
-              </p>
-            </div>
-          )}
-
           {/* Top bar — matched ghost circles for back + close */}
           <div className="flex items-center justify-between px-8 pt-5">
             {step !== "provider" ? (
