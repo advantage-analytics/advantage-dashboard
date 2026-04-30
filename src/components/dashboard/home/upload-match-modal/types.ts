@@ -32,6 +32,8 @@ export interface FormData {
   matchType?: string;
   courtType?: string;
   duration?: number;
+  playerHand?: "right" | "left";
+  playerBackhand?: "one-handed" | "two-handed";
 }
 
 /** Uploaded file metadata and data */
@@ -89,6 +91,8 @@ export interface MatchData {
   court_type?: string;
   verified?: boolean;
   duration?: number;
+  player_hand?: "right" | "left";
+  player_backhand?: "one-handed" | "two-handed";
 }
 
 /** Default form data values */

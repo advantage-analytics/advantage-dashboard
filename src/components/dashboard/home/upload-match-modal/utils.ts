@@ -142,7 +142,9 @@ export function buildMatchData(
       const val = formData.courtType || metadata.courtType;
       return val && val !== "None" ? val : undefined;
     })(),
-    duration: formData.duration
+    duration: formData.duration,
+    player_hand: formData.playerHand,
+    player_backhand: formData.playerBackhand
   };
 }
 
