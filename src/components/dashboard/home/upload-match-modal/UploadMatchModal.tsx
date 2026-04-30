@@ -45,7 +45,6 @@ export function UploadMatchModal({
     isUploading,
     error,
     uploadError,
-    isPrivateMatch,
     formData,
     parsingState,
     handleProviderSelect,
@@ -270,7 +269,6 @@ export function UploadMatchModal({
                   <ConfirmContent
                     formData={formData}
                     uploadedFile={uploadedFile}
-                    isPrivateMatch={isPrivateMatch}
                     error={error}
                   />
                 )}

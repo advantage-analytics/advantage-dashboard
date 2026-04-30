@@ -144,7 +144,9 @@ export function useUploadMatchModal({
 
       const storedFormData = loadFormDataFromStorage();
       if (storedFormData) {
-        setFormData(storedFormData);
+        // Merge over defaults so newly added fields (e.g. player hand/backhand)
+        // pick up their preselected values when stored data predates them.
+        setFormData({ ...getDefaultFormData(), ...storedFormData });
       }
 
       const storedFile = loadUploadedFileFromStorage();

@@ -1,4 +1,4 @@
-import { Calendar, Swords } from "lucide-react";
+import { Calendar, Crosshair, Swords } from "lucide-react";
 import Image from "next/image";
 
 interface MatchMetadataRowProps {
@@ -6,6 +6,9 @@ interface MatchMetadataRowProps {
   matchType?: string;
   courtType?: string;
   verificationStatus?: string;
+  /** Hide the verified/unverified badge entirely — useful on pre-save screens
+   *  where the concept of "verification" doesn't yet apply. */
+  showVerification?: boolean;
 }
 
 export function MatchMetadataRow({
@@ -13,6 +16,7 @@ export function MatchMetadataRow({
   matchType,
   courtType,
   verificationStatus,
+  showVerification = true,
 }: MatchMetadataRowProps): React.JSX.Element {
   return (
     <div className="flex flex-row gap-4 items-center">
@@ -23,7 +27,7 @@ export function MatchMetadataRow({
         </div>
       )}
 
-      {(matchType === "Tournament" || matchType === "Dual Match") && (
+      {(matchType === "Tournament" || matchType === "Dual Match" || matchType === "Practice") && (
         <div className="flex items-center gap-1">
           {matchType === "Tournament" ? (
             <Image
@@ -33,8 +37,10 @@ export function MatchMetadataRow({
               height={14}
               aria-hidden="true"
             />
-          ) : (
+          ) : matchType === "Dual Match" ? (
             <Swords className="size-[14px] text-[#888888]" strokeWidth={1.5} aria-hidden="true" />
+          ) : (
+            <Crosshair className="size-[14px] text-[#888888]" strokeWidth={1.5} aria-hidden="true" />
           )}
           <p className="text-[10px] font-normal text-[#888888] leading-[16px]">{matchType}</p>
         </div>
@@ -53,19 +59,24 @@ export function MatchMetadataRow({
         </div>
       )}
 
-      <div className="flex items-center gap-1">
-        <Image
-          src="/icons/verified-check-icon.svg"
-          alt=""
-          width={14}
-          height={14}
-          className={verificationStatus ? "" : "grayscale"}
-          aria-hidden="true"
-        />
-        <p className="text-[10px] font-normal text-[#888888] leading-[16px]">
-          {verificationStatus || "Unverified Result"}
-        </p>
-      </div>
+      {showVerification && (
+        <div className="flex items-center gap-1">
+          <Image
+            src={
+              verificationStatus
+                ? "/icons/verified-check-icon.svg"
+                : "/icons/verified-check-icon-unverified.svg"
+            }
+            alt=""
+            width={14}
+            height={14}
+            aria-hidden="true"
+          />
+          <p className="text-[10px] font-normal text-[#888888] leading-[16px]">
+            {verificationStatus || "Unverified Result"}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

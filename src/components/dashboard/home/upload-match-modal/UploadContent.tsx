@@ -250,33 +250,70 @@ export function UploadContent({
               </>
             )}
 
-            {/* File chip — compact inline marker */}
-            <div className="inline-flex self-start items-center gap-2 pl-2 pr-1 py-1 rounded-[8px] bg-white border border-[#F3F3F3]">
-              <div className="relative size-5 rounded-[5px] bg-[#3B82F6] flex items-center justify-center flex-shrink-0">
-                <FileSpreadsheet className="size-3 text-white" strokeWidth={1.75} />
-                {parseStatus === "success" && (
-                  <span
-                    className="absolute -bottom-0.5 -right-0.5 size-2 rounded-full bg-[#5DB955] border border-white"
-                    aria-hidden="true"
-                  />
-                )}
+            {/* Source file — quiet label-stack matching ConfirmContent's tile.
+                Stroke icon, filename · ext · size · status on one truncating line.
+                Filename anchors the row (medium, #0D0D0D); ext/size recede as supporting metadata.
+                Status carries semantic color on text only; remove sits as a ghost action on the right. */}
+            <div className="self-start w-full max-w-[480px] flex flex-col gap-2">
+              <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
+                Source file
+              </p>
+              <div className="flex items-center gap-3 min-w-0">
+                <FileSpreadsheet
+                  className="size-3.5 text-[#AAAAAA] shrink-0"
+                  strokeWidth={1.75}
+                  aria-hidden="true"
+                />
+                <div className="flex items-center gap-1.5 text-[13px] leading-[18px] text-[#525252] min-w-0 flex-1">
+                  <span className="truncate min-w-0 font-medium tracking-[-0.1px] text-[#0D0D0D]">
+                    {uploadedFile.name}
+                  </span>
+                  {fileConfig.ext && (
+                    <>
+                      <span className="text-[#CCCCCC] shrink-0" aria-hidden="true">·</span>
+                      <span className="shrink-0">{fileConfig.ext}</span>
+                    </>
+                  )}
+                  <span className="text-[#CCCCCC] shrink-0" aria-hidden="true">·</span>
+                  <span className="tabular-nums shrink-0">{uploadedFile.size}</span>
+                  {parseStatus === "success" && (
+                    <>
+                      <span className="text-[#CCCCCC] shrink-0" aria-hidden="true">·</span>
+                      <span className="font-medium text-[#5DB955] shrink-0">Parsed</span>
+                    </>
+                  )}
+                  {parseStatus === "warning" && (
+                    <>
+                      <span className="text-[#CCCCCC] shrink-0" aria-hidden="true">·</span>
+                      <span className="font-medium text-[#F59E0B] shrink-0">Parsed with warnings</span>
+                    </>
+                  )}
+                  {parseStatus === "error" && (
+                    <>
+                      <span className="text-[#CCCCCC] shrink-0" aria-hidden="true">·</span>
+                      <span className="font-medium text-[#E51837] shrink-0">Parse failed</span>
+                    </>
+                  )}
+                  {parseStatus === "parsing" && (
+                    <>
+                      <span className="text-[#CCCCCC] shrink-0" aria-hidden="true">·</span>
+                      <span className="font-medium text-[#525252] shrink-0 inline-flex items-center gap-1">
+                        <Loader2 className="size-3 animate-spin" strokeWidth={1.75} />
+                        Parsing
+                      </span>
+                    </>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={onRemoveFile}
+                  disabled={isUploading}
+                  className="size-7 flex items-center justify-center rounded-[6px] text-[#AAAAAA] hover:text-[#E51837] hover:bg-[rgba(229,24,55,0.06)] transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E51837]/40 shrink-0"
+                  aria-label="Remove file"
+                >
+                  <Trash2 className="size-3.5" strokeWidth={1.5} />
+                </button>
               </div>
-              <span className="text-[#0D0D0D] text-[12px] font-medium truncate max-w-[200px]">
-                {uploadedFile.name}
-              </span>
-              <span className="text-[#CCCCCC] text-[10px]">·</span>
-              <span className="text-[#888888] text-[11px] tabular-nums">
-                {uploadedFile.size}
-              </span>
-              <button
-                type="button"
-                onClick={onRemoveFile}
-                disabled={isUploading}
-                className="size-6 flex items-center justify-center rounded-md text-[#AAAAAA] hover:text-[#E51837] hover:bg-[rgba(229,24,55,0.06)] transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
-                aria-label="Remove file"
-              >
-                <Trash2 className="size-3" strokeWidth={1.5} />
-              </button>
             </div>
           </div>
         )}

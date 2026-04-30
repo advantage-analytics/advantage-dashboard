@@ -175,28 +175,41 @@ export function formatFileSize(bytes: number): string {
  * Returns "-:--" if duration is 0 or undefined
  */
 export function formatDuration(ms: number | undefined): string {
-  if (!ms || ms === 0) return "-:--";
+  if (!ms || ms === 0) return "";
   const totalSeconds = Math.floor(ms / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
-  return `${hours}:${String(minutes).padStart(2, "0")}`;
+  if (hours === 0) return `${minutes}M`;
+  if (minutes === 0) return `${hours}H`;
+  return `${hours}H ${minutes}M`;
 }
 
 /**
- * Parse H:MM format string back to milliseconds
- * Returns 0 if format is invalid or "-:--"
+ * Parse a duration string back to milliseconds.
+ * Accepts "2H 34M", "2h", "34m", legacy "2:34", or empty. Returns 0 if unparseable.
  */
 export function parseDuration(display: string): number {
-  if (!display || display === "-:--") return 0;
+  if (!display) return 0;
+  const trimmed = display.trim();
+  if (!trimmed || trimmed === "-:--") return 0;
 
-  const match = display.match(/^(\d+):(\d{2})$/);
-  if (!match) return 0;
+  // Legacy H:MM format
+  const colonMatch = trimmed.match(/^(\d+):(\d{2})$/);
+  if (colonMatch) {
+    const h = parseInt(colonMatch[1], 10);
+    const m = parseInt(colonMatch[2], 10);
+    if (m > 59) return 0;
+    return (h * 3600 + m * 60) * 1000;
+  }
 
-  const hours = parseInt(match[1], 10);
-  const minutes = parseInt(match[2], 10);
-
-  if (minutes > 59) return 0;
-  return (hours * 3600 + minutes * 60) * 1000;
+  // Letter format: "2H 34M", "2h", "34m"
+  const hMatch = trimmed.match(/(\d+)\s*[hH]/);
+  const mMatch = trimmed.match(/(\d+)\s*[mM]/);
+  if (!hMatch && !mMatch) return 0;
+  const h = hMatch ? parseInt(hMatch[1], 10) : 0;
+  const m = mMatch ? parseInt(mMatch[1], 10) : 0;
+  if (m > 59) return 0;
+  return (h * 3600 + m * 60) * 1000;
 }
 
 /**

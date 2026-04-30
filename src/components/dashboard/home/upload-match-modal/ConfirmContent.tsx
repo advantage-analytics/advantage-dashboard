@@ -4,7 +4,7 @@
  * ConfirmContent — Step 4 of 4 (peak-end summary)
  */
 
-import { Clock, FileSpreadsheet } from "lucide-react";
+import { AlertCircle, FileSpreadsheet } from "lucide-react";
 import { MatchMetadataRow } from "@/components/dashboard/matches/match-metadata-row";
 import { FormData, UploadedFile } from "./types";
 import { getAdjustedScores, formatDuration } from "./utils";
@@ -12,7 +12,6 @@ import { getAdjustedScores, formatDuration } from "./utils";
 export interface ConfirmContentProps {
   formData: FormData;
   uploadedFile: UploadedFile | null;
-  isPrivateMatch: boolean;
   error: string | null;
 }
 
@@ -110,19 +109,21 @@ function PlayerRow({
           return (
             <span
               key={idx}
-              className={`w-10 inline-flex items-baseline justify-center gap-0.5 ${
+              className={`w-10 inline-flex items-baseline justify-center ${
                 won ? "font-medium text-[#0D0D0D]" : "font-normal text-[#525252]"
               }`}
             >
-              <span>{ps}</span>
-              {showTb && (
-                <span
-                  aria-hidden="true"
-                  className="text-[10px] font-medium leading-none relative -top-2 text-[#AAAAAA]"
-                >
-                  {tb}
-                </span>
-              )}
+              <span className="relative">
+                {ps}
+                {showTb && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute left-full top-0 ml-0.5 text-[10px] font-medium leading-none text-[#AAAAAA] -translate-y-1.5"
+                  >
+                    {tb}
+                  </span>
+                )}
+              </span>
             </span>
           );
         })}
@@ -193,32 +194,87 @@ export function ConfirmContent({
 
   return (
     <div className="flex flex-col">
-      {/* Hero — event title + metadata */}
-      <div className="flex flex-col gap-2.5">
-        <h3 className="text-[22px] font-light tracking-[-0.5px] leading-[26px] text-[#0D0D0D]">
-          {eventTitle}
-        </h3>
-        <MatchMetadataRow
-          date={formatDate(formData.date)}
-          matchType={matchType}
-          courtType={courtType}
-        />
-      </div>
+      {/* Error — pinned to the top so it's visible after a failed save even if the modal scrolled.
+          Leads with the reason, ends with the recovery path. */}
+      {error && (
+        <div
+          role="alert"
+          className="flex items-start gap-2.5 bg-[rgba(229,24,55,0.06)] border border-[rgba(229,24,55,0.15)] rounded-[10px] p-3 mb-6"
+        >
+          <AlertCircle
+            className="size-4 text-[#E51837] mt-px flex-shrink-0"
+            strokeWidth={1.75}
+            aria-hidden="true"
+          />
+          <div className="flex flex-col gap-1 min-w-0">
+            <p className="text-[12px] leading-[18px] font-medium text-[#E51837]">
+              We couldn&apos;t save this match
+            </p>
+            <p className="text-[12px] leading-[18px] text-[#E51837]/80 break-words">
+              {error}
+            </p>
+            <p className="text-[12px] leading-[18px] text-[#E51837]/70">
+              Review the details below, then try Save again.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Hero — event title + metadata. Skip the meta row entirely when there's
+          nothing to render so it doesn't claim its gap slot below the title. */}
+      {(() => {
+        const formattedDate = formatDate(formData.date);
+        const hasMeta = !!(formattedDate || matchType || courtType);
+        return (
+          <div className={`flex flex-col ${hasMeta ? "gap-2.5" : ""}`}>
+            <h3 className="text-[22px] font-normal tracking-[-0.5px] leading-[26px] text-[#0D0D0D]">
+              {eventTitle}
+            </h3>
+            {hasMeta && (
+              <MatchMetadataRow
+                date={formattedDate}
+                matchType={matchType}
+                courtType={courtType}
+                showVerification={false}
+              />
+            )}
+          </div>
+        );
+      })()}
 
       {/* Scoreboard */}
       <div className="flex flex-col mt-8">
         {/* Header row */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <p className={labelCls}>
             {getMatchStatus(formData.result)}
             {round ? ` · ${round}` : ""}
           </p>
+          {(formData.duration ?? 0) > 0 && (
+            <span className={`${labelCls} tabular-nums`}>
+              {formatDuration(formData.duration)}
+            </span>
+          )}
         </div>
 
-        <div className="h-px bg-[#F3F3F3] mt-2" />
+        <div className="h-px bg-[#F3F3F3] mt-3" />
+
+        {/* Set headers — column labels aligned with the score cells below */}
+        <div className="flex justify-end mt-4">
+          <div className="flex gap-1.5">
+            {playerScores.map((_, i) => (
+              <div
+                key={i}
+                className="w-10 text-center text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2.5px] tabular-nums"
+              >
+                {i + 1}
+              </div>
+            ))}
+          </div>
+        </div>
 
         {/* Player rows */}
-        <div className="flex flex-col gap-3 mt-4">
+        <div className="flex flex-col gap-4 mt-3">
           {/* Player 1 */}
           <PlayerRow
             name={playerName}
@@ -239,74 +295,68 @@ export function ConfirmContent({
             theirTiebreaks={playerTiebreaks}
           />
         </div>
+
+        <div className="h-px bg-[#F3F3F3] mt-4" />
       </div>
 
-      {/* Match details — duration + format in a single quiet strip */}
+      {/* Match format — quiet 3-column definition grid.
+          Defaulted values render lighter so users can tell what they chose vs what's implied. */}
       {(() => {
-        const items: React.ReactNode[] = [];
-        if (formData.duration) {
-          items.push(
-            <span key="duration" className="inline-flex items-center gap-1.5 tabular-nums">
-              <Clock
-                className="size-[13px] text-[#AAAAAA]"
-                strokeWidth={1.75}
-                aria-hidden="true"
-              />
-              {formatDuration(formData.duration)}
-            </span>
-          );
-        }
-        if (formData.bestOf) {
-          items.push(<span key="bestOf">Best of {formData.bestOf}</span>);
-        }
-        if (formData.adScoring !== undefined) {
-          items.push(
-            <span key="ad">{formData.adScoring ? "Ad scoring" : "No-ad scoring"}</span>
-          );
-        }
-        if (formData.playOnLets !== undefined) {
-          items.push(
-            <span key="lets">{formData.playOnLets ? "Play on lets" : "Stop on lets"}</span>
-          );
-        }
-        if (items.length === 0) return null;
+        type Item = { label: string; value: string; defaulted: boolean };
+        const items: Item[] = [
+          {
+            label: "Format",
+            value: `Best of ${formData.bestOf || 3} sets`,
+            defaulted: !formData.bestOf,
+          },
+          {
+            label: "Scoring",
+            value: formData.adScoring === false ? "No-ad" : "Ad",
+            defaulted: formData.adScoring === undefined,
+          },
+          {
+            label: "Lets",
+            value: formData.playOnLets ? "Play on" : "Stop on",
+            defaulted: formData.playOnLets === undefined,
+          },
+        ];
         return (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] font-normal text-[#525252] leading-[16px] mt-6">
-            {items.map((node, i) => (
-              <span key={i} className="inline-flex items-center gap-x-3">
-                {i > 0 && (
-                  <span className="text-[#E5E5E5]" aria-hidden="true">·</span>
-                )}
-                {node}
-              </span>
+          <dl className="grid grid-cols-3 gap-x-6 mt-8">
+            {items.map((item) => (
+              <div key={item.label} className="flex flex-col gap-2">
+                <dt className={labelCls}>{item.label}</dt>
+                <dd
+                  className={`text-[13px] leading-[18px] font-normal tracking-[-0.1px] ${
+                    item.defaulted ? "text-[#AAAAAA]" : "text-[#0D0D0D]"
+                  }`}
+                >
+                  {item.value}
+                </dd>
+              </div>
             ))}
-          </div>
+          </dl>
         );
       })()}
 
       {/* Source file */}
       {uploadedFile && (
-        <div className="flex items-center gap-3 pt-5 mt-7 border-t border-[#F3F3F3]">
-          <div className="size-8 rounded-[10px] bg-[#F3F3F3] flex items-center justify-center shrink-0">
-            <FileSpreadsheet className="size-4 text-[#525252]" strokeWidth={1.5} />
-          </div>
-          <div className="min-w-0 flex-1 flex flex-col gap-0.5">
-            <p className={labelCls}>Source file</p>
-            <p className="text-[12px] leading-[18px] text-[#525252] truncate tabular-nums">
+        <div className="flex flex-col gap-2 mt-8">
+          <p className={labelCls}>Source file</p>
+          <div className="flex items-center gap-2 min-w-0">
+            <FileSpreadsheet
+              className="size-3.5 text-[#AAAAAA] shrink-0"
+              strokeWidth={1.75}
+              aria-hidden="true"
+            />
+            <p className="text-[13px] leading-[18px] text-[#525252] truncate">
               {uploadedFile.name}
               <span className="text-[#CCCCCC] mx-1.5">·</span>
-              {uploadedFile.size}
+              <span className="tabular-nums">{uploadedFile.size}</span>
             </p>
           </div>
         </div>
       )}
 
-      {/* Error */}
-      {error && (
-        <div className="bg-[rgba(229,24,55,0.06)] border border-[rgba(229,24,55,0.15)] rounded-[10px] p-3 mt-5">
-          <p className="text-[12px] leading-[18px] text-[#E51837]">{error}</p>
-        </div>
-      )}
     </div>
   );
 }

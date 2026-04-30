@@ -5,24 +5,35 @@
  * Match name (required) → Players (name + hand + backhand) → Score → Outcome → Event/When/Format.
  */
 
-import { useState, useRef, useCallback, useMemo, useEffect } from "react";
+import {
+  useState,
+  useRef,
+  useCallback,
+  useMemo,
+  useEffect,
+  useId,
+  useLayoutEffect,
+} from "react";
 import { Input } from "@/components/ui/input";
 import {
   AlertCircle,
   ChevronDown,
   CircleMinus,
   CirclePlus,
+  Info,
   Plus,
 } from "lucide-react";
 import { FormData } from "./types";
 import {
   getAdjustedScores,
-  formatDuration,
-  parseDuration,
   validateSetScore,
   deriveOutcome,
   setHasData,
 } from "./utils";
+
+const MS_PER_HOUR = 3_600_000;
+const MS_PER_MINUTE = 60_000;
+const onlyDigits = (s: string) => s.replace(/[^0-9]/g, "");
 
 export interface DetailsContentProps {
   formData: FormData;
@@ -39,20 +50,181 @@ function needsTiebreak(p: number | null, o: number | null): boolean {
 const sectionLabelCls =
   "text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]";
 
+// Top-level section headings (Match name / Score / Result / Match details).
+// Same typographic register as field labels — uppercase tracked — so the form
+// speaks one consistent visual language. Hierarchy is carried by position and
+// the gap below the heading, not by a register break.
+const sectionHeadingCls = sectionLabelCls;
+
 // Auth-style underline field — matches src/components/auth/form-field.tsx.
-// No visible labels in Match Details — placeholders + section heading carry context.
+// Match Details fields render a small uppercase label above the control so the
+// field's identity persists after selection (placeholder-as-label fails post-fill).
+// Color is applied per-control: filledTextCls when value is set, emptyTextCls when blank,
+// so empty selects don't inherit the dark text color from their disabled placeholder option.
 const fieldControlCls =
-  "w-full appearance-none bg-transparent text-[14px] text-[#0D0D0D] outline-none placeholder:text-[#888888] [&:invalid]:text-[#888888]";
+  "w-full appearance-none bg-transparent text-[14px] outline-none placeholder:text-[#AAAAAA] [&:invalid]:text-[#AAAAAA] transition-colors duration-150";
+
+// Selects and date/time inputs are interactive in a way text inputs aren't —
+// add cursor-pointer + hover preview color so the empty state reads as actionable.
+const interactiveFieldCls = "cursor-pointer hover:[&:not(:focus)]:text-[#525252]";
+
+const filledTextCls = "text-[#0D0D0D]";
+const emptyTextCls = "text-[#AAAAAA]";
 
 const fieldRuleCls =
-  "h-[1px] w-full bg-[#F3F3F3] transition-all duration-300 group-focus-within:h-[2px] group-focus-within:bg-[#3B82F6]";
+  "h-[1px] w-full bg-[#F3F3F3] transition-all duration-200 group-hover:bg-[#E5E5E5] group-focus-within:h-[2px] group-focus-within:bg-[#3B82F6]";
+
+// Inline help. Sits next to a field label as a small Info trigger; reveals a
+// quiet definition-list popover on hover / focus / click. The popover is an
+// editorial aside — restrained surface, no glassmorphism, no semantic accent
+// unless the term itself carries it elsewhere.
+function InfoTooltip({
+  label,
+  items,
+}: {
+  label: string;
+  items: { term: string; def: string }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [visible, setVisible] = useState(false);
+  const [anchor, setAnchor] = useState<"left" | "right">("left");
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const id = useId();
+
+  const cancelClose = () => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
+  // 100ms grace so the cursor can traverse the gap from trigger to popover.
+  const scheduleClose = () => {
+    cancelClose();
+    closeTimer.current = setTimeout(() => setOpen(false), 100);
+  };
+
+  // Mount/unmount with a 150ms fade so the popover doesn't snap in/out.
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      const raf = requestAnimationFrame(() => setVisible(true));
+      return () => cancelAnimationFrame(raf);
+    }
+    setVisible(false);
+    const t = setTimeout(() => setMounted(false), 150);
+    return () => clearTimeout(t);
+  }, [open]);
+
+  // Anchor right when the trigger is near the viewport's right edge so the
+  // 260px popover doesn't clip on narrow screens / right-column fields.
+  // Recomputes on resize so the anchor stays accurate if the user drags the
+  // viewport narrower while the tooltip is open.
+  useLayoutEffect(() => {
+    if (!mounted) return;
+    const compute = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const POPOVER_WIDTH = 260;
+      const MARGIN = 16;
+      setAnchor(
+        rect.left + POPOVER_WIDTH + MARGIN > window.innerWidth ? "right" : "left"
+      );
+    };
+    compute();
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+  }, [mounted]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t) || popoverRef.current?.contains(t)) {
+        return;
+      }
+      setOpen(false);
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [open]);
+
+  useEffect(() => () => cancelClose(), []);
+
+  return (
+    <span
+      className="relative inline-flex"
+      onMouseEnter={() => {
+        cancelClose();
+        setOpen(true);
+      }}
+      onMouseLeave={scheduleClose}
+    >
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label={`About ${label}`}
+        aria-expanded={open}
+        aria-describedby={open ? id : undefined}
+        onClick={() => setOpen((v) => !v)}
+        onFocus={() => {
+          cancelClose();
+          setOpen(true);
+        }}
+        onBlur={scheduleClose}
+        className="inline-flex items-center justify-center size-3 rounded-full text-[#CCCCCC] hover:text-[#525252] aria-expanded:text-[#525252] focus-visible:text-[#3B82F6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/30 focus-visible:ring-offset-1 transition-colors duration-150"
+      >
+        <Info className="size-3" strokeWidth={1.75} aria-hidden="true" />
+      </button>
+      {mounted && (
+        <div
+          ref={popoverRef}
+          id={id}
+          role="tooltip"
+          onMouseEnter={cancelClose}
+          onMouseLeave={scheduleClose}
+          className={`absolute z-30 ${
+            anchor === "right" ? "right-0" : "left-0"
+          } top-full mt-2 w-[260px] bg-white border border-[#F3F3F3] rounded-[10px] shadow-[0_4px_14px_rgba(0,0,0,0.04)] p-3 flex flex-col gap-2.5 transition-opacity duration-150 ${
+            visible ? "opacity-100" : "opacity-0"
+          }`}
+        >
+          {items.map((item, i) => (
+            <div key={i} className="flex flex-col gap-0.5">
+              <p className="text-[12px] leading-[18px] font-medium text-[#0D0D0D] tracking-[-0.1px]">
+                {item.term}
+              </p>
+              <p className="text-[11px] leading-[16px] text-[#525252]">
+                {item.def}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </span>
+  );
+}
 
 // Chevron for native <select> — gives them visible affordance.
+// Tracks group hover/focus so it reads as part of the same interactive surface.
 function SelectChevron() {
   return (
     <ChevronDown
       aria-hidden="true"
-      className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 size-3 text-[#AAAAAA]"
+      className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 size-3 text-[#AAAAAA] transition-colors duration-150 group-hover:text-[#525252] group-focus-within:text-[#3B82F6]"
       strokeWidth={1.75}
     />
   );
@@ -61,23 +233,69 @@ function SelectChevron() {
 type Hand = "right" | "left";
 type Backhand = "one-handed" | "two-handed";
 
-const cycleHand = (v: Hand | undefined): Hand | undefined => {
-  if (v === undefined) return "right";
-  if (v === "right") return "left";
-  return undefined;
-};
-const cycleBackhand = (v: Backhand | undefined): Backhand | undefined => {
-  if (v === undefined) return "two-handed";
-  if (v === "two-handed") return "one-handed";
-  return undefined;
-};
-const handLabel = (v: Hand | undefined) =>
-  v === "right" ? "Right" : v === "left" ? "Left" : null;
-const backhandLabel = (v: Backhand | undefined) =>
-  v === "two-handed" ? "2-handed" : v === "one-handed" ? "1-handed" : null;
+interface CompactSelectOption<T extends string> {
+  value: T;
+  label: string;
+}
+
+// Quiet inline select for ancillary metadata (player hand / backhand).
+// Matches the chevron-select language used elsewhere in the form, but smaller
+// and label-less so it can sit under the player name without crowding the scoreboard.
+function CompactSelect<T extends string>({
+  value,
+  onChange,
+  ariaLabel,
+  placeholder,
+  options,
+}: {
+  value: T | undefined;
+  onChange: (v: T | undefined) => void;
+  ariaLabel: string;
+  placeholder: string;
+  options: readonly CompactSelectOption<T>[];
+}) {
+  const isPlaceholder = value === undefined;
+  return (
+    <div className="group relative inline-flex items-center">
+      <select
+        aria-label={ariaLabel}
+        value={value ?? ""}
+        onChange={(e) =>
+          onChange((e.target.value === "" ? undefined : (e.target.value as T)))
+        }
+        className={`appearance-none bg-transparent pr-4 text-[11px] font-normal outline-none cursor-pointer transition-colors duration-150 focus-visible:text-[#0D0D0D] ${
+          isPlaceholder
+            ? "text-[#888888] group-hover:text-[#525252]"
+            : "text-[#525252] group-hover:text-[#0D0D0D]"
+        }`}
+      >
+        <option value="">{placeholder}</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown
+        aria-hidden="true"
+        className="pointer-events-none absolute right-0 size-3 text-[#888888] transition-colors duration-150 group-hover:text-[#525252] group-focus-within:text-[#3B82F6]"
+        strokeWidth={1.75}
+      />
+    </div>
+  );
+}
+
+const handOptions: readonly CompactSelectOption<Hand>[] = [
+  { value: "right", label: "Right-Handed" },
+  { value: "left", label: "Left-Handed" },
+];
+const backhandOptions: readonly CompactSelectOption<Backhand>[] = [
+  { value: "two-handed", label: "2-Handed Backhand" },
+  { value: "one-handed", label: "1-Handed Backhand" },
+];
 
 interface ScoreCellProps {
-  refMap: React.MutableRefObject<Record<number, HTMLInputElement | null>>;
+  refMap: React.RefObject<Record<number, HTMLInputElement | null>>;
   i: number;
   value: number | null;
   onValueChange: (v: string) => void;
@@ -130,11 +348,36 @@ export function DetailsContent({
   onScoreChange,
   onTiebreakChange,
 }: DetailsContentProps) {
-  const [outcomeOverride, setOutcomeOverride] = useState(false);
   const [eventNameTouched, setEventNameTouched] = useState(false);
   const [showAdvancedDetails, setShowAdvancedDetails] = useState(
     formData.adScoring !== undefined || formData.playOnLets !== undefined
   );
+  const [pendingRemoveAt, setPendingRemoveAt] = useState<number | null>(null);
+
+  // Duration is split into two number fields — users shouldn't have to type units.
+  // Local string state keeps editing fluid; commit to formData on blur.
+  const initialDurationMs = formData.duration ?? 0;
+  const [hoursInput, setHoursInput] = useState(() => {
+    const h = Math.floor(initialDurationMs / MS_PER_HOUR);
+    return h ? String(h) : "";
+  });
+  const [minutesInput, setMinutesInput] = useState(() => {
+    const m = Math.floor((initialDurationMs % MS_PER_HOUR) / MS_PER_MINUTE);
+    return m ? String(m) : "";
+  });
+  useEffect(() => {
+    const ms = formData.duration ?? 0;
+    const h = Math.floor(ms / MS_PER_HOUR);
+    const m = Math.floor((ms % MS_PER_HOUR) / MS_PER_MINUTE);
+    setHoursInput(h ? String(h) : "");
+    setMinutesInput(m ? String(m) : "");
+  }, [formData.duration]);
+  const commitDuration = () => {
+    const h = parseInt(hoursInput, 10) || 0;
+    const m = Math.min(59, parseInt(minutesInput, 10) || 0);
+    onInputChange("duration", h * MS_PER_HOUR + m * MS_PER_MINUTE);
+    setMinutesInput(m ? String(m) : "");
+  };
   const eventNameMissing = !formData.eventName.trim();
   const eventNameError = eventNameTouched && eventNameMissing;
 
@@ -217,20 +460,26 @@ export function DetailsContent({
   );
 
   const handleSetsChange = (delta: number) => {
+    setPendingRemoveAt(null);
     const newSets = Math.max(1, Math.min(bestOfNum, displayedSets + delta));
+    if (newSets === displayedSets) return;
     if (newSets < displayedSets) {
       const droppedHasData = Array.from(
         { length: displayedSets - newSets },
         (_, k) => setHasData(formData, newSets + k)
       ).some(Boolean);
       if (droppedHasData) {
-        const ok = window.confirm(
-          `Remove set ${newSets + 1}? Any scores entered there will be cleared.`
-        );
-        if (!ok) return;
+        setPendingRemoveAt(newSets);
+        return;
       }
     }
     onInputChange("numberOfSets", newSets);
+  };
+
+  const confirmRemoveSets = () => {
+    if (pendingRemoveAt === null) return;
+    onInputChange("numberOfSets", pendingRemoveAt);
+    setPendingRemoveAt(null);
   };
 
   const setValidations = useMemo(
@@ -266,23 +515,53 @@ export function DetailsContent({
     !formData.result.includes("Defaulted") &&
     formData.result !== "Unfinished";
 
-  const resultOptions = [
-    { value: `${formData.playerName || "Player"} Wins`, label: `${formData.playerName || "Player"} Wins` },
-    { value: `${formData.opponentName || "Opponent"} Wins`, label: `${formData.opponentName || "Opponent"} Wins` },
-    { value: `${formData.playerName || "Player"} Withdrew`, label: `${formData.playerName || "Player"} Withdrew` },
-    { value: `${formData.opponentName || "Opponent"} Withdrew`, label: `${formData.opponentName || "Opponent"} Withdrew` },
-    { value: `${formData.playerName || "Player"} Defaulted`, label: `${formData.playerName || "Player"} Defaulted` },
-    { value: `${formData.opponentName || "Opponent"} Defaulted`, label: `${formData.opponentName || "Opponent"} Defaulted` },
-    { value: "Unfinished", label: "Unfinished" },
-  ];
+  // Result is stored as a single string ("Player Wins" / "Opponent Withdrew" / "Unfinished").
+  // We expose it as two fields — Winner + Outcome — to keep the per-decision option count under 4.
+  const playerNm = formData.playerName || "Player";
+  const opponentNm = formData.opponentName || "Opponent";
+  type WinnerKey = "" | "player" | "opponent";
+  type OutcomeKey = "" | "Wins" | "Withdrew" | "Defaulted" | "Unfinished";
+  const currentWinner: WinnerKey = !formData.result || formData.result === "Unfinished"
+    ? ""
+    : formData.result.startsWith(playerNm)
+    ? "player"
+    : formData.result.startsWith(opponentNm)
+    ? "opponent"
+    : "";
+  const currentOutcome: OutcomeKey = !formData.result
+    ? ""
+    : formData.result === "Unfinished"
+    ? "Unfinished"
+    : formData.result.endsWith(" Wins")
+    ? "Wins"
+    : formData.result.endsWith(" Withdrew")
+    ? "Withdrew"
+    : formData.result.endsWith(" Defaulted")
+    ? "Defaulted"
+    : "";
+  const writeResult = (winner: WinnerKey, outcome: OutcomeKey) => {
+    if (outcome === "Unfinished") {
+      onInputChange("result", "Unfinished");
+      return;
+    }
+    if (!winner || !outcome) {
+      onInputChange("result", "");
+      return;
+    }
+    const name = winner === "player" ? playerNm : opponentNm;
+    onInputChange("result", `${name} ${outcome}`);
+  };
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
       {/* Match name — primary required field, underline-style */}
       <div className="group flex flex-col gap-1.5 max-w-[480px]">
+        <h4 className={sectionHeadingCls}>
+          Match name <span className="text-[#E51837]">*</span>
+        </h4>
         <div className="flex w-full items-center pb-2">
           <input
-            placeholder="e.g. Fall Invitational · Round of 16"
+            placeholder="e.g. State Open"
             value={formData.eventName}
             onChange={(e) => onInputChange("eventName", e.target.value)}
             onBlur={() => setEventNameTouched(true)}
@@ -300,7 +579,7 @@ export function DetailsContent({
         />
         {eventNameError && (
           <span className="text-[11px] text-[#E51837]">
-            Add a name so this match is easy to find later.
+            A name helps you find this match later.
           </span>
         )}
       </div>
@@ -308,7 +587,7 @@ export function DetailsContent({
       {/* Score — editorial scoreboard */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <span className={sectionLabelCls}>Score</span>
+          <span className={sectionHeadingCls}>Score</span>
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -336,8 +615,30 @@ export function DetailsContent({
           </div>
         </div>
 
+        {pendingRemoveAt !== null && (
+          <div className="flex items-center justify-end gap-2 text-[11px] text-[#525252]">
+            <span>
+              Remove set {pendingRemoveAt + 1}? Scores will be cleared.
+            </span>
+            <button
+              type="button"
+              onClick={() => setPendingRemoveAt(null)}
+              className="px-2 py-0.5 rounded-full text-[#525252] hover:text-[#0D0D0D] hover:bg-[#F5F5F5] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmRemoveSets}
+              className="px-2 py-0.5 rounded-full text-[#E51837] hover:bg-[rgba(229,24,55,0.08)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E51837]/40"
+            >
+              Remove
+            </button>
+          </div>
+        )}
+
         {/* Scoreboard frame */}
-        <div id="scoreboard-frame" className="flex flex-col border-y border-[#F3F3F3] py-4">
+        <div id="scoreboard-frame" className="flex flex-col border-t border-[#F3F3F3] pt-4">
           {/* Set headers */}
           <div className="flex justify-end pb-2">
             <div className="flex gap-4">
@@ -367,29 +668,25 @@ export function DetailsContent({
                   placeholder="Your name"
                   value={formData.playerName}
                   onChange={(e) => onInputChange("playerName", e.target.value)}
-                  className="w-full bg-transparent text-[16px] font-normal tracking-[-0.4px] text-[#0D0D0D] outline-none placeholder:text-[#888888] placeholder:font-normal pb-1.5"
+                  className="w-full bg-transparent text-[16px] font-normal tracking-[-0.4px] text-[#0D0D0D] outline-none placeholder:text-[#AAAAAA] placeholder:font-normal pb-1.5"
                 />
                 <div className="h-[1px] w-full bg-[#F3F3F3] transition-all duration-300 group-focus-within/name:h-[2px] group-focus-within/name:bg-[#3B82F6]" />
-                <div className="flex items-center gap-1 mt-1.5 -ml-1.5">
-                  <button
-                    type="button"
-                    onClick={() => onInputChange("playerHand", cycleHand(formData.playerHand))}
-                    aria-label="Cycle dominant hand"
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-normal text-[#888888] hover:text-[#0D0D0D] hover:bg-[#F5F5F5] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
-                  >
-                    <span>{handLabel(formData.playerHand) ?? "Set hand"}</span>
-                    <ChevronDown className="size-3 text-[#CCCCCC]" strokeWidth={1.5} />
-                  </button>
+                <div className="flex items-center gap-3 mt-1.5">
+                  <CompactSelect
+                    ariaLabel="Dominant hand"
+                    placeholder="Hand"
+                    options={handOptions}
+                    value={formData.playerHand}
+                    onChange={(v) => onInputChange("playerHand", v)}
+                  />
                   <span className="text-[#CCCCCC] text-[11px]">·</span>
-                  <button
-                    type="button"
-                    onClick={() => onInputChange("playerBackhand", cycleBackhand(formData.playerBackhand))}
-                    aria-label="Cycle backhand style"
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-normal text-[#888888] hover:text-[#0D0D0D] hover:bg-[#F5F5F5] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
-                  >
-                    <span>{backhandLabel(formData.playerBackhand) ?? "Set backhand"}</span>
-                    <ChevronDown className="size-3 text-[#CCCCCC]" strokeWidth={1.5} />
-                  </button>
+                  <CompactSelect
+                    ariaLabel="Backhand style"
+                    placeholder="Backhand"
+                    options={backhandOptions}
+                    value={formData.playerBackhand}
+                    onChange={(v) => onInputChange("playerBackhand", v)}
+                  />
                 </div>
               </div>
               <div className="flex gap-4">
@@ -437,29 +734,25 @@ export function DetailsContent({
                   placeholder="Opponent name"
                   value={formData.opponentName}
                   onChange={(e) => onInputChange("opponentName", e.target.value)}
-                  className="w-full bg-transparent text-[16px] font-normal tracking-[-0.4px] text-[#0D0D0D] outline-none placeholder:text-[#888888] placeholder:font-normal pb-1.5"
+                  className="w-full bg-transparent text-[16px] font-normal tracking-[-0.4px] text-[#0D0D0D] outline-none placeholder:text-[#AAAAAA] placeholder:font-normal pb-1.5"
                 />
                 <div className="h-[1px] w-full bg-[#F3F3F3] transition-all duration-300 group-focus-within/name:h-[2px] group-focus-within/name:bg-[#3B82F6]" />
-                <div className="flex items-center gap-1 mt-1.5 -ml-1.5">
-                  <button
-                    type="button"
-                    onClick={() => onInputChange("opponentHand", cycleHand(formData.opponentHand))}
-                    aria-label="Cycle opponent dominant hand"
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-normal text-[#888888] hover:text-[#0D0D0D] hover:bg-[#F5F5F5] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
-                  >
-                    <span>{handLabel(formData.opponentHand) ?? "Set hand"}</span>
-                    <ChevronDown className="size-3 text-[#CCCCCC]" strokeWidth={1.5} />
-                  </button>
+                <div className="flex items-center gap-3 mt-1.5">
+                  <CompactSelect
+                    ariaLabel="Opponent dominant hand"
+                    placeholder="Hand"
+                    options={handOptions}
+                    value={formData.opponentHand}
+                    onChange={(v) => onInputChange("opponentHand", v)}
+                  />
                   <span className="text-[#CCCCCC] text-[11px]">·</span>
-                  <button
-                    type="button"
-                    onClick={() => onInputChange("opponentBackhand", cycleBackhand(formData.opponentBackhand))}
-                    aria-label="Cycle opponent backhand style"
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-normal text-[#888888] hover:text-[#0D0D0D] hover:bg-[#F5F5F5] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
-                  >
-                    <span>{backhandLabel(formData.opponentBackhand) ?? "Set backhand"}</span>
-                    <ChevronDown className="size-3 text-[#CCCCCC]" strokeWidth={1.5} />
-                  </button>
+                  <CompactSelect
+                    ariaLabel="Opponent backhand style"
+                    placeholder="Backhand"
+                    options={backhandOptions}
+                    value={formData.opponentBackhand}
+                    onChange={(v) => onInputChange("opponentBackhand", v)}
+                  />
                 </div>
               </div>
               <div className="flex gap-4">
@@ -501,229 +794,301 @@ export function DetailsContent({
             </div>
           </div>
 
-          {/* Outcome — anchored inside scoreboard as footer */}
-          {(() => {
-            const derivedAndAccepted =
-              !!derivedOutcome &&
-              !outcomeOverride &&
-              formData.result === derivedOutcome;
-            return (
-              <div className="mt-3 pt-3 border-t border-[#F3F3F3]">
-                {derivedAndAccepted ? (
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="text-[13px] font-medium text-[#0D0D0D] tracking-[-0.1px]">
-                      {derivedOutcome}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setOutcomeOverride(true)}
-                      className="text-[11px] text-[#888888] hover:text-[#525252] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 rounded-sm"
-                    >
-                      Override
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-[6px]">
-                    <div className="group flex flex-col gap-[6px]">
-                      <div className="relative pb-[10px]">
-                        <select
-                          aria-label="Match outcome"
-                          value={formData.result || ""}
-                          onChange={(e) => onInputChange("result", e.target.value)}
-                          required
-                          className={`${fieldControlCls} pr-5`}
-                        >
-                          <option value="" disabled>
-                            Outcome
-                          </option>
-                          {resultOptions.map((o) => (
-                            <option key={o.value} value={o.value}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </select>
-                        <SelectChevron />
-                      </div>
-                      <div className={fieldRuleCls} />
-                    </div>
-                    {outcomeMismatch && derivedOutcome && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onInputChange("result", derivedOutcome);
-                          setOutcomeOverride(false);
-                        }}
-                        className="inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1 bg-[#F3F3F3] border border-[#EAECF0] rounded-full hover:bg-[#EAECF0] transition-colors self-start"
-                      >
-                        <AlertCircle className="size-3 text-[#525252]" strokeWidth={1.75} />
-                        <span className="text-[#525252] text-[12px] font-medium">
-                          Use {derivedOutcome}
-                        </span>
-                      </button>
-                    )}
-                  </div>
-                )}
+          {/* Validation message — anchored inside the scoreboard frame so it sits
+              near the offending set rather than far below the player rows. */}
+          {invalidMessage && (
+            <div className="flex justify-end mt-3">
+              <div className="inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1 bg-[rgba(229,24,55,0.06)] border border-[rgba(229,24,55,0.18)] rounded-full">
+                <AlertCircle className="size-3 text-[#E51837]" strokeWidth={1.75} />
+                <span className="text-[#E51837] text-[12px] font-medium">
+                  Set {firstInvalid + 1}: {invalidMessage}
+                </span>
               </div>
-            );
-          })()}
+            </div>
+          )}
         </div>
-
-        {invalidMessage && (
-          <div className="inline-flex items-center self-start gap-1.5 pl-2 pr-2.5 py-1 bg-[rgba(229,24,55,0.06)] border border-[rgba(229,24,55,0.18)] rounded-full">
-            <AlertCircle className="size-3 text-[#E51837]" strokeWidth={1.75} />
-            <span className="text-[#E51837] text-[12px] font-medium">
-              Set {firstInvalid + 1}: {invalidMessage}
-            </span>
-          </div>
-        )}
       </div>
 
-      {/* Match details — auth-style underline pairs */}
-      <div className="flex flex-col gap-5">
-        <h4 className={sectionLabelCls}>Match details</h4>
-
-        <div className="flex flex-col gap-5">
-          {/* Round · Match type */}
-          <div className="flex flex-wrap gap-x-[16px] gap-y-5">
-            <div className="group flex flex-1 min-w-[160px] flex-col gap-[6px]">
+      {/* Result — split into Winner + Outcome so each decision is at most 4 options.
+          Both feed back into the existing single-string formData.result via writeResult().
+          No section heading: the Winner / Outcome field labels are self-explanatory and
+          a redundant "RESULT" label restated what the fields already announce. */}
+      <div className="flex flex-col">
+        <div className="flex flex-col gap-[6px]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
+            <div className="group flex flex-col gap-[6px]">
+              <div className="flex items-center h-3">
+                <p className={`${sectionLabelCls} leading-none`}>Winner</p>
+              </div>
               <div className="relative pb-[10px]">
                 <select
-                  aria-label="Round"
-                  value={formData.round || ""}
-                  onChange={(e) => onInputChange("round", e.target.value)}
-                  className={`${fieldControlCls} pr-5`}
+                  aria-label="Match winner"
+                  value={currentWinner}
+                  onChange={(e) =>
+                    writeResult(e.target.value as WinnerKey, currentOutcome)
+                  }
+                  disabled={currentOutcome === "Unfinished"}
+                  className={`${fieldControlCls} ${interactiveFieldCls} pr-5 ${currentWinner ? filledTextCls : emptyTextCls} disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
                   <option value="" disabled>
-                    Round
+                    Select winner
                   </option>
-                  <option value="None">None</option>
-                  <option value="Round of 128">Round of 128</option>
-                  <option value="Round of 64">Round of 64</option>
-                  <option value="Round of 32">Round of 32</option>
-                  <option value="Round of 16">Round of 16</option>
-                  <option value="Quarterfinals">Quarterfinals</option>
-                  <option value="Semifinals">Semifinals</option>
-                  <option value="Finals">Finals</option>
+                  <option value="player">{playerNm}</option>
+                  <option value="opponent">{opponentNm}</option>
                 </select>
                 <SelectChevron />
               </div>
               <div className={fieldRuleCls} />
             </div>
-            <div className="group flex flex-1 min-w-[160px] flex-col gap-[6px]">
+            <div className="group flex flex-col gap-[6px]">
+              <div className="flex items-center gap-1.5 h-3">
+                <p className={`${sectionLabelCls} leading-none`}>Outcome</p>
+                <InfoTooltip
+                  label="Outcome"
+                  items={[
+                    { term: "Wins", def: "Match completed to a winner." },
+                    { term: "Withdrew", def: "Forfeit, often due to injury. Counts as a loss." },
+                    { term: "Defaulted", def: "Forfeit by rule (code violation, no-show)." },
+                    { term: "Unfinished", def: "Match was interrupted and not resumed." },
+                  ]}
+                />
+              </div>
               <div className="relative pb-[10px]">
                 <select
-                  aria-label="Match type"
-                  value={formData.matchType || ""}
-                  onChange={(e) => onInputChange("matchType", e.target.value)}
-                  className={`${fieldControlCls} pr-5`}
+                  aria-label="Match outcome"
+                  value={currentOutcome}
+                  onChange={(e) =>
+                    writeResult(currentWinner, e.target.value as OutcomeKey)
+                  }
+                  required
+                  className={`${fieldControlCls} ${interactiveFieldCls} pr-5 ${currentOutcome ? filledTextCls : emptyTextCls}`}
                 >
                   <option value="" disabled>
-                    Match type
+                    Select outcome
                   </option>
-                  <option value="None">None</option>
-                  <option value="Tournament">Tournament</option>
-                  <option value="Dual Match">Dual Match</option>
-                  <option value="Practice">Practice</option>
+                  <option value="Wins">Wins</option>
+                  <option value="Withdrew">Withdrew</option>
+                  <option value="Defaulted">Defaulted</option>
+                  <option value="Unfinished">Unfinished</option>
                 </select>
                 <SelectChevron />
               </div>
               <div className={fieldRuleCls} />
             </div>
           </div>
+          {outcomeMismatch && derivedOutcome && (
+            <button
+              type="button"
+              onClick={() => onInputChange("result", derivedOutcome)}
+              className="inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1 bg-[#F3F3F3] border border-[#EAECF0] rounded-full hover:bg-[#EAECF0] transition-colors self-start"
+            >
+              <AlertCircle className="size-3 text-[#525252]" strokeWidth={1.75} />
+              <span className="text-[#525252] text-[12px] font-medium">
+                Use {derivedOutcome}
+              </span>
+            </button>
+          )}
+        </div>
+      </div>
 
-          {/* Date · Time · Duration — packed 3-up, wrap on narrow */}
-          <div className="flex flex-wrap gap-x-[16px] gap-y-5">
-            <div className="group flex w-[160px] flex-col gap-[6px]">
-              <div className="pb-[10px]">
-                <input
-                  type="date"
-                  aria-label="Date"
-                  value={formData.date}
-                  onChange={(e) => onInputChange("date", e.target.value)}
-                  className={fieldControlCls}
-                />
-              </div>
-              <div className={fieldRuleCls} />
+      {/* Match details — uniform 2-column grid so chevron selects align with date/time/text inputs.
+          No section heading: the field labels (Round, Court, Date, etc.) are clearly all
+          "match details" — restating it added density without information. */}
+      <div className="flex flex-col">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
+          {/* Round */}
+          <div className="group flex flex-col gap-[6px]">
+            <p className={sectionLabelCls}>Round</p>
+            <div className="relative pb-[10px]">
+              <select
+                aria-label="Round"
+                value={formData.round || ""}
+                onChange={(e) => onInputChange("round", e.target.value)}
+                className={`${fieldControlCls} ${interactiveFieldCls} pr-5 ${formData.round ? filledTextCls : emptyTextCls}`}
+              >
+                <option value="" disabled>
+                  Round
+                </option>
+                <option value="None">None</option>
+                <option value="Round of 128">Round of 128</option>
+                <option value="Round of 64">Round of 64</option>
+                <option value="Round of 32">Round of 32</option>
+                <option value="Round of 16">Round of 16</option>
+                <option value="Quarterfinals">Quarterfinals</option>
+                <option value="Semifinals">Semifinals</option>
+                <option value="Finals">Finals</option>
+              </select>
+              <SelectChevron />
             </div>
-            <div className="group flex w-[120px] flex-col gap-[6px]">
-              <div className="pb-[10px]">
-                <input
-                  type="time"
-                  aria-label="Time"
-                  value={formData.time}
-                  onChange={(e) => onInputChange("time", e.target.value)}
-                  className={fieldControlCls}
-                />
-              </div>
-              <div className={fieldRuleCls} />
-            </div>
-            <div className="group flex flex-1 min-w-[140px] flex-col gap-[6px]">
-              <div className="pb-[10px]">
-                <input
-                  type="text"
-                  aria-label="Duration"
-                  placeholder="Duration · e.g. 1:32"
-                  value={formatDuration(formData.duration)}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    if (v === "" || v === "-") onInputChange("duration", 0);
-                    else onInputChange("duration", parseDuration(v));
-                  }}
-                  className={`${fieldControlCls} tabular-nums`}
-                />
-              </div>
-              <div className={fieldRuleCls} />
-            </div>
+            <div className={fieldRuleCls} />
           </div>
 
-          {/* Court · Best of */}
-          <div className="flex flex-wrap gap-x-[16px] gap-y-5">
-            <div className="group flex flex-1 min-w-[160px] flex-col gap-[6px]">
-              <div className="relative pb-[10px]">
-                <select
-                  aria-label="Court type"
-                  value={formData.courtType || ""}
-                  onChange={(e) => onInputChange("courtType", e.target.value)}
-                  className={`${fieldControlCls} pr-5`}
-                >
-                  <option value="" disabled>
-                    Court type
-                  </option>
-                  <option value="None">None</option>
-                  <option value="Indoor Hard Court">Indoor Hard Court</option>
-                  <option value="Outdoor Hard Court">Outdoor Hard Court</option>
-                  <option value="Clay Court">Clay Court</option>
-                  <option value="Grass Court">Grass Court</option>
-                </select>
-                <SelectChevron />
-              </div>
-              <div className={fieldRuleCls} />
+          {/* Match type */}
+          <div className="group flex flex-col gap-[6px]">
+            <p className={sectionLabelCls}>Match type</p>
+            <div className="relative pb-[10px]">
+              <select
+                aria-label="Match type"
+                value={formData.matchType || ""}
+                onChange={(e) => onInputChange("matchType", e.target.value)}
+                className={`${fieldControlCls} ${interactiveFieldCls} pr-5 ${formData.matchType ? filledTextCls : emptyTextCls}`}
+              >
+                <option value="" disabled>
+                  Match type
+                </option>
+                <option value="None">None</option>
+                <option value="Tournament">Tournament</option>
+                <option value="Dual Match">Dual Match</option>
+                <option value="Practice">Practice</option>
+              </select>
+              <SelectChevron />
             </div>
-            <div className="group flex flex-1 min-w-[160px] flex-col gap-[6px]">
-              <div className="relative pb-[10px]">
-                <select
-                  aria-label="Match format"
-                  value={formData.bestOf || ""}
-                  onChange={(e) => onInputChange("bestOf", e.target.value)}
-                  className={`${fieldControlCls} pr-5`}
-                >
-                  <option value="" disabled>
-                    Match format
-                  </option>
-                  <option value="1">Best of 1 Set</option>
-                  <option value="3">Best of 3 Sets</option>
-                  <option value="5">Best of 5 Sets</option>
-                </select>
-                <SelectChevron />
-              </div>
-              <div className={fieldRuleCls} />
-            </div>
+            <div className={fieldRuleCls} />
           </div>
 
-          {/* Advanced (Scoring · Lets) — disclosed on demand */}
+          {/* Court type */}
+          <div className="group flex flex-col gap-[6px]">
+            <p className={sectionLabelCls}>Court</p>
+            <div className="relative pb-[10px]">
+              <select
+                aria-label="Court type"
+                value={formData.courtType || ""}
+                onChange={(e) => onInputChange("courtType", e.target.value)}
+                className={`${fieldControlCls} ${interactiveFieldCls} pr-5 ${formData.courtType ? filledTextCls : emptyTextCls}`}
+              >
+                <option value="" disabled>
+                  Court type
+                </option>
+                <option value="None">None</option>
+                <option value="Indoor Hard Court">Indoor Hard Court</option>
+                <option value="Outdoor Hard Court">Outdoor Hard Court</option>
+                <option value="Clay Court">Clay Court</option>
+                <option value="Grass Court">Grass Court</option>
+              </select>
+              <SelectChevron />
+            </div>
+            <div className={fieldRuleCls} />
+          </div>
+
+          {/* Match format */}
+          <div className="group flex flex-col gap-[6px]">
+            <p className={sectionLabelCls}>Format</p>
+            <div className="relative pb-[10px]">
+              <select
+                aria-label="Match format"
+                value={formData.bestOf || ""}
+                onChange={(e) => onInputChange("bestOf", e.target.value)}
+                className={`${fieldControlCls} ${interactiveFieldCls} pr-5 ${formData.bestOf ? filledTextCls : emptyTextCls}`}
+              >
+                <option value="" disabled>
+                  Match format
+                </option>
+                <option value="1">Best of 1 Set</option>
+                <option value="3">Best of 3 Sets</option>
+                <option value="5">Best of 5 Sets</option>
+              </select>
+              <SelectChevron />
+            </div>
+            <div className={fieldRuleCls} />
+          </div>
+
+          {/* Date */}
+          <div className="group flex flex-col gap-[6px]">
+            <p className={sectionLabelCls}>Date</p>
+            <div className="pb-[10px]">
+              <input
+                type="date"
+                aria-label="Date"
+                max={new Date().toISOString().slice(0, 10)}
+                value={formData.date}
+                onChange={(e) => onInputChange("date", e.target.value)}
+                className={`${fieldControlCls} ${interactiveFieldCls} ${formData.date ? filledTextCls : emptyTextCls}`}
+              />
+            </div>
+            <div className={fieldRuleCls} />
+          </div>
+
+          {/* Time */}
+          <div className="group flex flex-col gap-[6px]">
+            <p className={sectionLabelCls}>Time</p>
+            <div className="pb-[10px]">
+              <input
+                type="time"
+                aria-label="Time"
+                value={formData.time}
+                onChange={(e) => onInputChange("time", e.target.value)}
+                className={`${fieldControlCls} ${interactiveFieldCls} ${formData.time ? filledTextCls : emptyTextCls}`}
+              />
+            </div>
+            <div className={fieldRuleCls} />
+          </div>
+
+          {/* Match length — two number fields so users don't have to type unit letters.
+              Editorial duration treatment: 16px digits with 10px uppercase H/M anchors,
+              optically tightened so each (digit · unit) reads as one piece of typography. */}
+          <div className="group flex flex-col gap-[6px]">
+            <p className={sectionLabelCls}>Duration</p>
+            <div className="pb-[10px] flex items-baseline gap-0.5">
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={1}
+                aria-label="Match length hours"
+                placeholder="0"
+                value={hoursInput}
+                onChange={(e) => setHoursInput(onlyDigits(e.target.value))}
+                onBlur={commitDuration}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                }}
+                className={`w-3 bg-transparent text-[16px] font-normal tracking-[-0.2px] outline-none tabular-nums text-left placeholder:text-[#AAAAAA] transition-colors duration-150 ${hoursInput ? filledTextCls : emptyTextCls}`}
+              />
+              <span
+                className={`text-[10px] font-medium uppercase tracking-[2px] transition-colors duration-150 ${
+                  hoursInput ? "text-[#525252]" : "text-[#AAAAAA]"
+                }`}
+              >
+                H
+              </span>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={2}
+                aria-label="Match length minutes"
+                placeholder="00"
+                value={minutesInput}
+                onChange={(e) => setMinutesInput(onlyDigits(e.target.value))}
+                onBlur={commitDuration}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                }}
+                className={`w-5 bg-transparent text-[16px] font-normal tracking-[-0.2px] outline-none tabular-nums text-left placeholder:text-[#AAAAAA] transition-colors duration-150 ${minutesInput ? filledTextCls : emptyTextCls}`}
+              />
+              <span
+                className={`text-[10px] font-medium uppercase tracking-[2px] transition-colors duration-150 ${
+                  minutesInput ? "text-[#525252]" : "text-[#AAAAAA]"
+                }`}
+              >
+                M
+              </span>
+            </div>
+            <div className={fieldRuleCls} />
+          </div>
+
+          {/* Advanced — Scoring + Lets, or a quiet "Add scoring rules" trigger */}
           {showAdvancedDetails ? (
-            <div className="flex flex-wrap gap-x-[16px] gap-y-5">
-              <div className="group flex flex-1 min-w-[160px] flex-col gap-[6px]">
+            <>
+              <div className="group flex flex-col gap-[6px]">
+                <div className="flex items-center gap-1.5 h-3">
+                  <p className={`${sectionLabelCls} leading-none`}>Scoring</p>
+                  <InfoTooltip
+                    label="Scoring"
+                    items={[
+                      { term: "Ad scoring", def: "Win 2 consecutive points after 40-all to take the game." },
+                      { term: "No-Ad scoring", def: "First point after 40-all wins. Receiver chooses serve side." },
+                    ]}
+                  />
+                </div>
                 <div className="relative pb-[10px]">
                   <select
                     aria-label="Scoring"
@@ -735,7 +1100,7 @@ export function DetailsContent({
                         : "no-ad"
                     }
                     onChange={(e) => onInputChange("adScoring", e.target.value === "ad")}
-                    className={`${fieldControlCls} pr-5`}
+                    className={`${fieldControlCls} ${interactiveFieldCls} pr-5 ${formData.adScoring === undefined ? emptyTextCls : filledTextCls}`}
                   >
                     <option value="" disabled>
                       Scoring
@@ -747,7 +1112,17 @@ export function DetailsContent({
                 </div>
                 <div className={fieldRuleCls} />
               </div>
-              <div className="group flex flex-1 min-w-[160px] flex-col gap-[6px]">
+              <div className="group flex flex-col gap-[6px]">
+                <div className="flex items-center gap-1.5 h-3">
+                  <p className={`${sectionLabelCls} leading-none`}>Lets</p>
+                  <InfoTooltip
+                    label="Lets"
+                    items={[
+                      { term: "Stop on lets", def: "Replay the serve when the ball touches the net." },
+                      { term: "Play on lets", def: "Net cords stay in play. Used in college and some leagues." },
+                    ]}
+                  />
+                </div>
                 <div className="relative pb-[10px]">
                   <select
                     aria-label="Lets rule"
@@ -759,7 +1134,7 @@ export function DetailsContent({
                         : "lets"
                     }
                     onChange={(e) => onInputChange("playOnLets", e.target.value === "play-on")}
-                    className={`${fieldControlCls} pr-5`}
+                    className={`${fieldControlCls} ${interactiveFieldCls} pr-5 ${formData.playOnLets === undefined ? emptyTextCls : filledTextCls}`}
                   >
                     <option value="" disabled>
                       Lets rule
@@ -771,7 +1146,7 @@ export function DetailsContent({
                 </div>
                 <div className={fieldRuleCls} />
               </div>
-            </div>
+            </>
           ) : (
             <button
               type="button"
