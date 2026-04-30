@@ -2,7 +2,8 @@
 
 /**
  * DetailsContent — Match step body.
- * Match name (required) → Players (name + hand + backhand) → Score → Outcome → Event/When/Format.
+ * Match name → Score (with player meta + per-set scores) → Result (Winner + Outcome)
+ * → Details (Round, Court, Format, Date, Time, Duration, optional Scoring/Lets).
  */
 
 import {
@@ -50,14 +51,14 @@ function needsTiebreak(p: number | null, o: number | null): boolean {
 const sectionLabelCls =
   "text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]";
 
-// Top-level section headings (Match name / Score / Result / Match details).
-// Same typographic register as field labels — uppercase tracked — so the form
-// speaks one consistent visual language. Hierarchy is carried by position and
-// the gap below the heading, not by a register break.
+// Top-level section headings (Match name / Score / Result / Details).
+// Same typographic register as field labels — uppercase tracked. Macro
+// hierarchy is carried by hairline rules above each section, not by a
+// register break.
 const sectionHeadingCls = sectionLabelCls;
 
 // Auth-style underline field — matches src/components/auth/form-field.tsx.
-// Match Details fields render a small uppercase label above the control so the
+// Details fields render a small uppercase label above the control so the
 // field's identity persists after selection (placeholder-as-label fails post-fill).
 // Color is applied per-control: filledTextCls when value is set, emptyTextCls when blank,
 // so empty selects don't inherit the dark text color from their disabled placeholder option.
@@ -218,13 +219,36 @@ function InfoTooltip({
   );
 }
 
+// Uniform label box for all form fields — fixed 12px height with leading-none
+// so labels with and without trailing tooltips occupy the exact same vertical
+// space. Without this, controls below tooltip-bearing labels would shift in
+// the grid relative to their neighbors.
+function FieldLabel({
+  children,
+  tooltip,
+}: {
+  children: React.ReactNode;
+  tooltip?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-1.5 h-3">
+      <p className={`${sectionLabelCls} leading-none`}>{children}</p>
+      {tooltip}
+    </div>
+  );
+}
+
 // Chevron for native <select> — gives them visible affordance.
 // Tracks group hover/focus so it reads as part of the same interactive surface.
-function SelectChevron() {
+function SelectChevron({ disabled }: { disabled?: boolean }) {
   return (
     <ChevronDown
       aria-hidden="true"
-      className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 size-3 text-[#AAAAAA] transition-colors duration-150 group-hover:text-[#525252] group-focus-within:text-[#3B82F6]"
+      className={`pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 size-3 transition-colors duration-150 ${
+        disabled
+          ? "text-[#CCCCCC]"
+          : "text-[#AAAAAA] group-hover:text-[#525252] group-focus-within:text-[#3B82F6]"
+      }`}
       strokeWidth={1.75}
     />
   );
@@ -254,7 +278,6 @@ function CompactSelect<T extends string>({
   placeholder: string;
   options: readonly CompactSelectOption<T>[];
 }) {
-  const isPlaceholder = value === undefined;
   return (
     <div className="group relative inline-flex items-center">
       <select
@@ -263,11 +286,7 @@ function CompactSelect<T extends string>({
         onChange={(e) =>
           onChange((e.target.value === "" ? undefined : (e.target.value as T)))
         }
-        className={`appearance-none bg-transparent pr-4 text-[11px] font-normal outline-none cursor-pointer transition-colors duration-150 focus-visible:text-[#0D0D0D] ${
-          isPlaceholder
-            ? "text-[#888888] group-hover:text-[#525252]"
-            : "text-[#525252] group-hover:text-[#0D0D0D]"
-        }`}
+        className="appearance-none bg-transparent pr-4 text-[11px] font-normal outline-none cursor-pointer transition-colors duration-150 text-[#525252] group-hover:text-[#0D0D0D] focus-visible:text-[#0D0D0D]"
       >
         <option value="">{placeholder}</option>
         {options.map((o) => (
@@ -278,7 +297,7 @@ function CompactSelect<T extends string>({
       </select>
       <ChevronDown
         aria-hidden="true"
-        className="pointer-events-none absolute right-0 size-3 text-[#888888] transition-colors duration-150 group-hover:text-[#525252] group-focus-within:text-[#3B82F6]"
+        className="pointer-events-none absolute right-0 size-3 text-[#525252] transition-colors duration-150 group-hover:text-[#0D0D0D] group-focus-within:text-[#3B82F6]"
         strokeWidth={1.75}
       />
     </div>
@@ -349,6 +368,8 @@ export function DetailsContent({
   onTiebreakChange,
 }: DetailsContentProps) {
   const [eventNameTouched, setEventNameTouched] = useState(false);
+  const [playerNameTouched, setPlayerNameTouched] = useState(false);
+  const [opponentNameTouched, setOpponentNameTouched] = useState(false);
   const [showAdvancedDetails, setShowAdvancedDetails] = useState(
     formData.adScoring !== undefined || formData.playOnLets !== undefined
   );
@@ -380,6 +401,8 @@ export function DetailsContent({
   };
   const eventNameMissing = !formData.eventName.trim();
   const eventNameError = eventNameTouched && eventNameMissing;
+  const playerNameError = playerNameTouched && !formData.playerName.trim();
+  const opponentNameError = opponentNameTouched && !formData.opponentName.trim();
 
   const bestOfNum = parseInt(formData.bestOf) || 3;
   const displayedSets = formData.numberOfSets ?? bestOfNum;
@@ -507,14 +530,6 @@ export function DetailsContent({
     }
   }, [derivedOutcome, formData.result, onInputChange]);
 
-  const outcomeMismatch =
-    !!derivedOutcome &&
-    !!formData.result &&
-    formData.result !== derivedOutcome &&
-    !formData.result.includes("Withdrew") &&
-    !formData.result.includes("Defaulted") &&
-    formData.result !== "Unfinished";
-
   // Result is stored as a single string ("Player Wins" / "Opponent Withdrew" / "Unfinished").
   // We expose it as two fields — Winner + Outcome — to keep the per-decision option count under 4.
   const playerNm = formData.playerName || "Player";
@@ -539,6 +554,15 @@ export function DetailsContent({
     : formData.result.endsWith(" Defaulted")
     ? "Defaulted"
     : "";
+
+  // Only suggest the auto-derived correction when the user's outcome is "Wins" —
+  // Withdrew / Defaulted / Unfinished are deliberate non-completion choices.
+  // Compared against structured currentOutcome rather than substring-matching the
+  // result string, which would false-fire on names containing those words.
+  const outcomeMismatch =
+    !!derivedOutcome &&
+    currentOutcome === "Wins" &&
+    formData.result !== derivedOutcome;
   const writeResult = (winner: WinnerKey, outcome: OutcomeKey) => {
     if (outcome === "Unfinished") {
       onInputChange("result", "Unfinished");
@@ -585,9 +609,9 @@ export function DetailsContent({
       </div>
 
       {/* Score — editorial scoreboard */}
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
-          <span className={sectionHeadingCls}>Score</span>
+          <h4 className={sectionHeadingCls}>Score</h4>
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -663,14 +687,34 @@ export function DetailsContent({
           <div className="flex flex-col gap-5">
             {/* Player 1 row */}
             <div className="flex justify-between items-center gap-4">
-              <div className="group/name flex flex-col flex-1 min-w-0 max-w-[260px]">
+              <div className="group/name flex flex-col flex-1 min-w-0 max-w-[320px]">
                 <input
                   placeholder="Your name"
+                  aria-label="Your name"
+                  aria-required="true"
+                  aria-invalid={playerNameError || undefined}
                   value={formData.playerName}
                   onChange={(e) => onInputChange("playerName", e.target.value)}
+                  onBlur={() => setPlayerNameTouched(true)}
                   className="w-full bg-transparent text-[16px] font-normal tracking-[-0.4px] text-[#0D0D0D] outline-none placeholder:text-[#AAAAAA] placeholder:font-normal pb-1.5"
                 />
-                <div className="h-[1px] w-full bg-[#F3F3F3] transition-all duration-300 group-focus-within/name:h-[2px] group-focus-within/name:bg-[#3B82F6]" />
+                <div
+                  className={
+                    playerNameError
+                      ? "h-[1px] w-full bg-[#E51837]"
+                      : "h-[1px] w-full bg-[#F3F3F3] transition-all duration-300 group-focus-within/name:h-[2px] group-focus-within/name:bg-[#3B82F6]"
+                  }
+                />
+                {/* Reserved height so the row stays aligned with the opponent
+                    row whether or not the error is showing — alignment is
+                    scoreboard-critical. */}
+                <div className="min-h-[16px] mt-1">
+                  {playerNameError && (
+                    <span className="text-[11px] text-[#E51837] leading-none">
+                      Add your name.
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-3 mt-1.5">
                   <CompactSelect
                     ariaLabel="Dominant hand"
@@ -729,14 +773,31 @@ export function DetailsContent({
 
             {/* Player 2 row */}
             <div className="flex justify-between items-center gap-4">
-              <div className="group/name flex flex-col flex-1 min-w-0 max-w-[260px]">
+              <div className="group/name flex flex-col flex-1 min-w-0 max-w-[320px]">
                 <input
                   placeholder="Opponent name"
+                  aria-label="Opponent name"
+                  aria-required="true"
+                  aria-invalid={opponentNameError || undefined}
                   value={formData.opponentName}
                   onChange={(e) => onInputChange("opponentName", e.target.value)}
+                  onBlur={() => setOpponentNameTouched(true)}
                   className="w-full bg-transparent text-[16px] font-normal tracking-[-0.4px] text-[#0D0D0D] outline-none placeholder:text-[#AAAAAA] placeholder:font-normal pb-1.5"
                 />
-                <div className="h-[1px] w-full bg-[#F3F3F3] transition-all duration-300 group-focus-within/name:h-[2px] group-focus-within/name:bg-[#3B82F6]" />
+                <div
+                  className={
+                    opponentNameError
+                      ? "h-[1px] w-full bg-[#E51837]"
+                      : "h-[1px] w-full bg-[#F3F3F3] transition-all duration-300 group-focus-within/name:h-[2px] group-focus-within/name:bg-[#3B82F6]"
+                  }
+                />
+                <div className="min-h-[16px] mt-1">
+                  {opponentNameError && (
+                    <span className="text-[11px] text-[#E51837] leading-none">
+                      Add their name.
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-3 mt-1.5">
                   <CompactSelect
                     ariaLabel="Opponent dominant hand"
@@ -797,7 +858,7 @@ export function DetailsContent({
           {/* Validation message — anchored inside the scoreboard frame so it sits
               near the offending set rather than far below the player rows. */}
           {invalidMessage && (
-            <div className="flex justify-end mt-3">
+            <div className="flex justify-start mt-3">
               <div className="inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1 bg-[rgba(229,24,55,0.06)] border border-[rgba(229,24,55,0.18)] rounded-full">
                 <AlertCircle className="size-3 text-[#E51837]" strokeWidth={1.75} />
                 <span className="text-[#E51837] text-[12px] font-medium">
@@ -810,16 +871,13 @@ export function DetailsContent({
       </div>
 
       {/* Result — split into Winner + Outcome so each decision is at most 4 options.
-          Both feed back into the existing single-string formData.result via writeResult().
-          No section heading: the Winner / Outcome field labels are self-explanatory and
-          a redundant "RESULT" label restated what the fields already announce. */}
-      <div className="flex flex-col">
+          Both feed back into the existing single-string formData.result via writeResult(). */}
+      <div className="flex flex-col gap-4 pt-6 border-t border-[#F3F3F3]">
+        <h4 className={sectionHeadingCls}>Result</h4>
         <div className="flex flex-col gap-[6px]">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
             <div className="group flex flex-col gap-[6px]">
-              <div className="flex items-center h-3">
-                <p className={`${sectionLabelCls} leading-none`}>Winner</p>
-              </div>
+              <FieldLabel>Winner</FieldLabel>
               <div className="relative pb-[10px]">
                 <select
                   aria-label="Match winner"
@@ -828,41 +886,46 @@ export function DetailsContent({
                     writeResult(e.target.value as WinnerKey, currentOutcome)
                   }
                   disabled={currentOutcome === "Unfinished"}
-                  className={`${fieldControlCls} ${interactiveFieldCls} pr-5 ${currentWinner ? filledTextCls : emptyTextCls} disabled:opacity-50 disabled:cursor-not-allowed`}
+                  className={`${fieldControlCls} ${interactiveFieldCls} pr-5 ${currentWinner ? filledTextCls : emptyTextCls} disabled:text-[#CCCCCC] disabled:cursor-not-allowed`}
                 >
+                  {/* Required when Outcome is set — disabled placeholder enforces an explicit pick. */}
                   <option value="" disabled>
                     Select winner
                   </option>
                   <option value="player">{playerNm}</option>
                   <option value="opponent">{opponentNm}</option>
                 </select>
-                <SelectChevron />
+                <SelectChevron disabled={currentOutcome === "Unfinished"} />
               </div>
               <div className={fieldRuleCls} />
             </div>
             <div className="group flex flex-col gap-[6px]">
-              <div className="flex items-center gap-1.5 h-3">
-                <p className={`${sectionLabelCls} leading-none`}>Outcome</p>
-                <InfoTooltip
-                  label="Outcome"
-                  items={[
-                    { term: "Wins", def: "Match completed to a winner." },
-                    { term: "Withdrew", def: "Forfeit, often due to injury. Counts as a loss." },
-                    { term: "Defaulted", def: "Forfeit by rule (code violation, no-show)." },
-                    { term: "Unfinished", def: "Match was interrupted and not resumed." },
-                  ]}
-                />
-              </div>
+              <FieldLabel
+                tooltip={
+                  <InfoTooltip
+                    label="Outcome"
+                    items={[
+                      { term: "Wins", def: "Match completed to a winner." },
+                      { term: "Withdrew", def: "Forfeit, often due to injury. Counts as a loss." },
+                      { term: "Defaulted", def: "Forfeit by rule (code violation, no-show)." },
+                      { term: "Unfinished", def: "Match was interrupted and not resumed." },
+                    ]}
+                  />
+                }
+              >
+                Outcome <span className="text-[#E51837]">*</span>
+              </FieldLabel>
               <div className="relative pb-[10px]">
                 <select
                   aria-label="Match outcome"
+                  aria-required="true"
                   value={currentOutcome}
                   onChange={(e) =>
                     writeResult(currentWinner, e.target.value as OutcomeKey)
                   }
-                  required
                   className={`${fieldControlCls} ${interactiveFieldCls} pr-5 ${currentOutcome ? filledTextCls : emptyTextCls}`}
                 >
+                  {/* Required field — placeholder not clearable. */}
                   <option value="" disabled>
                     Select outcome
                   </option>
@@ -891,14 +954,13 @@ export function DetailsContent({
         </div>
       </div>
 
-      {/* Match details — uniform 2-column grid so chevron selects align with date/time/text inputs.
-          No section heading: the field labels (Round, Court, Date, etc.) are clearly all
-          "match details" — restating it added density without information. */}
-      <div className="flex flex-col">
+      {/* Match details — uniform 2-column grid so chevron selects align with date/time/text inputs. */}
+      <div className="flex flex-col gap-4">
+        <h4 className={sectionHeadingCls}>Details</h4>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
           {/* Round */}
           <div className="group flex flex-col gap-[6px]">
-            <p className={sectionLabelCls}>Round</p>
+            <FieldLabel>Round</FieldLabel>
             <div className="relative pb-[10px]">
               <select
                 aria-label="Round"
@@ -906,10 +968,7 @@ export function DetailsContent({
                 onChange={(e) => onInputChange("round", e.target.value)}
                 className={`${fieldControlCls} ${interactiveFieldCls} pr-5 ${formData.round ? filledTextCls : emptyTextCls}`}
               >
-                <option value="" disabled>
-                  Round
-                </option>
-                <option value="None">None</option>
+                <option value="">Round</option>
                 <option value="Round of 128">Round of 128</option>
                 <option value="Round of 64">Round of 64</option>
                 <option value="Round of 32">Round of 32</option>
@@ -925,7 +984,20 @@ export function DetailsContent({
 
           {/* Match type */}
           <div className="group flex flex-col gap-[6px]">
-            <p className={sectionLabelCls}>Match type</p>
+            <FieldLabel
+              tooltip={
+                <InfoTooltip
+                  label="Match type"
+                  items={[
+                    { term: "Tournament", def: "Sanctioned event with a draw — singles or doubles bracket play." },
+                    { term: "Dual Match", def: "Team competition (college, high school) — multiple lines played head-to-head." },
+                    { term: "Practice", def: "Casual or training match. Won't count toward competitive records." },
+                  ]}
+                />
+              }
+            >
+              Match type
+            </FieldLabel>
             <div className="relative pb-[10px]">
               <select
                 aria-label="Match type"
@@ -933,10 +1005,7 @@ export function DetailsContent({
                 onChange={(e) => onInputChange("matchType", e.target.value)}
                 className={`${fieldControlCls} ${interactiveFieldCls} pr-5 ${formData.matchType ? filledTextCls : emptyTextCls}`}
               >
-                <option value="" disabled>
-                  Match type
-                </option>
-                <option value="None">None</option>
+                <option value="">Match type</option>
                 <option value="Tournament">Tournament</option>
                 <option value="Dual Match">Dual Match</option>
                 <option value="Practice">Practice</option>
@@ -948,7 +1017,7 @@ export function DetailsContent({
 
           {/* Court type */}
           <div className="group flex flex-col gap-[6px]">
-            <p className={sectionLabelCls}>Court</p>
+            <FieldLabel>Court</FieldLabel>
             <div className="relative pb-[10px]">
               <select
                 aria-label="Court type"
@@ -956,10 +1025,7 @@ export function DetailsContent({
                 onChange={(e) => onInputChange("courtType", e.target.value)}
                 className={`${fieldControlCls} ${interactiveFieldCls} pr-5 ${formData.courtType ? filledTextCls : emptyTextCls}`}
               >
-                <option value="" disabled>
-                  Court type
-                </option>
-                <option value="None">None</option>
+                <option value="">Court type</option>
                 <option value="Indoor Hard Court">Indoor Hard Court</option>
                 <option value="Outdoor Hard Court">Outdoor Hard Court</option>
                 <option value="Clay Court">Clay Court</option>
@@ -972,7 +1038,7 @@ export function DetailsContent({
 
           {/* Match format */}
           <div className="group flex flex-col gap-[6px]">
-            <p className={sectionLabelCls}>Format</p>
+            <FieldLabel>Format</FieldLabel>
             <div className="relative pb-[10px]">
               <select
                 aria-label="Match format"
@@ -980,6 +1046,7 @@ export function DetailsContent({
                 onChange={(e) => onInputChange("bestOf", e.target.value)}
                 className={`${fieldControlCls} ${interactiveFieldCls} pr-5 ${formData.bestOf ? filledTextCls : emptyTextCls}`}
               >
+                {/* Required field — every match has a format. Placeholder not clearable. */}
                 <option value="" disabled>
                   Match format
                 </option>
@@ -994,7 +1061,7 @@ export function DetailsContent({
 
           {/* Date */}
           <div className="group flex flex-col gap-[6px]">
-            <p className={sectionLabelCls}>Date</p>
+            <FieldLabel>Date</FieldLabel>
             <div className="pb-[10px]">
               <input
                 type="date"
@@ -1010,7 +1077,7 @@ export function DetailsContent({
 
           {/* Time */}
           <div className="group flex flex-col gap-[6px]">
-            <p className={sectionLabelCls}>Time</p>
+            <FieldLabel>Time</FieldLabel>
             <div className="pb-[10px]">
               <input
                 type="time"
@@ -1024,15 +1091,16 @@ export function DetailsContent({
           </div>
 
           {/* Match length — two number fields so users don't have to type unit letters.
-              Editorial duration treatment: 16px digits with 10px uppercase H/M anchors,
-              optically tightened so each (digit · unit) reads as one piece of typography. */}
+              Digits at 14px to match the row's field type size; H/M anchors at 10px.
+              Tight gap-0.5 keeps each (digit · unit) reading as one pair; ml-2 on
+              the minutes input separates the two pairs visually. */}
           <div className="group flex flex-col gap-[6px]">
-            <p className={sectionLabelCls}>Duration</p>
+            <FieldLabel>Duration</FieldLabel>
             <div className="pb-[10px] flex items-baseline gap-0.5">
               <input
                 type="text"
                 inputMode="numeric"
-                maxLength={1}
+                maxLength={2}
                 aria-label="Match length hours"
                 placeholder="0"
                 value={hoursInput}
@@ -1041,7 +1109,7 @@ export function DetailsContent({
                 onKeyDown={(e) => {
                   if (e.key === "Enter") e.currentTarget.blur();
                 }}
-                className={`w-3 bg-transparent text-[16px] font-normal tracking-[-0.2px] outline-none tabular-nums text-left placeholder:text-[#AAAAAA] transition-colors duration-150 ${hoursInput ? filledTextCls : emptyTextCls}`}
+                className={`[field-sizing:content] min-w-[8px] mr-1 bg-transparent text-[14px] font-normal outline-none tabular-nums text-left placeholder:text-[#AAAAAA] transition-colors duration-150 ${hoursInput ? filledTextCls : emptyTextCls}`}
               />
               <span
                 className={`text-[10px] font-medium uppercase tracking-[2px] transition-colors duration-150 ${
@@ -1062,7 +1130,7 @@ export function DetailsContent({
                 onKeyDown={(e) => {
                   if (e.key === "Enter") e.currentTarget.blur();
                 }}
-                className={`w-5 bg-transparent text-[16px] font-normal tracking-[-0.2px] outline-none tabular-nums text-left placeholder:text-[#AAAAAA] transition-colors duration-150 ${minutesInput ? filledTextCls : emptyTextCls}`}
+                className={`w-5 ml-2 bg-transparent text-[14px] font-normal outline-none tabular-nums text-left placeholder:text-[#AAAAAA] transition-colors duration-150 ${minutesInput ? filledTextCls : emptyTextCls}`}
               />
               <span
                 className={`text-[10px] font-medium uppercase tracking-[2px] transition-colors duration-150 ${
@@ -1079,16 +1147,19 @@ export function DetailsContent({
           {showAdvancedDetails ? (
             <>
               <div className="group flex flex-col gap-[6px]">
-                <div className="flex items-center gap-1.5 h-3">
-                  <p className={`${sectionLabelCls} leading-none`}>Scoring</p>
-                  <InfoTooltip
-                    label="Scoring"
-                    items={[
-                      { term: "Ad scoring", def: "Win 2 consecutive points after 40-all to take the game." },
-                      { term: "No-Ad scoring", def: "First point after 40-all wins. Receiver chooses serve side." },
-                    ]}
-                  />
-                </div>
+                <FieldLabel
+                  tooltip={
+                    <InfoTooltip
+                      label="Scoring"
+                      items={[
+                        { term: "Ad scoring", def: "Win 2 consecutive points after 40-all to take the game." },
+                        { term: "No-Ad scoring", def: "First point after 40-all wins. Receiver chooses serve side." },
+                      ]}
+                    />
+                  }
+                >
+                  Scoring
+                </FieldLabel>
                 <div className="relative pb-[10px]">
                   <select
                     aria-label="Scoring"
@@ -1102,6 +1173,7 @@ export function DetailsContent({
                     onChange={(e) => onInputChange("adScoring", e.target.value === "ad")}
                     className={`${fieldControlCls} ${interactiveFieldCls} pr-5 ${formData.adScoring === undefined ? emptyTextCls : filledTextCls}`}
                   >
+                    {/* Optional boolean — clear by collapsing the disclosure, not via the select. */}
                     <option value="" disabled>
                       Scoring
                     </option>
@@ -1113,16 +1185,19 @@ export function DetailsContent({
                 <div className={fieldRuleCls} />
               </div>
               <div className="group flex flex-col gap-[6px]">
-                <div className="flex items-center gap-1.5 h-3">
-                  <p className={`${sectionLabelCls} leading-none`}>Lets</p>
-                  <InfoTooltip
-                    label="Lets"
-                    items={[
-                      { term: "Stop on lets", def: "Replay the serve when the ball touches the net." },
-                      { term: "Play on lets", def: "Net cords stay in play. Used in college and some leagues." },
-                    ]}
-                  />
-                </div>
+                <FieldLabel
+                  tooltip={
+                    <InfoTooltip
+                      label="Lets"
+                      items={[
+                        { term: "Stop on lets", def: "Replay the serve when the ball touches the net." },
+                        { term: "Play on lets", def: "Net cords stay in play. Used in college and some leagues." },
+                      ]}
+                    />
+                  }
+                >
+                  Lets
+                </FieldLabel>
                 <div className="relative pb-[10px]">
                   <select
                     aria-label="Lets rule"
@@ -1136,6 +1211,7 @@ export function DetailsContent({
                     onChange={(e) => onInputChange("playOnLets", e.target.value === "play-on")}
                     className={`${fieldControlCls} ${interactiveFieldCls} pr-5 ${formData.playOnLets === undefined ? emptyTextCls : filledTextCls}`}
                   >
+                    {/* Optional boolean — clear by collapsing the disclosure, not via the select. */}
                     <option value="" disabled>
                       Lets rule
                     </option>

@@ -242,8 +242,8 @@ export function ConfirmContent({
         );
       })()}
 
-      {/* Scoreboard */}
-      <div className="flex flex-col mt-8">
+      {/* Scoreboard — the peak moment, given a hair more breathing room above */}
+      <div className="flex flex-col mt-10">
         {/* Header row */}
         <div className="flex items-center justify-between gap-3">
           <p className={labelCls}>
@@ -338,22 +338,21 @@ export function ConfirmContent({
         );
       })()}
 
-      {/* Source file */}
+      {/* Source file — footnote-class metadata. Quieter treatment + tighter spacing
+          so it stops competing with the hero, scoreboard, and format grid above. */}
       {uploadedFile && (
-        <div className="flex flex-col gap-2 mt-8">
-          <p className={labelCls}>Source file</p>
-          <div className="flex items-center gap-2 min-w-0">
-            <FileSpreadsheet
-              className="size-3.5 text-[#AAAAAA] shrink-0"
-              strokeWidth={1.75}
-              aria-hidden="true"
-            />
-            <p className="text-[13px] leading-[18px] text-[#525252] truncate">
-              {uploadedFile.name}
-              <span className="text-[#CCCCCC] mx-1.5">·</span>
-              <span className="tabular-nums">{uploadedFile.size}</span>
-            </p>
-          </div>
+        <div className="flex items-center gap-1.5 min-w-0 mt-6">
+          <FileSpreadsheet
+            className="size-3 text-[#CCCCCC] shrink-0"
+            strokeWidth={1.75}
+            aria-hidden="true"
+          />
+          <p className="text-[11px] leading-[16px] text-[#AAAAAA] truncate">
+            <span className="uppercase tracking-[1.5px] mr-1.5">Source</span>
+            {uploadedFile.name}
+            <span className="text-[#CCCCCC] mx-1.5">·</span>
+            <span className="tabular-nums">{uploadedFile.size}</span>
+          </p>
         </div>
       )}
 

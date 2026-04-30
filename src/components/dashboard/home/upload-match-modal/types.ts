@@ -97,6 +97,10 @@ export interface MatchData {
   court_type?: string;
   verified?: boolean;
   duration?: number;
+  player_hand?: "right" | "left";
+  player_backhand?: "one-handed" | "two-handed";
+  opponent_hand?: "right" | "left";
+  opponent_backhand?: "one-handed" | "two-handed";
 }
 
 /** Default form data values */
