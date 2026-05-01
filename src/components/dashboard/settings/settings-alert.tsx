@@ -25,24 +25,24 @@ interface AlertConfig {
 const alertConfig: Record<AlertType, AlertConfig> = {
   success: {
     icon: CheckCircle2,
-    bg: "bg-[rgba(115,230,104,0.08)]",
-    border: "border-[rgba(115,230,104,0.2)]",
-    text: "text-[#5DB955]",
-    iconColor: "text-[#5DB955]",
+    bg: "bg-[var(--color-success-tint-04)]",
+    border: "border-[var(--color-success-tint-20)]",
+    text: "text-[var(--color-success)]",
+    iconColor: "text-[var(--color-success)]",
   },
   error: {
     icon: AlertCircle,
-    bg: "bg-[rgba(229,24,55,0.06)]",
-    border: "border-[rgba(229,24,55,0.15)]",
-    text: "text-[#E51837]",
-    iconColor: "text-[#E51837]",
+    bg: "bg-[var(--color-danger-tint-15)]",
+    border: "border-[var(--color-danger-tint-15)]",
+    text: "text-[var(--color-error-strong)]",
+    iconColor: "text-[var(--color-error-strong)]",
   },
   info: {
     icon: Info,
-    bg: "bg-[#EBF2FD]",
-    border: "border-[rgba(59,130,246,0.15)]",
-    text: "text-[#3B82F6]",
-    iconColor: "text-[#3B82F6]",
+    bg: "bg-[var(--color-blue-tint-08)]",
+    border: "border-[var(--color-blue-tint-12)]",
+    text: "text-[var(--color-blue)]",
+    iconColor: "text-[var(--color-blue)]",
   },
 };
 
@@ -66,9 +66,12 @@ export function SettingsAlert({
     return () => clearTimeout(timer);
   }, [type, autoDismissMs]);
 
+  const isError = type === "error";
+
   return (
     <div
-      role="alert"
+      role={isError ? "alert" : "status"}
+      aria-live={isError ? "assertive" : "polite"}
       className={cn(
         "flex items-start gap-3 px-4 py-3 rounded-lg border animate-in fade-in slide-in-from-top-1 duration-200",
         config.bg,
@@ -88,7 +91,7 @@ export function SettingsAlert({
           onClick={onDismiss}
           aria-label="Dismiss alert"
           className={cn(
-            "size-4 flex-shrink-0 rounded flex items-center justify-center hover:bg-black/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40",
+            "size-4 flex-shrink-0 rounded flex items-center justify-center hover:bg-black/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-blue)]/40",
             config.text
           )}
         >

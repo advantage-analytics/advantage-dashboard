@@ -75,6 +75,89 @@
   --color-player-1-bar-tint: #BFD5FB;
   --color-player-2: #A855F7;
   --color-player-2-bar-tint: #DDC7F7;
+
+  /* Ink scale — neutral text/border ramp used across settings + dashboard */
+  --color-ink-900: #0D0D0D;
+  --color-ink-700: #525252;
+  --color-ink-500: #888888;
+  --color-ink-400: #AAAAAA;
+  --color-ink-300: #CCCCCC;
+  --color-ink-200: #E5E5EA;
+  --color-ink-100: #F3F3F3;
+  --color-ink-border: #EAECF0;
+
+  /* Accent blue + tints */
+  --color-blue: #3B82F6;
+  --color-blue-hover: #2563EB;
+  --color-blue-tint-04: rgba(59, 130, 246, 0.04);
+  --color-blue-tint-08: rgba(59, 130, 246, 0.08);
+  --color-blue-tint-12: rgba(59, 130, 246, 0.12);
+  --color-blue-ring-30: rgba(59, 130, 246, 0.30);
+  --color-blue-ring-40: rgba(59, 130, 246, 0.40);
+
+  /* Tonal blue ink — for headings/body sitting on blue-tint backgrounds.
+     Avoids the gray-on-color washout. Verified ≥4.5:1 on blue-tint-08 over white. */
+  --color-blue-ink-deep: oklch(0.36 0.13 263);
+  --color-blue-ink-mid: oklch(0.55 0.10 263);
+
+  /* Success tints */
+  --color-success-hover: #4EA84A;
+  --color-success-tint-04: rgba(93, 185, 85, 0.04);
+  --color-success-tint-12: rgba(115, 230, 104, 0.12);
+  --color-success-tint-20: rgba(93, 185, 85, 0.20);
+
+  /* Danger tints */
+  --color-danger-hover: #C41530;
+  --color-danger-tint-15: rgba(229, 24, 55, 0.15);
+  --color-danger-tint-70: rgba(229, 24, 55, 0.70);
+
+  /* Selected card elevation — same shadow as default; selection signaled via border-2 */
+  --shadow-selected: 0px 2px 8px 0px rgba(0, 0, 0, 0.06);
+}
+
+/* Dark-mode ink + surface overrides — tokens consumed by settings + dashboard.
+   Uses the same token names; only the values flip when `.dark` is on the root. */
+.dark {
+  /* Inverted ink scale, lower rungs lightened for WCAG AA on #0E0E10 surface.
+     Contrast ratios: 900=18.6, 700=9.2, 500=5.4, 400=5.0 (AA), 300=3.6 (AA Large /
+     decorative only — never use for body copy). */
+  --color-ink-900: #F5F5F5;
+  --color-ink-700: #B5B5B5;
+  --color-ink-500: #8A8A8A;
+  --color-ink-400: #828282;
+  --color-ink-300: #6A6A6A;
+  --color-ink-200: #2E2E2E;
+  --color-ink-100: #1F1F1F;
+  --color-ink-border: #2A2A2A;
+
+  /* Lighter error red so danger copy clears AA on dark surfaces */
+  --color-error-strong: #FF6478;
+  --color-danger-hover: #FF8294;
+  --color-danger-tint-15: rgba(255, 100, 120, 0.18);
+  --color-danger-tint-70: rgba(255, 100, 120, 0.70);
+
+  /* Success holds — #5DB955 already clears 8:1 on dark */
+
+  --color-surface-card: #0E0E10;
+  --color-surface-muted: #161618;
+  --color-border-card: #1F1F1F;
+  --color-text-body: #B5B5B5;
+
+  /* Blues lighten slightly so they read on dark surfaces */
+  --color-blue: #60A5FA;
+  --color-blue-hover: #93C5FD;
+  --color-blue-tint-04: rgba(96, 165, 250, 0.06);
+  --color-blue-tint-08: rgba(96, 165, 250, 0.10);
+  --color-blue-tint-12: rgba(96, 165, 250, 0.16);
+  --color-blue-ring-30: rgba(96, 165, 250, 0.30);
+  --color-blue-ring-40: rgba(96, 165, 250, 0.40);
+
+  /* Tonal blue ink — lifted so it reads on the dark blue-tint background */
+  --color-blue-ink-deep: oklch(0.88 0.06 263);
+  --color-blue-ink-mid: oklch(0.72 0.08 263);
+
+  --shadow-card: 0px 2px 8px 0px rgba(0, 0, 0, 0.45);
+  --shadow-selected: 0px 2px 8px 0px rgba(0, 0, 0, 0.45);
 }
 
 :root {
@@ -365,4 +448,36 @@
 @keyframes highlight-new-match {
   0% { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3); }
   100% { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0); }
+}
+
+/* Settings skeleton — directional shimmer for hairline form fields.
+   Stagger via inline --shimmer-delay so a wave scans down the form. */
+@keyframes settings-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.settings-skeleton-bar {
+  background-color: var(--color-ink-100);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    transparent 35%,
+    var(--color-ink-200) 50%,
+    transparent 65%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: settings-shimmer 1.8s ease-in-out infinite;
+  animation-delay: var(--shimmer-delay, 0ms);
+  will-change: background-position;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-skeleton-bar {
+    animation: none;
+    background-image: none;
+    background-color: var(--color-ink-100);
+  }
 }

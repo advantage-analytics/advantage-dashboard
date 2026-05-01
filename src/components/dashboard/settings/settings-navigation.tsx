@@ -3,27 +3,43 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { CreditCard, Shield, User } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUnsavedChanges } from "@/components/dashboard/settings/unsaved-changes-context";
 
 type TabId = "profile" | "account" | "subscription";
 
-const TABS = [
+interface Tab {
+  id: TabId;
+  index: string;
+  label: string;
+  description: string;
+  href: string;
+  icon: LucideIcon;
+}
+
+const TABS: readonly Tab[] = [
   {
-    id: "profile" as TabId,
+    id: "profile",
+    index: "01",
     label: "Profile",
+    description: "Identity & tennis info",
     href: "/dashboard/settings/profile",
     icon: User,
   },
   {
-    id: "account" as TabId,
+    id: "account",
+    index: "02",
     label: "Account",
+    description: "Login & security",
     href: "/dashboard/settings/account",
     icon: Shield,
   },
   {
-    id: "subscription" as TabId,
+    id: "subscription",
+    index: "03",
     label: "Subscription",
+    description: "Plan & billing",
     href: "/dashboard/settings/subscription",
     icon: CreditCard,
   },
@@ -37,7 +53,11 @@ export function SettingsNavigation(): React.ReactElement {
   const activeTab =
     TABS.find((tab) => pathname?.includes(tab.id))?.id ?? "profile";
 
-  const handleClick = (e: React.MouseEvent, href: string, isActive: boolean) => {
+  const handleClick = (
+    e: React.MouseEvent,
+    href: string,
+    isActive: boolean
+  ) => {
     if (isActive) return;
     if (!confirmNavigation()) {
       e.preventDefault();
@@ -48,9 +68,16 @@ export function SettingsNavigation(): React.ReactElement {
   };
 
   return (
-    <nav className="w-full md:w-44 flex-shrink-0" aria-label="Settings">
+    <nav
+      className="w-full md:w-52 flex-shrink-0 md:sticky md:top-6 md:self-start"
+      aria-label="Settings"
+    >
+      <p className="hidden md:block text-[10px] font-medium uppercase tracking-[2.5px] text-[var(--color-ink-400)] mb-4">
+        Sections
+      </p>
+
       <div className="flex md:flex-col gap-1 overflow-x-auto pb-2 md:pb-0 -mx-2 px-2 md:mx-0 md:px-0 scrollbar-hide">
-        {TABS.map(({ id, label, href, icon: Icon }) => {
+        {TABS.map(({ id, index, label, description, href, icon: Icon }) => {
           const isActive = activeTab === id;
 
           return (
@@ -60,24 +87,83 @@ export function SettingsNavigation(): React.ReactElement {
               onClick={(e) => handleClick(e, href, isActive)}
               aria-current={isActive ? "page" : undefined}
               className={cn(
-                "flex items-center gap-3 h-9 pl-[13px] pr-3.5 rounded-lg text-[13px] whitespace-nowrap transition-colors duration-200",
-                isActive
-                  ? "bg-[#EBF2FD] text-[#3B82F6] font-medium"
-                  : "text-[#8A8A8E] hover:text-[#3C3C43] hover:bg-[#F5F5F5]"
+                "group relative flex items-center gap-3 transition-colors duration-200 whitespace-nowrap md:whitespace-normal",
+                "py-2.5 pl-4 pr-3",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-blue)]/30 focus-visible:rounded-[6px]"
               )}
             >
+              {/* Left rail — only visible when active */}
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "absolute left-0 top-1/2 -translate-y-1/2 w-[2px] rounded-full transition-all duration-200",
+                  isActive
+                    ? "h-6 bg-[var(--color-blue)]"
+                    : "h-0 bg-transparent group-hover:h-3 group-hover:bg-[var(--color-ink-200)]"
+                )}
+              />
+
+              {/* Tabular index — magazine TOC */}
+              <span
+                className={cn(
+                  "hidden md:inline-block text-[10px] font-medium tracking-[1px] tabular-nums w-5 transition-colors duration-200",
+                  isActive
+                    ? "text-[var(--color-blue)]"
+                    : "text-[var(--color-ink-300)] group-hover:text-[var(--color-ink-500)]"
+                )}
+                aria-hidden="true"
+              >
+                {index}
+              </span>
+
               <Icon
                 className={cn(
-                  "size-3.5 flex-shrink-0",
-                  isActive ? "text-[#3B82F6]" : "text-[#8A8A8E]"
+                  "size-3.5 flex-shrink-0 transition-colors duration-200 md:hidden",
+                  isActive
+                    ? "text-[var(--color-blue)]"
+                    : "text-[var(--color-ink-400)] group-hover:text-[var(--color-ink-700)]"
                 )}
                 strokeWidth={1.5}
                 aria-hidden="true"
               />
-              {label}
+
+              <span className="flex flex-col min-w-0 leading-tight flex-1">
+                <span
+                  className={cn(
+                    "text-[13px] tracking-[-0.05px] transition-colors duration-200",
+                    isActive
+                      ? "text-[var(--color-ink-900)] font-medium"
+                      : "text-[var(--color-ink-700)] group-hover:text-[var(--color-ink-900)]"
+                  )}
+                >
+                  {label}
+                </span>
+                <span
+                  className={cn(
+                    "hidden md:block text-[11px] mt-0.5 transition-colors duration-200",
+                    isActive ? "text-[var(--color-ink-400)]" : "text-[var(--color-ink-400)]/80"
+                  )}
+                >
+                  {description}
+                </span>
+              </span>
+
             </Link>
           );
         })}
+      </div>
+
+      {/* Footer hint — mirrors auth subtitle voice */}
+      <div className="hidden md:block mt-8 pl-4">
+        <p className="text-[11px] text-[var(--color-ink-400)] leading-[1.55]">
+          Need help?{" "}
+          <Link
+            href="/dashboard/help"
+            className="text-[var(--color-blue)] hover:text-[var(--color-blue-hover)] transition-colors"
+          >
+            Visit support
+          </Link>
+        </p>
       </div>
     </nav>
   );
