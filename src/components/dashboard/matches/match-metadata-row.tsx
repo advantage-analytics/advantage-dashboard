@@ -59,21 +59,17 @@ export function MatchMetadataRow({
         </div>
       )}
 
-      {showVerification && (
+      {showVerification && verificationStatus && (
         <div className="flex items-center gap-1">
           <Image
-            src={
-              verificationStatus
-                ? "/icons/verified-check-icon.svg"
-                : "/icons/verified-check-icon-unverified.svg"
-            }
+            src="/icons/verified-check-icon.svg"
             alt=""
             width={14}
             height={14}
             aria-hidden="true"
           />
           <p className="text-[10px] font-normal text-[#888888] leading-[16px]">
-            {verificationStatus || "Unverified Result"}
+            {verificationStatus}
           </p>
         </div>
       )}

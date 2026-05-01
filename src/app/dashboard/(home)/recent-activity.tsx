@@ -12,9 +12,13 @@ import { createClient } from "@/lib/supabase/client";
 
 type ToastState =
   | { kind: "idle" }
-  | { kind: "created" }
-  | { kind: "analyzing" }
+  | { kind: "created"; matchId: string }
+  | { kind: "analyzing"; matchId: string }
   | { kind: "ready"; matchId: string };
+
+const POLL_INTERVALS_MS = [3000, 3000, 5000, 5000, 10000];
+const POLL_MAX_ATTEMPTS = 20;
+const PROCESSING_STORAGE_KEY = "match-processing";
 
 interface DbMatch {
   id: string;
@@ -37,6 +41,22 @@ interface DbMatch {
   court_type: string | null;
   verified: boolean | null;
   duration: number | null;
+  opponent_hand: string | null;
+  opponent_backhand: string | null;
+}
+
+function formatOpponentMeta(
+  hand: string | null,
+  backhand: string | null
+): string[] {
+  const meta: string[] = [];
+  if (hand === "left" || hand === "right") {
+    meta.push(`${hand.toUpperCase()} HANDED`);
+  }
+  if (backhand === "one-handed" || backhand === "two-handed") {
+    meta.push(`${backhand === "one-handed" ? "1" : "2"}-HANDED BACKHAND`);
+  }
+  return meta;
 }
 
 interface MatchStats {
@@ -77,10 +97,24 @@ export interface MatchRow {
 function formatDisplayDate(isoDate: string): string {
   try {
     const d = new Date(isoDate);
+    if (Number.isNaN(d.getTime())) return isoDate;
+    const now = new Date();
+    const dDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const diffDays = Math.round(
+      (nowDay.getTime() - dDay.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    if (diffDays === 0) return "Today";
+    if (diffDays === 1) return "Yesterday";
+    if (diffDays > 1 && diffDays <= 6) return `${diffDays} days ago`;
+    if (diffDays > 6 && diffDays <= 13) return "Last week";
+
+    const sameYear = d.getFullYear() === now.getFullYear();
     return d.toLocaleDateString("en-US", {
-      month: "long",
+      month: "short",
       day: "numeric",
-      year: "numeric",
+      ...(sameYear ? {} : { year: "numeric" }),
     });
   } catch {
     return isoDate;
@@ -155,7 +189,7 @@ function groupMatchesIntoEvents(
         breakpointsTotal: stat
           ? (stat.break_point_opportunities ?? stat.break_points_faced ?? null)
           : null,
-        opponentMeta: ["LEFT HANDED", "2-HANDED BACKHAND"],
+        opponentMeta: formatOpponentMeta(m.opponent_hand, m.opponent_backhand),
       });
     }
 
@@ -180,20 +214,20 @@ function EventsList({
   events: EventGroup[];
   seenEventIdsRef: React.MutableRefObject<Set<string> | null>;
 }) {
-  const currentIds = events.map((e) => e.id);
   const newEventIds = new Set<string>();
-
-  if (seenEventIdsRef.current === null) {
-    // First render — mark all as seen
-    seenEventIdsRef.current = new Set(currentIds);
-  } else {
-    for (const id of currentIds) {
-      if (!seenEventIdsRef.current.has(id)) {
-        newEventIds.add(id);
+  if (seenEventIdsRef.current !== null) {
+    for (const event of events) {
+      if (!seenEventIdsRef.current.has(event.id)) {
+        newEventIds.add(event.id);
       }
     }
-    seenEventIdsRef.current = new Set(currentIds);
   }
+
+  useEffect(() => {
+    const ids = new Set<string>();
+    for (const event of events) ids.add(event.id);
+    seenEventIdsRef.current = ids;
+  }, [events, seenEventIdsRef]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -219,12 +253,11 @@ export default function RecentActivity({ userId }: { userId: string }) {
   const shouldReduceMotion = useReducedMotion();
   const router = useRouter();
 
-  // Hydrate processing state from sessionStorage on mount.
-  // We never persist "created" or "ready" — those are short-lived UI moments.
   useEffect(() => {
     setMounted(true);
-    if (sessionStorage.getItem("match-processing") === "true") {
-      setToast({ kind: "analyzing" });
+    const storedMatchId = sessionStorage.getItem(PROCESSING_STORAGE_KEY);
+    if (storedMatchId) {
+      setToast({ kind: "analyzing", matchId: storedMatchId });
     }
   }, []);
 
@@ -237,7 +270,7 @@ export default function RecentActivity({ userId }: { userId: string }) {
       const { data: rows, error: fetchError } = await supabase
         .from("matches")
         .select(
-          "id, created_by, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, player1_id, player2_id"
+          "id, created_by, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, player1_id, player2_id, opponent_hand, opponent_backhand"
         )
         .eq("created_by", userId)
         .order("date", { ascending: false })
@@ -259,11 +292,11 @@ export default function RecentActivity({ userId }: { userId: string }) {
         )
         .in("match_id", matchIds);
 
-      // Build a map of match_id -> user's stats
+      const matchById = new Map(list.map((m) => [m.id, m]));
       const statsMap = new Map<string, MatchStats>();
       if (stats) {
         for (const stat of stats as MatchStats[]) {
-          const match = list.find((m) => m.id === stat.match_id);
+          const match = matchById.get(stat.match_id);
           if (!match) continue;
           const isUserPlayer1 = match.player1_id === userId;
           if (stat.is_player1 === isUserPlayer1) {
@@ -287,74 +320,74 @@ export default function RecentActivity({ userId }: { userId: string }) {
   }, [load]);
 
   useEffect(() => {
-    const handler = () => {
-      sessionStorage.setItem("match-processing", "true");
-      setToast({ kind: "created" });
-      // Hold the green-check celebration briefly, then transition to the analyzing
-      // state. Persist only "analyzing" to sessionStorage so a refresh during the
-      // brief "created" window resumes correctly without flashing the celebration.
-      const t = setTimeout(() => {
+    let createdTimer: ReturnType<typeof setTimeout> | undefined;
+    const handler = (e: Event) => {
+      const matchId = (e as CustomEvent<{ matchId: string }>).detail?.matchId;
+      if (!matchId) return;
+      sessionStorage.setItem(PROCESSING_STORAGE_KEY, matchId);
+      setToast({ kind: "created", matchId });
+      createdTimer = setTimeout(() => {
         setToast((current) =>
-          current.kind === "created" ? { kind: "analyzing" } : current
+          current.kind === "created"
+            ? { kind: "analyzing", matchId: current.matchId }
+            : current
         );
       }, 1200);
-      return t;
     };
-    let createdTimer: ReturnType<typeof setTimeout> | undefined;
-    const wrapped = () => {
-      createdTimer = handler();
-    };
-    window.addEventListener("match-created", wrapped);
+    window.addEventListener("match-created", handler);
     return () => {
-      window.removeEventListener("match-created", wrapped);
+      window.removeEventListener("match-created", handler);
       if (createdTimer) clearTimeout(createdTimer);
     };
-  }, [load]);
+  }, []);
 
-  // Poll for stats while the toast is in created/analyzing; auto-transition to
-  // "ready" when stats arrive, then to "idle" after a short celebration.
+  const targetMatchId =
+    toast.kind === "created" || toast.kind === "analyzing" ? toast.matchId : null;
+
   useEffect(() => {
-    if (toast.kind !== "created" && toast.kind !== "analyzing") return;
+    if (!targetMatchId) return;
     const supabase = createClient();
-    let readyTimer: ReturnType<typeof setTimeout> | undefined;
-    const interval = setInterval(async () => {
-      const { data: matches } = await supabase
-        .from("matches")
-        .select("id")
-        .eq("created_by", userId)
-        .order("date", { ascending: false })
-        .limit(1);
-      if (!matches?.[0]) return;
-      const matchId = matches[0].id;
+    let cancelled = false;
+    let pollTimer: ReturnType<typeof setTimeout> | undefined;
+    let attempt = 0;
+
+    const poll = async () => {
       const { data: stats } = await supabase
         .from("match_stats_with_percentages")
         .select("match_id")
-        .eq("match_id", matchId)
+        .eq("match_id", targetMatchId)
         .limit(1);
+      if (cancelled) return;
+
       if (stats && stats.length > 0) {
-        sessionStorage.removeItem("match-processing");
-        setToast({ kind: "ready", matchId });
+        sessionStorage.removeItem(PROCESSING_STORAGE_KEY);
+        setToast({ kind: "ready", matchId: targetMatchId });
         load();
         window.dispatchEvent(new Event("match-processed"));
-        readyTimer = setTimeout(() => {
-          setToast((current) => (current.kind === "ready" ? { kind: "idle" } : current));
-        }, 2500);
+        return;
       }
-    }, 3000);
-    // Safety timeout — dismiss after 60s without claiming "ready"
-    const timeout = setTimeout(() => {
-      sessionStorage.removeItem("match-processing");
-      setToast({ kind: "idle" });
-    }, 60000);
-    return () => {
-      clearInterval(interval);
-      clearTimeout(timeout);
-      if (readyTimer) clearTimeout(readyTimer);
+
+      attempt++;
+      if (attempt >= POLL_MAX_ATTEMPTS) {
+        sessionStorage.removeItem(PROCESSING_STORAGE_KEY);
+        setToast({ kind: "idle" });
+        return;
+      }
+      const delay =
+        POLL_INTERVALS_MS[Math.min(attempt, POLL_INTERVALS_MS.length - 1)];
+      pollTimer = setTimeout(poll, delay);
     };
-  }, [toast.kind, load, userId]);
+
+    pollTimer = setTimeout(poll, POLL_INTERVALS_MS[0]);
+
+    return () => {
+      cancelled = true;
+      if (pollTimer) clearTimeout(pollTimer);
+    };
+  }, [targetMatchId, load]);
 
   const dismissToast = useCallback(() => {
-    sessionStorage.removeItem("match-processing");
+    sessionStorage.removeItem(PROCESSING_STORAGE_KEY);
     setToast({ kind: "idle" });
   }, []);
 
@@ -389,7 +422,7 @@ export default function RecentActivity({ userId }: { userId: string }) {
               <div key={i} className="flex flex-col gap-3">
                 <Skeleton className="h-5 w-40" />
                 <Skeleton className="h-3 w-56" />
-                <div className="flex flex-col gap-5 mt-2">
+                <div className="flex flex-col gap-3 mt-2">
                   {[0, 1].map((j) => (
                     <div key={j} className="flex items-center justify-between">
                       <div className="flex gap-3 items-center">
@@ -400,9 +433,12 @@ export default function RecentActivity({ userId }: { userId: string }) {
                         </div>
                       </div>
                       <div className="flex gap-4">
-                        <Skeleton className="h-8 w-14" />
-                        <Skeleton className="h-8 w-14" />
-                        <Skeleton className="h-8 w-14" />
+                        {[0, 1, 2].map((k) => (
+                          <div key={k} className="flex flex-col gap-2 items-end">
+                            <Skeleton className="h-2 w-12" />
+                            <Skeleton className="h-3 w-10" />
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ))}
@@ -429,29 +465,15 @@ export default function RecentActivity({ userId }: { userId: string }) {
         )}
 
         {!loading && !error && events.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
-            <div className="rounded-full bg-[#F5F5F5] p-4 mb-4">
-              <Inbox className="h-8 w-8 text-[#888888]" aria-hidden />
-            </div>
-            <p className="font-medium text-[#0D0D0D] mb-1">No matches yet</p>
-            <p className="text-[12px] text-[#888888] max-w-[300px] leading-[1.6] mb-5">
-              Upload a SwingVision match file (.xlsx) to see your stats,
-              serve placement, and AI-powered analysis here.
+          <div className="flex flex-col items-center justify-center py-14 px-6 text-center">
+            <Inbox className="h-7 w-7 text-[#CCCCCC] mb-4" aria-hidden />
+            <p className="text-[14px] font-medium text-[#0D0D0D] mb-1.5">
+              No matches yet
             </p>
-            <div className="flex flex-col gap-2 text-[10px] text-[#AAAAAA] uppercase tracking-[1.5px]">
-              <div className="flex items-center gap-2">
-                <span className="w-4 h-px bg-[#E7E7E7]" aria-hidden />
-                <span>KPI breakdown</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-4 h-px bg-[#E7E7E7]" aria-hidden />
-                <span>Serve placement court map</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-4 h-px bg-[#E7E7E7]" aria-hidden />
-                <span>Match-by-match trends</span>
-              </div>
-            </div>
+            <p className="text-[13px] text-[#888888] max-w-[320px] leading-[1.55]">
+              Upload a SwingVision match file to see your stats, serve placement,
+              and AI-powered analysis.
+            </p>
           </div>
         )}
 
