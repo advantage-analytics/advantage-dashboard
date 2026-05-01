@@ -12,14 +12,14 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import { ArrowLeft, ChevronDown, X } from "lucide-react";
 import {
   Step,
   UploadMatchModalProps,
   STEP_CONFIG,
   STEP_ORDER,
-  STEP_FOOTER_CONFIG,
+  CONTINUE_LABEL,
 } from "./types";
 import { useUploadMatchModal } from "./useUploadMatchModal";
 import { StepIndicator } from "./StepIndicator";
@@ -27,6 +27,7 @@ import { ProviderContent } from "./ProviderContent";
 import { UploadContent } from "./UploadContent";
 import { DetailsContent } from "./DetailsContent";
 import { ConfirmContent } from "./ConfirmContent";
+import { primaryBtnCls, ghostBtnCls } from "./styles";
 
 const HINT_STEPS = new Set<Step>(["match", "confirm"]);
 
@@ -60,11 +61,25 @@ export function UploadMatchModal({
     handleScoreChange,
     handleTiebreakChange,
     handleCreateMatch,
+    pendingDetailFocus,
+    goEditDetail,
+    consumePendingDetailFocus,
   } = useUploadMatchModal({ open, onOpenChange });
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showScrollHint, setShowScrollHint] = useState(false);
   const scrollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const onDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsOver(true);
+  }, [setIsOver]);
+  const onDragLeave = useCallback(() => setIsOver(false), [setIsOver]);
+
+  const continueHandler =
+    step === "provider" ? handleProviderContinue
+    : step === "match" ? handleMatchContinue
+    : handleCreateMatch;
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -102,14 +117,7 @@ export function UploadMatchModal({
 
   const currentStepIndex = STEP_ORDER.indexOf(step);
   const { title, description } = STEP_CONFIG[step];
-  const { continueLabel } = STEP_FOOTER_CONFIG[step];
-
-  let continueHandler: () => void = () => {};
-  switch (step) {
-    case "provider": continueHandler = handleProviderContinue; break;
-    case "match":    continueHandler = handleMatchContinue; break;
-    case "confirm":  continueHandler = handleCreateMatch; break;
-  }
+  const continueLabel = CONTINUE_LABEL[step];
 
   const continueDisabled =
     (step === "provider" && !selectedProvider) ||
@@ -117,12 +125,121 @@ export function UploadMatchModal({
       (!uploadedFile || isUploading || !formData.eventName.trim())) ||
     (step === "confirm" && isCreating);
 
-  // Enter-to-continue. Ignores presses inside form controls so score-entry & dropdowns keep
-  // their native semantics (Enter advances focus inside DetailsContent, opens selects, etc.).
+  // Platform detection for the right modifier glyph in the footer hint. Gated
+  // behind null until mounted so SSR doesn't render a Mac chord on a Linux box.
+  const [isMac, setIsMac] = useState<boolean | null>(null);
+  useEffect(() => {
+    const platform =
+      // @ts-expect-error - userAgentData is widely supported but not yet in lib.dom
+      navigator.userAgentData?.platform ?? navigator.platform ?? "";
+    setIsMac(/Mac|iPhone|iPad|iPod/i.test(platform));
+  }, []);
+
+  // Tracks whether focus currently lives inside a form control. Drives the
+  // footer hint swap — when the user is mid-typing, plain Enter is suppressed
+  // so we surface ⌘/Ctrl↵ instead.
+  const [focusInForm, setFocusInForm] = useState(false);
   useEffect(() => {
     if (!open) return;
+    const isFormControl = (el: EventTarget | null) => {
+      const node = el as HTMLElement | null;
+      if (!node) return false;
+      const tag = node.tagName;
+      return (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        node.isContentEditable ||
+        node.getAttribute("role") === "combobox"
+      );
+    };
+    const onFocusIn = (e: FocusEvent) => setFocusInForm(isFormControl(e.target));
+    const onFocusOut = () => setFocusInForm(false);
+    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("focusout", onFocusOut);
+    return () => {
+      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("focusout", onFocusOut);
+    };
+  }, [open]);
+
+  // Keyboard:
+  //   • Plain Enter advances the wizard when focus is outside form controls
+  //     (so score-entry and dropdowns keep their native Enter semantics —
+  //     focus chain in DetailsContent, opening selects, etc.).
+  //   • ⌘/Ctrl+Enter advances *focus* to the next field — same idea as Tab,
+  //     but reachable without the user having to retrain pinkies. Submitting
+  //     the wizard is reserved for the explicit Continue button so a fast-typed
+  //     chord can never skip a missed field.
+  //   • Esc steps back when there's a previous step (handled here, not via the
+  //     dialog's default close, so Esc doesn't dump the user out of the wizard).
+  useEffect(() => {
+    if (!open) return;
+
+    const focusNextField = () => {
+      // Walk forward through the scrollable content's tabbables. When the
+      // user runs out of fields, fall through to the Continue button so the
+      // terminal chord lands on submit instead of silently no-op'ing.
+      const root = scrollRef.current;
+      if (!root) return;
+      const list = Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'a, button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((el) => el.offsetParent !== null || el === document.activeElement);
+      const idx = list.indexOf(document.activeElement as HTMLElement);
+      if (idx === -1) return;
+      const inFieldNext = list[idx + 1];
+      if (inFieldNext) {
+        inFieldNext.focus();
+        // Select text inputs so the next keystroke replaces, matching the
+        // behavior of tabbing into a numeric score cell.
+        if (inFieldNext instanceof HTMLInputElement && /text|number|search|email|url/i.test(inFieldNext.type || "text")) {
+          inFieldNext.select();
+        }
+        return;
+      }
+      // Walked past the last field — hand focus to Continue with a one-shot
+      // ring pulse so the chord-to-submit handoff isn't silent.
+      const cta = document.querySelector<HTMLElement>('[data-modal-continue]:not([disabled])');
+      if (!cta) return;
+      cta.focus();
+      cta.classList.remove("animate-chord-pulse");
+      // Force a reflow so re-adding the class restarts the animation if it
+      // was already mid-flight from a prior chord press.
+      void cta.offsetWidth;
+      cta.classList.add("animate-chord-pulse");
+      const onEnd = () => {
+        cta.classList.remove("animate-chord-pulse");
+        cta.removeEventListener("animationend", onEnd);
+      };
+      cta.addEventListener("animationend", onEnd);
+    };
+
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Enter" || e.shiftKey || e.altKey || e.metaKey || e.ctrlKey) return;
+      if (e.key === "Escape" && step !== "provider") {
+        // Bail when a transient popup is open — Esc should close that first,
+        // not pop the wizard step. Covers native <select> dropdowns (browser
+        // closes them on Esc), open comboboxes (aria-expanded="true"), and
+        // the InfoTooltip popover (role="tooltip" mounts only while open).
+        const active = document.activeElement as HTMLElement | null;
+        const inSelect = active?.tagName === "SELECT";
+        const openCombobox = !!document.querySelector('[aria-expanded="true"]');
+        const tooltipOpen = !!document.querySelector('[role="tooltip"]');
+        if (inSelect || openCombobox || tooltipOpen) return;
+        e.preventDefault();
+        e.stopPropagation();
+        handleBack();
+        return;
+      }
+      if (e.key !== "Enter" || e.shiftKey || e.altKey) return;
+
+      if (e.metaKey || e.ctrlKey) {
+        e.preventDefault();
+        focusNextField();
+        return;
+      }
+
       const target = e.target as HTMLElement | null;
       if (target) {
         const tag = target.tagName;
@@ -136,7 +253,7 @@ export function UploadMatchModal({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, continueDisabled, continueHandler]);
+  }, [open, continueDisabled, continueHandler, step, handleBack]);
 
   // Disabled-state hints. Only consumed when continueDisabled is true.
   const footerHint =
@@ -149,11 +266,6 @@ export function UploadMatchModal({
       : step === "confirm" && isCreating
       ? "Creating match…"
       : "Make a selection";
-
-  const primaryBtn =
-    "h-9 px-4 rounded-[6px] text-[13px] font-medium bg-[#3B82F6] hover:bg-[#2563EB] text-white shadow-[0_1px_3px_rgba(57,134,243,0.25)] transition-colors duration-200 disabled:bg-[#F7F7F7] disabled:text-[#888888] disabled:shadow-none";
-  const ghostBtn =
-    "h-9 px-4 rounded-[6px] text-[13px] font-medium bg-white border border-[#EAECF0] text-[#525252] hover:bg-[#F5F5F5] shadow-none transition-colors duration-200";
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -228,11 +340,8 @@ export function UploadMatchModal({
                       uploadError={uploadError}
                       parsingState={parsingState}
                       onSourceTypeChange={setSourceType}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        setIsOver(true);
-                      }}
-                      onDragLeave={() => setIsOver(false)}
+                      onDragOver={onDragOver}
+                      onDragLeave={onDragLeave}
                       onDrop={handleDrop}
                       onFileChange={handleFileChange}
                       onRemoveFile={handleRemoveFile}
@@ -243,6 +352,8 @@ export function UploadMatchModal({
                         onInputChange={handleInputChange}
                         onScoreChange={handleScoreChange}
                         onTiebreakChange={handleTiebreakChange}
+                        pendingDetailFocus={pendingDetailFocus}
+                        onPendingDetailFocusConsumed={consumePendingDetailFocus}
                       />
                     )}
                   </div>
@@ -253,6 +364,7 @@ export function UploadMatchModal({
                     formData={formData}
                     uploadedFile={uploadedFile}
                     error={error}
+                    onEditDetail={goEditDetail}
                   />
                 )}
               </div>
@@ -285,27 +397,49 @@ export function UploadMatchModal({
               ) : (
                 <>
                   <span>Press</span>
-                  <kbd
-                    aria-hidden="true"
-                    aria-label="Enter"
-                    className="inline-block px-1 py-0.5 rounded text-[10px] font-medium leading-none text-[#AAAAAA] bg-[#F0F0F0]"
-                  >
-                    ↵
-                  </kbd>
-                  <span>{step === "confirm" ? "to create" : "to continue"}</span>
+                  {/* When focus is mid-form, plain Enter is suppressed so we surface
+                      the chord users can still rely on. Platform-detected per
+                      SKILL.md › Keyboard Shortcut Chip conventions: ⌘ on Mac
+                      concatenates without `+`, Ctrl+ elsewhere. Render is gated
+                      until isMac resolves to avoid SSR mismatches. */}
+                  {focusInForm && isMac !== null ? (
+                    <kbd
+                      aria-hidden="true"
+                      aria-label={isMac ? "Command Enter" : "Control Enter"}
+                      className="inline-block px-1 py-0.5 rounded text-[10px] font-medium leading-none text-[#AAAAAA] bg-[#F0F0F0]"
+                    >
+                      {isMac ? "⌘↵" : "Ctrl+↵"}
+                    </kbd>
+                  ) : (
+                    <kbd
+                      aria-hidden="true"
+                      aria-label="Enter"
+                      className="inline-block px-1 py-0.5 rounded text-[10px] font-medium leading-none text-[#AAAAAA] bg-[#F0F0F0]"
+                    >
+                      ↵
+                    </kbd>
+                  )}
+                  <span>
+                    {focusInForm
+                      ? "to next field"
+                      : step === "confirm"
+                      ? "to create"
+                      : "to continue"}
+                  </span>
                 </>
               )}
             </div>
             <div className="flex items-center gap-2">
               {step === "confirm" ? (
                 <>
-                  <Button onClick={handleBack} className={ghostBtn}>
+                  <Button onClick={handleBack} className={ghostBtnCls}>
                     Edit
                   </Button>
                   <Button
                     onClick={handleCreateMatch}
                     disabled={isCreating}
-                    className={primaryBtn}
+                    data-modal-continue
+                    className={primaryBtnCls}
                   >
                     {isCreating ? "Creating…" : "Create match"}
                   </Button>
@@ -314,7 +448,8 @@ export function UploadMatchModal({
                 <Button
                   onClick={continueHandler}
                   disabled={continueDisabled}
-                  className={primaryBtn}
+                  data-modal-continue
+                  className={primaryBtnCls}
                 >
                   {continueLabel}
                 </Button>

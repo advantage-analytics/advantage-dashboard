@@ -24,13 +24,14 @@ import {
   Info,
   Plus,
 } from "lucide-react";
-import { FormData } from "./types";
+import { FormData, DetailField } from "./types";
 import {
   getAdjustedScores,
   validateSetScore,
   deriveOutcome,
   setHasData,
 } from "./utils";
+import { eyebrowLabelCls } from "./styles";
 
 const MS_PER_HOUR = 3_600_000;
 const MS_PER_MINUTE = 60_000;
@@ -41,21 +42,16 @@ export interface DetailsContentProps {
   onInputChange: (field: keyof FormData, value: string | number | boolean | undefined) => void;
   onScoreChange: (player: "player" | "opponent", index: number, value: string) => void;
   onTiebreakChange?: (player: "player" | "opponent", index: number, value: string) => void;
+  /** Set when Confirm wants Match to expand Details and focus a specific field. */
+  pendingDetailFocus?: DetailField | null;
+  /** Called once DetailsContent has applied the pending focus. */
+  onPendingDetailFocusConsumed?: () => void;
 }
 
 function needsTiebreak(p: number | null, o: number | null): boolean {
   if (p === null || o === null) return false;
   return (p === 7 && o === 6) || (p === 6 && o === 7);
 }
-
-const sectionLabelCls =
-  "text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]";
-
-// Top-level section headings (Match name / Score / Result / Details).
-// Same typographic register as field labels — uppercase tracked. Macro
-// hierarchy is carried by hairline rules above each section, not by a
-// register break.
-const sectionHeadingCls = sectionLabelCls;
 
 // Auth-style underline field — matches src/components/auth/form-field.tsx.
 // Details fields render a small uppercase label above the control so the
@@ -73,7 +69,7 @@ const filledTextCls = "text-[#0D0D0D]";
 const emptyTextCls = "text-[#AAAAAA]";
 
 const fieldRuleCls =
-  "h-[1px] w-full bg-[#F3F3F3] transition-all duration-200 group-hover:bg-[#E5E5E5] group-focus-within:h-[2px] group-focus-within:bg-[#3B82F6]";
+  "h-[1px] w-full bg-[#F3F3F3] transition-all duration-200 group-hover:bg-[#E5E5EA] group-focus-within:h-[2px] group-focus-within:bg-[#3B82F6]";
 
 // Inline help. Sits next to a field label as a small Info trigger; reveals a
 // quiet definition-list popover on hover / focus / click. The popover is an
@@ -232,7 +228,7 @@ function FieldLabel({
 }) {
   return (
     <div className="flex items-center gap-1.5 h-3">
-      <p className={`${sectionLabelCls} leading-none`}>{children}</p>
+      <p className={`${eyebrowLabelCls} leading-none`}>{children}</p>
       {tooltip}
     </div>
   );
@@ -286,7 +282,7 @@ function CompactSelect<T extends string>({
         onChange={(e) =>
           onChange((e.target.value === "" ? undefined : (e.target.value as T)))
         }
-        className="appearance-none bg-transparent pr-4 text-[11px] font-normal outline-none cursor-pointer transition-colors duration-150 text-[#525252] group-hover:text-[#0D0D0D] focus-visible:text-[#0D0D0D]"
+        className="appearance-none bg-transparent pr-3.5 text-[10px] font-normal outline-none cursor-pointer transition-colors duration-150 text-[#AAAAAA] group-hover:text-[#525252] focus-visible:text-[#0D0D0D]"
       >
         <option value="">{placeholder}</option>
         {options.map((o) => (
@@ -297,7 +293,7 @@ function CompactSelect<T extends string>({
       </select>
       <ChevronDown
         aria-hidden="true"
-        className="pointer-events-none absolute right-0 size-3 text-[#525252] transition-colors duration-150 group-hover:text-[#0D0D0D] group-focus-within:text-[#3B82F6]"
+        className="pointer-events-none absolute right-0 size-2.5 text-[#AAAAAA] transition-colors duration-150 group-hover:text-[#525252] group-focus-within:text-[#3B82F6]"
         strokeWidth={1.75}
       />
     </div>
@@ -366,6 +362,8 @@ export function DetailsContent({
   onInputChange,
   onScoreChange,
   onTiebreakChange,
+  pendingDetailFocus,
+  onPendingDetailFocusConsumed,
 }: DetailsContentProps) {
   const [eventNameTouched, setEventNameTouched] = useState(false);
   const [playerNameTouched, setPlayerNameTouched] = useState(false);
@@ -373,7 +371,38 @@ export function DetailsContent({
   const [showAdvancedDetails, setShowAdvancedDetails] = useState(
     formData.adScoring !== undefined || formData.playOnLets !== undefined
   );
+  // Match details (Round, Court, Format, Date, Time, Duration, Advanced) collapse
+  // behind a toggle so the Match step doesn't render 13 controls at once. Auto-opens
+  // when stored data has any non-pure-default value, or when Confirm deep-linked
+  // back to focus a specific field. Date and Time are excluded from the heuristic
+  // because getDefaultFormData() always populates them.
+  const [showDetails, setShowDetails] = useState(
+    Boolean(pendingDetailFocus) ||
+      Boolean(formData.round) ||
+      Boolean(formData.matchType) ||
+      Boolean(formData.courtType) ||
+      (formData.duration ?? 0) > 0 ||
+      formData.adScoring !== undefined ||
+      formData.playOnLets !== undefined
+  );
   const [pendingRemoveAt, setPendingRemoveAt] = useState<number | null>(null);
+
+  // Confirm deep-linked back to focus a specific detail field. Wait for the
+  // Details disclosure to render, then focus + scroll the target select into
+  // view. Clears the request so a manual back-and-forth doesn't re-fire.
+  useEffect(() => {
+    if (!pendingDetailFocus) return;
+    const id = `detail-${pendingDetailFocus}`;
+    const raf = requestAnimationFrame(() => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.focus();
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      onPendingDetailFocusConsumed?.();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [pendingDetailFocus, onPendingDetailFocusConsumed]);
 
   // Duration is split into two number fields — users shouldn't have to type units.
   // Local string state keeps editing fluid; commit to formData on blur.
@@ -580,7 +609,7 @@ export function DetailsContent({
     <div className="flex flex-col gap-6">
       {/* Match name — primary required field, underline-style */}
       <div className="group flex flex-col gap-1.5 max-w-[480px]">
-        <h4 className={sectionHeadingCls}>
+        <h4 className={eyebrowLabelCls}>
           Match name <span className="text-[#E51837]">*</span>
         </h4>
         <div className="flex w-full items-center pb-2">
@@ -608,10 +637,13 @@ export function DetailsContent({
         )}
       </div>
 
-      {/* Score — editorial scoreboard */}
-      <div className="flex flex-col gap-4">
+      {/* Score — editorial scoreboard.
+          gap-2 (8px) tucks the "Score" label and the sets stepper close to
+          the hairline below, signaling they belong to the scoreboard frame
+          rather than floating between sections. */}
+      <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <h4 className={sectionHeadingCls}>Score</h4>
+          <h4 className={eyebrowLabelCls}>Score</h4>
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -686,7 +718,7 @@ export function DetailsContent({
 
           <div className="flex flex-col gap-5">
             {/* Player 1 row */}
-            <div className="flex justify-between items-center gap-4">
+            <div className="flex justify-between items-start gap-4">
               <div className="group/name flex flex-col flex-1 min-w-0 max-w-[320px]">
                 <input
                   placeholder="Your name"
@@ -707,15 +739,16 @@ export function DetailsContent({
                 />
                 {/* Reserved height so the row stays aligned with the opponent
                     row whether or not the error is showing — alignment is
-                    scoreboard-critical. */}
-                <div className="min-h-[16px] mt-1">
+                    scoreboard-critical. Sized to the error line-height (12px)
+                    so it doesn't push the metadata row down by more than needed. */}
+                <div className="min-h-[12px] mt-1">
                   {playerNameError && (
                     <span className="text-[11px] text-[#E51837] leading-none">
                       Add your name.
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-3 mt-1.5">
+                <div className="flex items-center gap-2">
                   <CompactSelect
                     ariaLabel="Dominant hand"
                     placeholder="Hand"
@@ -723,7 +756,7 @@ export function DetailsContent({
                     value={formData.playerHand}
                     onChange={(v) => onInputChange("playerHand", v)}
                   />
-                  <span className="text-[#CCCCCC] text-[11px]">·</span>
+                  <span className="text-[#CCCCCC] text-[10px]">·</span>
                   <CompactSelect
                     ariaLabel="Backhand style"
                     placeholder="Backhand"
@@ -733,7 +766,7 @@ export function DetailsContent({
                   />
                 </div>
               </div>
-              <div className="flex gap-4">
+              <div className="flex gap-4 pt-1">
                 {playerScores.map((score, i) => {
                   const hasTie = needsTiebreak(score, opponentScores[i]);
                   return (
@@ -772,7 +805,7 @@ export function DetailsContent({
             </div>
 
             {/* Player 2 row */}
-            <div className="flex justify-between items-center gap-4">
+            <div className="flex justify-between items-start gap-4">
               <div className="group/name flex flex-col flex-1 min-w-0 max-w-[320px]">
                 <input
                   placeholder="Opponent name"
@@ -791,14 +824,14 @@ export function DetailsContent({
                       : "h-[1px] w-full bg-[#F3F3F3] transition-all duration-300 group-focus-within/name:h-[2px] group-focus-within/name:bg-[#3B82F6]"
                   }
                 />
-                <div className="min-h-[16px] mt-1">
+                <div className="min-h-[12px] mt-1">
                   {opponentNameError && (
                     <span className="text-[11px] text-[#E51837] leading-none">
                       Add their name.
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-3 mt-1.5">
+                <div className="flex items-center gap-2">
                   <CompactSelect
                     ariaLabel="Opponent dominant hand"
                     placeholder="Hand"
@@ -806,7 +839,7 @@ export function DetailsContent({
                     value={formData.opponentHand}
                     onChange={(v) => onInputChange("opponentHand", v)}
                   />
-                  <span className="text-[#CCCCCC] text-[11px]">·</span>
+                  <span className="text-[#CCCCCC] text-[10px]">·</span>
                   <CompactSelect
                     ariaLabel="Opponent backhand style"
                     placeholder="Backhand"
@@ -816,7 +849,7 @@ export function DetailsContent({
                   />
                 </div>
               </div>
-              <div className="flex gap-4">
+              <div className="flex gap-4 pt-1">
                 {opponentScores.map((score, i) => {
                   const hasTie = needsTiebreak(playerScores[i], score);
                   return (
@@ -868,37 +901,48 @@ export function DetailsContent({
             </div>
           )}
         </div>
+
       </div>
 
       {/* Result — split into Winner + Outcome so each decision is at most 4 options.
           Both feed back into the existing single-string formData.result via writeResult(). */}
       <div className="flex flex-col gap-4 pt-6 border-t border-[#F3F3F3]">
-        <h4 className={sectionHeadingCls}>Result</h4>
+        <h4 className={eyebrowLabelCls}>Result</h4>
         <div className="flex flex-col gap-[6px]">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
-            <div className="group flex flex-col gap-[6px]">
-              <FieldLabel>Winner</FieldLabel>
-              <div className="relative pb-[10px]">
-                <select
-                  aria-label="Match winner"
-                  value={currentWinner}
-                  onChange={(e) =>
-                    writeResult(e.target.value as WinnerKey, currentOutcome)
-                  }
-                  disabled={currentOutcome === "Unfinished"}
-                  className={`${fieldControlCls} ${interactiveFieldCls} pr-5 ${currentWinner ? filledTextCls : emptyTextCls} disabled:text-[#CCCCCC] disabled:cursor-not-allowed`}
-                >
-                  {/* Required when Outcome is set — disabled placeholder enforces an explicit pick. */}
-                  <option value="" disabled>
-                    Select winner
-                  </option>
-                  <option value="player">{playerNm}</option>
-                  <option value="opponent">{opponentNm}</option>
-                </select>
-                <SelectChevron disabled={currentOutcome === "Unfinished"} />
-              </div>
-              <div className={fieldRuleCls} />
-            </div>
+            {(() => {
+              // Winner asks the user to pick between the two named players. If
+              // either name is empty, the options collapse to placeholders
+              // ("Player" / "Opponent") which is recognition-as-recall. Disable
+              // the field until both names are present and tell the user why.
+              const namesReady =
+                !!formData.playerName.trim() && !!formData.opponentName.trim();
+              const winnerDisabled = currentOutcome === "Unfinished" || !namesReady;
+              return (
+                <div className="group flex flex-col gap-[6px]">
+                  <FieldLabel>Winner</FieldLabel>
+                  <div className="relative pb-[10px]">
+                    <select
+                      aria-label="Match winner"
+                      value={currentWinner}
+                      onChange={(e) =>
+                        writeResult(e.target.value as WinnerKey, currentOutcome)
+                      }
+                      disabled={winnerDisabled}
+                      className={`${fieldControlCls} ${interactiveFieldCls} pr-5 ${currentWinner ? filledTextCls : emptyTextCls} disabled:text-[#CCCCCC] disabled:cursor-not-allowed`}
+                    >
+                      <option value="" disabled>
+                        {namesReady ? "Select winner" : "Add player names above"}
+                      </option>
+                      <option value="player">{playerNm}</option>
+                      <option value="opponent">{opponentNm}</option>
+                    </select>
+                    <SelectChevron disabled={winnerDisabled} />
+                  </div>
+                  <div className={fieldRuleCls} />
+                </div>
+              );
+            })()}
             <div className="group flex flex-col gap-[6px]">
               <FieldLabel
                 tooltip={
@@ -954,15 +998,20 @@ export function DetailsContent({
         </div>
       </div>
 
-      {/* Match details — uniform 2-column grid so chevron selects align with date/time/text inputs. */}
+      {/* Match details — uniform 2-column grid so chevron selects align with date/time/text inputs.
+          Collapsed by default; the user opts in to refine round/court/format/date/time/duration
+          + scoring rules. Format defaults to "Best of 3" and Date/Time auto-populate to "now",
+          so a user submitting without expanding still gets a sensible record. */}
+      {showDetails ? (
       <div className="flex flex-col gap-4">
-        <h4 className={sectionHeadingCls}>Details</h4>
+        <h4 className={eyebrowLabelCls}>Details</h4>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
           {/* Round */}
           <div className="group flex flex-col gap-[6px]">
             <FieldLabel>Round</FieldLabel>
             <div className="relative pb-[10px]">
               <select
+                id="detail-round"
                 aria-label="Round"
                 value={formData.round || ""}
                 onChange={(e) => onInputChange("round", e.target.value)}
@@ -1000,6 +1049,7 @@ export function DetailsContent({
             </FieldLabel>
             <div className="relative pb-[10px]">
               <select
+                id="detail-matchType"
                 aria-label="Match type"
                 value={formData.matchType || ""}
                 onChange={(e) => onInputChange("matchType", e.target.value)}
@@ -1020,6 +1070,7 @@ export function DetailsContent({
             <FieldLabel>Court</FieldLabel>
             <div className="relative pb-[10px]">
               <select
+                id="detail-courtType"
                 aria-label="Court type"
                 value={formData.courtType || ""}
                 onChange={(e) => onInputChange("courtType", e.target.value)}
@@ -1235,6 +1286,16 @@ export function DetailsContent({
           )}
         </div>
       </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setShowDetails(true)}
+          className="self-start inline-flex items-center gap-1 text-[11px] text-[#3B82F6] hover:text-[#2563EB] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 rounded-sm"
+        >
+          <Plus className="size-3" strokeWidth={1.75} />
+          <span>Add match details</span>
+        </button>
+      )}
     </div>
   );
 }

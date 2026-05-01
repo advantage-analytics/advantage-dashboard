@@ -5,6 +5,9 @@
 /** Wizard step identifiers */
 export type Step = "provider" | "match" | "confirm";
 
+/** Optional Match-step fields that the Confirm step can deep-link back to. */
+export type DetailField = "round" | "matchType" | "courtType";
+
 /** Props for the main UploadMatchModal component */
 export interface UploadMatchModalProps {
   open: boolean;
@@ -107,7 +110,7 @@ export interface MatchData {
 export const DEFAULT_FORM_DATA: FormData = {
   eventName: "",
   round: "",
-  bestOf: "",
+  bestOf: "3",
   adScoring: false,
   playOnLets: false,
   result: "",
@@ -147,11 +150,11 @@ export const STEP_CONFIG: Record<Step, { title: string; description: string }> =
   }
 };
 
-/** Footer button configuration per step */
-export const STEP_FOOTER_CONFIG: Record<Step, { showBack: boolean; continueLabel: string }> = {
-  provider: { showBack: true, continueLabel: "Continue" },
-  match: { showBack: true, continueLabel: "Continue" },
-  confirm: { showBack: true, continueLabel: "Create match" }
+/** Continue-button label per step. */
+export const CONTINUE_LABEL: Record<Step, string> = {
+  provider: "Continue",
+  match: "Continue",
+  confirm: "Create match",
 };
 
 /** File parsing state for auto-population */

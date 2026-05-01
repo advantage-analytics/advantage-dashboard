@@ -6,6 +6,7 @@
  * chip once a file is present so the form below it can take the focus.
  */
 
+import { memo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   AlertCircle,
@@ -16,6 +17,7 @@ import {
 } from "lucide-react";
 import { UploadedFile, ParsingState } from "./types";
 import { ProviderId } from "@/lib/services/upload";
+import { primaryBtnCls, eyebrowLabelCls } from "./styles";
 
 const PROVIDER_FILE_CONFIG: Record<
   ProviderId,
@@ -49,7 +51,7 @@ export interface UploadContentProps {
   onRemoveFile: () => void;
 }
 
-export function UploadContent({
+function UploadContentImpl({
   selectedProvider,
   uploadedFile,
   isOver,
@@ -104,19 +106,9 @@ export function UploadContent({
                 ? "bg-[#FAFAFA] border-[#F3F3F3]"
                 : isOver
                 ? "bg-[#EFF4FF] border-[#3B82F6]"
-                : "bg-[#FAFAFA] border-[#F3F3F3] hover:bg-[#FAFBFF] hover:border-[#3B82F6]/40"
+                : "bg-[#FAFAFA] border-[#F3F3F3] hover:bg-[#EFF4FF] hover:border-[#3B82F6]/40"
             }`}
           >
-            {/* Subtle dotted texture */}
-            <div
-              className="pointer-events-none absolute inset-0 opacity-[0.35]"
-              style={{
-                backgroundImage:
-                  "radial-gradient(circle at 1px 1px, #E5E5EA 1px, transparent 0)",
-                backgroundSize: "20px 20px",
-              }}
-            />
-
             <div className="relative z-10 flex flex-col items-center gap-5 px-6 py-8 text-center">
               {isUploading ? (
                 <>
@@ -167,7 +159,7 @@ export function UploadContent({
                   <label htmlFor="upload-input-modal">
                     <Button
                       type="button"
-                      className="h-9 px-4 rounded-[6px] bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[13px] font-medium shadow-[0_1px_3px_rgba(57,134,243,0.25)] transition-colors duration-200"
+                      className={primaryBtnCls}
                       onClick={triggerBrowse}
                     >
                       Browse files
@@ -255,7 +247,7 @@ export function UploadContent({
                 Filename anchors the row (medium, #0D0D0D); ext/size recede as supporting metadata.
                 Status carries semantic color on text only; remove sits as a ghost action on the right. */}
             <div className="self-start w-full max-w-[480px] flex flex-col gap-2">
-              <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
+              <p className={eyebrowLabelCls}>
                 Source file
               </p>
               <div className="flex items-center gap-3 min-w-0">
@@ -285,7 +277,7 @@ export function UploadContent({
                   {parseStatus === "warning" && (
                     <>
                       <span className="text-[#CCCCCC] shrink-0" aria-hidden="true">·</span>
-                      <span className="font-medium text-[#F59E0B] shrink-0">Parsed with warnings</span>
+                      <span className="font-medium text-[#92400E] shrink-0">Parsed with warnings</span>
                     </>
                   )}
                   {parseStatus === "error" && (
@@ -321,3 +313,5 @@ export function UploadContent({
     </div>
   );
 }
+
+export const UploadContent = memo(UploadContentImpl);

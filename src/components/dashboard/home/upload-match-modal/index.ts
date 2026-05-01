@@ -32,7 +32,7 @@ export type {
   MatchData
 } from "./types";
 
-export { DEFAULT_FORM_DATA, STEP_CONFIG, STEP_ORDER, STEP_FOOTER_CONFIG } from "./types";
+export { DEFAULT_FORM_DATA, STEP_CONFIG, STEP_ORDER, CONTINUE_LABEL } from "./types";
 
 // Custom hook
 export { useUploadMatchModal } from "./useUploadMatchModal";

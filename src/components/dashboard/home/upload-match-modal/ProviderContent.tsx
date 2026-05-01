@@ -5,6 +5,7 @@
  * Vertical list of providers; each row carries logo, name, description, and state.
  */
 
+import { memo } from "react";
 import { Check, Lock, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { providers } from "@/lib/providers";
@@ -14,7 +15,7 @@ export interface ProviderContentProps {
   onProviderSelect: (providerId: string | null) => void;
 }
 
-export function ProviderContent({ selectedProvider, onProviderSelect }: ProviderContentProps) {
+function ProviderContentImpl({ selectedProvider, onProviderSelect }: ProviderContentProps) {
   return (
     <div className="flex flex-col gap-2.5 py-2">
       {providers.map((provider) => {
@@ -30,10 +31,10 @@ export function ProviderContent({ selectedProvider, onProviderSelect }: Provider
                 onProviderSelect(isSelected ? null : provider.id);
               }
             }}
-            className={`group relative w-full flex items-center gap-6 px-6 py-5 rounded-[14px] bg-white border text-left transition-[box-shadow,border-color,transform] duration-200 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-2 ${
+            className={`group relative w-full flex items-center gap-6 px-6 py-5 rounded-[14px] bg-white border text-left transition-colors duration-200 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-2 ${
               isAvailable
-                ? "border-[#F3F3F3] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] hover:shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)] hover:border-[#EAECF0] active:scale-[0.97] cursor-pointer"
-                : "border-[#F3F3F3] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] cursor-not-allowed"
+                ? "border-[#F3F3F3] hover:border-[#E5E5EA] cursor-pointer"
+                : "border-[#F3F3F3] cursor-not-allowed"
             }`}
           >
             {/* Selection accent — sibling overlay so opacity carries the work, not box-shadow */}
@@ -113,7 +114,7 @@ export function ProviderContent({ selectedProvider, onProviderSelect }: Provider
                   <motion.span
                     key="hint"
                     initial={false}
-                    className="inline-flex items-center gap-1 text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] opacity-0 -translate-x-1 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-hover:translate-x-0 transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]"
+                    className="inline-flex items-center gap-1 text-[10px] font-medium text-[#CCCCCC] uppercase tracking-[2.5px] group-hover:text-[#525252] transition-colors duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]"
                   >
                     Select
                     <ChevronRight className="size-3" strokeWidth={1.5} aria-hidden="true" />
@@ -127,3 +128,5 @@ export function ProviderContent({ selectedProvider, onProviderSelect }: Provider
     </div>
   );
 }
+
+export const ProviderContent = memo(ProviderContentImpl);

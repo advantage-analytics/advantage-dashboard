@@ -4,15 +4,19 @@
  * ConfirmContent — Step 4 of 4 (peak-end summary)
  */
 
+import { memo, useMemo } from "react";
 import { AlertCircle, FileSpreadsheet } from "lucide-react";
 import { MatchMetadataRow } from "@/components/dashboard/matches/match-metadata-row";
-import { FormData, UploadedFile } from "./types";
+import { FormData, UploadedFile, DetailField } from "./types";
 import { getAdjustedScores, formatDuration } from "./utils";
+import { eyebrowLabelCls } from "./styles";
 
 export interface ConfirmContentProps {
   formData: FormData;
   uploadedFile: UploadedFile | null;
   error: string | null;
+  /** Click handler for "Not set" rows — sends user back to Match focused on that field. */
+  onEditDetail?: (field: DetailField) => void;
 }
 
 function formatDate(dateString: string): string {
@@ -25,7 +29,7 @@ function formatDate(dateString: string): string {
   });
 }
 
-function determineWinner(
+function getSetWinner(
   playerScores: (number | null)[],
   opponentScores: (number | null)[]
 ): "player" | "opponent" | null {
@@ -48,11 +52,6 @@ function getMatchStatus(result: string | undefined): string {
   if (result.includes("Withdrew")) return "Withdrew";
   if (result.includes("Defaulted")) return "Defaulted";
   return "Final score";
-}
-
-function clean(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  return value.trim().toLowerCase() === "none" ? undefined : value;
 }
 
 function PlayerRow({
@@ -146,51 +145,38 @@ function formatPlayerStyle(
   return parts;
 }
 
-const labelCls =
-  "text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]";
+const labelCls = eyebrowLabelCls;
 
-export function ConfirmContent({
+function ConfirmContentImpl({
   formData,
   uploadedFile,
   error,
+  onEditDetail,
 }: ConfirmContentProps) {
-  const playerScores = getAdjustedScores(
+  const { playerScores, opponentScores, playerTiebreaks, opponentTiebreaks } = useMemo(() => ({
+    playerScores: getAdjustedScores(formData.playerScores, formData.bestOf, formData.numberOfSets),
+    opponentScores: getAdjustedScores(formData.opponentScores, formData.bestOf, formData.numberOfSets),
+    playerTiebreaks: getAdjustedScores(formData.playerTiebreaks, formData.bestOf, formData.numberOfSets),
+    opponentTiebreaks: getAdjustedScores(formData.opponentTiebreaks, formData.bestOf, formData.numberOfSets),
+  }), [
     formData.playerScores,
-    formData.bestOf,
-    formData.numberOfSets
-  );
-  const opponentScores = getAdjustedScores(
     formData.opponentScores,
-    formData.bestOf,
-    formData.numberOfSets
-  );
-  const playerTiebreaks = getAdjustedScores(
     formData.playerTiebreaks,
-    formData.bestOf,
-    formData.numberOfSets
-  );
-  const opponentTiebreaks = getAdjustedScores(
     formData.opponentTiebreaks,
     formData.bestOf,
-    formData.numberOfSets
-  );
+    formData.numberOfSets,
+  ]);
 
   const playerName = formData.playerName || "Player";
   const opponentName = formData.opponentName || "Opponent";
-  const winner = determineWinner(playerScores, opponentScores);
-  const playerStyle = formatPlayerStyle(
-    formData.playerHand,
-    formData.playerBackhand
-  );
-  const opponentStyle = formatPlayerStyle(
-    formData.opponentHand,
-    formData.opponentBackhand
-  );
+  const winner = getSetWinner(playerScores, opponentScores);
+  const playerStyle = formatPlayerStyle(formData.playerHand, formData.playerBackhand);
+  const opponentStyle = formatPlayerStyle(formData.opponentHand, formData.opponentBackhand);
   const eventTitle =
-    clean(formData.eventName?.trim()) || `${playerName} vs ${opponentName}`;
-  const round = clean(formData.round);
-  const matchType = clean(formData.matchType);
-  const courtType = clean(formData.courtType);
+    formData.eventName?.trim() || `${playerName} vs ${opponentName}`;
+  const round = formData.round || undefined;
+  const matchType = formData.matchType || undefined;
+  const courtType = formData.courtType || undefined;
 
   return (
     <div className="flex flex-col">
@@ -246,12 +232,12 @@ export function ConfirmContent({
       <div className="flex flex-col mt-10">
         {/* Header row */}
         <div className="flex items-center justify-between gap-3">
-          <p className={labelCls}>
+          <p className={eyebrowLabelCls}>
             {getMatchStatus(formData.result)}
             {round ? ` · ${round}` : ""}
           </p>
           {(formData.duration ?? 0) > 0 && (
-            <span className={`${labelCls} tabular-nums`}>
+            <span className={`${eyebrowLabelCls} tabular-nums`}>
               {formatDuration(formData.duration)}
             </span>
           )}
@@ -299,11 +285,37 @@ export function ConfirmContent({
         <div className="h-px bg-[#F3F3F3] mt-4" />
       </div>
 
-      {/* Match format — quiet 3-column definition grid.
-          Defaulted values render lighter so users can tell what they chose vs what's implied. */}
+      {/* Quiet 3-column definition grids. Unset Round/Match type/Court render
+          as "+ Add ..." links that send the user back to Match with the
+          relevant select focused — honoring intent (the user can ignore them)
+          while keeping the recovery path one click away. */}
       {(() => {
         type Item = { label: string; value: string; defaulted: boolean };
-        const items: Item[] = [
+        type EditableItem = Item & { field: DetailField; addLabel: string };
+        const detailItems: EditableItem[] = [
+          {
+            label: "Round",
+            field: "round",
+            addLabel: "Add round",
+            value: round ?? "Not set",
+            defaulted: !round,
+          },
+          {
+            label: "Match type",
+            field: "matchType",
+            addLabel: "Add type",
+            value: matchType ?? "Not set",
+            defaulted: !matchType,
+          },
+          {
+            label: "Court",
+            field: "courtType",
+            addLabel: "Add court",
+            value: courtType ?? "Not set",
+            defaulted: !courtType,
+          },
+        ];
+        const formatItems: Item[] = [
           {
             label: "Format",
             value: `Best of ${formData.bestOf || 3} sets`,
@@ -320,21 +332,47 @@ export function ConfirmContent({
             defaulted: formData.playOnLets === undefined,
           },
         ];
+        const valueCls = (defaulted: boolean) =>
+          `text-[13px] leading-[18px] font-normal tracking-[-0.1px] ${
+            defaulted ? "text-[#AAAAAA]" : "text-[#0D0D0D]"
+          }`;
         return (
-          <dl className="grid grid-cols-3 gap-x-6 mt-8">
-            {items.map((item) => (
-              <div key={item.label} className="flex flex-col gap-2">
-                <dt className={labelCls}>{item.label}</dt>
-                <dd
-                  className={`text-[13px] leading-[18px] font-normal tracking-[-0.1px] ${
-                    item.defaulted ? "text-[#AAAAAA]" : "text-[#0D0D0D]"
-                  }`}
-                >
-                  {item.value}
-                </dd>
-              </div>
-            ))}
-          </dl>
+          <>
+            <dl className="grid grid-cols-3 gap-x-6 mt-8">
+              {detailItems.map((item) => (
+                <div key={item.label} className="flex flex-col gap-2">
+                  <dt className={eyebrowLabelCls}>{item.label}</dt>
+                  <dd>
+                    {item.defaulted && onEditDetail ? (
+                      // Quiet at rest so three "+ Add" links don't read as a
+                      // wagging finger when a new user lands here with everything
+                      // unset. Color climbs to accent only on hover/focus.
+                      <button
+                        type="button"
+                        onClick={() => onEditDetail(item.field)}
+                        className="group/add inline-flex items-baseline gap-1 text-[13px] leading-[18px] font-normal tracking-[-0.1px] text-[#525252] hover:text-[#2563EB] focus-visible:text-[#3B82F6] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 rounded-sm"
+                      >
+                        <span className="text-[#CCCCCC] group-hover/add:text-[#3B82F6] group-focus-visible/add:text-[#3B82F6] transition-colors duration-150">
+                          +
+                        </span>
+                        {item.addLabel}
+                      </button>
+                    ) : (
+                      <span className={valueCls(item.defaulted)}>{item.value}</span>
+                    )}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            <dl className="grid grid-cols-3 gap-x-6 mt-6">
+              {formatItems.map((item) => (
+                <div key={item.label} className="flex flex-col gap-2">
+                  <dt className={eyebrowLabelCls}>{item.label}</dt>
+                  <dd className={valueCls(item.defaulted)}>{item.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </>
         );
       })()}
 
@@ -359,3 +397,5 @@ export function ConfirmContent({
     </div>
   );
 }
+
+export const ConfirmContent = memo(ConfirmContentImpl);

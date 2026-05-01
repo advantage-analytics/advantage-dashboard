@@ -10,7 +10,7 @@
  * - Match creation
  */
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -24,6 +24,7 @@ import {
   FormData as MatchFormData,
   UploadedFile,
   ParsingState,
+  DetailField,
   DEFAULT_FORM_DATA
 } from "./types";
 import {
@@ -66,6 +67,12 @@ export interface UseUploadMatchModalReturn {
   handleMatchContinue: () => void;
   handleBack: () => void;
   handleClose: () => void;
+  /** Deep-link from Confirm back to Match with a specific detail field focused. */
+  goEditDetail: (field: DetailField) => void;
+  /** When set, DetailsContent should auto-expand details and focus this field. */
+  pendingDetailFocus: DetailField | null;
+  /** Clears pendingDetailFocus once consumed by DetailsContent. */
+  consumePendingDetailFocus: () => void;
 
   // File handling
   setIsOver: (isOver: boolean) => void;
@@ -124,6 +131,10 @@ export function useUploadMatchModal({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isPrivateMatch] = useState(true);
   const [formData, setFormData] = useState<MatchFormData>(getDefaultFormData);
+  // Set when Confirm asks Match to focus a specific detail field. DetailsContent
+  // reads this on mount, expands its Details disclosure, focuses the matching
+  // <select>, and clears the request.
+  const [pendingDetailFocus, setPendingDetailFocus] = useState<DetailField | null>(null);
   const [parsingState, setParsingState] = useState<ParsingState>({
     isParsing: false,
     parseError: null,
@@ -131,28 +142,68 @@ export function useUploadMatchModal({
     parseSuccess: false,
   });
 
+  // Cached on modal open so handleCreateMatch doesn't pay an auth round-trip
+  // at click time. Why: getUser() can take 100–300ms over the network and the
+  // user has been authenticated since they opened the dashboard.
+  const cachedUserIdRef = useRef<string | null>(null);
+
   // Load data from localStorage when modal opens
   useEffect(() => {
-    if (open) {
-      const existingProvider = localStorage.getItem(STORAGE_KEYS.SELECTED_PROVIDER);
-      if (existingProvider && isProviderSupported(existingProvider)) {
-        setSelectedProvider(existingProvider as ProviderId);
-        setSourceType(existingProvider);
-      }
+    if (!open) return;
 
-      const storedFormData = loadFormDataFromStorage();
-      if (storedFormData) {
-        // Merge over defaults so newly added fields (e.g. player hand/backhand)
-        // pick up their preselected values when stored data predates them.
-        setFormData({ ...getDefaultFormData(), ...storedFormData });
-      }
-
-      const storedFile = loadUploadedFileFromStorage();
-      if (storedFile) {
-        setUploadedFile(storedFile);
-      }
+    const existingProvider = localStorage.getItem(STORAGE_KEYS.SELECTED_PROVIDER);
+    let resumedProvider = false;
+    if (existingProvider && isProviderSupported(existingProvider)) {
+      setSelectedProvider(existingProvider as ProviderId);
+      setSourceType(existingProvider);
+      resumedProvider = true;
     }
-  }, [open]);
+
+    const storedFormData = loadFormDataFromStorage();
+    if (storedFormData) {
+      // Merge over defaults so newly added fields (e.g. player hand/backhand)
+      // pick up their preselected values when stored data predates them.
+      setFormData({ ...getDefaultFormData(), ...storedFormData });
+    }
+
+    const storedFile = loadUploadedFileFromStorage();
+    if (storedFile) {
+      setUploadedFile(storedFile);
+    }
+
+    // Resume on the Match step when the user previously got past Provider —
+    // otherwise an accidental close means a wasted click on reopen.
+    setStep(resumedProvider ? "match" : "provider");
+
+    // Prefill the user's own name from their profile so a returning player
+    // doesn't retype it for every match. Skips if any stored data exists for
+    // playerName (the user has already typed something they want preserved).
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (cancelled || !user) return;
+        cachedUserIdRef.current = user.id;
+        const { data: profile } = await supabase
+          .from("users")
+          .select("first_name, last_name")
+          .eq("id", user.id)
+          .single();
+        if (cancelled) return;
+        const fullName = [profile?.first_name, profile?.last_name]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+        if (!fullName) return;
+        setFormData((prev) => (prev.playerName.trim() ? prev : { ...prev, playerName: fullName }));
+      } catch {
+        // Profile prefill is purely a convenience — a fetch failure shouldn't surface.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, supabase]);
 
   // Step navigation handlers
   const handleProviderSelect = useCallback((providerId: string | null) => {
@@ -181,6 +232,15 @@ export function useUploadMatchModal({
     setStep("confirm");
   }, [formData]);
 
+  const goEditDetail = useCallback((field: DetailField) => {
+    setPendingDetailFocus(field);
+    setStep("match");
+  }, []);
+
+  const consumePendingDetailFocus = useCallback(() => {
+    setPendingDetailFocus(null);
+  }, []);
+
   const handleBack = useCallback(() => {
     const stepMap: Record<Step, Step | null> = {
       provider: null,
@@ -193,15 +253,11 @@ export function useUploadMatchModal({
     }
   }, [step]);
 
+  // Close keeps localStorage intact so an accidental ✕ doesn't destroy in-flight
+  // typing. Storage is cleared only after a successful create (see handleCreateMatch)
+  // or when the user explicitly removes the file. Reopening picks up where they left off.
   const handleClose = useCallback(() => {
-    clearStorageData();
     onOpenChange(false);
-    setTimeout(() => {
-      setStep("provider");
-      setSelectedProvider(null);
-      setUploadedFile(null);
-      setFormData(getDefaultFormData());
-    }, 200);
   }, [onOpenChange]);
 
   // File handling
@@ -394,99 +450,56 @@ export function useUploadMatchModal({
     });
   }, []);
 
+  const updateScoreArray = useCallback(
+    (
+      field: "playerScores" | "opponentScores" | "playerTiebreaks" | "opponentTiebreaks",
+      index: number,
+      value: string,
+      max?: number
+    ) => {
+      let next: number | null;
+      if (value === "") {
+        next = null;
+      } else if (/^\d+$/.test(value)) {
+        next = max != null ? Math.min(max, Number(value)) : Number(value);
+      } else {
+        return;
+      }
+      setFormData((prev) => ({
+        ...prev,
+        [field]: prev[field].map((s, i) => (i === index ? next : s)),
+      }));
+    },
+    []
+  );
+
   const handleScoreChange = useCallback(
     (player: "player" | "opponent", index: number, value: string) => {
-      // Only allow empty string or valid integers
-      if (value === "") {
-        const numValue = null;
-        const field = player === "player" ? "playerScores" : "opponentScores";
-        setFormData((prev) => ({
-          ...prev,
-          [field]: prev[field].map((score, i) => (i === index ? numValue : score))
-        }));
-      } else if (/^\d+$/.test(value)) {
-        // Only accept positive integers
-        const numValue = Number(value);
-        const field = player === "player" ? "playerScores" : "opponentScores";
-        setFormData((prev) => ({
-          ...prev,
-          [field]: prev[field].map((score, i) => (i === index ? numValue : score))
-        }));
-      }
-      // Silently ignore invalid input
+      updateScoreArray(
+        player === "player" ? "playerScores" : "opponentScores",
+        index,
+        value
+      );
     },
-    []
+    [updateScoreArray]
   );
 
+  // Tiebreaks rarely exceed 20; clamp to 99 as a safety bound.
   const handleTiebreakChange = useCallback(
     (player: "player" | "opponent", index: number, value: string) => {
-      // Only allow empty string or valid integers
-      if (value === "") {
-        const numValue = null;
-        const field = player === "player" ? "playerTiebreaks" : "opponentTiebreaks";
-        setFormData((prev) => ({
-          ...prev,
-          [field]: prev[field].map((score, i) => (i === index ? numValue : score))
-        }));
-      } else if (/^\d+$/.test(value)) {
-        // Tiebreaks rarely exceed 20; clamp to 99 as a safety bound.
-        const numValue = Math.min(99, Number(value));
-        const field = player === "player" ? "playerTiebreaks" : "opponentTiebreaks";
-        setFormData((prev) => ({
-          ...prev,
-          [field]: prev[field].map((score, i) => (i === index ? numValue : score))
-        }));
-      }
-      // Silently ignore invalid input
+      updateScoreArray(
+        player === "player" ? "playerTiebreaks" : "opponentTiebreaks",
+        index,
+        value,
+        99
+      );
     },
-    []
+    [updateScoreArray]
   );
-
-  /**
-   * Upload file to Supabase storage via API route
-   *
-   * @param matchId - The match ID to associate the file with
-   * @returns Promise with upload result
-   */
-  const uploadFileToStorage = useCallback(async (matchId: string): Promise<{ success: boolean; error?: string }> => {
-    if (!uploadedFile?.file || !selectedProvider) {
-      return { success: false, error: "No file or provider selected" };
-    }
-
-    setIsUploading(true);
-    setUploadError(null);
-
-    try {
-      const formData = new FormData();
-      formData.append("file", uploadedFile.file);
-      formData.append("matchId", matchId);
-      formData.append("providerId", selectedProvider);
-
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        return { success: false, error: result.error || "Upload failed" };
-      }
-
-      return { success: true };
-    } catch (err) {
-      return {
-        success: false,
-        error: err instanceof Error ? err.message : "Upload error",
-      };
-    } finally {
-      setIsUploading(false);
-    }
-  }, [uploadedFile, selectedProvider]);
 
   // Match creation
   const handleCreateMatch = useCallback(async () => {
-    if (!formData || !uploadedFile) {
+    if (!formData || !uploadedFile?.file) {
       setError("Please complete all required fields and upload a file.");
       return;
     }
@@ -500,13 +513,14 @@ export function useUploadMatchModal({
     setError(null);
 
     try {
-      const {
-        data: { user },
-        error: authError
-      } = await supabase.auth.getUser();
-
-      if (authError || !user) {
-        throw new Error("Not authenticated");
+      // Use the userId cached on modal open. Falls back to auth.getUser() only
+      // if the cache hasn't populated yet (race against modal open).
+      let userId = cachedUserIdRef.current;
+      if (!userId) {
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError || !user) throw new Error("Not authenticated");
+        userId = user.id;
+        cachedUserIdRef.current = userId;
       }
 
       const matchId = crypto.randomUUID();
@@ -525,20 +539,15 @@ export function useUploadMatchModal({
         adjustedPlayerScores,
         adjustedOpponentScores,
         parseInt(formData.bestOf),
-        user.id,
+        userId,
         formData.playerName,
         formData.opponentName
       );
 
-      // Auto-fill event name if empty
-      let eventName = formData.eventName;
-      if (!eventName) {
-        eventName = `${formData.playerName} vs ${formData.opponentName}`;
-      }
+      const eventName = formData.eventName || `${formData.playerName} vs ${formData.opponentName}`;
 
-      // Build metadata for the match
       const metadata: MatchMetadata = {
-        userId: user.id,
+        userId,
         sourceProvider: selectedProvider,
         analysisMethod: 'elc',
         matchType: formData.matchType,
@@ -556,23 +565,46 @@ export function useUploadMatchModal({
         );
       }
 
-      // Upload file to storage via API route
-      if (uploadedFile?.file) {
-        const uploadResult = await uploadFileToStorage(matchId);
-
-        if (!uploadResult.success) {
-          // Log the error but don't fail the match creation
-          // The file can be re-uploaded later
-          console.error("File upload error:", uploadResult.error);
-          setUploadError(uploadResult.error || "File upload failed, but match was created.");
-        }
-      }
-
+      // Match row is in. Close the modal now so the user can move on; the file
+      // upload (1–10s for typical .xlsx) and downstream processing run in the
+      // background. The home page already shows a "match processing" toast
+      // driven by the match-created event + sessionStorage flag, so this is the
+      // user's signal that work is in flight.
       clearStorageData();
       sessionStorage.setItem("match-processing", "true");
       window.dispatchEvent(new CustomEvent("match-created", { detail: { matchId } }));
       router.refresh();
       onOpenChange(false);
+
+      // Background upload. On failure, surface via a custom event so the
+      // toast/banner system can react without the modal needing to stay open.
+      const fileToUpload = uploadedFile.file;
+      const providerId = selectedProvider;
+      void (async () => {
+        try {
+          const fd = new FormData();
+          fd.append("file", fileToUpload);
+          fd.append("matchId", matchId);
+          fd.append("providerId", providerId);
+          const response = await fetch("/api/upload", { method: "POST", body: fd });
+          const result = await response.json();
+          if (!response.ok || !result.success) {
+            throw new Error(result.error || "Upload failed");
+          }
+        } catch (err) {
+          console.error("Background file upload error:", err);
+          // Roll back the phantom match row so the user has a clean retry path.
+          await supabase.from("matches").delete().eq("id", matchId);
+          window.dispatchEvent(
+            new CustomEvent("match-upload-failed", {
+              detail: {
+                matchId,
+                error: err instanceof Error ? err.message : "Upload failed",
+              },
+            })
+          );
+        }
+      })();
     } catch (e: any) {
       console.error("Error creating match:", e);
       const errorMessage =
@@ -586,7 +618,7 @@ export function useUploadMatchModal({
     } finally {
       setIsCreating(false);
     }
-  }, [formData, uploadedFile, selectedProvider, supabase, isPrivateMatch, onOpenChange, router, uploadFileToStorage]);
+  }, [formData, uploadedFile, selectedProvider, supabase, isPrivateMatch, onOpenChange, router]);
 
   return {
     // State
@@ -602,6 +634,7 @@ export function useUploadMatchModal({
     isPrivateMatch,
     formData,
     parsingState,
+    pendingDetailFocus,
 
     // Step navigation
     setStep,
@@ -610,6 +643,8 @@ export function useUploadMatchModal({
     handleMatchContinue,
     handleBack,
     handleClose,
+    goEditDetail,
+    consumePendingDetailFocus,
 
     // File handling
     setIsOver,

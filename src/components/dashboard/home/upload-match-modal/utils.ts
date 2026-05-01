@@ -2,7 +2,7 @@
  * Utility functions for the Upload Match Modal
  */
 
-import { FormData, WinnerLoserResult, MatchData } from "./types";
+import { FormData, WinnerLoserResult, MatchData, UploadedFile } from "./types";
 
 /**
  * Get the number of sets to display/edit.
@@ -113,7 +113,7 @@ export function buildMatchData(
     player2_id: playerWon ? loser.id : winner.id,
     player2_name: formData.opponentName,
     tournament_name: formData.eventName || null,
-    round: formData.round && formData.round !== "None" ? formData.round : null,
+    round: formData.round || null,
     format: {
       best_of: bestOf,
       ad_scoring: formData.adScoring,
@@ -134,14 +134,8 @@ export function buildMatchData(
     created_by: metadata.userId,
     source_provider: metadata.sourceProvider,
     analysis_method: metadata.analysisMethod,
-    match_type: (() => {
-      const val = formData.matchType || metadata.matchType;
-      return val && val !== "None" ? val : undefined;
-    })(),
-    court_type: (() => {
-      const val = formData.courtType || metadata.courtType;
-      return val && val !== "None" ? val : undefined;
-    })(),
+    match_type: formData.matchType || metadata.matchType || undefined,
+    court_type: formData.courtType || metadata.courtType || undefined,
     duration: formData.duration,
     player_hand: formData.playerHand,
     player_backhand: formData.playerBackhand,
@@ -186,34 +180,6 @@ export function formatDuration(ms: number | undefined): string {
   if (hours === 0) return `${minutes}M`;
   if (minutes === 0) return `${hours}H`;
   return `${hours}H ${minutes}M`;
-}
-
-/**
- * Parse a duration string back to milliseconds.
- * Accepts "2H 34M", "2h", "34m", legacy "2:34", or empty. Returns 0 if unparseable.
- */
-export function parseDuration(display: string): number {
-  if (!display) return 0;
-  const trimmed = display.trim();
-  if (!trimmed || trimmed === "-:--") return 0;
-
-  // Legacy H:MM format
-  const colonMatch = trimmed.match(/^(\d+):(\d{2})$/);
-  if (colonMatch) {
-    const h = parseInt(colonMatch[1], 10);
-    const m = parseInt(colonMatch[2], 10);
-    if (m > 59) return 0;
-    return (h * 3600 + m * 60) * 1000;
-  }
-
-  // Letter format: "2H 34M", "2h", "34m"
-  const hMatch = trimmed.match(/(\d+)\s*[hH]/);
-  const mMatch = trimmed.match(/(\d+)\s*[mM]/);
-  if (!hMatch && !mMatch) return 0;
-  const h = hMatch ? parseInt(hMatch[1], 10) : 0;
-  const m = mMatch ? parseInt(mMatch[1], 10) : 0;
-  if (m > 59) return 0;
-  return (h * 3600 + m * 60) * 1000;
 }
 
 /**
@@ -314,13 +280,18 @@ export function loadFormDataFromStorage(): FormData | null {
   }
 }
 
+/** Persisted file metadata — the actual `File` can't survive localStorage. */
+export type StoredUploadedFile = Pick<UploadedFile, "name" | "size" | "status" | "type">;
+
 /**
- * Load uploaded file from localStorage
+ * Load uploaded file metadata from localStorage. Note: the underlying `File`
+ * object is intentionally not restored — callers must prompt the user to
+ * re-select the file when actually creating the match.
  */
-export function loadUploadedFileFromStorage(): any | null {
+export function loadUploadedFileFromStorage(): StoredUploadedFile | null {
   try {
     const stored = localStorage.getItem(STORAGE_KEYS.UPLOADED_FILE);
-    return stored ? JSON.parse(stored) : null;
+    return stored ? (JSON.parse(stored) as StoredUploadedFile) : null;
   } catch (e) {
     console.error("Error parsing file data:", e);
     return null;
