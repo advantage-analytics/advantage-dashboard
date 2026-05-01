@@ -508,11 +508,13 @@ function calculateKpiCards(
     const s = statByMatch.get(matchId);
     if (s) orderedStats.push(s);
   }
-  if (orderedStats.length === 0) return [];
 
+  // Emit a card for every spec even when stats haven't been computed yet
+  // (e.g. first match still processing in the edge function). The placeholder
+  // keeps the KPI strip populated so the customizer's 5-tile default stays intact.
   return KPI_SPECS.map((spec) => {
     const values = orderedStats.map(spec.pick);
-    const latest = values[0];
+    const hasData = values.length > 0;
     const sparkline = values.slice(0, 8).reverse();
     const change =
       values.length >= 2
@@ -521,7 +523,7 @@ function calculateKpiCards(
     return {
       key: spec.key,
       label: spec.label,
-      value: formatKpiValue(latest, spec.format),
+      value: hasData ? formatKpiValue(values[0], spec.format) : "—",
       change,
       changeLabel: "last 30 days",
       sparkline,
