@@ -2,7 +2,7 @@
  * Utility functions for the Upload Match Modal
  */
 
-import { FormData, WinnerLoserResult, MatchData } from "./types";
+import { FormData, WinnerLoserResult, MatchData, UploadedFile } from "./types";
 
 /**
  * Get the number of sets to display/edit.
@@ -113,7 +113,7 @@ export function buildMatchData(
     player2_id: playerWon ? loser.id : winner.id,
     player2_name: formData.opponentName,
     tournament_name: formData.eventName || null,
-    round: formData.round && formData.round !== "None" ? formData.round : null,
+    round: formData.round || null,
     format: {
       best_of: bestOf,
       ad_scoring: formData.adScoring,
@@ -134,15 +134,13 @@ export function buildMatchData(
     created_by: metadata.userId,
     source_provider: metadata.sourceProvider,
     analysis_method: metadata.analysisMethod,
-    match_type: (() => {
-      const val = formData.matchType || metadata.matchType;
-      return val && val !== "None" ? val : undefined;
-    })(),
-    court_type: (() => {
-      const val = formData.courtType || metadata.courtType;
-      return val && val !== "None" ? val : undefined;
-    })(),
-    duration: formData.duration
+    match_type: formData.matchType || metadata.matchType || undefined,
+    court_type: formData.courtType || metadata.courtType || undefined,
+    duration: formData.duration,
+    player_hand: formData.playerHand,
+    player_backhand: formData.playerBackhand,
+    opponent_hand: formData.opponentHand,
+    opponent_backhand: formData.opponentBackhand
   };
 }
 
@@ -167,7 +165,7 @@ export function base64ToBlob(base64Data: string, mimeType: string): Blob {
  */
 export function formatFileSize(bytes: number): string {
   const kb = bytes / 1024;
-  return `${kb.toFixed(0)} KB of ${kb.toFixed(0)} KB`;
+  return `${kb.toFixed(0)} KB`;
 }
 
 /**
@@ -175,28 +173,80 @@ export function formatFileSize(bytes: number): string {
  * Returns "-:--" if duration is 0 or undefined
  */
 export function formatDuration(ms: number | undefined): string {
-  if (!ms || ms === 0) return "-:--";
+  if (!ms || ms === 0) return "";
   const totalSeconds = Math.floor(ms / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
-  return `${hours}:${String(minutes).padStart(2, "0")}`;
+  if (hours === 0) return `${minutes}M`;
+  if (minutes === 0) return `${hours}H`;
+  return `${hours}H ${minutes}M`;
 }
 
 /**
- * Parse H:MM format string back to milliseconds
- * Returns 0 if format is invalid or "-:--"
+ * Validate a single set's score pair against standard tennis rules.
+ * Allowed completed sets: 6–0..6–4, 7–5, 7–6, and the mirror images.
+ * Returns null when the set is empty/incomplete (no error to show yet).
  */
-export function parseDuration(display: string): number {
-  if (!display || display === "-:--") return 0;
+export function validateSetScore(
+  p: number | null,
+  o: number | null
+): { kind: "ok" | "incomplete" | "invalid"; message?: string } {
+  if (p === null && o === null) return { kind: "incomplete" };
+  if (p === null || o === null) return { kind: "incomplete" };
+  if (p < 0 || o < 0 || p > 7 || o > 7) {
+    return { kind: "invalid", message: "Games must be 0–7." };
+  }
+  const [hi, lo] = p >= o ? [p, o] : [o, p];
+  // Valid completed combinations
+  if (hi === 6 && lo <= 4) return { kind: "ok" };
+  if (hi === 7 && (lo === 5 || lo === 6)) return { kind: "ok" };
+  // In-progress (e.g. 4–3, 5–5) — accept as incomplete, not invalid
+  if (hi <= 6 && lo <= 6 && !(hi === 6 && lo === 5) && !(hi === 6 && lo === 6)) {
+    if (hi < 6) return { kind: "incomplete" };
+  }
+  // 6–5, 6–6 are transitional but not final scores
+  if ((hi === 6 && lo === 5) || (hi === 6 && lo === 6)) {
+    return { kind: "incomplete" };
+  }
+  return { kind: "invalid", message: "Set must end 6–0..6–4, 7–5, or 7–6." };
+}
 
-  const match = display.match(/^(\d+):(\d{2})$/);
-  if (!match) return 0;
+/**
+ * Derive the outcome string from completed sets, when the scores produce
+ * a clean winner under best-of rules. Returns null if undecidable.
+ */
+export function deriveOutcome(
+  playerName: string,
+  opponentName: string,
+  playerScores: (number | null)[],
+  opponentScores: (number | null)[],
+  bestOf: number
+): string | null {
+  const setsToWin = Math.ceil(bestOf / 2);
+  let pSets = 0;
+  let oSets = 0;
+  for (let i = 0; i < playerScores.length; i++) {
+    const v = validateSetScore(playerScores[i], opponentScores[i]);
+    if (v.kind !== "ok") continue;
+    if ((playerScores[i] ?? 0) > (opponentScores[i] ?? 0)) pSets++;
+    else oSets++;
+  }
+  if (pSets >= setsToWin && pSets > oSets) return `${playerName} Wins`;
+  if (oSets >= setsToWin && oSets > pSets) return `${opponentName} Wins`;
+  return null;
+}
 
-  const hours = parseInt(match[1], 10);
-  const minutes = parseInt(match[2], 10);
-
-  if (minutes > 59) return 0;
-  return (hours * 3600 + minutes * 60) * 1000;
+/**
+ * True when a given set index has any user-entered data (score or tiebreak).
+ * Used to warn before the sets stepper drops it.
+ */
+export function setHasData(formData: FormData, index: number): boolean {
+  return (
+    formData.playerScores[index] != null ||
+    formData.opponentScores[index] != null ||
+    formData.playerTiebreaks[index] != null ||
+    formData.opponentTiebreaks[index] != null
+  );
 }
 
 /**
@@ -230,13 +280,18 @@ export function loadFormDataFromStorage(): FormData | null {
   }
 }
 
+/** Persisted file metadata — the actual `File` can't survive localStorage. */
+export type StoredUploadedFile = Pick<UploadedFile, "name" | "size" | "status" | "type">;
+
 /**
- * Load uploaded file from localStorage
+ * Load uploaded file metadata from localStorage. Note: the underlying `File`
+ * object is intentionally not restored — callers must prompt the user to
+ * re-select the file when actually creating the match.
  */
-export function loadUploadedFileFromStorage(): any | null {
+export function loadUploadedFileFromStorage(): StoredUploadedFile | null {
   try {
     const stored = localStorage.getItem(STORAGE_KEYS.UPLOADED_FILE);
-    return stored ? JSON.parse(stored) : null;
+    return stored ? (JSON.parse(stored) as StoredUploadedFile) : null;
   } catch (e) {
     console.error("Error parsing file data:", e);
     return null;

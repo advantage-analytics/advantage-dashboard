@@ -116,9 +116,9 @@ export function MatchDetailHero({
           Back
           <kbd
             aria-hidden="true"
-            className="hidden sm:inline-flex items-center justify-center ml-0.5 text-[10px] font-medium leading-none tracking-normal normal-case pl-1 pr-[3px] py-0.5 rounded text-[#AEAEB2] bg-[#F0F0F0]"
+            className="hidden sm:inline-flex items-center justify-center ml-0.5 text-[10px] font-medium leading-none tracking-normal normal-case px-1 py-0.5 rounded text-[#AAAAAA] bg-[#F0F0F0] [font-variant-caps:small-caps]"
           >
-            ESC
+            esc
           </kbd>
         </Link>
       </div>

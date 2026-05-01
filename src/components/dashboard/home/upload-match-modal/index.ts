@@ -10,9 +10,6 @@ export { UploadMatchModal } from "./UploadMatchModal";
 export { StepIndicator } from "./StepIndicator";
 
 // Content components
-export { MethodContent } from "./MethodContent";
-export type { MethodContentProps } from "./MethodContent";
-
 export { ProviderContent } from "./ProviderContent";
 export type { ProviderContentProps } from "./ProviderContent";
 
@@ -35,7 +32,7 @@ export type {
   MatchData
 } from "./types";
 
-export { DEFAULT_FORM_DATA, STEP_CONFIG, STEP_ORDER, STEP_FOOTER_CONFIG } from "./types";
+export { DEFAULT_FORM_DATA, STEP_CONFIG, STEP_ORDER, CONTINUE_LABEL } from "./types";
 
 // Custom hook
 export { useUploadMatchModal } from "./useUploadMatchModal";

@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * StepIndicator - Visual progress dots for the wizard
- * Shows current step with blue dot, others in gray
+ * StepIndicator — segmented progress bars only.
+ * The active step's name is carried by the dialog title below.
  */
 
 interface StepIndicatorProps {
@@ -12,16 +12,12 @@ interface StepIndicatorProps {
 
 export function StepIndicator({ currentStep, totalSteps }: StepIndicatorProps) {
   return (
-    <div className="flex justify-center gap-1">
+    <div className="flex gap-1" role="progressbar" aria-valuenow={currentStep + 1} aria-valuemin={1} aria-valuemax={totalSteps}>
       {Array.from({ length: totalSteps }, (_, index) => (
         <div
           key={index}
-          className={`h-1 rounded-full transition-all ${
-            index === currentStep
-              ? "w-10 bg-[#7BABED]"
-              : index < currentStep
-              ? "w-3 bg-[#7BABED]"
-              : "w-3 bg-gray-200"
+          className={`h-[2px] flex-1 rounded-full transition-colors duration-200 ${
+            index <= currentStep ? "bg-[#3B82F6]" : "bg-[#F3F3F3]"
           }`}
         />
       ))}

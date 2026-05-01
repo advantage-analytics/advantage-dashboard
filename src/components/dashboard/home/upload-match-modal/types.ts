@@ -3,7 +3,10 @@
  */
 
 /** Wizard step identifiers */
-export type Step = "method" | "provider" | "upload" | "details" | "confirm";
+export type Step = "provider" | "match" | "confirm";
+
+/** Optional Match-step fields that the Confirm step can deep-link back to. */
+export type DetailField = "round" | "matchType" | "courtType";
 
 /** Props for the main UploadMatchModal component */
 export interface UploadMatchModalProps {
@@ -32,6 +35,14 @@ export interface FormData {
   matchType?: string;
   courtType?: string;
   duration?: number;
+  /** Player dominant hand */
+  playerHand?: "right" | "left";
+  /** Opponent dominant hand */
+  opponentHand?: "right" | "left";
+  /** Player backhand style */
+  playerBackhand?: "one-handed" | "two-handed";
+  /** Opponent backhand style */
+  opponentBackhand?: "one-handed" | "two-handed";
 }
 
 /** Uploaded file metadata and data */
@@ -89,13 +100,17 @@ export interface MatchData {
   court_type?: string;
   verified?: boolean;
   duration?: number;
+  player_hand?: "right" | "left";
+  player_backhand?: "one-handed" | "two-handed";
+  opponent_hand?: "right" | "left";
+  opponent_backhand?: "one-handed" | "two-handed";
 }
 
 /** Default form data values */
 export const DEFAULT_FORM_DATA: FormData = {
   eventName: "",
   round: "",
-  bestOf: "",
+  bestOf: "3",
   adScoring: false,
   playOnLets: false,
   result: "",
@@ -103,6 +118,10 @@ export const DEFAULT_FORM_DATA: FormData = {
   time: "",
   playerName: "",
   opponentName: "",
+  playerHand: "right",
+  opponentHand: "right",
+  playerBackhand: "two-handed",
+  opponentBackhand: "two-handed",
   playerScores: [null, null, null],
   opponentScores: [null, null, null],
   playerTiebreaks: [null, null, null],
@@ -113,39 +132,29 @@ export const DEFAULT_FORM_DATA: FormData = {
 };
 
 /** Step order for navigation and indicator */
-export const STEP_ORDER: Step[] = ["method", "provider", "upload", "details", "confirm"];
+export const STEP_ORDER: Step[] = ["provider", "match", "confirm"];
 
 /** Step configuration for titles and descriptions */
 export const STEP_CONFIG: Record<Step, { title: string; description: string }> = {
-  method: {
-    title: "Your Analysis, Your Way",
-    description: "Choose which method to analyze your data"
-  },
   provider: {
-    title: "Choose Provider",
-    description: "Choose from the following Electronic Line Calling (ELC) providers"
+    title: "Choose your data source",
+    description: "Select the platform you exported from."
   },
-  upload: {
-    title: "Upload File",
-    description: "Upload your documents here"
-  },
-  details: {
-    title: "Match Details",
-    description: "Input and correct your match information"
+  match: {
+    title: "Add your match",
+    description: "Drop your file — we'll auto-fill the details for you to review."
   },
   confirm: {
-    title: "Confirm Details",
-    description: "Review and confirm your match details"
+    title: "Ready to save",
+    description: "A final review before this match is saved to your dashboard."
   }
 };
 
-/** Footer button configuration per step */
-export const STEP_FOOTER_CONFIG: Record<Step, { showBack: boolean; continueLabel: string }> = {
-  method: { showBack: false, continueLabel: "Continue" },
-  provider: { showBack: true, continueLabel: "Continue" },
-  upload: { showBack: true, continueLabel: "Continue" },
-  details: { showBack: true, continueLabel: "Continue" },
-  confirm: { showBack: true, continueLabel: "Create Match" }
+/** Continue-button label per step. */
+export const CONTINUE_LABEL: Record<Step, string> = {
+  provider: "Continue",
+  match: "Continue",
+  confirm: "Create match",
 };
 
 /** File parsing state for auto-population */

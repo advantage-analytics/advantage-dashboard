@@ -390,7 +390,7 @@ export function Header() {
             >
               <Search className="h-[14px] w-[14px]" strokeWidth={1.5} aria-hidden="true" />
               {isMac !== null && (
-                <kbd className="text-[10px] font-medium leading-none px-1 py-0.5 rounded text-[#AEAEB2] bg-[#F0F0F0]">
+                <kbd className="text-[10px] font-medium leading-none px-1 py-0.5 rounded text-[#AAAAAA] bg-[#F0F0F0]">
                   {isMac ? "\u2318K" : "\u2303K"}
                 </kbd>
               )}

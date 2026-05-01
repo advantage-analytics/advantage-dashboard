@@ -3,11 +3,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { AlertCircle, Inbox, RefreshCw, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, Inbox, RefreshCw, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import RecentMatches from "@/components/dashboard/home/recent-matches";
 import { createClient } from "@/lib/supabase/client";
+
+type ToastState =
+  | { kind: "idle" }
+  | { kind: "created" }
+  | { kind: "analyzing" }
+  | { kind: "ready"; matchId: string };
 
 interface DbMatch {
   id: string;
@@ -207,15 +214,17 @@ export default function RecentActivity({ userId }: { userId: string }) {
   const [error, setError] = useState<string | null>(null);
   const hasLoadedRef = useRef(false);
   const seenEventIdsRef = useRef<Set<string> | null>(null);
-  const [processing, setProcessing] = useState(false);
+  const [toast, setToast] = useState<ToastState>({ kind: "idle" });
   const [mounted, setMounted] = useState(false);
   const shouldReduceMotion = useReducedMotion();
+  const router = useRouter();
 
-  // Hydrate processing state from sessionStorage on mount
+  // Hydrate processing state from sessionStorage on mount.
+  // We never persist "created" or "ready" — those are short-lived UI moments.
   useEffect(() => {
     setMounted(true);
     if (sessionStorage.getItem("match-processing") === "true") {
-      setProcessing(true);
+      setToast({ kind: "analyzing" });
     }
   }, []);
 
@@ -280,16 +289,34 @@ export default function RecentActivity({ userId }: { userId: string }) {
   useEffect(() => {
     const handler = () => {
       sessionStorage.setItem("match-processing", "true");
-      setProcessing(true);
+      setToast({ kind: "created" });
+      // Hold the green-check celebration briefly, then transition to the analyzing
+      // state. Persist only "analyzing" to sessionStorage so a refresh during the
+      // brief "created" window resumes correctly without flashing the celebration.
+      const t = setTimeout(() => {
+        setToast((current) =>
+          current.kind === "created" ? { kind: "analyzing" } : current
+        );
+      }, 1200);
+      return t;
     };
-    window.addEventListener("match-created", handler);
-    return () => window.removeEventListener("match-created", handler);
+    let createdTimer: ReturnType<typeof setTimeout> | undefined;
+    const wrapped = () => {
+      createdTimer = handler();
+    };
+    window.addEventListener("match-created", wrapped);
+    return () => {
+      window.removeEventListener("match-created", wrapped);
+      if (createdTimer) clearTimeout(createdTimer);
+    };
   }, [load]);
 
-  // Poll for stats once processing starts, auto-dismiss when stats arrive
+  // Poll for stats while the toast is in created/analyzing; auto-transition to
+  // "ready" when stats arrive, then to "idle" after a short celebration.
   useEffect(() => {
-    if (!processing) return;
+    if (toast.kind !== "created" && toast.kind !== "analyzing") return;
     const supabase = createClient();
+    let readyTimer: ReturnType<typeof setTimeout> | undefined;
     const interval = setInterval(async () => {
       const { data: matches } = await supabase
         .from("matches")
@@ -298,28 +325,45 @@ export default function RecentActivity({ userId }: { userId: string }) {
         .order("date", { ascending: false })
         .limit(1);
       if (!matches?.[0]) return;
+      const matchId = matches[0].id;
       const { data: stats } = await supabase
         .from("match_stats_with_percentages")
         .select("match_id")
-        .eq("match_id", matches[0].id)
+        .eq("match_id", matchId)
         .limit(1);
       if (stats && stats.length > 0) {
         sessionStorage.removeItem("match-processing");
-        setProcessing(false);
+        setToast({ kind: "ready", matchId });
         load();
         window.dispatchEvent(new Event("match-processed"));
+        readyTimer = setTimeout(() => {
+          setToast((current) => (current.kind === "ready" ? { kind: "idle" } : current));
+        }, 2500);
       }
     }, 3000);
-    // Safety timeout — dismiss after 60s regardless
+    // Safety timeout — dismiss after 60s without claiming "ready"
     const timeout = setTimeout(() => {
       sessionStorage.removeItem("match-processing");
-      setProcessing(false);
+      setToast({ kind: "idle" });
     }, 60000);
     return () => {
       clearInterval(interval);
       clearTimeout(timeout);
+      if (readyTimer) clearTimeout(readyTimer);
     };
-  }, [processing, load, userId]);
+  }, [toast.kind, load, userId]);
+
+  const dismissToast = useCallback(() => {
+    sessionStorage.removeItem("match-processing");
+    setToast({ kind: "idle" });
+  }, []);
+
+  const handleToastClick = useCallback(() => {
+    if (toast.kind === "ready") {
+      router.push(`/dashboard/matches/${toast.matchId}`);
+      setToast({ kind: "idle" });
+    }
+  }, [toast, router]);
 
   return (
     <>
@@ -417,10 +461,10 @@ export default function RecentActivity({ userId }: { userId: string }) {
       </div>
     </div>
 
-    {/* Floating processing popup */}
+    {/* Floating upload-status pill — confirm → analyzing → ready */}
     {mounted && createPortal(
       <AnimatePresence>
-        {processing && (
+        {toast.kind !== "idle" && (
           <motion.div
             initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 24, scale: 0.95 }}
             animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
@@ -430,42 +474,75 @@ export default function RecentActivity({ userId }: { userId: string }) {
               ease: [0.25, 0.46, 0.45, 0.94],
             }}
             role="status"
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 pl-4 pr-5 py-3 bg-[#0D0D0D] rounded-[12px] shadow-[0px_8px_32px_rgba(0,0,0,0.25),0px_0px_0px_1px_rgba(255,255,255,0.06)_inset]"
+            onClick={toast.kind === "ready" ? handleToastClick : undefined}
+            className={
+              "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 pl-4 pr-5 py-3 bg-[#0D0D0D] rounded-[12px] shadow-[0px_8px_32px_rgba(0,0,0,0.25),0px_0px_0px_1px_rgba(255,255,255,0.06)_inset] " +
+              (toast.kind === "ready" ? "cursor-pointer hover:bg-[#1A1A1A] transition-colors duration-200" : "")
+            }
           >
-            {/* Animated progress dot */}
+            {/* Status icon — swaps cleanly across states */}
             <div className="relative flex items-center justify-center size-5 shrink-0">
-              <motion.div
-                className="absolute inset-0 rounded-full border-[1.5px] border-[#3B82F6]/30"
-                aria-hidden
-              />
-              {!shouldReduceMotion && (
-                <motion.div
-                  className="absolute inset-0 rounded-full border-[1.5px] border-transparent border-t-[#3B82F6]"
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1, ease: "linear", repeat: Infinity }}
-                  aria-hidden
-                />
-              )}
-              <div className="size-1.5 rounded-full bg-[#3B82F6]" aria-hidden />
+              <AnimatePresence mode="wait" initial={false}>
+                {toast.kind === "created" || toast.kind === "ready" ? (
+                  <motion.div
+                    key={toast.kind}
+                    initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.6 }}
+                    animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
+                    exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.8 }}
+                    transition={{ duration: 0.18, ease: [0.25, 0.46, 0.45, 0.94] }}
+                    className="absolute inset-0 flex items-center justify-center"
+                  >
+                    <CheckCircle2 className="size-5 text-[#5DB955]" strokeWidth={1.75} />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="analyzing"
+                    initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.6 }}
+                    animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
+                    exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.8 }}
+                    transition={{ duration: 0.18, ease: [0.25, 0.46, 0.45, 0.94] }}
+                    className="absolute inset-0 flex items-center justify-center"
+                  >
+                    <div className="absolute inset-0 rounded-full border-[1.5px] border-[#3B82F6]/30" aria-hidden />
+                    {!shouldReduceMotion && (
+                      <motion.div
+                        className="absolute inset-0 rounded-full border-[1.5px] border-transparent border-t-[#3B82F6]"
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 1, ease: "linear", repeat: Infinity }}
+                        aria-hidden
+                      />
+                    )}
+                    <div className="size-1.5 rounded-full bg-[#3B82F6]" aria-hidden />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-0.5 min-w-[180px]">
               <p className="text-[12px] font-medium text-white leading-none">
-                Analyzing match data
+                {toast.kind === "created"
+                  ? "Match created"
+                  : toast.kind === "ready"
+                  ? "Stats ready"
+                  : "Analyzing match data"}
               </p>
               <p className="text-[10px] font-normal text-[#888888] leading-none">
-                Stats will refresh automatically
+                {toast.kind === "created"
+                  ? "Analyzing your stats…"
+                  : toast.kind === "ready"
+                  ? "Tap to view your match"
+                  : "Stats will refresh automatically"}
               </p>
             </div>
 
             <button
               type="button"
-              onClick={() => {
-                sessionStorage.removeItem("match-processing");
-                setProcessing(false);
+              onClick={(e) => {
+                e.stopPropagation();
+                dismissToast();
               }}
               className="ml-1 p-1 rounded-full text-white/60 hover:text-white/80 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-              aria-label="Dismiss processing notification"
+              aria-label="Dismiss notification"
             >
               <X className="size-3.5" />
             </button>

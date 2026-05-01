@@ -330,6 +330,38 @@ border border-[#EAECF0] text-[#525252]
 hover:bg-[#F5F5F5] transition-colors duration-200
 ```
 
+### Chrome Icon Button
+
+Square icon-only buttons used for header and modal chrome — sidebar toggle, search trigger, profile menu, modal back, modal close. Always `rounded-lg` (radius-element); never `rounded-full` (per the radius-pill rule, full-round is reserved for non-button pills, avatars, dots, and indicators).
+
+**Sizes**
+
+- `h-7 w-7` (28×28) — modal chrome (back arrow, close X)
+- `h-8 w-8` (32×32) — dashboard header chrome (sidebar toggle, profile, search trigger when expanded)
+
+**Pattern (modal chrome — paired back/close in top bar)**
+
+```
+h-7 w-7 rounded-lg flex items-center justify-center
+text-[#888888] hover:text-[#0D0D0D] hover:bg-[#F5F5F5]
+transition-colors duration-200
+focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none
+```
+
+**Pattern (dashboard header chrome — slightly cooler greys + press feedback)**
+
+```
+h-8 w-8 rounded-lg flex items-center justify-center
+text-[#8A8A8E] hover:text-[#3C3C43] hover:bg-[#F5F5F5]
+active:scale-[0.97]
+transition-colors duration-150
+focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none
+```
+
+**Icon**: `size-3.5` (14px) at `strokeWidth={1.5}` for h-7 buttons; `h-[15px] w-[15px]` for h-8 buttons. Always Lucide.
+
+**Pairing rule**: when a back/close pair appears in modal chrome, both buttons must share size, shape, hover, and focus treatment. Mixing a labeled chip with an icon circle is forbidden — the eye reads them as unrelated controls.
+
 ### List Item (Hoverable Row)
 
 ```
