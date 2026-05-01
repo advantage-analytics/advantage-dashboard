@@ -1,20 +1,23 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Camera, Trash2, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { SettingsInput } from "@/components/dashboard/settings/settings-input";
 import { SettingsSelect } from "@/components/dashboard/settings/settings-select";
 import { SettingsSection } from "@/components/dashboard/settings/settings-section";
 import { SettingsButton } from "@/components/dashboard/settings/settings-button";
 import { SettingsAlert } from "@/components/dashboard/settings/settings-alert";
 import { ProfileWelcomeBanner } from "@/components/dashboard/settings/profile-welcome-banner";
+import { ProfileIdentityCard } from "@/components/dashboard/settings/profile-identity-card";
 import { useUnsavedChanges } from "@/components/dashboard/settings/unsaved-changes-context";
+import { saveProfile } from "@/components/dashboard/settings/actions";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 const FOCUS_RING =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40";
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-blue)]/40";
 
 const EASE_CURVE: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
 
@@ -28,7 +31,6 @@ const PROFILE_FIELDS = [
   "role",
 ] as const;
 
-/** Fields the auth system checks for profile completeness. */
 const REQUIRED_FIELDS = new Set<(typeof PROFILE_FIELDS)[number]>([
   "phone",
   "birthdate",
@@ -76,116 +78,7 @@ const ROLE_OPTIONS = [
   { value: "academy", label: "Academy" },
 ];
 
-function ProfilePicture({
-  src,
-  initials,
-  onImageSelect,
-  onRemove,
-}: {
-  src: string | null;
-  initials: string;
-  onImageSelect: (file: File) => void;
-  onRemove: () => void;
-}) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && file.type.startsWith("image/")) {
-      onImageSelect(file);
-    }
-    e.target.value = "";
-  };
-
-  return (
-    <div className="flex items-center gap-6">
-      {/* Avatar */}
-      <div className="relative group">
-        <div
-          className={cn(
-            "size-[72px] rounded-full flex items-center justify-center overflow-hidden",
-            "bg-[#F5F5F5] border border-[#F3F3F3]"
-          )}
-        >
-          {src ? (
-            <img
-              src={src}
-              alt="Profile"
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <span className="text-[18px] font-semibold text-[#AAAAAA] select-none">
-              {initials}
-            </span>
-          )}
-        </div>
-
-        {/* Hover / focus overlay */}
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          aria-label="Change profile photo"
-          className={cn(
-            "absolute inset-0 rounded-full flex items-center justify-center",
-            "bg-[#0D0D0D]/40 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
-            "transition-opacity duration-200 cursor-pointer",
-            FOCUS_RING
-          )}
-        >
-          <Camera className="size-4 text-white" strokeWidth={1.5} />
-        </button>
-      </div>
-
-      {/* Upload controls */}
-      <div className="space-y-2.5">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleFileChange}
-          className="hidden"
-        />
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className={cn(
-              "h-8 px-3.5 text-[10px] font-medium uppercase tracking-[1.5px] rounded-[6px]",
-              "border border-[#EAECF0] text-[#525252]",
-              "hover:border-[#3B82F6] hover:text-[#3B82F6]",
-              "transition-colors duration-200",
-              FOCUS_RING
-            )}
-          >
-            Upload photo
-          </button>
-          {src && (
-            <button
-              type="button"
-              onClick={onRemove}
-              aria-label="Remove profile photo"
-              className={cn(
-                "size-8 rounded-full flex items-center justify-center",
-                "border border-[#EAECF0] text-[#AAAAAA]",
-                "hover:border-[#E51837]/30 hover:text-[#E51837]",
-                "transition-colors duration-200",
-                FOCUS_RING
-              )}
-            >
-              <Trash2 className="size-3" strokeWidth={1.5} />
-            </button>
-          )}
-        </div>
-        <p className="text-[10px] text-[#AAAAAA]">
-          JPG, PNG or GIF. Max 2MB.
-        </p>
-      </div>
-    </div>
-  );
-}
-
 export default function ProfilePage() {
-  // TODO: Replace with Supabase user data once profile fetching is wired up
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -195,7 +88,8 @@ export default function ProfilePage() {
     state: "",
     role: "",
   });
-  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [email, setEmail] = useState<string>("");
   const [hasChanges, setHasChanges] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{
@@ -207,20 +101,61 @@ export default function ProfilePage() {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("profile-onboarding-dismissed") === "true";
   });
+  const [isMac, setIsMac] = useState(false);
+
+  useEffect(() => {
+    const platform =
+      (navigator as Navigator & { userAgentData?: { platform: string } })
+        .userAgentData?.platform ?? navigator.platform;
+    setIsMac(/mac/i.test(platform));
+  }, []);
+
+  // Initial load — fetch the user's profile row from public.users.
+  useEffect(() => {
+    let cancelled = false;
+    const supabase = createClient();
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+      setEmail(user.email ?? "");
+      const { data } = await supabase
+        .from("users")
+        .select("first_name, last_name, dob, phone, country, state, role")
+        .eq("id", user.id)
+        .single();
+      if (cancelled) return;
+      if (data) {
+        setFormData({
+          firstName: data.first_name ?? "",
+          lastName: data.last_name ?? "",
+          birthdate: data.dob ?? "",
+          phone: data.phone ?? "",
+          country: data.country ?? "",
+          state: data.state ?? "",
+          role: data.role ?? "",
+        });
+      }
+      setLoaded(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const { setHasUnsavedChanges } = useUnsavedChanges();
 
-  // Sync local hasChanges into the unsaved-changes context
   useEffect(() => {
     setHasUnsavedChanges(hasChanges);
     return () => setHasUnsavedChanges(false);
   }, [hasChanges, setHasUnsavedChanges]);
 
-  // Cmd+S / Ctrl+S keyboard shortcut to save
   const hasChangesRef = useRef(hasChanges);
   hasChangesRef.current = hasChanges;
   const loadingRef = useRef(loading);
   loadingRef.current = loading;
+  const completionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -235,18 +170,43 @@ export default function ProfilePage() {
     return () => window.removeEventListener("keydown", handler);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const completedCount = PROFILE_FIELDS.filter(
-    (f) => formData[f]?.trim().length > 0
-  ).length;
+  const { completedCount, missingFields } = useMemo(() => {
+    const missing: { id: string; label: string }[] = [];
+    let count = 0;
+    for (const f of PROFILE_FIELDS) {
+      if (formData[f]?.trim()) count++;
+      else missing.push({ id: f, label: FIELD_LABELS[f] });
+    }
+    return { completedCount: count, missingFields: missing };
+  }, [formData]);
+
   const isComplete = completedCount === PROFILE_FIELDS.length;
   const isNewUser = completedCount === 0 && !bannerDismissed;
-  const missingFieldNames = PROFILE_FIELDS.filter(
-    (f) => !formData[f]?.trim()
-  ).map((f) => FIELD_LABELS[f]);
+  const completionVisible = profileCompleted && isComplete && !hasChanges;
+  const wasVisibleRef = useRef(false);
 
-  const initials =
-    `${formData.firstName[0] || ""}${formData.lastName[0] || ""}`.toUpperCase() ||
-    "?";
+  useEffect(() => {
+    if (completionVisible && !wasVisibleRef.current) {
+      completionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }
+    wasVisibleRef.current = completionVisible;
+  }, [completionVisible]);
+
+  const realName = `${formData.firstName} ${formData.lastName}`.trim();
+  const displayName =
+    realName || (isNewUser ? "Welcome" : "Add your name");
+  // The "Welcome" greeting is real copy, not a placeholder — only italicize
+  // the "Add your name" fallback so it reads as missing data.
+  const isPlaceholderName = !realName && !isNewUser;
+  const showBanner = loaded && !isComplete && !bannerDismissed;
+
+  const roleLabel = useMemo(
+    () => ROLE_OPTIONS.find((r) => r.value === formData.role)?.label,
+    [formData.role]
+  );
 
   const handleInputChange = useCallback((field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -259,67 +219,51 @@ export default function ProfilePage() {
     localStorage.setItem("profile-onboarding-dismissed", "true");
   }, []);
 
-  const handleImageSelect = (file: File) => {
-    if (file.size > 2 * 1024 * 1024) {
-      setMessage({ type: "error", text: "Image must be less than 2MB" });
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setProfileImage(e.target?.result as string);
-      setHasChanges(true);
-      setMessage(null);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleRemoveImage = () => {
-    setProfileImage(null);
-    setHasChanges(true);
-    setMessage(null);
-  };
-
   const handleSave = async () => {
     setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 800));
-
-    setMessage({ type: "success", text: "Profile updated successfully" });
-
-    // Set completion before clearing hasChanges to avoid render flash
-    if (isComplete) {
-      setProfileCompleted(true);
+    try {
+      const result = await saveProfile(formData);
+      if (result.ok) {
+        setMessage({ type: "success", text: "Profile saved" });
+        if (isComplete) setProfileCompleted(true);
+        setHasChanges(false);
+      } else {
+        setMessage({
+          type: "error",
+          text: result.error || "Couldn't save your profile. Try again.",
+        });
+      }
+    } catch {
+      setMessage({
+        type: "error",
+        text: "Couldn't save your profile. Check your connection and try again.",
+      });
+    } finally {
+      setLoading(false);
     }
-
-    setHasChanges(false);
-    setLoading(false);
   };
 
   return (
-    <div className="max-w-xl space-y-8">
-      {/* Page Heading — context-aware for new users */}
-      <div>
-        <h2 className="text-[14px] font-medium text-[#0D0D0D]">
-          {isNewUser ? "Set up your profile" : "Profile"}
-        </h2>
-        <p className="text-[11px] text-[#888888] mt-0.5">
-          {isNewUser
-            ? "Tell us a bit about yourself so we can personalize your experience"
-            : "Manage your personal information"}
-        </p>
-        {!isComplete && (
-          <p className="text-[10px] text-[#AAAAAA] mt-2">
-            <span className="text-[#3B82F6]">*</span> Required to complete your profile
-          </p>
-        )}
-      </div>
+    <div className="max-w-xl flex flex-col gap-10">
+      {/* Identity block — hides its own completion meter when the banner
+          is visible, so progress is only signaled in one place. */}
+      <ProfileIdentityCard
+        displayName={displayName}
+        isPlaceholderName={isPlaceholderName}
+        email={email}
+        roleLabel={roleLabel}
+        completedCount={completedCount}
+        totalCount={PROFILE_FIELDS.length}
+        showCompletion={!showBanner}
+      />
 
-      {/* Onboarding Banner */}
-      {!isComplete && !bannerDismissed && (
+      {/* Onboarding Banner — gated on `loaded` so it doesn't flash with
+          "0 of 7 complete" before Supabase data lands. */}
+      {showBanner && (
         <ProfileWelcomeBanner
           completedCount={completedCount}
           totalCount={PROFILE_FIELDS.length}
-          missingFieldNames={missingFieldNames}
+          missingFields={missingFields}
           onDismiss={handleDismissBanner}
         />
       )}
@@ -333,23 +277,20 @@ export default function ProfilePage() {
         />
       )}
 
-      {/* Profile Picture */}
-      <SettingsSection title="Profile Picture">
-        <ProfilePicture
-          src={profileImage}
-          initials={initials}
-          onImageSelect={handleImageSelect}
-          onRemove={handleRemoveImage}
-        />
-      </SettingsSection>
-
       {/* General Information */}
-      <SettingsSection title="General Information">
+      <SettingsSection
+        number="01"
+        title="General Information"
+        description="Your name, contact, and date of birth."
+      >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <SettingsInput
             id="firstName"
             label="First Name"
             type="text"
+            skeleton={!loaded}
+            skeletonWidth="sm"
+            skeletonIndex={0}
             value={formData.firstName}
             onChange={(e) => handleInputChange("firstName", e.target.value)}
             placeholder="First name"
@@ -358,6 +299,9 @@ export default function ProfilePage() {
             id="lastName"
             label="Last Name"
             type="text"
+            skeleton={!loaded}
+            skeletonWidth="md"
+            skeletonIndex={1}
             value={formData.lastName}
             onChange={(e) => handleInputChange("lastName", e.target.value)}
             placeholder="Last name"
@@ -367,16 +311,22 @@ export default function ProfilePage() {
           id="birthdate"
           label="Date of Birth"
           type="date"
+          skeleton={!loaded}
+          skeletonWidth="md"
+          skeletonIndex={2}
           required={REQUIRED_FIELDS.has("birthdate")}
           value={formData.birthdate}
           onChange={(e) => handleInputChange("birthdate", e.target.value)}
-          hint="Used to categorize your age group in rankings"
+          hint="For age-group statistics."
         />
         <SettingsInput
           id="phone"
           label="Phone Number"
           type="tel"
           inputMode="tel"
+          skeleton={!loaded}
+          skeletonWidth="lg"
+          skeletonIndex={3}
           required={REQUIRED_FIELDS.has("phone")}
           value={formData.phone}
           onChange={(e) => handleInputChange("phone", e.target.value)}
@@ -386,11 +336,18 @@ export default function ProfilePage() {
       </SettingsSection>
 
       {/* Tennis Profile */}
-      <SettingsSection title="Tennis Profile">
+      <SettingsSection
+        number="02"
+        title="Tennis Profile"
+        description="Where you play and how you use Advantage."
+      >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <SettingsSelect
             id="country"
             label="Country"
+            skeleton={!loaded}
+            skeletonWidth="md"
+            skeletonIndex={4}
             required={REQUIRED_FIELDS.has("country")}
             value={formData.country}
             onChange={(e) => handleInputChange("country", e.target.value)}
@@ -401,6 +358,9 @@ export default function ProfilePage() {
             id="state"
             label="State / Region"
             type="text"
+            skeleton={!loaded}
+            skeletonWidth="sm"
+            skeletonIndex={5}
             required={REQUIRED_FIELDS.has("state")}
             value={formData.state}
             onChange={(e) => handleInputChange("state", e.target.value)}
@@ -410,66 +370,102 @@ export default function ProfilePage() {
         <SettingsSelect
           id="role"
           label="Role"
+          skeleton={!loaded}
+          skeletonWidth="md"
+          skeletonIndex={6}
           required={REQUIRED_FIELDS.has("role")}
           value={formData.role}
           onChange={(e) => handleInputChange("role", e.target.value)}
           options={ROLE_OPTIONS}
           placeholder="Select your role"
-          hint="Tailors your dashboard — players see personal stats, coaches see team overviews"
+          hint="Personal stats for players, overviews for coaches."
         />
       </SettingsSection>
 
-      {/* Save */}
-      <div className="pt-2 space-y-2">
-        <SettingsButton
-          onClick={handleSave}
-          disabled={!hasChanges}
-          loading={loading}
-          fullWidth
-        >
-          Save changes
-        </SettingsButton>
-        <p className="text-[10px] text-[#AAAAAA] text-center tracking-[0.3px]">
-          or press{" "}
-          <kbd className="text-[#525252] font-medium">
-            {typeof navigator !== "undefined" &&
-            /mac/i.test(
-              (navigator as Navigator & { userAgentData?: { platform: string } })
-                .userAgentData?.platform ?? navigator.platform
-            )
-              ? "\u2318S"
-              : "Ctrl+S"}
-          </kbd>
-        </p>
-      </div>
+      {/* Save — left-aligned compact, matching the Account page convention.
+          The ⌘S hint only appears when there's something to save. */}
+      {!(profileCompleted && isComplete && !hasChanges) && (
+        <div className="pt-2 flex flex-col items-start gap-2">
+          <SettingsButton
+            onClick={handleSave}
+            disabled={!hasChanges}
+            loading={loading}
+            variant="blue"
+          >
+            Save changes
+          </SettingsButton>
+          {hasChanges && (
+            <p className="text-[10px] text-[var(--color-ink-400)] tracking-[0.3px]">
+              You have unsaved changes · or press{" "}
+              <kbd className="text-[var(--color-ink-700)] font-medium">
+                {isMac ? "⌘S" : "Ctrl+S"}
+              </kbd>
+            </p>
+          )}
+        </div>
+      )}
 
-      {/* Completion CTA — persists after save, independent of alert auto-dismiss */}
+      {/* Completion CTA — scoreboard voice. Final score reads like a match
+          result, not a SaaS toast. The peak moment of the settings flow. */}
       {profileCompleted && isComplete && !hasChanges && (
         <motion.div
-          initial={{ opacity: 0, y: 6 }}
+          ref={completionRef}
+          initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: EASE_CURVE }}
-          className="rounded-[14px] border border-[rgba(93,185,85,0.15)] bg-[rgba(93,185,85,0.04)] p-5"
+          transition={{ duration: 0.45, ease: EASE_CURVE }}
+          className="flex items-end justify-between gap-6 pt-6 border-t border-[var(--color-success-tint-20)]"
         >
-          <p className="text-[12px] font-medium text-[#0D0D0D]">
-            Profile complete
-          </p>
-          <p className="text-[11px] text-[#888888] mt-0.5 leading-relaxed">
-            You&apos;re all set. Your dashboard is ready.
-          </p>
-          <div className="mt-3">
+          <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3, delay: 0.15, ease: EASE_CURVE }}
+              className="text-[10px] font-medium uppercase tracking-[2.5px] text-[var(--color-success)]"
+            >
+              Final · Match-day ready
+            </motion.p>
+            <motion.p
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.25, ease: EASE_CURVE }}
+              className="font-light text-[22px] text-[var(--color-ink-900)] tracking-[-0.4px] leading-[1.15]"
+            >
+              Profile complete.
+            </motion.p>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3, delay: 0.4, ease: EASE_CURVE }}
+              className="text-[11px] text-[var(--color-ink-500)] leading-[1.55]"
+            >
+              Your dashboard is calibrated.
+            </motion.p>
+          </div>
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.4, delay: 0.3, ease: EASE_CURVE }}
+            className="flex flex-col items-end gap-2"
+          >
+            <p className="font-light text-[22px] text-[var(--color-success)] tracking-[-0.4px] tabular-nums leading-none whitespace-nowrap">
+              {String(completedCount).padStart(2, "0")}
+              <span className="text-[var(--color-ink-300)]">
+                {" "}/ {String(PROFILE_FIELDS.length).padStart(2, "0")}
+              </span>
+            </p>
             <Link
               href="/dashboard"
               className={cn(
-                "inline-flex items-center gap-2 h-9 px-4 text-[10px] font-medium uppercase tracking-[1.5px] rounded-[6px]",
-                "bg-[#5DB955] text-white hover:bg-[#4EA84A] transition-colors duration-200",
+                "inline-flex items-center gap-2 h-9 px-4 text-[10px] font-medium uppercase tracking-[1.5px] rounded-full whitespace-nowrap",
+                "bg-[var(--color-ink-900)] text-white hover:bg-[var(--color-ink-700)] transition-colors duration-200",
                 FOCUS_RING
               )}
             >
-              Go to dashboard
-              <ArrowRight className="size-3" strokeWidth={1.5} />
+              Open dashboard
+              <ArrowRight className="size-3" strokeWidth={1.75} />
             </Link>
-          </div>
+          </motion.div>
         </motion.div>
       )}
     </div>

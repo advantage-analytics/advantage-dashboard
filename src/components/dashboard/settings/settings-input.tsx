@@ -2,45 +2,92 @@
 
 import { forwardRef } from "react";
 import { cn } from "@/lib/utils";
+import { SettingsFieldSkeleton } from "@/components/dashboard/settings/settings-field-skeleton";
 
 interface SettingsInputProps
   extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string;
-  hint?: string;
+  hint?: React.ReactNode;
+  skeleton?: boolean;
+  skeletonWidth?: "sm" | "md" | "lg";
+  skeletonIndex?: number;
+  tone?: "default" | "danger";
 }
 
+/**
+ * Underline-style input — mirrors the auth form-field.tsx vocabulary
+ * (eyebrow label · transparent input · 1px → 2px blue focus rule).
+ *
+ * `skeleton` renders a hairline pulse in place of the underline while data
+ * is loading, so the field reserves its layout slot without flashing empty.
+ */
 export const SettingsInput = forwardRef<HTMLInputElement, SettingsInputProps>(
-  ({ label, hint, className, id, disabled, ...props }, ref) => {
+  ({ label, hint, skeleton, skeletonWidth, skeletonIndex, className, id, disabled, required, tone = "default", ...props }, ref) => {
+    if (skeleton) {
+      return (
+        <SettingsFieldSkeleton
+          label={label}
+          width={skeletonWidth}
+          index={skeletonIndex}
+          required={required}
+        />
+      );
+    }
+    const isDanger = tone === "danger";
     return (
-      <div className="space-y-1.5">
+      <div className="group flex flex-col gap-[6px]">
         <label
           htmlFor={id}
           className={cn(
-            "block text-[12px] font-medium transition-colors",
-            disabled ? "text-[#888888]" : "text-[#0D0D0D]"
+            "text-[10px] font-medium uppercase tracking-[2.5px]",
+            disabled
+              ? "text-[var(--color-ink-300)]"
+              : isDanger
+                ? "text-[var(--color-danger-tint-70)]"
+                : "text-[var(--color-ink-400)]"
           )}
         >
           {label}
-          {props.required && (
-            <span className="text-[#3B82F6] ml-0.5" aria-hidden="true">*</span>
+          {required && (
+            <>
+              <span className="text-[var(--color-blue)] ml-1" aria-hidden="true">
+                *
+              </span>
+              <span className="sr-only">(required)</span>
+            </>
           )}
         </label>
-        <input
-          ref={ref}
-          id={id}
-          disabled={disabled}
+        <div className="flex w-full items-center pb-[10px]">
+          <input
+            ref={ref}
+            id={id}
+            disabled={disabled}
+            required={required}
+            className={cn(
+              "w-full bg-transparent text-[14px] outline-none transition-colors duration-150",
+              disabled
+                ? "text-[var(--color-ink-500)] cursor-not-allowed placeholder:text-[var(--color-ink-300)]"
+                : "text-[var(--color-ink-900)] placeholder:text-[var(--color-ink-400)]",
+              className
+            )}
+            {...props}
+          />
+        </div>
+        <div
+          aria-hidden="true"
           className={cn(
-            "w-full h-10 px-3.5 text-[13px] rounded-[6px] outline-none transition-all duration-200",
-            "border bg-white",
+            "h-[1px] w-full transition-all duration-300",
             disabled
-              ? "text-[#888888] bg-[#F7F7F7] border-[#F3F3F3] cursor-not-allowed"
-              : "text-[#0D0D0D] border-[#EAECF0] hover:border-[#CCCCCC] focus:border-[#3B82F6] focus-visible:ring-2 focus-visible:ring-[#3B82F6]/10 placeholder:text-[#AAAAAA]",
-            className
+              ? "bg-[var(--color-ink-100)]"
+              : isDanger
+                ? "bg-[var(--color-danger-tint-15)] group-focus-within:h-[2px] group-focus-within:bg-[var(--color-error-strong)]"
+                : "bg-[var(--color-ink-100)] group-hover:bg-[var(--color-ink-200)] group-focus-within:h-[2px] group-focus-within:bg-[var(--color-blue)]"
           )}
-          {...props}
         />
         {hint && (
-          <p className="text-[11px] text-[#AAAAAA] leading-relaxed">{hint}</p>
+          <div className="text-[11px] text-[var(--color-ink-400)] leading-relaxed mt-1">
+            {hint}
+          </div>
         )}
       </div>
     );

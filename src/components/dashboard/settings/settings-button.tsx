@@ -18,29 +18,29 @@ const variantStyles: Record<
 > = {
   primary: {
     enabled:
-      "bg-[#0D0D0D] text-white hover:bg-[#1a1a1a] active:scale-[0.97] shadow-none",
-    disabled: "bg-[#F3F3F3] text-[#AAAAAA] cursor-not-allowed",
+      "bg-[var(--color-ink-900)] text-white hover:bg-[var(--color-ink-900)] active:scale-[0.97] shadow-none",
+    disabled: "bg-[var(--color-ink-100)] text-[var(--color-ink-400)] cursor-not-allowed",
   },
   secondary: {
     enabled:
-      "bg-[#F5F5F5] text-[#525252] hover:bg-[#EBEBEB] active:scale-[0.97]",
-    disabled: "bg-[#F7F7F7] text-[#AAAAAA] cursor-not-allowed",
+      "bg-[var(--color-ink-100)] text-[var(--color-ink-700)] hover:bg-[var(--color-ink-200)] active:scale-[0.97]",
+    disabled: "bg-[var(--color-ink-100)] text-[var(--color-ink-400)] cursor-not-allowed",
   },
   outline: {
     enabled:
-      "border border-[#EAECF0] text-[#525252] hover:border-[#3B82F6] hover:text-[#3B82F6] active:scale-[0.97]",
-    disabled: "border border-[#F3F3F3] text-[#AAAAAA] cursor-not-allowed",
+      "border border-[var(--color-ink-border)] text-[var(--color-ink-700)] hover:border-[var(--color-blue)] hover:text-[var(--color-blue)] active:scale-[0.97]",
+    disabled: "border border-[var(--color-ink-100)] text-[var(--color-ink-400)] cursor-not-allowed",
   },
   blue: {
     enabled:
-      "bg-[#3B82F6] text-white hover:bg-[#2563EB] active:scale-[0.97]",
-    disabled: "bg-[#F3F3F3] text-[#AAAAAA] cursor-not-allowed",
+      "bg-[var(--color-blue)] text-white hover:bg-[var(--color-blue-hover)] active:scale-[0.97]",
+    disabled: "bg-[var(--color-ink-100)] text-[var(--color-ink-400)] cursor-not-allowed",
   },
   danger: {
     enabled:
-      "border border-[#E51837]/20 text-[#E51837] hover:bg-[rgba(229,24,55,0.05)] active:scale-[0.97]",
+      "border border-[var(--color-error-strong)]/20 text-[var(--color-error-strong)] hover:bg-[rgba(229,24,55,0.05)] active:scale-[0.97]",
     disabled:
-      "border border-[#F3F3F3] text-[#AAAAAA] cursor-not-allowed",
+      "border border-[var(--color-ink-100)] text-[var(--color-ink-400)] cursor-not-allowed",
   },
 };
 
@@ -60,7 +60,7 @@ export function SettingsButton({
     <button
       disabled={isDisabled}
       className={cn(
-        "h-10 px-5 text-[10px] font-medium uppercase tracking-[1.5px] rounded-[6px] transition-all duration-200 inline-flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40",
+        "h-10 px-5 text-[10px] font-medium uppercase tracking-[1.5px] rounded-[6px] transition-all duration-200 inline-flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-blue)]/40",
         fullWidth && "w-full",
         isDisabled ? styles.disabled : styles.enabled,
         className
