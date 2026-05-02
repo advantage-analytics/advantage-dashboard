@@ -113,6 +113,12 @@
 
   /* Selected card elevation — same shadow as default; selection signaled via border-2 */
   --shadow-selected: 0px 2px 8px 0px rgba(0, 0, 0, 0.06);
+
+  /* Raised surface — chips, kbd keycaps, active pills. One step above surface-card. */
+  --color-surface-raised: #FFFFFF;
+
+  /* Subtle bottom-edge shadow for keycap-style elements. */
+  --color-shadow-keycap: rgba(15, 23, 42, 0.04);
 }
 
 /* Dark-mode ink + surface overrides — tokens consumed by settings + dashboard.
@@ -140,8 +146,10 @@
 
   --color-surface-card: #0E0E10;
   --color-surface-muted: #161618;
+  --color-surface-raised: #1F1F1F;
   --color-border-card: #1F1F1F;
   --color-text-body: #B5B5B5;
+  --color-shadow-keycap: rgba(0, 0, 0, 0.45);
 
   /* Blues lighten slightly so they read on dark surfaces */
   --color-blue: #60A5FA;
