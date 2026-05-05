@@ -2,8 +2,9 @@
 
 import { Fragment } from "react";
 
-import { cn } from "@/lib/utils";
+import { formatPlayerStyle, formatScoreboardStatus } from "@/lib/data/match-utils";
 import type { Match, Player, SetScore } from "@/lib/data/types";
+import { cn } from "@/lib/utils";
 
 interface MatchSummaryRowProps {
   match: Match;
@@ -16,7 +17,7 @@ export function MatchSummaryRow({ match, p1Name, p2Name }: MatchSummaryRowProps)
   const winner = match.score.winner;
 
   const headerLeft = [
-    "FINAL",
+    formatScoreboardStatus(match.matchContext),
     match.matchType,
     match.round,
   ]
@@ -46,10 +47,17 @@ export function MatchSummaryRow({ match, p1Name, p2Name }: MatchSummaryRowProps)
       </div>
 
       {/* ── Body ────────────────────────────────────────────── */}
-      <div className="w-full flex flex-col gap-1">
-        {/* Set numbers */}
-        <div className="flex justify-end w-full">
-          <div className="flex gap-1.5">
+      {sets.length === 0 ? (
+        <p className="text-[12px] leading-[18px] text-[var(--color-text-dim)]">
+          No score recorded.
+        </p>
+      ) : (
+        <div className="w-full flex flex-col gap-1">
+          {/* Set numbers */}
+          <div
+            className="flex justify-end gap-1.5 w-full"
+            aria-hidden="true"
+          >
             {sets.map((_, i) => (
               <span
                 key={i}
@@ -59,28 +67,28 @@ export function MatchSummaryRow({ match, p1Name, p2Name }: MatchSummaryRowProps)
               </span>
             ))}
           </div>
-        </div>
 
-        {/* Player rows */}
-        <div className="flex flex-col gap-4 w-full">
-          <PlayerRow
-            name={p1Name}
-            player={match.player1}
-            isWinner={winner === "player1"}
-            sets={sets}
-            mineKey="player1"
-            theirsKey="player2"
-          />
-          <PlayerRow
-            name={p2Name}
-            player={match.player2}
-            isWinner={winner === "player2"}
-            sets={sets}
-            mineKey="player2"
-            theirsKey="player1"
-          />
+          {/* Player rows */}
+          <div className="flex flex-col gap-4 w-full">
+            <PlayerRow
+              name={p1Name}
+              player={match.player1}
+              isWinner={winner === "player1"}
+              sets={sets}
+              mineKey="player1"
+              theirsKey="player2"
+            />
+            <PlayerRow
+              name={p2Name}
+              player={match.player2}
+              isWinner={winner === "player2"}
+              sets={sets}
+              mineKey="player2"
+              theirsKey="player1"
+            />
+          </div>
         </div>
-      </div>
+      )}
     </section>
   );
 }
@@ -111,14 +119,14 @@ function PlayerRow({
               "truncate text-[14px] leading-[20px] font-medium whitespace-nowrap",
               isWinner
                 ? "text-[var(--color-text-primary)]"
-                : "text-[var(--color-text-dim)]",
+                : "text-[var(--color-text-secondary)]",
             )}
           >
             {isWinner && <span className="sr-only">Winner: </span>}
             {name}
           </p>
           {isWinner && (
-            <span className="text-[10px] font-medium leading-4 tracking-[2.5px] text-[var(--color-success)] whitespace-nowrap">
+            <span className="shrink-0 text-[10px] font-medium leading-4 tracking-[2.5px] text-[var(--color-success)] whitespace-nowrap">
               WON
             </span>
           )}
@@ -135,7 +143,7 @@ function PlayerRow({
         )}
       </div>
 
-      <div className="flex items-start gap-1.5 shrink-0" role="presentation">
+      <div className="flex gap-1.5 shrink-0" role="presentation">
         {sets.map((set, i) => {
           const mine = set[mineKey];
           const theirs = set[theirsKey];
@@ -172,32 +180,6 @@ function PlayerRow({
       </div>
     </div>
   );
-}
-
-function formatPlayerStyle(
-  hand: string | undefined,
-  backhand: string | undefined,
-): string[] {
-  const parts: string[] = [];
-  const h = hand?.trim().toLowerCase();
-  if (h === "right" || h === "right-handed" || h === "right handed") {
-    parts.push("RIGHT HANDED");
-  } else if (h === "left" || h === "left-handed" || h === "left handed") {
-    parts.push("LEFT HANDED");
-  } else if (h) {
-    parts.push(h.toUpperCase());
-  }
-
-  const b = backhand?.trim().toLowerCase();
-  if (b === "one-handed" || b === "one handed" || b === "1-handed" || b === "1 handed") {
-    parts.push("1-HANDED BACKHAND");
-  } else if (b === "two-handed" || b === "two handed" || b === "2-handed" || b === "2 handed") {
-    parts.push("2-HANDED BACKHAND");
-  } else if (b) {
-    parts.push(b.toUpperCase());
-  }
-
-  return parts;
 }
 
 function formatDuration(raw: string | undefined): string | null {

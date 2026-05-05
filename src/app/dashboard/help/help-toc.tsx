@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { Kbd } from "./kbd";
+import { Kbd } from "@/components/ui/kbd";
 
 type TocItem = { id: string; label: string };
 

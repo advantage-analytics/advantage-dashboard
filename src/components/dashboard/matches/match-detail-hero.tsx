@@ -3,8 +3,10 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BadgeCheck, Calendar, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Kbd } from "@/components/ui/kbd";
+import { MatchMetadataRow } from "@/components/dashboard/matches/match-metadata-row";
 import type { Match } from "@/lib/data/types";
 
 interface MatchDetailHeroProps {
@@ -53,7 +55,6 @@ export function MatchDetailHero({
   const heroTitle = hasTournament
     ? match.tournamentName
     : buildFallbackTitle(match.date);
-  const verificationLabel = match.verificationStatus ?? "Unverified Result";
 
   return (
     <div className="flex items-end justify-between gap-4 min-w-0">
@@ -62,34 +63,36 @@ export function MatchDetailHero({
           <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
             Match
           </p>
-          <h1 className="font-light text-[30px] text-[#0D0D0D] tracking-[-0.6px] leading-[36px] truncate">
+          <h1
+            title={heroTitle}
+            className="font-light text-[30px] text-[#0D0D0D] tracking-[-0.6px] leading-[36px] truncate"
+          >
             {heroTitle}
           </h1>
         </div>
-        <div className="flex items-center gap-4">
-          {match.date && (
-            <div className="flex items-center gap-1">
-              <Calendar
-                className="size-3.5 text-[#888]"
-                strokeWidth={1.75}
-                aria-hidden="true"
+        {(match.date || match.matchType || match.courtType) && (
+          <div className="flex items-center gap-4">
+            {match.date && (
+              <div className="flex items-center gap-1">
+                <Calendar
+                  className="size-3.5 text-[#888888]"
+                  strokeWidth={1.75}
+                  aria-hidden="true"
+                />
+                <span className="text-[10px] leading-4 text-[#888888]">
+                  {match.date}
+                </span>
+              </div>
+            )}
+            {(match.matchType || match.courtType) && (
+              <MatchMetadataRow
+                matchType={match.matchType}
+                courtType={match.courtType}
+                showVerification={false}
               />
-              <span className="text-[10px] leading-4 text-[#888]">
-                {match.date}
-              </span>
-            </div>
-          )}
-          <div className="flex items-center gap-1">
-            <BadgeCheck
-              className="size-3.5 text-[#888]"
-              strokeWidth={1.75}
-              aria-hidden="true"
-            />
-            <span className="text-[10px] leading-4 text-[#888]">
-              {verificationLabel}
-            </span>
+            )}
           </div>
-        </div>
+        )}
       </div>
 
       <nav
@@ -102,13 +105,7 @@ export function MatchDetailHero({
           ariaLabel="Previous match"
           title="Previous match (←)"
           shortcut="ArrowLeft"
-          icon={
-            <ChevronLeft
-              className="size-3.5 text-[#71717a]"
-              strokeWidth={1.75}
-              aria-hidden="true"
-            />
-          }
+          icon={<Kbd size="sm">←</Kbd>}
           position="left"
         />
         <NavLink
@@ -117,13 +114,7 @@ export function MatchDetailHero({
           ariaLabel="Next match"
           title="Next match (→)"
           shortcut="ArrowRight"
-          icon={
-            <ChevronRight
-              className="size-3.5 text-[#71717a]"
-              strokeWidth={1.75}
-              aria-hidden="true"
-            />
-          }
+          icon={<Kbd size="sm">→</Kbd>}
           position="right"
         />
       </nav>
@@ -159,7 +150,7 @@ function NavLink({
   );
 
   const baseClass =
-    "inline-flex items-end gap-1 text-[#888] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 rounded-sm";
+    "inline-flex items-end gap-1 py-2 -my-2 text-[#888888] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 rounded-sm";
 
   if (!href) {
     return (

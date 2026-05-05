@@ -155,9 +155,10 @@ const FILLER_KEY_MOMENTS = [
 ];
 
 /**
- * Returns the user's previous/next match ids in the same chronological order
- * as the matches list page (date desc). Used for arrow-key navigation between
- * adjacent matches. Returns null on either side at the list bounds.
+ * Returns the user's previous/next match ids in chronological order:
+ * `previousId` = older match (earlier date), `nextId` = newer match (later date).
+ * Used for arrow-key navigation between adjacent matches.
+ * Returns null on either side at the list bounds.
  */
 export const getAdjacentMatchIds = cache(async (currentMatchId: string) => {
   const supabase = await createClient();
@@ -177,9 +178,10 @@ export const getAdjacentMatchIds = cache(async (currentMatchId: string) => {
   const idx = data.findIndex((m) => m.id === currentMatchId);
   if (idx === -1) return { previousId: null, nextId: null };
 
+  // Array is date desc, so a smaller index = newer match.
   return {
-    previousId: idx > 0 ? data[idx - 1].id : null,
-    nextId: idx < data.length - 1 ? data[idx + 1].id : null,
+    previousId: idx < data.length - 1 ? data[idx + 1].id : null,
+    nextId: idx > 0 ? data[idx - 1].id : null,
   };
 });
 
