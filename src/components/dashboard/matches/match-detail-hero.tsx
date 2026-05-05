@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
+import { BadgeCheck, Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Match } from "@/lib/data/types";
 
@@ -49,148 +49,144 @@ export function MatchDetailHero({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [router, previousMatchId, nextMatchId]);
 
-  const dateLabel = match.date ? formatHeroDate(match.date) : null;
   const hasTournament = Boolean(match.tournamentName?.trim());
   const heroTitle = hasTournament
     ? match.tournamentName
     : buildFallbackTitle(match.date);
-  // When the title itself is date-derived, suppress the date in the eyebrow to avoid duplication.
-  const eyebrowDate = hasTournament ? dateLabel : null;
-  const eyebrowParts = [match.matchContext, eyebrowDate].filter(Boolean) as string[];
+  const verificationLabel = match.verificationStatus ?? "Unverified Result";
 
   return (
     <div className="flex items-end justify-between gap-4 min-w-0">
-      <div className="flex flex-col gap-3 min-w-0">
-        {eyebrowParts.length > 0 && (
-          <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] truncate tabular-nums">
-            {eyebrowParts.map((part, i) => (
-              <span key={i}>
-                {i > 0 && <span aria-hidden="true" className="mx-2 opacity-50">·</span>}
-                {part}
-              </span>
-            ))}
+      <div className="flex flex-col gap-4 min-w-0">
+        <div className="flex flex-col gap-3 min-w-0">
+          <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+            Match
           </p>
-        )}
-        <h1 className="font-light text-[30px] text-[#0D0D0D] tracking-[-0.6px] leading-[36px] truncate">
-          {heroTitle}
-        </h1>
+          <h1 className="font-light text-[30px] text-[#0D0D0D] tracking-[-0.6px] leading-[36px] truncate">
+            {heroTitle}
+          </h1>
+        </div>
+        <div className="flex items-center gap-4">
+          {match.date && (
+            <div className="flex items-center gap-1">
+              <Calendar
+                className="size-3.5 text-[#888]"
+                strokeWidth={1.75}
+                aria-hidden="true"
+              />
+              <span className="text-[10px] leading-4 text-[#888]">
+                {match.date}
+              </span>
+            </div>
+          )}
+          <div className="flex items-center gap-1">
+            <BadgeCheck
+              className="size-3.5 text-[#888]"
+              strokeWidth={1.75}
+              aria-hidden="true"
+            />
+            <span className="text-[10px] leading-4 text-[#888]">
+              {verificationLabel}
+            </span>
+          </div>
+        </div>
       </div>
 
-      <div className="shrink-0 flex items-center gap-2">
-        <div
-          role="group"
-          aria-label="Match navigation"
-          className="inline-flex items-stretch h-11 sm:h-7 rounded border border-[var(--color-border-subtle)] overflow-hidden"
-        >
-          <NavSegment
-            href={previousMatchId ? `/dashboard/matches/${previousMatchId}` : null}
-            label="Previous match"
-            title="Previous match (←)"
-            shortcut="ArrowLeft"
-            icon={<ChevronLeft className="size-3.5" strokeWidth={1.75} aria-hidden="true" />}
-          />
-          <span
-            aria-hidden="true"
-            className="w-px self-stretch bg-[var(--color-border-subtle)]"
-          />
-          <NavSegment
-            href={nextMatchId ? `/dashboard/matches/${nextMatchId}` : null}
-            label="Next match"
-            title="Next match (→)"
-            shortcut="ArrowRight"
-            icon={<ChevronRight className="size-3.5" strokeWidth={1.75} aria-hidden="true" />}
-          />
-        </div>
-        <span
-          aria-hidden="true"
-          className="hidden sm:inline-block text-[9px] font-medium text-[var(--color-text-dim)] tracking-[2.5px] tabular-nums"
-        >
-          ← →
-        </span>
-        <Link
-          href={MATCHES_HREF}
-          aria-label="Back to all matches"
-          className="inline-flex items-center gap-1.5 min-h-[44px] sm:min-h-0 sm:h-7 px-2 -mr-2 rounded text-[10px] font-medium uppercase tracking-[1.5px] text-[#525252] hover:text-[#0D0D0D] hover:bg-[#0D0D0D]/[0.05] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
-        >
-          <ArrowLeft className="size-3" strokeWidth={1.75} aria-hidden="true" />
-          Back
-          <kbd
-            aria-hidden="true"
-            className="hidden sm:inline-flex items-center justify-center ml-0.5 text-[10px] font-medium leading-none tracking-normal normal-case px-1 py-0.5 rounded text-[#AAAAAA] bg-[#F0F0F0] [font-variant-caps:small-caps]"
-          >
-            esc
-          </kbd>
-        </Link>
-      </div>
+      <nav
+        aria-label="Match navigation"
+        className="shrink-0 flex items-end gap-3.5"
+      >
+        <NavLink
+          href={previousMatchId ? `/dashboard/matches/${previousMatchId}` : null}
+          label="Prev"
+          ariaLabel="Previous match"
+          title="Previous match (←)"
+          shortcut="ArrowLeft"
+          icon={
+            <ChevronLeft
+              className="size-3.5 text-[#71717a]"
+              strokeWidth={1.75}
+              aria-hidden="true"
+            />
+          }
+          position="left"
+        />
+        <NavLink
+          href={nextMatchId ? `/dashboard/matches/${nextMatchId}` : null}
+          label="Next"
+          ariaLabel="Next match"
+          title="Next match (→)"
+          shortcut="ArrowRight"
+          icon={
+            <ChevronRight
+              className="size-3.5 text-[#71717a]"
+              strokeWidth={1.75}
+              aria-hidden="true"
+            />
+          }
+          position="right"
+        />
+      </nav>
     </div>
   );
 }
 
-function NavSegment({
+function NavLink({
   href,
   label,
+  ariaLabel,
   title,
   shortcut,
   icon,
+  position,
 }: {
   href: string | null;
   label: string;
+  ariaLabel: string;
   title: string;
   shortcut: string;
   icon: React.ReactNode;
+  position: "left" | "right";
 }) {
+  const content = (
+    <>
+      {position === "left" && icon}
+      <span className="text-[10px] font-medium uppercase tracking-[1.5px] leading-[15px]">
+        {label}
+      </span>
+      {position === "right" && icon}
+    </>
+  );
+
   const baseClass =
-    "inline-flex items-center justify-center w-11 sm:w-7 h-full text-[#525252] transition-colors duration-200 focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#3B82F6]/40";
+    "inline-flex items-end gap-1 text-[#888] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 rounded-sm";
+
   if (!href) {
     return (
       <span
-        aria-label={label}
+        aria-label={ariaLabel}
         aria-disabled="true"
-        role="button"
         className={cn(baseClass, "opacity-30 cursor-not-allowed")}
       >
-        {icon}
+        {content}
       </span>
     );
   }
+
   return (
     <Link
       href={href}
-      aria-label={label}
+      aria-label={ariaLabel}
       title={title}
       aria-keyshortcuts={shortcut}
-      className={cn(baseClass, "hover:text-[#0D0D0D] hover:bg-[#0D0D0D]/[0.05]")}
+      className={cn(baseClass, "hover:text-[#0D0D0D]")}
     >
-      {icon}
+      {content}
     </Link>
   );
 }
 
-function formatHeroDate(date: string): string {
-  try {
-    const d = new Date(date);
-    if (isNaN(d.getTime())) return date;
-    return d
-      .toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
-      .toUpperCase();
-  } catch {
-    return date;
-  }
-}
-
 function buildFallbackTitle(date: string | undefined): string {
   if (!date) return "Match";
-  try {
-    const d = new Date(date);
-    if (isNaN(d.getTime())) return "Match";
-    const sameYear = d.getFullYear() === new Date().getFullYear();
-    const formatted = d.toLocaleDateString("en-US", {
-      month: "long",
-      day: "numeric",
-      ...(sameYear ? {} : { year: "numeric" }),
-    });
-    return `Match \u00b7 ${formatted}`;
-  } catch {
-    return "Match";
-  }
+  return `Match · ${date}`;
 }

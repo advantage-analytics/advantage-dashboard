@@ -25,6 +25,10 @@ interface DbMatch {
   court_type: string | null;
   verified: boolean | null;
   duration: number | null;
+  player_hand: string | null;
+  player_backhand: string | null;
+  opponent_hand: string | null;
+  opponent_backhand: string | null;
   key_moments: Array<{ moment: string; description: string }> | null;
   insights: {
     player1?: { strengths?: Array<{ name: string; value: number; description: string }>; weaknesses?: Array<{ name: string; value: number; description: string }> };
@@ -87,6 +91,19 @@ function transformDbMatchToMatch(
   const p1Profile = row.player1_id ? profiles.get(row.player1_id) : undefined;
   const p2Profile = row.player2_id ? profiles.get(row.player2_id) : undefined;
 
+  // Match-row hand/backhand columns are captured at upload time and represent
+  // what was true for THIS match; they win over generic users-table profile.
+  // The "player_*" columns track the user (creator); "opponent_*" tracks the other side.
+  const userHand = row.player_hand ?? undefined;
+  const userBackhand = row.player_backhand ?? undefined;
+  const oppHand = row.opponent_hand ?? undefined;
+  const oppBackhand = row.opponent_backhand ?? undefined;
+
+  const p1Hand = isUserPlayer1 ? userHand : oppHand;
+  const p1Backhand = isUserPlayer1 ? userBackhand : oppBackhand;
+  const p2Hand = isUserPlayer1 ? oppHand : userHand;
+  const p2Backhand = isUserPlayer1 ? oppBackhand : userBackhand;
+
   return {
     id: row.id,
     tournamentName: row.tournament_name ?? "Unknown Event",
@@ -100,14 +117,14 @@ function transformDbMatchToMatch(
     player1: {
       name: row.player1_name,
       school: "",
-      hand: p1Profile?.hand ?? undefined,
-      backhand: p1Profile?.backhand ?? undefined,
+      hand: p1Hand ?? p1Profile?.hand ?? undefined,
+      backhand: p1Backhand ?? p1Profile?.backhand ?? undefined,
     },
     player2: {
       name: row.player2_name,
       school: "",
-      hand: p2Profile?.hand ?? undefined,
-      backhand: p2Profile?.backhand ?? undefined,
+      hand: p2Hand ?? p2Profile?.hand ?? undefined,
+      backhand: p2Backhand ?? p2Profile?.backhand ?? undefined,
     },
     score: { sets, winner, finalScore },
     won: userWon,
@@ -181,7 +198,7 @@ export const getMatchDetailData = cache(async (matchId: string) => {
   const { data: row, error } = await supabase
     .from("matches")
     .select(
-      "id, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, key_moments, insights",
+      "id, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, player_hand, player_backhand, opponent_hand, opponent_backhand, key_moments, insights",
     )
     .eq("id", matchId)
     .single();
