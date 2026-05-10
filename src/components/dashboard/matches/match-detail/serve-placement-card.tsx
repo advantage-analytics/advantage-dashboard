@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import Link from "next/link";
 import { Target } from "lucide-react";
 
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
@@ -79,13 +80,20 @@ function EmptyOverlay() {
         strokeWidth={1.5}
         aria-hidden
       />
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1.5">
         <p className="text-[13px] font-medium text-[var(--color-text-primary)] leading-[1.3]">
           No serve data for this match
         </p>
-        <p className="text-[12px] font-normal text-[var(--color-text-muted)] max-w-[220px] leading-[1.5]">
-          Serve landing coordinates weren&apos;t captured
+        <p className="text-[12px] font-normal text-[var(--color-text-muted)] max-w-[240px] leading-[1.5]">
+          Serve landing coordinates weren&apos;t captured. Re-export from
+          SwingVision with shot tracking enabled to populate this view.
         </p>
+        <Link
+          href="/dashboard/help"
+          className="text-[10px] font-medium uppercase tracking-[1.5px] text-[var(--color-accent-blue)] hover:text-[var(--color-accent-blue-hover)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-sm"
+        >
+          Upload help
+        </Link>
       </div>
     </div>
   );

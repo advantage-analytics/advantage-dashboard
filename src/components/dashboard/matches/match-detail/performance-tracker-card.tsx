@@ -160,9 +160,9 @@ export function PerformanceTrackerCard({
           onClick={() => setIsDetailsOpen((o) => !o)}
           aria-expanded={isDetailsOpen}
           aria-controls={detailsId}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 -mr-2 rounded-md text-[10px] font-medium uppercase tracking-[2.5px] text-[#3B82F6] hover:text-[#2563EB] cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 -mr-2 rounded-md text-[10px] font-medium uppercase tracking-[2.5px] text-[var(--color-accent-blue)] hover:text-[var(--color-accent-blue-hover)] cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)]"
         >
-          <span>{isDetailsOpen ? "Hide details" : "Match details"}</span>
+          <span>{isDetailsOpen ? "Hide breakdown" : "Stat breakdown"}</span>
           <ChevronDown
             aria-hidden="true"
             strokeWidth={1.75}

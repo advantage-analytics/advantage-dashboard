@@ -32,10 +32,10 @@ export function MatchSummaryRow({ match, p1Name, p2Name }: MatchSummaryRowProps)
     <section
       id="match-score"
       aria-label={`Match summary: ${p1Name} vs ${p2Name}`}
-      className="surface-card scroll-mt-6 flex flex-col gap-3 overflow-hidden p-[21px]"
+      className="surface-card scroll-mt-6 flex flex-col gap-3 overflow-hidden p-5"
     >
       {/* ── Header Rail ─────────────────────────────────────── */}
-      <div className="w-full min-h-[15px] border-b border-[var(--color-border-subtle)] pb-3 flex items-center justify-between">
+      <div className="w-full min-h-[15px] border-b border-[#F3F3F3] pb-3 flex items-center justify-between">
         <p className="text-[10px] font-medium leading-[15px] tracking-[2.5px] text-[var(--color-text-dim)] whitespace-nowrap">
           {headerLeft}
         </p>
@@ -162,7 +162,7 @@ function PlayerRow({
                 "flex h-6 w-10 items-baseline justify-center gap-0.5 text-[18px] leading-6 tracking-[-0.3px] tabular-nums",
                 setWon
                   ? "font-medium text-[var(--color-text-primary)]"
-                  : "font-normal text-[var(--color-text-secondary)]",
+                  : "font-light text-[var(--color-text-secondary)]",
               )}
             >
               <span>{mine}</span>
@@ -185,7 +185,7 @@ function PlayerRow({
 function formatDuration(raw: string | undefined): string | null {
   if (!raw) return null;
   const m = raw.match(/^(\d+):(\d{1,2})$/);
-  if (!m) return raw.toUpperCase();
+  if (!m) return null;
   const hours = parseInt(m[1], 10);
   const minutes = parseInt(m[2], 10);
   if (hours === 0) return `${minutes}M`;

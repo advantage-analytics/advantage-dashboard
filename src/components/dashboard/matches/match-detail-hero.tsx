@@ -60,7 +60,7 @@ export function MatchDetailHero({
     <div className="flex items-end justify-between gap-4 min-w-0">
       <div className="flex flex-col gap-4 min-w-0">
         <div className="flex flex-col gap-3 min-w-0">
-          <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+          <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
             Match
           </p>
           <h1
@@ -75,11 +75,11 @@ export function MatchDetailHero({
             {match.date && (
               <div className="flex items-center gap-1">
                 <Calendar
-                  className="size-3.5 text-[#888888]"
+                  className="size-3.5 text-[var(--color-text-muted)]"
                   strokeWidth={1.75}
                   aria-hidden="true"
                 />
-                <span className="text-[10px] leading-4 text-[#888888]">
+                <span className="text-[10px] leading-4 text-[var(--color-text-muted)]">
                   {match.date}
                 </span>
               </div>
@@ -150,7 +150,7 @@ function NavLink({
   );
 
   const baseClass =
-    "inline-flex items-end gap-1 py-2 -my-2 text-[#888888] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 rounded-sm";
+    "inline-flex items-end gap-1 py-2 -my-2 text-[var(--color-text-muted)] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-sm";
 
   if (!href) {
     return (
@@ -170,7 +170,7 @@ function NavLink({
       aria-label={ariaLabel}
       title={title}
       aria-keyshortcuts={shortcut}
-      className={cn(baseClass, "hover:text-[#0D0D0D]")}
+      className={cn(baseClass, "hover:text-[var(--color-text-primary)]")}
     >
       {content}
     </Link>

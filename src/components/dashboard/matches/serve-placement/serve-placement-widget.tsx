@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { ChevronDown, Maximize2, Target, X } from "lucide-react";
+import { ChevronDown, HelpCircle, Maximize2, Target, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useVisualFilters } from "@/hooks/use-visual-filters";
@@ -430,7 +430,7 @@ function HalfCourtWithZones({
                   fontFamily="Inter, sans-serif"
                 >
                   {colorMode === "result" ? zs.winPct : zs.pct}%
-                  {colorMode === "result" ? <tspan fill="#AAAAAA" fontSize={7}> W</tspan> : null}
+                  {colorMode === "result" ? <tspan fill="#AAAAAA" fontSize={7}> WIN</tspan> : null}
                 </text>
                 <text
                   x={cx}
@@ -760,7 +760,7 @@ function FullscreenEmptyState({
       aria-live={hasData ? "polite" : undefined}
       className="flex flex-col items-center gap-3 text-center max-w-[280px] px-6"
     >
-      <div className="bg-white/80 backdrop-blur-sm p-3 rounded-full border border-[#E6EEFB]">
+      <div className="bg-[#EBF2FD] p-3 rounded-full border border-[#E6EEFB]">
         <Target className="h-6 w-6 text-[#3B82F6]/70" strokeWidth={1.5} aria-hidden />
       </div>
       <div className="flex flex-col gap-1">
@@ -1037,6 +1037,8 @@ function ServePlacementFullscreen({
   const [colorMode, setColorMode] = useState<ColorMode>("serveType");
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set());
   const [manuallyExpanded, setManuallyExpanded] = useState<Set<string>>(new Set());
+  const [mobileRailOpen, setMobileRailOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const handleColorModeChange = useCallback((mode: ColorMode) => {
     setColorMode(mode);
@@ -1165,14 +1167,18 @@ function ServePlacementFullscreen({
       ) {
         return;
       }
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        if (shortcutsOpen) setShortcutsOpen(false);
+        else onClose();
+      }
       else if (e.key === "1") handleColorModeChange("serveType");
       else if (e.key === "2") handleColorModeChange("result");
       else if (e.key === "r" || e.key === "R") resetFiltersToInitial();
+      else if (e.key === "?") setShortcutsOpen((v) => !v);
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [onClose, handleColorModeChange, resetFiltersToInitial]);
+  }, [onClose, handleColorModeChange, resetFiltersToInitial, shortcutsOpen]);
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -1238,24 +1244,68 @@ function ServePlacementFullscreen({
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 h-14 shrink-0 border-b border-[#F3F3F3]">
-          <div className="flex items-center gap-3">
-            <h2 className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
+          <div className="flex items-baseline gap-3">
+            <h2 className="text-[14px] font-medium text-[#0D0D0D] tracking-[-0.1px]">
               Serve Placement
             </h2>
-            <span className="text-[10px] font-normal text-[#AAAAAA] uppercase tracking-[1px]">
+            <span className="text-[12px] font-normal text-[#767676]">
               {contextLabel}
             </span>
-            <span className="text-[10px] font-normal text-[#AAAAAA] tabular-nums">
-              {plottedCount} {vizType === "return" ? "return" : "serve"}{plottedCount !== 1 ? "s" : ""}
+            <span className="text-[13px] font-medium text-[#0D0D0D] tabular-nums">
+              <motion.span
+                key={plottedCount}
+                initial={prefersReduced ? undefined : { opacity: 0.4, y: -2 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.18, ease: EASE }}
+                className="inline-block"
+              >
+                {plottedCount}
+              </motion.span>
+              <span className="text-[#AAAAAA] font-normal ml-1">
+                {vizType === "return" ? "return" : "serve"}{plottedCount !== 1 ? "s" : ""}
+              </span>
             </span>
           </div>
-          <button
-            onClick={onClose}
-            className="cursor-pointer p-1.5 -m-1.5 rounded-lg hover:bg-[#F5F5F5] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
-            aria-label="Close fullscreen view"
-          >
-            <X className="h-4 w-4 text-[#767676]" strokeWidth={1.5} />
-          </button>
+          <div className="flex items-center gap-1 relative">
+            <button
+              type="button"
+              onClick={() => setShortcutsOpen((v) => !v)}
+              aria-expanded={shortcutsOpen}
+              aria-label="Show keyboard shortcuts"
+              className="cursor-pointer p-1.5 rounded-lg hover:bg-[#F5F5F5] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+            >
+              <HelpCircle className="h-4 w-4 text-[#767676]" strokeWidth={1.5} />
+            </button>
+            <button
+              onClick={onClose}
+              className="cursor-pointer p-1.5 -mr-1.5 rounded-lg hover:bg-[#F5F5F5] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+              aria-label="Close fullscreen view"
+            >
+              <X className="h-4 w-4 text-[#767676]" strokeWidth={1.5} />
+            </button>
+            {shortcutsOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setShortcutsOpen(false)}
+                  aria-hidden
+                />
+                <div
+                  role="dialog"
+                  aria-label="Keyboard shortcuts"
+                  className="absolute right-0 top-full mt-2 z-20 bg-white rounded-xl shadow-tooltip border border-[#F3F3F3] py-2.5 px-3 w-[200px] flex flex-col gap-1.5"
+                >
+                  <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[1.5px] mb-1">
+                    Keyboard
+                  </span>
+                  <ShortcutRow keys={["1"]} action="Color by 1st / 2nd" />
+                  <ShortcutRow keys={["2"]} action="Color by Win / Loss" />
+                  <ShortcutRow keys={["R"]} action="Reset filters" />
+                  <ShortcutRow keys={["Esc"]} action="Close" />
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Controls bar */}
@@ -1286,10 +1336,10 @@ function ServePlacementFullscreen({
           {vizType === "serve" && (
             <>
               <div className="w-px h-4 bg-[#E7E7E7]" />
-              <span className="text-[9px] font-medium text-[#767676] uppercase tracking-[1.5px]">
+              <span className="text-[11px] font-normal text-[#767676]">
                 Color by
               </span>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center rounded-full bg-[#F5F5F5] p-0.5">
                 {([
                   { mode: "serveType" as ColorMode, label: "1st / 2nd" },
                   { mode: "result" as ColorMode, label: "Win / Loss" },
@@ -1300,18 +1350,18 @@ function ServePlacementFullscreen({
                     onClick={() => handleColorModeChange(mode)}
                     aria-pressed={colorMode === mode}
                     className={cn(
-                      "rounded-full h-7 px-3 text-[11px] font-medium transition-all duration-200 cursor-pointer",
+                      "rounded-full px-3.5 h-7 text-[11px] font-medium transition-all duration-200 cursor-pointer",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40",
                       colorMode === mode
-                        ? "ring-1 ring-inset ring-[#3B82F6] text-[#3B82F6] bg-[#EBF2FD]"
-                        : "ring-1 ring-inset ring-[#EAECF0] text-[#767676] bg-white hover:bg-[#F9FAFB] hover:text-[#525252]",
+                        ? "bg-white text-[#0D0D0D] shadow-[0px_1px_3px_rgba(0,0,0,0.08)]"
+                        : "text-[#767676] hover:text-[#525252]",
                     )}
                   >
                     {label}
                   </button>
                 ))}
               </div>
-              <span className="text-[10px] font-normal text-[#AAAAAA] ml-auto hidden sm:inline">
+              <span className="text-[11px] font-normal text-[#AAAAAA] ml-auto hidden sm:inline">
                 {colorMode === "serveType"
                   ? "Zone labels show % of serves"
                   : "Zone labels show win rate"}
@@ -1365,25 +1415,58 @@ function ServePlacementFullscreen({
             aria-label="Filters"
           >
             <div className="flex items-center justify-between px-5 h-11 border-b border-[#F3F3F3] sticky top-0 bg-white z-10">
-              <span className="text-[10px] font-medium text-[#767676] uppercase tracking-[2.5px]">
-                Filters
+              <button
+                type="button"
+                onClick={() => setMobileRailOpen((v) => !v)}
+                aria-expanded={mobileRailOpen}
+                aria-controls="serve-placement-filter-body"
+                className="flex lg:hidden items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 rounded-sm"
+              >
+                <span className="text-[12px] font-medium text-[#0D0D0D]">
+                  Filters
+                </span>
+                {activeFilterCount > 0 && (
+                  <span className="text-[10px] font-medium text-[#3B82F6] tabular-nums">
+                    {activeFilterCount}
+                  </span>
+                )}
+                <ChevronDown
+                  className={cn(
+                    "h-3.5 w-3.5 text-[#AAAAAA] transition-transform duration-200",
+                    mobileRailOpen && "rotate-180",
+                  )}
+                  strokeWidth={1.75}
+                />
+              </button>
+              <span className="hidden lg:flex items-center gap-1.5">
+                <span className="text-[12px] font-medium text-[#0D0D0D]">
+                  Filters
+                </span>
+                {activeFilterCount > 0 && (
+                  <span className="text-[10px] font-medium text-[#3B82F6] tabular-nums">
+                    {activeFilterCount}
+                  </span>
+                )}
               </span>
               {activeFilterCount > 0 && (
                 <button
                   onClick={clearAllFilters}
-                  className="cursor-pointer text-[10px] font-medium text-[#3B82F6] uppercase tracking-[2.5px] hover:text-[#2563EB] transition-colors duration-200"
+                  className="cursor-pointer text-[11px] font-medium text-[#3B82F6] hover:text-[#2563EB] transition-colors duration-200"
                 >
                   Deselect all
                 </button>
               )}
             </div>
-            <div className="flex flex-col">
+            <div
+              id="serve-placement-filter-body"
+              className={cn("flex-col", mobileRailOpen ? "flex" : "hidden", "lg:flex")}
+            >
               {sectionedGroups.map((section, i) => (
                 <div
                   key={section.label}
                   className={cn("px-5 py-4 flex flex-col gap-3", i > 0 && "border-t border-[#F3F3F3]")}
                 >
-                  <span className="text-[9px] font-medium text-[#AAAAAA] uppercase tracking-[2px]">
+                  <span className="text-[11px] font-medium text-[#888888]">
                     {section.label}
                   </span>
                   <div className="flex flex-col gap-3">
@@ -1417,28 +1500,22 @@ function ServePlacementFullscreen({
                             }
                             aria-expanded={expanded}
                             className={cn(
-                              "flex items-center justify-between gap-2 rounded-sm",
+                              "flex items-center justify-between gap-2 rounded-sm cursor-pointer",
                               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40",
-                              allSelected || noneSelected
-                                ? "cursor-pointer"
-                                : "cursor-default",
                             )}
-                            disabled={!(allSelected || noneSelected) && !manuallyExpanded.has(g.key)}
                           >
                             <span className="text-[12px] font-medium text-[#525252]">{g.label}</span>
                             <span className="flex items-center gap-1.5">
                               <span className={cn("text-[10px] font-medium tabular-nums", summaryTone)}>
                                 {summary}
                               </span>
-                              {(allSelected || noneSelected) && (
-                                <ChevronDown
-                                  className={cn(
-                                    "h-3 w-3 text-[#AAAAAA] transition-transform duration-200",
-                                    expanded && "rotate-180",
-                                  )}
-                                  strokeWidth={1.75}
-                                />
-                              )}
+                              <ChevronDown
+                                className={cn(
+                                  "h-3 w-3 text-[#AAAAAA] transition-transform duration-200",
+                                  expanded && "rotate-180",
+                                )}
+                                strokeWidth={1.75}
+                              />
                             </span>
                           </button>
                           {expanded && (
@@ -1496,7 +1573,7 @@ function ServePlacementFullscreen({
             })}
           </div>
           <div
-            className="hidden md:flex items-center gap-3 text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[1.5px]"
+            className="hidden md:flex items-center gap-3 text-[11px] font-normal text-[#AAAAAA]"
             aria-hidden
           >
             <span>Hover zone for details</span>
@@ -1511,10 +1588,28 @@ function ServePlacementFullscreen({
   );
 }
 
+function ShortcutRow({ keys, action }: { keys: string[]; action: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-[11px] text-[#525252]">{action}</span>
+      <span className="flex items-center gap-1">
+        {keys.map((k) => (
+          <kbd
+            key={k}
+            className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-sm bg-[#F5F5F5] text-[10px] font-medium text-[#525252] tabular-nums tracking-normal normal-case"
+          >
+            {k}
+          </kbd>
+        ))}
+      </span>
+    </div>
+  );
+}
+
 function KeyHint({ label, action }: { label: string; action: string }) {
   return (
     <span className="flex items-center gap-1">
-      <kbd className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-sm bg-[#F5F5F5] text-[9px] font-medium text-[#525252] tabular-nums tracking-normal normal-case">
+      <kbd className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-sm bg-[#F5F5F5] text-[10px] font-medium text-[#525252] tabular-nums tracking-normal normal-case">
         {label}
       </kbd>
       <span>{action}</span>

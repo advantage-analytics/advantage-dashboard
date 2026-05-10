@@ -48,7 +48,7 @@ export function PerformanceProfileCard({
       aria-labelledby={headingId}
       className="surface-card flex flex-col"
     >
-      <div className="flex items-center justify-between h-14 px-5">
+      <div className="flex items-center gap-1.5 h-14 px-5">
         <h2
           id={headingId}
           className="text-[10px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[15px]"

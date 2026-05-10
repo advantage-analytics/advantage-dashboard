@@ -159,7 +159,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
           <MatchSummaryRow match={match} p1Name={p1Name} p2Name={p2Name} />
         </div>
 
-        <div className="mt-10 grid grid-cols-1 lg:grid-cols-[5fr_2fr] gap-8">
+        <div className="mt-10 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-8">
           <main
             aria-label="Match details"
             className="min-w-0 flex flex-col gap-6 order-1"
@@ -211,7 +211,12 @@ export default async function MatchDetailPage({ params }: PageProps) {
               p1Name={p1Short}
               p2Name={p2Short}
             />
-            <KeyMomentsCard points={points} narrativeMoments={keyMoments} />
+            <KeyMomentsCard
+              points={points}
+              narrativeMoments={keyMoments}
+              p1Name={p1Short}
+              p2Name={p2Short}
+            />
             <PressurePointsCard points={points} />
           </aside>
           </div>

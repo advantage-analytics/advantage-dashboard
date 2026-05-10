@@ -312,7 +312,7 @@ export function RadarChartSection({
             activeDot={{
               r: 5,
               fill: PLAYER_1,
-              stroke: "#FFFFFF",
+              stroke: "var(--color-surface-card)",
               strokeWidth: 2,
             }}
             isAnimationActive={false}
@@ -328,7 +328,7 @@ export function RadarChartSection({
             activeDot={{
               r: 5,
               fill: PLAYER_2,
-              stroke: "#FFFFFF",
+              stroke: "var(--color-surface-card)",
               strokeWidth: 2,
             }}
             isAnimationActive={false}

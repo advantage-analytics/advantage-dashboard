@@ -152,6 +152,8 @@ const FILLER_KEY_MOMENTS = [
   { moment: "Momentum Shift", description: "After dropping serve at 4-3, you responded immediately with a break back, demonstrating strong mental resilience under pressure." },
   { moment: "Clutch Serving", description: "Saved three break points at 5-4 in the second set with consecutive first-serve winners to close out the match." },
   { moment: "Rally Dominance", description: "Won 8 of 10 rallies lasting longer than 9 shots, wearing down your opponent physically in the second set." },
+  { moment: "Set Point Conversion", description: "Closed out the first set with a forehand winner up the line on your second set point, refusing to let the opportunity slip." },
+  { moment: "Strong Finish", description: "Won the final four games in a row to seal the match, mixing aggressive returning with high first-serve percentage on the closing hold." },
 ];
 
 /**
