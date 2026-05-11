@@ -29,11 +29,21 @@ export function AiInsightCard({
   const dismiss = useCallback(() => {
     setVisible(false);
     localStorage.setItem(storageKey, "true");
+    window.dispatchEvent(
+      new CustomEvent("advantage-ai-insight-toggle", {
+        detail: { storageKey, dismissed: true },
+      }),
+    );
   }, [storageKey]);
 
   const restore = useCallback(() => {
     setVisible(true);
     localStorage.removeItem(storageKey);
+    window.dispatchEvent(
+      new CustomEvent("advantage-ai-insight-toggle", {
+        detail: { storageKey, dismissed: false },
+      }),
+    );
   }, [storageKey]);
 
   const cardShell =

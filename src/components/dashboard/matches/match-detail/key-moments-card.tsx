@@ -5,6 +5,7 @@ import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { PLAYER_1, PLAYER_2 } from "@/lib/design/player-colors";
+import { cn } from "@/lib/utils";
 
 const EASE_CURVE: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
 
@@ -61,13 +62,12 @@ function descriptionFor(pt: MatchPoint, type: MomentType): string {
   return pt.resultType || "Point played";
 }
 
-const MAX_MOMENTS = 6;
-
 interface KeyMomentsCardProps {
   points: MatchPoint[];
   narrativeMoments?: Array<{ moment: string; description: string }>;
   p1Name: string;
   p2Name: string;
+  className?: string;
 }
 
 export function KeyMomentsCard({
@@ -75,14 +75,12 @@ export function KeyMomentsCard({
   narrativeMoments,
   p1Name,
   p2Name,
+  className,
 }: KeyMomentsCardProps) {
   const prefersReduced = useReducedMotion();
   const headingId = "key-moments-heading";
 
-  const { moments, totalCount } = useMemo<{
-    moments: DerivedMoment[];
-    totalCount: number;
-  }>(() => {
+  const moments = useMemo<DerivedMoment[]>(() => {
     const all: Array<DerivedMoment & { pointNumber: number }> = [];
 
     for (const pt of points) {
@@ -109,39 +107,35 @@ export function KeyMomentsCard({
       return b.pointNumber - a.pointNumber;
     });
 
-    const top = all.slice(0, MAX_MOMENTS);
+    if (narrativeMoments && narrativeMoments.length > 0) {
+      return all.map((m, i) => {
+        const prose = narrativeMoments[i];
+        return prose?.description ? { ...m, description: prose.description } : m;
+      });
+    }
 
-    const enriched =
-      narrativeMoments && narrativeMoments.length > 0
-        ? top.map((m, i) => {
-            const prose = narrativeMoments[i];
-            return prose?.description
-              ? { ...m, description: prose.description }
-              : m;
-          })
-        : top;
-
-    return { moments: enriched, totalCount: all.length };
+    return all;
   }, [points, narrativeMoments, p1Name, p2Name]);
-
-  const hasOverflow = totalCount > moments.length;
 
   return (
     <section
       id="match-key-moments"
       aria-labelledby={headingId}
-      className="surface-card scroll-mt-6 flex flex-col overflow-hidden"
+      className={cn(
+        "surface-card scroll-mt-6 flex flex-col overflow-hidden",
+        className,
+      )}
     >
       <div className="flex items-center justify-between h-14 px-5">
         <h2
           id={headingId}
-          className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]"
+          className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] leading-[15px]"
         >
           Key Moments
         </h2>
-        {hasOverflow && (
+        {moments.length > 0 && (
           <span className="text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2.5px] tabular-nums">
-            Top {moments.length} of {totalCount}
+            {moments.length} total
           </span>
         )}
       </div>
@@ -161,52 +155,57 @@ export function KeyMomentsCard({
           </Link>
         </div>
       ) : (
-        <ul className="flex flex-col gap-4 pb-5">
-          {moments.map((m, i) => {
-            const winnerColor = m.player === "player1" ? PLAYER_1 : PLAYER_2;
-            return (
-              <motion.li
-                key={m.id}
-                className="flex gap-3 items-stretch px-5"
-                initial={prefersReduced ? false : { opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  duration: 0.3,
-                  delay: 0.08 + i * 0.04,
-                  ease: EASE_CURVE,
-                }}
-              >
-                <span
-                  aria-hidden="true"
-                  className="w-px rounded-full shrink-0"
-                  style={{ backgroundColor: winnerColor }}
-                />
-                <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#0D0D0D]">
-                      {m.title}
-                    </span>
-                    <span className="text-[9px] font-normal uppercase tracking-[2.5px] text-[#AAAAAA] tabular-nums shrink-0">
-                      Set {m.setNumber} · {m.gameScore}
-                    </span>
+        <div
+          className="max-h-[340px] overflow-y-auto pb-5"
+          style={{ scrollbarGutter: "stable" }}
+        >
+          <ul className="flex flex-col gap-4">
+            {moments.map((m, i) => {
+              const winnerColor = m.player === "player1" ? PLAYER_1 : PLAYER_2;
+              return (
+                <motion.li
+                  key={m.id}
+                  className="flex gap-3 items-stretch px-5"
+                  initial={prefersReduced ? false : { opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{
+                    duration: 0.3,
+                    delay: 0.08 + Math.min(i, 6) * 0.04,
+                    ease: EASE_CURVE,
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    className="w-px rounded-full shrink-0"
+                    style={{ backgroundColor: winnerColor }}
+                  />
+                  <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#0D0D0D]">
+                        {m.title}
+                      </span>
+                      <span className="text-[9px] font-normal uppercase tracking-[2.5px] text-[#AAAAAA] tabular-nums shrink-0">
+                        Set {m.setNumber} · {m.gameScore}
+                      </span>
+                    </div>
+
+                    <p className="text-[12px] font-normal text-[#71717A] leading-[18px]">
+                      {m.description}
+                    </p>
+
+                    <p className="text-[11px] font-normal text-[#AAAAAA] leading-[16px]">
+                      Won by{" "}
+                      <span className="font-medium text-[#525252]">
+                        {m.winnerName}
+                      </span>
+                      {" · "}Served by {m.serverName}
+                    </p>
                   </div>
-
-                  <p className="text-[12px] font-normal text-[#71717A] leading-[18px]">
-                    {m.description}
-                  </p>
-
-                  <p className="text-[11px] font-normal text-[#AAAAAA] leading-[16px]">
-                    Won by{" "}
-                    <span className="font-medium text-[#525252]">
-                      {m.winnerName}
-                    </span>
-                    {" · "}Served by {m.serverName}
-                  </p>
-                </div>
-              </motion.li>
-            );
-          })}
-        </ul>
+                </motion.li>
+              );
+            })}
+          </ul>
+        </div>
       )}
     </section>
   );

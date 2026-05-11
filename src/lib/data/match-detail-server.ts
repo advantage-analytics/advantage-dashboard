@@ -114,6 +114,7 @@ function transformDbMatchToMatch(
     round: row.round ?? undefined,
     matchContext: row.result ?? "Final Score",
     duration: formatDuration(row.duration ?? undefined),
+    durationSec: row.duration != null ? Math.round(row.duration / 1000) : null,
     player1: {
       name: row.player1_name,
       school: "",

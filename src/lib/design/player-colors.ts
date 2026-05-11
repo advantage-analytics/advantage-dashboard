@@ -21,4 +21,4 @@ export const PLAYER_1_BAR_TINT = "#BFD5FB";
 export const PLAYER_2_BAR_TINT = "#DDC7F7";
 
 /** Accent for match-specific events (e.g., break of serve). */
-export const EVENT_ACCENT = "#E51837";
+export const EVENT_ACCENT = "#F59E0B";

@@ -1,10 +1,11 @@
 import { Info } from "lucide-react";
 
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { PLAYER_1, PLAYER_2 } from "@/lib/design/player-colors";
 
 import { RadarChartSection } from "./radar-chart-section";
 
@@ -39,145 +40,68 @@ export function PerformanceProfileCard({
   const hasData = data.length > 0;
   const p1Leads = data.filter((d) => d.p1 > d.p2).length;
   const p2Leads = data.filter((d) => d.p2 > d.p1).length;
-  const tallyLeader =
-    p1Leads === p2Leads ? null : p1Leads > p2Leads ? "p1" : "p2";
-  const tallyIsTie = tallyLeader === null;
+  const isTie = p1Leads === p2Leads;
 
   return (
     <section
       aria-labelledby={headingId}
       className="surface-card flex flex-col"
     >
-      <div className="flex items-center gap-1.5 h-14 px-5">
-        <h2
-          id={headingId}
-          className="text-[10px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[15px]"
-        >
-          Performance Profile
-        </h2>
-        {hasData && (
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                aria-label="Show all stats"
-                aria-haspopup="dialog"
-                className="relative inline-flex items-center justify-center size-5 -m-1 text-[var(--color-text-dim)] hover:text-[var(--color-text-secondary)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-full"
+      <div className="flex items-center justify-between gap-3 h-14 px-5">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <h2
+            id={headingId}
+            className="text-[10px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[15px]"
+          >
+            Performance Profile
+          </h2>
+          {hasData && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="About the Performance Profile"
+                  className="relative inline-flex items-center justify-center size-5 -m-1 text-[var(--color-text-dim)] hover:text-[var(--color-text-secondary)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-full"
+                >
+                  <Info className="size-3" strokeWidth={1.75} aria-hidden="true" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent
+                side="top"
+                align="start"
+                sideOffset={8}
+                showArrow={false}
+                className="!bg-white !text-[var(--color-text-primary)] !rounded-xl !px-0 !py-0 !border !border-[var(--color-border-card)] !shadow-[0px_4px_16px_0px_rgba(0,0,0,0.08)] !text-left !w-auto"
               >
-                <Info className="size-3" strokeWidth={1.75} aria-hidden="true" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent
-              side="top"
-              align="center"
-              sideOffset={8}
-              collisionPadding={16}
-              role="dialog"
-              aria-label="All stats"
-              className="!bg-white !text-[var(--color-text-primary)] !rounded-xl !p-0 !border !border-[var(--color-border-card)] !shadow-[0px_4px_16px_0px_rgba(0,0,0,0.08)] !w-auto"
-            >
-              <div className="w-[260px] py-4 px-4 flex flex-col gap-3.5">
-                <div className="flex flex-col gap-2">
+                <div className="w-[260px] py-3.5 px-4 flex flex-col gap-2.5">
                   <span className="text-[9px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[13px]">
                     Performance Profile
                   </span>
-                  <div className="flex items-center justify-between gap-3 min-w-0">
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <TooltipLegendName
-                        color="var(--color-player-1)"
-                        name={p1Name}
-                      />
-                      <TooltipLegendName
-                        color="var(--color-player-2)"
-                        name={p2Name}
-                      />
-                    </div>
-                    <span className="text-[9px] font-normal text-[var(--color-text-dim)] tabular-nums leading-[13px] shrink-0">
-                      {data.length} · 0–100
-                    </span>
-                  </div>
+                  <p className="text-[11px] font-normal text-[var(--color-text-secondary)] leading-[16px]">
+                    Each axis is a 0–100 score for one stat. The further out the
+                    shape reaches, the stronger that player is on that axis.
+                  </p>
+                  <div className="h-px bg-[var(--color-border-card)] -mx-4" />
+                  <p className="text-[10px] font-normal text-[var(--color-text-dim)] leading-[14px]">
+                    Pick any axis — by tap, hover, or keyboard — to compare
+                    both players on that stat. The full breakdown lives in the
+                    stats table below.
+                  </p>
                 </div>
-                <div className="h-px bg-[var(--color-border-card)] -mx-4" />
-                <ul className="flex flex-col gap-1.5 max-h-[228px] overflow-y-auto -mx-0.5 px-0.5">
-                  {data.map((d) => {
-                    const leader =
-                      d.p1 === d.p2 ? null : d.p1 > d.p2 ? "p1" : "p2";
-                    const isTie = leader === null;
-                    return (
-                      <li
-                        key={d.stat}
-                        className="flex items-start justify-between gap-3 text-[11px] leading-[16px]"
-                      >
-                        <span className="text-[var(--color-text-secondary)] min-w-0">
-                          {d.stat}
-                        </span>
-                        <span className="flex items-baseline gap-1 shrink-0 tabular-nums">
-                          <span
-                            className={`text-[var(--color-player-1)] transition-opacity ${
-                              leader === "p1"
-                                ? "font-semibold"
-                                : isTie
-                                  ? "font-normal"
-                                  : "font-normal opacity-55"
-                            }`}
-                          >
-                            {Math.round(d.p1)}
-                          </span>
-                          <span className="text-[11px] text-[var(--color-text-dim)]">
-                            ·
-                          </span>
-                          <span
-                            className={`text-[var(--color-player-2)] transition-opacity ${
-                              leader === "p2"
-                                ? "font-semibold"
-                                : isTie
-                                  ? "font-normal"
-                                  : "font-normal opacity-55"
-                            }`}
-                          >
-                            {Math.round(d.p2)}
-                          </span>
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-                <div className="h-px bg-[var(--color-border-card)] -mx-4" />
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-[9px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[13px]">
-                    Stats Leading
-                  </span>
-                  <span className="flex items-baseline gap-1.5 shrink-0 tabular-nums leading-[18px]">
-                    <span
-                      className={`text-[13px] text-[var(--color-player-1)] transition-opacity ${
-                        tallyLeader === "p1"
-                          ? "font-semibold"
-                          : tallyIsTie
-                            ? "font-medium"
-                            : "font-normal opacity-55"
-                      }`}
-                    >
-                      {p1Leads}
-                    </span>
-                    <span className="text-[12px] text-[var(--color-text-dim)]">
-                      ·
-                    </span>
-                    <span
-                      className={`text-[13px] text-[var(--color-player-2)] transition-opacity ${
-                        tallyLeader === "p2"
-                          ? "font-semibold"
-                          : tallyIsTie
-                            ? "font-medium"
-                            : "font-normal opacity-55"
-                      }`}
-                    >
-                      {p2Leads}
-                    </span>
-                  </span>
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+
+        {hasData && (
+          <HeadlineInsight
+            p1Name={p1Name}
+            p2Name={p2Name}
+            p1Leads={p1Leads}
+            p2Leads={p2Leads}
+            isTie={isTie}
+            total={data.length}
+          />
         )}
       </div>
 
@@ -190,67 +114,110 @@ export function PerformanceProfileCard({
           )}
         </div>
 
-        {hasData && (
-          <>
-            <div className="px-5 flex justify-end">
-              <span className="text-[10px] font-normal text-[var(--color-text-faint)] leading-[14px]">
-                Select an axis for detail
-              </span>
-            </div>
+        <div className="px-5">
+          <div
+            aria-hidden="true"
+            className="h-px bg-[var(--color-border-card)]"
+          />
+        </div>
 
-            <div className="px-5">
-              <div
-                aria-hidden="true"
-                className="h-px bg-[var(--color-border-card)]"
-              />
-            </div>
-
-            <div className="px-5 flex items-center justify-end sm:justify-between gap-x-3 gap-y-2 flex-wrap">
-              <span className="hidden sm:inline text-[10px] font-normal text-[var(--color-text-faint)]">
-                {data.length} Categories
-              </span>
-              <div className="flex items-center gap-3">
-                <LegendDot color="var(--color-player-1)" name={p1Name} />
-                <LegendDot color="var(--color-player-2)" name={p2Name} />
-              </div>
-            </div>
-          </>
-        )}
+        <div className="px-5 flex items-center justify-between gap-x-3 gap-y-2 flex-wrap">
+          <span className="text-[10px] font-normal text-[var(--color-text-faint)] tabular-nums">
+            {hasData ? `${data.length} Categories` : "— Categories"}
+          </span>
+          <div className="flex items-center gap-3">
+            <LegendDot
+              color="var(--color-player-1)"
+              name={p1Name}
+              dim={!hasData}
+            />
+            <LegendDot
+              color="var(--color-player-2)"
+              name={p2Name}
+              dim={!hasData}
+            />
+          </div>
+        </div>
       </div>
     </section>
   );
 }
 
-function TooltipLegendName({
-  color,
-  name,
+function HeadlineInsight({
+  p1Name,
+  p2Name,
+  p1Leads,
+  p2Leads,
+  isTie,
+  total,
 }: {
-  color: string;
-  name: string;
+  p1Name: string;
+  p2Name: string;
+  p1Leads: number;
+  p2Leads: number;
+  isTie: boolean;
+  total: number;
 }) {
+  if (isTie) {
+    return (
+      <span
+        className="text-[10px] font-medium text-[var(--color-text-secondary)] leading-[14px] tabular-nums shrink-0"
+        aria-label={`Categories tied ${p1Leads} to ${p2Leads}`}
+      >
+        Even
+      </span>
+    );
+  }
+  const p1Ahead = p1Leads > p2Leads;
+  const leaderName = p1Ahead ? p1Name : p2Name;
+  const leaderColor = p1Ahead ? PLAYER_1 : PLAYER_2;
+  const leaderCount = p1Ahead ? p1Leads : p2Leads;
   return (
-    <div className="flex items-center gap-1.5 min-w-0 flex-1">
+    <span
+      className="flex items-center gap-1.5 shrink-0"
+      aria-label={`${leaderName} leads ${leaderCount} of ${total} categories`}
+    >
+      <span className="text-[9px] font-normal text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[14px]">
+        Leads
+      </span>
       <span
         aria-hidden="true"
-        className="size-2 rounded-[2px] shrink-0"
-        style={{ backgroundColor: color }}
+        className="size-2 rounded-[2px]"
+        style={{ backgroundColor: leaderColor }}
       />
-      <span className="text-[10px] font-normal text-[var(--color-text-muted)] leading-4 truncate">
-        {name}
+      <span className="text-[10px] font-medium text-[var(--color-text-secondary)] leading-[14px] truncate max-w-[160px]">
+        {leaderName}
       </span>
-    </div>
+    </span>
   );
 }
 
-function LegendDot({ color, name }: { color: string; name: string }) {
+function LegendDot({
+  color,
+  name,
+  dim,
+}: {
+  color: string;
+  name: string;
+  dim?: boolean;
+}) {
   return (
     <div className="flex items-center gap-1.5">
       <span
         aria-hidden="true"
         className="size-2 rounded-[2px] shrink-0"
-        style={{ backgroundColor: color }}
+        style={{
+          backgroundColor: color,
+          opacity: dim ? 0.45 : 1,
+        }}
       />
-      <span className="text-[10px] font-normal text-[var(--color-text-muted)] leading-4 whitespace-nowrap">
+      <span
+        className={`text-[10px] font-normal leading-4 whitespace-nowrap ${
+          dim
+            ? "text-[var(--color-text-faint)]"
+            : "text-[var(--color-text-muted)]"
+        }`}
+      >
         {name}
       </span>
     </div>

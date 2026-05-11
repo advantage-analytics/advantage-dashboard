@@ -29,6 +29,7 @@ export interface Match {
   round?: string;
   matchContext?: string;
   duration?: string;
+  durationSec?: number | null;
   player1: Player;
   player2: Player;
   score: MatchScore;

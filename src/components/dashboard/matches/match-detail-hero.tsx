@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Kbd } from "@/components/ui/kbd";
 import { MatchMetadataRow } from "@/components/dashboard/matches/match-metadata-row";
 import type { Match } from "@/lib/data/types";
 
@@ -97,7 +96,7 @@ export function MatchDetailHero({
 
       <nav
         aria-label="Match navigation"
-        className="shrink-0 flex items-end gap-3.5"
+        className="shrink-0 flex items-center gap-3.5"
       >
         <NavLink
           href={previousMatchId ? `/dashboard/matches/${previousMatchId}` : null}
@@ -105,7 +104,11 @@ export function MatchDetailHero({
           ariaLabel="Previous match"
           title="Previous match (←)"
           shortcut="ArrowLeft"
-          icon={<Kbd size="sm">←</Kbd>}
+          icon={
+            <span aria-hidden className="text-[14px] font-normal leading-none">
+              ‹
+            </span>
+          }
           position="left"
         />
         <NavLink
@@ -114,7 +117,11 @@ export function MatchDetailHero({
           ariaLabel="Next match"
           title="Next match (→)"
           shortcut="ArrowRight"
-          icon={<Kbd size="sm">→</Kbd>}
+          icon={
+            <span aria-hidden className="text-[14px] font-normal leading-none">
+              ›
+            </span>
+          }
           position="right"
         />
       </nav>
@@ -150,7 +157,7 @@ function NavLink({
   );
 
   const baseClass =
-    "inline-flex items-end gap-1 py-2 -my-2 text-[var(--color-text-muted)] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-sm";
+    "inline-flex items-center gap-1 py-2 -my-2 text-[var(--color-text-muted)] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-sm";
 
   if (!href) {
     return (
