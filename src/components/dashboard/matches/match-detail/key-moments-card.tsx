@@ -1,27 +1,21 @@
 "use client";
 
 import { useMemo } from "react";
-import Link from "next/link";
-import { motion, useReducedMotion } from "framer-motion";
+import { Play } from "lucide-react";
 import type { MatchPoint } from "@/lib/data/match-points-server";
-import { PLAYER_1, PLAYER_2 } from "@/lib/design/player-colors";
-import { cn } from "@/lib/utils";
-
-const EASE_CURVE: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
 
 type MomentType = "match-point" | "set-point" | "break-point" | "ace";
 
 interface DerivedMoment {
   id: string;
   type: MomentType;
-  player: "player1" | "player2";
   title: string;
   description: string;
   setNumber: number;
   gameScore: string;
+  pointScore: string;
   videoTime: number | null;
   winnerName: string;
-  serverName: string;
 }
 
 const TYPE_PRIORITY: Record<MomentType, number> = {
@@ -31,25 +25,28 @@ const TYPE_PRIORITY: Record<MomentType, number> = {
   ace: 3,
 };
 
+const TYPE_LABEL: Record<MomentType, string> = {
+  "match-point": "Match Point",
+  "set-point": "Set Point",
+  "break-point": "Break Point",
+  ace: "Ace",
+};
+
+const RAIL_COLOR: Record<MomentType, string> = {
+  "match-point": "bg-[#E51837]",
+  "set-point": "bg-[#3B82F6]",
+  "break-point": "bg-[#3B82F6]",
+  ace: "bg-[#AAAAAA]",
+};
+
+const MAX_VISIBLE = 6;
+
 function classify(pt: MatchPoint): MomentType | null {
   if (pt.isMatchPoint) return "match-point";
   if (pt.isSetPoint) return "set-point";
   if (pt.isBreakPoint) return "break-point";
   if (pt.resultType?.toLowerCase().includes("ace")) return "ace";
   return null;
-}
-
-function titleFor(type: MomentType): string {
-  switch (type) {
-    case "match-point":
-      return "Match Point";
-    case "set-point":
-      return "Set Point";
-    case "break-point":
-      return "Break Point";
-    case "ace":
-      return "Ace";
-  }
 }
 
 function descriptionFor(pt: MatchPoint, type: MomentType): string {
@@ -60,6 +57,26 @@ function descriptionFor(pt: MatchPoint, type: MomentType): string {
     return returnerWon ? "Break point converted" : "Break point saved";
   }
   return pt.resultType || "Point played";
+}
+
+function formatVideoTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function buildProse(m: DerivedMoment): string {
+  const lcDesc = m.description.toLowerCase();
+  const lcTitle = m.title.toLowerCase();
+  return lcDesc.startsWith(lcTitle) ? m.description : `${m.title} — ${m.description}`;
+}
+
+function seekToVideoTime(time: number) {
+  window.dispatchEvent(
+    new CustomEvent("match:video-seek", { detail: { time } }),
+  );
+  const target = document.getElementById("match-video");
+  if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 interface KeyMomentsCardProps {
@@ -77,7 +94,6 @@ export function KeyMomentsCard({
   p2Name,
   className,
 }: KeyMomentsCardProps) {
-  const prefersReduced = useReducedMotion();
   const headingId = "key-moments-heading";
 
   const moments = useMemo<DerivedMoment[]>(() => {
@@ -89,14 +105,13 @@ export function KeyMomentsCard({
       all.push({
         id: pt.id,
         type,
-        player: pt.wonByPlayer1 ? "player1" : "player2",
-        title: titleFor(type),
+        title: TYPE_LABEL[type],
         description: descriptionFor(pt, type),
         setNumber: pt.setNumber,
         gameScore: pt.gameScore,
+        pointScore: pt.pointScore,
         videoTime: pt.videoTime,
         winnerName: pt.wonByPlayer1 ? p1Name : p2Name,
-        serverName: pt.serverIsPlayer1 ? p1Name : p2Name,
         pointNumber: pt.pointNumber,
       });
     }
@@ -117,94 +132,92 @@ export function KeyMomentsCard({
     return all;
   }, [points, narrativeMoments, p1Name, p2Name]);
 
+  const visible = moments.slice(0, MAX_VISIBLE);
+
   return (
     <section
       id="match-key-moments"
       aria-labelledby={headingId}
-      className={cn(
-        "surface-card scroll-mt-6 flex flex-col overflow-hidden",
-        className,
-      )}
+      className={`bg-white border border-[#F3F3F3] rounded-[14px] shadow-card overflow-hidden scroll-mt-6${className ? ` ${className}` : ""}`}
     >
-      <div className="flex items-center justify-between h-14 px-5">
+      <div className="flex items-center h-14 px-5">
         <h2
           id={headingId}
-          className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] leading-[15px]"
+          className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]"
         >
-          Key Moments
+          KEY MOMENTS
         </h2>
-        {moments.length > 0 && (
-          <span className="text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2.5px] tabular-nums">
-            {moments.length} total
-          </span>
-        )}
       </div>
 
-      {moments.length === 0 ? (
-        <div className="flex flex-col gap-1.5 px-5 pb-5">
-          <p className="text-[12px] font-normal text-[#888888] leading-[1.6]">
-            Key moments appear once your match finishes analyzing. If this match
-            already processed, the source data may be missing pressure-point
-            metadata.
-          </p>
-          <Link
-            href="/dashboard/help"
-            className="self-start text-[10px] font-medium uppercase tracking-[2.5px] text-[#3B82F6] hover:text-[#2563EB] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 rounded-sm"
-          >
-            Why is this empty?
-          </Link>
+      {visible.length === 0 ? (
+        <div className="flex items-center justify-center py-6 px-5">
+          <p className="text-[12px] text-[#888888]">No key moments yet</p>
         </div>
       ) : (
-        <div
-          className="max-h-[340px] overflow-y-auto pb-5"
-          style={{ scrollbarGutter: "stable" }}
-        >
-          <ul className="flex flex-col gap-4">
-            {moments.map((m, i) => {
-              const winnerColor = m.player === "player1" ? PLAYER_1 : PLAYER_2;
-              return (
-                <motion.li
-                  key={m.id}
-                  className="flex gap-3 items-stretch px-5"
-                  initial={prefersReduced ? false : { opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{
-                    duration: 0.3,
-                    delay: 0.08 + Math.min(i, 6) * 0.04,
-                    ease: EASE_CURVE,
-                  }}
+        <div className="flex flex-col gap-4 pb-5">
+          {visible.map((m) => {
+            const prose = buildProse(m);
+            const hasVideo = m.videoTime != null;
+
+            const inner = (
+              <>
+                <div
+                  className="flex flex-row items-center"
+                  aria-hidden="true"
                 >
-                  <span
-                    aria-hidden="true"
-                    className="w-px rounded-full shrink-0"
-                    style={{ backgroundColor: winnerColor }}
+                  <div
+                    className={`w-px self-stretch rounded-full ${RAIL_COLOR[m.type]}`}
                   />
-                  <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#0D0D0D]">
-                        {m.title}
-                      </span>
-                      <span className="text-[9px] font-normal uppercase tracking-[2.5px] text-[#AAAAAA] tabular-nums shrink-0">
-                        Set {m.setNumber} · {m.gameScore}
-                      </span>
-                    </div>
-
-                    <p className="text-[12px] font-normal text-[#71717A] leading-[18px]">
-                      {m.description}
+                </div>
+                <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                  <p className="text-[12px] font-light text-[#888888] leading-[1.5]">
+                    {prose}
+                  </p>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[10px] font-normal text-[#AAAAAA] tabular-nums min-w-0">
+                      SET {m.setNumber} · {m.gameScore}
+                      {m.pointScore ? ` · ${m.pointScore}` : ""}
+                      {" · WON BY "}{m.winnerName}
                     </p>
-
-                    <p className="text-[11px] font-normal text-[#AAAAAA] leading-[16px]">
-                      Won by{" "}
-                      <span className="font-medium text-[#525252]">
-                        {m.winnerName}
+                    {hasVideo && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[#AAAAAA] tabular-nums shrink-0 transition-colors duration-200 group-hover:text-[#3B82F6]">
+                        <Play
+                          className="h-2.5 w-2.5"
+                          strokeWidth={2}
+                          fill="currentColor"
+                          aria-hidden="true"
+                        />
+                        {formatVideoTime(m.videoTime!)}
                       </span>
-                      {" · "}Served by {m.serverName}
-                    </p>
+                    )}
                   </div>
-                </motion.li>
+                </div>
+              </>
+            );
+
+            if (hasVideo) {
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => seekToVideoTime(m.videoTime!)}
+                  aria-label={`Jump to ${m.title} at ${formatVideoTime(m.videoTime!)}`}
+                  className="group flex gap-3 items-stretch px-5 py-1.5 w-full text-left transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+                >
+                  {inner}
+                </button>
               );
-            })}
-          </ul>
+            }
+
+            return (
+              <div
+                key={m.id}
+                className="flex gap-3 items-stretch px-5 py-1.5"
+              >
+                {inner}
+              </div>
+            );
+          })}
         </div>
       )}
     </section>

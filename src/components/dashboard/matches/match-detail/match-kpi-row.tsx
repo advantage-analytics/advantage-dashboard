@@ -96,7 +96,7 @@ interface KpiCellProps {
 function KpiCell({ label, value, split }: KpiCellProps) {
   return (
     <div className="flex-1 min-w-0 flex flex-col gap-3 px-5 py-5">
-      <p className="text-[9px] font-normal leading-[13.5px] tracking-[2.5px] text-[var(--color-text-dim)] uppercase whitespace-nowrap">
+      <p className="text-[9px] font-medium leading-[13.5px] tracking-[2.5px] text-[var(--color-text-dim)] uppercase whitespace-nowrap">
         {label}
       </p>
       <p className="text-[28px] font-light leading-[28px] tracking-[-0.5px] text-[var(--color-text-primary)] tabular-nums">
@@ -123,7 +123,7 @@ function DurationCell({
   const hasActive = activeLabel !== null && activeRatio !== null && activePct !== null;
   return (
     <div className="flex-1 min-w-0 flex flex-col gap-3 px-5 py-5">
-      <p className="text-[9px] font-normal leading-[13.5px] tracking-[2.5px] text-[var(--color-text-dim)] uppercase whitespace-nowrap">
+      <p className="text-[9px] font-medium leading-[13.5px] tracking-[2.5px] text-[var(--color-text-dim)] uppercase whitespace-nowrap">
         Match Duration
       </p>
       <p className="text-[28px] font-light leading-[28px] tracking-[-0.5px] text-[var(--color-text-primary)] tabular-nums">
@@ -131,11 +131,11 @@ function DurationCell({
       </p>
       {hasActive && (
         <div
-          className="flex flex-col gap-1.5 w-full"
+          className="flex flex-col gap-2 w-full"
           aria-label={`${activeLabel} active play, ${activePct}% of elapsed time`}
         >
           <div
-            className="h-[3px] w-full overflow-hidden rounded-full bg-[var(--color-border-card)]"
+            className="h-1 w-full overflow-hidden rounded-full bg-[var(--color-border-card)]"
             role="presentation"
           >
             <div
@@ -145,7 +145,7 @@ function DurationCell({
           </div>
           <div className="flex items-baseline justify-between gap-2 text-[11px] leading-none tabular-nums">
             <span
-              className="font-medium"
+              className="font-semibold"
               style={{ color: ACTIVE_PLAY_COLOR }}
             >
               {activeLabel}
@@ -174,22 +174,36 @@ function SplitBar({
   const total = p1 + p2;
   const p1Pct = total > 0 ? (p1 / total) * 100 : 50;
   const p2Pct = 100 - p1Pct;
+  const p1Leads = p1 > p2;
+  const p2Leads = p2 > p1;
+  const lead = Math.abs(p1 - p2);
+  const leadLabel = lead > 0 ? ` (${p1Leads ? p1Name : p2Name} +${lead})` : "";
 
   return (
     <div
-      className="flex flex-col gap-1.5 w-full"
-      aria-label={`${p1Name} ${p1}, ${p2Name} ${p2}`}
+      className="flex flex-col gap-2 w-full"
+      aria-label={`${p1Name} ${p1}, ${p2Name} ${p2}${leadLabel}`}
     >
       <div
-        className="flex h-[3px] w-full overflow-hidden rounded-full bg-[var(--color-border-card)]"
+        className="flex h-1 w-full overflow-hidden rounded-full bg-[var(--color-border-card)]"
         role="presentation"
       >
         <div style={{ width: `${p1Pct}%`, backgroundColor: P1_COLOR }} />
         <div style={{ width: `${p2Pct}%`, backgroundColor: P2_COLOR }} />
       </div>
-      <div className="flex items-center justify-between text-[11px] font-medium leading-none tabular-nums">
-        <span style={{ color: P1_COLOR }}>{p1}</span>
-        <span style={{ color: P2_COLOR }}>{p2}</span>
+      <div className="flex items-center justify-between text-[11px] leading-none tabular-nums">
+        <span
+          className={p1Leads ? "font-semibold" : "font-medium"}
+          style={{ color: P1_COLOR }}
+        >
+          {p1}
+        </span>
+        <span
+          className={p2Leads ? "font-semibold" : "font-medium"}
+          style={{ color: P2_COLOR }}
+        >
+          {p2}
+        </span>
       </div>
     </div>
   );

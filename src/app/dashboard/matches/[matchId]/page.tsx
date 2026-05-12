@@ -143,7 +143,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
 
   return (
     <div className="flex-1 w-full bg-white">
-      <div className="px-8 py-10">
+      <div className="mx-auto max-w-screen-2xl px-6 sm:px-8 py-8 sm:py-10">
         <SectionsStagger className="flex flex-col">
         <MatchDetailHero
           match={match}
@@ -155,7 +155,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
           <MatchSummaryRow match={match} p1Name={p1Name} p2Name={p2Name} />
         </div>
 
-        <div className="mt-4">
+        <div className="mt-6">
           <MatchKpiRow
             duration={match.duration}
             matchDurationSec={matchDurationSec}
@@ -218,7 +218,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
           </aside>
         </div>
 
-        <div className="mt-6">
+        <div className="mt-8">
           <PerformanceTrackerCard
             points={points}
             p1Name={p1Short}

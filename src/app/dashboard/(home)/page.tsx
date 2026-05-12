@@ -60,7 +60,7 @@ export default async function Home() {
 
   return (
     <div className="flex-1 w-full bg-white">
-      <div className="px-8 py-10">
+      <div className="mx-auto max-w-screen-2xl px-6 sm:px-8 py-8 sm:py-10">
         <HomeContent
           displayName={displayName}
           greeting={greeting}

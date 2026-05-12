@@ -42,11 +42,11 @@ const STAT_DESCRIPTIONS: Record<string, string> = {
   "double faults": "Two missed serves on the same point.",
   "break points saved": "Break points denied while serving.",
   "break points converted": "Break points won while returning.",
-  "service breaks": "Games won while returning the opponent's serve.",
-  "winners": "Point-ending shots the opponent doesn't touch.",
+  "service breaks": "Opponent service games won — known as breaks of serve.",
+  "winners": "Clean shots that ended the point — opponent never returned.",
   "unforced errors": "Mistakes not forced by opponent pressure.",
   "net approaches": "Points where the player came to the net.",
-  "net points won %": "Share of approach points the player won at net.",
+  "net points won %": "Of net approaches, the share won as points.",
   "service games won": "Games held while serving.",
   "short rallies (1–4)": "Points decided in 1–4 shots.",
   "medium rallies (5–8)": "Points decided in 5–8 shots.",
@@ -77,7 +77,7 @@ export function MatchStatisticsCard({
     return (
       <section
         aria-labelledby="match-stats-heading-empty"
-        className="surface-card flex flex-col"
+        className="surface-card flex flex-col flex-1"
       >
         <div className="flex items-center h-14 px-5">
           <h2
@@ -107,7 +107,7 @@ export function MatchStatisticsCard({
     <section
       id="match-statistics"
       aria-labelledby="match-stats-heading"
-      className="surface-card scroll-mt-6 relative flex flex-col"
+      className="surface-card scroll-mt-6 relative flex flex-col flex-1"
     >
       <a
         href="#match-stats-end"
@@ -145,7 +145,7 @@ export function MatchStatisticsCard({
               className="!bg-white !text-[var(--color-text-primary)] !rounded-xl !p-0 !border !border-[var(--color-border-card)] !shadow-[0px_4px_16px_0px_rgba(0,0,0,0.08)] !w-auto"
             >
               <div className="w-[260px] py-4 px-4 flex flex-col gap-3">
-                <span className="text-[9px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[13px]">
+                <span className="text-[10px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[15px]">
                   Reading the values
                 </span>
                 <p className="text-[11px] font-normal text-[var(--color-text-body)] leading-[16px]">
@@ -172,7 +172,7 @@ export function MatchStatisticsCard({
         </div>
       </div>
 
-      <div className="flex flex-col gap-5 px-5 pb-5">
+      <div className="flex flex-col gap-5 px-5 pb-5 flex-1 justify-between">
         {renderableSections.map((section) => (
           <div key={section.title} className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
@@ -196,7 +196,7 @@ export function MatchStatisticsCard({
                 return (
                   <motion.li
                     key={row.label}
-                    className="flex items-center gap-3 sm:gap-4 py-1 rounded-md transition-colors duration-150 hover:bg-[var(--color-surface-muted)]"
+                    className="flex items-center gap-3 sm:gap-4 -mx-2 px-2 py-1 rounded-md transition-colors duration-150 hover:bg-[var(--color-surface-muted)]"
                     initial={prefersReduced ? false : { opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3, delay: rowDelay, ease: EASE_CURVE }}
@@ -215,7 +215,7 @@ export function MatchStatisticsCard({
                           <TooltipContent
                             sideOffset={8}
                             collisionPadding={12}
-                            className="max-w-[280px] px-3 py-2 text-left leading-[16px]"
+                            className="max-w-[420px] px-2.5 py-1.5 text-left leading-[16px]"
                           >
                             {description}
                           </TooltipContent>
@@ -304,7 +304,7 @@ function ValueText({
           <span
             tabIndex={0}
             aria-label="No data recorded for this stat"
-            className={`inline-block whitespace-nowrap text-[var(--color-text-muted)] italic cursor-help focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-sm text-[13px] leading-[18px] font-light tabular-nums ${touchTargetExpanderClass}`}
+            className={`inline-block whitespace-nowrap text-[var(--color-text-muted)] italic cursor-help focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-sm text-[14px] leading-[18px] font-light tabular-nums ${touchTargetExpanderClass}`}
           >
             —
           </span>

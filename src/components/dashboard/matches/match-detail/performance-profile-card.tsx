@@ -5,7 +5,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { PLAYER_1, PLAYER_2 } from "@/lib/design/player-colors";
 
 import { RadarChartSection } from "./radar-chart-section";
 
@@ -38,9 +37,6 @@ export function PerformanceProfileCard({
 }: PerformanceProfileCardProps) {
   const headingId = "performance-profile-heading";
   const hasData = data.length > 0;
-  const p1Leads = data.filter((d) => d.p1 > d.p2).length;
-  const p2Leads = data.filter((d) => d.p2 > d.p1).length;
-  const isTie = p1Leads === p2Leads;
 
   return (
     <section
@@ -93,16 +89,6 @@ export function PerformanceProfileCard({
           )}
         </div>
 
-        {hasData && (
-          <HeadlineInsight
-            p1Name={p1Name}
-            p2Name={p2Name}
-            p1Leads={p1Leads}
-            p2Leads={p2Leads}
-            isTie={isTie}
-            total={data.length}
-          />
-        )}
       </div>
 
       <div className="flex flex-col gap-4 pb-[21px]">
@@ -140,55 +126,6 @@ export function PerformanceProfileCard({
         </div>
       </div>
     </section>
-  );
-}
-
-function HeadlineInsight({
-  p1Name,
-  p2Name,
-  p1Leads,
-  p2Leads,
-  isTie,
-  total,
-}: {
-  p1Name: string;
-  p2Name: string;
-  p1Leads: number;
-  p2Leads: number;
-  isTie: boolean;
-  total: number;
-}) {
-  if (isTie) {
-    return (
-      <span
-        className="text-[10px] font-medium text-[var(--color-text-secondary)] leading-[14px] tabular-nums shrink-0"
-        aria-label={`Categories tied ${p1Leads} to ${p2Leads}`}
-      >
-        Even
-      </span>
-    );
-  }
-  const p1Ahead = p1Leads > p2Leads;
-  const leaderName = p1Ahead ? p1Name : p2Name;
-  const leaderColor = p1Ahead ? PLAYER_1 : PLAYER_2;
-  const leaderCount = p1Ahead ? p1Leads : p2Leads;
-  return (
-    <span
-      className="flex items-center gap-1.5 shrink-0"
-      aria-label={`${leaderName} leads ${leaderCount} of ${total} categories`}
-    >
-      <span className="text-[9px] font-normal text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[14px]">
-        Leads
-      </span>
-      <span
-        aria-hidden="true"
-        className="size-2 rounded-[2px]"
-        style={{ backgroundColor: leaderColor }}
-      />
-      <span className="text-[10px] font-medium text-[var(--color-text-secondary)] leading-[14px] truncate max-w-[160px]">
-        {leaderName}
-      </span>
-    </span>
   );
 }
 

@@ -109,20 +109,6 @@ function RadarTooltipContent({
   );
 }
 
-/* Keys MUST match RADAR_STATS labels in matches/[matchId]/page.tsx so axis
-   labels render their short form on the chart while the full canonical
-   label appears in the tooltip (and matches the stats-table labels). */
-const STAT_ABBREVIATIONS: Record<string, string> = {
-  "First Serve In": "1st Serve In",
-  "First Serve Won": "1st Serve Won",
-  "Second Serve Won": "2nd Serve Won",
-  "Service Games Won": "Service Games",
-  "Break Points Converted": "Break Pts Won",
-  "First Serve Returns Won": "1st Return",
-  "Second Serve Return Points Won": "2nd Return",
-  "Return Games Won": "Return Games",
-};
-
 function buildLabelRenderer(
   onEnter: (stat: string, x: number, y: number, cx: number, cy: number) => void,
   onLeave: () => void,
@@ -184,7 +170,7 @@ function buildLabelRenderer(
           className="fill-[var(--color-text-faint)] text-[10px] font-normal"
           style={{ pointerEvents: "none" }}
         >
-          {STAT_ABBREVIATIONS[payload.value] ?? payload.value}
+          {payload.value}
         </text>
       </g>
     );
@@ -284,7 +270,7 @@ export function RadarChartSection({
         <RadarChart
           cx="50%"
           cy="50%"
-          outerRadius="72%"
+          outerRadius="62%"
           data={data}
           onMouseMove={handleChartMove}
           onMouseLeave={handleChartLeave}
