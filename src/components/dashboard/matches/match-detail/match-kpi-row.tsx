@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { PlayerStatistics } from "@/lib/data/types";
 
 interface MatchKpiRowProps {
@@ -66,21 +67,25 @@ export function MatchKpiRow({
           label="Total Points"
           value={String(p1Pts + p2Pts)}
           split={{ p1: p1Pts, p2: p2Pts, p1Name, p2Name }}
+          href="#match-statistics"
         />
         <KpiCell
           label="Aces"
           value={String(p1Aces + p2Aces)}
           split={{ p1: p1Aces, p2: p2Aces, p1Name, p2Name }}
+          href="#match-statistics"
         />
         <KpiCell
           label="Winners"
           value={String(p1Win + p2Win)}
           split={{ p1: p1Win, p2: p2Win, p1Name, p2Name }}
+          href="#match-statistics"
         />
         <KpiCell
           label="Unforced Errors"
           value={String(p1Ue + p2Ue)}
           split={{ p1: p1Ue, p2: p2Ue, p1Name, p2Name }}
+          href="#match-statistics"
         />
       </div>
     </section>
@@ -91,11 +96,12 @@ interface KpiCellProps {
   label: string;
   value: string;
   split?: { p1: number; p2: number; p1Name: string; p2Name: string };
+  href?: string;
 }
 
-function KpiCell({ label, value, split }: KpiCellProps) {
-  return (
-    <div className="flex-1 min-w-0 flex flex-col gap-3 px-5 py-5">
+function KpiCell({ label, value, split, href }: KpiCellProps) {
+  const inner = (
+    <>
       <p className="text-[9px] font-medium leading-[13.5px] tracking-[2.5px] text-[var(--color-text-dim)] uppercase whitespace-nowrap">
         {label}
       </p>
@@ -103,8 +109,23 @@ function KpiCell({ label, value, split }: KpiCellProps) {
         {value}
       </p>
       {split && <SplitBar {...split} />}
-    </div>
+    </>
   );
+
+  const baseClass = "flex-1 min-w-0 flex flex-col gap-3 px-5 py-5";
+
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className={`${baseClass} cursor-pointer hover:bg-[var(--color-surface-muted)] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] focus-visible:ring-inset`}
+      >
+        {inner}
+      </Link>
+    );
+  }
+
+  return <div className={baseClass}>{inner}</div>;
 }
 
 interface DurationCellProps {
@@ -188,8 +209,20 @@ function SplitBar({
         className="flex h-1 w-full overflow-hidden rounded-full bg-[var(--color-border-card)]"
         role="presentation"
       >
-        <div style={{ width: `${p1Pct}%`, backgroundColor: P1_COLOR }} />
-        <div style={{ width: `${p2Pct}%`, backgroundColor: P2_COLOR }} />
+        <div
+          style={{
+            width: `${p1Pct}%`,
+            backgroundColor: P1_COLOR,
+            opacity: p2Leads ? 0.35 : 1,
+          }}
+        />
+        <div
+          style={{
+            width: `${p2Pct}%`,
+            backgroundColor: P2_COLOR,
+            opacity: p1Leads ? 0.35 : 1,
+          }}
+        />
       </div>
       <div className="flex items-center justify-between text-[11px] leading-none tabular-nums">
         <span

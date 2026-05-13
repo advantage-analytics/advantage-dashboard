@@ -37,7 +37,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <UnsavedChangesProvider>
       <SidebarProvider defaultOpen={false} style={{ "--sidebar-width": "240px" } as React.CSSProperties}>
         <AppSidebar />
-        <SidebarInset className="bg-white h-screen overflow-y-auto">
+        <SidebarInset className="bg-white h-screen overflow-y-auto scroll-smooth motion-reduce:scroll-auto">
           <Header />
           <main>
             <PageTransition>

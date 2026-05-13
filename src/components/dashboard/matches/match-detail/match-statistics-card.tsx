@@ -77,7 +77,7 @@ export function MatchStatisticsCard({
     return (
       <section
         aria-labelledby="match-stats-heading-empty"
-        className="surface-card flex flex-col flex-1"
+        className="surface-card flex flex-col"
       >
         <div className="flex items-center h-14 px-5">
           <h2
@@ -107,7 +107,7 @@ export function MatchStatisticsCard({
     <section
       id="match-statistics"
       aria-labelledby="match-stats-heading"
-      className="surface-card scroll-mt-6 relative flex flex-col flex-1"
+      className="surface-card scroll-mt-6 relative flex flex-col"
     >
       <a
         href="#match-stats-end"
@@ -166,7 +166,7 @@ export function MatchStatisticsCard({
             </PopoverContent>
           </Popover>
         </div>
-        <div className="flex items-center shrink-0 gap-x-4 sm:gap-x-8">
+        <div className="flex items-center shrink-0 gap-x-4 sm:gap-x-8 ml-auto">
           <ColumnHeader name={p1Short} />
           <ColumnHeader name={p2Short} />
         </div>
@@ -224,7 +224,7 @@ export function MatchStatisticsCard({
                         row.label
                       )}
                     </span>
-                    <div className="flex items-center shrink-0 gap-x-4 sm:gap-x-8">
+                    <div className="flex items-center shrink-0 gap-x-4 sm:gap-x-8 ml-auto">
                       <div className={VALUE_COL_CLASS}>
                         <ValueText
                           display={row.p1Display}

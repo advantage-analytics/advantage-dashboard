@@ -1,10 +1,10 @@
 import { Info } from "lucide-react";
 
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 import { RadarChartSection } from "./radar-chart-section";
 
@@ -52,25 +52,28 @@ export function PerformanceProfileCard({
             Performance Profile
           </h2>
           {hasData && (
-            <Tooltip>
-              <TooltipTrigger asChild>
+            <Popover>
+              <PopoverTrigger asChild>
                 <button
                   type="button"
                   aria-label="About the Performance Profile"
+                  aria-haspopup="dialog"
                   className="relative inline-flex items-center justify-center size-5 -m-1 text-[var(--color-text-dim)] hover:text-[var(--color-text-secondary)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-full"
                 >
                   <Info className="size-3" strokeWidth={1.75} aria-hidden="true" />
                 </button>
-              </TooltipTrigger>
-              <TooltipContent
+              </PopoverTrigger>
+              <PopoverContent
                 side="top"
                 align="start"
                 sideOffset={8}
-                showArrow={false}
-                className="!bg-white !text-[var(--color-text-primary)] !rounded-xl !px-0 !py-0 !border !border-[var(--color-border-card)] !shadow-[0px_4px_16px_0px_rgba(0,0,0,0.08)] !text-left !w-auto"
+                collisionPadding={16}
+                role="dialog"
+                aria-label="About the Performance Profile"
+                className="!bg-white !text-[var(--color-text-primary)] !rounded-xl !p-0 !border !border-[var(--color-border-card)] !shadow-[0px_4px_16px_0px_rgba(0,0,0,0.08)] !w-auto"
               >
-                <div className="w-[260px] py-3.5 px-4 flex flex-col gap-2.5">
-                  <span className="text-[9px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[13px]">
+                <div className="w-[260px] py-4 px-4 flex flex-col gap-3">
+                  <span className="text-[10px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[15px]">
                     Performance Profile
                   </span>
                   <p className="text-[11px] font-normal text-[var(--color-text-secondary)] leading-[16px]">
@@ -84,8 +87,8 @@ export function PerformanceProfileCard({
                     stats table below.
                   </p>
                 </div>
-              </TooltipContent>
-            </Tooltip>
+              </PopoverContent>
+            </Popover>
           )}
         </div>
 

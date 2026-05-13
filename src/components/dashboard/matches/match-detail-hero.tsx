@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MatchMetadataRow } from "@/components/dashboard/matches/match-metadata-row";
+import { ShareMatchButton } from "@/components/dashboard/matches/match-detail/share-match-button";
 import type { Match } from "@/lib/data/types";
 
 interface MatchDetailHeroProps {
@@ -94,37 +95,40 @@ export function MatchDetailHero({
         )}
       </div>
 
-      <nav
-        aria-label="Match navigation"
-        className="shrink-0 flex items-center gap-3.5"
-      >
-        <NavLink
-          href={previousMatchId ? `/dashboard/matches/${previousMatchId}` : null}
-          label="Prev"
-          ariaLabel="Previous match"
-          title="Previous match (←)"
-          shortcut="ArrowLeft"
-          icon={
-            <span aria-hidden className="text-[14px] font-normal leading-none">
-              ‹
-            </span>
-          }
-          position="left"
-        />
-        <NavLink
-          href={nextMatchId ? `/dashboard/matches/${nextMatchId}` : null}
-          label="Next"
-          ariaLabel="Next match"
-          title="Next match (→)"
-          shortcut="ArrowRight"
-          icon={
-            <span aria-hidden className="text-[14px] font-normal leading-none">
-              ›
-            </span>
-          }
-          position="right"
-        />
-      </nav>
+      <div className="shrink-0 flex flex-col items-end gap-3">
+        <ShareMatchButton match={match} />
+        <nav
+          aria-label="Match navigation"
+          className="flex items-center gap-3.5"
+        >
+          <NavLink
+            href={previousMatchId ? `/dashboard/matches/${previousMatchId}` : null}
+            label="Prev"
+            ariaLabel="Previous match"
+            title="Previous match (←)"
+            shortcut="ArrowLeft"
+            icon={
+              <span aria-hidden className="text-[14px] font-normal leading-none">
+                ‹
+              </span>
+            }
+            position="left"
+          />
+          <NavLink
+            href={nextMatchId ? `/dashboard/matches/${nextMatchId}` : null}
+            label="Next"
+            ariaLabel="Next match"
+            title="Next match (→)"
+            shortcut="ArrowRight"
+            icon={
+              <span aria-hidden className="text-[14px] font-normal leading-none">
+                ›
+              </span>
+            }
+            position="right"
+          />
+        </nav>
+      </div>
     </div>
   );
 }

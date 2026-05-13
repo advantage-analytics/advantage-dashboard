@@ -208,7 +208,14 @@ export const getMatchDetailData = cache(async (matchId: string) => {
     .eq("id", matchId)
     .single();
 
-  if (error || !row) {
+  if (error) {
+    // PGRST116 = "Results contain 0 rows" — the match genuinely doesn't exist.
+    // Anything else is a transient/server error; throw so the route's error.tsx
+    // boundary renders the retry surface instead of collapsing to a 404.
+    if (error.code === "PGRST116") return null;
+    throw error;
+  }
+  if (!row) {
     return null;
   }
 

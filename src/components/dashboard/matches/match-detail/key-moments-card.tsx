@@ -1,7 +1,13 @@
 "use client";
 
 import { useMemo } from "react";
-import { Play } from "lucide-react";
+import { Info, Play } from "lucide-react";
+
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 
 type MomentType = "match-point" | "set-point" | "break-point" | "ace";
@@ -16,6 +22,7 @@ interface DerivedMoment {
   pointScore: string;
   videoTime: number | null;
   winnerName: string;
+  serverName: string;
 }
 
 const TYPE_PRIORITY: Record<MomentType, number> = {
@@ -39,7 +46,7 @@ const RAIL_COLOR: Record<MomentType, string> = {
   ace: "bg-[#AAAAAA]",
 };
 
-const MAX_VISIBLE = 6;
+const MAX_VISIBLE = 24;
 
 function classify(pt: MatchPoint): MomentType | null {
   if (pt.isMatchPoint) return "match-point";
@@ -63,12 +70,6 @@ function formatVideoTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${s.toString().padStart(2, "0")}`;
-}
-
-function buildProse(m: DerivedMoment): string {
-  const lcDesc = m.description.toLowerCase();
-  const lcTitle = m.title.toLowerCase();
-  return lcDesc.startsWith(lcTitle) ? m.description : `${m.title} — ${m.description}`;
 }
 
 function seekToVideoTime(time: number) {
@@ -112,6 +113,7 @@ export function KeyMomentsCard({
         pointScore: pt.pointScore,
         videoTime: pt.videoTime,
         winnerName: pt.wonByPlayer1 ? p1Name : p2Name,
+        serverName: pt.serverIsPlayer1 ? p1Name : p2Name,
         pointNumber: pt.pointNumber,
       });
     }
@@ -138,15 +140,47 @@ export function KeyMomentsCard({
     <section
       id="match-key-moments"
       aria-labelledby={headingId}
-      className={`bg-white border border-[#F3F3F3] rounded-[14px] shadow-card overflow-hidden scroll-mt-6${className ? ` ${className}` : ""}`}
+      className={`surface-card overflow-hidden scroll-mt-6 flex flex-col min-h-0${className ? ` ${className}` : ""}`}
     >
-      <div className="flex items-center h-14 px-5">
+      <div className="flex items-center gap-1.5 h-14 px-5">
         <h2
           id={headingId}
           className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]"
         >
           KEY MOMENTS
         </h2>
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label="How to read these moments"
+              aria-haspopup="dialog"
+              className="relative inline-flex items-center justify-center size-5 -m-1 text-[var(--color-text-dim)] hover:text-[var(--color-text-secondary)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-full"
+            >
+              <Info className="size-3" strokeWidth={1.75} aria-hidden="true" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            side="top"
+            align="start"
+            sideOffset={8}
+            collisionPadding={16}
+            role="dialog"
+            aria-label="How to read these moments"
+            className="!bg-white !text-[var(--color-text-primary)] !rounded-xl !p-0 !border !border-[var(--color-border-card)] !shadow-[0px_4px_16px_0px_rgba(0,0,0,0.08)] !w-auto"
+          >
+            <div className="w-[240px] py-4 px-4 flex flex-col gap-3">
+              <span className="text-[10px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[15px]">
+                Rail colors
+              </span>
+              <ul className="flex flex-col gap-1.5">
+                <RailLegendRow color="#E51837" label="Match point" />
+                <RailLegendRow color="#3B82F6" label="Set or break point" />
+                <RailLegendRow color="#AAAAAA" label="Ace" />
+              </ul>
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
       {visible.length === 0 ? (
@@ -154,9 +188,8 @@ export function KeyMomentsCard({
           <p className="text-[12px] text-[#888888]">No key moments yet</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-4 pb-5">
+        <div className="flex flex-col gap-4 pb-5 flex-1 min-h-0 overflow-y-auto max-h-[640px]">
           {visible.map((m) => {
-            const prose = buildProse(m);
             const hasVideo = m.videoTime != null;
 
             const inner = (
@@ -170,14 +203,11 @@ export function KeyMomentsCard({
                   />
                 </div>
                 <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-                  <p className="text-[12px] font-light text-[#888888] leading-[1.5]">
-                    {prose}
-                  </p>
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-[10px] font-normal text-[#AAAAAA] tabular-nums min-w-0">
-                      SET {m.setNumber} · {m.gameScore}
-                      {m.pointScore ? ` · ${m.pointScore}` : ""}
-                      {" · WON BY "}{m.winnerName}
+                    <p className="text-[11px] font-medium text-[var(--color-text-primary)] tabular-nums min-w-0">
+                      <span>{m.title}</span>
+                      <span className="mx-2 text-[#D4D4D4]">|</span>
+                      <span className="text-[#AAAAAA] uppercase tracking-[1px]">SET {m.setNumber}</span>
                     </p>
                     {hasVideo && (
                       <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[#AAAAAA] tabular-nums shrink-0 transition-colors duration-200 group-hover:text-[#3B82F6]">
@@ -191,6 +221,20 @@ export function KeyMomentsCard({
                       </span>
                     )}
                   </div>
+                  <p className="text-[12px] font-light text-[#888888] leading-[1.5]">
+                    {m.description}
+                  </p>
+                  <p className="text-[10px] font-normal text-[#AAAAAA] uppercase tracking-[1px] tabular-nums">
+                    Served by {m.serverName}
+                    <span className="mx-1.5 text-[#D4D4D4]">·</span>
+                    {m.gameScore}
+                    {m.pointScore ? (
+                      <>
+                        <span className="mx-1.5 text-[#D4D4D4]">·</span>
+                        {m.pointScore}
+                      </>
+                    ) : null}
+                  </p>
                 </div>
               </>
             );
@@ -221,5 +265,20 @@ export function KeyMomentsCard({
         </div>
       )}
     </section>
+  );
+}
+
+function RailLegendRow({ color, label }: { color: string; label: string }) {
+  return (
+    <li className="flex items-center gap-2">
+      <span
+        aria-hidden="true"
+        className="w-0.5 h-3.5 rounded-full shrink-0"
+        style={{ backgroundColor: color }}
+      />
+      <span className="text-[11px] font-normal text-[var(--color-text-body)] leading-[16px]">
+        {label}
+      </span>
+    </li>
   );
 }

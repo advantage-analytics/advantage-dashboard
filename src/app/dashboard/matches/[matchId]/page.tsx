@@ -155,7 +155,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
           <MatchSummaryRow match={match} p1Name={p1Name} p2Name={p2Name} />
         </div>
 
-        <div className="mt-6">
+        <div className="mt-8">
           <MatchKpiRow
             duration={match.duration}
             matchDurationSec={matchDurationSec}
@@ -167,11 +167,17 @@ export default async function MatchDetailPage({ params }: PageProps) {
           />
         </div>
 
-        <div className="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="mt-8 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-8">
           <main
             aria-label="Match details"
             className="min-w-0 flex flex-col gap-6 order-1"
           >
+            <PerformanceTrackerCard
+              points={points}
+              p1Name={p1Short}
+              p2Name={p2Short}
+              matchDurationSec={matchDurationSec}
+            />
             {statSections.some((s) => s.rows.length > 0) && (
               <MatchStatisticsCard
                 sections={statSections}
@@ -218,16 +224,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
           </aside>
         </div>
 
-        <div className="mt-8">
-          <PerformanceTrackerCard
-            points={points}
-            p1Name={p1Short}
-            p2Name={p2Short}
-            matchDurationSec={matchDurationSec}
-          />
-        </div>
-
-        <div id="match-serve-placement" className="mt-6 scroll-mt-6">
+        <div id="match-serve-placement" className="mt-10 scroll-mt-6">
           <ServePlacementCard />
         </div>
         </SectionsStagger>

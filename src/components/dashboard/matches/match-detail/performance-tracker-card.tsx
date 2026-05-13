@@ -11,10 +11,10 @@ import {
 } from "@/lib/design/player-colors";
 import { ChartErrorBoundary } from "@/components/dashboard/shared/chart-error-boundary";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 const MomentumChartCompact = dynamic(
   () =>
@@ -65,25 +65,29 @@ export function PerformanceTrackerCard({
           >
             Momentum Tracker
           </h2>
-          <Tooltip>
-            <TooltipTrigger asChild>
+          <Popover>
+            <PopoverTrigger asChild>
               <button
                 type="button"
                 aria-label="About the Momentum chart"
+                aria-haspopup="dialog"
                 className="relative inline-flex items-center justify-center size-5 -m-1 text-[var(--color-text-dim)] hover:text-[var(--color-text-secondary)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-full"
               >
                 <Info className="size-3" strokeWidth={1.75} aria-hidden="true" />
               </button>
-            </TooltipTrigger>
-            <TooltipContent
+            </PopoverTrigger>
+            <PopoverContent
               side="top"
+              align="start"
               sideOffset={8}
-              showArrow={false}
-              className="!bg-white !text-[var(--color-text-primary)] !rounded-xl !px-0 !py-0 !border !border-[var(--color-border-card)] !shadow-[0px_4px_16px_0px_rgba(0,0,0,0.08)] !text-left !w-auto"
+              collisionPadding={16}
+              role="dialog"
+              aria-label="About the Momentum chart"
+              className="!bg-white !text-[var(--color-text-primary)] !rounded-xl !p-0 !border !border-[var(--color-border-card)] !shadow-[0px_4px_16px_0px_rgba(0,0,0,0.08)] !w-auto"
             >
-              <div className="w-[260px] py-3 px-3.5 flex flex-col gap-2.5">
+              <div className="w-[260px] py-4 px-4 flex flex-col gap-3">
                 <div className="flex flex-col gap-1">
-                  <span className="text-[9px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[13px]">
+                  <span className="text-[10px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[15px]">
                     Momentum
                   </span>
                   <p className="text-[11px] leading-[16px] text-[var(--color-text-secondary)]">
@@ -112,8 +116,8 @@ export function PerformanceTrackerCard({
                   Hover the chart for point-by-point detail.
                 </p>
               </div>
-            </TooltipContent>
-          </Tooltip>
+            </PopoverContent>
+          </Popover>
         </div>
         <div className="flex items-center gap-x-5 gap-y-2 flex-wrap justify-end">
           <LegendSwatch color={PLAYER_1} label={p1Short} />
@@ -123,7 +127,7 @@ export function PerformanceTrackerCard({
         </div>
       </div>
 
-      <div className="px-5 pb-5">
+      <div className="px-5 pb-5 pt-4">
         <div className="min-w-0">
           <ChartErrorBoundary minHeight={160}>
             <MomentumChartCompact

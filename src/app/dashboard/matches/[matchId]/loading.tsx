@@ -50,7 +50,7 @@ export default function Loading() {
         </div>
 
         {/* KPI Row */}
-        <div className="mt-6 surface-card overflow-hidden">
+        <div className="mt-8 surface-card overflow-hidden">
           <div className="flex items-stretch">
             {[0, 1, 2, 3, 4].map((i) => (
               <div
@@ -70,7 +70,7 @@ export default function Loading() {
         </div>
 
         {/* 2-col grid */}
-        <div className="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="mt-8 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-8">
           {/* Left: Statistics */}
           <div className="surface-card flex flex-col">
             <div className="flex items-center justify-between h-14 px-5">
@@ -166,7 +166,7 @@ export default function Loading() {
         </div>
 
         {/* Momentum Tracker */}
-        <div className="mt-8 surface-card">
+        <div className="mt-10 surface-card">
           <div className="flex items-center justify-between h-14 px-5">
             <Pulse className="h-2.5 w-36 rounded" />
             <div className="flex gap-4">
@@ -181,7 +181,7 @@ export default function Loading() {
         </div>
 
         {/* Serve Placement */}
-        <div className="mt-6 surface-card">
+        <div className="mt-10 surface-card">
           <div className="flex items-center justify-between h-14 px-5">
             <Pulse className="h-2.5 w-36 rounded" />
             <div className="flex gap-2">
