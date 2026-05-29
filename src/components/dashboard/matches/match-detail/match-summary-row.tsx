@@ -1,6 +1,8 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, useEffect } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { formatPlayerStyle, formatScoreboardStatus } from "@/lib/data/match-utils";
 import type { Match, Player, SetScore } from "@/lib/data/types";
@@ -10,9 +12,42 @@ interface MatchSummaryRowProps {
   match: Match;
   p1Name: string;
   p2Name: string;
+  previousMatchId?: string | null;
+  nextMatchId?: string | null;
 }
 
-export function MatchSummaryRow({ match, p1Name, p2Name }: MatchSummaryRowProps) {
+export function MatchSummaryRow({
+  match,
+  p1Name,
+  p2Name,
+  previousMatchId,
+  nextMatchId,
+}: MatchSummaryRowProps) {
+  const router = useRouter();
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+        if (target.isContentEditable) return;
+      }
+      if (document.querySelector('[role="dialog"], [data-state="open"]')) return;
+
+      if (e.key === "ArrowLeft" && previousMatchId) {
+        router.push(`/dashboard/matches/${previousMatchId}`);
+      } else if (e.key === "ArrowRight" && nextMatchId) {
+        router.push(`/dashboard/matches/${nextMatchId}`);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [router, previousMatchId, nextMatchId]);
+
   const sets = match.score.sets;
   const winner = match.score.winner;
 
@@ -35,15 +70,48 @@ export function MatchSummaryRow({ match, p1Name, p2Name }: MatchSummaryRowProps)
       className="surface-card scroll-mt-6 flex flex-col gap-3 overflow-hidden p-5"
     >
       {/* ── Header Rail ─────────────────────────────────────── */}
-      <div className="w-full min-h-[15px] border-b border-[#F3F3F3] pb-3 flex items-center justify-between">
+      <div className="w-full min-h-[15px] border-b border-[#F3F3F3] pb-3 flex items-center justify-between gap-4">
         <p className="text-[10px] font-medium leading-[15px] tracking-[2.5px] text-[var(--color-text-dim)] whitespace-nowrap">
           {headerLeft}
         </p>
-        {durationLabel && (
-          <p className="text-[10px] font-medium leading-[15px] tracking-[2.5px] text-[var(--color-text-dim)] whitespace-nowrap">
-            {durationLabel}
-          </p>
-        )}
+        <div className="flex items-center gap-4 shrink-0">
+          {durationLabel && (
+            <p className="text-[10px] font-medium leading-[15px] tracking-[2.5px] text-[var(--color-text-dim)] whitespace-nowrap">
+              {durationLabel}
+            </p>
+          )}
+          <nav
+            aria-label="Match navigation"
+            className="flex items-center gap-3.5"
+          >
+            <NavLink
+              href={previousMatchId ? `/dashboard/matches/${previousMatchId}` : null}
+              label="Prev"
+              ariaLabel="Previous match"
+              title="Previous match (←)"
+              shortcut="ArrowLeft"
+              icon={
+                <span aria-hidden className="text-[14px] font-normal leading-none">
+                  ‹
+                </span>
+              }
+              position="left"
+            />
+            <NavLink
+              href={nextMatchId ? `/dashboard/matches/${nextMatchId}` : null}
+              label="Next"
+              ariaLabel="Next match"
+              title="Next match (→)"
+              shortcut="ArrowRight"
+              icon={
+                <span aria-hidden className="text-[14px] font-normal leading-none">
+                  ›
+                </span>
+              }
+              position="right"
+            />
+          </nav>
+        </div>
       </div>
 
       {/* ── Body ────────────────────────────────────────────── */}
@@ -179,6 +247,61 @@ function PlayerRow({
         })}
       </div>
     </div>
+  );
+}
+
+function NavLink({
+  href,
+  label,
+  ariaLabel,
+  title,
+  shortcut,
+  icon,
+  position,
+}: {
+  href: string | null;
+  label: string;
+  ariaLabel: string;
+  title: string;
+  shortcut: string;
+  icon: React.ReactNode;
+  position: "left" | "right";
+}) {
+  const content = (
+    <>
+      {position === "left" && icon}
+      <span className="text-[10px] font-medium uppercase tracking-[1.5px] leading-[15px]">
+        {label}
+      </span>
+      {position === "right" && icon}
+    </>
+  );
+
+  const baseClass =
+    "inline-flex items-center gap-1 py-2 -my-2 text-[var(--color-text-muted)] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-sm";
+
+  if (!href) {
+    return (
+      <span
+        aria-label={ariaLabel}
+        aria-disabled="true"
+        className={cn(baseClass, "opacity-30 cursor-not-allowed")}
+      >
+        {content}
+      </span>
+    );
+  }
+
+  return (
+    <Link
+      href={href}
+      aria-label={ariaLabel}
+      title={title}
+      aria-keyshortcuts={shortcut}
+      className={cn(baseClass, "hover:text-[var(--color-text-primary)]")}
+    >
+      {content}
+    </Link>
   );
 }
 

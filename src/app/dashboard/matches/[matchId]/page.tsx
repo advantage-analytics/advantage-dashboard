@@ -152,7 +152,13 @@ export default async function MatchDetailPage({ params }: PageProps) {
         />
 
         <div className="mt-8">
-          <MatchSummaryRow match={match} p1Name={p1Name} p2Name={p2Name} />
+          <MatchSummaryRow
+            match={match}
+            p1Name={p1Name}
+            p2Name={p2Name}
+            previousMatchId={adjacent.previousId}
+            nextMatchId={adjacent.nextId}
+          />
         </div>
 
         <div className="mt-8">
