@@ -332,7 +332,7 @@ hover:bg-[#F5F5F5] transition-colors duration-200
 
 ### Chrome Icon Button
 
-Square icon-only buttons used for header and modal chrome — sidebar toggle, search trigger, profile menu, modal back, modal close. Always `rounded-lg` (radius-element); never `rounded-full` (per the radius-pill rule, full-round is reserved for non-button pills, avatars, dots, and indicators).
+Square icon-only buttons used for header, modal, and popover chrome — sidebar toggle, search trigger, profile menu, modal/popover back, modal/popover close. Always `rounded-lg` (radius-element); never `rounded-full` (per the radius-pill rule, full-round is reserved for non-button pills, avatars, dots, and indicators).
 
 **Sizes**
 
@@ -361,6 +361,8 @@ focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none
 **Icon**: `size-3.5` (14px) at `strokeWidth={1.5}` for h-7 buttons; `h-[15px] w-[15px]` for h-8 buttons. Always Lucide.
 
 **Pairing rule**: when a back/close pair appears in modal chrome, both buttons must share size, shape, hover, and focus treatment. Mixing a labeled chip with an icon circle is forbidden — the eye reads them as unrelated controls.
+
+**Close (X) buttons**: Any dismissible surface that renders an explicit close affordance — modals, popovers with form fields or multi-step content, side panels — MUST use the `h-7 w-7` modal-chrome pattern above with a Lucide `X` icon at `size-3.5` `strokeWidth={1.5}`. Do not invent variants per surface; the X on a popover must be visually identical to the X on a modal. Popovers that only contain a single quick action or readout (tooltip-style) should continue to rely on click-outside dismissal — no X needed there.
 
 ### List Item (Hoverable Row)
 

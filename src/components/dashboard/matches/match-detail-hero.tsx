@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Calendar } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { MatchMetadataRow } from "@/components/dashboard/matches/match-metadata-row";
 import { ShareMatchButton } from "@/components/dashboard/matches/match-detail/share-match-button";
 import { MatchActionsMenu } from "@/components/dashboard/matches/match-actions/match-actions-menu";
@@ -18,11 +16,7 @@ interface MatchDetailHeroProps {
 
 const MATCHES_HREF = "/dashboard/matches";
 
-export function MatchDetailHero({
-  match,
-  previousMatchId,
-  nextMatchId,
-}: MatchDetailHeroProps) {
+export function MatchDetailHero({ match }: MatchDetailHeroProps) {
   const router = useRouter();
 
   useEffect(() => {
@@ -35,22 +29,16 @@ export function MatchDetailHero({
         if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
         if (target.isContentEditable) return;
       }
-      // Skip if any Radix overlay (popover, menu, dialog, tooltip, combobox) is open —
-      // Esc should close those first, and arrow keys should navigate within.
       if (document.querySelector('[role="dialog"], [data-state="open"]')) return;
 
       if (e.key === "Escape") {
         router.push(MATCHES_HREF);
-      } else if (e.key === "ArrowLeft" && previousMatchId) {
-        router.push(`/dashboard/matches/${previousMatchId}`);
-      } else if (e.key === "ArrowRight" && nextMatchId) {
-        router.push(`/dashboard/matches/${nextMatchId}`);
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [router, previousMatchId, nextMatchId]);
+  }, [router]);
 
   const hasTournament = Boolean(match.tournamentName?.trim());
   const heroTitle = hasTournament
@@ -97,101 +85,13 @@ export function MatchDetailHero({
       </div>
 
       <div className="shrink-0 flex flex-col items-end gap-3">
-        <div className="flex items-center gap-2">
-          <MatchActionsMenu
-            matchId={match.id}
-            matchLabel={hasTournament ? match.tournamentName : heroTitle}
-          />
-          <ShareMatchButton match={match} />
-        </div>
-        <nav
-          aria-label="Match navigation"
-          className="flex items-center gap-3.5"
-        >
-          <NavLink
-            href={previousMatchId ? `/dashboard/matches/${previousMatchId}` : null}
-            label="Prev"
-            ariaLabel="Previous match"
-            title="Previous match (←)"
-            shortcut="ArrowLeft"
-            icon={
-              <span aria-hidden className="text-[14px] font-normal leading-none">
-                ‹
-              </span>
-            }
-            position="left"
-          />
-          <NavLink
-            href={nextMatchId ? `/dashboard/matches/${nextMatchId}` : null}
-            label="Next"
-            ariaLabel="Next match"
-            title="Next match (→)"
-            shortcut="ArrowRight"
-            icon={
-              <span aria-hidden className="text-[14px] font-normal leading-none">
-                ›
-              </span>
-            }
-            position="right"
-          />
-        </nav>
+        <MatchActionsMenu
+          matchId={match.id}
+          matchLabel={hasTournament ? match.tournamentName : heroTitle}
+        />
+        <ShareMatchButton match={match} />
       </div>
     </div>
-  );
-}
-
-function NavLink({
-  href,
-  label,
-  ariaLabel,
-  title,
-  shortcut,
-  icon,
-  position,
-}: {
-  href: string | null;
-  label: string;
-  ariaLabel: string;
-  title: string;
-  shortcut: string;
-  icon: React.ReactNode;
-  position: "left" | "right";
-}) {
-  const content = (
-    <>
-      {position === "left" && icon}
-      <span className="text-[10px] font-medium uppercase tracking-[1.5px] leading-[15px]">
-        {label}
-      </span>
-      {position === "right" && icon}
-    </>
-  );
-
-  const baseClass =
-    "inline-flex items-center gap-1 py-2 -my-2 text-[var(--color-text-muted)] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-sm";
-
-  if (!href) {
-    return (
-      <span
-        aria-label={ariaLabel}
-        aria-disabled="true"
-        className={cn(baseClass, "opacity-30 cursor-not-allowed")}
-      >
-        {content}
-      </span>
-    );
-  }
-
-  return (
-    <Link
-      href={href}
-      aria-label={ariaLabel}
-      title={title}
-      aria-keyshortcuts={shortcut}
-      className={cn(baseClass, "hover:text-[var(--color-text-primary)]")}
-    >
-      {content}
-    </Link>
   );
 }
 
