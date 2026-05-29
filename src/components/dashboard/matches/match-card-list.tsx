@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { BadgeCheck } from "lucide-react";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
+import { MatchActionsMenu } from "@/components/dashboard/matches/match-actions/match-actions-menu";
 
 export const LIST_GRID_COLS = { gridTemplateColumns: "1.8fr 55px 1fr 1.4fr 0.7fr 1fr" } as const;
 
@@ -19,12 +20,19 @@ export function MatchCardList({ match, isNew }: MatchCardListProps): React.JSX.E
   const isWin = match.score.winner === "player1";
 
   return (
-    <Link
-      href={`/dashboard/matches/${match.id}`}
-      role="row"
-      className={`group grid gap-x-4 items-center px-4 h-11 rounded-lg hover:bg-[#FAFAFA] transition-[background-color,transform] duration-200 ease-out active:scale-[0.998] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1${isNew ? " animate-[highlight-new-match_1.5s_ease-out_0.4s_both]" : ""}`}
-      style={LIST_GRID_COLS}
-    >
+    <div className={`group relative${isNew ? " animate-[highlight-new-match_1.5s_ease-out_0.4s_both]" : ""}`}>
+      <div className="absolute top-1/2 -translate-y-1/2 right-2 z-10 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 transition-opacity duration-200">
+        <MatchActionsMenu
+          matchId={match.id}
+          matchLabel={match.tournamentName}
+        />
+      </div>
+      <Link
+        href={`/dashboard/matches/${match.id}`}
+        role="row"
+        className="grid gap-x-4 items-center px-4 h-11 rounded-lg hover:bg-[#FAFAFA] transition-[background-color,transform] duration-200 ease-out active:scale-[0.998] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1"
+        style={LIST_GRID_COLS}
+      >
       {/* Event */}
       <div className="min-w-0">
         <div className="flex items-center gap-1.5">
@@ -78,6 +86,7 @@ export function MatchCardList({ match, isNew }: MatchCardListProps): React.JSX.E
       <div className="min-w-0">
         <span className="text-[12px] text-[#888888] tabular-nums whitespace-nowrap">{match.date}</span>
       </div>
-    </Link>
+      </Link>
+    </div>
   );
 }

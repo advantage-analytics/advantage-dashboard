@@ -7,6 +7,7 @@ import { Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MatchMetadataRow } from "@/components/dashboard/matches/match-metadata-row";
 import { ShareMatchButton } from "@/components/dashboard/matches/match-detail/share-match-button";
+import { MatchActionsMenu } from "@/components/dashboard/matches/match-actions/match-actions-menu";
 import type { Match } from "@/lib/data/types";
 
 interface MatchDetailHeroProps {
@@ -96,7 +97,13 @@ export function MatchDetailHero({
       </div>
 
       <div className="shrink-0 flex flex-col items-end gap-3">
-        <ShareMatchButton match={match} />
+        <div className="flex items-center gap-2">
+          <MatchActionsMenu
+            matchId={match.id}
+            matchLabel={hasTournament ? match.tournamentName : heroTitle}
+          />
+          <ShareMatchButton match={match} />
+        </div>
         <nav
           aria-label="Match navigation"
           className="flex items-center gap-3.5"

@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { MatchMetadataRow } from "./match-metadata-row";
 import { MatchScoreSection } from "./match-score-section";
+import { MatchActionsMenu } from "@/components/dashboard/matches/match-actions/match-actions-menu";
 
 interface FeaturedMatchCardProps {
   match: DisplayMatch;
@@ -18,10 +19,17 @@ export function FeaturedMatchCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: "easeOut" }}
+      className="group relative"
     >
+      <div className="absolute top-4 right-4 z-10 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 transition-opacity duration-200">
+        <MatchActionsMenu
+          matchId={match.id}
+          matchLabel={match.tournamentName}
+        />
+      </div>
       <Link
         href={`/dashboard/matches/${match.id}`}
-        className="group block bg-white border border-[rgba(0,0,0,0.06)] rounded-2xl shadow-[0_4px_16px_rgba(0,0,0,0.1)] overflow-hidden transition-transform hover:scale-[1.01]"
+        className="block bg-white border border-[rgba(0,0,0,0.06)] rounded-2xl shadow-[0_4px_16px_rgba(0,0,0,0.1)] overflow-hidden transition-transform hover:scale-[1.01]"
       >
         <div className="p-6">
           <div className="flex flex-col gap-6">

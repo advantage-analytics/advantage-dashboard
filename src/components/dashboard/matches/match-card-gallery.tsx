@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Calendar, Swords, BadgeCheck } from "lucide-react";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
+import { MatchActionsMenu } from "@/components/dashboard/matches/match-actions/match-actions-menu";
 
 interface ScoreRowProps {
   playerName: string;
@@ -70,10 +71,17 @@ export function MatchCardGallery({
   isNew,
 }: MatchCardGalleryProps): React.JSX.Element {
   return (
-    <Link
-      href={`/dashboard/matches/${match.id}`}
-      className={`group block w-full bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:shadow-[0px_6px_20px_0px_rgba(0,0,0,0.10)] hover:border-[#E5E5EA] transition-[box-shadow,border-color] duration-200 overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1${isNew ? " animate-[highlight-new-match_1.5s_ease-out_0.4s_both]" : ""}`}
-    >
+    <div className={`group relative w-full${isNew ? " animate-[highlight-new-match_1.5s_ease-out_0.4s_both]" : ""}`}>
+      <div className="absolute top-3 right-3 z-10 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 transition-opacity duration-200">
+        <MatchActionsMenu
+          matchId={match.id}
+          matchLabel={match.tournamentName}
+        />
+      </div>
+      <Link
+        href={`/dashboard/matches/${match.id}`}
+        className="block w-full bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:shadow-[0px_6px_20px_0px_rgba(0,0,0,0.10)] hover:border-[#E5E5EA] transition-[box-shadow,border-color] duration-200 overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1"
+      >
       <div className="p-5">
         {/* Header: match context + verified + duration */}
         <div className="flex items-center justify-between mb-3">
@@ -167,5 +175,6 @@ export function MatchCardGallery({
         </div>
       </div>
     </Link>
+    </div>
   );
 }
