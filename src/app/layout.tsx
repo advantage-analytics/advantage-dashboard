@@ -18,6 +18,9 @@ const mono = Roboto_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
+  ),
   title: "Advantage Analytics",
   description:
     "The world's first centralized hub for tennis analytics. Built for the modern athlete.",

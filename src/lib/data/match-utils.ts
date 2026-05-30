@@ -59,3 +59,44 @@ export function formatDuration(
   const mins = minutes % 60;
   return { hours, mins };
 }
+
+/**
+ * Format raw hand/backhand values into the display strings used in the
+ * scoreboard and upload preview. Unknown values are dropped, not echoed —
+ * protects the UI from schema drift.
+ */
+export function formatPlayerStyle(
+  hand: string | undefined,
+  backhand: string | undefined,
+): string[] {
+  const parts: string[] = [];
+
+  const h = hand?.trim().toLowerCase();
+  if (h === "right" || h === "right-handed" || h === "right handed") {
+    parts.push("RIGHT HANDED");
+  } else if (h === "left" || h === "left-handed" || h === "left handed") {
+    parts.push("LEFT HANDED");
+  }
+
+  const b = backhand?.trim().toLowerCase();
+  if (b === "one-handed" || b === "one handed" || b === "1-handed" || b === "1 handed") {
+    parts.push("1-HANDED BACKHAND");
+  } else if (b === "two-handed" || b === "two handed" || b === "2-handed" || b === "2 handed") {
+    parts.push("2-HANDED BACKHAND");
+  }
+
+  return parts;
+}
+
+/**
+ * Map a match's raw `result` / `matchContext` string into the uppercase eyebrow
+ * label shown in the scoreboard rail ("FINAL", "UNFINISHED", etc.).
+ */
+export function formatScoreboardStatus(matchContext: string | undefined): string {
+  if (!matchContext) return "FINAL";
+  const c = matchContext.toLowerCase();
+  if (c.includes("unfinished")) return "UNFINISHED";
+  if (c.includes("withdrew") || c.includes("withdrawn")) return "WITHDREW";
+  if (c.includes("default")) return "DEFAULTED";
+  return "FINAL";
+}

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import HomeContent from "./home-content";
 import KpiCards from "@/components/dashboard/home/kpi-cards";
-import AIInsight from "@/components/dashboard/home/ai-insight";
+import { AiInsightCard } from "@/components/dashboard/ai-insight-card";
 
 import MatchHeatmap from "@/components/dashboard/home/match-heatmap";
 import ActivityFeed from "@/components/dashboard/home/activity-feed";
@@ -60,7 +60,7 @@ export default async function Home() {
 
   return (
     <div className="flex-1 w-full bg-white">
-      <div className="px-8 py-10">
+      <div className="mx-auto max-w-screen-2xl px-6 sm:px-8 py-8 sm:py-10">
         <HomeContent
           displayName={displayName}
           greeting={greeting}
@@ -69,7 +69,13 @@ export default async function Home() {
           kpiStrip={allKpiCards.length > 0 ? <KpiCards cards={allKpiCards} matchCount={matchCount} /> : undefined}
           sidebar={hasMatches ? (
             <>
-              <AIInsight />
+              <AiInsightCard storageKey="advantage-ai-insight-dismissed">
+                <p className="text-[12px] font-normal text-[var(--color-text-body)] leading-[19.8px]">
+                  AI-powered match insights are coming soon. Once connected,
+                  you&apos;ll get actionable analysis of your recent
+                  performance here.
+                </p>
+              </AiInsightCard>
               <MatchHeatmap
                 heatmap={heatmap}
                 matchCount={matchCount}

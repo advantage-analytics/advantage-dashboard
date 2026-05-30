@@ -7,6 +7,7 @@ import {
 import { shortName } from "@/lib/data/match-utils";
 
 import { MatchSummaryRow } from "@/components/dashboard/matches/match-detail/match-summary-row";
+import { MatchKpiRow } from "@/components/dashboard/matches/match-detail/match-kpi-row";
 import { MatchDetailHero } from "@/components/dashboard/matches/match-detail-hero";
 import { PerformanceTrackerCard } from "@/components/dashboard/matches/match-detail/performance-tracker-card";
 import {
@@ -17,7 +18,6 @@ import { ServePlacementCard } from "@/components/dashboard/matches/match-detail/
 import { AiInsightCard } from "@/components/dashboard/ai-insight-card";
 import { PerformanceProfileCard } from "@/components/dashboard/matches/match-detail/performance-profile-card";
 import { KeyMomentsCard } from "@/components/dashboard/matches/match-detail/key-moments-card";
-import { PressurePointsCard } from "@/components/dashboard/matches/match-detail/pressure-points-card";
 import { SectionsStagger } from "@/components/dashboard/matches/match-detail/sections-stagger";
 import type { PlayerStatistics } from "@/lib/data/types";
 
@@ -121,11 +121,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
   const p1Short = shortName(p1Name, 14);
   const p2Short = shortName(p2Name, 14);
 
-  const matchDurationSec = (() => {
-    const m = match.duration?.match(/^(\d+):(\d{1,2})$/);
-    if (!m) return null;
-    return parseInt(m[1], 10) * 3600 + parseInt(m[2], 10) * 60;
-  })();
+  const matchDurationSec = match.durationSec ?? null;
 
   const radarData =
     p1 && p2
@@ -147,7 +143,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
 
   return (
     <div className="flex-1 w-full bg-white">
-      <div className="px-8 py-10">
+      <div className="mx-auto max-w-screen-2xl px-6 sm:px-8 py-8 sm:py-10">
         <SectionsStagger className="flex flex-col">
         <MatchDetailHero
           match={match}
@@ -156,10 +152,28 @@ export default async function MatchDetailPage({ params }: PageProps) {
         />
 
         <div className="mt-8">
-          <MatchSummaryRow match={match} p1Name={p1Name} p2Name={p2Name} />
+          <MatchSummaryRow
+            match={match}
+            p1Name={p1Name}
+            p2Name={p2Name}
+            previousMatchId={adjacent.previousId}
+            nextMatchId={adjacent.nextId}
+          />
         </div>
 
-        <div className="mt-10 grid grid-cols-1 lg:grid-cols-[5fr_2fr] gap-8">
+        <div className="mt-8">
+          <MatchKpiRow
+            duration={match.duration}
+            matchDurationSec={matchDurationSec}
+            playingTimeSec={points.reduce((sum, p) => sum + (p.duration ?? 0), 0)}
+            p1Stats={p1}
+            p2Stats={p2}
+            p1Name={p1Short}
+            p2Name={p2Short}
+          />
+        </div>
+
+        <div className="mt-8 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-8">
           <main
             aria-label="Match details"
             className="min-w-0 flex flex-col gap-6 order-1"
@@ -170,7 +184,6 @@ export default async function MatchDetailPage({ params }: PageProps) {
               p2Name={p2Short}
               matchDurationSec={matchDurationSec}
             />
-
             {statSections.some((s) => s.rows.length > 0) && (
               <MatchStatisticsCard
                 sections={statSections}
@@ -178,10 +191,6 @@ export default async function MatchDetailPage({ params }: PageProps) {
                 p2Name={p2Short}
               />
             )}
-
-            <div id="match-serve-placement" className="scroll-mt-6">
-              <ServePlacementCard />
-            </div>
           </main>
 
           <aside
@@ -211,10 +220,19 @@ export default async function MatchDetailPage({ params }: PageProps) {
               p1Name={p1Short}
               p2Name={p2Short}
             />
-            <KeyMomentsCard points={points} narrativeMoments={keyMoments} />
-            <PressurePointsCard points={points} />
+            <KeyMomentsCard
+              points={points}
+              narrativeMoments={keyMoments}
+              p1Name={p1Short}
+              p2Name={p2Short}
+              className="flex-1"
+            />
           </aside>
-          </div>
+        </div>
+
+        <div id="match-serve-placement" className="mt-10 scroll-mt-6">
+          <ServePlacementCard />
+        </div>
         </SectionsStagger>
       </div>
     </div>

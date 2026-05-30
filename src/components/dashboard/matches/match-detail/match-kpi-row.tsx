@@ -1,0 +1,243 @@
+import Link from "next/link";
+import type { PlayerStatistics } from "@/lib/data/types";
+
+interface MatchKpiRowProps {
+  duration: string | undefined;
+  matchDurationSec: number | null;
+  playingTimeSec: number;
+  p1Stats: PlayerStatistics | undefined;
+  p2Stats: PlayerStatistics | undefined;
+  p1Name: string;
+  p2Name: string;
+}
+
+const P1_COLOR = "var(--color-accent-blue)";
+const P2_COLOR = "#A855F7";
+const ACTIVE_PLAY_COLOR = "#5DB955";
+
+function formatHm(totalSec: number): string {
+  const t = Math.max(0, Math.round(totalSec));
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}`;
+  const s = t % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+export function MatchKpiRow({
+  duration,
+  matchDurationSec,
+  playingTimeSec,
+  p1Stats,
+  p2Stats,
+  p1Name,
+  p2Name,
+}: MatchKpiRowProps) {
+  const durationLabel = duration && duration.trim().length > 0 ? duration : null;
+
+  const p1Pts = p1Stats?.totalPointsWon ?? 0;
+  const p2Pts = p2Stats?.totalPointsWon ?? 0;
+  const p1Aces = p1Stats?.aces ?? 0;
+  const p2Aces = p2Stats?.aces ?? 0;
+  const p1Win = p1Stats?.winners ?? 0;
+  const p2Win = p2Stats?.winners ?? 0;
+  const p1Ue = p1Stats?.unforcedErrors ?? 0;
+  const p2Ue = p2Stats?.unforcedErrors ?? 0;
+
+  const activeRatio =
+    matchDurationSec && matchDurationSec > 0 && playingTimeSec > 0
+      ? Math.min(1, playingTimeSec / matchDurationSec)
+      : null;
+  const activePct = activeRatio !== null ? Math.round(activeRatio * 100) : null;
+  const activeLabel = playingTimeSec > 0 ? formatHm(playingTimeSec) : null;
+
+  return (
+    <section
+      aria-label="Match KPI summary"
+      className="surface-card overflow-hidden"
+    >
+      <div className="flex items-stretch">
+        <DurationCell
+          value={durationLabel ?? "—"}
+          activeLabel={activeLabel}
+          activePct={activePct}
+          activeRatio={activeRatio}
+        />
+        <KpiCell
+          label="Total Points"
+          value={String(p1Pts + p2Pts)}
+          split={{ p1: p1Pts, p2: p2Pts, p1Name, p2Name }}
+          href="#match-statistics"
+        />
+        <KpiCell
+          label="Aces"
+          value={String(p1Aces + p2Aces)}
+          split={{ p1: p1Aces, p2: p2Aces, p1Name, p2Name }}
+          href="#match-statistics"
+        />
+        <KpiCell
+          label="Winners"
+          value={String(p1Win + p2Win)}
+          split={{ p1: p1Win, p2: p2Win, p1Name, p2Name }}
+          href="#match-statistics"
+        />
+        <KpiCell
+          label="Unforced Errors"
+          value={String(p1Ue + p2Ue)}
+          split={{ p1: p1Ue, p2: p2Ue, p1Name, p2Name }}
+          href="#match-statistics"
+        />
+      </div>
+    </section>
+  );
+}
+
+interface KpiCellProps {
+  label: string;
+  value: string;
+  split?: { p1: number; p2: number; p1Name: string; p2Name: string };
+  href?: string;
+}
+
+function KpiCell({ label, value, split, href }: KpiCellProps) {
+  const inner = (
+    <>
+      <p className="text-[9px] font-medium leading-[13.5px] tracking-[2.5px] text-[var(--color-text-dim)] uppercase whitespace-nowrap">
+        {label}
+      </p>
+      <p className="text-[28px] font-light leading-[28px] tracking-[-0.5px] text-[var(--color-text-primary)] tabular-nums">
+        {value}
+      </p>
+      {split && <SplitBar {...split} />}
+    </>
+  );
+
+  const baseClass = "flex-1 min-w-0 flex flex-col gap-3 px-5 py-5";
+
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className={`${baseClass} cursor-pointer hover:bg-[var(--color-surface-muted)] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] focus-visible:ring-inset`}
+      >
+        {inner}
+      </Link>
+    );
+  }
+
+  return <div className={baseClass}>{inner}</div>;
+}
+
+interface DurationCellProps {
+  value: string;
+  activeLabel: string | null;
+  activePct: number | null;
+  activeRatio: number | null;
+}
+
+function DurationCell({
+  value,
+  activeLabel,
+  activePct,
+  activeRatio,
+}: DurationCellProps) {
+  const hasActive = activeLabel !== null && activeRatio !== null && activePct !== null;
+  return (
+    <div className="flex-1 min-w-0 flex flex-col gap-3 px-5 py-5">
+      <p className="text-[9px] font-medium leading-[13.5px] tracking-[2.5px] text-[var(--color-text-dim)] uppercase whitespace-nowrap">
+        Match Duration
+      </p>
+      <p className="text-[28px] font-light leading-[28px] tracking-[-0.5px] text-[var(--color-text-primary)] tabular-nums">
+        {value}
+      </p>
+      {hasActive && (
+        <div
+          className="flex flex-col gap-2 w-full"
+          aria-label={`${activeLabel} active play, ${activePct}% of elapsed time`}
+        >
+          <div
+            className="h-1 w-full overflow-hidden rounded-full bg-[var(--color-border-card)]"
+            role="presentation"
+          >
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${activePct}%`, backgroundColor: ACTIVE_PLAY_COLOR }}
+            />
+          </div>
+          <div className="flex items-baseline justify-between gap-2 text-[11px] leading-none tabular-nums">
+            <span
+              className="font-semibold"
+              style={{ color: ACTIVE_PLAY_COLOR }}
+            >
+              {activeLabel}
+            </span>
+            <span className="text-[var(--color-text-dim)] text-[10px] uppercase tracking-[1.5px]">
+              {activePct}% live
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SplitBar({
+  p1,
+  p2,
+  p1Name,
+  p2Name,
+}: {
+  p1: number;
+  p2: number;
+  p1Name: string;
+  p2Name: string;
+}) {
+  const total = p1 + p2;
+  const p1Pct = total > 0 ? (p1 / total) * 100 : 50;
+  const p2Pct = 100 - p1Pct;
+  const p1Leads = p1 > p2;
+  const p2Leads = p2 > p1;
+  const lead = Math.abs(p1 - p2);
+  const leadLabel = lead > 0 ? ` (${p1Leads ? p1Name : p2Name} +${lead})` : "";
+
+  return (
+    <div
+      className="flex flex-col gap-2 w-full"
+      aria-label={`${p1Name} ${p1}, ${p2Name} ${p2}${leadLabel}`}
+    >
+      <div
+        className="flex h-1 w-full overflow-hidden rounded-full bg-[var(--color-border-card)]"
+        role="presentation"
+      >
+        <div
+          style={{
+            width: `${p1Pct}%`,
+            backgroundColor: P1_COLOR,
+            opacity: p2Leads ? 0.35 : 1,
+          }}
+        />
+        <div
+          style={{
+            width: `${p2Pct}%`,
+            backgroundColor: P2_COLOR,
+            opacity: p1Leads ? 0.35 : 1,
+          }}
+        />
+      </div>
+      <div className="flex items-center justify-between text-[11px] leading-none tabular-nums">
+        <span
+          className={p1Leads ? "font-semibold" : "font-medium"}
+          style={{ color: P1_COLOR }}
+        >
+          {p1}
+        </span>
+        <span
+          className={p2Leads ? "font-semibold" : "font-medium"}
+          style={{ color: P2_COLOR }}
+        >
+          {p2}
+        </span>
+      </div>
+    </div>
+  );
+}

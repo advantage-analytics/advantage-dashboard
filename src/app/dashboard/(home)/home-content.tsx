@@ -58,7 +58,7 @@ export default function HomeContent({
           {kpiStrip && <div className="mt-8">{kpiStrip}</div>}
 
           <div className={cn("mt-10", sidebar
-            ? "grid grid-cols-1 lg:grid-cols-[5fr_2fr] gap-8"
+            ? "grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-8"
             : "flex flex-col gap-6"
           )}>
             <motion.div

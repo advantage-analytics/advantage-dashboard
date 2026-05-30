@@ -18,7 +18,7 @@ export default async function StatisticsPage() {
 
   return (
     <div className="flex-1 w-full bg-white">
-      <div className="px-8 py-10">
+      <div className="mx-auto max-w-screen-2xl px-6 sm:px-8 py-8 sm:py-10">
         <h1 className="font-light text-[30px] text-[#0D0D0D] tracking-[-0.6px] leading-[36px]">
           Statistics
         </h1>

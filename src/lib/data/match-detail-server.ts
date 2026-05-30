@@ -25,6 +25,10 @@ interface DbMatch {
   court_type: string | null;
   verified: boolean | null;
   duration: number | null;
+  player_hand: string | null;
+  player_backhand: string | null;
+  opponent_hand: string | null;
+  opponent_backhand: string | null;
   key_moments: Array<{ moment: string; description: string }> | null;
   insights: {
     player1?: { strengths?: Array<{ name: string; value: number; description: string }>; weaknesses?: Array<{ name: string; value: number; description: string }> };
@@ -87,6 +91,19 @@ function transformDbMatchToMatch(
   const p1Profile = row.player1_id ? profiles.get(row.player1_id) : undefined;
   const p2Profile = row.player2_id ? profiles.get(row.player2_id) : undefined;
 
+  // Match-row hand/backhand columns are captured at upload time and represent
+  // what was true for THIS match; they win over generic users-table profile.
+  // The "player_*" columns track the user (creator); "opponent_*" tracks the other side.
+  const userHand = row.player_hand ?? undefined;
+  const userBackhand = row.player_backhand ?? undefined;
+  const oppHand = row.opponent_hand ?? undefined;
+  const oppBackhand = row.opponent_backhand ?? undefined;
+
+  const p1Hand = isUserPlayer1 ? userHand : oppHand;
+  const p1Backhand = isUserPlayer1 ? userBackhand : oppBackhand;
+  const p2Hand = isUserPlayer1 ? oppHand : userHand;
+  const p2Backhand = isUserPlayer1 ? oppBackhand : userBackhand;
+
   return {
     id: row.id,
     tournamentName: row.tournament_name ?? "Unknown Event",
@@ -97,17 +114,18 @@ function transformDbMatchToMatch(
     round: row.round ?? undefined,
     matchContext: row.result ?? "Final Score",
     duration: formatDuration(row.duration ?? undefined),
+    durationSec: row.duration != null ? Math.round(row.duration / 1000) : null,
     player1: {
       name: row.player1_name,
       school: "",
-      hand: p1Profile?.hand ?? undefined,
-      backhand: p1Profile?.backhand ?? undefined,
+      hand: p1Hand ?? p1Profile?.hand ?? undefined,
+      backhand: p1Backhand ?? p1Profile?.backhand ?? undefined,
     },
     player2: {
       name: row.player2_name,
       school: "",
-      hand: p2Profile?.hand ?? undefined,
-      backhand: p2Profile?.backhand ?? undefined,
+      hand: p2Hand ?? p2Profile?.hand ?? undefined,
+      backhand: p2Backhand ?? p2Profile?.backhand ?? undefined,
     },
     score: { sets, winner, finalScore },
     won: userWon,
@@ -135,12 +153,15 @@ const FILLER_KEY_MOMENTS = [
   { moment: "Momentum Shift", description: "After dropping serve at 4-3, you responded immediately with a break back, demonstrating strong mental resilience under pressure." },
   { moment: "Clutch Serving", description: "Saved three break points at 5-4 in the second set with consecutive first-serve winners to close out the match." },
   { moment: "Rally Dominance", description: "Won 8 of 10 rallies lasting longer than 9 shots, wearing down your opponent physically in the second set." },
+  { moment: "Set Point Conversion", description: "Closed out the first set with a forehand winner up the line on your second set point, refusing to let the opportunity slip." },
+  { moment: "Strong Finish", description: "Won the final four games in a row to seal the match, mixing aggressive returning with high first-serve percentage on the closing hold." },
 ];
 
 /**
- * Returns the user's previous/next match ids in the same chronological order
- * as the matches list page (date desc). Used for arrow-key navigation between
- * adjacent matches. Returns null on either side at the list bounds.
+ * Returns the user's previous/next match ids in chronological order:
+ * `previousId` = older match (earlier date), `nextId` = newer match (later date).
+ * Used for arrow-key navigation between adjacent matches.
+ * Returns null on either side at the list bounds.
  */
 export const getAdjacentMatchIds = cache(async (currentMatchId: string) => {
   const supabase = await createClient();
@@ -160,9 +181,10 @@ export const getAdjacentMatchIds = cache(async (currentMatchId: string) => {
   const idx = data.findIndex((m) => m.id === currentMatchId);
   if (idx === -1) return { previousId: null, nextId: null };
 
+  // Array is date desc, so a smaller index = newer match.
   return {
-    previousId: idx > 0 ? data[idx - 1].id : null,
-    nextId: idx < data.length - 1 ? data[idx + 1].id : null,
+    previousId: idx < data.length - 1 ? data[idx + 1].id : null,
+    nextId: idx > 0 ? data[idx - 1].id : null,
   };
 });
 
@@ -181,12 +203,19 @@ export const getMatchDetailData = cache(async (matchId: string) => {
   const { data: row, error } = await supabase
     .from("matches")
     .select(
-      "id, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, key_moments, insights",
+      "id, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, player_hand, player_backhand, opponent_hand, opponent_backhand, key_moments, insights",
     )
     .eq("id", matchId)
     .single();
 
-  if (error || !row) {
+  if (error) {
+    // PGRST116 = "Results contain 0 rows" — the match genuinely doesn't exist.
+    // Anything else is a transient/server error; throw so the route's error.tsx
+    // boundary renders the retry surface instead of collapsing to a 404.
+    if (error.code === "PGRST116") return null;
+    throw error;
+  }
+  if (!row) {
     return null;
   }
 

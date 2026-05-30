@@ -1,143 +1,217 @@
 "use client";
 
-import { BadgeCheck, Calendar, Check, CircleAlert } from "lucide-react";
+import { Fragment, useEffect } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+
+import { formatPlayerStyle, formatScoreboardStatus } from "@/lib/data/match-utils";
+import type { Match, Player, SetScore } from "@/lib/data/types";
 import { cn } from "@/lib/utils";
-import type { Match, SetScore } from "@/lib/data/types";
 
 interface MatchSummaryRowProps {
   match: Match;
   p1Name: string;
   p2Name: string;
+  previousMatchId?: string | null;
+  nextMatchId?: string | null;
 }
 
-export function MatchSummaryRow({ match, p1Name, p2Name }: MatchSummaryRowProps) {
+export function MatchSummaryRow({
+  match,
+  p1Name,
+  p2Name,
+  previousMatchId,
+  nextMatchId,
+}: MatchSummaryRowProps) {
+  const router = useRouter();
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+        if (target.isContentEditable) return;
+      }
+      if (document.querySelector('[role="dialog"], [data-state="open"]')) return;
+
+      if (e.key === "ArrowLeft" && previousMatchId) {
+        router.push(`/dashboard/matches/${previousMatchId}`);
+      } else if (e.key === "ArrowRight" && nextMatchId) {
+        router.push(`/dashboard/matches/${nextMatchId}`);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [router, previousMatchId, nextMatchId]);
+
   const sets = match.score.sets;
   const winner = match.score.winner;
 
-  const dateLabel = formatDate(match.date);
-  const footerDateLabel = formatFooterDate(match.date);
+  const headerLeft = [
+    formatScoreboardStatus(match.matchContext),
+    match.matchType,
+    match.round,
+  ]
+    .map((s) => s?.trim())
+    .filter(Boolean)
+    .join(" · ")
+    .toUpperCase();
 
-  const roundType = [match.round, match.matchType].filter(Boolean).join(" | ");
-  const eyebrow = (roundType || dateLabel || "Match").toUpperCase();
-  // Avoid duplicating the date when the eyebrow falls back to it.
-  const showFooterDate = !!roundType && !!footerDateLabel;
-
-  const tournamentTitle = match.tournamentName?.trim() || "Match";
-  const verification = parseVerification(match.verificationStatus);
+  const durationLabel = formatDuration(match.duration);
 
   return (
     <section
       id="match-score"
       aria-label={`Match summary: ${p1Name} vs ${p2Name}`}
-      className="surface-card scroll-mt-6 flex flex-col md:flex-row md:items-stretch gap-5 md:gap-6 px-5 py-5"
+      className="surface-card scroll-mt-6 flex flex-col gap-3 overflow-hidden p-5"
     >
-      {/* ── Left: Match info ───────────────────────────────── */}
-      <div className="flex-1 min-w-0 flex flex-col gap-3 md:min-h-[92px]">
-        <div className="flex flex-col gap-1 min-w-0">
-          <p className="w-full truncate text-[9px] font-normal text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[13.5px] tabular-nums">
-            {eyebrow}
-          </p>
-          <p className="w-full truncate text-[15px] font-light text-[var(--color-text-primary)] tracking-[-0.6px] leading-[24px]">
-            {tournamentTitle}
-          </p>
-        </div>
-        <div className="flex items-center gap-4 mt-auto h-4 text-[10px] leading-4 text-[var(--color-text-muted)] whitespace-nowrap">
-          {showFooterDate && (
-            <span className="flex items-center gap-1">
-              <Calendar
-                className="size-3.5 shrink-0"
-                strokeWidth={1.75}
-                aria-hidden="true"
-              />
-              {footerDateLabel}
-            </span>
+      {/* ── Header Rail ─────────────────────────────────────── */}
+      <div className="w-full min-h-[15px] border-b border-[#F3F3F3] pb-3 flex items-center justify-between gap-4">
+        <p className="text-[10px] font-medium leading-[15px] tracking-[2.5px] text-[var(--color-text-dim)] whitespace-nowrap">
+          {headerLeft}
+        </p>
+        <div className="flex items-center gap-4 shrink-0">
+          {durationLabel && (
+            <p className="text-[10px] font-medium leading-[15px] tracking-[2.5px] text-[var(--color-text-dim)] whitespace-nowrap">
+              {durationLabel}
+            </p>
           )}
-          {verification && (
-            <span className="flex items-center gap-1" title={verification.label}>
-              {verification.verified ? (
-                <BadgeCheck
-                  className="size-3.5 shrink-0 text-[var(--color-success)]"
-                  strokeWidth={1.75}
-                  aria-hidden="true"
-                />
-              ) : (
-                <CircleAlert
-                  className="size-3.5 shrink-0"
-                  strokeWidth={1.75}
-                  aria-hidden="true"
-                />
-              )}
-              {verification.label}
-            </span>
-          )}
+          <nav
+            aria-label="Match navigation"
+            className="flex items-center gap-3.5"
+          >
+            <NavLink
+              href={previousMatchId ? `/dashboard/matches/${previousMatchId}` : null}
+              label="Prev"
+              ariaLabel="Previous match"
+              title="Previous match (←)"
+              shortcut="ArrowLeft"
+              icon={
+                <span aria-hidden className="text-[14px] font-normal leading-none">
+                  ‹
+                </span>
+              }
+              position="left"
+            />
+            <NavLink
+              href={nextMatchId ? `/dashboard/matches/${nextMatchId}` : null}
+              label="Next"
+              ariaLabel="Next match"
+              title="Next match (→)"
+              shortcut="ArrowRight"
+              icon={
+                <span aria-hidden className="text-[14px] font-normal leading-none">
+                  ›
+                </span>
+              }
+              position="right"
+            />
+          </nav>
         </div>
       </div>
 
-      {/* ── Divider (vertical desktop, horizontal mobile) ─── */}
-      <div
-        aria-hidden="true"
-        className="shrink-0 self-stretch bg-[var(--color-border-subtle)] h-px md:h-auto md:w-px"
-      />
+      {/* ── Body ────────────────────────────────────────────── */}
+      {sets.length === 0 ? (
+        <p className="text-[12px] leading-[18px] text-[var(--color-text-dim)]">
+          No score recorded.
+        </p>
+      ) : (
+        <div className="w-full flex flex-col gap-1">
+          {/* Set numbers */}
+          <div
+            className="flex justify-end gap-1.5 w-full"
+            aria-hidden="true"
+          >
+            {sets.map((_, i) => (
+              <span
+                key={i}
+                className="flex h-4 w-10 items-center justify-center text-[9px] font-normal tracking-[2.5px] text-[var(--color-text-dim)] tabular-nums"
+              >
+                {i + 1}
+              </span>
+            ))}
+          </div>
 
-      {/* ── Right: Scoreboard ──────────────────────────────── */}
-      <div className="flex-[1.1] min-w-0 flex flex-col justify-between gap-3 md:gap-0 md:min-h-[92px]">
-        <ScoreLine
-          name={p1Name}
-          isWinner={winner === "player1"}
-          sets={sets}
-          mineKey="player1"
-          theirsKey="player2"
-        />
-        <ScoreLine
-          name={p2Name}
-          isWinner={winner === "player2"}
-          sets={sets}
-          mineKey="player2"
-          theirsKey="player1"
-        />
-      </div>
+          {/* Player rows */}
+          <div className="flex flex-col gap-4 w-full">
+            <PlayerRow
+              name={p1Name}
+              player={match.player1}
+              isWinner={winner === "player1"}
+              sets={sets}
+              mineKey="player1"
+              theirsKey="player2"
+            />
+            <PlayerRow
+              name={p2Name}
+              player={match.player2}
+              isWinner={winner === "player2"}
+              sets={sets}
+              mineKey="player2"
+              theirsKey="player1"
+            />
+          </div>
+        </div>
+      )}
     </section>
   );
 }
 
-function ScoreLine({
+function PlayerRow({
   name,
+  player,
   isWinner,
   sets,
   mineKey,
   theirsKey,
 }: {
   name: string;
+  player: Player;
   isWinner: boolean;
   sets: SetScore[];
   mineKey: "player1" | "player2";
   theirsKey: "player1" | "player2";
 }) {
+  const meta = formatPlayerStyle(player.hand, player.backhand);
+
   return (
-    <div className="flex items-center justify-between gap-4 min-w-0">
-      <div className="flex items-center gap-1.5 min-w-0">
-        {isWinner ? (
-          <Check
-            className="size-3.5 shrink-0 text-[var(--color-success)]"
-            strokeWidth={2.5}
-            aria-hidden="true"
-          />
-        ) : (
-          <span aria-hidden="true" className="size-3.5 shrink-0" />
-        )}
-        <p
-          className={cn(
-            "truncate text-[14px] leading-[20px] whitespace-nowrap",
-            isWinner
-              ? "font-medium text-[var(--color-text-primary)]"
-              : "font-normal text-[var(--color-text-secondary)]",
+    <div className="flex items-center justify-between w-full gap-4 min-w-0">
+      <div className="flex flex-col gap-2 min-w-0">
+        <div className="flex items-center gap-3">
+          <p
+            className={cn(
+              "truncate text-[14px] leading-[20px] font-medium whitespace-nowrap",
+              isWinner
+                ? "text-[var(--color-text-primary)]"
+                : "text-[var(--color-text-secondary)]",
+            )}
+          >
+            {isWinner && <span className="sr-only">Winner: </span>}
+            {name}
+          </p>
+          {isWinner && (
+            <span className="shrink-0 text-[10px] font-medium leading-4 tracking-[2.5px] text-[var(--color-success)] whitespace-nowrap">
+              WON
+            </span>
           )}
-        >
-          {isWinner && <span className="sr-only">Winner: </span>}
-          {name}
-        </p>
+        </div>
+        {meta.length > 0 && (
+          <div className="flex items-center gap-2 text-[9px] font-normal leading-[13.5px] text-[var(--color-text-dim)]">
+            {meta.map((m, i) => (
+              <Fragment key={i}>
+                {i > 0 && <span aria-hidden="true">·</span>}
+                <span className="tracking-[2.5px] whitespace-nowrap">{m}</span>
+              </Fragment>
+            ))}
+          </div>
+        )}
       </div>
-      <div className="flex items-center gap-1.5 shrink-0" role="presentation">
+
+      <div className="flex gap-1.5 shrink-0" role="presentation">
         {sets.map((set, i) => {
           const mine = set[mineKey];
           const theirs = set[theirsKey];
@@ -149,12 +223,14 @@ function ScoreLine({
           return (
             <span
               key={i}
-              aria-label={`Set ${i + 1}: ${mine}${showTiebreak ? ` tiebreak ${theirTiebreak}` : ""}`}
+              aria-label={`Set ${i + 1}: ${mine}${
+                showTiebreak ? ` tiebreak ${theirTiebreak}` : ""
+              }`}
               className={cn(
-                "w-10 text-center text-[16px] leading-[28px] tracking-[-0.3px] tabular-nums inline-flex items-baseline justify-center gap-0.5",
+                "flex h-6 w-10 items-baseline justify-center gap-0.5 text-[18px] leading-6 tracking-[-0.3px] tabular-nums",
                 setWon
-                  ? "font-normal text-[var(--color-text-primary)]"
-                  : "font-light text-[var(--color-text-dim)]",
+                  ? "font-medium text-[var(--color-text-primary)]"
+                  : "font-light text-[var(--color-text-secondary)]",
               )}
             >
               <span>{mine}</span>
@@ -174,38 +250,67 @@ function ScoreLine({
   );
 }
 
-function parseVerification(
-  raw: string | undefined,
-): { verified: boolean; label: string } | null {
+function NavLink({
+  href,
+  label,
+  ariaLabel,
+  title,
+  shortcut,
+  icon,
+  position,
+}: {
+  href: string | null;
+  label: string;
+  ariaLabel: string;
+  title: string;
+  shortcut: string;
+  icon: React.ReactNode;
+  position: "left" | "right";
+}) {
+  const content = (
+    <>
+      {position === "left" && icon}
+      <span className="text-[10px] font-medium uppercase tracking-[1.5px] leading-[15px]">
+        {label}
+      </span>
+      {position === "right" && icon}
+    </>
+  );
+
+  const baseClass =
+    "inline-flex items-center gap-1 py-2 -my-2 text-[var(--color-text-muted)] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-sm";
+
+  if (!href) {
+    return (
+      <span
+        aria-label={ariaLabel}
+        aria-disabled="true"
+        className={cn(baseClass, "opacity-30 cursor-not-allowed")}
+      >
+        {content}
+      </span>
+    );
+  }
+
+  return (
+    <Link
+      href={href}
+      aria-label={ariaLabel}
+      title={title}
+      aria-keyshortcuts={shortcut}
+      className={cn(baseClass, "hover:text-[var(--color-text-primary)]")}
+    >
+      {content}
+    </Link>
+  );
+}
+
+function formatDuration(raw: string | undefined): string | null {
   if (!raw) return null;
-  const verified = !/unverified/i.test(raw);
-  return { verified, label: raw };
-}
-
-function formatDate(date: string | undefined): string | null {
-  if (!date) return null;
-  try {
-    const d = new Date(date);
-    if (isNaN(d.getTime())) return null;
-    return d
-      .toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
-      .toUpperCase();
-  } catch {
-    return null;
-  }
-}
-
-function formatFooterDate(date: string | undefined): string | null {
-  if (!date) return null;
-  try {
-    const d = new Date(date);
-    if (isNaN(d.getTime())) return null;
-    return d.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  } catch {
-    return null;
-  }
+  const m = raw.match(/^(\d+):(\d{1,2})$/);
+  if (!m) return null;
+  const hours = parseInt(m[1], 10);
+  const minutes = parseInt(m[2], 10);
+  if (hours === 0) return `${minutes}M`;
+  return `${hours}H ${String(minutes).padStart(2, "0")}M`;
 }

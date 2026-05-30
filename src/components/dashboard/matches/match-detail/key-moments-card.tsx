@@ -1,23 +1,29 @@
 "use client";
 
 import { useMemo } from "react";
-import { motion, useReducedMotion } from "framer-motion";
-import type { MatchPoint } from "@/lib/data/match-points-server";
-import { PLAYER_1, PLAYER_2 } from "@/lib/design/player-colors";
+import { CirclePlay, Info } from "lucide-react";
 
-const EASE_CURVE: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import type { MatchPoint } from "@/lib/data/match-points-server";
 
 type MomentType = "match-point" | "set-point" | "break-point" | "ace";
 
 interface DerivedMoment {
   id: string;
   type: MomentType;
-  player: "player1" | "player2";
   title: string;
   description: string;
   setNumber: number;
   gameScore: string;
+  pointScore: string;
   videoTime: number | null;
+  winnerName: string;
+  serverName: string;
 }
 
 const TYPE_PRIORITY: Record<MomentType, number> = {
@@ -27,25 +33,35 @@ const TYPE_PRIORITY: Record<MomentType, number> = {
   ace: 3,
 };
 
+const TYPE_LABEL: Record<MomentType, string> = {
+  "match-point": "Match Point",
+  "set-point": "Set Point",
+  "break-point": "Break Point",
+  ace: "Ace",
+};
+
+const RAIL_COLOR: Record<MomentType, string> = {
+  "match-point": "bg-[#E51837]",
+  "set-point": "bg-[#3B82F6]",
+  "break-point": "bg-[#3B82F6]",
+  ace: "bg-[#CCCCCC]",
+};
+
+const TYPE_TEXT_COLOR: Record<MomentType, string> = {
+  "match-point": "text-[#E51837]",
+  "set-point": "text-[#3B82F6]",
+  "break-point": "text-[#3B82F6]",
+  ace: "text-[#525252]",
+};
+
+const MAX_VISIBLE = 24;
+
 function classify(pt: MatchPoint): MomentType | null {
   if (pt.isMatchPoint) return "match-point";
   if (pt.isSetPoint) return "set-point";
   if (pt.isBreakPoint) return "break-point";
   if (pt.resultType?.toLowerCase().includes("ace")) return "ace";
   return null;
-}
-
-function titleFor(type: MomentType): string {
-  switch (type) {
-    case "match-point":
-      return "Match Point";
-    case "set-point":
-      return "Set Point";
-    case "break-point":
-      return "Break Point";
-    case "ace":
-      return "Ace";
-  }
 }
 
 function descriptionFor(pt: MatchPoint, type: MomentType): string {
@@ -58,18 +74,35 @@ function descriptionFor(pt: MatchPoint, type: MomentType): string {
   return pt.resultType || "Point played";
 }
 
-const MAX_MOMENTS = 4;
+function formatVideoTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function seekToVideoTime(time: number) {
+  window.dispatchEvent(
+    new CustomEvent("match:video-seek", { detail: { time } }),
+  );
+  const target = document.getElementById("match-video");
+  if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+}
 
 interface KeyMomentsCardProps {
   points: MatchPoint[];
   narrativeMoments?: Array<{ moment: string; description: string }>;
+  p1Name: string;
+  p2Name: string;
+  className?: string;
 }
 
 export function KeyMomentsCard({
   points,
   narrativeMoments,
+  p1Name,
+  p2Name,
+  className,
 }: KeyMomentsCardProps) {
-  const prefersReduced = useReducedMotion();
   const headingId = "key-moments-heading";
 
   const moments = useMemo<DerivedMoment[]>(() => {
@@ -81,12 +114,14 @@ export function KeyMomentsCard({
       all.push({
         id: pt.id,
         type,
-        player: pt.wonByPlayer1 ? "player1" : "player2",
-        title: titleFor(type),
+        title: TYPE_LABEL[type],
         description: descriptionFor(pt, type),
         setNumber: pt.setNumber,
         gameScore: pt.gameScore,
+        pointScore: pt.pointScore,
         videoTime: pt.videoTime,
+        winnerName: pt.wonByPlayer1 ? p1Name : p2Name,
+        serverName: pt.serverIsPlayer1 ? p1Name : p2Name,
         pointNumber: pt.pointNumber,
       });
     }
@@ -97,76 +132,191 @@ export function KeyMomentsCard({
       return b.pointNumber - a.pointNumber;
     });
 
-    const top = all.slice(0, MAX_MOMENTS);
-
     if (narrativeMoments && narrativeMoments.length > 0) {
-      return top.map((m, i) => {
+      return all.map((m, i) => {
         const prose = narrativeMoments[i];
-        return prose?.description
-          ? { ...m, description: prose.description }
-          : m;
+        return prose?.description ? { ...m, description: prose.description } : m;
       });
     }
 
-    return top;
-  }, [points, narrativeMoments]);
+    return all;
+  }, [points, narrativeMoments, p1Name, p2Name]);
+
+  const visible = moments.slice(0, MAX_VISIBLE);
 
   return (
     <section
       id="match-key-moments"
       aria-labelledby={headingId}
-      className="surface-card scroll-mt-6 flex flex-col overflow-hidden"
+      className={`surface-card overflow-hidden scroll-mt-6 flex flex-col min-h-0${className ? ` ${className}` : ""}`}
     >
-      <div className="flex items-center h-14 px-5">
+      <div className="flex items-center gap-1.5 h-14 px-5">
         <h2
           id={headingId}
-          className="text-[10px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[15px]"
+          className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]"
         >
-          Key Moments
+          KEY MOMENTS
         </h2>
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label="How to read these moments"
+              aria-haspopup="dialog"
+              className="relative inline-flex items-center justify-center size-5 -m-1 text-[var(--color-text-dim)] hover:text-[var(--color-text-secondary)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-full"
+            >
+              <Info className="size-3" strokeWidth={1.75} aria-hidden="true" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            side="top"
+            align="start"
+            sideOffset={8}
+            collisionPadding={16}
+            role="dialog"
+            aria-label="How to read these moments"
+            className="!bg-white !text-[var(--color-text-primary)] !rounded-xl !p-0 !border !border-[var(--color-border-card)] !shadow-[0px_4px_16px_0px_rgba(0,0,0,0.08)] !w-auto"
+          >
+            <div className="w-[240px] py-4 px-4 flex flex-col gap-3">
+              <span className="text-[10px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[15px]">
+                Moment types
+              </span>
+              <ul className="flex flex-col gap-2">
+                <RailLegendRow color="#E51837" label="Match point" description="A point that could end the match" />
+                <RailLegendRow color="#3B82F6" label="Set or break point" description="High-leverage serve or return" />
+                <RailLegendRow color="#525252" label="Ace" description="Unreturned serve" />
+              </ul>
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
-      {moments.length === 0 ? (
-        <p className="text-[11px] font-normal text-[var(--color-text-muted)] leading-[1.6] px-5 pb-5">
-          Key moments appear after your match is analyzed.
-        </p>
+      {visible.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
+          <div className="bg-[#F5F5F5] p-4 rounded-full">
+            <CirclePlay className="h-8 w-8 text-[#888888]" strokeWidth={1.5} aria-hidden="true" />
+          </div>
+          <p className="text-[12px] text-[#888888] mt-3">No key moments yet</p>
+        </div>
       ) : (
-        <ul className="flex flex-col gap-4 pb-5">
-          {moments.map((m, i) => {
-            const color = m.player === "player1" ? PLAYER_1 : PLAYER_2;
-            return (
-              <motion.li
-                key={m.id}
-                className="flex gap-3 items-stretch px-5"
-                initial={prefersReduced ? false : { opacity: 0, x: -4 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{
-                  duration: 0.3,
-                  delay: 0.08 + i * 0.04,
-                  ease: EASE_CURVE,
-                }}
-              >
-                <span
+        <div className="flex flex-col pb-2 flex-1 min-h-0 overflow-y-auto max-h-[640px]">
+          {visible.map((m) => {
+            const hasVideo = m.videoTime != null;
+
+            const inner = (
+              <>
+                <div
+                  className={cn(
+                    "w-[1.5px] self-stretch rounded-full shrink-0",
+                    RAIL_COLOR[m.type],
+                  )}
                   aria-hidden="true"
-                  className="w-px rounded-full shrink-0"
-                  style={{ backgroundColor: color }}
                 />
-                <div className="flex flex-col min-w-0 py-px">
-                  <p className="text-[12px] font-medium text-[var(--color-text-primary)] leading-[18px]">
-                    {m.title}
-                  </p>
-                  <p className="text-[11px] font-normal text-[var(--color-text-body)] leading-[18px] mt-0.5">
+                <div className="flex flex-col gap-1 flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-baseline gap-1.5 min-w-0">
+                      <span
+                        className={cn(
+                          "text-[10px] font-semibold uppercase tracking-[1.5px]",
+                          TYPE_TEXT_COLOR[m.type],
+                        )}
+                      >
+                        {m.title}
+                      </span>
+                      <span className="text-[10px] text-[#D4D4D4]" aria-hidden="true">
+                        ·
+                      </span>
+                      <span className="text-[10px] font-medium uppercase tracking-[1.5px] text-[#AAAAAA] tabular-nums">
+                        Set {m.setNumber}
+                      </span>
+                    </div>
+                    {hasVideo && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[#888888] tabular-nums shrink-0 transition-colors duration-200 group-hover:text-[#3B82F6]">
+                        <CirclePlay
+                          className="size-3"
+                          strokeWidth={1.75}
+                          aria-hidden="true"
+                        />
+                        {formatVideoTime(m.videoTime!)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[12px] font-normal text-[#0D0D0D] leading-[1.5]">
                     {m.description}
                   </p>
-                  <p className="text-[10px] font-medium uppercase tracking-[1.5px] leading-[15px] text-[var(--color-text-dim)] tabular-nums mt-2">
-                    Set {m.setNumber} · {m.gameScore}
+                  <p className="text-[10px] font-normal text-[#AAAAAA] uppercase tracking-[1px] tabular-nums">
+                    {m.gameScore}
+                    {m.pointScore ? (
+                      <>
+                        <span className="mx-1.5 text-[#D4D4D4]">·</span>
+                        {m.pointScore}
+                      </>
+                    ) : null}
+                    <span className="mx-1.5 text-[#D4D4D4]">·</span>
+                    Served by {m.serverName}
                   </p>
                 </div>
-              </motion.li>
+              </>
+            );
+
+            if (hasVideo) {
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => seekToVideoTime(m.videoTime!)}
+                  aria-label={`Jump to ${m.title} at ${formatVideoTime(m.videoTime!)}`}
+                  className="group flex gap-3 items-stretch px-5 py-3 w-full text-left hover:bg-[#FAFAFA] active:scale-[0.998] transition-[background-color,transform] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-inset"
+                >
+                  {inner}
+                </button>
+              );
+            }
+
+            return (
+              <div
+                key={m.id}
+                className="flex gap-3 items-stretch px-5 py-3"
+              >
+                {inner}
+              </div>
             );
           })}
-        </ul>
+        </div>
       )}
     </section>
+  );
+}
+
+function RailLegendRow({
+  color,
+  label,
+  description,
+}: {
+  color: string;
+  label: string;
+  description?: string;
+}) {
+  return (
+    <li className="flex items-start gap-2">
+      <span
+        aria-hidden="true"
+        className="w-0.5 h-3.5 rounded-full shrink-0 mt-0.5"
+        style={{ backgroundColor: color }}
+      />
+      <div className="flex flex-col gap-0.5 min-w-0">
+        <span
+          className="text-[11px] font-medium leading-[16px]"
+          style={{ color }}
+        >
+          {label}
+        </span>
+        {description && (
+          <span className="text-[10px] font-normal text-[#888888] leading-[14px]">
+            {description}
+          </span>
+        )}
+      </div>
+    </li>
   );
 }

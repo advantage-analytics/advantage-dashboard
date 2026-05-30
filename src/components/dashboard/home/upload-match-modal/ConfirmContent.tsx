@@ -7,6 +7,7 @@
 import { memo, useMemo } from "react";
 import { AlertCircle, FileSpreadsheet } from "lucide-react";
 import { MatchMetadataRow } from "@/components/dashboard/matches/match-metadata-row";
+import { formatPlayerStyle } from "@/lib/data/match-utils";
 import { FormData, UploadedFile, DetailField } from "./types";
 import { getAdjustedScores, formatDuration } from "./utils";
 import { eyebrowLabelCls } from "./styles";
@@ -129,20 +130,6 @@ function PlayerRow({
       </div>
     </div>
   );
-}
-
-function formatPlayerStyle(
-  hand: "right" | "left" | undefined,
-  backhand: "one-handed" | "two-handed" | undefined
-): string[] {
-  const parts: string[] = [];
-  if (hand) parts.push(hand === "right" ? "RIGHT HANDED" : "LEFT HANDED");
-  if (backhand) {
-    parts.push(
-      backhand === "one-handed" ? "1-HANDED BACKHAND" : "2-HANDED BACKHAND"
-    );
-  }
-  return parts;
 }
 
 const labelCls = eyebrowLabelCls;

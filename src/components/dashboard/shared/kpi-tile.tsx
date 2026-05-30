@@ -143,7 +143,7 @@ export interface KpiTileProps {
   href?: string;
 }
 
-const MotionLink = motion(Link);
+const MotionLink = motion.create(Link);
 
 export function KpiTile({
   label,

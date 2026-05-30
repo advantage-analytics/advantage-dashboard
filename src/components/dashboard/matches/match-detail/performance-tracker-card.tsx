@@ -1,8 +1,7 @@
 "use client";
 
-import { useId, useState } from "react";
 import dynamic from "next/dynamic";
-import { ChevronDown, Info } from "lucide-react";
+import { Info } from "lucide-react";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { shortName } from "@/lib/data/match-utils";
 import {
@@ -11,12 +10,11 @@ import {
   EVENT_ACCENT,
 } from "@/lib/design/player-colors";
 import { ChartErrorBoundary } from "@/components/dashboard/shared/chart-error-boundary";
-import { cn } from "@/lib/utils";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 const MomentumChartCompact = dynamic(
   () =>
@@ -42,54 +40,16 @@ interface PerformanceTrackerCardProps {
   matchDurationSec?: number | null;
 }
 
-const eyebrowClass =
-  "text-[9px] font-normal text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[13.5px]";
-
 export function PerformanceTrackerCard({
   points,
   p1Name,
   p2Name,
   matchDurationSec,
 }: PerformanceTrackerCardProps) {
-  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
-  const detailsId = useId();
-
   if (points.length < 2) return null;
 
   const p1Short = shortName(p1Name, 18);
   const p2Short = shortName(p2Name, 18);
-
-  let p1Cum = 0;
-  let p2Cum = 0;
-  let p1PeakLead = 0;
-  let p2PeakLead = 0;
-  let p1Breaks = 0;
-  let p2Breaks = 0;
-  for (let i = 0; i < points.length; i++) {
-    const pt = points[i];
-    if (pt.wonByPlayer1) p1Cum++;
-    else p2Cum++;
-    const d = p1Cum - p2Cum;
-    if (d > p1PeakLead) p1PeakLead = d;
-    if (-d > p2PeakLead) p2PeakLead = -d;
-    if (i > 0) {
-      const prev = points[i - 1];
-      const newGame =
-        pt.gameNumber !== prev.gameNumber || pt.setNumber !== prev.setNumber;
-      if (newGame) {
-        const serverWon = prev.serverIsPlayer1
-          ? prev.wonByPlayer1
-          : !prev.wonByPlayer1;
-        if (!serverWon) {
-          if (prev.serverIsPlayer1) p2Breaks++;
-          else p1Breaks++;
-        }
-      }
-    }
-  }
-  const finalDiff = p1Cum - p2Cum;
-  const p1IsLeader = finalDiff > 0;
-  const p2IsLeader = finalDiff < 0;
 
   return (
     <section
@@ -105,25 +65,29 @@ export function PerformanceTrackerCard({
           >
             Momentum Tracker
           </h2>
-          <Tooltip>
-            <TooltipTrigger asChild>
+          <Popover>
+            <PopoverTrigger asChild>
               <button
                 type="button"
                 aria-label="About the Momentum chart"
+                aria-haspopup="dialog"
                 className="relative inline-flex items-center justify-center size-5 -m-1 text-[var(--color-text-dim)] hover:text-[var(--color-text-secondary)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-full"
               >
                 <Info className="size-3" strokeWidth={1.75} aria-hidden="true" />
               </button>
-            </TooltipTrigger>
-            <TooltipContent
+            </PopoverTrigger>
+            <PopoverContent
               side="top"
+              align="start"
               sideOffset={8}
-              showArrow={false}
-              className="!bg-white !text-[var(--color-text-primary)] !rounded-xl !px-0 !py-0 !border !border-[var(--color-border-card)] !shadow-[0px_4px_16px_0px_rgba(0,0,0,0.08)] !text-left !w-auto"
+              collisionPadding={16}
+              role="dialog"
+              aria-label="About the Momentum chart"
+              className="!bg-white !text-[var(--color-text-primary)] !rounded-xl !p-0 !border !border-[var(--color-border-card)] !shadow-[0px_4px_16px_0px_rgba(0,0,0,0.08)] !w-auto"
             >
-              <div className="w-[260px] py-3 px-3.5 flex flex-col gap-2.5">
+              <div className="w-[260px] py-4 px-4 flex flex-col gap-3">
                 <div className="flex flex-col gap-1">
-                  <span className="text-[9px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[13px]">
+                  <span className="text-[10px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[15px]">
                     Momentum
                   </span>
                   <p className="text-[11px] leading-[16px] text-[var(--color-text-secondary)]">
@@ -152,29 +116,18 @@ export function PerformanceTrackerCard({
                   Hover the chart for point-by-point detail.
                 </p>
               </div>
-            </TooltipContent>
-          </Tooltip>
+            </PopoverContent>
+          </Popover>
         </div>
-        <button
-          type="button"
-          onClick={() => setIsDetailsOpen((o) => !o)}
-          aria-expanded={isDetailsOpen}
-          aria-controls={detailsId}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 -mr-2 rounded-md text-[10px] font-medium uppercase tracking-[2.5px] text-[#3B82F6] hover:text-[#2563EB] cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
-        >
-          <span>{isDetailsOpen ? "Hide details" : "Match details"}</span>
-          <ChevronDown
-            aria-hidden="true"
-            strokeWidth={1.75}
-            className={cn(
-              "size-3 transition-transform duration-200 ease-out motion-reduce:transition-none",
-              isDetailsOpen && "rotate-180",
-            )}
-          />
-        </button>
+        <div className="flex items-center gap-x-5 gap-y-2 flex-wrap justify-end">
+          <LegendSwatch color={PLAYER_1} label={p1Short} />
+          <LegendSwatch color={PLAYER_2} label={p2Short} />
+          <span aria-hidden="true" className="h-3 w-px bg-[var(--color-border-card)]" />
+          <LegendDash color={EVENT_ACCENT} label="Break of Serve" />
+        </div>
       </div>
 
-      <div className="px-5 pb-5">
+      <div className="px-5 pb-5 pt-4">
         <div className="min-w-0">
           <ChartErrorBoundary minHeight={160}>
             <MomentumChartCompact
@@ -185,131 +138,8 @@ export function PerformanceTrackerCard({
             />
           </ChartErrorBoundary>
         </div>
-
-        <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
-          <LegendSwatch color={PLAYER_1} label={p1Short} />
-          <LegendSwatch color={PLAYER_2} label={p2Short} />
-          <span aria-hidden="true" className="h-3 w-px bg-[var(--color-border-card)]" />
-          <LegendDash color={EVENT_ACCENT} label="Break of Serve" />
-        </div>
-
-        <div
-          id={detailsId}
-          className={cn(
-            "grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none",
-            isDetailsOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-          )}
-        >
-        <div className="overflow-hidden">
-          <div className="pt-7">
-            <table className="w-full border-collapse">
-          <thead>
-            <tr>
-              <th scope="col" className="sr-only">
-                Player
-              </th>
-              <th scope="col" className={cn(eyebrowClass, "text-right font-normal pb-2.5 px-3 sm:px-4 first:pl-0 last:pr-0")}>
-                Points
-              </th>
-              <th scope="col" className={cn(eyebrowClass, "text-right font-normal pb-2.5 px-3 sm:px-4 first:pl-0 last:pr-0")}>
-                Breaks Won
-              </th>
-              <th scope="col" className={cn(eyebrowClass, "text-right font-normal pb-2.5 px-3 sm:px-4 first:pl-0 last:pr-0")}>
-                Peak Lead
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <PlayerStatRow
-              name={p1Short}
-              color={PLAYER_1}
-              points={p1Cum}
-              breaks={p1Breaks}
-              peakLead={p1PeakLead}
-              isLeader={p1IsLeader}
-            />
-            <PlayerStatRow
-              name={p2Short}
-              color={PLAYER_2}
-              points={p2Cum}
-              breaks={p2Breaks}
-              peakLead={p2PeakLead}
-              isLeader={p2IsLeader}
-            />
-          </tbody>
-        </table>
-          </div>
-        </div>
-        </div>
       </div>
     </section>
-  );
-}
-
-function PlayerStatRow({
-  name,
-  color,
-  points,
-  breaks,
-  peakLead,
-  isLeader,
-}: {
-  name: string;
-  color: string;
-  points: number;
-  breaks: number;
-  peakLead: number;
-  isLeader: boolean;
-}) {
-  return (
-    <tr>
-      <th
-        scope="row"
-        className="text-left font-normal py-3.5 pr-3 sm:pr-4 first:pl-0"
-      >
-        <span
-          className={cn(
-            "truncate whitespace-nowrap text-[13px] leading-[18px]",
-            isLeader
-              ? "font-medium text-[var(--color-text-primary)]"
-              : "font-normal text-[var(--color-text-secondary)]",
-          )}
-        >
-          {name}
-        </span>
-      </th>
-      <StatCell
-        primary={`${points}`}
-        primaryColor={isLeader ? color : "var(--color-text-primary)"}
-      />
-      <StatCell
-        primary={`${breaks}`}
-        primaryColor="var(--color-text-primary)"
-      />
-      <StatCell
-        primary={peakLead === 0 ? "—" : `+${peakLead}`}
-        primaryColor={peakLead === 0 ? "var(--color-text-dim)" : "var(--color-text-primary)"}
-      />
-    </tr>
-  );
-}
-
-function StatCell({
-  primary,
-  primaryColor,
-}: {
-  primary: string;
-  primaryColor: string;
-}) {
-  return (
-    <td className="text-right py-3.5 px-3 sm:px-4 last:pr-0 align-baseline">
-      <span
-        className="text-[18px] font-light tabular-nums leading-none tracking-[-0.4px]"
-        style={{ color: primaryColor }}
-      >
-        {primary}
-      </span>
-    </td>
   );
 }
 

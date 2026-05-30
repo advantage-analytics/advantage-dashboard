@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+
 import {
   Tooltip,
   TooltipTrigger,
@@ -46,6 +48,7 @@ export interface CourtDot {
   shape?: "circle" | "triangle";
   pairId?: string; // shared id between landing + contact dots of the same point
   meta?: DotMeta;
+  exiting?: boolean; // set by useDotExit while the dot fades out before unmount
 }
 
 interface InteractiveProps {
@@ -60,11 +63,20 @@ export type CourtSVGProps = { dots: CourtDot[] } & Partial<InteractiveProps>;
 
 /* ── Helpers ─────────────────────────────────────────────── */
 
+// Area-match a triangle to a circle of the same nominal `size` (radius): a
+// circle's area is π·size² but this triangle's is only 1.7825·size² (~57%), so
+// at equal radius the triangle reads visibly smaller. Scale by √(π/1.7825) ≈ 1.33
+// so circle (forehand) and triangle (backhand) markers carry equal visual weight.
+const TRIANGLE_AREA_SCALE = 1.33;
+
 function trianglePoints(cx: number, cy: number, size: number): string {
-  // Equilateral-ish upward triangle centered vertically on (cx, cy).
-  const h = size * 1.15;
-  const half = size;
-  return `${cx},${cy - h * 0.9} ${cx - half},${cy + h * 0.65} ${cx + half},${cy + h * 0.65}`;
+  // Upward triangle (base 2·s, height 1.7825·s) recentered so its centroid —
+  // not its bounding box — sits exactly on (cx, cy), keeping each marker anchored
+  // on its true landing/contact coordinate alongside the circles.
+  const s = size * TRIANGLE_AREA_SCALE;
+  const apexY = cy - s * 1.1883;
+  const baseY = cy + s * 0.5942;
+  return `${cx},${apexY} ${cx - s},${baseY} ${cx + s},${baseY}`;
 }
 
 function starPoints(
@@ -86,26 +98,108 @@ function starPoints(
 
 /* ── Shared SVG defs ─────────────────────────────────────── */
 
+// Data-point enter/exit motion. A strong ease-out curve gives the entrance
+// immediate "punch"; dots scale up from 0.6 (never from nothing) and fade in.
+// Exit is deliberately faster than enter and shrinks slightly — a quick, quiet
+// retreat rather than a vanish. `both` fill keeps the `to` state implicit so each
+// dot settles at its own `opacity` attribute. transform-box/origin make the SVG
+// scale happen around each dot's own center. Reduced motion keeps the fade,
+// drops the movement.
+const DOT_ANIM_CSS = `
+.court-dot{transform-box:fill-box;transform-origin:center;animation:courtDotIn .28s cubic-bezier(.23,1,.32,1) both}
+.court-dot--exit{transform-box:fill-box;transform-origin:center;animation:courtDotOut .16s cubic-bezier(.23,1,.32,1) both;pointer-events:none}
+@keyframes courtDotIn{from{opacity:0;transform:scale(.6)}}
+@keyframes courtDotOut{to{opacity:0;transform:scale(.7)}}
+@media(prefers-reduced-motion:reduce){
+.court-dot{animation:courtDotInRM .2s ease both}
+.court-dot--exit{animation:courtDotOutRM .12s ease both}
+@keyframes courtDotInRM{from{opacity:0}}
+@keyframes courtDotOutRM{to{opacity:0}}
+}
+`;
+
+/** Shared <style> for dot enter/exit; render inside any court <svg>. */
+export function CourtDotStyles() {
+  return <style>{DOT_ANIM_CSS}</style>;
+}
+
+/**
+ * Keeps just-removed dots mounted for `holdMs` so they can play an exit
+ * animation before unmounting, then drops them. Returned dots carry an
+ * `exiting` flag while they fade. Re-adding an id mid-exit cancels the exit
+ * (the live dot simply re-enters). Dots without an `id` are passed through
+ * untouched — exit needs stable identity.
+ */
+export function useDotExit<T extends { id?: string }>(
+  dots: T[],
+  holdMs = 160,
+): Array<T & { exiting?: boolean }> {
+  const [extra, setExtra] = useState<Array<T & { exiting: true }>>([]);
+  const prev = useRef<Map<string, T>>(new Map());
+  const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  useEffect(() => {
+    const curr = new Map<string, T>();
+    for (const d of dots) if (d.id) curr.set(d.id, d);
+
+    // An id that reappeared is alive again — cancel its pending exit.
+    let cancelled = false;
+    for (const id of curr.keys()) {
+      const t = timers.current.get(id);
+      if (t) {
+        clearTimeout(t);
+        timers.current.delete(id);
+        cancelled = true;
+      }
+    }
+    if (cancelled) setExtra((ex) => ex.filter((d) => !curr.has(d.id as string)));
+
+    // Newly removed ids start their exit countdown.
+    const removed: Array<T & { exiting: true }> = [];
+    for (const [id, d] of prev.current) {
+      if (!curr.has(id) && !timers.current.has(id)) {
+        removed.push({ ...d, exiting: true });
+        const t = setTimeout(() => {
+          timers.current.delete(id);
+          setExtra((ex) => ex.filter((x) => x.id !== id));
+        }, holdMs);
+        timers.current.set(id, t);
+      }
+    }
+    if (removed.length) {
+      setExtra((ex) => [
+        ...ex.filter((x) => !removed.some((r) => r.id === x.id)),
+        ...removed,
+      ]);
+    }
+
+    prev.current = curr;
+  }, [dots, holdMs]);
+
+  useEffect(() => () => timers.current.forEach((t) => clearTimeout(t)), []);
+
+  const currIds = new Set<string>();
+  for (const d of dots) if (d.id) currIds.add(d.id);
+  const visibleExtra = extra.filter((d) => !currIds.has(d.id as string));
+  return (
+    visibleExtra.length ? [...dots, ...visibleExtra] : dots
+  ) as Array<T & { exiting?: boolean }>;
+}
+
+/** Soft drop-shadow that lifts a hovered/active dot. Referenced via url(#dot-glow). */
+export function CourtGlowFilter() {
+  return (
+    <filter id="dot-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="0" stdDeviation="2" floodColor="rgba(0,0,0,0.15)" />
+    </filter>
+  );
+}
+
 function CourtDefs({ interactive }: { interactive: boolean }) {
   return (
     <defs>
-      {interactive && (
-        <>
-          <filter id="dot-glow" x="-50%" y="-50%" width="200%" height="200%">
-            <feDropShadow
-              dx="0"
-              dy="0"
-              stdDeviation="2"
-              floodColor="rgba(0,0,0,0.15)"
-            />
-          </filter>
-          <style>{`
-            @keyframes courtDotIn{from{opacity:0}}
-            .court-dot{animation:courtDotIn .3s cubic-bezier(.25,.46,.45,.94) both}
-            @media(prefers-reduced-motion:reduce){.court-dot{animation:none}}
-          `}</style>
-        </>
-      )}
+      <CourtDotStyles />
+      {interactive && <CourtGlowFilter />}
     </defs>
   );
 }
@@ -171,82 +265,75 @@ function DotTooltipContent({ dot }: { dot: CourtDot }) {
 
 /* ── Dot rendering ───────────────────────────────────────── */
 
+function dotSizes(r: number) {
+  return {
+    r,
+    rInactive: r * 1.17,
+    rActive: r * 2,
+    rContact: r * 0.85,
+    aceOuter: r * 2.33,
+    aceOuterActive: r * 3,
+    aceInner: r * 1.17,
+    aceInnerActive: r * 1.5,
+    squareHalf: r * 0.83,
+  };
+}
+
+// Cap the cascade so a full court of dots still finishes entering quickly
+// (~400ms) instead of trickling in. Decorative — never gates interaction.
+export const dotStagger = (i: number) => `${Math.min(i * 0.006, 0.4)}s`;
+
+/**
+ * Plain, non-interactive shape for a dot — used for widget previews
+ * (`court-dot` entrance) and for exiting ghosts (`court-dot--exit`).
+ */
+function staticDotShape(
+  dot: CourtDot,
+  s: ReturnType<typeof dotSizes>,
+  className: string,
+  i: number,
+) {
+  const dotOpacity = dot.opacity ?? 0.85;
+  const style = { animationDelay: className === "court-dot" ? dotStagger(i) : "0s" };
+  const key = `${className === "court-dot--exit" ? "exit-" : ""}${dot.id ?? i}`;
+  if (dot.variant === "contact") {
+    return dot.shape === "triangle" ? (
+      <polygon key={key} className={className} style={style} points={trianglePoints(dot.cx, dot.cy, s.rContact)} fill="transparent" stroke={dot.color} strokeWidth={1.5} opacity={dotOpacity} />
+    ) : (
+      <circle key={key} className={className} style={style} cx={dot.cx} cy={dot.cy} r={s.rContact} fill="transparent" stroke={dot.color} strokeWidth={1.5} opacity={dotOpacity} />
+    );
+  }
+  if (dot.shape === "triangle") {
+    return <polygon key={key} className={className} style={style} points={trianglePoints(dot.cx, dot.cy, s.r)} fill={dot.color} opacity={dotOpacity} />;
+  }
+  return dot.isSecondServe ? (
+    <rect key={key} className={className} style={style} x={dot.cx - s.squareHalf} y={dot.cy - s.squareHalf} width={s.squareHalf * 2} height={s.squareHalf * 2} rx={1} fill={dot.color} opacity={dotOpacity} />
+  ) : (
+    <circle key={key} className={className} style={style} cx={dot.cx} cy={dot.cy} r={s.r} fill={dot.color} opacity={dotOpacity} />
+  );
+}
+
 function renderDots(
   dots: CourtDot[],
   interactive: InteractiveProps | null,
   radius = 3,
 ) {
-  const r = radius;
-  const rInactive = r * 1.17;
-  const rActive = r * 2;
-  const rContact = r * 0.85;
-  const aceOuter = r * 2.33;
-  const aceOuterActive = r * 3;
-  const aceInner = r * 1.17;
-  const aceInnerActive = r * 1.5;
-  const squareHalf = r * 0.83;
+  const s = dotSizes(radius);
+  const { r, rInactive, rActive, rContact, aceOuter, aceOuterActive, aceInner, aceInnerActive } = s;
 
   return dots.map((dot, i) => {
     const dotOpacity = dot.opacity ?? 0.85;
     const isContact = dot.variant === "contact";
     const isTriangle = dot.shape === "triangle";
 
+    /* Exiting ghost — fading out before unmount, no interaction */
+    if (dot.exiting) {
+      return staticDotShape(dot, s, "court-dot--exit", i);
+    }
+
     /* Non-interactive mode (widget usage) */
     if (!interactive || !dot.id) {
-      if (isContact) {
-        return isTriangle ? (
-          <polygon
-            key={dot.id ?? i}
-            points={trianglePoints(dot.cx, dot.cy, rContact)}
-            fill="transparent"
-            stroke={dot.color}
-            strokeWidth={1.5}
-            opacity={dotOpacity}
-          />
-        ) : (
-          <circle
-            key={dot.id ?? i}
-            cx={dot.cx}
-            cy={dot.cy}
-            r={rContact}
-            fill="transparent"
-            stroke={dot.color}
-            strokeWidth={1.5}
-            opacity={dotOpacity}
-          />
-        );
-      }
-      if (isTriangle) {
-        return (
-          <polygon
-            key={dot.id ?? i}
-            points={trianglePoints(dot.cx, dot.cy, r)}
-            fill={dot.color}
-            opacity={dotOpacity}
-          />
-        );
-      }
-      return dot.isSecondServe ? (
-        <rect
-          key={dot.id ?? i}
-          x={dot.cx - squareHalf}
-          y={dot.cy - squareHalf}
-          width={squareHalf * 2}
-          height={squareHalf * 2}
-          rx={1}
-          fill={dot.color}
-          opacity={dotOpacity}
-        />
-      ) : (
-        <circle
-          key={dot.id ?? i}
-          cx={dot.cx}
-          cy={dot.cy}
-          r={r}
-          fill={dot.color}
-          opacity={dotOpacity}
-        />
-      );
+      return staticDotShape(dot, s, "court-dot", i);
     }
 
     /* Interactive mode */
@@ -257,13 +344,13 @@ function renderDots(
 
     const sharedStyle = {
       transition: "all 0.15s ease",
-      animationDelay: `${Math.min(i * 0.008, 0.8)}s`,
+      animationDelay: dotStagger(i),
     };
 
     const shape = isContact ? (
       isTriangle ? (
         <polygon
-          points={trianglePoints(dot.cx, dot.cy, isActive ? r * 1.45 : rContact)}
+          points={trianglePoints(dot.cx, dot.cy, isActive ? r * 1.7 : rContact)}
           fill="transparent"
           stroke={dot.color}
           strokeWidth={isActive ? 2 : 1.5}
@@ -457,9 +544,12 @@ export const FULL_SVG_FAR_BASELINE = FAR_BL;
 export const FULL_SVG_NET_Y = NET_Y;
 export const FULL_SVG_NEAR_BASELINE = NEAR_BL;
 // Extra canvas space above and below the court so data points (especially
-// returner contact positions behind the near baseline) render in-frame.
-export const FULL_SVG_PAD_TOP = 40;
-export const FULL_SVG_PAD_BOTTOM = 160;
+// returner contact positions behind the near baseline) render in-frame. Kept
+// tight so the court itself fills the frame — the bottom pad still clears ~3.4m
+// behind the baseline (deeper outliers clamp to the edge); the top is cosmetic
+// margin above the far baseline.
+export const FULL_SVG_PAD_TOP = 20;
+export const FULL_SVG_PAD_BOTTOM = 100;
 
 export function FullCourtSVG({
   dots,
@@ -479,6 +569,10 @@ export function FullCourtSVG({
           onBackgroundClick,
         }
       : null;
+
+  // Hold just-removed dots briefly so filter/legend changes fade out instead of
+  // popping. Tab/mode switches unmount the whole SVG, so those swap cleanly.
+  const dotsWithExit = useDotExit(dots);
 
   const fullLine = { stroke: COURT_LINE, strokeWidth: 2.25, strokeLinecap: "round" as const };
   return (
@@ -521,7 +615,7 @@ export function FullCourtSVG({
       <line x1={0} y1={NET_Y} x2={COURT_W} y2={NET_Y} stroke={COURT_LINE} strokeWidth={3} strokeLinecap="round" />
 
       {/* Dots */}
-      {renderDots(dots, interactive, 3.75)}
+      {renderDots(dotsWithExit, interactive, 3.75)}
     </svg>
   );
 }

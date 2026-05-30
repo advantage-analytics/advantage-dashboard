@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { HelpToc } from "./help-toc";
-import { Kbd } from "./kbd";
+import { Kbd } from "@/components/ui/kbd";
 
 const SUPPORT_EMAIL = "support@advantageanalytics.app";
 const SWINGVISION_TROUBLESHOOTING_URL =
