@@ -17,6 +17,10 @@ import {
 } from "@/components/dashboard/matches/visuals/types/filters.types";
 import {
   FullCourtSVG,
+  CourtDotStyles,
+  CourtGlowFilter,
+  useDotExit,
+  dotStagger,
   FULL_SVG_FAR_BASELINE,
   FULL_SVG_NET_Y,
   FULL_SVG_NEAR_BASELINE,
@@ -29,6 +33,7 @@ import {
 export type ServeResult = "won" | "lost" | "ace" | "doubleFault";
 
 export interface ServeDot {
+  id?: string; // stable point id — enables exit animation when filtered out
   x: number;
   y: number;
   isFirstServe: boolean;
@@ -120,6 +125,11 @@ interface ReturnLegendItem {
   label: string;
   shape: ReturnLegendShape;
 }
+
+const RETURN_SERVE_TYPE_LEGEND: LegendItem[] = [
+  { key: "first", color: FIRST_SERVE_COLOR, label: "1st-Serve Return" },
+  { key: "second", color: SECOND_SERVE_COLOR, label: "2nd-Serve Return" },
+];
 
 const RETURN_LEGEND: ReturnLegendItem[] = (
   [
@@ -262,7 +272,10 @@ function classifyPointResult(p: ServePointInput): PointResult {
 
 function classifyReturnDot(p: ServePointInput): { stroke: ReturnStroke; outcome: ReturnOutcome } {
   const typeLower = (p.secondShotType ?? "").toLowerCase();
-  const stroke: ReturnStroke = typeLower.includes("backhand") ? "backhand" : "forehand";
+  // SwingVision uses both full ("Backhand") and abbreviated ("BH Volley") labels,
+  // so match the "bh" prefix too — otherwise a backhand volley return reads as a forehand.
+  const stroke: ReturnStroke =
+    typeLower.includes("backhand") || typeLower.startsWith("bh") ? "backhand" : "forehand";
 
   const shotResult = p.secondShotResult;
   let outcome: ReturnOutcome;
@@ -366,6 +379,8 @@ function HalfCourtWithZones({
   );
   const stats = useMemo(() => computeZoneStats(visibleDots), [visibleDots]);
   const hoveredDot = hoveredDotIdx != null ? visibleDots[hoveredDotIdx] ?? null : null;
+  // Keep just-removed serves mounted briefly so they fade out instead of popping.
+  const exitingDots = useDotExit(visibleDots).filter((d) => d.exiting);
 
   return (
     <div className="relative w-full">
@@ -377,6 +392,10 @@ function HalfCourtWithZones({
         aria-label="Serve placement court diagram showing where serves landed"
         onPointerLeave={() => setActiveZone(null)}
       >
+        <defs>
+          <CourtGlowFilter />
+        </defs>
+        <CourtDotStyles />
         <rect x="0" y="0" width={COURT_W} height={COURT_H} fill="#EFF4FF" />
 
         <line x1={DOUBLES_LEFT} y1={DOUBLES_TOP} x2={DOUBLES_RIGHT} y2={DOUBLES_TOP} {...L} />
@@ -497,14 +516,16 @@ function HalfCourtWithZones({
           const isHovered = hoveredDotIdx === i;
           return (
             <circle
-              key={i}
+              key={dot.id ?? i}
+              className="court-dot"
               cx={cx}
               cy={cy}
-              r={isHovered ? 4.5 : 2.5}
+              r={isHovered ? 4.25 : 2.5}
               fill={dotColor(dot, colorMode)}
-              stroke={isHovered ? "#0D0D0D" : "none"}
-              strokeWidth={isHovered ? 0.75 : 0}
-              style={{ cursor: "pointer", transition: "r 0.1s ease" }}
+              stroke="rgba(255,255,255,0.4)"
+              strokeWidth={1}
+              filter={isHovered ? "url(#dot-glow)" : undefined}
+              style={{ cursor: "pointer", transition: "all 0.15s ease", animationDelay: dotStagger(i) }}
               onPointerEnter={() => {
                 setHoveredDotIdx(i);
                 setActiveZone(null);
@@ -513,6 +534,17 @@ function HalfCourtWithZones({
             />
           );
         })}
+
+        {exitingDots.map((dot) => (
+          <circle
+            key={`exit-${dot.id}`}
+            className="court-dot--exit"
+            cx={SINGLES_LEFT + dot.x * (SINGLES_RIGHT - SINGLES_LEFT)}
+            cy={SERVICE_Y + dot.y * (BASELINE_Y - SERVICE_Y)}
+            r={2.5}
+            fill={dotColor(dot, colorMode)}
+          />
+        ))}
       </svg>
 
       {hoveredDot ? (
@@ -760,14 +792,14 @@ function FullscreenEmptyState({
       aria-live={hasData ? "polite" : undefined}
       className="flex flex-col items-center gap-3 text-center max-w-[280px] px-6"
     >
-      <div className="bg-[#EBF2FD] p-3 rounded-full border border-[#E6EEFB]">
-        <Target className="h-6 w-6 text-[#3B82F6]/70" strokeWidth={1.5} aria-hidden />
+      <div className="bg-[#F5F5F5] p-4 rounded-full">
+        <Target className="h-8 w-8 text-[#888888]" strokeWidth={1.5} aria-hidden />
       </div>
       <div className="flex flex-col gap-1">
         <p className="text-[13px] font-medium text-[#0D0D0D]">
           {hasData ? `No ${noun} match your filters` : `No ${nounNoData} data yet`}
         </p>
-        <p className="text-[11px] text-[#767676] leading-[1.5]">
+        <p className="text-[12px] text-[#888888] leading-[1.5]">
           {hasData
             ? `Every ${nounNoData} was excluded by the active filters. Reset to the default view.`
             : mode === "return"
@@ -779,7 +811,7 @@ function FullscreenEmptyState({
         <button
           type="button"
           onClick={onReset}
-          className="mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-medium uppercase tracking-[1.5px] rounded-md transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 cursor-pointer"
+          className="mt-1 inline-flex items-center px-3 py-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-medium uppercase tracking-[1.5px] rounded-full shadow-none transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 cursor-pointer"
         >
           Reset filters
         </button>
@@ -928,6 +960,7 @@ export function pointToServeDot(p: ServePointInput): ServeDot | null {
   );
   return {
     ...base,
+    id: p.id,
     result: classifyPointResult(p),
     setNumber: p.setNumber,
     pointScore: p.pointScore ?? null,
@@ -935,12 +968,15 @@ export function pointToServeDot(p: ServePointInput): ServeDot | null {
   };
 }
 
-function pointToReturnCourtDots(p: ServePointInput): CourtDot[] {
+function pointToReturnCourtDots(p: ServePointInput, colorMode: ColorMode = "result"): CourtDot[] {
   if (p.secondShotLandingX == null || p.secondShotLandingY == null) return [];
 
   const isFirstServe = isFirstServePoint(p);
   const { stroke, outcome } = classifyReturnDot(p);
-  const color = RETURN_OUTCOME_COLORS[outcome];
+  const color =
+    colorMode === "serveType"
+      ? (isReturnOnFirstServe(p) ? FIRST_SERVE_COLOR : SECOND_SERVE_COLOR)
+      : RETURN_OUTCOME_COLORS[outcome];
   const shape: "circle" | "triangle" = stroke === "backhand" ? "triangle" : "circle";
 
   const meta: DotMeta = {
@@ -961,7 +997,11 @@ function pointToReturnCourtDots(p: ServePointInput): CourtDot[] {
     : landingRaw;
 
   const farH = FULL_SVG_NET_Y - FULL_SVG_FAR_BASELINE;
-  const landingCx = CENTER_X + (landing.lx / REAL_HALF_DOUBLES) * (COURT_W / 2);
+  // Mirror world-x onto screen-x (note the leading minus) so the court reads from
+  // BEHIND the returner: a right-hander's forehand contact lands on the right,
+  // matching the serve view's behind-the-server angle. Contact mirrors identically
+  // below, keeping each landing/contact pair's trajectory consistent.
+  const landingCx = CENTER_X - (landing.lx / REAL_HALF_DOUBLES) * (COURT_W / 2);
   const landingCy = FULL_SVG_FAR_BASELINE + (landing.ly / REAL_NET_Y) * farH;
   const landingDot: CourtDot = {
     cx: Math.max(4, Math.min(COURT_W - 4, landingCx)),
@@ -984,7 +1024,7 @@ function pointToReturnCourtDots(p: ServePointInput): CourtDot[] {
     : { lx: p.secondShotContactX, ly: p.secondShotContactY };
   const nearH = FULL_SVG_NEAR_BASELINE - FULL_SVG_NET_Y;
   const nearSpanY = REAL_COURT_LENGTH - REAL_NET_Y;
-  const contactCx = CENTER_X + (contactNorm.lx / REAL_HALF_DOUBLES) * (COURT_W / 2);
+  const contactCx = CENTER_X - (contactNorm.lx / REAL_HALF_DOUBLES) * (COURT_W / 2);
   const contactCy =
     FULL_SVG_NET_Y + ((contactNorm.ly - REAL_NET_Y) / nearSpanY) * nearH;
   // Clamp contact to the full canvas including the extended bottom padding,
@@ -1056,7 +1096,9 @@ function ServePlacementFullscreen({
 
   const legend =
     vizType === "return"
-      ? RETURN_LEGEND
+      ? colorMode === "serveType"
+        ? RETURN_SERVE_TYPE_LEGEND
+        : RETURN_LEGEND
       : colorMode === "serveType"
         ? SERVE_TYPE_LEGEND
         : RESULT_LEGEND;
@@ -1134,11 +1176,15 @@ function ServePlacementFullscreen({
     const out: CourtDot[] = [];
     for (const p of filtered) {
       const { stroke, outcome } = classifyReturnDot(p);
-      if (hiddenKeys.has(returnLegendKey(stroke, outcome))) continue;
-      for (const d of pointToReturnCourtDots(p)) out.push(d);
+      const key =
+        colorMode === "serveType"
+          ? (isReturnOnFirstServe(p) ? "first" : "second")
+          : returnLegendKey(stroke, outcome);
+      if (hiddenKeys.has(key)) continue;
+      for (const d of pointToReturnCourtDots(p, colorMode)) out.push(d);
     }
     return out;
-  }, [filtered, vizType, hiddenKeys]);
+  }, [filtered, vizType, hiddenKeys, colorMode]);
   // Dots we pass to FullCourtSVG — meta stripped so the built-in shadcn tooltip
   // stays silent. We render our own DotTooltipBody overlaid instead.
   const returnDotsForSVG = useMemo(
@@ -1192,7 +1238,10 @@ function ServePlacementFullscreen({
     if (vizType === "return") {
       for (const p of filtered) {
         const { stroke, outcome } = classifyReturnDot(p);
-        const k = returnLegendKey(stroke, outcome);
+        const k =
+          colorMode === "serveType"
+            ? (isReturnOnFirstServe(p) ? "first" : "second")
+            : returnLegendKey(stroke, outcome);
         counts[k] = (counts[k] ?? 0) + 1;
       }
     } else {
@@ -1245,13 +1294,13 @@ function ServePlacementFullscreen({
         {/* Header */}
         <div className="flex items-center justify-between px-5 h-14 shrink-0 border-b border-[#F3F3F3]">
           <div className="flex items-baseline gap-3">
-            <h2 className="text-[14px] font-medium text-[#0D0D0D] tracking-[-0.1px]">
+            <h2 className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
               Serve Placement
             </h2>
-            <span className="text-[12px] font-normal text-[#767676]">
+            <span className="text-[10px] font-normal text-[#AAAAAA] uppercase tracking-[1px]">
               {contextLabel}
             </span>
-            <span className="text-[13px] font-medium text-[#0D0D0D] tabular-nums">
+            <span className="text-[10px] font-medium text-[#525252] uppercase tracking-[1px] tabular-nums">
               <motion.span
                 key={plottedCount}
                 initial={prefersReduced ? undefined : { opacity: 0.4, y: -2 }}
@@ -1272,16 +1321,16 @@ function ServePlacementFullscreen({
               onClick={() => setShortcutsOpen((v) => !v)}
               aria-expanded={shortcutsOpen}
               aria-label="Show keyboard shortcuts"
-              className="cursor-pointer p-1.5 rounded-lg hover:bg-[#F5F5F5] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+              className="cursor-pointer h-7 w-7 rounded-lg flex items-center justify-center text-[#888888] hover:text-[#0D0D0D] hover:bg-[#F5F5F5] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
             >
-              <HelpCircle className="h-4 w-4 text-[#767676]" strokeWidth={1.5} />
+              <HelpCircle className="size-3.5" strokeWidth={1.5} />
             </button>
             <button
               onClick={onClose}
-              className="cursor-pointer p-1.5 -mr-1.5 rounded-lg hover:bg-[#F5F5F5] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+              className="cursor-pointer h-7 w-7 rounded-lg flex items-center justify-center text-[#888888] hover:text-[#0D0D0D] hover:bg-[#F5F5F5] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
               aria-label="Close fullscreen view"
             >
-              <X className="h-4 w-4 text-[#767676]" strokeWidth={1.5} />
+              <X className="size-3.5" strokeWidth={1.5} />
             </button>
             {shortcutsOpen && (
               <>
@@ -1293,15 +1342,15 @@ function ServePlacementFullscreen({
                 <div
                   role="dialog"
                   aria-label="Keyboard shortcuts"
-                  className="absolute right-0 top-full mt-2 z-20 bg-white rounded-xl shadow-tooltip border border-[#F3F3F3] py-2.5 px-3 w-[200px] flex flex-col gap-1.5"
+                  className="absolute right-0 top-full mt-2 z-20 bg-white rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)] border border-[#E5E5EA] py-2.5 px-3 w-[200px] flex flex-col gap-1.5"
                 >
-                  <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[1.5px] mb-1">
+                  <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] mb-1">
                     Keyboard
                   </span>
                   <ShortcutRow keys={["1"]} action="Color by 1st / 2nd" />
                   <ShortcutRow keys={["2"]} action="Color by Win / Loss" />
                   <ShortcutRow keys={["R"]} action="Reset filters" />
-                  <ShortcutRow keys={["Esc"]} action="Close" />
+                  <ShortcutRow keys={["esc"]} action="Close" />
                 </div>
               </>
             )}
@@ -1309,7 +1358,7 @@ function ServePlacementFullscreen({
         </div>
 
         {/* Controls bar */}
-        <div className="flex items-center gap-4 px-5 py-3 shrink-0 border-b border-[#F3F3F3]">
+        <div className="flex items-center gap-4 px-5 py-4 shrink-0 border-b border-[#F3F3F3]">
           <div className="flex items-center rounded-full bg-[#F5F5F5] p-0.5">
             {(["serve", "return"] as const).map((tab) => (
               <button
@@ -1326,53 +1375,58 @@ function ServePlacementFullscreen({
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40",
                   vizType === tab
                     ? "bg-white text-[#0D0D0D] shadow-[0px_1px_3px_rgba(0,0,0,0.08)]"
-                    : "text-[#767676] hover:text-[#525252]",
+                    : "text-[#71717A] hover:text-[#525252]",
                 )}
               >
                 {tab === "serve" ? "Serve" : "Return"}
               </button>
             ))}
           </div>
+          <div className="w-px h-4 bg-[#E5E5EA]" />
+          <span className="text-[11px] font-normal text-[#71717A]">
+            Color by
+          </span>
+          <div className="flex items-center rounded-full bg-[#F5F5F5] p-0.5">
+            {([
+              { mode: "serveType" as ColorMode, label: "1st / 2nd" },
+              { mode: "result" as ColorMode, label: "Win / Loss" },
+            ]).map(({ mode, label }) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => handleColorModeChange(mode)}
+                aria-pressed={colorMode === mode}
+                className={cn(
+                  "rounded-full px-3.5 h-7 text-[11px] font-medium transition-all duration-200 cursor-pointer",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40",
+                  colorMode === mode
+                    ? "bg-white text-[#0D0D0D] shadow-[0px_1px_3px_rgba(0,0,0,0.08)]"
+                    : "text-[#71717A] hover:text-[#525252]",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           {vizType === "serve" && (
-            <>
-              <div className="w-px h-4 bg-[#E7E7E7]" />
-              <span className="text-[11px] font-normal text-[#767676]">
-                Color by
-              </span>
-              <div className="flex items-center rounded-full bg-[#F5F5F5] p-0.5">
-                {([
-                  { mode: "serveType" as ColorMode, label: "1st / 2nd" },
-                  { mode: "result" as ColorMode, label: "Win / Loss" },
-                ]).map(({ mode, label }) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => handleColorModeChange(mode)}
-                    aria-pressed={colorMode === mode}
-                    className={cn(
-                      "rounded-full px-3.5 h-7 text-[11px] font-medium transition-all duration-200 cursor-pointer",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40",
-                      colorMode === mode
-                        ? "bg-white text-[#0D0D0D] shadow-[0px_1px_3px_rgba(0,0,0,0.08)]"
-                        : "text-[#767676] hover:text-[#525252]",
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <span className="text-[11px] font-normal text-[#AAAAAA] ml-auto hidden sm:inline">
-                {colorMode === "serveType"
-                  ? "Zone labels show % of serves"
-                  : "Zone labels show win rate"}
-              </span>
-            </>
+            <span className="text-[11px] font-normal text-[#AAAAAA] ml-auto hidden sm:inline">
+              {colorMode === "serveType"
+                ? "Zone labels show % of serves"
+                : "Zone labels show win rate"}
+            </span>
           )}
         </div>
 
         {/* Court + filter rail */}
         <div className="flex-1 flex flex-col lg:flex-row min-h-0">
-          <div className="flex-1 bg-[#EFF4FF] flex items-center justify-center p-6 min-h-0">
+          <div
+            className={cn(
+              "flex-1 bg-[#EFF4FF] flex items-center justify-center min-h-0",
+              // The return court is tall and height-bound — give it minimal
+              // vertical padding so it scales up to fill the frame.
+              vizType === "return" ? "px-4 py-2" : "p-6",
+            )}
+          >
             {plottedCount === 0 ? (
               <FullscreenEmptyState
                 hasData={points.some((p) =>
@@ -1466,7 +1520,7 @@ function ServePlacementFullscreen({
                   key={section.label}
                   className={cn("px-5 py-4 flex flex-col gap-3", i > 0 && "border-t border-[#F3F3F3]")}
                 >
-                  <span className="text-[11px] font-medium text-[#888888]">
+                  <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
                     {section.label}
                   </span>
                   <div className="flex flex-col gap-3">
@@ -1538,8 +1592,8 @@ function ServePlacementFullscreen({
         </div>
 
         {/* Footer: legend */}
-        <div className="flex items-center justify-between px-5 h-11 shrink-0 border-t border-[#F3F3F3]">
-          <div className="flex gap-4 items-center flex-wrap">
+        <div className="flex items-center justify-between px-5 py-4 min-h-[60px] shrink-0">
+          <div className="flex gap-4 items-start flex-wrap">
             {legend.map(({ key, color, label, shape }) => {
               const hidden = hiddenKeys.has(key);
               const count = legendCounts[key] ?? 0;
@@ -1565,21 +1619,17 @@ function ServePlacementFullscreen({
                   >
                     {label}
                   </span>
-                  <span className="text-[10px] font-normal text-[#AAAAAA] tabular-nums">
-                    {count}
-                  </span>
                 </button>
               );
             })}
           </div>
           <div
-            className="hidden md:flex items-center gap-3 text-[11px] font-normal text-[#AAAAAA]"
+            className="hidden md:flex items-center text-[11px] font-normal text-[#AAAAAA]"
             aria-hidden
           >
-            <span>Hover zone for details</span>
-            <span className="text-[#E6EEFB]">·</span>
-            <KeyHint label="1 / 2" action="Mode" />
-            <KeyHint label="R" action="Reset" />
+            <span>
+              {vizType === "return" ? "Hover a point for details" : "Hover a zone for details"}
+            </span>
           </div>
         </div>
       </motion.div>
@@ -1593,27 +1643,22 @@ function ShortcutRow({ keys, action }: { keys: string[]; action: string }) {
     <div className="flex items-center justify-between gap-3">
       <span className="text-[11px] text-[#525252]">{action}</span>
       <span className="flex items-center gap-1">
-        {keys.map((k) => (
-          <kbd
-            key={k}
-            className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-sm bg-[#F5F5F5] text-[10px] font-medium text-[#525252] tabular-nums tracking-normal normal-case"
-          >
-            {k}
-          </kbd>
-        ))}
+        {keys.map((k) => {
+          const isWordKey = /^[a-z]+$/.test(k);
+          return (
+            <kbd
+              key={k}
+              className={cn(
+                "inline-block px-1 py-0.5 rounded text-[10px] font-medium leading-none text-[#AAAAAA] bg-[#F0F0F0]",
+                isWordKey && "[font-variant-caps:small-caps]",
+              )}
+            >
+              {k}
+            </kbd>
+          );
+        })}
       </span>
     </div>
-  );
-}
-
-function KeyHint({ label, action }: { label: string; action: string }) {
-  return (
-    <span className="flex items-center gap-1">
-      <kbd className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-sm bg-[#F5F5F5] text-[10px] font-medium text-[#525252] tabular-nums tracking-normal normal-case">
-        {label}
-      </kbd>
-      <span>{action}</span>
-    </span>
   );
 }
 

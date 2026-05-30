@@ -1,13 +1,14 @@
 "use client";
 
 import { useMemo } from "react";
-import { Info, Play } from "lucide-react";
+import { CirclePlay, Info } from "lucide-react";
 
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 
 type MomentType = "match-point" | "set-point" | "break-point" | "ace";
@@ -43,7 +44,14 @@ const RAIL_COLOR: Record<MomentType, string> = {
   "match-point": "bg-[#E51837]",
   "set-point": "bg-[#3B82F6]",
   "break-point": "bg-[#3B82F6]",
-  ace: "bg-[#AAAAAA]",
+  ace: "bg-[#CCCCCC]",
+};
+
+const TYPE_TEXT_COLOR: Record<MomentType, string> = {
+  "match-point": "text-[#E51837]",
+  "set-point": "text-[#3B82F6]",
+  "break-point": "text-[#3B82F6]",
+  ace: "text-[#525252]",
 };
 
 const MAX_VISIBLE = 24;
@@ -171,12 +179,12 @@ export function KeyMomentsCard({
           >
             <div className="w-[240px] py-4 px-4 flex flex-col gap-3">
               <span className="text-[10px] font-medium text-[var(--color-text-dim)] uppercase tracking-[2.5px] leading-[15px]">
-                Rail colors
+                Moment types
               </span>
-              <ul className="flex flex-col gap-1.5">
-                <RailLegendRow color="#E51837" label="Match point" />
-                <RailLegendRow color="#3B82F6" label="Set or break point" />
-                <RailLegendRow color="#AAAAAA" label="Ace" />
+              <ul className="flex flex-col gap-2">
+                <RailLegendRow color="#E51837" label="Match point" description="A point that could end the match" />
+                <RailLegendRow color="#3B82F6" label="Set or break point" description="High-leverage serve or return" />
+                <RailLegendRow color="#525252" label="Ace" description="Unreturned serve" />
               </ul>
             </div>
           </PopoverContent>
@@ -184,49 +192,59 @@ export function KeyMomentsCard({
       </div>
 
       {visible.length === 0 ? (
-        <div className="flex items-center justify-center py-6 px-5">
-          <p className="text-[12px] text-[#888888]">No key moments yet</p>
+        <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
+          <div className="bg-[#F5F5F5] p-4 rounded-full">
+            <CirclePlay className="h-8 w-8 text-[#888888]" strokeWidth={1.5} aria-hidden="true" />
+          </div>
+          <p className="text-[12px] text-[#888888] mt-3">No key moments yet</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-4 pb-5 flex-1 min-h-0 overflow-y-auto max-h-[640px]">
+        <div className="flex flex-col pb-2 flex-1 min-h-0 overflow-y-auto max-h-[640px]">
           {visible.map((m) => {
             const hasVideo = m.videoTime != null;
 
             const inner = (
               <>
                 <div
-                  className="flex flex-row items-center"
+                  className={cn(
+                    "w-[1.5px] self-stretch rounded-full shrink-0",
+                    RAIL_COLOR[m.type],
+                  )}
                   aria-hidden="true"
-                >
-                  <div
-                    className={`w-px self-stretch rounded-full ${RAIL_COLOR[m.type]}`}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                />
+                <div className="flex flex-col gap-1 flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-[11px] font-medium text-[var(--color-text-primary)] tabular-nums min-w-0">
-                      <span>{m.title}</span>
-                      <span className="mx-2 text-[#D4D4D4]">|</span>
-                      <span className="text-[#AAAAAA] uppercase tracking-[1px]">SET {m.setNumber}</span>
-                    </p>
+                    <div className="flex items-baseline gap-1.5 min-w-0">
+                      <span
+                        className={cn(
+                          "text-[10px] font-semibold uppercase tracking-[1.5px]",
+                          TYPE_TEXT_COLOR[m.type],
+                        )}
+                      >
+                        {m.title}
+                      </span>
+                      <span className="text-[10px] text-[#D4D4D4]" aria-hidden="true">
+                        ·
+                      </span>
+                      <span className="text-[10px] font-medium uppercase tracking-[1.5px] text-[#AAAAAA] tabular-nums">
+                        Set {m.setNumber}
+                      </span>
+                    </div>
                     {hasVideo && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[#AAAAAA] tabular-nums shrink-0 transition-colors duration-200 group-hover:text-[#3B82F6]">
-                        <Play
-                          className="h-2.5 w-2.5"
-                          strokeWidth={2}
-                          fill="currentColor"
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[#888888] tabular-nums shrink-0 transition-colors duration-200 group-hover:text-[#3B82F6]">
+                        <CirclePlay
+                          className="size-3"
+                          strokeWidth={1.75}
                           aria-hidden="true"
                         />
                         {formatVideoTime(m.videoTime!)}
                       </span>
                     )}
                   </div>
-                  <p className="text-[12px] font-light text-[#888888] leading-[1.5]">
+                  <p className="text-[12px] font-normal text-[#0D0D0D] leading-[1.5]">
                     {m.description}
                   </p>
                   <p className="text-[10px] font-normal text-[#AAAAAA] uppercase tracking-[1px] tabular-nums">
-                    Served by {m.serverName}
-                    <span className="mx-1.5 text-[#D4D4D4]">·</span>
                     {m.gameScore}
                     {m.pointScore ? (
                       <>
@@ -234,6 +252,8 @@ export function KeyMomentsCard({
                         {m.pointScore}
                       </>
                     ) : null}
+                    <span className="mx-1.5 text-[#D4D4D4]">·</span>
+                    Served by {m.serverName}
                   </p>
                 </div>
               </>
@@ -246,7 +266,7 @@ export function KeyMomentsCard({
                   type="button"
                   onClick={() => seekToVideoTime(m.videoTime!)}
                   aria-label={`Jump to ${m.title} at ${formatVideoTime(m.videoTime!)}`}
-                  className="group flex gap-3 items-stretch px-5 py-1.5 w-full text-left transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+                  className="group flex gap-3 items-stretch px-5 py-3 w-full text-left hover:bg-[#FAFAFA] active:scale-[0.998] transition-[background-color,transform] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-inset"
                 >
                   {inner}
                 </button>
@@ -256,7 +276,7 @@ export function KeyMomentsCard({
             return (
               <div
                 key={m.id}
-                className="flex gap-3 items-stretch px-5 py-1.5"
+                className="flex gap-3 items-stretch px-5 py-3"
               >
                 {inner}
               </div>
@@ -268,17 +288,35 @@ export function KeyMomentsCard({
   );
 }
 
-function RailLegendRow({ color, label }: { color: string; label: string }) {
+function RailLegendRow({
+  color,
+  label,
+  description,
+}: {
+  color: string;
+  label: string;
+  description?: string;
+}) {
   return (
-    <li className="flex items-center gap-2">
+    <li className="flex items-start gap-2">
       <span
         aria-hidden="true"
-        className="w-0.5 h-3.5 rounded-full shrink-0"
+        className="w-0.5 h-3.5 rounded-full shrink-0 mt-0.5"
         style={{ backgroundColor: color }}
       />
-      <span className="text-[11px] font-normal text-[var(--color-text-body)] leading-[16px]">
-        {label}
-      </span>
+      <div className="flex flex-col gap-0.5 min-w-0">
+        <span
+          className="text-[11px] font-medium leading-[16px]"
+          style={{ color }}
+        >
+          {label}
+        </span>
+        {description && (
+          <span className="text-[10px] font-normal text-[#888888] leading-[14px]">
+            {description}
+          </span>
+        )}
+      </div>
     </li>
   );
 }

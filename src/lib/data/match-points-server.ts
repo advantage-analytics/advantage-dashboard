@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { pickServeShot, pickReturnShot } from "@/lib/data/serve-return-shots";
 
 export interface MatchPoint {
   id: string;
@@ -182,23 +183,11 @@ export async function getMatchPointsFromSupabase(
   return points.map((point): MatchPoint => {
     const pointShots = shotsByPointId.get(point.id) ?? [];
 
-    // Pick shots by ROLE, not array position. Raw data includes Feed rows at
-    // shot_number=0 and can carry two serve rows sharing shot_number=1 (first
-    // serve fault + second serve in the same slot). Positional indexing
-    // silently mis-labels ~34% of points.
-    const serveRows = pointShots.filter(
-      (s) => s.shot_type === "First Serve" || s.shot_type === "Second Serve",
-    );
-    const firstShot: DbShot | undefined =
-      serveRows.find((s) => s.shot_type === "Second Serve") ??
-      serveRows.find((s) => s.shot_type === "First Serve") ??
-      pointShots[0];
-    const secondShot: DbShot | undefined = pointShots.find(
-      (s) =>
-        s.shot_type !== "First Serve" &&
-        s.shot_type !== "Second Serve" &&
-        s.shot_type !== "Feed",
-    );
+    // Pick shots by ROLE, not array position (see serve-return-shots.ts):
+    // raw data has Feed rows at shot_number=0 and can carry two serve rows
+    // sharing shot_number=1, so positional indexing mis-labels many points.
+    const firstShot: DbShot | undefined = pickServeShot(pointShots);
+    const secondShot: DbShot | undefined = pickReturnShot(pointShots);
 
     const lastShot = pointShots.length > 0 ? pointShots[pointShots.length - 1] : undefined;
     const resultType = point.result_type ?? "";

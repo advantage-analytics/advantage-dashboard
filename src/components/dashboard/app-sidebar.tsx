@@ -137,6 +137,7 @@ export function AppSidebar() {
             alt="Advantage"
             width={141}
             height={24}
+            style={{ width: 141, height: 24 }}
             priority
             className="absolute left-1/2 -translate-x-1/2 opacity-100 group-data-[collapsible=icon]:opacity-0 transition-opacity duration-800 delay-150 ease-in group-data-[collapsible=icon]:duration-0 group-data-[collapsible=icon]:delay-0 group-data-[collapsible=icon]:ease-out"
           />
@@ -146,6 +147,7 @@ export function AppSidebar() {
             alt="Advantage"
             width={30}
             height={21}
+            style={{ width: 30, height: 21 }}
             priority
             className="absolute left-1/2 -translate-x-1/2 opacity-0 group-data-[collapsible=icon]:opacity-100 transition-opacity duration-0 ease-out group-data-[collapsible=icon]:duration-800 group-data-[collapsible=icon]:delay-150 group-data-[collapsible=icon]:ease-in"
           />

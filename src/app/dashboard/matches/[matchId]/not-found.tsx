@@ -1,3 +1,5 @@
+"use client";
+
 import { SearchX } from "lucide-react";
 import { ErrorState } from "@/components/dashboard/matches/error-state";
 
