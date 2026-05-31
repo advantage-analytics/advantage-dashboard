@@ -73,10 +73,13 @@ async function openaiStream(
   messages: ChatMessage[]
 ): Promise<AsyncIterable<string>> {
   const { default: OpenAI } = await import("openai");
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const client = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+    baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+  });
 
   const stream = await client.chat.completions.create({
-    model: "gpt-4o",
+    model: "gemini-2.5-flash-lite",
     stream: true,
     messages: [
       { role: "system", content: systemPrompt },
