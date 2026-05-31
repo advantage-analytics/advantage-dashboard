@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import HomeContent from "./home-content";
 import KpiCards from "@/components/dashboard/home/kpi-cards";
 import { AiInsightCard } from "@/components/dashboard/ai-insight-card";
+import HomeAiInsight from "@/components/dashboard/home/home-ai-insight";
 
 import MatchHeatmap from "@/components/dashboard/home/match-heatmap";
 import ActivityFeed from "@/components/dashboard/home/activity-feed";
@@ -70,11 +71,7 @@ export default async function Home() {
           sidebar={hasMatches ? (
             <>
               <AiInsightCard storageKey="advantage-ai-insight-dismissed">
-                <p className="text-[12px] font-normal text-[var(--color-text-body)] leading-[19.8px]">
-                  AI-powered match insights are coming soon. Once connected,
-                  you&apos;ll get actionable analysis of your recent
-                  performance here.
-                </p>
+                <HomeAiInsight />
               </AiInsightCard>
               <MatchHeatmap
                 heatmap={heatmap}
