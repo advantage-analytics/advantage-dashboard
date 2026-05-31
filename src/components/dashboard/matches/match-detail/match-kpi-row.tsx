@@ -1,5 +1,8 @@
-import Link from "next/link";
+"use client";
+
+import { useReducedMotion } from "framer-motion";
 import type { PlayerStatistics } from "@/lib/data/types";
+import { statRowAnchorId } from "./match-statistics-card";
 
 interface MatchKpiRowProps {
   duration: string | undefined;
@@ -67,25 +70,25 @@ export function MatchKpiRow({
           label="Total Points"
           value={String(p1Pts + p2Pts)}
           split={{ p1: p1Pts, p2: p2Pts, p1Name, p2Name }}
-          href="#match-statistics"
+          statLabel="Total Points Won"
         />
         <KpiCell
           label="Aces"
           value={String(p1Aces + p2Aces)}
           split={{ p1: p1Aces, p2: p2Aces, p1Name, p2Name }}
-          href="#match-statistics"
+          statLabel="Aces"
         />
         <KpiCell
           label="Winners"
           value={String(p1Win + p2Win)}
           split={{ p1: p1Win, p2: p2Win, p1Name, p2Name }}
-          href="#match-statistics"
+          statLabel="Winners"
         />
         <KpiCell
           label="Unforced Errors"
           value={String(p1Ue + p2Ue)}
           split={{ p1: p1Ue, p2: p2Ue, p1Name, p2Name }}
-          href="#match-statistics"
+          statLabel="Unforced Errors"
         />
       </div>
     </section>
@@ -96,10 +99,29 @@ interface KpiCellProps {
   label: string;
   value: string;
   split?: { p1: number; p2: number; p1Name: string; p2Name: string };
-  href?: string;
+  /** Label of the statistics row this tile links to (see match-statistics-card). */
+  statLabel?: string;
 }
 
-function KpiCell({ label, value, split, href }: KpiCellProps) {
+/**
+ * Smooth-scrolls the matching statistics row into the viewport center and
+ * flashes it so the user can see which stat the tile drilled into. Returns
+ * false (letting the native anchor jump run) if the row isn't in the DOM.
+ */
+function scrollToStatRow(anchorId: string, reduceMotion: boolean): boolean {
+  const el = document.getElementById(anchorId);
+  if (!el) return false;
+  el.scrollIntoView({
+    behavior: reduceMotion ? "auto" : "smooth",
+    block: "center",
+  });
+  el.setAttribute("data-stat-flash", "true");
+  window.setTimeout(() => el.removeAttribute("data-stat-flash"), 1100);
+  return true;
+}
+
+function KpiCell({ label, value, split, statLabel }: KpiCellProps) {
+  const reduceMotion = useReducedMotion();
   const inner = (
     <>
       <p className="text-[9px] font-medium leading-[13.5px] tracking-[2.5px] text-[var(--color-text-dim)] uppercase whitespace-nowrap">
@@ -114,14 +136,21 @@ function KpiCell({ label, value, split, href }: KpiCellProps) {
 
   const baseClass = "flex-1 min-w-0 flex flex-col gap-3 px-5 py-5";
 
-  if (href) {
+  if (statLabel) {
+    const anchorId = statRowAnchorId(statLabel);
     return (
-      <Link
-        href={href}
+      <a
+        href={`#${anchorId}`}
+        onClick={(e) => {
+          if (scrollToStatRow(anchorId, Boolean(reduceMotion))) {
+            e.preventDefault();
+            window.history.replaceState(null, "", `#${anchorId}`);
+          }
+        }}
         className={`${baseClass} cursor-pointer hover:bg-[var(--color-surface-muted)] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] focus-visible:ring-inset`}
       >
         {inner}
-      </Link>
+      </a>
     );
   }
 

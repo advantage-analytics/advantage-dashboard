@@ -3,7 +3,7 @@ import Link from "next/link";
 import { HelpToc } from "./help-toc";
 import { Kbd } from "@/components/ui/kbd";
 
-const SUPPORT_EMAIL = "support@advantageanalytics.app";
+const SUPPORT_EMAIL = "team@advantage-analytics.com";
 const SWINGVISION_TROUBLESHOOTING_URL =
   "https://support.swingvision.com/hc/en-us/articles/360058475731";
 
@@ -38,7 +38,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: ["/"], action: "Focus search from anywhere outside an input" },
       { keys: ["⌘", "B"], action: "Toggle the sidebar" },
       { keys: ["⌘", "U"], action: "Open the upload-match modal" },
-      { keys: ["Esc"], action: "Close the active modal, dropdown, or palette" },
+      { keys: ["esc"], action: "Close the active modal, dropdown, or palette" },
       {
         keys: ["←"],
         action: "Jump to the previous match",
@@ -517,7 +517,7 @@ export default function HelpCenterPage() {
                 .
               </p>
               <p className="text-[11px] text-[var(--color-ink-500)] leading-[1.5]">
-                By CJ Gimena, Founder
+                By Clajerson Gimena, Founder
               </p>
             </footer>
           </article>

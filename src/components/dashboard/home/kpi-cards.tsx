@@ -119,7 +119,8 @@ export default function KpiCards({ cards, matchCount }: KpiCardsProps) {
             description={card.description}
             index={index}
             skipAnimation={skipAnimation}
-            href={`/dashboard/statistics?focus=${card.key}`}
+            detail={card.points}
+            format={card.format}
           />
         ))}
       </KpiTileStrip>
