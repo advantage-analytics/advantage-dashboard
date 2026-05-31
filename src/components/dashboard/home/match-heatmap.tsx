@@ -282,8 +282,8 @@ export default function MatchHeatmap({
                   key={i}
                   className={`w-5 h-5 rounded-[3px] flex items-center justify-center text-[9px] font-semibold ${
                     result === "W"
-                      ? "bg-[rgba(115,230,104,0.2)] text-[#3D8B38]"
-                      : "bg-[rgba(229,24,55,0.2)] text-[#B81430]"
+                      ? "bg-[rgba(93,185,85,0.2)] text-[#5DB955]"
+                      : "bg-[rgba(229,24,55,0.2)] text-[#E51837]"
                   }`}
                 >
                   {result}

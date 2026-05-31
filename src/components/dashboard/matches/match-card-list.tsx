@@ -53,11 +53,11 @@ export function MatchCardList({ match, isNew }: MatchCardListProps): React.JSX.E
         <span
           className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-[10px] font-medium ${
             isWin
-              ? "bg-[rgba(115,230,104,0.15)] text-[#5DB955]"
+              ? "bg-[rgba(93,185,85,0.15)] text-[#5DB955]"
               : "bg-[rgba(229,24,55,0.15)] text-[#E51837]"
           }`}
         >
-          {isWin ? "Won" : "Loss"}
+          {isWin ? "Won" : "Lost"}
         </span>
       </div>
 
