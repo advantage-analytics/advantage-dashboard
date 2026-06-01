@@ -37,6 +37,17 @@ const NEUTRAL_COLOR = "var(--color-text-secondary)";
 
 const EASE_CURVE: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
 
+/**
+ * Stable anchor id for a stat row, derived from its label. Shared with the
+ * KPI row (match-kpi-row.tsx) so a KPI tile can deep-scroll to its stat.
+ */
+export function statRowAnchorId(label: string): string {
+  return `stat-${label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")}`;
+}
+
 const STAT_DESCRIPTIONS: Record<string, string> = {
   "aces": "Serves the returner doesn't touch.",
   "double faults": "Two missed serves on the same point.",
@@ -196,7 +207,8 @@ export function MatchStatisticsCard({
                 return (
                   <motion.li
                     key={row.label}
-                    className="flex items-center gap-3 sm:gap-4 -mx-2 px-2 py-1 rounded-md transition-colors duration-150 hover:bg-[var(--color-surface-muted)]"
+                    id={statRowAnchorId(row.label)}
+                    className="scroll-mt-24 flex items-center gap-3 sm:gap-4 -mx-2 px-2 py-1 rounded-md transition-colors duration-150 hover:bg-[var(--color-surface-muted)] data-[stat-flash=true]:bg-[var(--color-blue-tint-12)]"
                     initial={prefersReduced ? false : { opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3, delay: rowDelay, ease: EASE_CURVE }}

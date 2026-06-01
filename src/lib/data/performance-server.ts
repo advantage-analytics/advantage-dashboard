@@ -27,6 +27,10 @@ export interface KpiCardData {
   change: number;
   changeLabel: string;
   sparkline: number[];
+  /** Per-point metadata aligned index-for-index with `sparkline` (oldest → newest). */
+  points?: { value: number; date: string; opponent: string }[];
+  /** Value formatting hint for charts/tooltips. */
+  format?: KpiFormat;
   description?: string;
   category: KpiCategory;
   lowerIsBetter?: boolean;
@@ -364,7 +368,7 @@ function calculateHeatmap(matches: DbMatch[], userId: string): HeatmapDay[] {
   return result;
 }
 
-type KpiFormat = "percent" | "count" | "decimal";
+export type KpiFormat = "percent" | "count" | "decimal";
 
 interface KpiSpec {
   key: string;
@@ -513,7 +517,8 @@ function formatKpiValue(value: number, format: KpiFormat): string {
 function calculateKpiCards(
   stats: DbMatchStats[],
   matchPlayerMap: Map<string, boolean>,
-  orderedMatchIds: string[]
+  orderedMatchIds: string[],
+  matchMetaMap: Map<string, { date: string; opponent: string }>
 ): KpiCardData[] {
   const statByMatch = new Map<string, DbMatchStats>();
   for (const stat of stats) {
@@ -523,10 +528,15 @@ function calculateKpiCards(
     statByMatch.set(stat.match_id, stat);
   }
 
+  // Keep matchIds parallel to orderedStats so per-point metadata stays aligned.
   const orderedStats: DbMatchStats[] = [];
+  const orderedIds: string[] = [];
   for (const matchId of orderedMatchIds) {
     const s = statByMatch.get(matchId);
-    if (s) orderedStats.push(s);
+    if (s) {
+      orderedStats.push(s);
+      orderedIds.push(matchId);
+    }
   }
 
   // Emit a card for every spec even when stats haven't been computed yet
@@ -536,6 +546,18 @@ function calculateKpiCards(
     const values = orderedStats.map(spec.pick);
     const hasData = values.length > 0;
     const sparkline = values.slice(0, 8).reverse();
+    // Same slice+reverse window as `sparkline` so points[k].value === sparkline[k].
+    const points = values
+      .slice(0, 8)
+      .map((value, i) => {
+        const meta = matchMetaMap.get(orderedIds[i]);
+        return {
+          value,
+          date: meta?.date ?? "",
+          opponent: meta?.opponent ?? "Opponent",
+        };
+      })
+      .reverse();
     const change =
       values.length >= 2
         ? Math.round((values[0] - values[1]) * 10) / 10
@@ -547,6 +569,8 @@ function calculateKpiCards(
       change,
       changeLabel: "last 30 days",
       sparkline,
+      points,
+      format: spec.format,
       description: spec.description,
       category: spec.category,
       lowerIsBetter: spec.lowerIsBetter,
@@ -721,8 +745,14 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
 
   const matchIds = matches.map((m) => m.id);
   const matchPlayerMap = new Map<string, boolean>();
+  const matchMetaMap = new Map<string, { date: string; opponent: string }>();
   for (const m of matches) {
-    matchPlayerMap.set(m.id, m.player1_id === user.id);
+    const isP1 = m.player1_id === user.id;
+    matchPlayerMap.set(m.id, isP1);
+    matchMetaMap.set(m.id, {
+      date: m.date,
+      opponent: (isP1 ? m.player2_name : m.player1_name) ?? "Opponent",
+    });
   }
 
   const { data: stats } = await supabase
@@ -754,7 +784,12 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
       { label: "Under Pressure Rating", value: ratings.pressure, barColor: "#666666" },
     ],
     recentPerformance: recentPerf,
-    kpiCards: calculateKpiCards(typedStats, matchPlayerMap, orderedMatchIds),
+    kpiCards: calculateKpiCards(
+      typedStats,
+      matchPlayerMap,
+      orderedMatchIds,
+      matchMetaMap
+    ),
     winRate: calculateWinRateSparkline(typedMatches, user.id),
     form: calculateForm(typedMatches, user.id, 5),
     matchCount: typedMatches.length,

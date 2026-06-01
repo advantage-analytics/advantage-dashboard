@@ -1,13 +1,26 @@
 "use client";
 
-import { useId, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   Tooltip,
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+} from "@/components/ui/popover";
+import type { KpiFormat } from "@/lib/data/performance-server";
+
+// Lazy-loaded so Recharts is only pulled in when a tile actually renders a
+// detail popover (home KPI strip) — keeps the shared tile light elsewhere.
+const KpiDetailChart = dynamic(() => import("./kpi-detail-chart"), {
+  ssr: false,
+});
 
 const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
@@ -141,6 +154,13 @@ export interface KpiTileProps {
   subtext?: string;
   /** When provided, the tile becomes a link to this href with hover/focus affordances. */
   href?: string;
+  /**
+   * Per-match series for the hover-preview chart. When present alongside `href`,
+   * hovering the tile reveals a detailed graph popover (click still navigates).
+   */
+  detail?: { value: number; date: string; opponent: string }[];
+  /** Value formatting hint passed to the detail chart's tooltip/axis. */
+  format?: KpiFormat;
 }
 
 const MotionLink = motion.create(Link);
@@ -156,7 +176,31 @@ export function KpiTile({
   skipAnimation = false,
   subtext,
   href,
+  detail,
+  format,
 }: KpiTileProps) {
+  const hasDetail = !!detail && detail.length > 0;
+  const [detailOpen, setDetailOpen] = useState(false);
+  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (openTimer.current) clearTimeout(openTimer.current);
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    };
+  }, []);
+
+  const handleDetailEnter = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    // Short dwell so a quick pass over the tile/label doesn't pop the chart.
+    openTimer.current = setTimeout(() => setDetailOpen(true), 150);
+  };
+  const handleDetailLeave = () => {
+    if (openTimer.current) clearTimeout(openTimer.current);
+    closeTimer.current = setTimeout(() => setDetailOpen(false), 80);
+  };
+
   const isNeutral = trend?.change === 0;
   const isGood = trend
     ? trend.lowerIsBetter
@@ -183,7 +227,9 @@ export function KpiTile({
   const baseClass = "flex-1 flex flex-col gap-3 px-5 py-5 min-w-0";
   const linkClass = href
     ? "cursor-pointer hover:bg-[#FAFAFA] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] focus-visible:ring-inset"
-    : "";
+    : hasDetail
+      ? "hover:bg-[#FAFAFA] transition-colors duration-200"
+      : "";
 
   const content = (
     <>
@@ -249,18 +295,46 @@ export function KpiTile({
     </>
   );
 
-  if (href) {
-    return (
-      <MotionLink href={href} {...sharedMotion} className={`${baseClass} ${linkClass}`}>
-        {content}
-      </MotionLink>
-    );
-  }
+  const hoverHandlers = hasDetail
+    ? { onMouseEnter: handleDetailEnter, onMouseLeave: handleDetailLeave }
+    : {};
 
-  return (
-    <motion.div {...sharedMotion} className={baseClass}>
+  const tileEl = href ? (
+    <MotionLink
+      href={href}
+      {...sharedMotion}
+      className={`${baseClass} ${linkClass}`}
+      {...hoverHandlers}
+    >
+      {content}
+    </MotionLink>
+  ) : (
+    <motion.div
+      {...sharedMotion}
+      className={`${baseClass} ${linkClass}`}
+      {...hoverHandlers}
+    >
       {content}
     </motion.div>
+  );
+
+  if (!hasDetail) return tileEl;
+
+  return (
+    <Popover open={detailOpen} onOpenChange={setDetailOpen}>
+      <PopoverAnchor asChild>{tileEl}</PopoverAnchor>
+      <PopoverContent
+        side="top"
+        align="center"
+        sideOffset={8}
+        className="w-auto"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onMouseEnter={handleDetailEnter}
+        onMouseLeave={handleDetailLeave}
+      >
+        <KpiDetailChart label={label} points={detail} format={format} />
+      </PopoverContent>
+    </Popover>
   );
 }
 

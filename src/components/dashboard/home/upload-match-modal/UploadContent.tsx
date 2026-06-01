@@ -184,7 +184,7 @@ function UploadContentImpl({
                     </span>
                     {selectedProvider === "swing-vision" && (
                       <a
-                        href="https://swingvision.com/help/exporting-data"
+                        href="/dashboard/help#upload"
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center rounded-[6px] bg-white border border-[#F3F3F3] px-2 py-1 text-[10px] font-medium text-[#3B82F6] hover:text-[#2563EB] hover:border-[#3B82F6]/30 transition-colors duration-200"
