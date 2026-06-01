@@ -80,11 +80,11 @@ function formatVideoTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-function seekToVideoTime(time: number) {
+function showOnMomentumTracker(pointId: string) {
   window.dispatchEvent(
-    new CustomEvent("match:video-seek", { detail: { time } }),
+    new CustomEvent("match:momentum-select", { detail: { pointId } }),
   );
-  const target = document.getElementById("match-video");
+  const target = document.getElementById("match-performance");
   if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -163,7 +163,7 @@ export function KeyMomentsCard({
               type="button"
               aria-label="How to read these moments"
               aria-haspopup="dialog"
-              className="relative inline-flex items-center justify-center size-5 -m-1 text-[var(--color-text-dim)] hover:text-[var(--color-text-secondary)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-full"
+              className="relative inline-flex items-center justify-center size-5 -m-1 text-[var(--color-text-dim)] hover:text-[#525252] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-full"
             >
               <Info className="size-3" strokeWidth={1.75} aria-hidden="true" />
             </button>
@@ -192,14 +192,14 @@ export function KeyMomentsCard({
       </div>
 
       {visible.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
+        <div className="flex flex-1 min-h-0 flex-col items-center justify-center py-12 px-6 text-center">
           <div className="bg-[#F5F5F5] p-4 rounded-full">
             <CirclePlay className="h-8 w-8 text-[#888888]" strokeWidth={1.5} aria-hidden="true" />
           </div>
           <p className="text-[12px] text-[#888888] mt-3">No key moments yet</p>
         </div>
       ) : (
-        <div className="flex flex-col pb-2 flex-1 min-h-0 overflow-y-auto max-h-[640px]">
+        <div className="flex flex-col pb-2 flex-1 min-h-0 overflow-y-auto max-h-[480px]">
           {visible.map((m) => {
             const hasVideo = m.videoTime != null;
 
@@ -259,27 +259,16 @@ export function KeyMomentsCard({
               </>
             );
 
-            if (hasVideo) {
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => seekToVideoTime(m.videoTime!)}
-                  aria-label={`Jump to ${m.title} at ${formatVideoTime(m.videoTime!)}`}
-                  className="group flex gap-3 items-stretch px-5 py-3 w-full text-left hover:bg-[#FAFAFA] active:scale-[0.998] transition-[background-color,transform] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-inset"
-                >
-                  {inner}
-                </button>
-              );
-            }
-
             return (
-              <div
+              <button
                 key={m.id}
-                className="flex gap-3 items-stretch px-5 py-3"
+                type="button"
+                onClick={() => showOnMomentumTracker(m.id)}
+                aria-label={`Show ${m.title} on the momentum tracker`}
+                className="group flex gap-3 items-stretch px-5 py-3 w-full text-left hover:bg-[#FAFAFA] active:scale-[0.998] transition-[background-color,transform] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-inset"
               >
                 {inner}
-              </div>
+              </button>
             );
           })}
         </div>
