@@ -7,7 +7,10 @@ import HomeAiInsight from "@/components/dashboard/home/home-ai-insight";
 import MatchHeatmap from "@/components/dashboard/home/match-heatmap";
 import ActivityFeed from "@/components/dashboard/home/activity-feed";
 import { createClient } from "@/lib/supabase/server";
-import { getOverallPerformance } from "@/lib/data/performance-server";
+import {
+  getOverallPerformance,
+  getTopKpiMovers,
+} from "@/lib/data/performance-server";
 import type { KpiCardData } from "@/lib/data/performance-server";
 
 export default async function Home() {
@@ -55,6 +58,15 @@ export default async function Home() {
     },
   ];
 
+  // Deterministic evidence chips for the AI insight — the same top movers the
+  // insight prompt narrates, sourced from real computed stats (never LLM text).
+  const insightStats = getTopKpiMovers(kpiCards, 2);
+
+  // Signature of the data the insight is built from. When a new match is uploaded
+  // (and processed), these change, busting the client-side insight cache so the
+  // card regenerates instead of showing the stale session-cached text.
+  const insightSignature = `${matchCount}:${winRate.value}:${form.join("")}`;
+
   // Compute greeting server-side to avoid hydration flash
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -71,7 +83,10 @@ export default async function Home() {
           sidebar={hasMatches ? (
             <>
               <AiInsightCard storageKey="advantage-ai-insight-dismissed">
-                <HomeAiInsight />
+                <HomeAiInsight
+                  supportingStats={insightStats}
+                  cacheSignature={insightSignature}
+                />
               </AiInsightCard>
               <MatchHeatmap
                 heatmap={heatmap}

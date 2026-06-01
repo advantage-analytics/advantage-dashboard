@@ -16,6 +16,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/match-statistics-card";
 import { ServePlacementCard } from "@/components/dashboard/matches/match-detail/serve-placement-card";
 import { AiInsightCard } from "@/components/dashboard/ai-insight-card";
+import { InsightStatChip } from "@/components/dashboard/shared/insight-stat-chip";
 import { PerformanceProfileCard } from "@/components/dashboard/matches/match-detail/performance-profile-card";
 import { KeyMomentsCard } from "@/components/dashboard/matches/match-detail/key-moments-card";
 import { SectionsStagger } from "@/components/dashboard/matches/match-detail/sections-stagger";
@@ -106,16 +107,50 @@ export default async function MatchDetailPage({ params }: PageProps) {
 
   if (!data) notFound();
 
-  const { match, statsResult, points, keyMoments, insights } = data;
+  const { match, statsResult, points, keyMoments, insights, playerAverages } =
+    data;
 
   const userInsights = match.isUserPlayer1
     ? insights?.player1
     : insights?.player2;
+  // Synthesized prose insight (home-quality), generated once at upload. Falls back to
+  // the single top strength/weakness for matches processed before summaries existed.
+  const summary = userInsights?.summary?.trim() || null;
   const topInsight =
     userInsights?.weaknesses?.[0] ?? userInsights?.strengths?.[0] ?? null;
 
   const p1 = statsResult?.statistics?.player1Stats;
   const p2 = statsResult?.statistics?.player2Stats;
+
+  // Deterministic evidence chips — real computed match stats for the user, never the
+  // LLM-emitted insight `value` (which would reintroduce hallucinated numbers). Each
+  // carries a delta vs the player's career average (computed live, always fresh). The
+  // delta is only shown when the user is player1, matching how `playerAverages` is
+  // computed (over the user's player1_id matches).
+  const userStats = match.isUserPlayer1 ? p1 : p2;
+  const chipSpecs: { label: string; key: keyof PlayerStatistics; isPct: boolean }[] = [
+    { label: "First Serve In", key: "firstServeInPct", isPct: true },
+    { label: "Break Points Won", key: "breakpointsWonPct", isPct: true },
+    { label: "Winners", key: "winners", isPct: false },
+  ];
+  const insightChips = userStats
+    ? chipSpecs.map((spec) => {
+        const matchVal = Math.round(userStats[spec.key] as number);
+        const avgVal = playerAverages?.[spec.key];
+        const change =
+          match.isUserPlayer1 && typeof avgVal === "number" && avgVal > 0
+            ? matchVal - Math.round(avgVal)
+            : undefined;
+        return {
+          label: spec.label,
+          value: spec.isPct ? `${matchVal}%` : String(matchVal),
+          change,
+        };
+      })
+    : [];
+  const showAvgCaption = insightChips.some(
+    (c) => typeof c.change === "number" && c.change !== 0,
+  );
   const p1Name = statsResult?.player1Name ?? match.player1.name;
   const p2Name = statsResult?.player2Name ?? match.player2.name;
   const p1Short = shortName(p1Name, 14);
@@ -191,6 +226,9 @@ export default async function MatchDetailPage({ params }: PageProps) {
                 p2Name={p2Short}
               />
             )}
+            <div id="match-serve-placement" className="scroll-mt-6">
+              <ServePlacementCard />
+            </div>
           </main>
 
           <aside
@@ -200,20 +238,45 @@ export default async function MatchDetailPage({ params }: PageProps) {
             <AiInsightCard
               storageKey={`advantage-ai-insight-dismissed:${matchId}`}
             >
-              {topInsight ? (
-                <div className="flex flex-col gap-1.5">
-                  <p className="text-[12px] font-medium text-[var(--color-text-primary)] leading-[18px]">
-                    {topInsight.name}
-                  </p>
+              <div className="flex flex-col gap-3.5">
+                {summary ? (
                   <p className="text-[12px] font-normal text-[var(--color-text-body)] leading-[19.8px]">
-                    {topInsight.description}
+                    {summary}
                   </p>
-                </div>
-              ) : (
-                <p className="text-[12px] font-normal text-[var(--color-text-body)] leading-[19.8px]">
-                  Insights will appear here once this match is fully analyzed.
-                </p>
-              )}
+                ) : topInsight ? (
+                  <div className="flex flex-col gap-1.5">
+                    <p className="text-[12px] font-medium text-[var(--color-text-primary)] leading-[18px]">
+                      {topInsight.name}
+                    </p>
+                    <p className="text-[12px] font-normal text-[var(--color-text-body)] leading-[19.8px]">
+                      {topInsight.description}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-[12px] font-normal text-[var(--color-text-body)] leading-[19.8px]">
+                    Insights will appear here once this match is fully analyzed.
+                  </p>
+                )}
+                {insightChips.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    {showAvgCaption && (
+                      <span className="text-[9px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+                        vs your average
+                      </span>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {insightChips.map((chip) => (
+                        <InsightStatChip
+                          key={chip.label}
+                          label={chip.label}
+                          value={chip.value}
+                          change={chip.change}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </AiInsightCard>
             <PerformanceProfileCard
               data={radarData}
@@ -230,9 +293,6 @@ export default async function MatchDetailPage({ params }: PageProps) {
           </aside>
         </div>
 
-        <div id="match-serve-placement" className="mt-10 scroll-mt-6">
-          <ServePlacementCard />
-        </div>
         </SectionsStagger>
       </div>
     </div>

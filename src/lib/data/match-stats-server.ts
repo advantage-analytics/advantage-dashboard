@@ -85,13 +85,17 @@ interface TiebreakCounts {
 
 export async function getPlayerAverageStats(
   userId: string,
+  excludeMatchId?: string,
 ): Promise<Partial<PlayerStatistics> | null> {
   const supabase = await createClient();
 
-  const { data: matches } = await supabase
-    .from("matches")
-    .select("id")
-    .eq("player1_id", userId);
+  // Average over the player's OTHER matches. On a match-detail page we exclude the
+  // current match so the baseline is the player's typical level elsewhere — otherwise
+  // a 1-match player compares against themselves (every delta = 0) and a few-match
+  // player sees diluted deltas (the current match drags the average toward itself).
+  let query = supabase.from("matches").select("id").eq("player1_id", userId);
+  if (excludeMatchId) query = query.neq("id", excludeMatchId);
+  const { data: matches } = await query;
 
   if (!matches?.length) return null;
 

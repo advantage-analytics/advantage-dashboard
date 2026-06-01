@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getLLMStream } from "@/lib/llm/adapter";
 import {
   getOverallPerformance,
+  getTopKpiMovers,
   type OverallPerformanceData,
 } from "@/lib/data/performance-server";
 
@@ -23,11 +24,9 @@ function buildHomeInsightSystemPrompt(
     perf.form.length > 0 ? perf.form.join(" ") : "No recent results.";
 
   // Top KPI movers: largest absolute non-zero change, accounting for whether
-  // a lower value is better (e.g. double faults, unforced errors).
-  const movers = perf.kpiCards
-    .filter((k) => k.change !== 0 && k.value !== "—")
-    .sort((a, b) => Math.abs(b.change) - Math.abs(a.change))
-    .slice(0, 5)
+  // a lower value is better (e.g. double faults, unforced errors). Uses the same
+  // selection the home card renders as chips, so prose and evidence stay aligned.
+  const movers = getTopKpiMovers(perf.kpiCards, 5)
     .map((k) => {
       const improving = k.lowerIsBetter ? k.change < 0 : k.change > 0;
       return `  - ${k.label}: ${k.value} (${formatChange(k.change)} vs prior, ${

@@ -38,6 +38,22 @@ export interface PerformanceProfileDimension {
   previous: number;
 }
 
+/**
+ * Top KPI movers: the stats with the largest absolute non-zero change vs the prior
+ * period. Shared by the home-insight prompt builder (which narrates these) and the
+ * home AI-insight card (which renders them as deterministic evidence chips), so the
+ * prose and the chips always reflect the same underlying stats.
+ */
+export function getTopKpiMovers(
+  kpiCards: KpiCardData[],
+  n: number,
+): KpiCardData[] {
+  return kpiCards
+    .filter((k) => k.change !== 0 && k.value !== "—")
+    .sort((a, b) => Math.abs(b.change) - Math.abs(a.change))
+    .slice(0, n);
+}
+
 export interface HeatmapMatchSummary {
   id: string;
   opponent: string;
