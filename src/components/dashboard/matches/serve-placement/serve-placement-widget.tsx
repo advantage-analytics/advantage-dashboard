@@ -177,6 +177,7 @@ const SERVICE_Y = 155;
 const BASELINE_Y = 331;
 const CENTER_X = (SINGLES_LEFT + SINGLES_RIGHT) / 2;
 const BOX_HALF = (SINGLES_RIGHT - SINGLES_LEFT) / 2;
+const ALLEY_LABEL_X = (DOUBLES_LEFT + SINGLES_LEFT) / 2; // 60.8 — left doubles alley midpoint
 
 const ZONE_LINES_X = [
   SINGLES_LEFT + BOX_HALF / 3,
@@ -441,31 +442,73 @@ function HalfCourtWithZones({
                 </text>
                 <text
                   x={cx}
-                  y={BASELINE_Y - 20}
+                  y={BASELINE_Y - 25}
                   textAnchor="middle"
                   fill="#888888"
                   fontSize={10}
                   fontWeight={500}
                   fontFamily="Inter, sans-serif"
+                  style={{ fontVariantNumeric: "tabular-nums" }}
                 >
                   {colorMode === "result" ? zs.winPct : zs.pct}%
-                  {colorMode === "result" ? <tspan fill="#AAAAAA" fontSize={7}> WIN</tspan> : null}
                 </text>
                 <text
                   x={cx}
-                  y={BASELINE_Y - 10}
+                  y={BASELINE_Y - 9}
                   textAnchor="middle"
                   fill="#AAAAAA"
-                  fontSize={7}
+                  fontSize={6}
                   fontWeight={400}
                   fontFamily="Inter, sans-serif"
                   letterSpacing={0.5}
+                  style={{ fontVariantNumeric: "tabular-nums" }}
                 >
-                  n={zs.count}
+                  ({zs.count})
                 </text>
               </g>
             );
           })}
+
+        {stats && (
+          <g style={{ pointerEvents: "none" }} aria-hidden>
+            <text
+              x={ALLEY_LABEL_X}
+              y={SERVICE_Y - 10}
+              textAnchor="middle"
+              fill="#AAAAAA"
+              fontSize={7}
+              fontWeight={500}
+              fontFamily="Inter, sans-serif"
+              letterSpacing={1}
+            >
+              ZONE
+            </text>
+            <text
+              x={ALLEY_LABEL_X}
+              y={BASELINE_Y - 25}
+              textAnchor="middle"
+              fill="#AAAAAA"
+              fontSize={7}
+              fontWeight={500}
+              fontFamily="Inter, sans-serif"
+              letterSpacing={1}
+            >
+              {colorMode === "result" ? "WIN" : "IN"}
+            </text>
+            <text
+              x={ALLEY_LABEL_X}
+              y={BASELINE_Y - 9}
+              textAnchor="middle"
+              fill="#AAAAAA"
+              fontSize={7}
+              fontWeight={500}
+              fontFamily="Inter, sans-serif"
+              letterSpacing={1}
+            >
+              COUNT
+            </text>
+          </g>
+        )}
 
         {stats &&
           ZONES.map((z) => {
@@ -949,19 +992,45 @@ function filterPoints(
   });
 }
 
+// Keep serves landing within the service box plus a ~20cm line-call tolerance,
+// expressed in the dot's normalized [0,1] box coordinates. x spans the ~8.23m
+// singles width; y spans the service-box depth (REAL_NET_Y − REAL_SERVICE_Y, ~6.4m).
+const SERVE_LINE_TOL_M = 0.2;
+const SERVE_BOX_W_M = 8.23;
+const SERVE_BOX_D_M = REAL_NET_Y - REAL_SERVICE_Y;
+const SERVE_TOL_X = SERVE_LINE_TOL_M / SERVE_BOX_W_M;
+const SERVE_TOL_Y = SERVE_LINE_TOL_M / SERVE_BOX_D_M;
+
 export function pointToServeDot(p: ServePointInput): ServeDot | null {
   if (p.firstShotLandingX == null || p.firstShotLandingY == null) return null;
   const servedIn = p.firstShotResult === "In";
+  const result = classifyPointResult(p);
   const base = mapRealCoordsToServeDot(
     p.firstShotLandingX,
     p.firstShotLandingY,
     isFirstServePoint(p),
     servedIn,
   );
+
+  // Data-quality gate for serves NOT flagged "In" (these would otherwise plot
+  // outside the box). Keep double faults regardless — a DF's out/net 2nd serve
+  // is real and meaningful. For everything else (first-serve faults, and rows
+  // whose coords land outside the box without an out/net result), keep only when
+  // the landing is within the box plus a ~20cm line-call tolerance — so near-line
+  // serves (possible missed calls) stay, while clearly-out serves are dropped.
+  if (!servedIn && result !== "doubleFault") {
+    const inBoxWithTolerance =
+      base.x >= -SERVE_TOL_X &&
+      base.x <= 1 + SERVE_TOL_X &&
+      base.y >= -SERVE_TOL_Y &&
+      base.y <= 1 + SERVE_TOL_Y;
+    if (!inBoxWithTolerance) return null;
+  }
+
   return {
     ...base,
     id: p.id,
-    result: classifyPointResult(p),
+    result,
     setNumber: p.setNumber,
     pointScore: p.pointScore ?? null,
     gameScore: p.gameScore ?? null,
@@ -1027,6 +1096,12 @@ function pointToReturnCourtDots(p: ServePointInput, colorMode: ColorMode = "resu
   const contactCx = CENTER_X - (contactNorm.lx / REAL_HALF_DOUBLES) * (COURT_W / 2);
   const contactCy =
     FULL_SVG_NET_Y + ((contactNorm.ly - REAL_NET_Y) / nearSpanY) * nearH;
+  // A return is struck behind the net — a contact computed on/in front of the net
+  // (which would otherwise clamp onto the net line) is a tracking artifact, not a
+  // real contact. Drop the contact marker but keep the landing dot.
+  if (contactCy <= FULL_SVG_NET_Y + 4) {
+    return [landingDot];
+  }
   // Clamp contact to the full canvas including the extended bottom padding,
   // so positions wide of the singles lines or well behind the baseline still
   // render in-frame. Keep a margin from the net so a contact never visually
@@ -1454,6 +1529,7 @@ function ServePlacementFullscreen({
                     setPinnedReturnId((prev) => (prev === norm ? null : norm));
                   }}
                   onBackgroundClick={() => setPinnedReturnId(null)}
+                  halfLabels={{ top: "PLACEMENT", bottom: "CONTACT" }}
                 />
                 {hoveredReturnLandingDot && <ReturnDotTooltip dot={hoveredReturnLandingDot} />}
               </div>
@@ -1718,10 +1794,10 @@ export function ServePlacementWidget({
           onClick={() => setFullscreen(true)}
           disabled={!canExpand}
           className={cn(
-            "flex items-center gap-1.5 px-2.5 py-1.5 -mr-2 text-[10px] font-medium uppercase tracking-[2.5px] transition-colors duration-200 rounded-md",
+            "flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[2.5px] transition-colors duration-200 rounded-sm",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40",
             canExpand
-              ? "text-[#3B82F6] hover:text-[#2563EB] hover:bg-[#EBF2FD] cursor-pointer"
+              ? "text-[#3B82F6] hover:text-[#2563EB] cursor-pointer"
               : "text-[#CCCCCC] cursor-not-allowed",
           )}
           aria-label="Expand serve placement to fullscreen"

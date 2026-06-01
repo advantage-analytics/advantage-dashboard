@@ -558,7 +558,8 @@ export function FullCourtSVG({
   onDotHover,
   onDotClick,
   onBackgroundClick,
-}: CourtSVGProps) {
+  halfLabels,
+}: CourtSVGProps & { halfLabels?: { top: string; bottom: string } }) {
   const interactive: InteractiveProps | null =
     onDotHover && onDotClick && onBackgroundClick
       ? {
@@ -581,7 +582,11 @@ export function FullCourtSVG({
       className="w-full h-full"
       preserveAspectRatio="xMidYMid meet"
       role="img"
-      aria-label="Full court return placement diagram"
+      aria-label={
+        halfLabels
+          ? `Full court return diagram. Top half: ${halfLabels.top.toLowerCase()} (where returns landed). Bottom half: ${halfLabels.bottom.toLowerCase()} (where the returner struck the ball).`
+          : "Full court return placement diagram"
+      }
       onClick={interactive?.onBackgroundClick}
     >
       <CourtDefs interactive={!!interactive} />
@@ -616,6 +621,36 @@ export function FullCourtSVG({
 
       {/* Dots */}
       {renderDots(dotsWithExit, interactive, 3.75)}
+
+      {/* Half labels — clarify the two stacked halves (return mode) */}
+      {halfLabels && (
+        <g style={{ pointerEvents: "none" }} aria-hidden>
+          <text
+            x={CENTER_X}
+            y={NET_Y - 16}
+            textAnchor="middle"
+            fill="#525252"
+            fontSize={13}
+            fontWeight={500}
+            fontFamily="Inter, sans-serif"
+            letterSpacing={2.5}
+          >
+            {halfLabels.top}
+          </text>
+          <text
+            x={CENTER_X}
+            y={NET_Y + 29}
+            textAnchor="middle"
+            fill="#525252"
+            fontSize={13}
+            fontWeight={500}
+            fontFamily="Inter, sans-serif"
+            letterSpacing={2.5}
+          >
+            {halfLabels.bottom}
+          </text>
+        </g>
+      )}
     </svg>
   );
 }

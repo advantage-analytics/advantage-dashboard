@@ -65,9 +65,12 @@ export default function ServePlacementHome({ userId }: { userId: string }) {
       }
 
       setMatchCount(matches.length);
+      // Home aggregates serves across the last N matches (many opponents), so a
+      // single match's names would mislabel the filter. Use generic aggregate
+      // labels: the player2 bucket holds every opponent, not one person.
       setCtxData({
-        player1Name: matches[0].player1_name ?? "You",
-        player2Name: matches[0].player2_name ?? "Opponent",
+        player1Name: "You",
+        player2Name: "Opponents",
       });
       const matchIds = matches.map((m) => m.id);
 
