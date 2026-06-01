@@ -241,9 +241,9 @@ export default function ActivityFeed({ userId }: { userId: string }) {
         </div>
         {/* Mirror the loaded layout exactly (items-stretch, per-row padding,
             self-stretch rail) so nothing shifts when content swaps in. */}
-        <div className="flex flex-col gap-4 pb-5">
+        <div className="flex flex-col gap-1 px-5 pb-5">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="flex gap-3 items-stretch px-5 py-1.5">
+            <div key={i} className="flex gap-3 items-stretch py-2.5">
               <Skeleton className="w-px self-stretch shrink-0" />
               <div className="flex flex-col gap-1.5 flex-1">
                 <Skeleton className="h-3 w-full" />
@@ -299,7 +299,7 @@ export default function ActivityFeed({ userId }: { userId: string }) {
         </p>
       </div>
 
-      <div className="flex flex-col gap-4 pb-5">
+      <div className="flex flex-col gap-1 px-5 pb-5">
         {items.map((item) => {
           const rail = (
             <span
@@ -325,7 +325,7 @@ export default function ActivityFeed({ userId }: { userId: string }) {
                 key={item.id}
                 href={item.href}
                 aria-label={`${item.label}${item.detail ? ` ${item.detail}` : ""}, ${item.timeAgo}`}
-                className="group flex gap-3 items-stretch px-5 py-1.5 hover:bg-[#FAFAFA] active:scale-[0.998] transition-[background-color,transform] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-inset"
+                className="group flex gap-3 items-stretch rounded-lg px-2 -mx-2 py-2.5 transition-[background-color,transform] duration-200 ease-out hover:bg-[#FAFAFA] active:scale-[0.998] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1"
               >
                 {rail}
                 {body}
@@ -338,7 +338,7 @@ export default function ActivityFeed({ userId }: { userId: string }) {
           }
 
           return (
-            <div key={item.id} className="flex gap-3 items-stretch px-5 py-1.5">
+            <div key={item.id} className="flex gap-3 items-stretch py-2.5">
               {rail}
               {body}
             </div>
