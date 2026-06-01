@@ -120,6 +120,10 @@ export function buildMatchData(
       play_on_lets: formData.playOnLets
     },
     result: formData.result,
+    // Store the picked local date as the leading YYYY-MM-DD so it survives the
+    // timestamptz round-trip (PostgREST returns timestamptz normalized to UTC, and the
+    // heatmap buckets by date.slice(0,10)). getCurrentDate() already defaults this to
+    // the user's LOCAL day, so the blue square lands on the day they actually played.
     date: formData.time
       ? `${formData.date}T${formData.time}:00`
       : formData.date,
