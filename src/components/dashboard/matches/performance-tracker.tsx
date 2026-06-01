@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import { shortName } from "@/lib/data/match-utils";
@@ -150,6 +150,23 @@ export function MomentumChartCompact({
     },
     [data, selectedIndex],
   );
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ pointId?: string }>).detail;
+      if (!detail?.pointId) return;
+      const idx = points.findIndex((p) => p.id === detail.pointId);
+      if (idx >= 0) {
+        // Keep the highlight sticky (as with keyboard nav) so the redirected
+        // point stays selected until the user takes over or presses Escape.
+        setIsKeyboardNav(true);
+        setSelectedIndex(idx);
+      }
+    };
+    window.addEventListener("match:momentum-select", handler as EventListener);
+    return () =>
+      window.removeEventListener("match:momentum-select", handler as EventListener);
+  }, [points]);
 
   if (data.length < 2) return null;
 

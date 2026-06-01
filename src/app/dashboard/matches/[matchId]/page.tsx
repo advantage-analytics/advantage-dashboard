@@ -288,7 +288,6 @@ export default async function MatchDetailPage({ params }: PageProps) {
               narrativeMoments={keyMoments}
               p1Name={p1Short}
               p2Name={p2Short}
-              className="flex-1"
             />
           </aside>
         </div>
