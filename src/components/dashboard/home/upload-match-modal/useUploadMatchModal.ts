@@ -91,10 +91,15 @@ export interface UseUploadMatchModalReturn {
   handleCreateMatch: () => Promise<void>;
 }
 
-// Helper to get current date in YYYY-MM-DD format
+// Helper to get current date in YYYY-MM-DD format.
+// Use LOCAL date components (not toISOString, which is UTC) so the default date matches
+// the user's local day — otherwise an evening upload behind UTC defaults to tomorrow.
 function getCurrentDate(): string {
   const now = new Date();
-  return now.toISOString().split('T')[0];
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 // Helper to get current time in HH:MM format
@@ -571,10 +576,21 @@ export function useUploadMatchModal({
       // driven by the match-created event + sessionStorage flag, so this is the
       // user's signal that work is in flight.
       clearStorageData();
-      sessionStorage.setItem("match-processing", "true");
+      // Store the real matchId (recent-activity reads this back as the id to poll for
+      // processing completion). Storing a literal "true" made the first-upload poll
+      // target a bogus id and never detect completion.
+      sessionStorage.setItem("match-processing", matchId);
       window.dispatchEvent(new CustomEvent("match-created", { detail: { matchId } }));
-      router.refresh();
+
+      // Close the modal FIRST, then refresh after it has finished closing. The modal is
+      // a Radix dialog that locks <body> (pointer-events + scroll) while open. On the
+      // first upload, the refresh flips the dashboard from empty to populated, which
+      // unmounts EmptyDashboard — the subtree that hosts this open dialog. Refreshing
+      // while it's open tears the dialog down mid-close so Radix never restores <body>,
+      // freezing the whole page. Deferring past the 200ms close animation lets the
+      // dialog unmount and unlock <body> before the layout swaps.
       onOpenChange(false);
+      setTimeout(() => router.refresh(), 300);
 
       // Background upload. On failure, surface via a custom event so the
       // toast/banner system can react without the modal needing to stay open.

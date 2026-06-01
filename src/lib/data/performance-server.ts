@@ -307,12 +307,16 @@ function calculateHeatmap(matches: DbMatch[], userId: string): HeatmapDay[] {
   const year = now.getFullYear();
   const month = now.getMonth();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`; // "YYYY-MM"
 
+  // Bucket by the stored calendar-date string (YYYY-MM-DD), NOT new Date(match.date):
+  // re-parsing the timestamptz applies the server timezone and can disagree with the
+  // day key below, landing the square on the wrong day. The leading date is the day
+  // the user picked at upload, so string bucketing is timezone-independent.
   const dayMap = new Map<string, DbMatch[]>();
   for (const match of matches) {
-    const d = new Date(match.date);
-    if (d.getFullYear() === year && d.getMonth() === month) {
-      const key = match.date.slice(0, 10);
+    const key = match.date.slice(0, 10);
+    if (key.startsWith(monthPrefix)) {
       const list = dayMap.get(key) ?? [];
       list.push(match);
       dayMap.set(key, list);
