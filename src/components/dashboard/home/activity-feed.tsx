@@ -1,30 +1,168 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, RefreshCw } from "lucide-react";
+import Link from "next/link";
+import { AlertCircle, ChevronRight, RefreshCw } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createClient } from "@/lib/supabase/client";
+import {
+  buildScoreString,
+  didUserWin,
+  formatDisplayDate,
+  shortName,
+  type MatchScore,
+} from "@/lib/data/match-utils";
+
+type ActivityKind =
+  | "result-win"
+  | "result-loss"
+  | "streak-win"
+  | "streak-loss"
+  | "milestone";
 
 interface ActivityItem {
   id: string;
-  type: "milestone" | "alert" | "system";
-  message: string;
+  kind: ActivityKind;
+  /** Primary text, e.g. "Won vs. Smith" or "3-match win streak". */
+  label: string;
+  /** Trailing figure (score, %, count) set apart with tabular-nums. */
+  detail?: string;
   timeAgo: string;
+  /** When present, the row deep-links to a match and becomes clickable. */
+  href?: string;
 }
 
-const INDICATOR_COLORS: Record<ActivityItem["type"], string> = {
+// Restrained rail palette: wins/win-streaks earn green, losses stay neutral
+// gray (never red; these are facts, not alerts), milestones get accent blue.
+// The rail is decorative (aria-hidden); the label text always states the
+// meaning, so no information is carried by color alone.
+const RAIL_COLORS: Record<ActivityKind, string> = {
+  "result-win": "bg-[#5DB955]",
+  "result-loss": "bg-[#AAAAAA]",
+  "streak-win": "bg-[#5DB955]",
+  "streak-loss": "bg-[#AAAAAA]",
   milestone: "bg-[#3B82F6]",
-  alert: "bg-[#E51837]",
-  system: "bg-[#AAAAAA]",
 };
 
-function formatTimeAgo(date: Date): string {
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) return "today";
-  if (diffDays === 1) return "1d ago";
-  return `${diffDays}d ago`;
+interface DbMatchLite {
+  id: string;
+  player1_id: string | null;
+  player1_name: string;
+  player2_name: string;
+  date: string;
+  score: MatchScore | null;
+}
+
+interface StatLite {
+  match_id: string;
+  is_player1: boolean;
+  first_serve_pct: string | null;
+  winners: number | null;
+}
+
+/** Most recent match → "Won vs. {opp}" + score detail / "Lost to {opp}". */
+function buildResultItem(m: DbMatchLite, userId: string): ActivityItem {
+  const isUserP1 = m.player1_id === userId;
+  const opponent = shortName(isUserP1 ? m.player2_name : m.player1_name);
+  const won = didUserWin(m.score, isUserP1);
+  const scoreStr = buildScoreString(m.score, isUserP1);
+  return {
+    id: `result-${m.id}`,
+    kind: won ? "result-win" : "result-loss",
+    label: won ? `Won vs. ${opponent}` : `Lost to ${opponent}`,
+    detail: scoreStr || undefined,
+    timeAgo: formatDisplayDate(m.date),
+    href: `/dashboard/matches/${m.id}`,
+  };
+}
+
+/** Current win/loss streak from the leading run of same-result matches. */
+function buildStreakItem(scored: DbMatchLite[], userId: string): ActivityItem | null {
+  if (scored.length < 2) return null;
+  const firstWon = didUserWin(scored[0].score, scored[0].player1_id === userId);
+  let count = 0;
+  for (const m of scored) {
+    if (didUserWin(m.score, m.player1_id === userId) === firstWon) count++;
+    else break;
+  }
+  if (count < 2) return null;
+  return {
+    id: `streak-${scored[0].id}`,
+    kind: firstWon ? "streak-win" : "streak-loss",
+    label: `${count}-match ${firstWon ? "win" : "loss"} streak`,
+    timeAgo: formatDisplayDate(scored[0].date),
+  };
+}
+
+/**
+ * Honest milestone: only surfaced when the MOST RECENT match set or tied the
+ * high across the fetched window (so it's genuine news, never a stale record).
+ * Prefers first-serve %, falls back to winners. Needs ≥3 samples to be meaningful.
+ */
+function buildMilestoneItem(
+  scored: DbMatchLite[],
+  userStat: Map<string, StatLite>,
+): ActivityItem | null {
+  if (scored.length < 3) return null;
+  const recent = scored[0];
+  const recentStat = userStat.get(recent.id);
+  if (!recentStat) return null;
+
+  const firstServe = scored
+    .map((m) => parseFloat(userStat.get(m.id)?.first_serve_pct ?? ""))
+    .filter((v) => Number.isFinite(v));
+  const recentFs = parseFloat(recentStat.first_serve_pct ?? "");
+  if (Number.isFinite(recentFs) && firstServe.length >= 3 && recentFs >= Math.max(...firstServe)) {
+    return {
+      id: `milestone-fs-${recent.id}`,
+      kind: "milestone",
+      label: `Best 1st-serve %, last ${firstServe.length}`,
+      detail: `${Math.round(recentFs)}%`,
+      timeAgo: formatDisplayDate(recent.date),
+      href: `/dashboard/matches/${recent.id}`,
+    };
+  }
+
+  const winners = scored
+    .map((m) => userStat.get(m.id)?.winners)
+    .filter((w): w is number => typeof w === "number");
+  const recentWinners = recentStat.winners;
+  if (
+    typeof recentWinners === "number" &&
+    recentWinners > 0 &&
+    winners.length >= 3 &&
+    recentWinners >= Math.max(...winners)
+  ) {
+    return {
+      id: `milestone-win-${recent.id}`,
+      kind: "milestone",
+      label: `Most winners, last ${winners.length}`,
+      detail: `${recentWinners}`,
+      timeAgo: formatDisplayDate(recent.date),
+      href: `/dashboard/matches/${recent.id}`,
+    };
+  }
+
+  return null;
+}
+
+/** Fill up to 3 slots preferring category diversity, then backfill with results. */
+function selectItems(
+  results: ActivityItem[],
+  streak: ActivityItem | null,
+  milestone: ActivityItem | null,
+): ActivityItem[] {
+  const selected: ActivityItem[] = [];
+  const add = (item: ActivityItem | null) => {
+    if (!item || selected.length >= 3) return;
+    if (selected.some((s) => s.id === item.id || s.label === item.label)) return;
+    selected.push(item);
+  };
+  add(results[0]); // newest result anchors the feed
+  add(streak);
+  add(milestone);
+  for (let i = 1; i < results.length && selected.length < 3; i++) add(results[i]);
+  return selected;
 }
 
 export default function ActivityFeed({ userId }: { userId: string }) {
@@ -37,86 +175,45 @@ export default function ActivityFeed({ userId }: { userId: string }) {
     setLoading(true);
     setError(null);
     try {
-      // Fetch recent matches to generate activity items
-      const { data: matches } = await supabase
+      const { data: matches, error: matchError } = await supabase
         .from("matches")
-        .select("id, player2_name, date, score, player1_id")
+        .select("id, player1_id, player1_name, player2_name, date, score")
         .eq("created_by", userId)
         .order("date", { ascending: false })
         .limit(10);
 
-      if (!matches || matches.length === 0) {
+      if (matchError) throw new Error(matchError.message);
+
+      const list = (matches ?? []) as DbMatchLite[];
+      // Only matches with a real score can become results/streaks.
+      const scored = list.filter((m) => m.score?.player1?.length);
+      if (scored.length === 0) {
         setItems([]);
         return;
       }
 
-      // Fetch match stats for milestone detection
-      const matchIds = matches.map((m) => m.id);
+      // Attribute each stat row to the user (player1 vs player2 perspective).
       const { data: stats } = await supabase
         .from("match_stats_with_percentages")
-        .select("match_id, is_player1, first_serve_pct, break_points_saved_pct")
-        .in("match_id", matchIds);
+        .select("match_id, is_player1, first_serve_pct, winners")
+        .in("match_id", list.map((m) => m.id));
 
-      const activities: ActivityItem[] = [];
-
-      // Find personal bests and declines from stats
-      if (stats && stats.length > 0) {
-        const userStats = stats.filter((s) => {
-          const match = matches.find((m) => m.id === s.match_id);
-          if (!match) return false;
-          const isPlayer1 = match.player1_id === userId;
-          return s.is_player1 === isPlayer1;
-        });
-
-        // Check for best first serve percentage
-        let bestFirstServe = 0;
-        let bestFirstServeMatch: (typeof matches)[0] | null = null;
-        for (const stat of userStats) {
-          const pct = parseFloat(stat.first_serve_pct ?? "0");
-          if (pct > bestFirstServe) {
-            bestFirstServe = pct;
-            bestFirstServeMatch = matches.find((m) => m.id === stat.match_id) ?? null;
-          }
-        }
-        if (bestFirstServeMatch && bestFirstServe > 0) {
-          activities.push({
-            id: `milestone-${bestFirstServeMatch.id}`,
-            type: "milestone",
-            message: `Personal best: ${Math.round(bestFirstServe)}% first serve in a match this season`,
-            timeAgo: formatTimeAgo(new Date(bestFirstServeMatch.date)),
-          });
-        }
-
-        // Check for break point save rate decline
-        const bpRates = userStats
-          .map((s) => parseFloat(s.break_points_saved_pct ?? "0"))
-          .filter((v) => v > 0);
-        if (bpRates.length >= 3) {
-          const recent3 = bpRates.slice(0, 3);
-          const declining = recent3.every((v, i) => i === 0 || v <= recent3[i - 1]);
-          if (declining && recent3[2] < recent3[0]) {
-            activities.push({
-              id: "alert-bp-decline",
-              type: "alert",
-              message: "Three-match decline in break point save rate",
-              timeAgo: formatTimeAgo(new Date(matches[0].date)),
-            });
+      const userStat = new Map<string, StatLite>();
+      if (stats) {
+        for (const stat of stats as StatLite[]) {
+          const match = list.find((m) => m.id === stat.match_id);
+          if (!match) continue;
+          if (stat.is_player1 === (match.player1_id === userId)) {
+            userStat.set(stat.match_id, stat);
           }
         }
       }
 
-      // Add system messages for recent processed matches
-      const recentMatch = matches[0];
-      if (recentMatch) {
-        activities.push({
-          id: `system-${recentMatch.id}`,
-          type: "system",
-          message: `Match vs. ${recentMatch.player2_name} processed and analyzed`,
-          timeAgo: formatTimeAgo(new Date(recentMatch.date)),
-        });
-      }
+      const results = scored.map((m) => buildResultItem(m, userId));
+      const streak = buildStreakItem(scored, userId);
+      const milestone = buildMilestoneItem(scored, userStat);
 
-      setItems(activities.slice(0, 3));
+      setItems(selectItems(results, streak, milestone));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load activity");
       setItems([]);
@@ -142,10 +239,12 @@ export default function ActivityFeed({ userId }: { userId: string }) {
         <div className="flex items-center h-14 px-5">
           <Skeleton className="h-3 w-16" />
         </div>
-        <div className="flex flex-col gap-4 px-5 pb-5">
+        {/* Mirror the loaded layout exactly (items-stretch, per-row padding,
+            self-stretch rail) so nothing shifts when content swaps in. */}
+        <div className="flex flex-col gap-1 px-5 pb-5">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="flex gap-3 items-center">
-              <Skeleton className="w-px h-8" />
+            <div key={i} className="flex gap-3 items-stretch py-2.5">
+              <Skeleton className="w-px self-stretch shrink-0" />
               <div className="flex flex-col gap-1.5 flex-1">
                 <Skeleton className="h-3 w-full" />
                 <Skeleton className="h-2.5 w-12" />
@@ -200,27 +299,51 @@ export default function ActivityFeed({ userId }: { userId: string }) {
         </p>
       </div>
 
-      <div className="flex flex-col gap-4 pb-5">
-        {items.map((item) => (
-          <div
-            key={item.id}
-            className="flex gap-3 items-stretch px-5 py-1.5"
-          >
-            <div className="flex flex-row items-center" aria-hidden="true">
-              <div
-                className={`w-px self-stretch rounded-full ${INDICATOR_COLORS[item.type]}`}
-              />
-            </div>
+      <div className="flex flex-col gap-1 px-5 pb-5">
+        {items.map((item) => {
+          const rail = (
+            <span
+              aria-hidden="true"
+              className={`w-px shrink-0 self-stretch ${RAIL_COLORS[item.kind]}`}
+            />
+          );
+          const body = (
             <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-              <p className="text-[12px] font-light text-[#888888] leading-[1.5]">
-                {item.message}
+              <p className="text-[12px] font-normal text-[#525252] leading-[1.5] line-clamp-2">
+                {item.label}
+                {item.detail && (
+                  <span className="ml-1.5 font-medium tabular-nums">{item.detail}</span>
+                )}
               </p>
-              <p className="text-[10px] font-normal text-[#AAAAAA] capitalize">
-                {item.timeAgo}
-              </p>
+              <p className="text-[10px] font-normal text-[#767676]">{item.timeAgo}</p>
             </div>
-          </div>
-        ))}
+          );
+
+          if (item.href) {
+            return (
+              <Link
+                key={item.id}
+                href={item.href}
+                aria-label={`${item.label}${item.detail ? ` ${item.detail}` : ""}, ${item.timeAgo}`}
+                className="group flex gap-3 items-stretch rounded-lg px-2 -mx-2 py-2.5 transition-[background-color,transform] duration-200 ease-out hover:bg-[#FAFAFA] active:scale-[0.998] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1"
+              >
+                {rail}
+                {body}
+                <ChevronRight
+                  aria-hidden
+                  className="size-4 shrink-0 self-center text-[#CCCCCC] group-hover:text-[#888888] transition-colors duration-200"
+                />
+              </Link>
+            );
+          }
+
+          return (
+            <div key={item.id} className="flex gap-3 items-stretch py-2.5">
+              {rail}
+              {body}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
