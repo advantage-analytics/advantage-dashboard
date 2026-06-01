@@ -31,8 +31,8 @@ interface DbMatch {
   opponent_backhand: string | null;
   key_moments: Array<{ moment: string; description: string }> | null;
   insights: {
-    player1?: { strengths?: Array<{ name: string; value: number; description: string }>; weaknesses?: Array<{ name: string; value: number; description: string }> };
-    player2?: { strengths?: Array<{ name: string; value: number; description: string }>; weaknesses?: Array<{ name: string; value: number; description: string }> };
+    player1?: { summary?: string; strengths?: Array<{ name: string; value: number; description: string }>; weaknesses?: Array<{ name: string; value: number; description: string }> };
+    player2?: { summary?: string; strengths?: Array<{ name: string; value: number; description: string }>; weaknesses?: Array<{ name: string; value: number; description: string }> };
   } | null;
 }
 
@@ -135,6 +135,8 @@ function transformDbMatchToMatch(
 
 const FILLER_INSIGHTS: NonNullable<DbMatch["insights"]> = {
   player1: {
+    summary:
+      "Your second serve and baseline endurance are carrying you right now — keep leaning on those strengths under pressure. To take the next step, tighten up your backhand to cut down on unforced errors and look for more chances to finish points at the net.",
     strengths: [
       { name: "Reliable Second Serve", value: 75, description: "Your second serve was a consistent weapon, putting pressure on your opponent and preventing easy returns. The high placement accuracy forced defensive returns on the majority of second-serve points." },
       { name: "Strong Baseline Endurance", value: 67, description: "You consistently outlasted your opponent in longer rallies, showcasing your fitness and consistency under pressure." },
@@ -241,7 +243,7 @@ export const getMatchDetailData = cache(async (matchId: string) => {
   const [statsResult, points, playerAverages] = await Promise.all([
     getMatchStatisticsFromSupabase(matchId),
     getMatchPointsFromSupabase(matchId),
-    user?.id ? getPlayerAverageStats(user.id) : Promise.resolve(null),
+    user?.id ? getPlayerAverageStats(user.id, matchId) : Promise.resolve(null),
   ]);
 
   return {
