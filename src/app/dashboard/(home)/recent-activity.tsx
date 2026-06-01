@@ -16,8 +16,10 @@ type ToastState =
   | { kind: "analyzing"; matchId: string }
   | { kind: "ready"; matchId: string };
 
-const POLL_INTERVALS_MS = [3000, 3000, 5000, 5000, 10000];
-const POLL_MAX_ATTEMPTS = 20;
+// How long to wait for the match_stats INSERT before giving up (dropped socket /
+// failed processing). Detection is push-based via Supabase Realtime, so this is only
+// a safety net, not a poll interval.
+const PROCESSING_TIMEOUT_MS = 120000;
 const PROCESSING_STORAGE_KEY = "match-processing";
 
 interface DbMatch {
@@ -326,6 +328,10 @@ export default function RecentActivity({ userId }: { userId: string }) {
       if (!matchId) return;
       sessionStorage.setItem(PROCESSING_STORAGE_KEY, matchId);
       setToast({ kind: "created", matchId });
+      // Show the newly created match right away — its row (with the score) already
+      // exists. Stats fill in later when processing completes (finish() → load()).
+      // Without this, the list wouldn't change until processing finished.
+      load();
       createdTimer = setTimeout(() => {
         setToast((current) =>
           current.kind === "created"
@@ -339,7 +345,7 @@ export default function RecentActivity({ userId }: { userId: string }) {
       window.removeEventListener("match-created", handler);
       if (createdTimer) clearTimeout(createdTimer);
     };
-  }, []);
+  }, [load]);
 
   const targetMatchId =
     toast.kind === "created" || toast.kind === "analyzing" ? toast.matchId : null;
@@ -347,42 +353,83 @@ export default function RecentActivity({ userId }: { userId: string }) {
   useEffect(() => {
     if (!targetMatchId) return;
     const supabase = createClient();
-    let cancelled = false;
-    let pollTimer: ReturnType<typeof setTimeout> | undefined;
-    let attempt = 0;
+    let settled = false;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
 
-    const poll = async () => {
-      const { data: stats } = await supabase
-        .from("match_stats_with_percentages")
-        .select("match_id")
-        .eq("match_id", targetMatchId)
-        .limit(1);
-      if (cancelled) return;
-
-      if (stats && stats.length > 0) {
-        sessionStorage.removeItem(PROCESSING_STORAGE_KEY);
-        setToast({ kind: "ready", matchId: targetMatchId });
-        load();
-        window.dispatchEvent(new Event("match-processed"));
-        return;
-      }
-
-      attempt++;
-      if (attempt >= POLL_MAX_ATTEMPTS) {
-        sessionStorage.removeItem(PROCESSING_STORAGE_KEY);
-        setToast({ kind: "idle" });
-        return;
-      }
-      const delay =
-        POLL_INTERVALS_MS[Math.min(attempt, POLL_INTERVALS_MS.length - 1)];
-      pollTimer = setTimeout(poll, delay);
+    // Processing is done once calculate_match_stats writes the match's rows. Detect
+    // that via a Realtime INSERT on match_stats rather than polling the heavy
+    // percentages view. `settled` guards against the event, the existence-check, and
+    // the safety reconcile all firing.
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      sessionStorage.removeItem(PROCESSING_STORAGE_KEY);
+      setToast({ kind: "ready", matchId: targetMatchId });
+      load();
+      window.dispatchEvent(new Event("match-processed"));
     };
 
-    pollTimer = setTimeout(poll, POLL_INTERVALS_MS[0]);
+    const statsExist = async () => {
+      // Base table, not the percentages view — we only need existence (lighter).
+      const { data } = await supabase
+        .from("match_stats")
+        .select("id")
+        .eq("match_id", targetMatchId)
+        .limit(1);
+      return Boolean(data && data.length > 0);
+    };
+
+    (async () => {
+      // Authenticate the realtime socket with the user's JWT BEFORE subscribing.
+      // match_stats is RLS-protected, and supabase-js does not proactively push the
+      // token to the socket on sign-in (it only stores it), so a channel can join as
+      // anon and RLS silently delivers ZERO postgres_changes — the subscription
+      // "succeeds" but no INSERT events ever arrive. setAuth() forces the token on.
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        await supabase.realtime.setAuth(session.access_token);
+      }
+      if (settled) return;
+
+      channel = supabase
+        .channel(`match-stats:${targetMatchId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "match_stats",
+            filter: `match_id=eq.${targetMatchId}`,
+          },
+          () => finish(),
+        )
+        .subscribe(async (status) => {
+          // Race guard: processing may have finished before the subscription opened,
+          // so the INSERT event would never arrive — reconcile once on connect.
+          if (status === "SUBSCRIBED" && !settled && (await statsExist())) {
+            finish();
+          }
+        });
+    })();
+
+    // Safety net: if the realtime event never arrives (dropped socket), reconcile by
+    // checking directly; only give up if the stats genuinely aren't there yet.
+    const timeout = setTimeout(async () => {
+      if (settled) return;
+      if (await statsExist()) {
+        finish();
+      } else {
+        sessionStorage.removeItem(PROCESSING_STORAGE_KEY);
+        setToast({ kind: "idle" });
+      }
+    }, PROCESSING_TIMEOUT_MS);
 
     return () => {
-      cancelled = true;
-      if (pollTimer) clearTimeout(pollTimer);
+      settled = true;
+      clearTimeout(timeout);
+      if (channel) supabase.removeChannel(channel);
     };
   }, [targetMatchId, load]);
 
