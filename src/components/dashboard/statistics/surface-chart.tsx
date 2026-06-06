@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import type { SurfaceBreakdownItem } from "@/lib/data/statistics-server";
+import { VIZ_WON, VIZ_LOST } from "@/lib/design/data-viz";
 
 interface SurfaceChartProps {
   data: SurfaceBreakdownItem[];
@@ -32,10 +33,10 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
     <div className="bg-white border border-[#F3F3F3] rounded-xl px-3 py-2.5 shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]">
       <p className="text-[12px] font-medium text-[#0D0D0D] mb-1">{label}</p>
       <p className="text-[11px] font-normal text-[#71717A]">
-        Wins: <span className="font-medium text-[#3B82F6]">{wins}</span>
+        Wins: <span className="font-medium text-[#5DB955]">{wins}</span>
       </p>
       <p className="text-[11px] font-normal text-[#71717A]">
-        Losses: <span className="font-medium text-[#525252]">{losses}</span>
+        Losses: <span className="font-medium text-[#E51837]">{losses}</span>
       </p>
       <p className="text-[11px] font-normal text-[#71717A] mt-1 border-t border-[#F0F0F0] pt-1">
         Win rate: <span className="font-medium text-[#0D0D0D]">{winRate}%</span>
@@ -88,19 +89,19 @@ export function SurfaceChart({ data }: SurfaceChartProps) {
                 width={72}
               />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(0,0,0,0.03)" }} />
-              <Bar dataKey="wins" name="wins" fill="#3B82F6" radius={[0, 4, 4, 0]} animationDuration={500} />
-              <Bar dataKey="losses" name="losses" fill="#D9D9D9" radius={[0, 4, 4, 0]} animationDuration={500} />
+              <Bar dataKey="wins" name="wins" fill={VIZ_WON} radius={[0, 4, 4, 0]} animationDuration={500} />
+              <Bar dataKey="losses" name="losses" fill={VIZ_LOST} radius={[0, 4, 4, 0]} animationDuration={500} />
             </BarChart>
           </ResponsiveContainer>
 
           {/* Legend */}
           <div className="flex items-center gap-4 mt-3">
             <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-[#3B82F6]" />
+              <span className="w-2 h-2 rounded-full bg-[#5DB955]" />
               <span className="text-[10px] font-normal text-[#AAAAAA]">Wins</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-[#D9D9D9]" />
+              <span className="w-2 h-2 rounded-full bg-[#E51837]" />
               <span className="text-[10px] font-normal text-[#AAAAAA]">Losses</span>
             </div>
           </div>

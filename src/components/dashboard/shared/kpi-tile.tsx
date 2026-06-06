@@ -75,11 +75,19 @@ function Sparkline({
           <stop offset="100%" style={{ stopColor: color, stopOpacity: 0 }} />
         </linearGradient>
       </defs>
+      {/*
+        Geometry is static. The entrance animates only `opacity` (area) and
+        `pathLength` (line) — both safe numeric props. Animating the `d` /
+        `points` attributes directly made framer-motion interpolate the
+        attribute strings and emit "Expected moveto / Expected number,
+        'undefined'" warnings on every mount.
+      */}
       <motion.path
         d={areaPath}
         fill={`url(#${areaId})`}
-        animate={{ d: areaPath }}
-        transition={shouldReduceMotion ? { duration: 0 } : { duration: 1.2, ease: EASE_OUT }}
+        initial={shouldReduceMotion ? false : { opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.8, ease: EASE_OUT, delay: 0.2 }}
       />
       <motion.polyline
         points={polylinePoints}
@@ -88,8 +96,9 @@ function Sparkline({
         strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
-        animate={{ points: polylinePoints }}
-        transition={shouldReduceMotion ? { duration: 0 } : { duration: 1.2, ease: EASE_OUT }}
+        initial={shouldReduceMotion ? false : { pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={shouldReduceMotion ? { duration: 0 } : { duration: 1, ease: EASE_OUT }}
       />
     </svg>
   );

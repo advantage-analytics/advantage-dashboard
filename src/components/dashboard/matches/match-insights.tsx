@@ -52,10 +52,10 @@ interface ProgressBarProps {
 }
 
 function ProgressBar({ value, color }: ProgressBarProps): React.JSX.Element {
-  const barColor = color === "green" ? "bg-[#22C55E]" : "bg-[#EF4444]";
+  const barColor = color === "green" ? "bg-[#5DB955]" : "bg-[#E51837]";
 
   return (
-    <div className="relative w-full h-1.5 bg-[#E8E8E8] rounded-full overflow-hidden">
+    <div className="relative w-full h-1.5 bg-[#F3F3F3] rounded-full overflow-hidden">
       <motion.div
         className={`absolute left-0 h-full ${barColor} rounded-full`}
         initial={{ width: 0 }}
@@ -73,7 +73,7 @@ interface StatRowProps {
 }
 
 function StatRow({ item, color, index }: StatRowProps): React.JSX.Element {
-  const textColor = color === "green" ? "text-[#22C55E]" : "text-[#EF4444]";
+  const textColor = color === "green" ? "text-[#5DB955]" : "text-[#E51837]";
 
   return (
     <motion.div

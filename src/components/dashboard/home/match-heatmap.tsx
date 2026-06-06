@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import type { HeatmapDay } from "@/lib/data/performance-server";
+import { VIZ_HEATMAP } from "@/lib/design/data-viz";
 
 interface MatchHeatmapProps {
   heatmap: HeatmapDay[];
@@ -13,11 +14,11 @@ interface MatchHeatmapProps {
   form: ("W" | "L")[];
 }
 
-function getCellColor(count: number): string {
-  if (count === 0) return "bg-[#F2F2F2]";
-  if (count === 1) return "bg-[#B8D4F9]";
-  if (count === 2) return "bg-[#6AABFF]";
-  return "bg-[#3B82F6]";
+function getCellLevel(count: number): number {
+  if (count === 0) return 0;
+  if (count === 1) return 1;
+  if (count === 2) return 2;
+  return 3;
 }
 
 function getCellTextColor(count: number): string {
@@ -25,7 +26,7 @@ function getCellTextColor(count: number): string {
 }
 
 const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
-const LEGEND_COLORS = ["#F2F2F2", "#B8D4F9", "#6AABFF", "#3B82F6"];
+const LEGEND_COLORS = VIZ_HEATMAP;
 
 export default function MatchHeatmap({
   heatmap,
@@ -171,11 +172,12 @@ export default function MatchHeatmap({
                   ref={(el) => { if (el) cellRefs.current.set(cell.date, el); }}
                   type="button"
                   tabIndex={isSelected || (!selectedDate && cell.date === navigableDates[0]) ? 0 : -1}
-                  className={`aspect-square rounded-[4px] ${getCellColor(cell.count)} flex items-center justify-center relative transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 ${
+                  className={`aspect-square rounded-[4px] flex items-center justify-center relative transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 ${
                     isToday && !isSelected ? "ring-1 ring-[#3B82F6] ring-offset-1" : ""
                   } ${isSelected ? "ring-2 ring-[#3B82F6] ring-offset-1 z-10" : ""} ${
                     hasMatches ? "cursor-pointer hover:brightness-90" : "cursor-default"
                   }`}
+                  style={{ backgroundColor: VIZ_HEATMAP[getCellLevel(cell.count)] }}
                   role="gridcell"
                   aria-label={cellLabel}
                   aria-pressed={isSelected}

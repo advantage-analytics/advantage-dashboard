@@ -128,7 +128,7 @@ export function DurationProfile({ matches }: Props) {
               {/* Whisker line */}
               <motion.line
                 x1={toX(box.min)} y1={cy} x2={toX(box.max)} y2={cy}
-                stroke="#D9D9D9" strokeWidth={1}
+                stroke="#E5E5EA" strokeWidth={1}
                 initial={shouldReduceMotion ? false : { x2: toX(box.min) }}
                 animate={{ x2: toX(box.max) }}
                 transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.5, delay: i * 0.15, ease: EASE_CURVE }}

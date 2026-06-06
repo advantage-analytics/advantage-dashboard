@@ -19,7 +19,8 @@ function getFormattedDate(): string {
 ;
 }
 
-export default function WelcomeMessage({ name = "Player", greeting }: WelcomeMessageProps) {
+export default function WelcomeMessage({ name, greeting }: WelcomeMessageProps) {
+  const trimmedName = name?.trim();
   const [dateText, setDateText] = useState("");
 
   // Compute date client-side only (timezone-dependent)
@@ -37,7 +38,7 @@ export default function WelcomeMessage({ name = "Player", greeting }: WelcomeMes
           {dateText || "\u00A0"}
         </p>
         <h1 className="font-light text-[30px] text-[#0D0D0D] tracking-[-0.6px] leading-[36px]">
-          {greeting}, {name}
+          {trimmedName ? `${greeting}, ${trimmedName}` : greeting}
         </h1>
       </div>
       <CreateMatchButton variant="blue" />

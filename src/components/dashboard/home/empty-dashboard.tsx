@@ -136,7 +136,7 @@ export default function EmptyDashboard() {
                 ease: EASE_CURVE,
                 delay: T.FEATURES_START + i * T.FEATURES_STAGGER,
               }}
-              className="flex-1 flex flex-col gap-2.5 text-left pt-3.5 border-t-2 border-[#3B82F6]"
+              className="flex-1 flex flex-col gap-2.5 text-left pt-3.5 border-t border-[#F3F3F3]"
             >
               <div className="flex items-center gap-2">
                 <feature.icon

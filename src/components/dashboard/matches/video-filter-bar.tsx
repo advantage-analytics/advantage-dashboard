@@ -218,7 +218,7 @@ export function VideoFilterBar({ filters, onFiltersChange, player1Name, player2N
         {totalActive > 0 && (
           <button
             onClick={() => onFiltersChange(DEFAULT_FILTERS)}
-            className="text-[11px] font-medium text-[#525252] hover:text-[#EF4444] transition-colors duration-200 whitespace-nowrap"
+            className="text-[11px] font-medium text-[#525252] hover:text-[#E51837] transition-colors duration-200 whitespace-nowrap"
           >
             Clear all
           </button>
@@ -245,7 +245,7 @@ export function VideoFilterBar({ filters, onFiltersChange, player1Name, player2N
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ duration: 0.15, ease: EASE }}
                   onClick={tag.onRemove}
-                  className="inline-flex items-center gap-1 rounded-full h-6 px-2.5 text-[10px] font-medium text-[#525252] bg-[#F5F5F5] hover:bg-[#FEF2F2] hover:text-[#EF4444] transition-colors duration-150 group"
+                  className="inline-flex items-center gap-1 rounded-full h-6 px-2.5 text-[10px] font-medium text-[#525252] bg-[#F5F5F5] hover:bg-[rgba(229,24,55,0.08)] hover:text-[#E51837] transition-colors duration-150 group"
                 >
                   {tag.label}
                   <X className="h-2.5 w-2.5 opacity-40 group-hover:opacity-100 transition-opacity" />

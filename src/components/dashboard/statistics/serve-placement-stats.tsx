@@ -293,7 +293,7 @@ export function ServePlacementStats({ matchIds }: Props) {
               </span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-sm bg-[#818CF8]" />
+              <span className="w-2 h-2 rounded-sm bg-[#8B5CF6]" />
               <span className="text-[10px] font-normal text-[#525252]">
                 2nd serve ({counts.second})
               </span>

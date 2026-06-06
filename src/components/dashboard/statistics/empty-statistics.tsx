@@ -63,7 +63,7 @@ export function EmptyStatistics() {
     <div className="flex flex-col items-center text-center pt-10 pb-16 px-6 max-w-[600px] mx-auto">
       {/* Heading */}
       <motion.h2
-        className="text-[26px] font-light text-[#0D0D0D] tracking-[-0.5px] leading-[32px] mb-3"
+        className="text-[28px] font-light text-[#0D0D0D] tracking-[-0.5px] leading-[34px] mb-3"
         {...anim(T.HEADING)}
       >
         Your statistics build with every match

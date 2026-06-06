@@ -124,12 +124,12 @@ export function EfficiencyMatrix({ matches }: Props) {
             tickLine={false}
             label={{ value: "UE →", angle: -90, position: "insideLeft", offset: 16, fontSize: 9, fill: "#AAAAAA" }}
           />
-          <Tooltip content={<MatrixTooltip />} cursor={{ strokeDasharray: "4 4", stroke: "#D9D9D9" }} />
+          <Tooltip content={<MatrixTooltip />} cursor={{ strokeDasharray: "4 4", stroke: "#E5E5EA" }} />
 
           {/* Diagonal break-even line */}
           <ReferenceLine
             segment={[{ x: 0, y: 0 }, { x: maxVal, y: maxVal }]}
-            stroke="#D9D9D9"
+            stroke="#E5E5EA"
             strokeDasharray="4 4"
             strokeWidth={1}
           />

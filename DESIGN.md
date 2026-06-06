@@ -9,6 +9,13 @@ colors:
   win-green: "#5DB955"
   loss-red: "#E51837"
   player-violet: "#A855F7"
+  viz-amber: "#E0902E"
+  viz-green-deep: "#3E9A45"
+  viz-green-mid: "#84C97E"
+  viz-green-light: "#ABDCA6"
+  viz-slate-deep: "#475569"
+  viz-slate: "#64748B"
+  viz-slate-light: "#94A3B8"
   ink: "#0D0D0D"
   ink-dialog: "#1D1D1F"
   ink-secondary: "#525252"
@@ -184,6 +191,17 @@ A monochrome system. One accent. Two semantic outcome colors. No tertiary palett
 - **Hairline Medium** (`#E5E5EA`): Dropdown borders, modal borders.
 - **Border Field** (`#EAECF0`): Button outlines and the boxed-input variants (rare; underline is preferred).
 
+### Data Visualization (charts only)
+
+The closed palette above governs all UI chrome. Charts are the one sanctioned exception: a multi-series line chart or a court dot-plot needs more separable hues than two outcome colors can provide. These tokens live in `src/lib/design/data-viz.ts` and may appear **only** in data-viz contexts (Recharts series, inline SVG fills) — never on buttons, text, borders, or other chrome. Every value is anchored to the brand palette.
+
+- **Outcome** — won/lost in any chart reuse the brand outcome colors exactly: **Win Green `#5DB955`** and **Loss Red `#E51837`**. A green dot on the court is the same green as a "WON" badge. This is non-negotiable.
+- **Amber** (`#E0902E`): the one warm hue in the system, data-viz only. Means "a free or decisive point / key event" — aces, unforced errors, break of serve. Calmer than neon amber so it sits quietly on a light court. This is the *only* sanctioned exception to "no warm tones," and it never leaves a chart.
+- **Green ramp** (return-family series, derived from Win Green): `#3E9A45` deep → `#5DB955` base → `#84C97E` mid → `#ABDCA6` light.
+- **Cool slate** (neutral / context series, cool-tinted not pure gray): `#475569` deep, `#64748B`, `#94A3B8` light. Also the court's double-fault dot.
+- **Surfaces** (categorical): Hard = Signal Blue `#3B82F6`, Grass = Win Green `#5DB955`, Clay = slate `#94A3B8`, Indoor = violet `#8B5CF6`, Carpet = slate `#64748B`.
+- **Player attribution**: Player 1 = Signal Blue `#3B82F6`, Player 2 = Player Violet `#A855F7` (see above).
+
 ### Named Rules
 
 **The One Voice Rule.** Signal Blue carries no more than 10% of any screen. The page may have one CTA, one active nav highlight, one focus ring at a time. If two blue elements compete on the same surface, one of them is wrong.
@@ -191,6 +209,8 @@ A monochrome system. One accent. Two semantic outcome colors. No tertiary palett
 **The Outcome-Only Rule.** Green means winning; red means losing. They never appear as mood, status, or affirmation. A "saved successfully" toast uses Win Green only because complete-state on a profile maps to the same idea: the player got the point.
 
 **The Hairline Rule.** Hierarchy comes from `#F3F3F3` rules and whitespace, not from borders or shadows. If a section needs a card to feel real, the structure is wrong: simplify the page, not the chrome.
+
+**The Data-Viz Rule.** Chart hues come exclusively from `src/lib/design/data-viz.ts`. Never inline a raw hex in a chart component. Won/lost always reuse the brand outcome colors. If a chart needs a new role, add a named token to that module so the palette stays documented and closed.
 
 ## 3. Typography
 
@@ -202,12 +222,22 @@ A monochrome system. One accent. Two semantic outcome colors. No tertiary palett
 
 ### Hierarchy
 - **Display** (300, 30px, 36px line-height, `-0.6px`): Page heading. Home greeting, settings page title, matches list title. Always paired with a 10px uppercase eyebrow above it at `gap-3`.
-- **Headline** (300, 28px, 1.1, `-0.5px`): Large numbers, KPI hero values, brand panel hero on auth.
+- **Headline** (300, 28px, 1.1, `-0.5px`): Large numbers, KPI hero values, brand panel hero on auth, empty- and error-state titles.
 - **Title** (400, 16px, 1.5, `-0.4px`): Event names, tournament names, dialog titles.
 - **Body** (400, 13px, 1.5): Standard interface body, nav items.
 - **Body Small** (400, 12px, 1.5): Descriptions, helper text, activity messages.
 - **Label** (500, 10px, `2.5px`, uppercase): Section eyebrows, card headers, field labels in the auth and upload-modal vocabularies. The most-used token in the system.
 - **Score** (700, 40px, `-1px`): Match scores in the match detail view only. The only place 700 weight appears.
+
+### Supplementary scale
+
+Finer-grained steps the core scale omits. These are intentional and load-bearing — use them only for the roles named, and never introduce a size outside this documented set. The hierarchy is: Display (30) → Headline (28) → Title Large (22–24) → Title (16) → Data (14) → Body (13) → Body Small (12) → Micro (11) → Label (10) → Micro Label (9), plus Score (40) for the match-detail scoreboard.
+
+- **Title Large** (300, 22–24px, `-0.4px`): Modal/dialog hero titles (upload, edit-match) and large settings stat values. 24px for full modals, 22px for settings figures.
+- **Scoreboard** (600, 18px and 14px, `tabular-nums`, `-0.3px`): Tennis set scores. 18px for the prominent match-detail summary row; 14px for set digits in match cards and lists. Losing-set scores may recede in color but never below legibility.
+- **Data** (400–500, 14px): The canonical underline-input text size (auth, settings, upload, edit dialogs) and compact data values (player names in match rows, inline stat figures).
+- **Micro** (400–500, 11px): Dense secondary metadata — filter chips, table sub-labels, compact captions where 12px is too large.
+- **Micro Label** (500–600, 9px): The smallest tier. Inline form pills (the 5×5 win/loss squares), micro-badges. Uppercase variants keep their `tracking`.
 
 ### Named Rules
 

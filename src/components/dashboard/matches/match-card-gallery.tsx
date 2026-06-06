@@ -28,11 +28,6 @@ function ScoreRow({
       }`}
     >
       <div className="flex items-center gap-2.5 min-w-0">
-        <div
-          className={`w-0.5 self-stretch rounded-full shrink-0 ${
-            isWinner ? "bg-[#3B82F6]" : "bg-transparent"
-          }`}
-        />
         <span
           className={`text-[13px] truncate ${
             isWinner

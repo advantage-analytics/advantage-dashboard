@@ -1,14 +1,14 @@
 "use client";
 
 import { useMemo } from "react";
-import { CirclePlay, Info } from "lucide-react";
+import { CircleDot, CirclePlay, Flag, Info, Target, Zap } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 
 type MomentType = "match-point" | "set-point" | "break-point" | "ace";
@@ -40,18 +40,14 @@ const TYPE_LABEL: Record<MomentType, string> = {
   ace: "Ace",
 };
 
-const RAIL_COLOR: Record<MomentType, string> = {
-  "match-point": "bg-[#E51837]",
-  "set-point": "bg-[#3B82F6]",
-  "break-point": "bg-[#3B82F6]",
-  ace: "bg-[#CCCCCC]",
-};
-
-const TYPE_TEXT_COLOR: Record<MomentType, string> = {
-  "match-point": "text-[#E51837]",
-  "set-point": "text-[#3B82F6]",
-  "break-point": "text-[#3B82F6]",
-  ace: "text-[#525252]",
+// Type is encoded by a neutral leading glyph + the uppercase label, not by
+// color: accent blue is reserved for action and red for losing, so neither
+// belongs on a category rail. Distinct icons keep the list scannable at a glance.
+const MOMENT_ICON: Record<MomentType, LucideIcon> = {
+  "match-point": Target,
+  "set-point": Flag,
+  "break-point": Zap,
+  ace: CircleDot,
 };
 
 const MAX_VISIBLE = 24;
@@ -182,9 +178,10 @@ export function KeyMomentsCard({
                 Moment types
               </span>
               <ul className="flex flex-col gap-2">
-                <RailLegendRow color="#E51837" label="Match point" description="A point that could end the match" />
-                <RailLegendRow color="#3B82F6" label="Set or break point" description="High-leverage serve or return" />
-                <RailLegendRow color="#525252" label="Ace" description="Unreturned serve" />
+                <MomentLegendRow icon={Target} label="Match point" description="A point that could end the match" />
+                <MomentLegendRow icon={Flag} label="Set point" description="A point that could close a set" />
+                <MomentLegendRow icon={Zap} label="Break point" description="High-leverage serve or return" />
+                <MomentLegendRow icon={CircleDot} label="Ace" description="Unreturned serve" />
               </ul>
             </div>
           </PopoverContent>
@@ -202,25 +199,19 @@ export function KeyMomentsCard({
         <div className="flex flex-col pb-2 flex-1 min-h-0 overflow-y-auto max-h-[480px]">
           {visible.map((m) => {
             const hasVideo = m.videoTime != null;
+            const Icon = MOMENT_ICON[m.type];
 
             const inner = (
               <>
-                <div
-                  className={cn(
-                    "w-[1.5px] self-stretch rounded-full shrink-0",
-                    RAIL_COLOR[m.type],
-                  )}
+                <Icon
+                  className="size-3.5 text-[#888888] shrink-0 mt-0.5"
+                  strokeWidth={1.5}
                   aria-hidden="true"
                 />
                 <div className="flex flex-col gap-1 flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-baseline gap-1.5 min-w-0">
-                      <span
-                        className={cn(
-                          "text-[10px] font-semibold uppercase tracking-[1.5px]",
-                          TYPE_TEXT_COLOR[m.type],
-                        )}
-                      >
+                      <span className="text-[10px] font-semibold uppercase tracking-[1.5px] text-[#525252]">
                         {m.title}
                       </span>
                       <span className="text-[10px] text-[#D4D4D4]" aria-hidden="true">
@@ -265,7 +256,7 @@ export function KeyMomentsCard({
                 type="button"
                 onClick={() => showOnMomentumTracker(m.id)}
                 aria-label={`Show ${m.title} on the momentum tracker`}
-                className="group flex gap-3 items-stretch px-5 py-3 w-full text-left hover:bg-[#FAFAFA] active:scale-[0.998] transition-[background-color,transform] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-inset"
+                className="group flex gap-3 items-start px-5 py-3 w-full text-left hover:bg-[#FAFAFA] active:scale-[0.998] transition-[background-color,transform] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-inset"
               >
                 {inner}
               </button>
@@ -277,27 +268,24 @@ export function KeyMomentsCard({
   );
 }
 
-function RailLegendRow({
-  color,
+function MomentLegendRow({
+  icon: Icon,
   label,
   description,
 }: {
-  color: string;
+  icon: LucideIcon;
   label: string;
   description?: string;
 }) {
   return (
     <li className="flex items-start gap-2">
-      <span
+      <Icon
+        className="size-3.5 text-[#888888] shrink-0 mt-0.5"
+        strokeWidth={1.5}
         aria-hidden="true"
-        className="w-0.5 h-3.5 rounded-full shrink-0 mt-0.5"
-        style={{ backgroundColor: color }}
       />
       <div className="flex flex-col gap-0.5 min-w-0">
-        <span
-          className="text-[11px] font-medium leading-[16px]"
-          style={{ color }}
-        >
+        <span className="text-[11px] font-medium leading-[16px] text-[#0D0D0D]">
           {label}
         </span>
         {description && (
