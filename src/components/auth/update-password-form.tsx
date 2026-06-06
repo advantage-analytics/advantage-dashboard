@@ -50,7 +50,7 @@ export function UpdatePasswordForm() {
   return (
     <form
       onSubmit={handleUpdatePassword}
-      className="flex w-[360px] flex-col gap-[24px]"
+      className="flex w-full max-w-[360px] flex-col gap-[24px]"
       style={{ animation: "fadeUp 0.5s ease-out" }}
     >
       <FormHeader

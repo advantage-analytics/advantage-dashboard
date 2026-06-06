@@ -65,6 +65,11 @@ export function LoginForm() {
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/callback?next=/dashboard`,
+        // Drive the redirect ourselves (below) so supabase-js does not ALSO
+        // navigate the browser. Two navigations to the same authorize URL race
+        // and abort each other (ERR_ABORTED) — mobile Safari is strict about it,
+        // which left the Google button doing nothing on phones.
+        skipBrowserRedirect: true,
       },
     });
     if (oauthError) {
@@ -79,7 +84,7 @@ export function LoginForm() {
   return (
     <form
       onSubmit={handleLogin}
-      className="flex w-[360px] flex-col gap-[24px]"
+      className="flex w-full max-w-[360px] flex-col gap-[24px]"
       style={{ animation: "fadeUp 0.5s ease-out" }}
     >
       <FormHeader

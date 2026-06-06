@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { Header } from "@/app/dashboard/header";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
+import { MobileGate } from "@/components/dashboard/mobile-gate";
 import { PageTransition } from "@/components/dashboard/page-transition";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { UnsavedChangesProvider } from "@/components/dashboard/settings/unsaved-changes-context";
@@ -45,6 +46,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </PageTransition>
           </main>
         </SidebarInset>
+        <MobileGate />
       </SidebarProvider>
     </UnsavedChangesProvider>
   );

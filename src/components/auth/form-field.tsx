@@ -67,13 +67,13 @@ export default function FormField({
           placeholder={placeholder}
           required={required}
           autoComplete={autoComplete}
-          className="w-full bg-transparent text-[14px] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-dim)]"
+          className="w-full bg-transparent text-[16px] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-dim)] sm:text-[14px]"
         />
         {showPasswordToggle ? (
           <button
             type="button"
             onClick={() => setShowPassword((prev) => !prev)}
-            className="text-[var(--color-text-dim)] transition-colors hover:text-[var(--color-text-secondary)]"
+            className="-my-3 -mr-3 flex h-11 w-11 shrink-0 items-center justify-center text-[var(--color-text-dim)] transition-colors hover:text-[var(--color-text-secondary)]"
             aria-label={showPassword ? "Hide password" : "Show password"}
           >
             {showPassword ? (
