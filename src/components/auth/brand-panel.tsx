@@ -20,14 +20,14 @@ export default function BrandPanel({
 }) {
   const { hero, subtitle } = content[variant];
   return (
-    <div className="flex h-full flex-1 flex-col items-start justify-between brand-mesh-gradient px-[64px] pt-10 pb-16">
-      {/* Logo */}
-      <div className="flex h-8 items-center">
+    <div className="flex h-full flex-1 flex-col items-start justify-between brand-mesh-gradient px-[64px] pt-[27.5px] pb-16">
+      {/* Logo — matches landing nav: 24px tall, center 40px from top */}
+      <div className="flex items-center">
         <Image
           src="/logos/logo.svg"
           alt="Advantage Logo"
-          width={100}
-          height={20}
+          width={320}
+          height={57}
           priority
           className="h-6 w-auto brightness-0 invert"
         />
@@ -35,7 +35,7 @@ export default function BrandPanel({
 
       {/* Center Content */}
       <div className="flex flex-col gap-[32px] max-w-[420px]">
-        <h1 className="text-[56px] font-light leading-[1.05] tracking-[-1px] text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.15)]">
+        <h1 className="text-[56px] font-light leading-[1.02] tracking-[-1.5px] text-white">
           {hero.map((line) => (
             <span key={line} className="block">
               {line}
@@ -43,7 +43,7 @@ export default function BrandPanel({
           ))}
         </h1>
 
-        <p className="text-[16px] font-light leading-[1.6] tracking-[0.2px] text-white/90">
+        <p className="text-[18px] font-light leading-[1.55] tracking-[-0.1px] text-white/[0.86]">
           {subtitle}
         </p>
 
