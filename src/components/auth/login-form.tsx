@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
+import { CircleAlert } from "lucide-react";
 import FormHeader from "./form-header";
 import FormField from "./form-field";
 
@@ -101,21 +102,11 @@ export function LoginForm() {
             style={{ animation: "shake 0.4s ease-in-out" }}
             role="alert"
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="var(--color-error)"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+            <CircleAlert
+              size={16}
               className="shrink-0"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
+              style={{ color: "var(--color-error)" }}
+            />
             <span className="text-[12px] leading-[1.4] text-[var(--color-error)]">
               {error}
             </span>

@@ -23,14 +23,20 @@ export default function BrandPanel({
     <div className="flex h-full flex-1 flex-col items-start justify-between brand-mesh-gradient px-[64px] pt-[27.5px] pb-16">
       {/* Logo — matches landing nav: 24px tall, center 40px from top */}
       <div className="flex items-center">
-        <Image
-          src="/logos/logo.svg"
-          alt="Advantage Logo"
-          width={320}
-          height={57}
-          priority
-          className="h-6 w-auto brightness-0 invert"
-        />
+        <a
+          href="https://advantage-analytics.com"
+          aria-label="Advantage Analytics — Home"
+          className="flex items-center"
+        >
+          <Image
+            src="/logos/logo.svg"
+            alt="Advantage Logo"
+            width={320}
+            height={57}
+            priority
+            className="h-6 w-auto brightness-0 invert"
+          />
+        </a>
       </div>
 
       {/* Center Content */}

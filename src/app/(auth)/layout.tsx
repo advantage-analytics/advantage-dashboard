@@ -22,14 +22,20 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       <div className="relative flex h-full w-full flex-1 items-center justify-center overflow-y-auto bg-[var(--color-bg-panel)] px-6 py-10 lg:px-16 lg:py-16">
         {/* Mobile logo */}
         <div className="absolute left-6 top-8 lg:hidden">
-          <Image
-            src="/logos/logo.svg"
-            alt="Advantage"
-            width={100}
-            height={20}
-            priority
-            className="h-5 w-auto"
-          />
+          <a
+            href="https://advantage-analytics.com"
+            aria-label="Advantage Analytics — Home"
+            className="flex items-center"
+          >
+            <Image
+              src="/logos/logo.svg"
+              alt="Advantage"
+              width={100}
+              height={20}
+              priority
+              className="h-5 w-auto"
+            />
+          </a>
         </div>
 
         {children}
