@@ -1,6 +1,14 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  memo,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check } from "lucide-react";
 import Link from "next/link";
@@ -11,12 +19,14 @@ import { SettingsSection } from "@/components/dashboard/settings/settings-sectio
 import { createClient } from "@/lib/supabase/client";
 
 type PlanType = "free" | "pro";
-type Billing = "monthly" | "yearly";
 
 interface Plan {
   id: PlanType;
   name: string;
-  monthly: number;
+  /** Price in dollars. 0 for free, one-time charge for paid plans. */
+  price: number;
+  /** One-time purchase (no recurring billing). */
+  oneTime?: boolean;
   description: string;
   features: string[];
   recommended?: boolean;
@@ -24,11 +34,14 @@ interface Plan {
 
 const EASE_CURVE: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
 
+/** users.role value that marks a paid Pro user (mirrors the original Founder's Pass). */
+const PRO_ROLE = "founder";
+
 const plans: Plan[] = [
   {
     id: "free",
     name: "Free",
-    monthly: 0,
+    price: 0,
     description: "Basic match analysis and performance tracking.",
     features: [
       "Upload and store match data",
@@ -40,7 +53,8 @@ const plans: Plan[] = [
   {
     id: "pro",
     name: "Pro",
-    monthly: 14.99,
+    price: 4.99,
+    oneTime: true,
     description: "Advanced analytics, unlimited uploads, AI coaching.",
     features: [
       "Unlimited match uploads",
@@ -60,35 +74,29 @@ function getPlanName(planId: PlanType): string {
   return plans.find((p) => p.id === planId)?.name ?? planId;
 }
 
-function formatPrice(plan: Plan, billing: Billing) {
-  if (plan.monthly === 0) return { price: "Free", note: "" };
-  if (billing === "yearly") {
-    const yearly = plan.monthly * 12 * 0.8;
-    return {
-      price: `$${(yearly / 12).toFixed(2)}`,
-      note: "/mo, billed yearly",
-    };
-  }
-  return { price: `$${plan.monthly.toFixed(2)}`, note: "/mo" };
+function formatPrice(plan: Plan) {
+  if (plan.price === 0) return { price: "Free", note: "" };
+  return {
+    price: `$${plan.price.toFixed(2)}`,
+    note: plan.oneTime ? "one-time" : "/mo",
+  };
 }
 
 const PlanCard = memo(function PlanCard({
   plan,
-  billing,
   isSelected,
   isCurrentPlan,
   onSelect,
   index,
 }: {
   plan: Plan;
-  billing: Billing;
   isSelected: boolean;
   isCurrentPlan: boolean;
   onSelect: (planId: PlanType) => void;
   index: number;
 }) {
   const handleClick = useCallback(() => onSelect(plan.id), [onSelect, plan.id]);
-  const { price, note } = formatPrice(plan, billing);
+  const { price, note } = formatPrice(plan);
 
   return (
     <motion.button
@@ -131,9 +139,9 @@ const PlanCard = memo(function PlanCard({
         )}
       </div>
 
-      {billing === "yearly" && plan.monthly > 0 && (
+      {plan.oneTime && (
         <p className="text-[10px] text-[var(--color-ink-500)] tracking-[0.2px] mt-1">
-          Billed yearly · save 20%
+          Lifetime access · pay once
         </p>
       )}
 
@@ -166,34 +174,38 @@ const PlanCard = memo(function PlanCard({
   );
 });
 
-export default function SubscriptionPage() {
-  const [currentPlan] = useState<PlanType>("free");
+function SubscriptionContent() {
+  const searchParams = useSearchParams();
+  const [currentPlan, setCurrentPlan] = useState<PlanType>("free");
   const [selectedPlan, setSelectedPlan] = useState<PlanType>("pro");
-  const [billing, setBilling] = useState<Billing>("monthly");
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{
     type: "success" | "error" | "info";
     text: string;
   } | null>(null);
 
-  // TODO(stripe): real upgrade flow lands when the subscriptions table + Stripe
-  // checkout session are wired. Until then, this is a visual demo.
+  // Redirect to Stripe Checkout for the one-time Pro purchase.
   const handleUpgrade = async () => {
     if (selectedPlan === currentPlan) return;
     setIsLoading(true);
     setMessage({ type: "info", text: "Preparing checkout..." });
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-      setMessage({
-        type: "success",
-        text: "Checkout session created. You would be redirected to Stripe.",
+      const response = await fetch("/api/create-checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
       });
+      const data = await response.json();
+
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      throw new Error(data.error || "No checkout URL returned");
     } catch {
       setMessage({
         type: "error",
         text: "Couldn't start checkout. Try again or contact support.",
       });
-    } finally {
       setIsLoading(false);
     }
   };
@@ -201,8 +213,6 @@ export default function SubscriptionPage() {
   const currentPlanIndex = planOrder.indexOf(currentPlan);
   const selectedPlanIndex = planOrder.indexOf(selectedPlan);
   const canUpgrade = selectedPlanIndex > currentPlanIndex;
-  const canDowngrade =
-    selectedPlanIndex < currentPlanIndex && selectedPlan !== "free";
 
   const currentPlanData = useMemo(
     () => plans.find((p) => p.id === currentPlan)!,
@@ -224,7 +234,7 @@ export default function SubscriptionPage() {
       const [{ data: row }, { count }] = await Promise.all([
         supabase
           .from("users")
-          .select("created_at")
+          .select("created_at, role")
           .eq("id", user.id)
           .single(),
         supabase
@@ -234,6 +244,9 @@ export default function SubscriptionPage() {
       ]);
 
       if (cancelled) return;
+      if (row?.role === PRO_ROLE) {
+        setCurrentPlan("pro");
+      }
       if (row?.created_at) {
         const d = new Date(row.created_at);
         setMemberSince(
@@ -247,12 +260,76 @@ export default function SubscriptionPage() {
     };
   }, []);
 
-  // TODO(stripe): nextBilling becomes a real date once subscriptions sync.
+  // Handle the Stripe Checkout redirect back into the app. On success we poll
+  // the user's role until the webhook upgrades it (eventually consistent).
+  useEffect(() => {
+    const success = searchParams.get("success");
+    const canceled = searchParams.get("canceled");
+
+    if (success === "true") {
+      setMessage({ type: "info", text: "Confirming your payment..." });
+      const supabase = createClient();
+
+      let cancelled = false;
+      let pollCount = 0;
+      const maxPolls = 20;
+      let delay = 250;
+
+      const checkRole = async () => {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return false;
+        const { data } = await supabase
+          .from("users")
+          .select("role")
+          .eq("id", user.id)
+          .single();
+        return data?.role === PRO_ROLE;
+      };
+
+      const poll = async () => {
+        if (cancelled) return;
+        const isPro = await checkRole();
+        if (isPro) {
+          setCurrentPlan("pro");
+          setSelectedPlan("pro");
+          setMessage({
+            type: "success",
+            text: "Payment successful! You now have unlimited access to all Pro features.",
+          });
+          return;
+        }
+        pollCount++;
+        if (pollCount < maxPolls) {
+          delay = Math.min(delay * 1.5, 1000);
+          setTimeout(poll, delay);
+        } else {
+          setMessage({
+            type: "success",
+            text: "Payment received. Your account will update shortly — refresh if it hasn't.",
+          });
+        }
+      };
+
+      poll();
+      return () => {
+        cancelled = true;
+      };
+    } else if (canceled === "true") {
+      setMessage({
+        type: "info",
+        text: "Checkout canceled. You can upgrade to Pro anytime.",
+      });
+    }
+  }, [searchParams]);
+
+  // One-time purchase: once on Pro there is no recurring billing date.
   const usage = {
     uploadsUsed,
     uploadsLimit: currentPlan === "free" ? 5 : null,
     memberSince: memberSince ?? "—",
-    nextBilling: currentPlan === "free" ? null : "—",
+    nextBilling: currentPlan === "free" ? null : "Lifetime",
   };
   const uploadsRatio = usage.uploadsLimit
     ? Math.min(1, usage.uploadsUsed / usage.uploadsLimit)
@@ -260,7 +337,7 @@ export default function SubscriptionPage() {
 
   return (
     <div className="flex flex-col">
-      {/* Usage strip — four editorial columns: plan, uploads, member since, next billing */}
+      {/* Usage strip — four editorial columns: plan, uploads, member since, access */}
       <section className="grid grid-cols-2 sm:grid-cols-4 gap-y-6 gap-x-0 sm:divide-x sm:divide-[var(--color-ink-100)]">
         {/* Plan */}
         <div className="flex flex-col gap-2 sm:pr-6">
@@ -312,7 +389,7 @@ export default function SubscriptionPage() {
           ) : (
             <p className="font-light text-[22px] text-[var(--color-ink-900)] tracking-[-0.4px] leading-[1.15] tabular-nums">
               {usage.uploadsUsed}{" "}
-              <span className="text-[12px] text-[var(--color-ink-500)]">this month</span>
+              <span className="text-[12px] text-[var(--color-ink-500)]">total</span>
             </p>
           )}
         </div>
@@ -327,10 +404,10 @@ export default function SubscriptionPage() {
           </p>
         </div>
 
-        {/* Next billing */}
+        {/* Access */}
         <div className="flex flex-col gap-2 sm:pl-6">
           <p className="text-[10px] font-medium text-[var(--color-ink-400)] uppercase tracking-[2.5px]">
-            Next billing
+            Access
           </p>
           <p
             className={cn(
@@ -363,77 +440,13 @@ export default function SubscriptionPage() {
       </AnimatePresence>
 
       {/* Plans — generous gutter from the usage strip (different territory) */}
-      <SettingsSection
-        number="01"
-        title="Choose Your Plan"
-        className="mt-12"
-      >
-        {/* Billing toggle — sliding indicator via Framer layoutId.
-            Centered above the plan grid so it visually anchors the two cards.
-            Savings stays visible in both states; greens up when yearly is active. */}
-        <div className="flex justify-center">
-          <div
-            role="tablist"
-            aria-label="Billing period"
-            className="relative inline-flex items-center p-1 rounded-full bg-[var(--color-ink-100)]"
-          >
-            {(["monthly", "yearly"] as Billing[]).map((b) => {
-              const active = billing === b;
-              return (
-                <button
-                  key={b}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setBilling(b)}
-                  className={cn(
-                    "relative h-9 px-4 text-[10px] font-medium uppercase tracking-[1.5px] rounded-full transition-colors duration-200",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-blue)]/30",
-                    active
-                      ? "text-[var(--color-ink-900)]"
-                      : "text-[var(--color-ink-500)] hover:text-[var(--color-ink-700)]"
-                  )}
-                >
-                  {active && (
-                    <motion.span
-                      layoutId="billing-indicator"
-                      aria-hidden="true"
-                      className="absolute inset-0 rounded-full bg-[var(--color-surface-card)] shadow-[var(--shadow-card)]"
-                      transition={{ duration: 0.3, ease: EASE_CURVE }}
-                    />
-                  )}
-                  <span className="relative z-10 inline-flex items-center gap-1.5">
-                    {b === "monthly" ? (
-                      "Monthly"
-                    ) : (
-                      <>
-                        Yearly
-                        <span
-                          className={cn(
-                            "tabular-nums transition-colors duration-200",
-                            active
-                              ? "text-[var(--color-success)]"
-                              : "text-[var(--color-ink-400)]"
-                          )}
-                        >
-                          −20%
-                        </span>
-                      </>
-                    )}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
+      <SettingsSection number="01" title="Choose Your Plan" className="mt-12">
         {/* Plan cards — gap-6 for breathing room between the two */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {plans.map((plan, index) => (
             <PlanCard
               key={plan.id}
               plan={plan}
-              billing={billing}
               isSelected={selectedPlan === plan.id}
               isCurrentPlan={currentPlan === plan.id}
               onSelect={setSelectedPlan}
@@ -447,21 +460,19 @@ export default function SubscriptionPage() {
       <div className="flex flex-col gap-2 mt-10">
         <SettingsButton
           onClick={handleUpgrade}
-          disabled={!canUpgrade && !canDowngrade}
+          disabled={!canUpgrade}
           loading={isLoading}
           fullWidth
           variant={canUpgrade ? "blue" : "primary"}
         >
-          {selectedPlan === currentPlan
-            ? `You're on ${getPlanName(currentPlan)}`
+          {currentPlan === "pro"
+            ? "You're on Pro"
             : canUpgrade
-              ? `Upgrade to ${getPlanName(selectedPlan)}`
-              : canDowngrade
-                ? `Downgrade to ${getPlanName(selectedPlan)}`
-                : `Select a plan to change`}
+              ? `Upgrade to ${getPlanName(selectedPlan)} · $4.99 once`
+              : `You're on ${getPlanName(currentPlan)}`}
         </SettingsButton>
         <p className="text-[10px] text-[var(--color-ink-400)] text-center tracking-[0.3px]">
-          Secure payment powered by Stripe · Cancel anytime
+          Secure one-time payment powered by Stripe · Lifetime access
         </p>
       </div>
 
@@ -476,5 +487,13 @@ export default function SubscriptionPage() {
         </Link>
       </p>
     </div>
+  );
+}
+
+export default function SubscriptionPage() {
+  return (
+    <Suspense fallback={null}>
+      <SubscriptionContent />
+    </Suspense>
   );
 }
