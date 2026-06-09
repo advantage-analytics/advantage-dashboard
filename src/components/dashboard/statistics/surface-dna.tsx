@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import type { SurfaceBreakdownItem } from "@/lib/data/statistics-server";
+import { VIZ_SURFACE, VIZ_SURFACE_DEFAULT } from "@/lib/design/data-viz";
 
 const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
 const CX = 80;
@@ -11,14 +12,8 @@ const R = 56;
 const STROKE_W = 14;
 const CIRC = 2 * Math.PI * R;
 
-const SURFACE_COLORS: Record<string, string> = {
-  Hard: "#3B82F6",
-  Clay: "#94A3B8",
-  Grass: "#10B981",
-  Indoor: "#8B5CF6",
-  Carpet: "#64748B",
-};
-const DEFAULT_COLOR = "#A1A1AA";
+const SURFACE_COLORS = VIZ_SURFACE;
+const DEFAULT_COLOR = VIZ_SURFACE_DEFAULT;
 
 interface Props {
   surfaceBreakdown: SurfaceBreakdownItem[];

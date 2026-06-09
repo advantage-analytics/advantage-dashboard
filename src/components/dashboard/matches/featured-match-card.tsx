@@ -36,7 +36,7 @@ export function FeaturedMatchCard({
             {/* Header: Tournament name + badge | Date */}
             <div className="flex flex-col gap-4">
               <div className="flex items-center gap-2">
-                <p className="text-xl font-medium text-[#000000]">
+                <p className="text-xl font-medium text-[#0D0D0D]">
                   {match.tournamentName}
                 </p>
                 <span className="text-[10px] font-medium text-[#3B82F6] bg-[#EBF2FD] px-2.5 py-1 rounded-xl">

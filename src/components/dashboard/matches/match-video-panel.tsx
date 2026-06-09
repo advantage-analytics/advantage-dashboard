@@ -122,7 +122,7 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
               {phase === "uploading" && uploadProgress && uploadProgress.etaSeconds > 0 && (
                 <span className="text-[10px] font-medium text-[#525252] tabular-nums">~{fmtDuration(uploadProgress.etaSeconds)} left</span>
               )}
-              <button onClick={() => void actions.cancel()} className="flex items-center gap-1 text-[10px] font-medium text-[#AAAAAA] hover:text-[#EF4444] transition-colors duration-200">
+              <button onClick={() => void actions.cancel()} className="flex items-center gap-1 text-[10px] font-medium text-[#AAAAAA] hover:text-[#E51837] transition-colors duration-200">
                 <X className="w-3 h-3" />Cancel
               </button>
             </div>
@@ -132,19 +132,19 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
 
       {/* Large file warning */}
       {largeFileWarning && !busy && (
-        <div className="mx-6 mb-4 bg-[#FFFBEB] border border-[#FDE68A] rounded-[10px] p-4">
+        <div className="mx-6 mb-4 bg-[#F5F5F5] border border-[#E5E5EA] rounded-[10px] p-4">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="w-4 h-4 text-[#D97706] shrink-0 mt-0.5" />
+            <AlertTriangle className="w-4 h-4 text-[#525252] shrink-0 mt-0.5" strokeWidth={1.5} />
             <div className="flex-1 min-w-0">
-              <p className="text-[12px] font-medium text-[#92400E] mb-1">Too large to auto-compress — {fmtSize(largeFileWarning.size)}</p>
-              <p className="text-[11px] text-[#A16207] leading-[16px]">
+              <p className="text-[12px] font-medium text-[#0D0D0D] mb-1">Too large to auto-compress — {fmtSize(largeFileWarning.size)}</p>
+              <p className="text-[11px] text-[#525252] leading-[16px]">
                 Files over 2 GB exceed browser memory limits for compression. Compress to 720p with HandBrake or VLC first, or upload the original.
               </p>
               <div className="flex items-center gap-3 mt-3">
-                <button onClick={() => void actions.startUpload(largeFileWarning)} className="text-[11px] font-medium text-[#0D0D0D] bg-[#FDE68A] hover:bg-[#FCD34D] rounded-full px-4 py-1.5 transition-colors duration-200">
+                <button onClick={() => void actions.startUpload(largeFileWarning)} className="text-[11px] font-medium text-[#0D0D0D] bg-white border border-[#EAECF0] hover:bg-[#F5F5F5] rounded-full px-4 py-1.5 transition-colors duration-200">
                   Upload without compressing
                 </button>
-                <button onClick={actions.dismissLargeFileWarning} className="text-[11px] font-medium text-[#A16207] hover:text-[#92400E] transition-colors duration-200">
+                <button onClick={actions.dismissLargeFileWarning} className="text-[11px] font-medium text-[#888888] hover:text-[#525252] transition-colors duration-200">
                   Cancel
                 </button>
               </div>
@@ -154,8 +154,8 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
       )}
 
       {error && (
-        <div className="mx-6 mb-4 bg-[#FEF2F2] border border-[#FECACA] rounded-[10px] p-3">
-          <p className="text-[12px] text-[#DC2626]">{error}</p>
+        <div className="mx-6 mb-4 bg-[rgba(229,24,55,0.06)] border border-[rgba(229,24,55,0.15)] rounded-[10px] p-3">
+          <p className="text-[12px] text-[#E51837]">{error}</p>
         </div>
       )}
 
@@ -163,7 +163,7 @@ export function MatchVideoPanel({ matchId }: MatchVideoPanelProps) {
       {loading ? (
         <div className="flex items-center justify-center aspect-video text-[12px] text-[#AAAAAA]">Loading…</div>
       ) : videoUrl ? (
-        <video ref={videoRef} className="w-full aspect-video bg-black" controls preload="metadata" src={videoUrl} />
+        <video ref={videoRef} className="w-full aspect-video bg-[#0D0D0D]" controls preload="metadata" src={videoUrl} />
       ) : !busy && !largeFileWarning ? (
         <div className="flex flex-col items-center justify-center aspect-video px-8">
           <div className="w-12 h-12 rounded-full bg-[#F5F5F5] flex items-center justify-center mb-4">

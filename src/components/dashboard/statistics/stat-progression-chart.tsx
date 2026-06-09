@@ -13,6 +13,23 @@ import {
 } from "recharts";
 import type { SelectableMatch } from "@/lib/data/statistics-server";
 import { rollingAverage } from "./trend-utils";
+import {
+  VIZ_LOST,
+  VIZ_AMBER,
+  VIZ_GREEN,
+  VIZ_GREEN_DEEP,
+  VIZ_GREEN_MID,
+  VIZ_GREEN_LIGHT,
+  VIZ_BLUE,
+  VIZ_BLUE_DEEP,
+  VIZ_BLUE_MID,
+  VIZ_VIOLET,
+  VIZ_VIOLET_DEEP,
+  VIZ_VIOLET_LIGHT,
+  VIZ_SLATE,
+  VIZ_SLATE_DEEP,
+  VIZ_SLATE_LIGHT,
+} from "@/lib/design/data-viz";
 
 type StatKey =
   | "firstServePct" | "firstServeWonPct" | "secondServeWonPct"
@@ -33,28 +50,28 @@ interface StatConfig {
 const STAT_CONFIG: Record<StatKey, StatConfig> = {
   // Serve (percentages → left axis, counts → right)
   aces:               { label: "Aces", color: "#0D0D0D", axis: "right", category: "serve" },
-  doubleFaults:       { label: "DFs", color: "#E51837", axis: "right", category: "serve" },
-  firstServePct:      { label: "1st In %", color: "#3B82F6", axis: "left", category: "serve" },
-  firstServeWonPct:   { label: "1st Won %", color: "#2563EB", axis: "left", category: "serve" },
-  secondServeWonPct:  { label: "2nd Won %", color: "#60A5FA", axis: "left", category: "serve" },
-  breakPointsSavedPct:{ label: "BP Saved %", color: "#7C3AED", axis: "left", category: "serve" },
-  serviceGamesWonPct: { label: "Svc Games %", color: "#8B5CF6", axis: "left", category: "serve" },
+  doubleFaults:       { label: "DFs", color: VIZ_LOST, axis: "right", category: "serve" },
+  firstServePct:      { label: "1st In %", color: VIZ_BLUE, axis: "left", category: "serve" },
+  firstServeWonPct:   { label: "1st Won %", color: VIZ_BLUE_DEEP, axis: "left", category: "serve" },
+  secondServeWonPct:  { label: "2nd Won %", color: VIZ_BLUE_MID, axis: "left", category: "serve" },
+  breakPointsSavedPct:{ label: "BP Saved %", color: VIZ_VIOLET_DEEP, axis: "left", category: "serve" },
+  serviceGamesWonPct: { label: "Svc Games %", color: VIZ_VIOLET, axis: "left", category: "serve" },
   // Return (percentages → left)
-  breakPointsConvertedPct: { label: "BP Conv %", color: "#059669", axis: "left", category: "return" },
-  firstReturnWonPct:  { label: "1st Ret Won %", color: "#10B981", axis: "left", category: "return" },
-  secondReturnWonPct: { label: "2nd Ret Won %", color: "#34D399", axis: "left", category: "return" },
-  returnGamesWonPct:  { label: "Ret Games %", color: "#6EE7B7", axis: "left", category: "return" },
+  breakPointsConvertedPct: { label: "BP Conv %", color: VIZ_GREEN_DEEP, axis: "left", category: "return" },
+  firstReturnWonPct:  { label: "1st Ret Won %", color: VIZ_GREEN, axis: "left", category: "return" },
+  secondReturnWonPct: { label: "2nd Ret Won %", color: VIZ_GREEN_MID, axis: "left", category: "return" },
+  returnGamesWonPct:  { label: "Ret Games %", color: VIZ_GREEN_LIGHT, axis: "left", category: "return" },
   // Other
   winners:            { label: "Winners", color: "#0D0D0D", axis: "right", category: "other" },
-  unforcedErrors:     { label: "Errors", color: "#F59E0B", axis: "right", category: "other" },
-  netPointsWonPct:    { label: "Net Pts %", color: "#64748B", axis: "left", category: "other" },
-  totalPointsWonPct:  { label: "Total Pts %", color: "#94A3B8", axis: "left", category: "other" },
-  shortRallyWonPct:   { label: "Short Rally", color: "#F472B6", axis: "left", category: "other" },
-  mediumRallyWonPct:  { label: "Med Rally", color: "#E879F9", axis: "left", category: "other" },
-  longRallyWonPct:    { label: "Long Rally", color: "#C084FC", axis: "left", category: "other" },
+  unforcedErrors:     { label: "Errors", color: VIZ_AMBER, axis: "right", category: "other" },
+  netPointsWonPct:    { label: "Net Pts %", color: VIZ_SLATE, axis: "left", category: "other" },
+  totalPointsWonPct:  { label: "Total Pts %", color: VIZ_SLATE_LIGHT, axis: "left", category: "other" },
+  shortRallyWonPct:   { label: "Short Rally", color: VIZ_VIOLET_DEEP, axis: "left", category: "other" },
+  mediumRallyWonPct:  { label: "Med Rally", color: VIZ_VIOLET, axis: "left", category: "other" },
+  longRallyWonPct:    { label: "Long Rally", color: VIZ_VIOLET_LIGHT, axis: "left", category: "other" },
   // Ratings (0-300+ scale → right axis)
-  serveRating:        { label: "Serve Rtg", color: "#475569", axis: "right", category: "serve" },
-  returnRating:       { label: "Return Rtg", color: "#64748B", axis: "right", category: "return" },
+  serveRating:        { label: "Serve Rtg", color: VIZ_SLATE_DEEP, axis: "right", category: "serve" },
+  returnRating:       { label: "Return Rtg", color: VIZ_SLATE, axis: "right", category: "return" },
 };
 
 const CATEGORIES: { key: string; label: string; stats: StatKey[] }[] = [

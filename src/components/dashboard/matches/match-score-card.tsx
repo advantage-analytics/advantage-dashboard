@@ -27,7 +27,7 @@ export function MatchScoreCard({ match }: MatchScoreCardProps) {
         <span className="text-xs font-medium text-[#888888]">
           {match.matchContext}
         </span>
-        <span className="px-1.5 py-0.5 rounded-[10px] bg-[#6AABFF] text-xs font-medium text-white">
+        <span className="px-1.5 py-0.5 rounded-[10px] bg-[#F3F3F3] text-xs font-medium text-[#888888]">
           {match.duration ?? "—"}
         </span>
       </motion.div>

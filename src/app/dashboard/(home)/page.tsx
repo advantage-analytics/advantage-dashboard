@@ -32,11 +32,11 @@ export default async function Home() {
     getOverallPerformance(),
   ]);
 
-  // Build display name with fallback
-  const displayName =
-    user?.first_name || user?.last_name
-      ? [user.first_name, user.last_name].filter(Boolean).join(" ")
-      : "Player";
+  // Real name only — when absent, the greeting drops the name rather than
+  // showing a "Player" placeholder.
+  const displayName = [user?.first_name, user?.last_name]
+    .filter(Boolean)
+    .join(" ");
 
   const { kpiCards, winRate, form, matchCount, heatmap, views } =
     performanceData;

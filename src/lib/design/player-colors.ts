@@ -20,5 +20,5 @@ export const PLAYER_2_SOFT = "#FAF5FF";
 export const PLAYER_1_BAR_TINT = "#BFD5FB";
 export const PLAYER_2_BAR_TINT = "#DDC7F7";
 
-/** Accent for match-specific events (e.g., break of serve). */
-export const EVENT_ACCENT = "#F59E0B";
+/** Accent for match-specific events (e.g., break of serve). Chart-only amber. */
+export { VIZ_AMBER as EVENT_ACCENT } from "./data-viz";

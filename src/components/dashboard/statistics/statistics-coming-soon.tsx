@@ -3,7 +3,7 @@
 import { useRef, useEffect } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
-import { HelpCircle, Percent, RotateCcw, Swords, TrendingUp } from "lucide-react";
+import { HelpCircle } from "lucide-react";
 
 const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
 
@@ -12,33 +12,7 @@ const T = {
   DESCRIPTION: 0.2,
   CTA: 0.35,
   HELP: 0.45,
-  FEATURES_LABEL: 0.55,
-  FEATURES_START: 0.6,
-  FEATURES_STAGGER: 0.07,
 } as const;
-
-const FEATURES = [
-  {
-    icon: Percent,
-    title: "Serve",
-    description: "First serve %, aces, double faults, and placement accuracy",
-  },
-  {
-    icon: RotateCcw,
-    title: "Return",
-    description: "Return points won, break point conversion, and depth",
-  },
-  {
-    icon: Swords,
-    title: "Rally",
-    description: "Short, medium, and long rally win rates under pressure",
-  },
-  {
-    icon: TrendingUp,
-    title: "Trends",
-    description: "Performance ratings and win rate tracked over time",
-  },
-] as const;
 
 export function StatisticsComingSoon() {
   const shouldReduceMotion = useReducedMotion();
@@ -64,26 +38,27 @@ export function StatisticsComingSoon() {
   }
 
   return (
-    <div className="flex flex-col items-center text-center pt-10 pb-16 px-6 max-w-[600px] mx-auto">
+    <div className="flex flex-col items-center text-center pt-16 pb-20 px-6 max-w-[440px] mx-auto">
       {/* Heading */}
       <motion.h2
-        className="text-[26px] font-light text-[#0D0D0D] tracking-[-0.5px] leading-[32px] mb-3"
+        className="text-[28px] font-light text-[#0D0D0D] tracking-[-0.5px] leading-[34px] mb-3"
         {...anim(T.HEADING)}
       >
-        Aggregate trends are being rebuilt
+        Aggregate trends are on the way
       </motion.h2>
 
       {/* Description */}
       <motion.p
-        className="text-[13px] font-normal text-[#888888] leading-[1.6] max-w-[380px]"
+        className="text-[13px] font-normal text-[#888888] leading-[1.6] max-w-[400px]"
         {...anim(T.DESCRIPTION)}
       >
-        Per-match analysis is available today. When aggregate stats return, your
-        existing matches roll up here automatically, with no re-upload needed.
+        Serve, return, rally, and trend breakdowns will roll up across every
+        match you log, right here. Per-match analysis is ready now, with
+        nothing to re-upload.
       </motion.p>
 
       {/* CTA + help link */}
-      <div className="mt-10 mb-14 flex flex-col items-center gap-4">
+      <div className="mt-9 flex flex-col items-center gap-4">
         <motion.div {...anim(T.CTA)}>
           <Link
             href="/dashboard/matches"
@@ -101,40 +76,6 @@ export function StatisticsComingSoon() {
             Visit the help center
           </Link>
         </motion.div>
-      </div>
-
-      {/* What's landing here — cascading entrance */}
-      <div className="w-full">
-        <motion.p
-          className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] mb-3 text-left"
-          {...anim(T.FEATURES_LABEL)}
-        >
-          What&apos;s landing here
-        </motion.p>
-
-        <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">
-          {FEATURES.map((feature, i) => (
-            <motion.div
-              key={feature.title}
-              {...anim(T.FEATURES_START + i * T.FEATURES_STAGGER)}
-              className="flex-1 flex flex-col gap-2.5 text-left pt-3.5 border-t-2 border-[#3B82F6]"
-            >
-              <div className="flex items-center gap-2">
-                <feature.icon
-                  className="size-3.5 text-[#525252]"
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-                <p className="text-[11px] font-semibold text-[#0D0D0D] uppercase tracking-[1.5px]">
-                  {feature.title}
-                </p>
-              </div>
-              <p className="text-[11px] font-normal text-[#888888] leading-[1.6]">
-                {feature.description}
-              </p>
-            </motion.div>
-          ))}
-        </div>
       </div>
     </div>
   );

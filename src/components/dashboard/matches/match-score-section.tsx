@@ -73,8 +73,8 @@ function MatchHeader({
 }: MatchHeaderProps): React.JSX.Element {
   const durationClassName =
     durationStyle === "featured"
-      ? "rounded-[10px] px-1.5 py-0.5 text-xs font-medium bg-[#6AABFF] text-white"
-      : "rounded-[10px] px-1.5 py-0.5 text-xs font-medium bg-[#F3F3F3] text-[#888888] group-hover:bg-[#6AABFF] group-hover:text-white transition-colors";
+      ? "rounded-[10px] px-1.5 py-0.5 text-xs font-medium bg-[#F3F3F3] text-[#888888]"
+      : "rounded-[10px] px-1.5 py-0.5 text-xs font-medium bg-[#F3F3F3] text-[#888888] group-hover:bg-[#E5E5EA] group-hover:text-[#525252] transition-colors";
 
   return (
     <div className="flex flex-row justify-between items-center font-normal text-xs text-[#888888]">
@@ -100,7 +100,7 @@ interface MatchScoreSectionProps {
 
 export function MatchScoreSection({
   match,
-  accentLineClassName = "w-0.5 bg-[#DDDDDD] group-hover:bg-[#6AABFF] self-stretch rounded-full transition-colors",
+  accentLineClassName = "w-0.5 bg-[#E5E5EA] group-hover:bg-[#CCCCCC] self-stretch rounded-full transition-colors",
   durationStyle = "default",
 }: MatchScoreSectionProps): React.JSX.Element {
   return (

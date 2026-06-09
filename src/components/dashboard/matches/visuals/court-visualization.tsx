@@ -13,6 +13,7 @@ import type {
   FilterState,
   VisualizationType,
 } from "@/components/dashboard/matches/visuals/types/filters.types";
+import { VIZ_SHOT } from "@/lib/design/data-viz";
 
 const VISUALIZATION_TABS: { value: VisualizationType; label: string }[] = [
   { value: "serve", label: "Serve" },
@@ -63,12 +64,7 @@ const COURT_FONT = "var(--font-inter), Inter, sans-serif";
 
 /* ── Dot colors ──────────────────────────────────────────── */
 
-const DOT_COLORS = {
-  ace: "#F59E0B",
-  won: "#22C55E",
-  lost: "#EF4444",
-  doubleFault: "#94A3B8",
-} as const;
+const DOT_COLORS = VIZ_SHOT;
 
 /* ── Types ───────────────────────────────────────────────── */
 

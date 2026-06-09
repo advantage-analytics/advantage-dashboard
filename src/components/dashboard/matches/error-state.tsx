@@ -50,7 +50,7 @@ export function ErrorState({
           aria-hidden
         />
 
-        <h1 className="text-[26px] font-light text-[#0D0D0D] tracking-[-0.5px] leading-[32px] mt-5">
+        <h1 className="text-[28px] font-light text-[#0D0D0D] tracking-[-0.5px] leading-[34px] mt-5">
           {title}
         </h1>
 
@@ -63,14 +63,14 @@ export function ErrorState({
             <button
               onClick={primaryAction.onClick}
               disabled={primaryAction.loading}
-              className="px-5 py-2 bg-[#3B82F6] hover:bg-[#2563EB] disabled:opacity-60 disabled:cursor-not-allowed text-white text-[13px] font-medium rounded-[8px] transition-colors duration-200 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
+              className="px-5 py-2 bg-[#3B82F6] hover:bg-[#2563EB] disabled:opacity-60 disabled:cursor-not-allowed text-white text-[13px] font-medium rounded-[6px] transition-colors duration-200 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
             >
               {primaryAction.loading ? "Retrying…" : primaryAction.label}
             </button>
           ) : (
             <Link
               href={primaryAction.href}
-              className="px-5 py-2 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[13px] font-medium rounded-[8px] transition-colors duration-200 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
+              className="px-5 py-2 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[13px] font-medium rounded-[6px] transition-colors duration-200 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
             >
               {primaryAction.label}
             </Link>
@@ -116,7 +116,7 @@ function MetaRow({ item }: { item: MetaItem }) {
         <dt className="text-[#AAAAAA] uppercase tracking-[1.5px] font-medium">
           {item.label}
         </dt>
-        <dd className="font-mono text-[#525252] select-all">{item.value}</dd>
+        <dd className="tabular-nums tracking-[0.3px] text-[#525252] select-all">{item.value}</dd>
       </div>
     );
   }
@@ -136,7 +136,7 @@ function MetaRow({ item }: { item: MetaItem }) {
       <dt className="text-[#AAAAAA] uppercase tracking-[1.5px] font-medium">
         {item.label}
       </dt>
-      <dd className="font-mono text-[#525252] select-all">{item.value}</dd>
+      <dd className="tabular-nums tracking-[0.3px] text-[#525252] select-all">{item.value}</dd>
       <button
         type="button"
         onClick={copy}

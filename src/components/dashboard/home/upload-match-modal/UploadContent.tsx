@@ -212,11 +212,11 @@ function UploadContentImpl({
                 )}
 
                 {parsingState.parseWarnings.length > 0 && (
-                  <div className="animate-slideDown flex items-start gap-2 px-3 py-2 bg-[#FFFBEB] border border-[#FDE68A] rounded-[10px]">
-                    <AlertTriangle className="size-3.5 text-[#92400E] mt-0.5 flex-shrink-0" strokeWidth={1.5} />
+                  <div className="animate-slideDown flex items-start gap-2 px-3 py-2 bg-[#F5F5F5] border border-[#E5E5EA] rounded-[10px]">
+                    <AlertTriangle className="size-3.5 text-[#525252] mt-0.5 flex-shrink-0" strokeWidth={1.5} />
                     <div>
-                      <p className="text-[#92400E] text-[12px] font-medium">Parsing warnings</p>
-                      <ul className="text-[#92400E] text-[12px] mt-1 space-y-0.5">
+                      <p className="text-[#0D0D0D] text-[12px] font-medium">Parsing warnings</p>
+                      <ul className="text-[#525252] text-[12px] mt-1 space-y-0.5">
                         {parsingState.parseWarnings.map((warning, idx) => (
                           <li key={idx}>• {warning}</li>
                         ))}
@@ -277,7 +277,7 @@ function UploadContentImpl({
                   {parseStatus === "warning" && (
                     <>
                       <span className="text-[#CCCCCC] shrink-0" aria-hidden="true">·</span>
-                      <span className="font-medium text-[#92400E] shrink-0">Parsed with warnings</span>
+                      <span className="font-medium text-[#525252] shrink-0">Parsed with warnings</span>
                     </>
                   )}
                   {parseStatus === "error" && (
