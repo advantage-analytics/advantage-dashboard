@@ -23,9 +23,9 @@ export async function GET(request: Request) {
         } = await supabase.auth.getUser()
 
         if (user) {
-          const { data: profile, error: profileError } = await supabase
+          const { error: profileError } = await supabase
             .from('users')
-            .select('phone, dob, state, country, role')
+            .select('id')
             .eq('id', user.id)
             .single()
 
@@ -48,17 +48,9 @@ export async function GET(request: Request) {
             } else {
               console.log("Created new user profile for Google OAuth user")
             }
-            
-            // New user should go to settings to complete profile
-            next = '/dashboard/settings'
-          } else if (profile) {
-            // Existing user - check if profile is complete
-            const isIncomplete = !profile.phone || !profile.dob || !profile.state || !profile.country || !profile.role
-
-            if (isIncomplete) {
-              next = '/dashboard/settings'
-            }
           }
+          // Always land on the home dashboard, even if the profile is
+          // incomplete — `next` stays at its default of '/dashboard'.
         }
       } catch (error) {
         console.error("Error in OAuth callback:", error)

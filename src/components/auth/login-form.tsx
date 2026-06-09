@@ -14,33 +14,6 @@ export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  const checkProfileAndRedirect = async (
-    supabase: ReturnType<typeof createClient>,
-  ) => {
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-    if (userError || !user) throw userError ?? new Error("User not found");
-
-    const { data: profile, error: profileError } = await supabase
-      .from("users")
-      .select("phone, dob, state, country, role")
-      .eq("id", user.id)
-      .single();
-
-    if (profileError) throw profileError;
-
-    const isIncomplete =
-      !profile.phone ||
-      !profile.dob ||
-      !profile.state ||
-      !profile.country ||
-      !profile.role;
-
-    router.push(isIncomplete ? "/dashboard/settings" : "/dashboard");
-  };
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const supabase = createClient();
@@ -51,7 +24,8 @@ export function LoginForm() {
       const { error: signInError } =
         await supabase.auth.signInWithPassword({ email, password });
       if (signInError) throw signInError;
-      await checkProfileAndRedirect(supabase);
+      // Always land on the home dashboard, even if the profile is incomplete.
+      router.push("/dashboard");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
