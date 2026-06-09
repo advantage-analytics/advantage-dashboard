@@ -37,7 +37,7 @@ export default function Page() {
   if (submitted) {
     return (
       <div
-        className="flex w-[360px] flex-col items-center gap-[24px]"
+        className="flex w-full max-w-[360px] flex-col items-center gap-[24px]"
         style={{ animation: "fadeUp 0.5s ease-out" }}
       >
         <div className="w-full">
@@ -95,7 +95,7 @@ export default function Page() {
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex w-[360px] flex-col gap-[24px]"
+      className="flex w-full max-w-[360px] flex-col gap-[24px]"
       style={{ animation: "fadeUp 0.5s ease-out" }}
     >
       <FormHeader
@@ -156,7 +156,7 @@ export default function Page() {
                 value={division}
                 onChange={(e) => setDivision(e.target.value)}
                 required
-                className="w-full appearance-none bg-transparent text-[14px] text-[var(--color-text-primary)] outline-none [&:invalid]:text-[var(--color-text-dim)]"
+                className="w-full appearance-none bg-transparent text-[16px] text-[var(--color-text-primary)] outline-none [&:invalid]:text-[var(--color-text-dim)] sm:text-[14px]"
               >
                 <option value="" disabled>
                   Select division
@@ -185,7 +185,7 @@ export default function Page() {
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
                 required
-                className="w-full appearance-none bg-transparent text-[14px] text-[var(--color-text-primary)] outline-none [&:invalid]:text-[var(--color-text-dim)]"
+                className="w-full appearance-none bg-transparent text-[16px] text-[var(--color-text-primary)] outline-none [&:invalid]:text-[var(--color-text-dim)] sm:text-[14px]"
               >
                 <option value="" disabled>
                   Select role
@@ -226,7 +226,7 @@ export default function Page() {
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Tell us about your competitive background..."
-              className="h-full w-full resize-none bg-transparent text-[14px] leading-[1.6] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-dim)]"
+              className="h-full w-full resize-none bg-transparent text-[16px] leading-[1.6] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-dim)] sm:text-[14px]"
             />
           </div>
           <div className="h-[1px] bg-[var(--color-border-subtle)]" />
