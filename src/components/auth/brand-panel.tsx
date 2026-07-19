@@ -6,11 +6,6 @@ const content = {
     subtitle:
       "AI-powered match analysis and performance tracking to elevate your game and outsmart opponents.",
   },
-  "request-access": {
-    hero: ["Join the Next", "Generation of", "Tennis Analytics."],
-    subtitle:
-      "Applications are reviewed on a rolling basis. Selected athletes and coaches will receive credentials via email.",
-  },
 };
 
 export default function BrandPanel({
