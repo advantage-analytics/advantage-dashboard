@@ -7,6 +7,7 @@ import Link from "next/link";
 import { CircleAlert } from "lucide-react";
 import FormHeader from "./form-header";
 import FormField from "./form-field";
+import { REQUEST_ACCESS_URL } from "@/lib/constants";
 
 export function LoginForm() {
   const [email, setEmail] = useState("");
@@ -185,7 +186,7 @@ export function LoginForm() {
               Bringing a team?
             </span>
             <a
-              href="https://advantage-analytics.com/#access"
+              href={REQUEST_ACCESS_URL}
               className="text-[12px] text-[var(--color-accent-blue)]"
             >
               Request access.

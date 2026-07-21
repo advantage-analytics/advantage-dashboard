@@ -1,8 +1,7 @@
-"use client";
-
 import type { ReactNode } from "react";
 import Image from "next/image";
 import BrandPanel from "@/components/auth/brand-panel";
+import { MARKETING_SITE_URL } from "@/lib/constants";
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
@@ -17,7 +16,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         {/* Mobile logo */}
         <div className="absolute left-6 top-8 lg:hidden">
           <a
-            href="https://advantage-analytics.com"
+            href={MARKETING_SITE_URL}
             aria-label="Advantage Analytics — Home"
             className="flex items-center"
           >
