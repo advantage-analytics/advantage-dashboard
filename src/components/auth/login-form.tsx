@@ -7,6 +7,7 @@ import Link from "next/link";
 import { CircleAlert } from "lucide-react";
 import FormHeader from "./form-header";
 import FormField from "./form-field";
+import { REQUEST_ACCESS_URL } from "@/lib/constants";
 
 export function LoginForm() {
   const [email, setEmail] = useState("");
@@ -65,7 +66,7 @@ export function LoginForm() {
       <FormHeader
         title="Welcome Back."
         description="Enter your credentials to access your athlete dashboard and performance insights."
-        subtitle="Access to Advantage is currently limited to invited players and coaches."
+        subtitle="Match analytics for collegiate programs and competitive players."
       />
 
       {/* Fields */}
@@ -182,14 +183,14 @@ export function LoginForm() {
           </div>
           <div className="flex items-center gap-[6px]">
             <span className="text-[12px] text-[var(--color-text-muted)]">
-              Not invited yet?
+              Bringing a team?
             </span>
-            <Link
-              href="/request-access"
+            <a
+              href={REQUEST_ACCESS_URL}
               className="text-[12px] text-[var(--color-accent-blue)]"
             >
               Request access.
-            </Link>
+            </a>
           </div>
         </div>
       </div>

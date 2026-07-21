@@ -1,30 +1,17 @@
 import Image from "next/image";
+import { MARKETING_SITE_URL } from "@/lib/constants";
 
-const content = {
-  default: {
-    hero: ["Performance", "Intelligence", "for Competitive", "Tennis."],
-    subtitle:
-      "AI-powered match analysis and performance tracking to elevate your game and outsmart opponents.",
-  },
-  "request-access": {
-    hero: ["Join the Next", "Generation of", "Tennis Analytics."],
-    subtitle:
-      "Applications are reviewed on a rolling basis. Selected athletes and coaches will receive credentials via email.",
-  },
-};
+const hero = ["Performance", "Intelligence", "for Competitive", "Tennis."];
+const subtitle =
+  "AI-powered match analysis and performance tracking to elevate your game and outsmart opponents.";
 
-export default function BrandPanel({
-  variant = "default",
-}: {
-  variant?: keyof typeof content;
-}) {
-  const { hero, subtitle } = content[variant];
+export default function BrandPanel() {
   return (
     <div className="flex h-full flex-1 flex-col items-start justify-between brand-mesh-gradient px-[64px] pt-[27.5px] pb-16">
       {/* Logo — matches landing nav: 24px tall, center 40px from top */}
       <div className="flex items-center">
         <a
-          href="https://advantage-analytics.com"
+          href={MARKETING_SITE_URL}
           aria-label="Advantage Analytics — Home"
           className="flex items-center"
         >

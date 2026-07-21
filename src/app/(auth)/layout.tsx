@@ -1,21 +1,14 @@
-"use client";
-
 import type { ReactNode } from "react";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
 import BrandPanel from "@/components/auth/brand-panel";
+import { MARKETING_SITE_URL } from "@/lib/constants";
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
-  const pathname = usePathname() || "";
-  const variant = pathname.includes("/request-access")
-    ? "request-access"
-    : "default";
-
   return (
     <div className="flex h-dvh w-full bg-[var(--color-bg-dark)]">
       {/* Brand panel — desktop only */}
       <div className="hidden lg:flex lg:flex-1">
-        <BrandPanel variant={variant} />
+        <BrandPanel />
       </div>
 
       {/* Form panel */}
@@ -23,7 +16,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         {/* Mobile logo */}
         <div className="absolute left-6 top-8 lg:hidden">
           <a
-            href="https://advantage-analytics.com"
+            href={MARKETING_SITE_URL}
             aria-label="Advantage Analytics — Home"
             className="flex items-center"
           >
