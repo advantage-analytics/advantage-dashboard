@@ -23,6 +23,11 @@ const eslintConfig = [
       // Deno edge functions: URL and jsr: specifiers Node resolution cannot
       // follow. Linting them here yields only import noise.
       "supabase/functions/**",
+      // Cloudflare Worker: separate deployment with its own tsconfig, its own
+      // dependencies, and Workers runtime globals (R2Bucket, ExportedHandler)
+      // that the app's TypeScript project does not know. Typechecked on its own
+      // with `npm run typecheck` in workers/video-access.
+      "workers/**",
       // Python utilities.
       "scripts/**",
       // Playwright output.

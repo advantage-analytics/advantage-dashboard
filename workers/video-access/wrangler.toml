@@ -1,0 +1,32 @@
+name = "advantage-video-access"
+main = "src/index.ts"
+compatibility_date = "2026-08-02"
+
+# Workers Logs — the download log is the whole point of this Worker, so keep
+# observability on. `npm run tail` streams it live.
+[observability]
+enabled = true
+
+# Source-video bucket. This name is spec §3.2 decision 2: originals and results
+# live in SEPARATE buckets, matching the two env vars in §7
+# (R2_BUCKET_VIDEOS / R2_BUCKET_RESULTS). The results bucket is not bound here —
+# this Worker only ever serves originals to the vendor.
+[[r2_buckets]]
+binding = "VIDEOS"
+bucket_name = "advantage-match-videos"
+
+# Custom domain. Left commented until the hostname is confirmed: `wrangler
+# deploy` without it gives a workers.dev URL, which is a perfectly good pilot
+# origin. Set R2_PUBLIC_WORKER_URL in the Next.js app to whichever you use.
+#
+# A custom domain is worth adopting before the pilot ends — the URL is handed to
+# a third party, and a workers.dev subdomain is awkward to migrate off once
+# their side has jobs in flight against it.
+#
+# [[routes]]
+# pattern = "video.advantage-analytics.com"
+# custom_domain = true
+
+# Secrets — set with `wrangler secret put`, never in this file:
+#   SUPABASE_URL
+#   SUPABASE_SERVICE_ROLE_KEY

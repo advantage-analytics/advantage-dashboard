@@ -58,6 +58,40 @@ export const ACCEPTED_VIDEO_MIME_TYPES = [
 export const MIN_TRIM_DURATION_SECONDS = 60;
 
 // ---------------------------------------------------------------------------
+// Vendor video access
+// ---------------------------------------------------------------------------
+
+/**
+ * How long a vendor-facing video URL stays valid.
+ *
+ * The vendor fetches the video when a worker picks the job up, not at submit,
+ * and they declined to bound the queue wait — on the pilot call they said a
+ * 72-hour window was fine "in the Pilot, it depends how many videos we send",
+ * with no committed date. So the URL has to outlive a wait we cannot predict,
+ * and one that gets worse precisely as volume grows.
+ *
+ * 30 days is deliberately far past anything observed. It is not an estimate of
+ * the queue — it is headroom, because the cost of being wrong is a dead job we
+ * only notice via a free-text error string (§5 Q7).
+ *
+ * A presigned URL could not have been set this long: SigV4 caps expiry at 7
+ * days. Nothing here would fit inside that ceiling with room to spare.
+ *
+ * The real lifetime is shorter than this in practice — revoke the token once
+ * the job reaches a terminal state rather than letting it idle to expiry.
+ */
+export const VENDOR_URL_TTL_SECONDS = 30 * 24 * 60 * 60;
+
+/**
+ * Flag a job whose video the vendor has never fetched this long after submit.
+ *
+ * Not a failure on its own — it means the job is still sitting in their queue,
+ * which is legitimate. It is the threshold past which silence stops being
+ * normal and someone should ask them.
+ */
+export const VENDOR_DOWNLOAD_STALL_SECONDS = 72 * 60 * 60;
+
+// ---------------------------------------------------------------------------
 // Processing quota
 // ---------------------------------------------------------------------------
 
