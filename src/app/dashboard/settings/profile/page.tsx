@@ -151,10 +151,17 @@ export default function ProfilePage() {
     return () => setHasUnsavedChanges(false);
   }, [hasChanges, setHasUnsavedChanges]);
 
+  // Latest-value refs for the ⌘S handler, which is registered once and reads
+  // these at keypress time — long after any render. Written in an effect rather
+  // than during render, which is unsafe under concurrent rendering where a
+  // render can be discarded or replayed (react-hooks/refs).
   const hasChangesRef = useRef(hasChanges);
-  hasChangesRef.current = hasChanges;
   const loadingRef = useRef(loading);
-  loadingRef.current = loading;
+  useEffect(() => {
+    hasChangesRef.current = hasChanges;
+    loadingRef.current = loading;
+  }, [hasChanges, loading]);
+
   const completionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

@@ -328,6 +328,12 @@ export function RadarChartSection({
       </ResponsiveContainer>
 
       {/* Stat axis indicator — constant-length dashed line from center to the outer circle along the hovered stat's axis */}
+      {/* eslint-disable-next-line react-hooks/refs -- reads outerRadiusPxRef
+          during render. Recharts hands us the outer radius from inside its own
+          label render (see the ref's declaration above), so promoting it to
+          state would mean calling a setter while a child renders, which React
+          forbids outright; a ref read is the lesser violation. Revisit if
+          Recharts ever exposes resolved geometry as a prop. */}
       {hover && hoveredEntry && (() => {
         const dx = hover.x - hover.cx;
         const dy = hover.y - hover.cy;

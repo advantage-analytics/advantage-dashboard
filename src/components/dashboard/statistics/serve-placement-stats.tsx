@@ -245,7 +245,7 @@ export function ServePlacementStats({ matchIds }: Props) {
   const idsKey = matchIds.join(",");
   useEffect(() => {
     // Re-fetch when matchIds change (already handled by `load` dep)
-  }, [idsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [idsKey]);
 
   return (
     <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)] overflow-hidden">

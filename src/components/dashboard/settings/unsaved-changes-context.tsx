@@ -28,8 +28,15 @@ export function UnsavedChangesProvider({
   children: React.ReactNode;
 }) {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // Latest-value ref, read only from the beforeunload handler and
+  // confirmNavigation — both of which fire outside render. Written in an effect
+  // rather than during render, which is unsafe under concurrent rendering where
+  // a render can be discarded or replayed (react-hooks/refs).
   const dirtyRef = useRef(false);
-  dirtyRef.current = hasUnsavedChanges;
+  useEffect(() => {
+    dirtyRef.current = hasUnsavedChanges;
+  }, [hasUnsavedChanges]);
 
   // Browser-level protection (refresh, close tab)
   useEffect(() => {

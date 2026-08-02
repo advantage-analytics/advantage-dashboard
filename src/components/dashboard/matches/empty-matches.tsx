@@ -1,6 +1,5 @@
 "use client";
 
-import { useRef, useEffect } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import { HelpCircle } from "lucide-react";
@@ -25,13 +24,14 @@ const GHOST_ROWS = [
 ];
 
 export function EmptyMatches() {
+  // `skip` feeds motion `initial` props, which React only consults when an
+  // element mounts. A previous version also OR'd in a `hasAnimated` ref, but
+  // that ref is always false at mount (its effect runs afterwards), so it never
+  // changed what rendered — it only truncated an in-flight entrance if the
+  // component happened to re-render mid-animation. Reading a ref during render
+  // is also unsafe under concurrent rendering (react-hooks/refs).
   const shouldReduceMotion = useReducedMotion();
-  const hasAnimated = useRef(false);
-  const skip = shouldReduceMotion || hasAnimated.current;
-
-  useEffect(() => {
-    hasAnimated.current = true;
-  }, []);
+  const skip = shouldReduceMotion;
 
   function anim(delay: number) {
     if (skip) return { initial: false as const, animate: { opacity: 1 }, transition: { duration: 0 } };

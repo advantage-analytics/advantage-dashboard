@@ -216,9 +216,21 @@ function EventsList({
   events: EventGroup[];
   seenEventIdsRef: React.MutableRefObject<Set<string> | null>;
 }) {
+  // Which event groups arrived since the last commit, so they animate in once.
+  //
+  // Reads a ref during render (react-hooks/refs) for the same reason as
+  // recent-matches.tsx: the value needed is the set as of the PREVIOUS commit,
+  // and it must survive into the committed render. Calling a setter during
+  // render discards the in-progress output, so the re-render would already see
+  // the updated set and nothing would highlight.
+  //
+  // Safe in practice because seenEventIdsRef only changes when `events`
+  // changes (see the effect below), so repeat renders in between are
+  // idempotent.
   const newEventIds = new Set<string>();
   if (seenEventIdsRef.current !== null) {
     for (const event of events) {
+      // eslint-disable-next-line react-hooks/refs -- see note above
       if (!seenEventIdsRef.current.has(event.id)) {
         newEventIds.add(event.id);
       }
