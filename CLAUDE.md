@@ -58,9 +58,10 @@ Key tables: `matches`, `match_stats`, `points`, `shots`, `users`. The `match_sta
 Server/client split pattern for statistics:
 - `src/lib/data/statistics-server.ts` — Server-side initial data load (`getStatisticsPageData()`, `getSelectableMatches()`)
 - `src/lib/data/statistics-client.ts` — Client-side recomputation (`computeStatistics()`) when match filters change
-- `src/lib/data/stat-configs.ts` — Shared stat definitions (24 stats in 3 tabs: Serve/Return/Other)
 
 Both files produce the same `StatisticsPageData` shape. The client version operates on `SelectableMatch[]` to avoid round-trips when users toggle filters.
+
+Stat definitions are **not** shared. `STAT_CONFIG` (20 stats, grouped into Serve/Return/Other tabs by a `category` field) is a private const inside `src/components/dashboard/statistics/stat-progression-chart.tsx` — it is not exported, and there is no `stat-configs.ts` module. Extract it before reaching for it from a second component.
 
 ### File Upload Pipeline
 
