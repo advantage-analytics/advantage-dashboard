@@ -15,8 +15,12 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   getProviderStrategy,
+  getProviderKind,
   isProviderSupported,
+  IProcessingProviderStrategy,
   ProviderId,
+  ProviderKind,
+  ValidationResult,
 } from "@/lib/services/upload";
 import { getParser, hasParser } from "@/lib/services/upload/parsers";
 import {
@@ -25,7 +29,9 @@ import {
   UploadedFile,
   ParsingState,
   DetailField,
-  DEFAULT_FORM_DATA
+  VideoProbeSummary,
+  DEFAULT_FORM_DATA,
+  STEP_ORDER_BY_KIND
 } from "./types";
 import {
   determineWinner,
@@ -60,10 +66,29 @@ export interface UseUploadMatchModalReturn {
   formData: MatchFormData;
   parsingState: ParsingState;
 
+  // Provider flow shape
+  /** Step sequence for the selected provider's kind. */
+  stepOrder: Step[];
+  /** True when the selected provider analyses video rather than parsing a file. */
+  isProcessingProvider: boolean;
+
+  // Video analysis (processing providers only)
+  videoProbe: VideoProbeSummary | null;
+  videoWarnings: string[];
+  isProbing: boolean;
+  /** Provider-owned media rules, so the wizard never names a vendor. */
+  minTrimSeconds: number;
+  acceptString: string;
+  requirementChips: readonly string[];
+  onVideoPick: (file: File | null) => void;
+  handleTrimChange: (startSeconds: number, endSeconds: number) => void;
+  handleRemoveVideo: () => void;
+
   // Step navigation
   setStep: (step: Step) => void;
   handleProviderSelect: (providerId: string | null) => void;
   handleProviderContinue: () => void;
+  handleVideoContinue: () => void;
   handleMatchContinue: () => void;
   handleBack: () => void;
   handleClose: () => void;
@@ -147,6 +172,35 @@ export function useUploadMatchModal({
     parseSuccess: false,
   });
 
+  // Video-analysis state. Only populated for processing providers; the probe
+  // result is kept so the Video step can show the user why their file passed
+  // and the trim rail knows the true duration.
+  const [videoProbe, setVideoProbe] = useState<VideoProbeSummary | null>(null);
+  const [videoWarnings, setVideoWarnings] = useState<string[]>([]);
+  const [isProbing, setIsProbing] = useState(false);
+  // The picked File itself rides along on `uploadedFile.file`, held in memory
+  // only — a File cannot be serialised to localStorage, so a resumed draft
+  // requires re-picking the video.
+
+  // Which flow we're in. Falls back to the import order before a provider is
+  // chosen, which is correct: the Provider step is shared by both.
+  const providerKind: ProviderKind = selectedProvider
+    ? getProviderKind(selectedProvider)
+    : "import";
+  // STEP_ORDER_BY_KIND is a module const, so indexing it already returns a
+  // stable reference — memoizing would allocate a closure to prevent an
+  // identity change that cannot happen.
+  const stepOrder = STEP_ORDER_BY_KIND[providerKind];
+  const isProcessingProvider = providerKind === "processing";
+
+  // Media rules, trim floor and billing all come from the provider rather than
+  // from a vendor config the wizard imports directly — the wizard is written
+  // against `kind`, so it must not know whose thresholds these are.
+  const processingStrategy =
+    selectedProvider && isProcessingProvider
+      ? (getProviderStrategy(selectedProvider) as IProcessingProviderStrategy)
+      : null;
+
   // Cached on modal open so handleCreateMatch doesn't pay an auth round-trip
   // at click time. Why: getUser() can take 100–300ms over the network and the
   // user has been authenticated since they opened the dashboard.
@@ -176,9 +230,15 @@ export function useUploadMatchModal({
       setUploadedFile(storedFile);
     }
 
-    // Resume on the Match step when the user previously got past Provider —
-    // otherwise an accidental close means a wasted click on reopen.
-    setStep(resumedProvider ? "match" : "provider");
+    // Resume past Provider when the user previously got that far — otherwise an
+    // accidental close means a wasted click on reopen. Video flows resume on the
+    // Video step: the File can't be persisted, so it has to be picked again.
+    if (resumedProvider && existingProvider) {
+      const resumedOrder = STEP_ORDER_BY_KIND[getProviderKind(existingProvider as ProviderId)];
+      setStep(resumedOrder[1]);
+    } else {
+      setStep("provider");
+    }
 
     // Prefill the user's own name from their profile so a returning player
     // doesn't retype it for every match. Skips if any stored data exists for
@@ -228,9 +288,88 @@ export function useUploadMatchModal({
 
   const handleProviderContinue = useCallback(() => {
     if (selectedProvider) {
-      setStep("match");
+      // Processing providers get a video step before the form; import providers
+      // go straight to the merged file+details step.
+      setStep(stepOrder[1]);
+    }
+  }, [selectedProvider, stepOrder]);
+
+  const handleVideoContinue = useCallback(() => {
+    setStep("match");
+  }, []);
+
+  /**
+   * Pick and validate a video, entirely locally.
+   *
+   * Nothing uploads here. The probe reads resolution, duration and frame rate
+   * from the file itself so an unusable video is refused at pick time rather
+   * than after a twenty-minute upload.
+   */
+  const onVideoPick = useCallback(async (file: File | null) => {
+    if (!file || !selectedProvider) return;
+
+    setUploadError(null);
+    setVideoWarnings([]);
+    setVideoProbe(null);
+    setUploadedFile(null);
+    setIsProbing(true);
+
+    try {
+      const strategy = getProviderStrategy(selectedProvider);
+      const result: ValidationResult = await strategy.validateFile(file);
+
+      if (!result.success) {
+        setUploadError(result.error || "This video can't be analysed.");
+        return;
+      }
+
+      const summary = result.details?.video ?? null;
+
+      setVideoProbe(summary);
+      setVideoWarnings(result.warnings ?? []);
+      setUploadedFile({
+        name: file.name,
+        size: formatFileSize(file.size),
+        status: "ready",
+        file,
+        type: file.type,
+      });
+
+      // Default the trim to the whole video. The user narrows it on the rail;
+      // starting at the full extent means a straight-through flow still submits
+      // a valid window.
+      setFormData((prev) => ({
+        ...prev,
+        videoStartSeconds: 0,
+        videoEndSeconds: summary?.durationSeconds ?? prev.videoEndSeconds,
+      }));
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Couldn't read this video.");
+    } finally {
+      setIsProbing(false);
     }
   }, [selectedProvider]);
+
+  /** Set the trim window. Values are seconds into the original video. */
+  const handleTrimChange = useCallback((startSeconds: number, endSeconds: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      videoStartSeconds: startSeconds,
+      videoEndSeconds: endSeconds,
+    }));
+  }, []);
+
+  const handleRemoveVideo = useCallback(() => {
+    setVideoProbe(null);
+    setVideoWarnings([]);
+    setUploadedFile(null);
+    setUploadError(null);
+    setFormData((prev) => ({
+      ...prev,
+      videoStartSeconds: undefined,
+      videoEndSeconds: undefined,
+    }));
+  }, []);
 
   const handleMatchContinue = useCallback(() => {
     saveFormDataToStorage(formData);
@@ -246,17 +385,14 @@ export function useUploadMatchModal({
     setPendingDetailFocus(null);
   }, []);
 
+  // Derived from the active order rather than a hardcoded map, so adding a step
+  // to STEP_ORDER_BY_KIND is the only edit a new flow needs.
   const handleBack = useCallback(() => {
-    const stepMap: Record<Step, Step | null> = {
-      provider: null,
-      match: "provider",
-      confirm: "match"
-    };
-    const prevStep = stepMap[step];
-    if (prevStep) {
-      setStep(prevStep);
+    const index = stepOrder.indexOf(step);
+    if (index > 0) {
+      setStep(stepOrder[index - 1]);
     }
-  }, [step]);
+  }, [step, stepOrder]);
 
   // Close keeps localStorage intact so an accidental ✕ doesn't destroy in-flight
   // typing. Storage is cleared only after a successful create (see handleCreateMatch)
@@ -275,10 +411,12 @@ export function useUploadMatchModal({
 
     const file = files[0];
 
-    // Basic file type validation using provider strategy
+    // Basic file type validation using provider strategy. Awaited because
+    // processing providers validate asynchronously (they probe media metadata);
+    // awaiting an import provider's synchronous result is a no-op.
     try {
       const strategy = getProviderStrategy(selectedProvider);
-      const validationResult = strategy.validateFile(file);
+      const validationResult: ValidationResult = await strategy.validateFile(file);
 
       if (!validationResult.success) {
         setUploadError(validationResult.error || "Invalid file");
@@ -554,14 +692,25 @@ export function useUploadMatchModal({
       const metadata: MatchMetadata = {
         userId,
         sourceProvider: selectedProvider,
-        analysisMethod: 'elc',
+        // Video providers run computer-vision analysis; file imports carry
+        // electronic line-calling data the provider already computed.
+        analysisMethod: isProcessingProvider ? 'ai' : 'elc',
         matchType: formData.matchType,
         courtType: formData.courtType
       };
 
       const matchData = buildMatchData(matchId, { ...formData, eventName }, winner, loser, isPrivateMatch, metadata);
 
-      const { error: matchError } = await supabase.from("matches").insert(matchData);
+      // Camera context is only meaningful for video analysis.
+      const matchRow = isProcessingProvider
+        ? {
+            ...matchData,
+            fixed_camera: formData.fixedCamera ?? null,
+            initial_top_player_is_player1: formData.initialTopPlayerIsPlayer1 ?? null,
+          }
+        : matchData;
+
+      const { error: matchError } = await supabase.from("matches").insert(matchRow);
 
       if (matchError) {
         console.error("Supabase insert error:", matchError);
@@ -579,7 +728,13 @@ export function useUploadMatchModal({
       // Store the real matchId (recent-activity reads this back as the id to poll for
       // processing completion). Storing a literal "true" made the first-upload poll
       // target a bogus id and never detect completion.
-      sessionStorage.setItem("match-processing", matchId);
+      //
+      // Skipped for draft video jobs: the "analyzing" toast resolves on a
+      // match_stats INSERT, and a draft has nothing uploaded to produce one. It
+      // would sit spinning forever and reappear on every page load.
+      if (!isProcessingProvider) {
+        sessionStorage.setItem("match-processing", matchId);
+      }
       window.dispatchEvent(new CustomEvent("match-created", { detail: { matchId } }));
 
       // Close the modal FIRST, then refresh after it has finished closing. The modal is
@@ -591,6 +746,46 @@ export function useUploadMatchModal({
       // dialog unmount and unlock <body> before the layout swaps.
       onOpenChange(false);
       setTimeout(() => router.refresh(), 300);
+
+      // Video providers: record the job as a draft and stop.
+      //
+      // Storage is not wired yet, so no bytes move and no VideoUrl exists. What
+      // we persist is everything the job request needs *except* that URL —
+      // trim window, camera orientation and score all come from this form. When
+      // upload lands, submission reads this row, mints a URL and POSTs.
+      //
+      // The picked File is deliberately not persisted: it cannot be serialised,
+      // so a resumed draft requires re-picking the video.
+      if (processingStrategy) {
+        const startSeconds = formData.videoStartSeconds ?? 0;
+        const endSeconds = formData.videoEndSeconds ?? 0;
+
+        const { error: jobError } = await supabase.from("processing_jobs").insert({
+          match_id: matchId,
+          created_by: userId,
+          provider: selectedProvider,
+          status: "pending",
+          start_time_seconds: startSeconds,
+          end_time_seconds: endSeconds,
+          billable_seconds: processingStrategy.billableSeconds(startSeconds, endSeconds),
+        });
+
+        if (jobError) {
+          console.error("Processing job insert error:", jobError);
+          // Roll back the match row so the user gets a clean retry, matching
+          // the file-upload path's behaviour on failure.
+          await supabase.from("matches").delete().eq("id", matchId);
+          window.dispatchEvent(
+            new CustomEvent("match-upload-failed", {
+              detail: {
+                matchId,
+                error: jobError.message || "Couldn't queue this match for analysis",
+              },
+            })
+          );
+        }
+        return;
+      }
 
       // Background upload. On failure, surface via a custom event so the
       // toast/banner system can react without the modal needing to stay open.
@@ -634,7 +829,7 @@ export function useUploadMatchModal({
     } finally {
       setIsCreating(false);
     }
-  }, [formData, uploadedFile, selectedProvider, supabase, isPrivateMatch, onOpenChange, router]);
+  }, [formData, uploadedFile, selectedProvider, isProcessingProvider, supabase, isPrivateMatch, onOpenChange, router]);
 
   return {
     // State
@@ -669,6 +864,22 @@ export function useUploadMatchModal({
     handleDrop,
     handleFileChange,
     handleRemoveFile,
+
+    // Provider flow shape
+    stepOrder,
+    isProcessingProvider,
+
+    // Video analysis
+    videoProbe,
+    videoWarnings,
+    isProbing,
+    minTrimSeconds: processingStrategy?.minTrimSeconds ?? 0,
+    acceptString: processingStrategy?.getAcceptString() ?? "",
+    requirementChips: processingStrategy?.requirementChips ?? [],
+    onVideoPick,
+    handleTrimChange,
+    handleRemoveVideo,
+    handleVideoContinue,
 
     // Form handling
     handleInputChange,

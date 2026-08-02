@@ -17,11 +17,18 @@ import {
 } from "lucide-react";
 import { UploadedFile, ParsingState } from "./types";
 import { ProviderId } from "@/lib/services/upload";
-import { primaryBtnCls, eyebrowLabelCls } from "./styles";
+import { primaryBtnCls, eyebrowLabelCls, dropZoneCls } from "./styles";
 
-const PROVIDER_FILE_CONFIG: Record<
-  ProviderId,
-  { accept: string; ext: string; description: string }
+/**
+ * Display metadata for the file drop zone.
+ *
+ * Partial by design: this component only ever renders for *import* providers.
+ * Keying it over the whole ProviderId union forced a fabricated entry for the
+ * video provider — inventing an extension and a size cap that contradicted its
+ * real config — which is worse than the missing-key it was meant to guard.
+ */
+const PROVIDER_FILE_CONFIG: Partial<
+  Record<ProviderId, { accept: string; ext: string; description: string }>
 > = {
   "swing-vision": {
     accept: ".xlsx",
@@ -36,14 +43,12 @@ const PROVIDER_FILE_CONFIG: Record<
 };
 
 export interface UploadContentProps {
-  sourceType: string;
   selectedProvider: ProviderId | null;
   uploadedFile: UploadedFile | null;
   isOver: boolean;
   isUploading?: boolean;
   uploadError?: string | null;
   parsingState?: ParsingState;
-  onSourceTypeChange: (type: string) => void;
   onDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
   onDragLeave: () => void;
   onDrop: React.DragEventHandler<HTMLDivElement>;
@@ -64,9 +69,9 @@ function UploadContentImpl({
   onFileChange,
   onRemoveFile,
 }: UploadContentProps) {
-  const fileConfig = selectedProvider
-    ? PROVIDER_FILE_CONFIG[selectedProvider]
-    : { accept: ".csv,.xlsx", ext: "FILE", description: "Select a provider first" };
+  const fileConfig =
+    (selectedProvider ? PROVIDER_FILE_CONFIG[selectedProvider] : undefined) ??
+    { accept: ".csv,.xlsx", ext: "FILE", description: "Select a provider first" };
 
   const hasFile = !!uploadedFile;
   const triggerBrowse = () =>
@@ -101,13 +106,10 @@ function UploadContentImpl({
             onDragOver={onDragOver}
             onDragLeave={onDragLeave}
             onDrop={onDrop}
-            className={`relative flex-1 rounded-[14px] border border-dashed transition-colors duration-200 flex flex-col items-center justify-center overflow-hidden ${
-              isUploading
-                ? "bg-[#FAFAFA] border-[#F3F3F3]"
-                : isOver
-                ? "bg-[#EFF4FF] border-[#3B82F6]"
-                : "bg-[#FAFAFA] border-[#F3F3F3] hover:bg-[#EFF4FF] hover:border-[#3B82F6]/40"
-            }`}
+            className={`relative flex-1 rounded-[14px] border border-dashed transition-colors duration-200 flex flex-col items-center justify-center overflow-hidden ${dropZoneCls(
+              isUploading,
+              isOver
+            )}`}
           >
             <div className="relative z-10 flex flex-col items-center gap-5 px-6 py-8 text-center">
               {isUploading ? (

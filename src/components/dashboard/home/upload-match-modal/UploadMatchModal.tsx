@@ -18,18 +18,20 @@ import {
   Step,
   UploadMatchModalProps,
   STEP_CONFIG,
-  STEP_ORDER,
+  STEP_CONFIG_PROCESSING,
   CONTINUE_LABEL,
 } from "./types";
 import { useUploadMatchModal } from "./useUploadMatchModal";
 import { StepIndicator } from "./StepIndicator";
 import { ProviderContent } from "./ProviderContent";
 import { UploadContent } from "./UploadContent";
+import { VideoStepContent } from "./VideoStepContent";
+import { VideoMetaFields } from "./VideoMetaFields";
 import { DetailsContent } from "./DetailsContent";
 import { ConfirmContent } from "./ConfirmContent";
-import { primaryBtnCls, ghostBtnCls } from "./styles";
+import { primaryBtnCls, ghostBtnCls, iconBtnCls } from "./styles";
 
-const HINT_STEPS = new Set<Step>(["match", "confirm"]);
+const HINT_STEPS = new Set<Step>(["video", "match", "confirm"]);
 
 export function UploadMatchModal({
   open,
@@ -38,7 +40,6 @@ export function UploadMatchModal({
   const {
     step,
     selectedProvider,
-    sourceType,
     uploadedFile,
     isOver,
     isCreating,
@@ -49,6 +50,7 @@ export function UploadMatchModal({
     parsingState,
     handleProviderSelect,
     handleProviderContinue,
+    handleVideoContinue,
     handleMatchContinue,
     handleBack,
     handleClose,
@@ -64,6 +66,17 @@ export function UploadMatchModal({
     pendingDetailFocus,
     goEditDetail,
     consumePendingDetailFocus,
+    stepOrder,
+    isProcessingProvider,
+    videoProbe,
+    videoWarnings,
+    isProbing,
+    minTrimSeconds,
+    acceptString,
+    requirementChips,
+    onVideoPick,
+    handleTrimChange,
+    handleRemoveVideo,
   } = useUploadMatchModal({ open, onOpenChange });
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -76,8 +89,20 @@ export function UploadMatchModal({
   }, [setIsOver]);
   const onDragLeave = useCallback(() => setIsOver(false), [setIsOver]);
 
+  // Stable so memo(VideoStepContent) can actually skip renders — an inline
+  // arrow here made its shallow compare fail on every parent render.
+  const onVideoDrop = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      setIsOver(false);
+      onVideoPick(e.dataTransfer.files?.[0] ?? null);
+    },
+    [setIsOver, onVideoPick]
+  );
+
   const continueHandler =
     step === "provider" ? handleProviderContinue
+    : step === "video" ? handleVideoContinue
     : step === "match" ? handleMatchContinue
     : handleCreateMatch;
 
@@ -115,15 +140,45 @@ export function UploadMatchModal({
     };
   }, [step]);
 
-  const currentStepIndex = STEP_ORDER.indexOf(step);
-  const { title, description } = STEP_CONFIG[step];
+  const currentStepIndex = stepOrder.indexOf(step);
+  const { title, description } = {
+    ...STEP_CONFIG[step],
+    ...(isProcessingProvider ? STEP_CONFIG_PROCESSING[step] : undefined),
+  };
   const continueLabel = CONTINUE_LABEL[step];
 
-  const continueDisabled =
-    (step === "provider" && !selectedProvider) ||
-    (step === "match" &&
-      (!uploadedFile || isUploading || !formData.eventName.trim())) ||
-    (step === "confirm" && isCreating);
+  // Per-step gate. A table rather than a ternary chain so a new step is one
+  // entry rather than an edit threaded through three chained conditionals.
+  const trimSelected =
+    (formData.videoEndSeconds ?? 0) - (formData.videoStartSeconds ?? 0);
+
+  const stepBlockers: Record<Step, string | null> = {
+    provider: !selectedProvider ? "Make a selection" : null,
+    video: isProbing
+      ? "Checking your video…"
+      : !uploadedFile
+      ? "Drop or browse a video"
+      : trimSelected < minTrimSeconds
+      ? "Widen the trim window"
+      : null,
+    match: !uploadedFile
+      ? "Drop or browse a file"
+      : isUploading
+      ? "Validating file…"
+      : !formData.eventName.trim()
+      ? "Add a match name"
+      : isProcessingProvider && formData.initialTopPlayerIsPlayer1 === undefined
+      ? "Pick which end you started on"
+      : isProcessingProvider && formData.fixedCamera === undefined
+      ? "Tell us about the camera"
+      : null,
+    confirm: isCreating ? "Creating match…" : null,
+  };
+
+  // Non-null means "cannot continue", and the string doubles as the footer hint
+  // explaining why. Read once so the two uses cannot disagree.
+  const blocker = stepBlockers[step];
+  const continueDisabled = blocker !== null;
 
   // Platform detection for the right modifier glyph in the footer hint. Gated
   // behind null until mounted so SSR doesn't render a Mac chord on a Linux box.
@@ -255,17 +310,6 @@ export function UploadMatchModal({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open, continueDisabled, continueHandler, step, handleBack]);
 
-  // Disabled-state hints. Only consumed when continueDisabled is true.
-  const footerHint =
-    step === "match" && !uploadedFile
-      ? "Drop or browse a file"
-      : step === "match" && isUploading
-      ? "Validating file…"
-      : step === "match" && !formData.eventName.trim()
-      ? "Add a match name"
-      : step === "confirm" && isCreating
-      ? "Creating match…"
-      : "Make a selection";
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -280,7 +324,7 @@ export function UploadMatchModal({
               <button
                 onClick={handleBack}
                 aria-label="Back"
-                className="h-7 w-7 rounded-lg flex items-center justify-center text-[#888888] hover:text-[#0D0D0D] hover:bg-[#F5F5F5] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+                className={iconBtnCls()}
               >
                 <ArrowLeft className="size-3.5" strokeWidth={1.5} />
               </button>
@@ -290,7 +334,7 @@ export function UploadMatchModal({
             <button
               onClick={handleClose}
               aria-label="Close"
-              className="h-7 w-7 rounded-lg flex items-center justify-center text-[#888888] hover:text-[#0D0D0D] hover:bg-[#F5F5F5] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+              className={iconBtnCls()}
             >
               <X className="size-3.5" strokeWidth={1.5} />
             </button>
@@ -300,7 +344,7 @@ export function UploadMatchModal({
           <div className="px-8 pt-5 pb-6">
             <StepIndicator
               currentStep={currentStepIndex}
-              totalSteps={STEP_ORDER.length}
+              totalSteps={stepOrder.length}
             />
             <DialogHeader className="mt-6 space-y-1.5 items-start text-left">
               <DialogTitle className="text-[24px] font-light text-[#1D1D1F] tracking-[-0.5px] leading-[30px]">
@@ -329,23 +373,52 @@ export function UploadMatchModal({
                   />
                 )}
 
+                {step === "video" && (
+                  <VideoStepContent
+                    videoFile={uploadedFile?.file ?? null}
+                    probe={videoProbe}
+                    warnings={videoWarnings}
+                    isProbing={isProbing}
+                    error={uploadError}
+                    startSeconds={formData.videoStartSeconds}
+                    endSeconds={formData.videoEndSeconds}
+                    isOver={isOver}
+                    minTrimSeconds={minTrimSeconds}
+                    acceptString={acceptString}
+                    requirementChips={requirementChips}
+                    onDragOver={onDragOver}
+                    onDragLeave={onDragLeave}
+                    onDrop={onVideoDrop}
+                    onPick={onVideoPick}
+                    onTrimChange={handleTrimChange}
+                    onRemove={handleRemoveVideo}
+                  />
+                )}
+
                 {step === "match" && (
                   <div className="flex flex-col gap-6">
-                    <UploadContent
-                      sourceType={sourceType}
-                      selectedProvider={selectedProvider}
-                      uploadedFile={uploadedFile}
-                      isOver={isOver}
-                      isUploading={isUploading}
-                      uploadError={uploadError}
-                      parsingState={parsingState}
-                      onSourceTypeChange={setSourceType}
-                      onDragOver={onDragOver}
-                      onDragLeave={onDragLeave}
-                      onDrop={handleDrop}
-                      onFileChange={handleFileChange}
-                      onRemoveFile={handleRemoveFile}
-                    />
+                    {/* Processing providers already picked their video on the
+                        previous step — this step is metadata only. */}
+                    {isProcessingProvider ? (
+                      <VideoMetaFields
+                        formData={formData}
+                        onInputChange={handleInputChange}
+                      />
+                    ) : (
+                      <UploadContent
+                        selectedProvider={selectedProvider}
+                        uploadedFile={uploadedFile}
+                        isOver={isOver}
+                        isUploading={isUploading}
+                        uploadError={uploadError}
+                        parsingState={parsingState}
+                        onDragOver={onDragOver}
+                        onDragLeave={onDragLeave}
+                        onDrop={handleDrop}
+                        onFileChange={handleFileChange}
+                        onRemoveFile={handleRemoveFile}
+                      />
+                    )}
                     {uploadedFile && !parsingState.isParsing && (
                       <DetailsContent
                         formData={formData}
@@ -365,6 +438,7 @@ export function UploadMatchModal({
                     uploadedFile={uploadedFile}
                     error={error}
                     onEditDetail={goEditDetail}
+                    isProcessingProvider={isProcessingProvider}
                   />
                 )}
               </div>
@@ -392,8 +466,8 @@ export function UploadMatchModal({
           {/* Footer */}
           <div className="border-t border-[#F3F3F3] px-8 py-3.5 flex items-center justify-between bg-[#FAFAFA]">
             <div className="inline-flex items-center gap-1.5 text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
-              {continueDisabled ? (
-                <span>{footerHint}</span>
+              {blocker !== null ? (
+                <span>{blocker}</span>
               ) : (
                 <>
                   <span>Press</span>

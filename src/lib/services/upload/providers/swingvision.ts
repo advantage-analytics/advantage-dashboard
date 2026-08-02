@@ -6,7 +6,7 @@
  */
 
 import {
-  IProviderUploadStrategy,
+  IImportProviderStrategy,
   ProviderConfig,
   ValidationResult,
 } from '../types';
@@ -39,7 +39,8 @@ const SWINGVISION_CONFIG: ProviderConfig = {
  * Handles client-side validation and configuration for SwingVision files.
  * Server-side validation (sheet structure) is handled by the Python validation endpoint.
  */
-export class SwingVisionUploadStrategy implements IProviderUploadStrategy {
+export class SwingVisionUploadStrategy implements IImportProviderStrategy {
+  readonly kind = 'import' as const;
   readonly config: ProviderConfig = SWINGVISION_CONFIG;
 
   /**

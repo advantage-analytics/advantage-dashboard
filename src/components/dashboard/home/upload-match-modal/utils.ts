@@ -165,11 +165,51 @@ export function base64ToBlob(base64Data: string, mimeType: string): Blob {
 }
 
 /**
- * Format file size for display
+ * Format a byte count for display, KB → MB → GB.
+ *
+ * Replaces an earlier KB-only version. That was written for ~2 MB xlsx exports
+ * and rendered a 4 GB video as "4194304 KB".
  */
 export function formatFileSize(bytes: number): string {
-  const kb = bytes / 1024;
-  return `${kb.toFixed(0)} KB`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+/**
+ * Format a duration in SECONDS as a compact human string ("42s", "3m 12s",
+ * "1h 30m").
+ *
+ * Note the sibling `formatDuration` below takes MILLISECONDS and returns a
+ * different shape ("1H 30M"). Keep the names distinct — they are not
+ * interchangeable.
+ */
+export function formatClipLength(seconds: number): string {
+  if (seconds < 60) return `${Math.ceil(seconds)}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.ceil(seconds % 60)}s`;
+  return `${Math.floor(seconds / 3600)}h ${Math.ceil((seconds % 3600) / 60)}m`;
+}
+
+/**
+ * Format a position in SECONDS as a clock ("2:05", "1:02:05").
+ *
+ * `tenths` adds a decimal place for frame-accurate trim handles, where a whole
+ * second is too coarse to place a cut against a serve.
+ */
+export function formatClock(
+  seconds: number | undefined,
+  { tenths = false }: { tenths?: boolean } = {}
+): string {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) {
+    return tenths ? "0:00.0" : "—";
+  }
+  const whole = Math.floor(seconds);
+  const h = Math.floor(whole / 3600);
+  const m = Math.floor((whole % 3600) / 60);
+  const s = whole % 60;
+  const mm = h > 0 ? String(m).padStart(2, "0") : String(m);
+  const base = `${h > 0 ? `${h}:` : ""}${mm}:${String(s).padStart(2, "0")}`;
+  return tenths ? `${base}.${Math.floor((seconds - whole) * 10)}` : base;
 }
 
 /**

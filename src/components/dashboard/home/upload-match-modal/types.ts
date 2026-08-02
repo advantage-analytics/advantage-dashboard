@@ -2,8 +2,11 @@
  * Type definitions for the Upload Match Modal wizard
  */
 
+import type { ProviderKind } from "@/lib/services/upload";
+import type { VideoProbe } from "@/lib/video/probe";
+
 /** Wizard step identifiers */
-export type Step = "provider" | "match" | "confirm";
+export type Step = "provider" | "video" | "match" | "confirm";
 
 /** Optional Match-step fields that the Confirm step can deep-link back to. */
 export type DetailField = "round" | "matchType" | "courtType";
@@ -43,7 +46,32 @@ export interface FormData {
   playerBackhand?: "one-handed" | "two-handed";
   /** Opponent backhand style */
   opponentBackhand?: "one-handed" | "two-handed";
+
+  // --- Video-analysis fields (processing providers only) ---
+
+  /**
+   * True when YOU were at the top of frame at the start of the video.
+   *
+   * Camera-relative, not player-relative: ends change every odd game, so this
+   * describes the opening of the video and nothing else. It is what lets us map
+   * the provider's per-player predictions back onto the right person.
+   */
+  initialTopPlayerIsPlayer1?: boolean;
+  /** Camera stayed in one position for the whole recording. */
+  fixedCamera?: boolean;
+  /** Trim start, seconds into the original video. */
+  videoStartSeconds?: number;
+  /** Trim end, seconds into the original video. */
+  videoEndSeconds?: number;
 }
+
+/**
+ * Metadata read from a picked video, shown back to the user.
+ *
+ * Aliased rather than redeclared so adding a probed field (codec, rotation) is
+ * one edit in probe.ts instead of three coordinated ones.
+ */
+export type VideoProbeSummary = VideoProbe;
 
 /** Uploaded file metadata and data */
 export interface UploadedFile {
@@ -128,17 +156,36 @@ export const DEFAULT_FORM_DATA: FormData = {
   opponentTiebreaks: [null, null, null],
   matchType: "",
   courtType: "",
-  duration: 0
+  duration: 0,
+  initialTopPlayerIsPlayer1: undefined,
+  fixedCamera: undefined,
+  videoStartSeconds: undefined,
+  videoEndSeconds: undefined
 };
 
-/** Step order for navigation and indicator */
-export const STEP_ORDER: Step[] = ["provider", "match", "confirm"];
+/**
+ * Step order, per provider kind.
+ *
+ * Import providers hand us a parseable file, so the file drop and the metadata
+ * form share one step — the parser pre-fills the form. Processing providers
+ * need a step of their own first: the video has to be validated and trimmed
+ * before the metadata form means anything, and none of that can be inferred
+ * from the file.
+ */
+export const STEP_ORDER_BY_KIND: Record<ProviderKind, Step[]> = {
+  import: ["provider", "match", "confirm"],
+  processing: ["provider", "video", "match", "confirm"],
+};
 
 /** Step configuration for titles and descriptions */
 export const STEP_CONFIG: Record<Step, { title: string; description: string }> = {
   provider: {
     title: "Choose your data source",
     description: "Select the platform you exported from."
+  },
+  video: {
+    title: "Add your video",
+    description: "We'll check it works before anything uploads, then you can trim to the match itself."
   },
   match: {
     title: "Add your match",
@@ -150,9 +197,27 @@ export const STEP_CONFIG: Record<Step, { title: string; description: string }> =
   }
 };
 
+/**
+ * Field-wise overrides for processing providers, merged over STEP_CONFIG.
+ *
+ * Deliberately Partial at both levels: only the differing fields are listed, so
+ * editing a base title cannot leave a stale duplicate here.
+ */
+export const STEP_CONFIG_PROCESSING: Partial<
+  Record<Step, Partial<{ title: string; description: string }>>
+> = {
+  match: {
+    description: "Tell us how the match went — the analysis needs the final score to line up with your video."
+  },
+  confirm: {
+    description: "A final review before this match is queued for analysis."
+  }
+};
+
 /** Continue-button label per step. */
 export const CONTINUE_LABEL: Record<Step, string> = {
   provider: "Continue",
+  video: "Continue",
   match: "Continue",
   confirm: "Create match",
 };

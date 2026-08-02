@@ -9,7 +9,7 @@ import { AlertCircle, FileSpreadsheet } from "lucide-react";
 import { MatchMetadataRow } from "@/components/dashboard/matches/match-metadata-row";
 import { formatPlayerStyle } from "@/lib/data/match-utils";
 import { FormData, UploadedFile, DetailField } from "./types";
-import { getAdjustedScores, formatDuration } from "./utils";
+import { getAdjustedScores, formatDuration, formatClock } from "./utils";
 import { eyebrowLabelCls } from "./styles";
 
 export interface ConfirmContentProps {
@@ -18,7 +18,10 @@ export interface ConfirmContentProps {
   error: string | null;
   /** Click handler for "Not set" rows — sends user back to Match focused on that field. */
   onEditDetail?: (field: DetailField) => void;
+  /** Video-analysis provider — show the trim window and camera orientation. */
+  isProcessingProvider?: boolean;
 }
+
 
 function formatDate(dateString: string): string {
   if (!dateString) return "";
@@ -139,6 +142,7 @@ function ConfirmContentImpl({
   uploadedFile,
   error,
   onEditDetail,
+  isProcessingProvider = false,
 }: ConfirmContentProps) {
   const { playerScores, opponentScores, playerTiebreaks, opponentTiebreaks } = useMemo(() => ({
     playerScores: getAdjustedScores(formData.playerScores, formData.bestOf, formData.numberOfSets),
@@ -362,6 +366,52 @@ function ConfirmContentImpl({
           </>
         );
       })()}
+
+      {/* Video analysis summary.
+          The Top/Bottom line is the whole point of this block: it resolves the
+          camera-relative answer into actual names, so a reversed choice is
+          visible here rather than silently mis-attributing every statistic. */}
+      {isProcessingProvider && (
+        <dl className="grid grid-cols-3 gap-x-6 gap-y-6 mt-6 pt-6 border-t border-[#F3F3F3]">
+          <div className="flex flex-col gap-2">
+            <dt className={eyebrowLabelCls}>Top of frame</dt>
+            <dd className="text-[13px] leading-[18px] text-[#0D0D0D]">
+              {formData.initialTopPlayerIsPlayer1 === undefined
+                ? "Not set"
+                : formData.initialTopPlayerIsPlayer1
+                ? formData.playerName || "You"
+                : formData.opponentName || "Opponent"}
+            </dd>
+          </div>
+          <div className="flex flex-col gap-2">
+            <dt className={eyebrowLabelCls}>Bottom of frame</dt>
+            <dd className="text-[13px] leading-[18px] text-[#0D0D0D]">
+              {formData.initialTopPlayerIsPlayer1 === undefined
+                ? "Not set"
+                : formData.initialTopPlayerIsPlayer1
+                ? formData.opponentName || "Opponent"
+                : formData.playerName || "You"}
+            </dd>
+          </div>
+          <div className="flex flex-col gap-2">
+            <dt className={eyebrowLabelCls}>Camera</dt>
+            <dd className="text-[13px] leading-[18px] text-[#0D0D0D]">
+              {formData.fixedCamera === undefined
+                ? "Not set"
+                : formData.fixedCamera
+                ? "Fixed position"
+                : "Moved or panned"}
+            </dd>
+          </div>
+          <div className="flex flex-col gap-2">
+            <dt className={eyebrowLabelCls}>Analysed window</dt>
+            <dd className="text-[13px] leading-[18px] text-[#0D0D0D] tabular-nums">
+              {formatClock(formData.videoStartSeconds)} –{" "}
+              {formatClock(formData.videoEndSeconds)}
+            </dd>
+          </div>
+        </dl>
+      )}
 
       {/* Source file — footnote-class metadata. Quieter treatment + tighter spacing
           so it stops competing with the hero, scoreboard, and format grid above. */}
