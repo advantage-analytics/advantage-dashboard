@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { UploadMatchFlow } from "@/components/dashboard/home/upload-match-modal/UploadMatchFlow";
+import { UploadMatchFlow } from "@/components/dashboard/matches/new-match-wizard/UploadMatchFlow";
 
 export const metadata: Metadata = {
   title: "New match",

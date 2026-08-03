@@ -1,4 +1,4 @@
-import { formatDuration } from "@/components/dashboard/home/upload-match-modal/utils";
+import { formatDuration } from "@/components/dashboard/matches/new-match-wizard/utils";
 
 export interface DbMatch {
   id: string;

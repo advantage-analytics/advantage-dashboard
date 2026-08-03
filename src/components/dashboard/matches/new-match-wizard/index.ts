@@ -3,8 +3,7 @@
  * Cleaner architecture with shell + content composition
  *
  * The wizard is a full page (`/dashboard/matches/new`); the dialog shell it
- * used to live in is gone. Directory and hook names still say "modal" — a
- * rename would churn every step component's imports for no behaviour change.
+ * used to live in is gone.
  */
 
 // Main component
@@ -44,8 +43,8 @@ export {
 } from "./types";
 
 // Custom hook
-export { useUploadMatchModal } from "./useUploadMatchModal";
-export type { UseUploadMatchModalProps, UseUploadMatchModalReturn } from "./useUploadMatchModal";
+export { useUploadMatchWizard } from "./useUploadMatchWizard";
+export type { UseUploadMatchWizardProps, UseUploadMatchWizardReturn } from "./useUploadMatchWizard";
 
 // Utilities
 export {

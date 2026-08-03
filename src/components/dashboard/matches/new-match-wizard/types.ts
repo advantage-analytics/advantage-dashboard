@@ -1,5 +1,5 @@
 /**
- * Type definitions for the Upload Match Modal wizard
+ * Type definitions for the Upload Match wizard
  */
 
 import type { ProviderKind } from "@/lib/services/upload";

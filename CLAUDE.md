@@ -68,7 +68,7 @@ SwingVision .xlsx → `SwingVisionValidator` → `SwingVisionParser` → Supabas
 
 Upload code lives in `src/lib/services/upload/` with parsers, providers, and validators subdirectories. Provider strategy pattern allows adding new data sources without touching core upload logic.
 
-The upload modal (`src/components/dashboard/home/upload-match-modal/`) is a multi-step flow: Provider → Method → Upload → Confirm. Dashboard layout cleans up upload localStorage on route changes.
+The upload wizard (`src/components/dashboard/matches/new-match-wizard/`) is a full page at `/dashboard/matches/new`, not a dialog. It is a multi-step flow whose step order branches on provider kind: import providers run Provider → Match → Confirm, processing providers insert a Video step (`STEP_ORDER_BY_KIND` in the subtree's `types.ts`). Dashboard layout cleans up upload localStorage when you navigate away from the wizard route.
 
 ### Court Visualization System
 

@@ -4,7 +4,7 @@
  * UploadMatchFlow — full-page wizard shell for creating a match.
  *
  * Replaces the dialog shell that used to host these steps. The step components,
- * the step order and every piece of state still come from `useUploadMatchModal`;
+ * the step order and every piece of state still come from `useUploadMatchWizard`;
  * only the chrome differs. Two things the page gets that a fixed-height dialog
  * could not: the trim rail is as wide as the viewport allows, and finishing has
  * somewhere to land — a dialog can only close, so success was previously silent.
@@ -21,7 +21,7 @@ import {
   STEP_CONFIG_PROCESSING,
   CONTINUE_LABEL,
 } from "./types";
-import { useUploadMatchModal } from "./useUploadMatchModal";
+import { useUploadMatchWizard } from "./useUploadMatchWizard";
 import { StepIndicator } from "./StepIndicator";
 import { ProviderContent } from "./ProviderContent";
 import { UploadContent } from "./UploadContent";
@@ -140,7 +140,7 @@ function UploadMatchWizard({ onCreated }: { onCreated: (matchId: string) => void
     onVideoPick,
     handleTrimChange,
     handleRemoveVideo,
-  } = useUploadMatchModal({
+  } = useUploadMatchWizard({
     open: true,
     onOpenChange: handleOpenChange,
     onCreated: handleCreated,
@@ -289,7 +289,7 @@ function UploadMatchWizard({ onCreated }: { onCreated: (matchId: string) => void
       }
       // Walked past the last field — hand focus to Continue with a one-shot
       // ring pulse so the chord-to-submit handoff isn't silent.
-      const cta = document.querySelector<HTMLElement>('[data-modal-continue]:not([disabled])');
+      const cta = document.querySelector<HTMLElement>('[data-wizard-continue]:not([disabled])');
       if (!cta) return;
       cta.focus();
       cta.classList.remove("animate-chord-pulse");
@@ -478,7 +478,7 @@ function UploadMatchWizard({ onCreated }: { onCreated: (matchId: string) => void
             <Button
               onClick={continueHandler}
               disabled={continueDisabled}
-              data-modal-continue
+              data-wizard-continue
               className={primaryBtnCls}
             >
               {isCreating ? "Creating…" : CONTINUE_LABEL[step]}

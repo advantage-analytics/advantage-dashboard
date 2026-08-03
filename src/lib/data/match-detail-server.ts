@@ -2,7 +2,7 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getMatchStatisticsFromSupabase, getPlayerAverageStats } from "@/lib/data/match-stats-server";
 import { getMatchPointsFromSupabase } from "@/lib/data/match-points-server";
-import { formatDuration } from "@/components/dashboard/home/upload-match-modal/utils";
+import { formatDuration } from "@/components/dashboard/matches/new-match-wizard/utils";
 import type { Match, SetScore } from "@/lib/data/types";
 
 interface DbMatch {

@@ -575,13 +575,13 @@ function VideoStepContentImpl({
                 We check it works before anything uploads
               </p>
               <Button
-                onClick={() => document.getElementById("video-input-modal")?.click()}
+                onClick={() => document.getElementById("video-input-wizard")?.click()}
                 className={`${primaryBtnCls} mt-4`}
               >
                 Browse files
               </Button>
               <input
-                id="video-input-modal"
+                id="video-input-wizard"
                 type="file"
                 accept={acceptString}
                 className="hidden"

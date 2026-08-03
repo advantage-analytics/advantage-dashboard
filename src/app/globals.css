@@ -330,31 +330,6 @@
   animation: scroll 40s linear infinite;
 }
 
-/* Upload/match modal: matches Safari native overlay scrollbar style */
-.upload-modal-scroll::-webkit-scrollbar {
-  width: 6px;
-}
-
-.upload-modal-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.upload-modal-scroll::-webkit-scrollbar-thumb {
-  background: rgba(13, 13, 15, 0.12);
-  border-radius: 100px;
-  transition: background 200ms ease-out;
-}
-
-.upload-modal-scroll:hover::-webkit-scrollbar-thumb,
-.upload-modal-scrolling::-webkit-scrollbar-thumb {
-  background: rgba(13, 13, 15, 0.25);
-}
-
-.upload-modal-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(13, 13, 15, 0.12) transparent;
-}
-
 /* Auth brand panel mesh gradient */
 .brand-mesh-gradient {
   background:

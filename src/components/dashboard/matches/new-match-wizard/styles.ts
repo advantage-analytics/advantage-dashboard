@@ -1,5 +1,5 @@
 /**
- * Shared className strings for the upload-match-modal subtree.
+ * Shared className strings for the new-match-wizard subtree.
  *
  * Every value below is a literal copy of a token documented in
  * `.skills/advantage-analytics-design/SKILL.md`. The mapping is recorded so

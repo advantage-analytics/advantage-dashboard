@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Custom hook for managing Upload Match Modal state and logic
+ * Custom hook for managing Upload Match wizard state and logic
  *
  * Orchestrates the multi-step upload wizard, including:
  * - Step navigation
@@ -46,7 +46,7 @@ import {
   MatchMetadata
 } from "./utils";
 
-export interface UseUploadMatchModalProps {
+export interface UseUploadMatchWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /**
@@ -59,7 +59,7 @@ export interface UseUploadMatchModalProps {
   onCreated?: (matchId: string) => void;
 }
 
-export interface UseUploadMatchModalReturn {
+export interface UseUploadMatchWizardReturn {
   // State
   step: Step;
   selectedProvider: ProviderId | null;
@@ -150,11 +150,11 @@ function getDefaultFormData(): MatchFormData {
   };
 }
 
-export function useUploadMatchModal({
+export function useUploadMatchWizard({
   open,
   onOpenChange,
   onCreated
-}: UseUploadMatchModalProps): UseUploadMatchModalReturn {
+}: UseUploadMatchWizardProps): UseUploadMatchWizardReturn {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
 

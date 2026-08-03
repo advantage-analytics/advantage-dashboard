@@ -15,9 +15,9 @@ import {
   eyebrowLabelCls,
   ghostBtnCls,
   primaryBtnCls,
-} from "@/components/dashboard/home/upload-match-modal/styles";
-import { validateSetScore } from "@/components/dashboard/home/upload-match-modal/utils";
-import { ScoreCell } from "@/components/dashboard/home/upload-match-modal/ScoreCell";
+} from "@/components/dashboard/matches/new-match-wizard/styles";
+import { validateSetScore } from "@/components/dashboard/matches/new-match-wizard/utils";
+import { ScoreCell } from "@/components/dashboard/matches/new-match-wizard/ScoreCell";
 
 type FieldKey = "player1_name" | "player2_name" | "date";
 

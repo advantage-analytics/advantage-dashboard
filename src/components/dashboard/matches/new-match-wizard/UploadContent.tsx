@@ -75,7 +75,7 @@ function UploadContentImpl({
 
   const hasFile = !!uploadedFile;
   const triggerBrowse = () =>
-    document.getElementById("upload-input-modal")?.click();
+    document.getElementById("upload-input-wizard")?.click();
 
   const parseStatus: "parsing" | "success" | "error" | "warning" | "idle" =
     parsingState?.isParsing
@@ -158,7 +158,7 @@ function UploadContentImpl({
                     </p>
                   </div>
 
-                  <label htmlFor="upload-input-modal">
+                  <label htmlFor="upload-input-wizard">
                     <Button
                       type="button"
                       className={primaryBtnCls}
@@ -168,7 +168,7 @@ function UploadContentImpl({
                     </Button>
                   </label>
                   <input
-                    id="upload-input-modal"
+                    id="upload-input-wizard"
                     type="file"
                     onChange={onFileChange}
                     className="hidden"

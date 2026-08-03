@@ -1,5 +1,5 @@
 /**
- * Utility functions for the Upload Match Modal
+ * Utility functions for the Upload Match wizard
  */
 
 import { FormData, WinnerLoserResult, MatchData, UploadedFile } from "./types";
