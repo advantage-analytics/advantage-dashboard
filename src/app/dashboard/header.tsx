@@ -50,6 +50,8 @@ function getStaticBreadcrumbs(
   if (pathname.startsWith("/dashboard/help")) return [{ label: "Help" }];
   if (pathname.startsWith("/dashboard/settings"))
     return [{ label: "Settings" }];
+  if (pathname === "/dashboard/matches/new")
+    return [{ label: "Matches", href: "/dashboard/matches" }, { label: "New match" }];
   if (pathname.startsWith("/dashboard/matches"))
     return [{ label: "Matches" }];
   return [];

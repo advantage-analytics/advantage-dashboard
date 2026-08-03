@@ -49,6 +49,14 @@ import {
 export interface UseUploadMatchModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Fired once the match row is committed, before the wizard is dismissed.
+   *
+   * `onOpenChange(false)` alone cannot tell "the user backed out" from "the
+   * match was created" — the modal doesn't care, but the full-page flow has to
+   * show a success state for one and navigate away for the other.
+   */
+  onCreated?: (matchId: string) => void;
 }
 
 export interface UseUploadMatchModalReturn {
@@ -144,7 +152,8 @@ function getDefaultFormData(): MatchFormData {
 
 export function useUploadMatchModal({
   open,
-  onOpenChange
+  onOpenChange,
+  onCreated
 }: UseUploadMatchModalProps): UseUploadMatchModalReturn {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -736,6 +745,7 @@ export function useUploadMatchModal({
         sessionStorage.setItem("match-processing", matchId);
       }
       window.dispatchEvent(new CustomEvent("match-created", { detail: { matchId } }));
+      onCreated?.(matchId);
 
       // Close the modal FIRST, then refresh after it has finished closing. The modal is
       // a Radix dialog that locks <body> (pointer-events + scroll) while open. On the
@@ -829,7 +839,7 @@ export function useUploadMatchModal({
     } finally {
       setIsCreating(false);
     }
-  }, [formData, uploadedFile, selectedProvider, isProcessingProvider, supabase, isPrivateMatch, onOpenChange, router]);
+  }, [formData, uploadedFile, selectedProvider, isProcessingProvider, supabase, isPrivateMatch, onOpenChange, onCreated, router]);
 
   return {
     // State

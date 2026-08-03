@@ -11,12 +11,6 @@ export type Step = "provider" | "video" | "match" | "confirm";
 /** Optional Match-step fields that the Confirm step can deep-link back to. */
 export type DetailField = "round" | "matchType" | "courtType";
 
-/** Props for the main UploadMatchModal component */
-export interface UploadMatchModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}
-
 /** Form data structure for match details */
 export interface FormData {
   eventName: string;

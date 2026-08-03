@@ -6,6 +6,11 @@
  * Everything here runs against the LOCAL file. The video is scrubbed through an
  * object URL, so trimming is instant and does not wait on any upload. Nothing
  * leaves the browser on this step.
+ *
+ * The rail is a filmstrip rather than a bar, and holding a handle zooms the
+ * window it spans. That matters because these clips are hours long: at full
+ * extent one pixel is several seconds, which is not a resolution you can place
+ * a cut against a serve with. Zoomed, the same pixel is a handful of frames.
  */
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -16,9 +21,14 @@ import {
   ChevronRight,
   Clapperboard,
   Loader2,
+  Pause,
+  Play,
   Trash2,
+  Volume2,
+  VolumeX,
   XCircle,
 } from "lucide-react";
+import { useVideoFilmstrip } from "@/hooks/use-video-filmstrip";
 import type { VideoProbeSummary } from "./types";
 import {
   primaryBtnCls,
@@ -58,6 +68,39 @@ type Handle = "start" | "end";
 
 const HANDLES: readonly Handle[] = ["start", "end"];
 
+/** Rail height in CSS pixels. Also sets the thumbnail size. */
+const RAIL_HEIGHT_PX = 56;
+
+/** How far the rail zooms in when precision engages. */
+const PRECISION_ZOOM = 14;
+
+/** Never zoom tighter than this — below it the strip is all one frame. */
+const MIN_PRECISION_SPAN_SECONDS = 45;
+
+/** Pointer must rest this long before the rail zooms. See onMove. */
+const HOLD_TO_ZOOM_MS = 200;
+
+const ZOOM_ANIM_MS = 260;
+
+/** Drag within this fraction of either edge pans the zoomed window. */
+const AUTOPAN_EDGE = 0.06;
+const AUTOPAN_STEP = 0.04;
+
+const TICK_COUNT = 5;
+
+/** Floating frame preview. Height follows the video's own aspect ratio. */
+const PREVIEW_WIDTH_PX = 132;
+
+const FALLBACK_ASPECT = 16 / 9;
+
+const transportBtnCls =
+  `h-6 rounded-[6px] px-2.5 text-[11px] font-medium tabular-nums bg-white/10 text-white/85 hover:bg-white/[0.18] transition-colors duration-200 ${focusRingCls}`;
+
+interface ViewWindow {
+  start: number;
+  span: number;
+}
+
 function VideoStepContentImpl({
   videoFile,
   probe,
@@ -79,14 +122,46 @@ function VideoStepContentImpl({
 }: VideoStepContentProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const railRef = useRef<HTMLDivElement>(null);
+  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+
   const [dragging, setDragging] = useState<Handle | null>(null);
+  const [precision, setPrecision] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [railWidth, setRailWidth] = useState(0);
+
+  const duration = probe?.durationSeconds ?? 0;
+  const start = startSeconds ?? 0;
+  const end = endSeconds ?? duration;
+  const selectedDuration = Math.max(0, end - start);
+  const tooShort = duration > 0 && selectedDuration < minTrimSeconds;
+
+  /** One frame, when we know the rate. Falls back to a reasonable nudge. */
+  const frameStep = probe?.fps ? 1 / probe.fps : 0.1;
+
+  // The slice of the clip the rail spans, as an override on top of "the whole
+  // video". Null is the resting state rather than a copy of the duration, so a
+  // new file needs no reset — the derived window follows it.
+  const [zoom, setZoom] = useState<ViewWindow | null>(null);
+  const viewRef = useRef<ViewWindow>({ start: 0, span: 0 });
+  const rafRef = useRef<number | null>(null);
+
+  const view = useMemo<ViewWindow>(() => {
+    if (!zoom || duration <= 0) return { start: 0, span: duration };
+    // Clamped rather than trusted: a zoom left over from a previous, longer
+    // file would otherwise scroll the rail off the end of a shorter one.
+    const span = Math.min(zoom.span, duration);
+    return { start: Math.max(0, Math.min(duration - span, zoom.start)), span };
+  }, [zoom, duration]);
+
+  const filmstrip = useVideoFilmstrip(videoFile, duration);
 
   // Playhead is written imperatively rather than held in state. It updates ~4x
   // a second during playback and twice per pointermove while dragging (the
   // seek fires its own timeupdate), and none of the rest of this step — probe
-  // chips, warnings, rail, both control columns — depends on it. Re-rendering
-  // all of that to move one 1px line is waste on the one thread that is busy
-  // decoding video.
+  // chips, warnings, filmstrip, both control columns — depends on it.
+  // Re-rendering all of that to move one 1px line is waste on the one thread
+  // that is busy decoding video.
   const playheadRef = useRef(0);
   const playheadElRef = useRef<HTMLDivElement>(null);
 
@@ -111,28 +186,80 @@ function VideoStepContentImpl({
     };
   }, [objectUrl]);
 
-  const duration = probe?.durationSeconds ?? 0;
-  const start = startSeconds ?? 0;
-  const end = endSeconds ?? duration;
-  const selectedDuration = Math.max(0, end - start);
-  const tooShort = duration > 0 && selectedDuration < minTrimSeconds;
+  const applyPlayhead = useCallback(() => {
+    const el = playheadElRef.current;
+    if (!el) return;
+    const { start: viewStart, span } = viewRef.current;
+    const pct = span > 0 ? ((playheadRef.current - viewStart) / span) * 100 : 0;
+    el.style.left = `${pct}%`;
+    // Hidden rather than clamped when the playhead falls outside the zoomed
+    // window — pinning it to an edge reads as "the playhead is here", which is
+    // exactly wrong.
+    el.style.opacity = pct < 0 || pct > 100 ? "0" : "1";
+  }, []);
 
-  /** One frame, when we know the rate. Falls back to a reasonable nudge. */
-  const frameStep = probe?.fps ? 1 / probe.fps : 0.1;
-
-  const setPlayhead = useCallback(
-    (time: number) => {
-      playheadRef.current = time;
-      const el = playheadElRef.current;
-      if (el) el.style.left = duration > 0 ? `${(time / duration) * 100}%` : "0%";
-    },
-    [duration]
-  );
-
-  // The imperative style survives re-renders, so reset it when the source changes.
+  // Mirror `view` into a ref for the imperative playhead and the window-level
+  // pointer handlers. Written in an effect, never during render.
   useEffect(() => {
-    setPlayhead(0);
-  }, [objectUrl, setPlayhead]);
+    viewRef.current = view;
+    applyPlayhead();
+  }, [view, applyPlayhead]);
+
+  // A new source rewinds the playhead and cancels any zoom still animating.
+  // The window itself needs no reset — see the derivation above.
+  useEffect(() => {
+    playheadRef.current = 0;
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [objectUrl]);
+
+  // Rail width drives how many thumbnails tile across it, and the
+  // seconds-per-pixel figure in the precision badge.
+  useEffect(() => {
+    const el = railRef.current;
+    if (!el) return;
+    setRailWidth(el.getBoundingClientRect().width);
+    const observer = new ResizeObserver((entries) => {
+      setRailWidth(entries[0].contentRect.width);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [videoFile]);
+
+  /**
+   * Ease the rail window to a new span.
+   *
+   * `settleToRest` lands on null rather than on the target numbers, so zooming
+   * back out returns the window to "however long this video is" instead of
+   * pinning a stale copy of the duration.
+   */
+  const animateView = useCallback(
+    (toStart: number, toSpan: number, settleToRest = false) => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      const from = viewRef.current;
+      const startedAt = performance.now();
+      const tick = (now: number) => {
+        const k = Math.min(1, (now - startedAt) / ZOOM_ANIM_MS);
+        if (k < 1) {
+          const eased = 1 - Math.pow(1 - k, 3);
+          setZoom({
+            start: from.start + (toStart - from.start) * eased,
+            span: from.span + (toSpan - from.span) * eased,
+          });
+          rafRef.current = requestAnimationFrame(tick);
+          return;
+        }
+        setZoom(settleToRest ? null : { start: toStart, span: toSpan });
+        rafRef.current = null;
+      };
+      rafRef.current = requestAnimationFrame(tick);
+    },
+    []
+  );
 
   const seekTo = useCallback(
     (time: number) => {
@@ -143,16 +270,14 @@ function VideoStepContentImpl({
     [duration]
   );
 
-  const positionFromEvent = useCallback(
-    (clientX: number): number => {
-      const rail = railRef.current;
-      if (!rail || duration <= 0) return 0;
-      const rect = rail.getBoundingClientRect();
-      const ratio = (clientX - rect.left) / rect.width;
-      return Math.max(0, Math.min(1, ratio)) * duration;
-    },
-    [duration]
-  );
+  const positionFromEvent = useCallback((clientX: number): number => {
+    const rail = railRef.current;
+    if (!rail) return 0;
+    const rect = rail.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const { start: viewStart, span } = viewRef.current;
+    return viewStart + ratio * span;
+  }, []);
 
   /**
    * Single clamp for both handles. Drag and nudge previously each had their own
@@ -174,6 +299,29 @@ function VideoStepContentImpl({
     [start, end, duration, frameStep, onTrimChange, seekTo]
   );
 
+  /**
+   * Narrow the rail around the held handle, keeping it under the cursor so the
+   * grab point doesn't jump out from under the user's finger.
+   */
+  const engagePrecision = useCallback(
+    (handle: Handle, clientX: number) => {
+      const rail = railRef.current;
+      if (!rail || duration <= 0) return;
+      const span = Math.max(MIN_PRECISION_SPAN_SECONDS, duration / PRECISION_ZOOM);
+      // Short clip — the whole thing already fits at frame resolution.
+      if (span >= duration) return;
+
+      const rect = rail.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const anchor = handle === "start" ? start : end;
+      const nextStart = Math.max(0, Math.min(duration - span, anchor - ratio * span));
+
+      setPrecision(true);
+      animateView(nextStart, span);
+    },
+    [duration, start, end, animateView]
+  );
+
   // Drag inputs go through a ref so the window subscription keys only on
   // `dragging`. Depending on start/end directly re-subscribed on every pointer
   // sample, since each move writes them back through onTrimChange.
@@ -182,35 +330,216 @@ function VideoStepContentImpl({
   // unsafe when a render can be discarded or replayed. This effect is declared
   // before the drag effect below, and pointer events only fire after both have
   // committed, so onMove always sees current values.
-  const dragCtx = useRef({ moveHandle, positionFromEvent });
+  const dragCtx = useRef({ moveHandle, positionFromEvent, engagePrecision, precision, duration });
   useEffect(() => {
-    dragCtx.current = { moveHandle, positionFromEvent };
+    dragCtx.current = { moveHandle, positionFromEvent, engagePrecision, precision, duration };
   });
+
+  const draggingRef = useRef<Handle | null>(null);
+  useEffect(() => {
+    draggingRef.current = dragging;
+  }, [dragging]);
 
   useEffect(() => {
     if (!dragging) return;
 
-    const onMove = (e: PointerEvent) => {
-      const { moveHandle: move, positionFromEvent: pos } = dragCtx.current;
-      move(dragging, pos(e.clientX));
+    // Hold-to-zoom, re-armed on every move. A quick grab-and-throw across the
+    // rail stays at full extent — which is what you want when dragging the end
+    // handle from the third set back to the first. Rest the pointer for a beat,
+    // at grab time or mid-drag, and the window narrows around it.
+    let holdTimer: ReturnType<typeof setTimeout> | undefined;
+    const armHold = (clientX: number) => {
+      clearTimeout(holdTimer);
+      if (dragCtx.current.precision) return;
+      holdTimer = setTimeout(() => {
+        dragCtx.current.engagePrecision(dragging, clientX);
+      }, HOLD_TO_ZOOM_MS);
     };
-    const onUp = () => setDragging(null);
+
+    const onMove = (e: PointerEvent) => {
+      const ctx = dragCtx.current;
+      ctx.moveHandle(dragging, ctx.positionFromEvent(e.clientX));
+      armHold(e.clientX);
+
+      // Edge auto-pan, so a zoomed window can still be walked along the clip.
+      const rail = railRef.current;
+      if (!rail || !ctx.precision) return;
+      const rect = rail.getBoundingClientRect();
+      const ratio = (e.clientX - rect.left) / rect.width;
+      if (ratio >= AUTOPAN_EDGE && ratio <= 1 - AUTOPAN_EDGE) return;
+      const direction = ratio < AUTOPAN_EDGE ? -1 : 1;
+      setZoom((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          start: Math.max(
+            0,
+            Math.min(ctx.duration - prev.span, prev.start + direction * prev.span * AUTOPAN_STEP)
+          ),
+        };
+      });
+    };
+
+    const onUp = () => {
+      clearTimeout(holdTimer);
+      setDragging(null);
+      setPrecision(false);
+      animateView(0, dragCtx.current.duration, true);
+    };
 
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     return () => {
+      clearTimeout(holdTimer);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
     };
-  }, [dragging]);
+  }, [dragging, animateView]);
+
+  const startDrag = useCallback((handle: Handle, clientX: number) => {
+    setDragging(handle);
+    // The window handler arms its own hold timer on the first move; this covers
+    // a press with no movement at all.
+    window.setTimeout(() => {
+      if (draggingRef.current === handle && !dragCtx.current.precision) {
+        dragCtx.current.engagePrecision(handle, clientX);
+      }
+    }, HOLD_TO_ZOOM_MS);
+  }, []);
 
   const nudge = useCallback(
-    (handle: Handle, direction: -1 | 1) => {
+    (handle: Handle, direction: -1 | 1, coarse = false) => {
       const from = handle === "start" ? start : end;
-      moveHandle(handle, from + frameStep * direction);
+      moveHandle(handle, from + (coarse ? 1 : frameStep) * direction);
     },
     [start, end, frameStep, moveHandle]
   );
+
+  const seekBy = useCallback(
+    (delta: number) => {
+      const el = videoRef.current;
+      if (!el) return;
+      seekTo(el.currentTime + delta);
+    },
+    [seekTo]
+  );
+
+  const togglePlay = useCallback(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    if (el.paused) void el.play().catch(() => undefined);
+    else el.pause();
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    el.muted = !el.muted;
+    setIsMuted(el.muted);
+  }, []);
+
+  /**
+   * Keep the playhead marker in step, and paint the floating preview.
+   *
+   * The preview is drawn from the main player rather than a second video
+   * element: the drag already seeks this one, so painting the frame it just
+   * landed on costs a canvas blit instead of a whole extra decode.
+   */
+  const handleSeeked = useCallback(
+    (e: React.SyntheticEvent<HTMLVideoElement>) => {
+      const el = e.currentTarget;
+      playheadRef.current = el.currentTime;
+      applyPlayhead();
+
+      if (!draggingRef.current) return;
+      const canvas = previewCanvasRef.current;
+      const ctx = canvas?.getContext("2d");
+      if (!canvas || !ctx) return;
+      try {
+        ctx.drawImage(el, 0, 0, canvas.width, canvas.height);
+      } catch {
+        // A codec the browser will decode but not paint. The clocks and the
+        // rail still work; only the thumbnail is missing.
+      }
+    },
+    [applyPlayhead]
+  );
+
+  const handleTimeUpdate = useCallback(
+    (e: React.SyntheticEvent<HTMLVideoElement>) => {
+      playheadRef.current = e.currentTarget.currentTime;
+      applyPlayhead();
+    },
+    [applyPlayhead]
+  );
+
+  // ---- Derived geometry ----
+
+  const pct = useCallback(
+    (time: number) => (view.span > 0 ? ((time - view.start) / view.span) * 100 : 0),
+    [view]
+  );
+
+  const startPct = pct(start);
+  const endPct = pct(end);
+  const draggedPct = dragging ? pct(dragging === "start" ? start : end) : 0;
+
+  // Zoomed, a handle routinely sits outside the window — the end of a match is
+  // an hour past a start-handle zoom. The bars that span the selection have to
+  // be clipped to the rail or they paint across the page; the handles
+  // themselves are hidden rather than pinned to an edge, since a marker parked
+  // at 0% reads as "the cut is here", which is exactly wrong.
+  const visibleStartPct = Math.max(0, Math.min(100, startPct));
+  const visibleEndPct = Math.max(0, Math.min(100, endPct));
+  const selectionWidthPct = Math.max(0, visibleEndPct - visibleStartPct);
+
+  const aspect =
+    probe && probe.width > 0 && probe.height > 0 ? probe.width / probe.height : FALLBACK_ASPECT;
+  const previewHeightPx = Math.round(PREVIEW_WIDTH_PX / aspect);
+
+  /**
+   * Thumbnails tile at their natural aspect and are looked up by time, rather
+   * than being stretched to fill. Zoomed in, neighbouring slots resolve to the
+   * same sample and the strip visibly repeats — which is honest: twenty frames
+   * is what was decoded. The live preview above the handle is what carries
+   * frame-level detail at that magnification.
+   */
+  const slots = useMemo(() => {
+    const thumbWidth = Math.max(24, Math.round(RAIL_HEIGHT_PX * aspect));
+    const count = railWidth > 0 ? Math.ceil(railWidth / thumbWidth) : 0;
+    const frames = filmstrip.frames;
+    if (count === 0 || frames.length === 0 || duration <= 0) return [];
+
+    return Array.from({ length: count }, (_, i) => {
+      const time = view.start + ((i + 0.5) / count) * view.span;
+      const index = Math.round((time / duration) * frames.length - 0.5);
+      return {
+        key: i,
+        src: frames[Math.max(0, Math.min(frames.length - 1, index))],
+      };
+    });
+  }, [aspect, railWidth, filmstrip.frames, duration, view]);
+
+  const ticks = useMemo(
+    () =>
+      Array.from({ length: TICK_COUNT }, (_, i) => {
+        const fraction = i / (TICK_COUNT - 1);
+        return {
+          key: i,
+          label: formatClock(view.start + fraction * view.span),
+          left: `${fraction * 100}%`,
+          translate:
+            i === 0 ? "translateX(0)" : i === TICK_COUNT - 1 ? "translateX(-100%)" : "translateX(-50%)",
+        };
+      }),
+    [view]
+  );
+
+  const secondsPerPixel = railWidth > 0 ? view.span / railWidth : 0;
+  const precisionLabel =
+    probe?.fps && secondsPerPixel < 1
+      ? `1px ≈ ${Math.max(1, Math.round(secondsPerPixel * probe.fps))} frames`
+      : `1px ≈ ${secondsPerPixel.toFixed(1)}s`;
 
   // ---- Empty / loading / error states ----
 
@@ -337,87 +666,229 @@ function VideoStepContentImpl({
         </div>
       ) : null}
 
-      {/* Player — local playback, no network */}
-      <div className="overflow-hidden rounded-[10px] bg-[#0D0D0D]">
+      {/* Player — local playback, no network. Native controls are omitted
+          because the rail below is the scrub surface; a second timeline inside
+          the frame would compete with it. */}
+      <div className="relative overflow-hidden rounded-[10px] bg-[#0D0D0D]">
         {objectUrl ? (
           <video
             ref={videoRef}
             src={objectUrl}
-            controls
             playsInline
             preload="metadata"
-            onTimeUpdate={(e) => setPlayhead(e.currentTarget.currentTime)}
-            className="max-h-[240px] w-full bg-black"
+            onSeeked={handleSeeked}
+            onTimeUpdate={handleTimeUpdate}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onClick={togglePlay}
+            className="max-h-[280px] w-full cursor-pointer bg-black"
           />
         ) : null}
+
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 bg-gradient-to-t from-black/55 to-transparent pb-2.5 pt-8">
+          <div className="pointer-events-auto flex items-center gap-2">
+            <button onClick={() => seekBy(-10)} className={transportBtnCls}>
+              −10s
+            </button>
+            <button
+              onClick={() => seekBy(-frameStep)}
+              className={transportBtnCls}
+              aria-label="Back one frame"
+            >
+              −1f
+            </button>
+            <button
+              onClick={togglePlay}
+              aria-label={isPlaying ? "Pause" : "Play"}
+              className={`flex h-6 w-11 items-center justify-center rounded-[6px] bg-[#3B82F6] text-white transition-colors duration-200 hover:bg-[#2563EB] ${focusRingCls}`}
+            >
+              {isPlaying ? (
+                <Pause className="size-3" strokeWidth={2} fill="currentColor" />
+              ) : (
+                <Play className="size-3" strokeWidth={2} fill="currentColor" />
+              )}
+            </button>
+            <button
+              onClick={() => seekBy(frameStep)}
+              className={transportBtnCls}
+              aria-label="Forward one frame"
+            >
+              +1f
+            </button>
+            <button onClick={() => seekBy(10)} className={transportBtnCls}>
+              +10s
+            </button>
+            <button
+              onClick={toggleMute}
+              aria-label={isMuted ? "Unmute" : "Mute"}
+              className={`flex size-6 items-center justify-center rounded-[6px] bg-white/10 text-white/85 transition-colors duration-200 hover:bg-white/[0.18] ${focusRingCls}`}
+            >
+              {isMuted ? (
+                <VolumeX className="size-3" strokeWidth={1.5} />
+              ) : (
+                <Volume2 className="size-3" strokeWidth={1.5} />
+              )}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Trim */}
       <div className="flex flex-col gap-3">
-        <div className="flex items-baseline justify-between">
-          <span className={eyebrowLabelCls}>Trim to the match</span>
+        <div className="flex items-baseline gap-3">
+          <span className={`${eyebrowLabelCls} whitespace-nowrap`}>Trim to the match</span>
+          <span className="flex-1" />
+          {precision ? (
+            <span className="rounded-full bg-[#3B82F6]/[0.08] px-2 py-0.5 text-[9px] font-medium uppercase tracking-[2px] tabular-nums text-[#3B82F6]">
+              Precision · {precisionLabel}
+            </span>
+          ) : null}
           <span className="text-[11px] tabular-nums text-[#888888]">
             {formatClipLength(selectedDuration)} selected
           </span>
         </div>
 
-        {/* Rail. Click seeks; handles drag. */}
-        <div
-          ref={railRef}
-          onPointerDown={(e) => seekTo(positionFromEvent(e.clientX))}
-          className="relative h-9 cursor-pointer select-none rounded-[6px] bg-[#F3F3F3] touch-none"
-        >
-          {duration > 0 ? (
-            <>
-              {/* Selected region */}
-              <div
-                className="absolute inset-y-0 bg-[#3B82F6]/15"
-                style={{
-                  left: `${(start / duration) * 100}%`,
-                  width: `${(selectedDuration / duration) * 100}%`,
-                }}
+        <div className="relative">
+          {/* Live frame at the handle being dragged. Sits above the rail on its
+              own layer so showing it never reflows the strip. */}
+          {dragging ? (
+            <div
+              className="pointer-events-none absolute bottom-[calc(100%+8px)] z-10 overflow-hidden rounded-[8px] border border-[#E5E5EA] bg-white shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]"
+              style={{
+                width: PREVIEW_WIDTH_PX,
+                left: `clamp(0px, calc(${draggedPct}% - ${PREVIEW_WIDTH_PX / 2}px), calc(100% - ${PREVIEW_WIDTH_PX}px))`,
+              }}
+            >
+              <canvas
+                ref={previewCanvasRef}
+                width={PREVIEW_WIDTH_PX * 2}
+                height={previewHeightPx * 2}
+                className="block w-full bg-[#0D0D0D]"
+                style={{ height: previewHeightPx }}
               />
-              {/* Playhead — position written imperatively, see setPlayhead */}
-              <div
-                ref={playheadElRef}
-                className="pointer-events-none absolute inset-y-0 w-px bg-[#0D0D0D]"
-                style={{ left: 0 }}
-              />
-              {/* Handles */}
-              {HANDLES.map((handle) => {
-                const value = handle === "start" ? start : end;
-                return (
-                  <div
-                    key={handle}
-                    role="slider"
-                    tabIndex={0}
-                    aria-label={handle === "start" ? "Trim start" : "Trim end"}
-                    aria-valuemin={0}
-                    aria-valuemax={duration}
-                    aria-valuenow={value}
-                    aria-valuetext={formatClock(value, { tenths: true })}
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      setDragging(handle);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "ArrowLeft") {
-                        e.preventDefault();
-                        nudge(handle, -1);
-                      } else if (e.key === "ArrowRight") {
-                        e.preventDefault();
-                        nudge(handle, 1);
-                      }
-                    }}
-                    className={`absolute inset-y-0 -ml-1.5 w-3 cursor-ew-resize rounded-[3px] ${focusRingCls}`}
-                    style={{ left: `${(value / duration) * 100}%` }}
-                  >
-                    <div className="mx-auto h-full w-[3px] rounded-full bg-[#3B82F6]" />
-                  </div>
-                );
-              })}
-            </>
+              <div className="bg-white py-1 text-center text-[10px] tabular-nums text-[#525252]">
+                {formatClock(dragging === "start" ? start : end, { tenths: true })}
+              </div>
+            </div>
           ) : null}
+
+          {/* Rail. Click seeks; handles drag. */}
+          <div
+            ref={railRef}
+            onPointerDown={(e) => seekTo(positionFromEvent(e.clientX))}
+            className="relative cursor-pointer touch-none select-none rounded-[8px] bg-[#0D0D0D]"
+            style={{ height: RAIL_HEIGHT_PX }}
+          >
+            {duration > 0 ? (
+              <>
+                {/* Filmstrip */}
+                <div
+                  className={`absolute inset-0 flex overflow-hidden rounded-[8px] transition-opacity duration-200 ${
+                    precision ? "opacity-40" : "opacity-100"
+                  }`}
+                >
+                  {slots.map((slot) => (
+                    <div
+                      key={slot.key}
+                      className="h-full min-w-0 flex-1 border-r border-white/[0.06] last:border-r-0"
+                    >
+                      {slot.src ? (
+                        <img
+                          src={slot.src}
+                          alt=""
+                          draggable={false}
+                          className="size-full object-cover"
+                        />
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+
+                {filmstrip.isExtracting ? (
+                  <span className="pointer-events-none absolute right-2 top-2 rounded-[4px] bg-black/55 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-[1.5px] text-white/70">
+                    Reading frames
+                  </span>
+                ) : null}
+
+                {/* Everything outside the selection, dimmed */}
+                <div
+                  className="pointer-events-none absolute inset-y-0 left-0 rounded-l-[8px] bg-[#FAFAFA]/[0.78]"
+                  style={{ width: `${visibleStartPct}%` }}
+                />
+                <div
+                  className="pointer-events-none absolute inset-y-0 rounded-r-[8px] bg-[#FAFAFA]/[0.78]"
+                  style={{ left: `${visibleEndPct}%`, width: `${100 - visibleEndPct}%` }}
+                />
+
+                {/* Selection edges */}
+                <div
+                  className="pointer-events-none absolute top-0 h-0.5 bg-[#3B82F6]"
+                  style={{ left: `${visibleStartPct}%`, width: `${selectionWidthPct}%` }}
+                />
+                <div
+                  className="pointer-events-none absolute bottom-0 h-0.5 bg-[#3B82F6]"
+                  style={{ left: `${visibleStartPct}%`, width: `${selectionWidthPct}%` }}
+                />
+
+                {/* Playhead — position written imperatively, see applyPlayhead */}
+                <div
+                  ref={playheadElRef}
+                  className="pointer-events-none absolute -top-1 -bottom-1 z-[2] w-px bg-white shadow-[0_0_0_0.5px_rgba(0,0,0,0.4)]"
+                  style={{ left: 0 }}
+                />
+
+                {/* Handles */}
+                {HANDLES.map((handle) => {
+                  const value = handle === "start" ? start : end;
+                  const handlePct = pct(value);
+                  if (handlePct < 0 || handlePct > 100) return null;
+                  return (
+                    <div
+                      key={handle}
+                      role="slider"
+                      tabIndex={0}
+                      aria-label={handle === "start" ? "Trim start" : "Trim end"}
+                      aria-valuemin={0}
+                      aria-valuemax={duration}
+                      aria-valuenow={value}
+                      aria-valuetext={formatClock(value, { tenths: true })}
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        startDrag(handle, e.clientX);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "ArrowLeft") {
+                          e.preventDefault();
+                          nudge(handle, -1, e.shiftKey);
+                        } else if (e.key === "ArrowRight") {
+                          e.preventDefault();
+                          nudge(handle, 1, e.shiftKey);
+                        }
+                      }}
+                      className={`absolute -top-1.5 -bottom-1.5 z-[3] -ml-1.5 flex w-3.5 cursor-ew-resize items-center justify-center rounded-[3px] ${focusRingCls}`}
+                      style={{ left: `${handlePct}%` }}
+                    >
+                      <div className="h-[calc(100%-4px)] w-[5px] rounded-full bg-[#3B82F6] shadow-[0_0_0_1.5px_#fff]" />
+                    </div>
+                  );
+                })}
+              </>
+            ) : null}
+          </div>
+
+          {/* Timestamps for the window the rail currently spans */}
+          <div className="relative mt-1.5 h-4">
+            {ticks.map((tick) => (
+              <span
+                key={tick.key}
+                className="absolute text-[10px] tabular-nums text-[#AAAAAA]"
+                style={{ left: tick.left, transform: tick.translate }}
+              >
+                {tick.label}
+              </span>
+            ))}
+          </div>
         </div>
 
         {/* Precise controls for each end */}
@@ -469,10 +940,11 @@ function VideoStepContentImpl({
           </div>
         ) : (
           <p className="text-[12px] leading-[1.5] text-[#888888]">
-            Set the start just before the first serve and the end just after the final
-            point. The window must contain <span className="text-[#525252]">complete games</span>{" "}
-            matching the score you enter next — cutting into the middle of a game throws off
-            every point after it.
+            Hold a handle to zoom into that part of the video — the strip magnifies so
+            each pixel moves frames, not minutes. Set the start just before the first
+            serve and the end just after the final point. The window must contain{" "}
+            <span className="text-[#525252]">complete games</span> matching the score you
+            enter next — cutting into the middle of a game throws off every point after it.
           </p>
         )}
       </div>

@@ -1,10 +1,14 @@
 /**
- * Upload Match Modal - Barrel Export
+ * Upload Match wizard - Barrel Export
  * Cleaner architecture with shell + content composition
+ *
+ * The wizard is a full page (`/dashboard/matches/new`); the dialog shell it
+ * used to live in is gone. Directory and hook names still say "modal" — a
+ * rename would churn every step component's imports for no behaviour change.
  */
 
 // Main component
-export { UploadMatchModal } from "./UploadMatchModal";
+export { UploadMatchFlow } from "./UploadMatchFlow";
 
 // Shell components
 export { StepIndicator } from "./StepIndicator";
@@ -25,7 +29,6 @@ export type { ConfirmContentProps } from "./ConfirmContent";
 // Types
 export type {
   Step,
-  UploadMatchModalProps,
   FormData,
   UploadedFile,
   WinnerLoserResult,

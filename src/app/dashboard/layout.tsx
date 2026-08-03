@@ -26,8 +26,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
    * This ensures a clean slate when returning to the upload flow
    */
   useEffect(() => {
-    // Check if we're leaving the upload flow
-    if (!pathname.startsWith('/dashboard/upload')) {
+    // Check if we're leaving the upload flow. The path is the wizard's own
+    // route — this used to name `/dashboard/upload`, which no route has ever
+    // matched, so the guard never held and storage was cleared everywhere.
+    if (!pathname.startsWith('/dashboard/matches/new')) {
       localStorage.removeItem("selectedProvider");
       localStorage.removeItem("uploadFormData");
       localStorage.removeItem("uploadedFile");
