@@ -93,6 +93,22 @@ const PREVIEW_WIDTH_PX = 132;
 
 const FALLBACK_ASPECT = 16 / 9;
 
+/**
+ * Ceiling for the player, applied to height and (via the aspect ratio) width.
+ *
+ * Set so that 16:9 never reaches it in this column: match footage is landscape,
+ * so it fills the width and shares its edges with the trim rail underneath.
+ * That alignment is the point — the rail scrubs the player, and two elements
+ * that read as one control should not be inset from each other. Squarer or
+ * portrait clips do hit the cap and centre, which is inherent to their shape.
+ *
+ * Deliberately not a viewport-relative value. Clamping to vh keeps the rail
+ * above the fold on short screens, but it also unpins the player from the
+ * column at every ordinary window size, which trades a permanent misalignment
+ * for a scroll the page already handles.
+ */
+const PLAYER_MAX_HEIGHT = "440px";
+
 const transportBtnCls =
   `h-6 rounded-[6px] px-2.5 text-[11px] font-medium tabular-nums bg-white/10 text-white/85 hover:bg-white/[0.18] transition-colors duration-200 ${focusRingCls}`;
 
@@ -465,6 +481,19 @@ function VideoStepContentImpl({
     [applyPlayhead]
   );
 
+  /**
+   * Force the first frame to paint.
+   *
+   * With `preload="metadata"` the element knows its dimensions but has not
+   * decoded a frame, so the player sits black until something seeks it. A
+   * sub-frame nudge costs one decode and means the box shows the video the
+   * moment it is sized.
+   */
+  const paintFirstFrame = useCallback((e: React.SyntheticEvent<HTMLVideoElement>) => {
+    const el = e.currentTarget;
+    if (el.currentTime === 0) el.currentTime = 0.001;
+  }, []);
+
   const handleTimeUpdate = useCallback(
     (e: React.SyntheticEvent<HTMLVideoElement>) => {
       playheadRef.current = e.currentTarget.currentTime;
@@ -668,20 +697,35 @@ function VideoStepContentImpl({
 
       {/* Player — local playback, no network. Native controls are omitted
           because the rail below is the scrub surface; a second timeline inside
-          the frame would compete with it. */}
-      <div className="relative overflow-hidden rounded-[10px] bg-[#0D0D0D]">
+          the frame would compete with it.
+
+          The frame carries the clip's own aspect ratio rather than a fixed
+          height, so there are no pillarbox bars: the box IS the video's shape.
+          Capping height and width from the same value keeps a portrait clip
+          from running the length of the page. At 16:9 in this column the cap
+          isn't reached, so match footage fills the width and lines up with the
+          rail beneath it. */}
+      <div
+        className="relative mx-auto w-full overflow-hidden rounded-[10px] bg-[#0D0D0D]"
+        style={{
+          aspectRatio: aspect,
+          maxHeight: PLAYER_MAX_HEIGHT,
+          maxWidth: `calc(${PLAYER_MAX_HEIGHT} * ${aspect})`,
+        }}
+      >
         {objectUrl ? (
           <video
             ref={videoRef}
             src={objectUrl}
             playsInline
             preload="metadata"
+            onLoadedMetadata={paintFirstFrame}
             onSeeked={handleSeeked}
             onTimeUpdate={handleTimeUpdate}
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
             onClick={togglePlay}
-            className="max-h-[280px] w-full cursor-pointer bg-black"
+            className="block size-full cursor-pointer bg-black object-contain"
           />
         ) : null}
 

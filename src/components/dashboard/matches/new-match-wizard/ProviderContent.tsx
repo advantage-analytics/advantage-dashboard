@@ -50,6 +50,11 @@ function ProviderContentImpl({ selectedProvider, onProviderSelect }: ProviderCon
               <img
                 src={provider.logo}
                 alt={provider.name}
+                style={
+                  provider.logoMaxHeight
+                    ? { maxHeight: provider.logoMaxHeight }
+                    : undefined
+                }
                 className={`max-w-full max-h-full object-contain transition-opacity duration-200 ${
                   isAvailable ? "" : "opacity-50"
                 }`}

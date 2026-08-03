@@ -346,9 +346,7 @@ function UploadMatchWizard({ onCreated }: { onCreated: (matchId: string) => void
   return (
     <div className="flex min-h-[calc(100vh-56px)] flex-col">
       <div className={`${CONTENT_CLS} pb-10 pt-7`}>
-        <div className="max-w-[340px]">
-          <StepIndicator currentStep={currentStepIndex} totalSteps={stepOrder.length} />
-        </div>
+        <StepIndicator currentStep={currentStepIndex} totalSteps={stepOrder.length} />
 
         <h1 className="mt-6 text-[24px] font-light leading-[30px] tracking-[-0.5px] text-[#1D1D1F]">
           {title}
@@ -434,8 +432,18 @@ function UploadMatchWizard({ onCreated }: { onCreated: (matchId: string) => void
       </div>
 
       {/* Footer sticks to the bottom of the viewport so the primary action is
-          reachable without scrolling to the end of a long form. */}
-      <div className="sticky bottom-0 mt-auto border-t border-[#F3F3F3] bg-[#FAFAFA]">
+          reachable without scrolling to the end of a long form.
+
+          White on a hairline, matching the app header rather than the tinted
+          bar this had while it was a dialog footer. In a dialog the tint
+          separated the action row from the body; on a page it was a full-bleed
+          grey band under a centred 820px column, weighted to nothing in the
+          composition. The header is the only other persistent chrome in the
+          dashboard and it is white, so this follows it. The border is
+          unconditional where the header's is scroll-triggered: the header at
+          scroll-top is genuinely part of the page, while an action bar is
+          always chrome and should always be delineated. */}
+      <div className="sticky bottom-0 mt-auto border-t border-[#F3F3F3] bg-white">
         <div className={`${CONTENT_CLS} flex items-center justify-between py-3.5`}>
           <div className="inline-flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
             {blocker !== null ? (
