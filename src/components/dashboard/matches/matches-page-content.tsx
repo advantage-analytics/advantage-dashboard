@@ -8,9 +8,8 @@ import { EmptyMatches } from "./empty-matches";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { isAnalysisFailed, isInFlight } from "@/lib/data/match-analysis";
 import { providers } from "@/lib/providers";
-import { MatchesGrid } from "./matches-grid";
+import { MatchesGrid, type MatchView } from "./matches-grid";
 import { MatchesFilterPanel, type FilterGroup } from "./matches-filter-panel";
-import { ViewToggle, type MatchView } from "./view-toggle";
 
 function providerName(id: string): string {
   return providers.find((p) => p.id === id)?.name ?? id;
@@ -233,26 +232,22 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
   const searchParams = useSearchParams();
   const pathname = usePathname();
 
-  const [view, setView] = useState<MatchView>(() => (searchParams.get("view") as MatchView) || "list");
-  const [userSetView, setUserSetView] = useState(false);
+  /* Layout is decided by the viewport alone — there is no view control any
+     more. Six columns need the width, so under 1024px the same matches render
+     as cards instead. Nothing here is a user preference, so it is not seeded
+     from or written back to the URL. */
+  const [view, setView] = useState<MatchView>("list");
 
-  // Auto-switch to gallery on narrow screens (< 1024px) unless user explicitly chose a view
   useEffect(() => {
     const mql = window.matchMedia("(max-width: 1023px)");
     function handleChange(e: MediaQueryListEvent | MediaQueryList) {
-      if (!userSetView) {
-        setView(e.matches ? "gallery" : "list");
-      }
+      setView(e.matches ? "gallery" : "list");
     }
     handleChange(mql);
     mql.addEventListener("change", handleChange);
     return () => mql.removeEventListener("change", handleChange);
-  }, [userSetView]);
-
-  const handleViewChange = useCallback((v: MatchView) => {
-    setView(v);
-    setUserSetView(true);
   }, []);
+
   const [search, setSearch] = useState(() => searchParams.get("q") || "");
   const [sortField, setSortField] = useState<SortField>(() => (searchParams.get("sort") as SortField) || "date");
   const [sortDir, setSortDir] = useState<SortDir>(() => (searchParams.get("dir") as SortDir) || "desc");
@@ -444,7 +439,6 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
     }
     const params = new URLSearchParams();
     if (search) params.set("q", search);
-    if (view !== "list") params.set("view", view);
     if (sortField !== "date") params.set("sort", sortField);
     if (sortDir !== "desc") params.set("dir", sortDir);
     if (page > 1) params.set("page", String(page));
@@ -452,7 +446,7 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
     for (const f of filters) params.append(f.key, f.value);
     const query = params.toString();
     window.history.replaceState(null, "", `${pathname}${query ? `?${query}` : ""}`);
-  }, [search, view, sortField, sortDir, page, pageSize, filters, pathname]);
+  }, [search, sortField, sortDir, page, pageSize, filters, pathname]);
 
   function toggleSort(field: SortField) {
     if (sortField === field) {
@@ -498,7 +492,7 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
 
   return (
     <div>
-      {/* Toolbar: filters, search, sort, view toggle — wraps on medium screens */}
+      {/* Toolbar: filter, search, sort — wraps on medium screens */}
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-5">
         {/* Left: one filter button for every category */}
         <div className="flex items-center gap-2">
@@ -526,7 +520,7 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
           )}
         </div>
 
-        {/* Right: search, sort, view toggle */}
+        {/* Right: search, sort */}
         <div className="flex items-center gap-2">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#CCCCCC]" />
@@ -547,8 +541,6 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
           </div>
 
           <SortDropdown sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
-
-          <ViewToggle view={view} onViewChange={handleViewChange} />
         </div>
       </div>
 
