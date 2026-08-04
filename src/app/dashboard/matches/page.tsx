@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { getMatchAnalysis } from "@/lib/data/match-analysis";
 import {
   type DbMatch,
   type DisplayMatch,
@@ -57,7 +58,17 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
           }
           return display;
         })
-        .filter((m): m is DisplayMatch => m !== null);
+        .filter((m): m is DisplayMatch => m !== null)
+        // Analysis state is mocked until processing_jobs is queryable; see
+        // lib/data/match-analysis.ts for the single swap point.
+        .map((display) => ({
+          ...display,
+          analysis: getMatchAnalysis(
+            display.id,
+            display.sourceProvider,
+            Boolean(display.verificationStatus)
+          ),
+        }));
     }
   }
 

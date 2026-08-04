@@ -5,6 +5,12 @@ import {
   getMatchDetailData,
 } from "@/lib/data/match-detail-server";
 import { shortName } from "@/lib/data/match-utils";
+import {
+  getMatchAnalysis,
+  isAnalysisFailed,
+  isInFlight,
+} from "@/lib/data/match-analysis";
+import { MatchAnalysisProgress } from "@/components/dashboard/matches/match-detail/match-analysis-progress";
 
 import { MatchSummaryRow } from "@/components/dashboard/matches/match-detail/match-summary-row";
 import { MatchKpiRow } from "@/components/dashboard/matches/match-detail/match-kpi-row";
@@ -157,6 +163,49 @@ export default async function MatchDetailPage({ params }: PageProps) {
   const p2Short = shortName(p2Name, 14);
 
   const matchDurationSec = match.durationSec ?? null;
+
+  // A match whose video hasn't finished analysing has no stats to show. Every
+  // section below would render zeroes, and an empty serve chart reads as "you
+  // hit no serves" rather than "we're still working" — so the page stops at the
+  // identity the player entered plus the pipeline state. Failures take the same
+  // path: the reason it stopped is more use than a page of zeroes.
+  const analysis = getMatchAnalysis(
+    matchId,
+    match.sourceProvider,
+    Boolean(match.verificationStatus),
+  );
+  const isAwaitingAnalysis =
+    isInFlight(analysis.status) || isAnalysisFailed(analysis.status);
+
+  if (isAwaitingAnalysis) {
+    return (
+      <div className="flex-1 w-full bg-white">
+        <div className="mx-auto max-w-screen-2xl px-6 sm:px-8 py-8 sm:py-10">
+          <SectionsStagger className="flex flex-col">
+            <MatchDetailHero
+              match={match}
+              previousMatchId={adjacent.previousId}
+              nextMatchId={adjacent.nextId}
+            />
+
+            <div className="mt-8">
+              <MatchSummaryRow
+                match={match}
+                p1Name={p1Name}
+                p2Name={p2Name}
+                previousMatchId={adjacent.previousId}
+                nextMatchId={adjacent.nextId}
+              />
+            </div>
+
+            <div className="mt-8">
+              <MatchAnalysisProgress analysis={analysis} />
+            </div>
+          </SectionsStagger>
+        </div>
+      </div>
+    );
+  }
 
   const radarData =
     p1 && p2

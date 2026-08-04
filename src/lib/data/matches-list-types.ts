@@ -1,4 +1,5 @@
 import { formatDuration } from "@/components/dashboard/matches/new-match-wizard/utils";
+import type { MatchAnalysis } from "@/lib/data/match-analysis";
 
 export interface DbMatch {
   id: string;
@@ -37,6 +38,12 @@ export interface DisplayMatch {
   player2: { name: string };
   player2Hand?: string;
   player2Backhand?: string;
+  /**
+   * Processing state, attached by the page after transform. Optional because
+   * the transform itself only knows about the `matches` row — analysis lives in
+   * `processing_jobs` and is joined in one level up.
+   */
+  analysis?: MatchAnalysis;
   score: {
     sets: { player1: number; player2: number; tiebreak?: boolean }[];
     winner: "player1" | "player2";

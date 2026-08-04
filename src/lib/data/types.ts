@@ -26,6 +26,8 @@ export interface Match {
   matchType: string;
   courtType?: string;
   verificationStatus?: string;
+  /** `matches.source_provider` — which pipeline produced this match's data. */
+  sourceProvider?: string;
   round?: string;
   matchContext?: string;
   duration?: string;

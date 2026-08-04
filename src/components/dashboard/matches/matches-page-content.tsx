@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown, X } from "lucide-react";
 import { EmptyMatches } from "./empty-matches";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
+import { isAnalysisFailed, isInFlight } from "@/lib/data/match-analysis";
 import { providers } from "@/lib/providers";
 import { MatchesGrid } from "./matches-grid";
 import { ViewToggle, type MatchView } from "./view-toggle";
@@ -21,7 +22,25 @@ interface MatchesPageContentProps {
 
 type SortField = "date" | "opponent" | "event" | "result";
 type SortDir = "asc" | "desc";
-type FilterKey = "result" | "matchType" | "courtType" | "source";
+type FilterKey = "result" | "matchType" | "courtType" | "source" | "analysis";
+
+const FILTER_KEYS: FilterKey[] = ["result", "matchType", "courtType", "source", "analysis"];
+
+/**
+ * Collapses the nine job statuses into the four buckets a player actually
+ * filters by. This is the analysis queue's filter, folded into the chip row
+ * that was already here.
+ */
+function analysisGroup(match: DisplayMatch): string | null {
+  const status = match.analysis?.status;
+  if (!status) return null;
+  if (isInFlight(status)) return "In progress";
+  if (isAnalysisFailed(status)) return "Failed";
+  if (status === "manual") return "No video";
+  return "Ready";
+}
+
+const ANALYSIS_GROUP_ORDER = ["In progress", "Ready", "Failed", "No video"];
 
 interface ActiveFilter {
   key: FilterKey;
@@ -53,6 +72,17 @@ const FILTER_CHIPS: { key: FilterKey; label: string; title?: string; getValues: 
     title: "Data source provider",
     getValues: (matches) => [...new Set(matches.map((m) => m.sourceProvider).filter(Boolean) as string[])].sort(),
     displayValue: providerName,
+  },
+  {
+    key: "analysis",
+    label: "Analysis",
+    title: "Filter by analysis state",
+    getValues: (matches) => {
+      const present = new Set(matches.map(analysisGroup).filter(Boolean) as string[]);
+      // Fixed order — these are pipeline stages, so alphabetising them would
+      // scramble the sequence a reader expects.
+      return ANALYSIS_GROUP_ORDER.filter((group) => present.has(group));
+    },
   },
 ];
 
@@ -394,7 +424,7 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
   const [sortDir, setSortDir] = useState<SortDir>(() => (searchParams.get("dir") as SortDir) || "desc");
   const [filters, setFilters] = useState<ActiveFilter[]>(() => {
     const result: ActiveFilter[] = [];
-    for (const key of ["result", "matchType", "courtType", "source"] as FilterKey[]) {
+    for (const key of FILTER_KEYS) {
       for (const value of searchParams.getAll(key)) {
         result.push({ key, value });
       }
@@ -518,6 +548,8 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
             return m.courtType === filter.value;
           case "source":
             return m.sourceProvider === filter.value;
+          case "analysis":
+            return analysisGroup(m) === filter.value;
           default:
             return true;
         }
@@ -722,9 +754,11 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
         />
       )}
 
-      {/* Pagination */}
+      {/* Pagination — no rule of its own. Every row already carries a bottom
+          hairline, so the last one closes the table; a second line 16px below it
+          just read as a doubled edge. Whitespace separates the two now. */}
       {sorted.length > 0 && (
-        <div className="flex items-center justify-between mt-4 pt-4 border-t border-[#F0F0F0]">
+        <div className="flex items-center justify-between mt-5">
           <div className="flex items-center gap-3 text-xs text-[#888888]">
             <span className="tabular-nums">
               {rangeStart}–{rangeEnd} of {sorted.length}

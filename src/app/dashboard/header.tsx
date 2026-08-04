@@ -41,6 +41,16 @@ interface MatchCrumb {
   player2Name: string;
 }
 
+/**
+ * Static children of /dashboard/matches. Next resolves these before the
+ * [matchId] dynamic segment, so they are never match ids — the header has to
+ * mirror that or it fires a doomed match lookup (and shows a crumb skeleton)
+ * on every one of them.
+ */
+const MATCHES_STATIC_SEGMENTS = new Set(["new"]);
+
+const MATCHES_CRUMB = { label: "Matches", href: "/dashboard/matches" };
+
 function getStaticBreadcrumbs(
   pathname: string
 ): { label: string; href?: string }[] | null {
@@ -51,7 +61,7 @@ function getStaticBreadcrumbs(
   if (pathname.startsWith("/dashboard/settings"))
     return [{ label: "Settings" }];
   if (pathname === "/dashboard/matches/new")
-    return [{ label: "Matches", href: "/dashboard/matches" }, { label: "New match" }];
+    return [MATCHES_CRUMB, { label: "New match" }];
   if (pathname.startsWith("/dashboard/matches"))
     return [{ label: "Matches" }];
   return [];
@@ -77,11 +87,13 @@ export function Header() {
   const menuRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
 
-  const isMatchDetailPage = /^\/dashboard\/matches\/[^/]+/.test(pathname);
+  const matchesChildSegment =
+    pathname.match(/^\/dashboard\/matches\/([^/]+)/)?.[1] ?? null;
 
-  const matchId = isMatchDetailPage
-    ? pathname.match(/^\/dashboard\/matches\/([^/]+)/)?.[1]
-    : null;
+  const isMatchDetailPage =
+    matchesChildSegment !== null && !MATCHES_STATIC_SEGMENTS.has(matchesChildSegment);
+
+  const matchId = isMatchDetailPage ? matchesChildSegment : null;
 
   // Platform detection for shortcut display
   useEffect(() => {
