@@ -13,15 +13,21 @@ import {
   resultInk,
 } from "@/lib/data/match-analysis";
 import { MatchActionsMenu } from "@/components/dashboard/matches/match-actions/match-actions-menu";
-import { MatchSourcePopover } from "@/components/dashboard/matches/match-source-popover";
 
 /**
- * Four columns, down from six. Opponent and Date fold into the Match cell and
- * Result sits under the Score, which buys a full column for analysis state
- * without widening the table — the reason there is no separate queue page.
+ * Event · Result · Score · Opponent · Analysis · action.
+ *
+ * Every field gets its own column and its own header, so the eye scans down a
+ * column instead of parsing a stacked block per row. Result is a fixed 62px —
+ * it only ever holds "Won" or "Lost", so giving it a share of the fluid space
+ * would just pad it. Analysis stays the widest fluid column because it is the
+ * only cell whose contents change shape (bar, check, cross, or a phrase).
+ *
+ * Date is not a column: it is one of the least-scanned fields and reachable
+ * from the sort control, and dropping it is what buys Analysis its width.
  */
 export const LIST_GRID_COLS = {
-  gridTemplateColumns: "2.6fr 1fr 2fr 84px",
+  gridTemplateColumns: "2fr 62px 1.05fr 1.2fr 1.9fr 84px",
 } as const;
 
 function formatScore(sets: DisplayMatch["score"]["sets"]): string {
@@ -43,43 +49,38 @@ export function MatchCardList({ match, isNew }: MatchCardListProps): React.JSX.E
        menu — which the design has no equivalent for — sits outside the grid
        instead of colliding with the CTA. */
     <div
-      className={`group relative grid h-[58px] items-center gap-x-6 border-b border-[#F3F3F3] pl-3.5 pr-9 transition-colors duration-200 hover:bg-[#F5F5F5]${
+      className={`group relative grid h-[52px] items-center gap-x-5 border-b border-[#F3F3F3] pl-3.5 pr-9 transition-colors duration-200 hover:bg-[#F5F5F5]${
         isNew ? " animate-[highlight-new-match_1.5s_ease-out_0.4s_both]" : ""
       }`}
       style={LIST_GRID_COLS}
       role="row"
     >
-      {/* Match */}
-      <div className="min-w-0">
-        <div className="flex min-w-0 items-center gap-[7px]">
-          <Link
-            href={`/dashboard/matches/${match.id}`}
-            className="truncate rounded-sm text-[12px] text-[#0D0D0D] after:absolute after:inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1"
-          >
-            {match.tournamentName}
-          </Link>
-          {analysis && (
-            <MatchSourcePopover analysis={analysis} matchLabel={match.tournamentName} />
-          )}
-        </div>
-        <p className="mt-1 truncate text-[11px] text-[#888888]">
-          {match.player2.name ? `vs ${match.player2.name} · ` : ""}
-          {match.date}
-        </p>
-      </div>
+      {/* Event */}
+      <Link
+        href={`/dashboard/matches/${match.id}`}
+        className="min-w-0 truncate rounded-sm text-[12px] text-[#0D0D0D] after:absolute after:inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1"
+      >
+        {match.tournamentName}
+      </Link>
 
-      {/* Score, with the win/loss marker beneath it */}
-      <div className="min-w-0">
-        <p className="truncate text-[12px] text-[#71717A] tabular-nums tracking-[0.3px]">
-          {formatScore(match.score.sets)}
-        </p>
-        <span
-          className="mt-[3px] block whitespace-nowrap text-[9px] font-medium uppercase tracking-[1.8px]"
-          style={{ color: resultInk(isWin) }}
-        >
-          {isWin ? "Won" : "Lost"}
-        </span>
-      </div>
+      {/* Result */}
+      <span
+        className="whitespace-nowrap text-[9.5px] font-medium uppercase tracking-[1.8px]"
+        style={{ color: resultInk(isWin) }}
+      >
+        {isWin ? "Won" : "Lost"}
+      </span>
+
+      {/* Score */}
+      <span className="min-w-0 truncate text-[12px] text-[#71717A] tabular-nums tracking-[0.3px]">
+        {formatScore(match.score.sets)}
+      </span>
+
+      {/* Opponent — the bare name. The "vs" that used to prefix it was carrying
+          no information the Opponent header does not already give. */}
+      <span className="min-w-0 truncate text-[12px] text-[#0D0D0D]">
+        {match.player2.name}
+      </span>
 
       {/* Analysis */}
       <div className="min-w-0">

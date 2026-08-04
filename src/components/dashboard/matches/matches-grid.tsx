@@ -20,13 +20,16 @@ interface MatchesGridProps {
 }
 
 /**
- * Four headers to match the condensed row. Opponent and Date moved into the
- * Match cell and Type dropped to the filter chips, so both stay sortable from
- * the toolbar's sort control rather than from a column header.
+ * One header per row column. Score and Analysis carry no sort: there is no
+ * ordering of a set score that a player would ask for, and analysis state is a
+ * filter concern, not a sort. Date has no column but is still sortable from the
+ * toolbar's sort control, which is where the remaining fields live too.
  */
 const COLUMNS: { label: string; field?: SortField }[] = [
-  { label: "Match", field: "event" },
-  { label: "Score", field: "result" },
+  { label: "Event", field: "event" },
+  { label: "Result", field: "result" },
+  { label: "Score" },
+  { label: "Opponent", field: "opponent" },
   { label: "Analysis" },
   { label: "" },
 ];
@@ -81,7 +84,7 @@ export function MatchesGrid({
         >
           {/* Column headers — 28px tall, no underline of their own; the rows
               below open with a single top hairline and carry the rest. */}
-          <div className="grid h-7 gap-x-6 items-center pl-3.5 pr-9" style={LIST_GRID_COLS} role="row">
+          <div className="grid h-7 gap-x-5 items-center pl-3.5 pr-9" style={LIST_GRID_COLS} role="row">
             {COLUMNS.map((col, i) => (
               <div key={col.label || `col-${i}`} className="min-w-0" role="columnheader" aria-sort={col.field === sortField ? (sortDir === "asc" ? "ascending" : "descending") : undefined}>
                 {col.field ? (
