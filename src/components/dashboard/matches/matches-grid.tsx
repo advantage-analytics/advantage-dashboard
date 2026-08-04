@@ -2,21 +2,14 @@
 
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { MatchCardGallery } from "./match-card-gallery";
-import { MatchCardList, LIST_GRID_COLS } from "./match-card-list";
+import { MatchCardList, LIST_GRID_COLS, LIST_ROW_FRAME } from "./match-card-list";
 import { ArrowUp, ArrowDown } from "lucide-react";
 
-/**
- * Not a user preference — the matches page picks this off the viewport width.
- * The six-column table needs room, so narrow screens get cards instead.
- */
-export type MatchView = "gallery" | "list";
-
-type SortField = "date" | "opponent" | "event" | "result";
-type SortDir = "asc" | "desc";
+export type SortField = "date" | "opponent" | "event" | "result";
+export type SortDir = "asc" | "desc";
 
 interface MatchesGridProps {
   matches: DisplayMatch[];
-  view: MatchView;
   sortField: SortField;
   sortDir: SortDir;
   onSort: (field: SortField) => void;
@@ -46,61 +39,65 @@ function SortIcon({ field, sortField, sortDir }: { field?: SortField; sortField:
 
 export function MatchesGrid({
   matches,
-  view,
   sortField,
   sortDir,
   onSort,
   newMatchId,
 }: MatchesGridProps): React.JSX.Element {
-  /* No crossfade between the two layouts. It existed to soften a deliberate
-     view switch, and that control is gone — `view` now only changes when the
-     window crosses 1024px, where a fade adds nothing. It also actively hurt:
-     `AnimatePresence mode="wait"` holds the outgoing subtree until its exit
-     tween finishes, and that tween is rAF-driven. In a background tab rAF is
-     paused, so a resize left the old layout mounted and frozen — no longer
-     receiving props — while state had already moved on. */
-  return view === "gallery" ? (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-      {matches.map((match) => (
-        <MatchCardGallery key={match.id} match={match} isNew={match.id === newMatchId} />
-      ))}
-    </div>
-  ) : (
-    <div>
-      {/* Column headers — 28px tall, no underline of their own; the rows
-          below open with a single top hairline and carry the rest. */}
-      <div className="grid h-7 gap-x-5 items-center pl-3.5 pr-9" style={LIST_GRID_COLS} role="row">
-        {COLUMNS.map((col, i) => (
-          <div
-            key={col.label || `col-${i}`}
-            className="min-w-0"
-            role="columnheader"
-            aria-sort={col.field === sortField ? (sortDir === "asc" ? "ascending" : "descending") : undefined}
-          >
-            {col.field ? (
-              <button
-                onClick={() => onSort(col.field!)}
-                className="inline-flex items-center gap-0.5 text-[9px] font-medium text-[#AAAAAA] uppercase tracking-[1.5px] hover:text-[#525252] hover:underline underline-offset-2 cursor-pointer transition-[color] duration-200"
-              >
-                {col.label}
-                <SortIcon field={col.field} sortField={sortField} sortDir={sortDir} />
-              </button>
-            ) : (
-              <span className="text-[9px] font-medium text-[#AAAAAA] uppercase tracking-[1.5px]">
-                {col.label}
-              </span>
-            )}
-          </div>
-        ))}
-      </div>
-      {/* Rows — no per-item entrance tween. Content must never depend on an
-          animation frame to become visible; PageTransition already carries
-          the route-level entrance. */}
-      <div className="border-t border-[#F3F3F3]">
+  /* Which layout shows is a width question, so Tailwind answers it rather than
+     React. Held in state it could only be read after mount, so the server — which
+     has no viewport — always emitted the six-column table and a phone painted
+     that squeezed table for a frame before an effect swapped in the cards.
+     Deciding in CSS renders the right layout the first time, and pins the
+     breakpoint to `lg` instead of a 1023px literal with nothing tying it there.
+
+     Both layouts sit in the tree. `hidden` is display:none, so the inactive one
+     costs no paint and stays out of both the accessibility tree and the tab
+     order; pagination caps the duplication at 50 rows. */
+  return (
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 lg:hidden">
         {matches.map((match) => (
-          <MatchCardList key={match.id} match={match} isNew={match.id === newMatchId} />
+          <MatchCardGallery key={match.id} match={match} isNew={match.id === newMatchId} />
         ))}
       </div>
-    </div>
+
+      <div className="hidden lg:block">
+        {/* Column headers — 28px tall, no underline of their own; the rows
+            below open with a single top hairline and carry the rest. */}
+        <div className={`${LIST_ROW_FRAME} h-7`} style={LIST_GRID_COLS} role="row">
+          {COLUMNS.map((col, i) => (
+            <div
+              key={col.label || `col-${i}`}
+              className="min-w-0"
+              role="columnheader"
+              aria-sort={col.field === sortField ? (sortDir === "asc" ? "ascending" : "descending") : undefined}
+            >
+              {col.field ? (
+                <button
+                  onClick={() => onSort(col.field!)}
+                  className="inline-flex items-center gap-0.5 text-[9px] font-medium text-[#AAAAAA] uppercase tracking-[1.5px] hover:text-[#525252] hover:underline underline-offset-2 cursor-pointer transition-[color] duration-200"
+                >
+                  {col.label}
+                  <SortIcon field={col.field} sortField={sortField} sortDir={sortDir} />
+                </button>
+              ) : (
+                <span className="text-[9px] font-medium text-[#AAAAAA] uppercase tracking-[1.5px]">
+                  {col.label}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+        {/* Rows — no per-item entrance tween. Content must never depend on an
+            animation frame to become visible; PageTransition already carries
+            the route-level entrance. */}
+        <div className="border-t border-[#F3F3F3]">
+          {matches.map((match) => (
+            <MatchCardList key={match.id} match={match} isNew={match.id === newMatchId} />
+          ))}
+        </div>
+      </div>
+    </>
   );
 }

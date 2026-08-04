@@ -8,7 +8,7 @@ import { EmptyMatches } from "./empty-matches";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { isAnalysisFailed, isInFlight } from "@/lib/data/match-analysis";
 import { providers } from "@/lib/providers";
-import { MatchesGrid, type MatchView } from "./matches-grid";
+import { MatchesGrid, type SortField, type SortDir } from "./matches-grid";
 import { MatchesFilterPanel, type FilterGroup } from "./matches-filter-panel";
 
 function providerName(id: string): string {
@@ -19,8 +19,6 @@ interface MatchesPageContentProps {
   matches: DisplayMatch[];
 }
 
-type SortField = "date" | "opponent" | "event" | "result";
-type SortDir = "asc" | "desc";
 type FilterKey = "result" | "matchType" | "courtType" | "source" | "analysis";
 
 const FILTER_KEYS: FilterKey[] = ["result", "matchType", "courtType", "source", "analysis"];
@@ -234,20 +232,8 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
 
   /* Layout is decided by the viewport alone — there is no view control any
      more. Six columns need the width, so under 1024px the same matches render
-     as cards instead. Nothing here is a user preference, so it is not seeded
-     from or written back to the URL. */
-  const [view, setView] = useState<MatchView>("list");
-
-  useEffect(() => {
-    const mql = window.matchMedia("(max-width: 1023px)");
-    function handleChange(e: MediaQueryListEvent | MediaQueryList) {
-      setView(e.matches ? "gallery" : "list");
-    }
-    handleChange(mql);
-    mql.addEventListener("change", handleChange);
-    return () => mql.removeEventListener("change", handleChange);
-  }, []);
-
+     as cards instead. That choice is made in CSS inside MatchesGrid, so it
+     needs no state, no listener, and no URL parameter here. */
   const [search, setSearch] = useState(() => searchParams.get("q") || "");
   const [sortField, setSortField] = useState<SortField>(() => (searchParams.get("sort") as SortField) || "date");
   const [sortDir, setSortDir] = useState<SortDir>(() => (searchParams.get("dir") as SortDir) || "desc");
@@ -582,7 +568,6 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
       ) : (
         <MatchesGrid
           matches={paginatedMatches}
-          view={view}
           sortField={sortField}
           sortDir={sortDir}
           onSort={toggleSort}

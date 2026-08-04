@@ -30,6 +30,14 @@ export const LIST_GRID_COLS = {
   gridTemplateColumns: "2fr 62px 1.05fr 1.2fr 1.9fr 84px",
 } as const;
 
+/**
+ * The row frame, shared with the header row that sits above these. Column
+ * widths already travel together via LIST_GRID_COLS; the gap and the side
+ * padding have to as well, or a header cell drifts out of line with the column
+ * it names and nothing catches it.
+ */
+export const LIST_ROW_FRAME = "grid items-center gap-x-5 pl-3.5 pr-9";
+
 function formatScore(sets: DisplayMatch["score"]["sets"]): string {
   return sets.map((s) => `${s.player1}-${s.player2}`).join(", ");
 }
@@ -49,7 +57,7 @@ export function MatchCardList({ match, isNew }: MatchCardListProps): React.JSX.E
        menu — which the design has no equivalent for — sits outside the grid
        instead of colliding with the CTA. */
     <div
-      className={`group relative grid h-[52px] items-center gap-x-5 border-b border-[#F3F3F3] pl-3.5 pr-9 transition-colors duration-200 hover:bg-[#F5F5F5]${
+      className={`${LIST_ROW_FRAME} group relative h-[52px] border-b border-[#F3F3F3] transition-colors duration-200 hover:bg-[#F5F5F5]${
         isNew ? " animate-[highlight-new-match_1.5s_ease-out_0.4s_both]" : ""
       }`}
       style={LIST_GRID_COLS}
