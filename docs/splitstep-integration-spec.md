@@ -85,10 +85,12 @@ Browser
   ├─ status=job_failed → mark failed, release quota reservation, surface to user
   └─ status=job_completed
        ├─ download sas_url JSON immediately (7-day expiry)
-       ├─ persist raw JSON to R2 (audit + reprocessing)
-       ├─ run derivation engine → points, shots
-       ├─ call calculate_match_stats(match_id)
+       ├─ persist raw JSON to Supabase Storage (audit + reprocessing)
        └─ reconcile quota, mark job complete
+             │
+             └─ (async) Supabase Edge Function
+                  ├─ run derivation engine → points, shots
+                  └─ call calculate_match_stats(match_id)
 ```
 
 Storage split — keep these separate, they have different lifetimes and revocation needs:
@@ -97,7 +99,27 @@ Storage split — keep these separate, they have different lifetimes and revocat
 |---|---|---|
 | Original video | R2 | user playback (short-lived signed URL) |
 | Vendor-facing video URL | R2 | see §3.2 |
-| Raw results JSON | R2 | internal only |
+| Raw results JSON | Supabase Storage, `match-results` (private) | internal only |
+
+**The webhook does not derive.** It verifies, records the delivery, fetches the
+results JSON, and returns. Derivation runs afterwards in a Supabase Edge
+Function, mirroring the SwingVision `process-match` fire-and-forget pattern.
+Two reasons, and the first is the one that matters: webhook senders retry on
+timeout, so slow inline work produces duplicate deliveries against partial
+state. The second is that the app runs on Vercel Hobby, where the function
+ceiling is 60s — not something to bet a full match of strokes on.
+
+**Results JSON goes to Supabase, not R2** (revised 2026-08-04; the table above
+originally said R2). A full match is roughly a megabyte, so R2's zero-egress
+advantage is worth pennies here, and none of the reasons R2 wins for video
+apply: nobody external reads it, and there is no revocation story to tell. What
+does apply is that the webhook already holds a service-role Supabase client to
+write `processing_jobs`, that SwingVision already stores its raw provider files
+in Supabase Storage (`match-data`), and that the Edge Function which will read
+this JSON lives there too. Put the data next to whatever computes on it.
+
+R2 keeps the video, where multi-GB vendor egress and the Worker's download log
+— our only signal that processing has started, per §3.2 — actually earn it.
 
 ---
 
