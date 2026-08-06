@@ -17,6 +17,7 @@ import { SettingsAlert } from "@/components/dashboard/settings/settings-alert";
 import { SettingsButton } from "@/components/dashboard/settings/settings-button";
 import { SettingsSection } from "@/components/dashboard/settings/settings-section";
 import { createClient } from "@/lib/supabase/client";
+import { PRO_PLAN } from "@/lib/user/plan";
 
 type PlanType = "free" | "pro";
 
@@ -33,9 +34,6 @@ interface Plan {
 }
 
 const EASE_CURVE: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
-
-/** users.role value that marks a paid Pro user (mirrors the original Founder's Pass). */
-const PRO_ROLE = "founder";
 
 const plans: Plan[] = [
   {
@@ -234,7 +232,7 @@ function SubscriptionContent() {
       const [{ data: row }, { count }] = await Promise.all([
         supabase
           .from("users")
-          .select("created_at, role")
+          .select("created_at, plan")
           .eq("id", user.id)
           .single(),
         supabase
@@ -244,7 +242,7 @@ function SubscriptionContent() {
       ]);
 
       if (cancelled) return;
-      if (row?.role === PRO_ROLE) {
+      if (row?.plan === PRO_PLAN) {
         setCurrentPlan("pro");
       }
       if (row?.created_at) {
@@ -261,7 +259,7 @@ function SubscriptionContent() {
   }, []);
 
   // Handle the Stripe Checkout redirect back into the app. On success we poll
-  // the user's role until the webhook upgrades it (eventually consistent).
+  // the user's plan until the webhook upgrades it (eventually consistent).
   useEffect(() => {
     const success = searchParams.get("success");
     const canceled = searchParams.get("canceled");
@@ -275,22 +273,22 @@ function SubscriptionContent() {
       const maxPolls = 20;
       let delay = 250;
 
-      const checkRole = async () => {
+      const checkPlan = async () => {
         const {
           data: { user },
         } = await supabase.auth.getUser();
         if (!user) return false;
         const { data } = await supabase
           .from("users")
-          .select("role")
+          .select("plan")
           .eq("id", user.id)
           .single();
-        return data?.role === PRO_ROLE;
+        return data?.plan === PRO_PLAN;
       };
 
       const poll = async () => {
         if (cancelled) return;
-        const isPro = await checkRole();
+        const isPro = await checkPlan();
         if (isPro) {
           setCurrentPlan("pro");
           setSelectedPlan("pro");

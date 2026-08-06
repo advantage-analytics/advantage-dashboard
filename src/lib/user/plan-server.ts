@@ -1,13 +1,13 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-
-/** Role value that marks a user as having purchased the one-time Pro plan. */
-export const PRO_ROLE = "founder";
+import { PRO_PLAN } from "@/lib/user/plan";
 
 /**
  * Upgrade a user to the paid Pro tier (admin operation, bypasses RLS).
  *
- * Sets `users.role = 'founder'` — the value the subscription UI treats as the
- * active Pro plan. Called from the Stripe webhook after a successful payment.
+ * Sets `users.plan = 'pro'` — the entitlement the subscription UI and checkout
+ * gate on. Called from the Stripe webhook after a successful payment. A DB
+ * trigger blocks non-service-role writes to `plan`, so this must go through
+ * the admin client. The profile persona (`users.role`) is untouched.
  */
 export async function upgradeUserToPro(
   userId: string
@@ -17,7 +17,7 @@ export async function upgradeUserToPro(
 
     const { error } = await supabase
       .from("users")
-      .update({ role: PRO_ROLE })
+      .update({ plan: PRO_PLAN })
       .eq("id", userId);
 
     if (error) {
@@ -25,7 +25,7 @@ export async function upgradeUserToPro(
       return { success: false, error: error.message };
     }
 
-    console.log(`User ${userId} upgraded to Pro (role=${PRO_ROLE})`);
+    console.log(`User ${userId} upgraded to Pro (plan=${PRO_PLAN})`);
     return { success: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

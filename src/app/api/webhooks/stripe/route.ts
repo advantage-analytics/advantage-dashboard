@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe/client";
-import { upgradeUserToPro, PRO_ROLE } from "@/lib/user/roles";
+import { upgradeUserToPro } from "@/lib/user/plan-server";
+import { PRO_PLAN } from "@/lib/user/plan";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type Stripe from "stripe";
 
@@ -46,12 +47,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No user ID" }, { status: 400 });
     }
 
-    // Update the user's role using the admin client (bypasses RLS)
+    // Update the user's plan using the admin client (bypasses RLS)
     const supabase = createAdminClient();
 
     const { data: existingUser, error: fetchError } = await supabase
       .from("users")
-      .select("id, role")
+      .select("id, plan")
       .eq("id", userId)
       .single();
 
@@ -66,7 +67,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (existingUser.role === PRO_ROLE) {
+    if (existingUser.plan === PRO_PLAN) {
       console.log(`User ${userId} already has Pro, skipping update`);
       return NextResponse.json({ received: true, message: "Already Pro" });
     }
@@ -75,7 +76,7 @@ export async function POST(request: NextRequest) {
 
     if (!result.success) {
       return NextResponse.json(
-        { error: "Failed to update user role", details: result.error },
+        { error: "Failed to update user plan", details: result.error },
         { status: 500 }
       );
     }
