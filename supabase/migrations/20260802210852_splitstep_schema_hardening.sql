@@ -1,5 +1,5 @@
 -- Hardening pass over the two SplitStep migrations, from a Postgres/Supabase
--- best-practices review. Three findings, all introduced by 20260802000000.
+-- best-practices review. Three findings, all introduced by 20260802083544.
 
 -- ---------------------------------------------------------------------------
 -- 1. set_processing_jobs_updated_at was needlessly SECURITY DEFINER

@@ -18,7 +18,7 @@ Unknown, revoked, expired, and not-yet-uploaded tokens all return an identical
 
 ## Why a Worker instead of a presigned URL
 
-Recorded in full in `supabase/migrations/20260802010000_splitstep_video_access.sql`.
+Recorded in full in `supabase/migrations/20260802205902_splitstep_video_access.sql`.
 The short version:
 
 - The vendor fetches the video when a worker **picks up** the job, not at
