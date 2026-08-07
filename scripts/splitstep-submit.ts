@@ -17,7 +17,7 @@
  * you to read it before anything is spent.
  *
  * Requires in .env.local: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
- * NEXT_PUBLIC_APP_URL, R2_PUBLIC_WORKER_URL, SPLITSTEP_API_URL, SPLITSTEP_API_KEY.
+ * NEXT_PUBLIC_SITE_URL, R2_PUBLIC_WORKER_URL, SPLITSTEP_API_URL, SPLITSTEP_API_KEY.
  */
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'node:fs';
@@ -108,12 +108,12 @@ async function main() {
     fail('Edit the MATCH block at the top of this script first (matchId, userId).');
   }
 
-  const appUrl = requireEnv('NEXT_PUBLIC_APP_URL');
+  const appUrl = requireEnv('NEXT_PUBLIC_SITE_URL');
   const webhookUrl = `${appUrl.replace(/\/+$/, '')}/api/webhooks/splitstep`;
 
   if (webhookUrl.includes('localhost') || webhookUrl.includes('127.0.0.1')) {
     fail(
-      `NEXT_PUBLIC_APP_URL points at localhost (${appUrl}). The vendor calls the ` +
+      `NEXT_PUBLIC_SITE_URL points at localhost (${appUrl}). The vendor calls the ` +
         `webhook from their infrastructure and cannot reach it. Use the deployed origin.`
     );
   }

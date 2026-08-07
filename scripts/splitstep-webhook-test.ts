@@ -9,7 +9,7 @@
  * proves nothing):
  *   npx tsx scripts/splitstep-webhook-test.ts --url https://app.advantage-analytics.com
  *
- * Defaults to NEXT_PUBLIC_APP_URL. Sends the shared secret when
+ * Defaults to NEXT_PUBLIC_SITE_URL. Sends the shared secret when
  * SPLITSTEP_WEBHOOK_SECRET is set, and exercises the unsigned path when it is
  * not — both are supported modes, see .env.example.
  *
@@ -24,6 +24,7 @@
 
 import { readFileSync } from 'node:fs';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { RESULTS_BUCKET } from '../src/lib/services/splitstep/config';
 
 /* ─── env ─── */
 
@@ -55,9 +56,9 @@ function required(name: string): string {
   return v;
 }
 
-const baseUrl = (flag('--url') ?? process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/+$/, '');
+const baseUrl = (flag('--url') ?? process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/\/+$/, '');
 if (!baseUrl) {
-  console.error('No target. Pass --url https://your-deployment or set NEXT_PUBLIC_APP_URL.');
+  console.error('No target. Pass --url https://your-deployment or set NEXT_PUBLIC_SITE_URL.');
   process.exit(1);
 }
 
@@ -69,7 +70,6 @@ const supabase: SupabaseClient = createClient(
   { auth: { persistSession: false } }
 );
 
-const RESULTS_BUCKET = 'match-results';
 const FIXTURE_KEY = `__webhook_test__/${Date.now()}-strokes.json`;
 /* Shaped like a stroke array so the bytes that land are the bytes we expect. */
 const FIXTURE = JSON.stringify([

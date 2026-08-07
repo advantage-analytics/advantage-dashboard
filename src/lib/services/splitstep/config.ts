@@ -138,17 +138,28 @@ export const WEBHOOK_PATH = '/api/webhooks/splitstep';
  * Absolute URL the vendor POSTs results to, or null when this deployment
  * cannot receive them.
  *
- * Null for unset and for localhost alike: the vendor calls us from outside, so
- * a loopback origin is not a degraded webhook, it is no webhook. Returning
- * null rather than throwing lets the caller decide the status code — a
- * submission refuses with 503, a script prints a readable message.
+ * Built from NEXT_PUBLIC_SITE_URL — the variable that already answers "where
+ * is this deployment publicly reachable", used by `metadataBase` in
+ * app/layout.tsx and by the Stripe checkout redirect. The webhook asks the
+ * same question, so it reads the same answer rather than introducing a second
+ * origin variable that could disagree with the first.
+ *
+ * IMPORTANT: it must be set PER ENVIRONMENT in Vercel. A single value shared
+ * by Production and Preview means a preview deployment hands the vendor the
+ * production origin, where this route does not exist — the POST 404s, and
+ * nothing on either side looks wrong.
+ *
+ * Null for unset and for localhost alike: the vendor calls from outside, so a
+ * loopback origin is not a degraded webhook, it is no webhook. Returning null
+ * rather than throwing lets the caller pick the status code — a submission
+ * refuses with 503, a script prints a readable message.
  */
 export function resolveWebhookUrl(
-  appUrl: string | undefined = process.env.NEXT_PUBLIC_APP_URL
+  siteUrl: string | undefined = process.env.NEXT_PUBLIC_SITE_URL
 ): string | null {
-  if (!appUrl) return null;
+  if (!siteUrl) return null;
 
-  const origin = appUrl.replace(/\/+$/, '');
+  const origin = siteUrl.replace(/\/+$/, '');
   if (origin.includes('localhost') || origin.includes('127.0.0.1')) return null;
 
   return `${origin}${WEBHOOK_PATH}`;

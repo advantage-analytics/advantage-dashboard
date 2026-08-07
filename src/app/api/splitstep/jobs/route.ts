@@ -63,7 +63,7 @@ function resolveDeploymentConfig():
   | { ok: false; missing: string } {
   const webhookUrl = resolveWebhookUrl();
   if (!webhookUrl) {
-    return { ok: false, missing: 'NEXT_PUBLIC_APP_URL (absent, or points at localhost)' };
+    return { ok: false, missing: 'NEXT_PUBLIC_SITE_URL (absent, or points at localhost)' };
   }
 
   const apiUrl = process.env.SPLITSTEP_API_URL;
