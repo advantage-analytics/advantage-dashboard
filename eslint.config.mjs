@@ -37,6 +37,12 @@ const eslintConfig = [
       // bundled/minified browser scripts. ESLint 9 does not read .gitignore,
       // so this has to be named explicitly.
       ".agents/**",
+      // Git worktrees. Each one is a FULL second checkout of this repo, so
+      // linting them re-lints every source file once per worktree against a
+      // different branch's code — 446 files and ~8,000 errors from two of them,
+      // none of which belong to the branch you are on. Same reason .gitignore
+      // does not save us: ESLint 9 does not read it.
+      ".claude/worktrees/**",
     ],
   },
 
