@@ -90,18 +90,40 @@ async function resolveToken(
   return rows?.[0] ?? null;
 }
 
-/** Normalize R2's three range shapes into an absolute offset and length. */
+/**
+ * Normalize R2's three range shapes into an absolute offset and length.
+ *
+ * Test the VALUES, not the keys. R2 hands back an object carrying all three
+ * keys every time, with the unused ones set to `undefined` — confirmed against
+ * the live bucket: a `bytes=-500` request logged
+ * `keys=["offset","length","suffix"] val={"offset":1927914018,"length":500}`.
+ *
+ * So `'suffix' in range` was true even for offset ranges, sending
+ * `Math.min(undefined, size)` to NaN and emitting
+ * `content-range: bytes NaN-NaN/…`. The body was always correct, so it showed
+ * up only in the header — a downloader strict about RFC 7233 would reject the
+ * 206 while a lenient one streamed happily. Caught by the first real range
+ * request ever made through this Worker.
+ *
+ * Note R2 pre-resolves a suffix range into offset+length, so the suffix branch
+ * below is a fallback for a shape it has not actually been observed to return.
+ */
 function resolveRange(
   range: R2Range,
   size: number
 ): { offset: number; length: number } {
-  if ('suffix' in range) {
+  if ('suffix' in range && range.suffix !== undefined) {
     const length = Math.min(range.suffix, size);
     return { offset: size - length, length };
   }
 
-  const offset = range.offset ?? 0;
-  const length = range.length ?? size - offset;
+  const offset = ('offset' in range && range.offset !== undefined)
+    ? range.offset
+    : 0;
+  const length = ('length' in range && range.length !== undefined)
+    ? range.length
+    : size - offset;
+
   return { offset, length };
 }
 

@@ -42,7 +42,7 @@ npm install
 Create the buckets (names must match `wrangler.toml`):
 
 ```bash
-npx wrangler r2 bucket create advantage-match-videos
+npx wrangler r2 bucket create advantage-videos
 ```
 
 ```bash

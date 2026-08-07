@@ -72,7 +72,7 @@ Pilot: free through **31 Dec 2026**, capped at **75 processing-hours/month per c
 - `scripts/splitstep-submit.ts` — the smoke-test submit script (§3 task 4)
 - `workers/video-access/` — the Cloudflare Worker (see §2)
 
-**§3.2 resolved (commit `d6ab1e0`).** Vendor URL strategy is a **Cloudflare Worker fronting R2 with an opaque token**, two separate buckets (`advantage-match-videos` / `advantage-match-results`).
+**§3.2 resolved (commit `d6ab1e0`).** Vendor URL strategy is a **Cloudflare Worker fronting R2 with an opaque token**. The original decision called for two R2 buckets; only one survives — `advantage-videos` for originals — because results JSON moved to Supabase Storage (§2.1).
 
 The driver was the pilot call. The vendor fetches the video **lazily**, when a worker picks up the job — not at submit — and said **no** to all three asks: no download-at-submit, no "processing started" webhook, no stated max queue time. Because they fetch lazily, the Worker's download log (`vendor_first_downloaded_at`) **is** the processing-started signal they declined to build. A presigned URL cannot do this: 7-day SigV4 ceiling, no revocation, no visibility.
 
@@ -96,13 +96,27 @@ Final split:
 
 | Artifact | Where | Why |
 |---|---|---|
-| Video (1–5 GB) | **R2** `advantage-match-videos` | vendor egress is free; Worker logs the fetch |
+| Video (1–5 GB) | **R2** `advantage-videos` | vendor egress is free; Worker logs the fetch |
 | Stroke JSON (~1 MB) | **Supabase Storage**, new `match-results` bucket | beside `match-data`; same client the webhook already holds |
 | Webhook envelope (~1 KB) | **`processing_jobs.raw_webhook_payload`** | already an append-array jsonb column |
 
 `results_object_key` still works unchanged — it just points at a Supabase Storage path. `R2_BUCKET_RESULTS` in `.env.example` becomes unused.
 
 **R2 is still required.** This is not "drop Cloudflare." Supabase Storage meters egress and multi-GB vendor pulls are exactly the expensive shape, plus we'd lose `vendor_first_downloaded_at`.
+
+### 2.3 R2 S3 credentials ARE needed — for upload, not for serving
+
+Easy to conclude otherwise, and it was concluded wrongly once here. The Worker reads
+video through its **R2 binding** (`env.VIDEOS`), so *serving* needs no credentials at
+all. But the browser upload path presigns a PUT through the **S3 API**, and that does:
+`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`. They live in the Supabase
+edge-function secrets, because the presigning happens in `upload-video-r2`.
+
+**One bucket name, two systems.** `R2_BUCKET_VIDEOS` in the Supabase secrets and
+`bucket_name` in `workers/video-access/wrangler.toml` must be the same string — they
+are the write side and the read side of the same object. When they disagree the upload
+succeeds, the row records a `video_object_key`, and the vendor 404s, with nothing
+visibly wrong at either end. Both are currently `advantage-videos`.
 
 ### 2.2 Derivation must not run inline in the webhook
 

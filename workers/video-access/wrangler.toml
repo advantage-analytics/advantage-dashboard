@@ -7,13 +7,17 @@ compatibility_date = "2026-08-02"
 [observability]
 enabled = true
 
-# Source-video bucket. This name is spec §3.2 decision 2: originals and results
-# live in SEPARATE buckets, matching the two env vars in §7
-# (R2_BUCKET_VIDEOS / R2_BUCKET_RESULTS). The results bucket is not bound here —
-# this Worker only ever serves originals to the vendor.
+# Source-video bucket. Originals live in R2; results do not — they go to the
+# Supabase `match-results` bucket, so only one bucket is bound here and this
+# Worker only ever serves originals to the vendor.
+#
+# The name must match R2_BUCKET_VIDEOS in the Supabase edge-function secrets,
+# which is what upload-video-r2 presigns uploads against. Those two are the
+# write side and the read side of the same object: if they disagree, video
+# uploads fine and the vendor 404s, with nothing visibly wrong on either end.
 [[r2_buckets]]
 binding = "VIDEOS"
-bucket_name = "advantage-match-videos"
+bucket_name = "advantage-videos"
 
 # Custom domain. Left commented until the hostname is confirmed: `wrangler
 # deploy` without it gives a workers.dev URL, which is a perfectly good pilot
