@@ -25,6 +25,7 @@ import { createHash, timingSafeEqual } from 'crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { parseWebhookPayload } from '@/lib/services/splitstep/webhook-payload';
 import { resultsObjectKey } from '@/lib/services/splitstep/object-keys';
+import { RESULTS_BUCKET } from '@/lib/services/splitstep/config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -40,8 +41,9 @@ export const maxDuration = 60;
 
 const LOG = '[splitstep-webhook]';
 
-/** Bucket for raw provider results — see the 20260805005801 migration. */
-const RESULTS_BUCKET = 'match-results';
+/* Bucket for raw provider results (created by the 20260805005801 migration).
+   Imported rather than re-declared: the verification script reads the same
+   bucket, and two literals would drift silently. */
 
 /** Ceiling on the results fetch, leaving headroom inside maxDuration. */
 const RESULTS_FETCH_TIMEOUT_MS = 25_000;

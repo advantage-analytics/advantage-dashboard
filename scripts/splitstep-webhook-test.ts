@@ -27,11 +27,18 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 /* ─── env ─── */
 
-for (const line of readFileSync('.env.local', 'utf8').split('\n')) {
-  const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)$/);
-  if (m && process.env[m[1]] === undefined) {
-    process.env[m[1]] = m[2].trim().replace(/^["'](.*)["']$/, '$1');
+// Guarded: on a fresh checkout or a CI box there is no .env.local, and an
+// unhandled ENOENT here would replace the readable "Missing X" messages below
+// with a raw stack trace.
+try {
+  for (const line of readFileSync('.env.local', 'utf8').split('\n')) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)$/);
+    if (m && process.env[m[1]] === undefined) {
+      process.env[m[1]] = m[2].trim().replace(/^["'](.*)["']$/, '$1');
+    }
   }
+} catch {
+  /* fall through to the required() checks, which explain what is missing */
 }
 
 function flag(name: string): string | undefined {

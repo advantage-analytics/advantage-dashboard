@@ -16,7 +16,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { buildSplitStepJobRequest } from '@/lib/services/splitstep/job-request';
-import { videoObjectKey } from '@/lib/services/splitstep/object-keys';
+import { parseWebhookPayload } from '@/lib/services/splitstep/webhook-payload';
+import { resolveWebhookUrl } from '@/lib/services/splitstep/config';
 import { createVideoUrlStrategy } from '@/lib/services/splitstep/video-url';
 import { releaseQuota, reserveQuota } from '@/lib/services/splitstep/quota';
 
@@ -45,6 +46,44 @@ interface SubmitBody {
   initialTopPlayerIsPlayer1?: boolean;
   adScoring?: boolean;
   fixedCamera?: boolean;
+}
+
+/**
+ * Everything this deployment needs before a submission can possibly succeed.
+ *
+ * Checked once, up front, rather than at the three depths these used to sit
+ * at — webhook URL after two lookups, vendor credentials after quota was
+ * already reserved, Worker URL deeper still inside mint(). On a deployment
+ * missing any of them (which is the current state until Vercel is configured)
+ * every attempt burned a job lookup, a match lookup, and a full
+ * reserve-then-release cycle before discovering it could never have worked.
+ */
+function resolveDeploymentConfig():
+  | { ok: true; webhookUrl: string; apiUrl: string; apiKey: string }
+  | { ok: false; missing: string } {
+  const webhookUrl = resolveWebhookUrl();
+  if (!webhookUrl) {
+    return { ok: false, missing: 'NEXT_PUBLIC_APP_URL (absent, or points at localhost)' };
+  }
+
+  const apiUrl = process.env.SPLITSTEP_API_URL;
+  const apiKey = process.env.SPLITSTEP_API_KEY;
+
+  // The published vendor client still points at api.example.com; refuse rather
+  // than POST a real job at a placeholder host.
+  if (!apiUrl || apiUrl.includes('api.example.com')) {
+    return { ok: false, missing: 'SPLITSTEP_API_URL (absent, or still the placeholder)' };
+  }
+  if (!apiKey) {
+    return { ok: false, missing: 'SPLITSTEP_API_KEY' };
+  }
+  if (!process.env.R2_PUBLIC_WORKER_URL) {
+    // createVideoUrlStrategy() throws on this — synchronously, deep inside the
+    // submit path. Catch it here where it can still be a clean 503.
+    return { ok: false, missing: 'R2_PUBLIC_WORKER_URL' };
+  }
+
+  return { ok: true, webhookUrl, apiUrl, apiKey };
 }
 
 export async function POST(request: NextRequest) {
@@ -78,6 +117,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: 'initialTopPlayerIsPlayer1 is required and must be a boolean' },
       { status: 400 }
+    );
+  }
+
+  // Before touching the database or an allowance: can this deployment finish
+  // the job at all?
+  const config = resolveDeploymentConfig();
+  if (!config.ok) {
+    console.error(`${LOG} refusing — deployment not configured`, {
+      missing: config.missing,
+    });
+    return NextResponse.json(
+      { error: 'Analysis is not configured on this deployment.' },
+      { status: 503 }
     );
   }
 
@@ -169,14 +221,6 @@ export async function POST(request: NextRequest) {
     match_type: string | null;
   };
 
-  const webhookUrl = buildWebhookUrl();
-  if (!webhookUrl) {
-    return NextResponse.json(
-      { error: 'Analysis is not configured on this deployment.' },
-      { status: 503 }
-    );
-  }
-
   // 5. Build and validate before anything is spent. buildSplitStepJobRequest
   //    enforces singles-only, a trim consistent with the score, and the
   //    top-player-first ordering of SetGameScores.
@@ -184,7 +228,7 @@ export async function POST(request: NextRequest) {
     matchId: job.match_id,
     videoUrl: '',
     allowEmptyVideoUrl: true,
-    webhookUrl,
+    webhookUrl: config.webhookUrl,
     player1Name: match.player1_name,
     player2Name: match.player2_name,
     initialTopPlayerIsPlayer1,
@@ -235,21 +279,19 @@ export async function POST(request: NextRequest) {
 
   // Everything past here must hand the reservation back on failure.
   try {
-    const apiUrl = process.env.SPLITSTEP_API_URL;
-    const apiKey = process.env.SPLITSTEP_API_KEY;
-
-    if (!apiUrl || !apiKey || apiUrl.includes('api.example.com')) {
-      // The published client script still points at api.example.com; refuse
-      // rather than POST a real job at a placeholder host.
-      throw new Error('Analysis provider is not configured.');
-    }
-
+    // Record what we are about to send. These three have no other home, and
+    // the orientation especially must survive the request: Phase 2 maps
+    // top-of-frame strokes back onto player1/player2 and has no other
+    // authoritative source for which was which.
     await admin
       .from('processing_jobs')
       .update({
         status: 'submitting',
         billable_seconds: billableSeconds,
         attempt_count: 1,
+        initial_top_player_is_player1: initialTopPlayerIsPlayer1,
+        ad_scoring: vendorRequest.Ad,
+        fixed_camera: vendorRequest.FixedCamera,
       })
       .eq('id', job.id);
 
@@ -262,9 +304,9 @@ export async function POST(request: NextRequest) {
     });
 
     // 8. Submit.
-    const response = await fetch(apiUrl, {
+    const response = await fetch(config.apiUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey },
+      headers: { 'Content-Type': 'application/json', 'X-Api-Key': config.apiKey },
       body: JSON.stringify({ ...vendorRequest, VideoUrl: vendorUrl.url }),
       signal: AbortSignal.timeout(30_000),
     });
@@ -277,16 +319,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Same defensive read the webhook uses. Their response shape is
+    // unconfirmed, and parseWebhookPayload already walks nested objects and
+    // every casing we have guessed at — a second, narrower copy here would
+    // reject shapes the webhook would happily accept.
     let externalJobId: string | null = null;
     try {
-      const parsed = JSON.parse(rawResponse) as Record<string, unknown>;
-      for (const key of ['job_id', 'jobId', 'JobId', 'JobID', 'id']) {
-        const value = parsed[key];
-        if (typeof value === 'string' && value) {
-          externalJobId = value;
-          break;
-        }
-      }
+      externalJobId = parseWebhookPayload(JSON.parse(rawResponse)).externalJobId;
     } catch {
       console.warn(`${LOG} provider response was not JSON`, {
         jobId: job.id,
@@ -333,37 +372,35 @@ export async function POST(request: NextRequest) {
 
     console.error(`${LOG} submission failed`, { jobId: job.id, message });
 
-    // Hand the allowance back, and retire the credential — the vendor either
-    // never got it or cannot use it.
+    // Hand the allowance back and retire the credential. Each step is isolated
+    // rather than chained: createVideoUrlStrategy() throws SYNCHRONOUSLY when
+    // R2_PUBLIC_WORKER_URL is unset, so a `.catch()` on revoke()'s promise
+    // never sees it — and an escape here would skip the one write that matters,
+    // leaving the job stuck at 'submitting' forever with the caller getting an
+    // unhandled error instead of the 502 below.
     await releaseQuota(admin, job.id);
-    await createVideoUrlStrategy(admin)
-      .revoke(job.id)
-      .catch(() => {
-        /* best effort; an unused token expiring on its own is untidy, not unsafe */
-      });
 
-    await admin
+    try {
+      await createVideoUrlStrategy(admin).revoke(job.id);
+    } catch {
+      /* best effort; an unused token expiring on its own is untidy, not unsafe */
+    }
+
+    const { error: markError } = await admin
       .from('processing_jobs')
       .update({ status: 'failed', error_message: message })
       .eq('id', job.id);
+
+    if (markError) {
+      console.error(`${LOG} could not mark the job failed`, {
+        jobId: job.id,
+        error: markError.message,
+      });
+    }
 
     return NextResponse.json(
       { error: 'Could not submit this match for analysis.', detail: message },
       { status: 502 }
     );
   }
-}
-
-/**
- * Absolute URL the vendor POSTs results to. They call us from outside, so a
- * relative path or a localhost origin is useless.
- */
-function buildWebhookUrl(): string | null {
-  const base = process.env.NEXT_PUBLIC_APP_URL;
-  if (!base) return null;
-
-  const origin = base.replace(/\/+$/, '');
-  if (origin.includes('localhost') || origin.includes('127.0.0.1')) return null;
-
-  return `${origin}/api/webhooks/splitstep`;
 }

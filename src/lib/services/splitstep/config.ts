@@ -120,3 +120,36 @@ export function currentBillingMonth(now: Date = new Date()): string {
   const month = String(now.getUTCMonth() + 1).padStart(2, '0');
   return `${year}-${month}-01`;
 }
+
+/**
+ * Supabase Storage bucket holding raw vendor results JSON.
+ *
+ * Named here rather than in each caller because the webhook writes it and the
+ * verification script reads it — two places that must agree, with nothing but a
+ * human enforcing it. Same failure shape as the R2 bucket name in §2.3 of the
+ * handoff: one string, two systems, silent drift.
+ */
+export const RESULTS_BUCKET = 'match-results';
+
+/** Path the vendor POSTs job status to. */
+export const WEBHOOK_PATH = '/api/webhooks/splitstep';
+
+/**
+ * Absolute URL the vendor POSTs results to, or null when this deployment
+ * cannot receive them.
+ *
+ * Null for unset and for localhost alike: the vendor calls us from outside, so
+ * a loopback origin is not a degraded webhook, it is no webhook. Returning
+ * null rather than throwing lets the caller decide the status code — a
+ * submission refuses with 503, a script prints a readable message.
+ */
+export function resolveWebhookUrl(
+  appUrl: string | undefined = process.env.NEXT_PUBLIC_APP_URL
+): string | null {
+  if (!appUrl) return null;
+
+  const origin = appUrl.replace(/\/+$/, '');
+  if (origin.includes('localhost') || origin.includes('127.0.0.1')) return null;
+
+  return `${origin}${WEBHOOK_PATH}`;
+}
