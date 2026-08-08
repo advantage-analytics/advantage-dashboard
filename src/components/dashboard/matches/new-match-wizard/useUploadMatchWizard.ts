@@ -811,7 +811,12 @@ export function useUploadMatchWizard({
               }
 
               const { uploadUrl, videoObjectKey } = res.data;
-              console.log("🚀 Presigned R2 Upload URL acquired:", uploadUrl);
+              // Log the key, never the URL. `uploadUrl` is a live presigned
+              // credential — an hour of write access to this object in R2 —
+              // and the browser console outlives the upload: it survives
+              // screen shares, extensions, and anyone opening devtools. The
+              // key is what you actually want when debugging anyway.
+              console.log("🚀 Presigned R2 upload URL acquired for:", videoObjectKey);
               console.log(`Starting binary upload to Cloudflare R2 (${(videoFileToUpload.size / (1024 * 1024)).toFixed(1)} MB)...`);
 
               // Attach browser unload guard to prevent accidental tab closing/navigation during upload
