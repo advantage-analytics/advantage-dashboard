@@ -757,24 +757,17 @@ export function useUploadMatchWizard({
       onOpenChange(false);
       setTimeout(() => router.refresh(), 300);
 
-      // Video providers: record the job as a draft and stop.
-      //
-      // Storage is not wired yet, so no bytes move and no VideoUrl exists. What
-      // we persist is everything the job request needs *except* that URL —
-      // trim window, camera orientation and score all come from this form. When
-      // upload lands, submission reads this row, mints a URL and POSTs.
-      //
-      // The picked File is deliberately not persisted: it cannot be serialised,
-      // so a resumed draft requires re-picking the video.
+      // Video providers (e.g. Advantage Intelligence): record job & upload video to Cloudflare R2
       if (processingStrategy) {
         const startSeconds = formData.videoStartSeconds ?? 0;
         const endSeconds = formData.videoEndSeconds ?? 0;
+        const videoFileToUpload = uploadedFile?.file;
 
         const { error: jobError } = await supabase.from("processing_jobs").insert({
           match_id: matchId,
           created_by: userId,
           provider: selectedProvider,
-          status: "pending",
+          status: videoFileToUpload ? "uploading" : "pending",
           start_time_seconds: startSeconds,
           end_time_seconds: endSeconds,
           billable_seconds: processingStrategy.billableSeconds(startSeconds, endSeconds),
@@ -782,8 +775,7 @@ export function useUploadMatchWizard({
 
         if (jobError) {
           console.error("Processing job insert error:", jobError);
-          // Roll back the match row so the user gets a clean retry, matching
-          // the file-upload path's behaviour on failure.
+          // Roll back the match row so the user gets a clean retry
           await supabase.from("matches").delete().eq("id", matchId);
           window.dispatchEvent(
             new CustomEvent("match-upload-failed", {
@@ -793,7 +785,120 @@ export function useUploadMatchWizard({
               },
             })
           );
+          return;
         }
+
+        // Kick off background upload to Cloudflare R2 via upload-video-r2 Edge Function
+        if (videoFileToUpload) {
+          void (async () => {
+            try {
+              const { data: { session } } = await supabase.auth.getSession();
+              const res = await supabase.functions.invoke("upload-video-r2", {
+                body: {
+                  matchId,
+                  fileName: videoFileToUpload.name,
+                  contentType: videoFileToUpload.type || "video/mp4",
+                },
+                headers: session?.access_token
+                  ? { Authorization: `Bearer ${session.access_token}` }
+                  : undefined,
+              });
+
+              if (res.error || !res.data?.success || !res.data?.uploadUrl) {
+                throw new Error(
+                  res.error?.message || res.data?.error || "Failed to acquire presigned R2 upload URL"
+                );
+              }
+
+              const { uploadUrl, videoObjectKey } = res.data;
+              console.log("🚀 Presigned R2 Upload URL acquired:", uploadUrl);
+              console.log(`Starting binary upload to Cloudflare R2 (${(videoFileToUpload.size / (1024 * 1024)).toFixed(1)} MB)...`);
+
+              // Attach browser unload guard to prevent accidental tab closing/navigation during upload
+              const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+                e.preventDefault();
+                e.returnValue = "Video upload is in progress. Leaving this page will cancel your upload.";
+                return e.returnValue;
+              };
+              window.addEventListener("beforeunload", handleBeforeUnload);
+
+              try {
+                // Upload video binary directly to R2 with live progress logging
+                let lastLoggedPct = -1;
+                await new Promise<void>((resolve, reject) => {
+                  const xhr = new XMLHttpRequest();
+                  xhr.open("PUT", uploadUrl, true);
+                  xhr.setRequestHeader("Content-Type", videoFileToUpload.type || "video/mp4");
+
+                  xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                      const pct = Math.floor((e.loaded / e.total) * 100);
+                      if (pct % 10 === 0 && pct !== lastLoggedPct) {
+                        lastLoggedPct = pct;
+                        console.log(
+                          `Uploading to Cloudflare R2: ${pct}% (${(e.loaded / (1024 * 1024)).toFixed(1)}MB / ${(e.total / (1024 * 1024)).toFixed(1)}MB)`
+                        );
+                      }
+                    }
+                  };
+
+                  xhr.onload = () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                      resolve();
+                    } else {
+                      reject(
+                        new Error(`Cloudflare R2 video upload failed with HTTP status ${xhr.status}: ${xhr.responseText}`)
+                      );
+                    }
+                  };
+
+                  xhr.onerror = () =>
+                    reject(new Error("Network / CORS error during direct upload to Cloudflare R2"));
+                  xhr.onabort = () => reject(new Error("Cloudflare R2 upload aborted"));
+
+                  xhr.send(videoFileToUpload);
+                });
+              } finally {
+                window.removeEventListener("beforeunload", handleBeforeUnload);
+              }
+
+              console.log("🎉 Cloudflare R2 Upload Completed! Updating processing_jobs row...");
+
+              // Update processing job status and video key
+              await supabase
+                .from("processing_jobs")
+                .update({
+                  video_object_key: videoObjectKey,
+                  status: "uploaded",
+                  updated_at: new Date().toISOString(),
+                })
+                .eq("match_id", matchId);
+
+              console.log("✅ Successfully updated processing_jobs status to 'uploaded' for match:", matchId);
+            } catch (uploadErr: any) {
+              console.error("❌ R2 video upload error:", uploadErr);
+
+              await supabase
+                .from("processing_jobs")
+                .update({
+                  status: "failed",
+                  error_message: uploadErr?.message || "Video upload to Cloudflare R2 failed",
+                  updated_at: new Date().toISOString(),
+                })
+                .eq("match_id", matchId);
+
+              window.dispatchEvent(
+                new CustomEvent("match-upload-failed", {
+                  detail: {
+                    matchId,
+                    error: uploadErr?.message || "Video upload to Cloudflare R2 failed",
+                  },
+                })
+              );
+            }
+          })();
+        }
+
         return;
       }
 
