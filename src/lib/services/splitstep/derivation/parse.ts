@@ -14,8 +14,9 @@
  *
  * A fourth failure mode is not a sentinel at all and the spec does not mention
  * it: coordinates that are numerically fine but physically impossible, up to
- * `bounce_y_m: 371.7` on a court that ends at 11.885. One of the two sample
- * matches carries these on 22% of strokes. They are nulled here too.
+ * `bounce_y_m: 371.7` on a court whose fence is at 18.3. One of the two sample
+ * matches carries these on 15% of strokes. They are nulled here too, against
+ * the playing enclosure defined in court.ts.
  */
 
 import {

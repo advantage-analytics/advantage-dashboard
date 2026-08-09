@@ -20,22 +20,34 @@ export const SERVICE_LINE_M = 6.4;
 export const BASELINE_M = 11.885;
 
 /**
- * How far outside the court a coordinate may sit before we call it corrupt
- * rather than merely long.
+ * The playing enclosure — the outer bound on where a ball or a player can
+ * physically be.
  *
- * A ball genuinely lands a metre or two past the baseline; the vendor also
- * emits values like `bounce_y_m: 371.7`, which is a tracking failure, not a
- * shot. The gap between those two is wide, so the threshold does not need to
- * be precise — it needs to exist. Without it, one sample match leaks 22% of
- * its bounces into every placement chart.
+ * Taken from the ITF's recommended run-off: 6.40 m behind each baseline and
+ * 3.66 m outside each doubles sideline. Anything beyond that is outside the
+ * fence, so it is a tracking failure rather than a wide ball or a deep
+ * returner.
  *
- * Chosen to sit above any real shot (a lob landing long clears the baseline by
- * well under a metre) and far below the failure mode.
+ * The bound has to come from somewhere real, because both plausible-looking
+ * mistakes are costly. Too loose and the vendor's `bounce_y_m: 371.7` reaches
+ * a placement chart. Too tight and it eats legitimate data: an earlier
+ * 13.0 m cut nulled 71% of player positions in a sample match, because the
+ * median player stands 13.6 m from the net — about two metres behind the
+ * baseline, which is simply where people stand.
  */
-export const MAX_PLAUSIBLE_Y_M = 13.0;
-export const MAX_PLAUSIBLE_X_M = 7.0;
+export const RUN_OFF_BEHIND_BASELINE_M = 6.4;
+export const RUN_OFF_BESIDE_SIDELINE_M = 3.66;
 
-/** True when a bounce coordinate pair is physically possible on a court. */
+export const MAX_PLAUSIBLE_Y_M = BASELINE_M + RUN_OFF_BEHIND_BASELINE_M;
+export const MAX_PLAUSIBLE_X_M =
+  DOUBLES_HALF_WIDTH_M + RUN_OFF_BESIDE_SIDELINE_M;
+
+/**
+ * True when a coordinate pair sits inside the playing enclosure.
+ *
+ * Applied to bounces and to player positions alike — neither a ball nor a
+ * person can be outside the fence.
+ */
 export function isPlausibleCourtPosition(x: number, y: number): boolean {
   return Math.abs(x) <= MAX_PLAUSIBLE_X_M && Math.abs(y) <= MAX_PLAUSIBLE_Y_M;
 }
