@@ -11,17 +11,19 @@
  * Vercel Hobby, where the platform ceiling is 60s. A full match of strokes
  * through derivation is not something to bet on fitting.
  *
- * So: verify → record → fetch the results JSON → return. Derivation runs
- * afterwards in a Supabase Edge Function, mirroring the SwingVision
+ * So: verify → record → return 200 → fetch the results JSON in after().
+ * Derivation runs later in a Supabase Edge Function, mirroring the SwingVision
  * `process-match` fire-and-forget pattern.
  *
- * The one thing kept inline is the results download. That URL is short-lived
- * with no documented way to re-request it (§7 Q5), so it is fetched while we
- * certainly still have it. A JSON fetch is fast; derivation is not.
+ * Nothing slow happens before the response. The vendor confirmed a 30s
+ * connection timeout and NO retry policy, which makes their timeout the hard
+ * deadline: a delivery we fail to answer in time is gone permanently, and a
+ * non-2xx buys nothing because nothing retries it. The only work before the 200
+ * is recording the envelope, which is what makes everything else recoverable.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { createHash, timingSafeEqual } from 'crypto';
+import { NextRequest, NextResponse, after } from 'next/server';
+import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { parseWebhookPayload } from '@/lib/services/splitstep/webhook-payload';
 import { resultsObjectKey } from '@/lib/services/splitstep/object-keys';
@@ -49,62 +51,137 @@ const LOG = '[splitstep-webhook]';
 const RESULTS_FETCH_TIMEOUT_MS = 25_000;
 
 /**
- * Shared-secret check.
+ * Headers the signature might arrive in.
  *
- * TODO(splitstep-q4): replace with the vendor's real signing scheme once they
- * document algorithm, header name, signing payload and rotation. Until then a
- * shared secret is the whole of the authentication.
- *
- * Accepted UNSIGNED when SPLITSTEP_WEBHOOK_SECRET is unset, so the smoke test
- * can run before the vendor has implemented anything on their side — they are
- * not blocked on us for the signing scheme. Every unsigned delivery is logged
- * as such and recorded with signature_verified = false, so this cannot quietly
- * become the production posture.
- *
- * While unset, this endpoint is an open write path against `processing_jobs`
- * for anyone who finds the URL. Acceptable for a test with a throwaway video;
- * NOT acceptable once real athlete video goes through.
+ * The published contract gives the algorithm but never names the header, so
+ * this is a candidate list for the same reason webhook-payload.ts uses one for
+ * the body keys: guess once and you fail silently on the first real delivery.
+ * Collapse to the single real header once one has been observed — the log below
+ * prints the full header set whenever none of these match.
  */
-function verifySecret(request: NextRequest): {
-  ok: boolean;
-  verified: boolean;
-} {
-  const expected = process.env.SPLITSTEP_WEBHOOK_SECRET;
+const SIGNATURE_HEADERS = [
+  'x-splitstep-signature',
+  'x-webhook-signature',
+  'x-signature',
+  'x-signature-256',
+  'x-hub-signature-256',
+  'signature',
+  'x-webhook-secret',
+  'x-api-key',
+  'authorization',
+] as const;
 
-  if (!expected) {
+type AuthOutcome = {
+  /** Whether to process this delivery at all. */
+  ok: boolean;
+  /** Recorded on the row. True only for a real HMAC match. */
+  verified: boolean;
+  /** For the log; never includes the signature or the secret. */
+  reason: string;
+};
+
+/**
+ * Verify a delivery against the documented scheme:
+ * base64(HMAC-SHA256(secret, raw_body)), compared to a signature header.
+ *
+ *   digest = hmac.new(secret, raw_body, sha256).digest()
+ *   expected = base64.b64encode(digest)
+ *
+ * ── Why a missing signature is accepted, not rejected ────────────────────────
+ * The vendor has NO retry policy and a 30s connection timeout, so a delivery we
+ * refuse is gone permanently — there is no second attempt to fix it on. Paired
+ * with a header name nobody has written down, rejecting on "no signature found"
+ * risks discarding perfectly valid results because we looked in the wrong place.
+ *
+ * So: a signature that is present and WRONG is refused (that is a real failure).
+ * A signature we cannot find is accepted, recorded `signature_verified = false`,
+ * and logged with the full header set — which is what tells us the header name.
+ *
+ * Set SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE=true to flip to fail-closed. Do that
+ * as soon as one real delivery has confirmed the header, and before any real
+ * athlete video goes through.
+ */
+function verifyWebhookAuth(request: NextRequest, rawBody: string): AuthOutcome {
+  const secret = process.env.SPLITSTEP_WEBHOOK_SECRET;
+
+  if (!secret) {
     console.warn(
       `${LOG} UNSIGNED — SPLITSTEP_WEBHOOK_SECRET is not set. Accepting without ` +
         `authentication. This must not remain true once real match video is processed.`
     );
-    return { ok: true, verified: false };
+    return { ok: true, verified: false, reason: 'no secret configured' };
   }
 
-  const auth = request.headers.get('authorization');
-  const presented =
-    request.headers.get('x-webhook-secret') ??
-    request.headers.get('x-api-key') ??
-    (auth?.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : null);
+  const expected = createHmac('sha256', secret).update(rawBody, 'utf8').digest('base64');
 
-  if (!presented) {
-    return { ok: false, verified: false };
+  // Equal-length compare via digests, so nothing leaks through timing or length.
+  const matches = (presented: string, against: string) =>
+    timingSafeEqual(
+      createHash('sha256').update(presented).digest(),
+      createHash('sha256').update(against).digest()
+    );
+
+  let sawCandidate = false;
+
+  for (const header of SIGNATURE_HEADERS) {
+    const raw = request.headers.get(header);
+    if (!raw) continue;
+    sawCandidate = true;
+
+    const presented = header === 'authorization' ? raw.replace(/^Bearer\s+/i, '') : raw.trim();
+
+    if (matches(presented, expected)) {
+      return { ok: true, verified: true, reason: `HMAC verified via ${header}` };
+    }
+
+    // Tolerated, not trusted: some senders put the shared secret itself in the
+    // header rather than a signature over the body. It proves they hold the
+    // secret, which is worth accepting, but it is not a signature — it says
+    // nothing about whether the body was modified in transit.
+    if (matches(presented, secret)) {
+      console.warn(
+        `${LOG} ${header} carried the raw shared secret, not an HMAC of the body. ` +
+          `Accepted, but recorded unverified — ask the vendor to send ` +
+          `base64(HMAC-SHA256(secret, raw_body)).`
+      );
+      return { ok: true, verified: false, reason: `raw secret via ${header}` };
+    }
   }
 
-  // Hash both sides so timingSafeEqual gets equal-length buffers regardless of
-  // what was presented — comparing lengths directly would itself leak.
-  const a = createHash('sha256').update(presented).digest();
-  const b = createHash('sha256').update(expected).digest();
+  if (sawCandidate) {
+    // A signature was presented and it did not match. That is a real failure,
+    // not an unknown-header problem.
+    return { ok: false, verified: false, reason: 'signature present but did not match' };
+  }
 
-  return { ok: timingSafeEqual(a, b), verified: true };
+  const requireSignature = process.env.SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE === 'true';
+
+  console.warn(
+    `${LOG} no signature header found${requireSignature ? ' — REJECTING' : ' — accepting unverified'}`,
+    {
+      searched: SIGNATURE_HEADERS,
+      // The header NAMES are what identify the right one. Values are redacted
+      // by safeHeaders() before anything is stored or logged.
+      received: [...request.headers.keys()],
+    }
+  );
+
+  return {
+    ok: !requireSignature,
+    verified: false,
+    reason: 'no signature header found',
+  };
 }
 
-/** Headers worth keeping, without dragging the secret into the database. */
+/**
+ * Headers worth keeping, without dragging a credential into the database.
+ *
+ * Every candidate signature header is redacted along with `cookie`. The NAMES
+ * still land in the row, which is the part that identifies where the vendor
+ * puts the signature; the values never do.
+ */
 function safeHeaders(request: NextRequest): Record<string, string> {
-  const redacted = new Set([
-    'authorization',
-    'x-webhook-secret',
-    'x-api-key',
-    'cookie',
-  ]);
+  const redacted = new Set<string>([...SIGNATURE_HEADERS, 'cookie']);
 
   const out: Record<string, string> = {};
   request.headers.forEach((value, key) => {
@@ -131,12 +208,14 @@ export async function POST(request: NextRequest) {
     body: rawBody.slice(0, 4000),
   });
 
-  // 2. Authenticate.
-  const { ok, verified } = verifySecret(request);
-  if (!ok) {
-    console.error(`${LOG} rejected — bad or missing shared secret`);
+  // 2. Authenticate. Must run against the exact bytes received — the HMAC is
+  //    over the raw body, so re-serializing would break it.
+  const auth = verifyWebhookAuth(request, rawBody);
+  if (!auth.ok) {
+    console.error(`${LOG} rejected — ${auth.reason}`);
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  const verified = auth.verified;
 
   // 3. Interpret. Never fatal: an unparseable body is still recorded verbatim.
   let parsedJson: unknown = null;
@@ -209,46 +288,57 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // 5. Results download. Only on completion, and only once.
+  // 5. Results download — AFTER the response is committed, not before.
+  //
+  // The vendor has a 30s connection timeout and NO retry policy. Downloading
+  // inline meant a slow vendor host could hold the response past their timeout,
+  // and a timed-out delivery is gone permanently — there is no second attempt.
+  // So the 200 goes out as soon as the envelope is durable, and the fetch runs
+  // in after(), still inside this invocation's maxDuration.
+  //
+  // The old code returned 500 here "to invite a retry". That was wrong: they
+  // confirmed no retry policy exists, so a 500 bought nothing and only risked
+  // the timeout. Recovery is by hand from the stored sas_url, or via
+  // GET {BASE_URL}/jobs/{job_id}, which the docs now expose.
   if (payload.nextStatus === 'completed' && payload.sasUrl && !record.already_stored) {
-    const stored = await storeResults({
-      supabase,
-      sasUrl: payload.sasUrl,
-      objectKey: record.matched_job_id
-        ? resultsObjectKey({
-            userId: record.created_by!,
-            matchId: record.match_id!,
-            jobId: record.matched_job_id,
-          })
-        : `orphaned/${payload.externalJobId ?? 'unknown'}/${record.delivery_id}.json`,
-    });
+    const objectKey = record.matched_job_id
+      ? resultsObjectKey({
+          userId: record.created_by!,
+          matchId: record.match_id!,
+          jobId: record.matched_job_id,
+        })
+      : `orphaned/${payload.externalJobId ?? 'unknown'}/${record.delivery_id}.json`;
 
-    await supabase.rpc('finalize_splitstep_results', {
-      p_delivery_id: record.delivery_id,
-      p_job_id: record.matched_job_id,
-      p_results_object_key: stored.ok ? stored.objectKey : null,
-      p_error: stored.ok ? null : stored.error,
-    });
+    const sasUrl = payload.sasUrl;
+    const deliveryId = record.delivery_id;
+    const jobId = record.matched_job_id;
 
-    if (!stored.ok) {
-      // 500 so they retry while the URL is still valid. The envelope is already
-      // recorded above, so even if they never retry, the sas_url is on disk and
-      // a human can fetch it by hand before it expires.
-      console.error(`${LOG} results download FAILED — returning 500 to invite a retry`, {
-        deliveryId: record.delivery_id,
-        jobId: record.matched_job_id,
-        error: stored.error,
+    after(async () => {
+      const stored = await storeResults({ supabase, sasUrl, objectKey });
+
+      await supabase.rpc('finalize_splitstep_results', {
+        p_delivery_id: deliveryId,
+        p_job_id: jobId,
+        p_results_object_key: stored.ok ? stored.objectKey : null,
+        p_error: stored.ok ? null : stored.error,
       });
-      return NextResponse.json(
-        { error: 'Failed to store results' },
-        { status: 500 }
-      );
-    }
 
-    console.log(`${LOG} results stored`, {
-      jobId: record.matched_job_id,
-      objectKey: stored.objectKey,
-      bytes: stored.bytes,
+      if (!stored.ok) {
+        // Loud, because nothing retries this. The sas_url is in the delivery
+        // row and stays valid for days — it can be fetched by hand.
+        console.error(`${LOG} results download FAILED — recover from the stored sas_url`, {
+          deliveryId,
+          jobId,
+          error: stored.error,
+        });
+        return;
+      }
+
+      console.log(`${LOG} results stored`, {
+        jobId,
+        objectKey: stored.objectKey,
+        bytes: stored.bytes,
+      });
     });
   }
 

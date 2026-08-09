@@ -23,6 +23,7 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { createHmac } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { RESULTS_BUCKET } from '../src/lib/services/splitstep/config';
 
@@ -89,14 +90,44 @@ function check(label: string, ok: boolean, detail?: unknown): void {
   }
 }
 
+/**
+ * Poll until a condition holds, or give up.
+ *
+ * The webhook answers 200 before it downloads results — deliberately, because
+ * the vendor times out at 30s and never retries — so anything that happens in
+ * after() cannot be asserted synchronously.
+ */
+async function waitFor(
+  condition: () => Promise<boolean>,
+  timeoutMs = 20_000,
+  intervalMs = 500
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await condition()) return true;
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  return false;
+}
+
+/**
+ * base64(HMAC-SHA256(secret, raw_body)) — the scheme the vendor publishes.
+ * Signed over the exact bytes sent, which is why the body is stringified once
+ * and reused rather than serialized twice.
+ */
+function sign(rawBody: string): string {
+  return createHmac('sha256', secret!).update(rawBody, 'utf8').digest('base64');
+}
+
 async function post(body: unknown): Promise<{ status: number; json: unknown }> {
+  const rawBody = JSON.stringify(body);
   const headers: Record<string, string> = { 'content-type': 'application/json' };
-  if (secret) headers['x-webhook-secret'] = secret;
+  if (secret) headers['x-splitstep-signature'] = sign(rawBody);
 
   const res = await fetch(endpoint, {
     method: 'POST',
     headers,
-    body: JSON.stringify(body),
+    body: rawBody,
   });
 
   let json: unknown = null;
@@ -222,7 +253,14 @@ async function main(): Promise<void> {
       sas_url: sasUrl,
     });
     check('returns 200', r.status === 200, r);
-    check('job reaches completed', (await jobStatus(completedJob.id)) === 'completed');
+
+    // The download runs in after(), so it completes AFTER the 200 — that is the
+    // point of the change, since the vendor times out at 30s and never retries.
+    // Poll rather than assert immediately.
+    const reached = await waitFor(
+      async () => (await jobStatus(completedJob.id)) === 'completed'
+    );
+    check('job reaches completed (async, after the 200)', reached);
 
     const { data } = await supabase
       .from('processing_jobs')
@@ -302,20 +340,42 @@ async function main(): Promise<void> {
 
   console.log('7. unparseable body is recorded rather than lost');
   {
+    // Signed like any other delivery — the HMAC is over raw bytes, so it does
+    // not care that those bytes are not JSON.
+    const rawBody = 'not json{';
     const headers: Record<string, string> = { 'content-type': 'application/json' };
-    if (secret) headers['x-webhook-secret'] = secret;
-    const res = await fetch(endpoint, { method: 'POST', headers, body: 'not json{' });
+    if (secret) headers['x-splitstep-signature'] = sign(rawBody);
+    const res = await fetch(endpoint, { method: 'POST', headers, body: rawBody });
     check('does not 5xx on malformed input', res.status < 500, res.status);
   }
 
   if (secret) {
-    console.log('8. a wrong secret is rejected');
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-webhook-secret': 'wrong' },
-      body: JSON.stringify({ status: 'queued', externalJobId: completedExtId }),
-    });
-    check('returns 401', res.status === 401, res.status);
+    console.log('8. a bad signature is rejected');
+    {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-splitstep-signature': 'wrong' },
+        body: JSON.stringify({ status: 'queued', externalJobId: completedExtId }),
+      });
+      check('garbage signature returns 401', res.status === 401, res.status);
+    }
+
+    console.log('9. a signature over DIFFERENT bytes is rejected');
+    {
+      // The real thing HMAC protects against: a valid signature replayed onto a
+      // tampered body. Sign one payload, send another.
+      const signedBody = JSON.stringify({ status: 'queued', externalJobId: completedExtId });
+      const tamperedBody = JSON.stringify({ status: 'job_completed', externalJobId: completedExtId });
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-splitstep-signature': sign(signedBody),
+        },
+        body: tamperedBody,
+      });
+      check('signature/body mismatch returns 401', res.status === 401, res.status);
+    }
   }
 }
 
