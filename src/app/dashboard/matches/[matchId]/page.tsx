@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 
 import {
   getAdjacentMatchIds,
@@ -6,10 +7,10 @@ import {
 } from "@/lib/data/match-detail-server";
 import { shortName } from "@/lib/data/match-utils";
 import {
-  getMatchAnalysis,
   isAnalysisFailed,
   isInFlight,
 } from "@/lib/data/match-analysis";
+import { analysisFor, loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import { MatchAnalysisProgress } from "@/components/dashboard/matches/match-detail/match-analysis-progress";
 
 import { MatchSummaryRow } from "@/components/dashboard/matches/match-detail/match-summary-row";
@@ -169,11 +170,11 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // hit no serves" rather than "we're still working" — so the page stops at the
   // identity the player entered plus the pipeline state. Failures take the same
   // path: the reason it stopped is more use than a page of zeroes.
-  const analysis = getMatchAnalysis(
-    matchId,
-    match.sourceProvider,
-    Boolean(match.verificationStatus),
-  );
+  const analysis = analysisFor(await loadMatchAnalysis(await createClient(), [matchId]), {
+    id: matchId,
+    sourceProvider: match.sourceProvider,
+    verificationStatus: match.verificationStatus,
+  });
   const isAwaitingAnalysis =
     isInFlight(analysis.status) || isAnalysisFailed(analysis.status);
 

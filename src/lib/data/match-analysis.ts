@@ -254,22 +254,48 @@ function hashId(value: string): number {
   return Math.abs(hash);
 }
 
+/**
+ * A match that arrived complete from a file import and never had a job.
+ *
+ * No `window` or `jobReference`: the mock invented both ("1:31:47",
+ * "sv_import") and they read as real facts about the match. An import has no
+ * billed window and no vendor job to reference — showing nothing is honest,
+ * showing a fixture is not.
+ */
+export function importedAnalysis(
+  sourceProvider: string,
+  verified: boolean
+): MatchAnalysis {
+  return {
+    status: "imported",
+    providerId: (sourceProvider as ProviderId) ?? null,
+    verified,
+  };
+}
+
+/** Scored by hand. No video was ever submitted. */
+export function manualAnalysis(): MatchAnalysis {
+  return { status: "manual", providerId: null };
+}
+
+/**
+ * @deprecated Fixture data. Superseded by `loadMatchAnalysis()` in
+ * match-analysis-server.ts, which reads real `processing_jobs` rows.
+ *
+ * Kept only so anything still importing it keeps compiling. It hash-cycles a
+ * fixture array, so a real match gets a plausible-looking status that is pure
+ * invention — do not wire it into anything new.
+ */
 export function getMatchAnalysis(
   matchId: string,
   sourceProvider: string | undefined,
   verified: boolean
 ): MatchAnalysis {
   if (sourceProvider === "swing-vision") {
-    return {
-      status: "imported",
-      providerId: "swing-vision",
-      window: "1:31:47",
-      jobReference: "sv_import",
-      verified,
-    };
+    return importedAnalysis(sourceProvider, verified);
   }
   if (!sourceProvider) {
-    return { status: "manual", providerId: null };
+    return manualAnalysis();
   }
   return MOCK_CYCLE[hashId(matchId) % MOCK_CYCLE.length];
 }

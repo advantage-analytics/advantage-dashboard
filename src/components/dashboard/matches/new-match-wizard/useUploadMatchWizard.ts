@@ -843,6 +843,30 @@ export function useUploadMatchWizard({
                         console.log(
                           `Uploading to Cloudflare R2: ${pct}% (${(e.loaded / (1024 * 1024)).toFixed(1)}MB / ${(e.total / (1024 * 1024)).toFixed(1)}MB)`
                         );
+
+                        // Persist it too. The wizard has already closed by now
+                        // and this upload runs in the background, so a console
+                        // line is invisible — the matches list is where the user
+                        // actually looks, and it reads this column.
+                        //
+                        // Every ~10% rather than every event: a multi-GB upload
+                        // fires hundreds, and the bar cannot show finer than
+                        // that anyway. Fire-and-forget — a dropped progress
+                        // write must never disturb the upload itself.
+                        void supabase
+                          .from("processing_jobs")
+                          .update({ upload_progress_percent: pct })
+                          // By match_id, matching the status writes below — the
+                          // insert above never selects the row id back.
+                          .eq("match_id", matchId)
+                          .then(({ error }) => {
+                            if (error) {
+                              console.warn(
+                                "Could not record upload progress:",
+                                error.message
+                              );
+                            }
+                          });
                       }
                     }
                   };
