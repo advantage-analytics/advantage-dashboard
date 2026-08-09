@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { RESULTS_BUCKET } from "@/lib/services/splitstep/config";
 
 // Beta gate: every PATCH forces private = true until we surface the toggle.
 const BETA_FORCE_PRIVATE = true;
@@ -198,7 +199,67 @@ export async function DELETE(
   if (lookupError) return NextResponse.json({ error: lookupError.message }, { status: 500 });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  // Everything below runs BEFORE the row is deleted, and that ordering is
+  // load-bearing: `video_object_key` and `results_object_key` live on
+  // `processing_jobs`, which cascades away with the match. Delete first and the
+  // keys are gone, leaving objects that nothing can even name — a permanent
+  // multi-GB leak in R2's case.
+  //
+  // Every step is best-effort. A stranded file is recoverable (see
+  // scripts/cleanup-orphan-storage.ts); a match the user cannot delete is not.
+  // So storage failures log and the row delete proceeds regardless.
   try {
+    // 1. Source video in R2. Delegated to the edge function because that is
+    //    where the R2 write credentials already live — the Next runtime has no
+    //    S3 client and no R2 keys, and duplicating them here for one call would
+    //    widen the credential surface for nothing.
+    const { data: r2Result, error: r2Error } = await supabase.functions.invoke(
+      "delete-video-r2",
+      { body: { matchId } }
+    );
+
+    if (r2Error) {
+      console.error("[match delete] R2 video cleanup failed:", r2Error.message);
+    } else if (r2Result?.deleted?.length) {
+      console.log(
+        `[match delete] removed ${r2Result.deleted.length} R2 object(s) for ${matchId}`
+      );
+    }
+  } catch (err) {
+    console.error("[match delete] R2 cleanup threw:", err);
+  }
+
+  try {
+    // 2. Raw provider results in Supabase Storage. Same bucket the webhook
+    //    writes to, so this client can remove them directly.
+    const { data: jobs } = await supabase
+      .from("processing_jobs")
+      .select("results_object_key")
+      .eq("match_id", matchId)
+      .not("results_object_key", "is", null);
+
+    const resultKeys = (jobs ?? [])
+      .map((j) => j.results_object_key as string | null)
+      .filter((k): k is string => Boolean(k));
+
+    if (resultKeys.length > 0) {
+      const { error: resultsError } = await supabase.storage
+        .from(RESULTS_BUCKET)
+        .remove(resultKeys);
+
+      if (resultsError) {
+        console.error(
+          `[match delete] results cleanup failed for ${RESULTS_BUCKET}:`,
+          resultsError.message
+        );
+      }
+    }
+  } catch (err) {
+    console.error("[match delete] results cleanup threw:", err);
+  }
+
+  try {
+    // 3. Uploaded provider files (SwingVision .xlsx and friends).
     const { data: files } = await supabase
       .from("match_files")
       .select("storage_path, storage_bucket")
