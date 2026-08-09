@@ -1,8 +1,8 @@
 -- SplitStep webhook ingest — results bucket, durable delivery log, idempotent
 -- job advance.
 --
--- Implements the two architecture corrections recorded in docs/splitstep-handoff.md
--- §2, which supersede the spec's §2 diagram and storage table:
+-- Implements the two architecture corrections that supersede the spec's §2 diagram
+-- and storage table (now described in docs/r2-and-webhook-overview.md §2 and §5):
 --
 --   §2.1  Raw results JSON goes to Supabase Storage, not R2. The stroke JSON is
 --         ~0.5–2 MB against a 1–5 GB video — three orders of magnitude apart, so

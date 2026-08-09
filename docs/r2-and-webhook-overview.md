@@ -506,3 +506,44 @@ likely to be wrong are invisible when wrong: `InitialTopPlayer` is camera-relati
 first frame (not player1), and `SetGameScores` is ordered top-player-first. Get either
 backwards and every statistic is attributed to the wrong player with nothing looking off
 in the UI.
+
+---
+
+## 14. Gotchas that will each cost you an hour
+
+Every one of these has already cost someone one.
+
+**Migrations applied through the Supabase MCP get stamped with the MCP's own version,
+not your filename's.** Files named `20260802000000` went live as `20260802083544`.
+`supabase db push` compares by version, so it will happily try to replay migrations the
+database already has. After applying through the MCP, read the version back out of
+`supabase_migrations.schema_migrations` and rename the file to match. Ten older files
+still carry this drift.
+
+**`wrangler r2` reads a LOCAL simulated bucket by default.** `wrangler r2 object get`
+will tell you a real 800 MB object "does not exist". Pass `--remote`. Relatedly,
+`wrangler r2 bucket info` metrics are cached and stale — an S3 `ListObjectsV2` is the
+only authoritative answer.
+
+**Anything added to `processing_jobs_status_check` must also be added to
+`splitstep_status_rank()`.** They are two halves of one state machine and nothing
+enforces agreement. This already broke once: `deriving` was added to the constraint but
+not the rank function, fell to the `else -1` branch, and a late `queued` retry dragged a
+mid-derivation job backwards.
+
+**No root `middleware.ts` exists**, so the webhook route is reachable today. If anyone
+ever adds one, note that `publicPaths` in `src/lib/supabase/middleware.ts:43` does
+**not** include `/api/webhooks` — an unauthenticated vendor POST would 307 to `/login`.
+Their side sees a redirect; you see nothing.
+
+**Don't route a test video through `src/lib/video/compress.ts`.** It transcodes to 720p
+(`-vf scale=-2:720`), which is under the vendor's 1080p floor.
+
+**The repo is public.** It was made public to enable Vercel git auto-deploy on Hobby.
+Every commit is world-readable — secrets in env only, and never commit a test video or
+its URL.
+
+**Vercel injects env vars at deploy time**, and `NEXT_PUBLIC_*` values are inlined at
+build. Changing one in the dashboard does nothing until you redeploy. A mismatched
+`STRIPE_WEBHOOK_SECRET` once let payments succeed silently without upgrading the plan;
+the same failure shape applies here.

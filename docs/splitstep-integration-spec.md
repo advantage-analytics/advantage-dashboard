@@ -4,6 +4,24 @@ Repo: `advantage-analytics/advantage-dashboard`
 Target: add SplitStep as a video-based analysis provider alongside the existing SwingVision xlsx importer.
 Vendor docs: https://splitstep.ai/api-docs.html
 
+> ## Status of this document
+>
+> **This is the original design spec, kept for the "why".** It was written before
+> anything was built and is deliberately not updated as reality moves — parts of it are
+> now wrong on purpose, because the reasoning is still worth reading.
+>
+> | Section | Status |
+> |---|---|
+> | §2 architecture diagram + storage table | **Superseded.** Results JSON goes to Supabase Storage, not R2, and derivation does not run inline in the webhook. See `r2-and-webhook-overview.md` §2 and §5 |
+> | §3 Phase 1 | **Built.** Current state is `r2-and-webhook-overview.md` |
+> | §4 Phase 2 | **Not built**, and gated differently than described |
+> | §5 open questions | **Superseded** by `docs/splitstep-vendor-questions.md` on the `splitstep-derivation` branch. Question numbers are preserved there, so `TODO(splitstep-qN)` markers in the code stay valid |
+> | §6 Phase 3 UI | Partly built — the wizard exists |
+> | §7 environment | **Superseded** by `r2-and-webhook-overview.md` §12 |
+> | §0, §1, §8 | Still accurate |
+>
+> **For what actually exists today, read `r2-and-webhook-overview.md` first.**
+
 ---
 
 ## 0. Read this first
