@@ -64,6 +64,22 @@ export async function loadMatchAnalysis(
   const out = new Map<string, MatchAnalysis>();
   if (matchIds.length === 0) return out;
 
+  // Retire stalled uploads before reading, so a job whose tab was closed shows
+  // "Failed" rather than a progress bar frozen at whatever percent it reached.
+  //
+  // On the read path rather than a schedule because that is exactly when it
+  // matters — a stale row is only misleading while someone is looking at it —
+  // and it avoids enabling pg_cron for one statement. Runs under the caller's
+  // RLS, so a user only ever reaps their own. The predicate almost always
+  // matches nothing and is served by processing_jobs_status_idx.
+  const { error: reapError } = await supabase.rpc('reap_stalled_uploads');
+  if (reapError) {
+    // Never fatal — the list is more useful slightly stale than not at all.
+    console.warn('[match-analysis] could not reap stalled uploads', {
+      error: reapError.message,
+    });
+  }
+
   const { data, error } = await supabase
     .from('processing_jobs')
     .select(

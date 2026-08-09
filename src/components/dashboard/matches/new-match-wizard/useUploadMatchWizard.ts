@@ -819,10 +819,19 @@ export function useUploadMatchWizard({
               console.log("🚀 Presigned R2 upload URL acquired for:", videoObjectKey);
               console.log(`Starting binary upload to Cloudflare R2 (${(videoFileToUpload.size / (1024 * 1024)).toFixed(1)} MB)...`);
 
-              // Attach browser unload guard to prevent accidental tab closing/navigation during upload
+              // The wizard has already closed by this point, so this guard is the
+              // only thing telling the user the work is not finished.
+              //
+              // Says what is actually at risk: the match itself is saved and
+              // survives, only the video transfer dies with the page. Leaving
+              // used to strand the job at `uploading` forever with no error —
+              // reap_stalled_uploads() now marks it failed, but a cancelled
+              // upload still means starting the transfer over, so it is worth
+              // stopping rather than merely recovering from.
               const handleBeforeUnload = (e: BeforeUnloadEvent) => {
                 e.preventDefault();
-                e.returnValue = "Video upload is in progress. Leaving this page will cancel your upload.";
+                e.returnValue =
+                  "Your video is still uploading. The match is saved, but leaving now cancels the upload and you'll have to add the video again.";
                 return e.returnValue;
               };
               window.addEventListener("beforeunload", handleBeforeUnload);
