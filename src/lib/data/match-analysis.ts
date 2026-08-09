@@ -5,11 +5,11 @@
  * (`processing_jobs.match_id` is NOT NULL with a FK to `matches`), so the match
  * row is the job's identity and the list is the queue.
  *
- * MOCK. Nothing here reads Supabase — the browser→R2 transfer, job submission
- * and the status webhook are unbuilt, so every real `processing_jobs` row sits
- * at 'pending' forever. `getMatchAnalysis()` is the single swap point: replace
- * its body with a `processing_jobs` lookup keyed by match id and every consumer
- * keeps working.
+ * This file holds the SHAPE and the presentation rules — statuses, labels,
+ * colours, stage arithmetic. The data comes from `match-analysis-server.ts`,
+ * which reads real `processing_jobs` rows. It used to come from a fixture array
+ * hash-cycled per match id, which meant every status and percentage on screen
+ * was invented; that is gone.
  */
 
 import type { ProviderId } from "@/lib/services/upload";
@@ -21,9 +21,10 @@ export type AnalysisStatus =
   | "processing"
   /**
    * Our derivation engine turning vendor strokes into points and shots.
-   * NOT YET IN THE DB — the constraint has `derivation_failed` but no matching
-   * in-progress value, so a job jumps `processing → completed` with our own
-   * work invisible. A migration adding this has to land before it can be real.
+   * Added to processing_jobs_status_check in 20260805005321, and to
+   * splitstep_status_rank() in 20260805010934 — it ranks ABOVE anything a
+   * webhook can carry, so a late vendor delivery cannot drag a mid-derivation
+   * job backwards.
    */
   | "deriving"
   | "completed"
@@ -38,13 +39,13 @@ export type AnalysisStatus =
 export interface MatchAnalysis {
   status: AnalysisStatus;
   /**
-   * Overall pipeline progress, 0-100, shown beside the status word.
+   * Progress 0-100, shown beside the status word.
    *
-   * Only the `uploading` share of this is measurable today — bytes moved by the
-   * browser. Queue/analysis/derivation arrive as webhook status transitions with
-   * no percentage attached, so once this is wired those stages will need either
-   * a progress field from the vendor or a stage-weighted estimate. Until then
-   * these are fixture values.
+   * Set ONLY while uploading, from real bytes the browser has moved. The vendor
+   * sends queue/analysis transitions with no percentage attached, so a bar for
+   * those stages would be invented — `loadMatchAnalysis` leaves this undefined
+   * there, and a bare status word is the honest render. Giving them a number
+   * needs either a progress field from the vendor or a stage-weighted estimate.
    */
   progressPercent?: number;
   /** Drives the popover's logo and heading. */
@@ -190,71 +191,6 @@ export function analysisAction(
 }
 
 /**
- * Deterministic stand-in so every state is reviewable in the list.
- *
- * Keyed off the match id, not the row position: the list can be sorted,
- * filtered and paginated, and a match's analysis state has to survive all of
- * that — and has to agree with what the match's own page shows. Replace
- * wholesale when `processing_jobs` is queryable.
- */
-const MOCK_CYCLE: MatchAnalysis[] = [
-  {
-    status: "deriving",
-    providerId: "splitstep",
-    progressPercent: 84,
-    fileName: "court3-cam1_2026-07-18.mp4",
-    window: "1:26:03",
-    jobReference: "sj_9f2c41a7",
-    stageNote: "Shot detection",
-  },
-  {
-    status: "completed",
-    providerId: "splitstep",
-    progressPercent: 100,
-    fileName: "grass_sf_0731.mp4",
-    window: "1:12:40",
-    jobReference: "sj_77bd3f05",
-    verified: true,
-  },
-  {
-    status: "uploading",
-    providerId: "splitstep",
-    progressPercent: 21,
-    fileName: "clay_drills_0803.mp4",
-    window: "0:34:00",
-    jobReference: "sj_44a0c9e1",
-    stageNote: "2.9 GB of 8.4 GB transferred",
-  },
-  {
-    status: "failed",
-    providerId: "splitstep",
-    fileName: "sunday_singles.mov",
-    window: "1:04:12",
-    jobReference: "sj_5c8e2210",
-    failNote: "Camera moved at 00:41:18",
-  },
-  {
-    status: "processing",
-    providerId: "splitstep",
-    progressPercent: 41,
-    fileName: "practice_0803.mov",
-    window: "0:48:20",
-    jobReference: "sj_1b70de32",
-    stageNote: "Court calibration · 30 fps source",
-  },
-];
-
-/** FNV-1a, enough to spread ids evenly across the fixture cycle. */
-function hashId(value: string): number {
-  let hash = 2166136261;
-  for (let i = 0; i < value.length; i++) {
-    hash ^= value.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return Math.abs(hash);
-}
-
-/**
  * A match that arrived complete from a file import and never had a job.
  *
  * No `window` or `jobReference`: the mock invented both ("1:31:47",
@@ -276,26 +212,4 @@ export function importedAnalysis(
 /** Scored by hand. No video was ever submitted. */
 export function manualAnalysis(): MatchAnalysis {
   return { status: "manual", providerId: null };
-}
-
-/**
- * @deprecated Fixture data. Superseded by `loadMatchAnalysis()` in
- * match-analysis-server.ts, which reads real `processing_jobs` rows.
- *
- * Kept only so anything still importing it keeps compiling. It hash-cycles a
- * fixture array, so a real match gets a plausible-looking status that is pure
- * invention — do not wire it into anything new.
- */
-export function getMatchAnalysis(
-  matchId: string,
-  sourceProvider: string | undefined,
-  verified: boolean
-): MatchAnalysis {
-  if (sourceProvider === "swing-vision") {
-    return importedAnalysis(sourceProvider, verified);
-  }
-  if (!sourceProvider) {
-    return manualAnalysis();
-  }
-  return MOCK_CYCLE[hashId(matchId) % MOCK_CYCLE.length];
 }

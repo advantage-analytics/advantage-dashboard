@@ -208,83 +208,99 @@ export async function DELETE(
   // Every step is best-effort. A stranded file is recoverable (see
   // scripts/cleanup-orphan-storage.ts); a match the user cannot delete is not.
   // So storage failures log and the row delete proceeds regardless.
-  try {
-    // 1. Source video in R2. Delegated to the edge function because that is
-    //    where the R2 write credentials already live — the Next runtime has no
-    //    S3 client and no R2 keys, and duplicating them here for one call would
-    //    widen the credential surface for nothing.
-    const { data: r2Result, error: r2Error } = await supabase.functions.invoke(
-      "delete-video-r2",
-      { body: { matchId } }
-    );
-
-    if (r2Error) {
-      console.error("[match delete] R2 video cleanup failed:", r2Error.message);
-    } else if (r2Result?.deleted?.length) {
-      console.log(
-        `[match delete] removed ${r2Result.deleted.length} R2 object(s) for ${matchId}`
-      );
-    }
-  } catch (err) {
-    console.error("[match delete] R2 cleanup threw:", err);
-  }
-
-  try {
-    // 2. Raw provider results in Supabase Storage. Same bucket the webhook
-    //    writes to, so this client can remove them directly.
-    const { data: jobs } = await supabase
-      .from("processing_jobs")
-      .select("results_object_key")
-      .eq("match_id", matchId)
-      .not("results_object_key", "is", null);
-
-    const resultKeys = (jobs ?? [])
-      .map((j) => j.results_object_key as string | null)
-      .filter((k): k is string => Boolean(k));
-
-    if (resultKeys.length > 0) {
-      const { error: resultsError } = await supabase.storage
-        .from(RESULTS_BUCKET)
-        .remove(resultKeys);
-
-      if (resultsError) {
-        console.error(
-          `[match delete] results cleanup failed for ${RESULTS_BUCKET}:`,
-          resultsError.message
+  // The three cleanups key only off `matchId` and none reads another's output,
+  // so they run concurrently — the R2 step is an edge-function round trip
+  // (cold start, its own auth, a DeleteObjects call) and serialising behind it
+  // made every deletion cost the sum rather than the slowest.
+  //
+  // Each keeps its own try/catch rather than sharing one. That isolation is the
+  // point: a throw in the R2 step must not skip the other two, which is exactly
+  // what a single wrapping try would do.
+  await Promise.all([
+    (async () => {
+      try {
+        // 1. Source video in R2. Delegated to the edge function because that is
+        //    where the R2 write credentials already live — the Next runtime has
+        //    no S3 client and no R2 keys, and duplicating them here for one call
+        //    would widen the credential surface for nothing.
+        const { data: r2Result, error: r2Error } = await supabase.functions.invoke(
+          "delete-video-r2",
+          { body: { matchId } }
         );
-      }
-    }
-  } catch (err) {
-    console.error("[match delete] results cleanup threw:", err);
-  }
 
-  try {
-    // 3. Uploaded provider files (SwingVision .xlsx and friends).
-    const { data: files } = await supabase
-      .from("match_files")
-      .select("storage_path, storage_bucket")
-      .eq("match_id", matchId);
-
-    if (files && files.length > 0) {
-      const byBucket = new Map<string, string[]>();
-      for (const f of files) {
-        const bucket = (f.storage_bucket as string | null) ?? "match-data";
-        const path = f.storage_path as string | null;
-        if (!path) continue;
-        const arr = byBucket.get(bucket) ?? [];
-        arr.push(path);
-        byBucket.set(bucket, arr);
-      }
-      for (const [bucket, paths] of byBucket) {
-        const { error: storageError } = await supabase.storage.from(bucket).remove(paths);
-        if (storageError) {
-          console.error(`[match delete] storage cleanup failed for ${bucket}:`, storageError.message);
+        if (r2Error) {
+          console.error("[match delete] R2 video cleanup failed:", r2Error.message);
+        } else if (r2Result?.deleted?.length) {
+          console.log(
+            `[match delete] removed ${r2Result.deleted.length} R2 object(s) for ${matchId}`
+          );
         }
+      } catch (err) {
+        console.error("[match delete] R2 cleanup threw:", err);
       }
-    }
-  } catch (err) {
-    console.error("[match delete] storage cleanup threw:", err);
-  }
+    })(),
+
+    (async () => {
+      try {
+        // 2. Raw provider results in Supabase Storage. Same bucket the webhook
+        //    writes to, so this client can remove them directly.
+        const { data: jobs } = await supabase
+          .from("processing_jobs")
+          .select("results_object_key")
+          .eq("match_id", matchId)
+          .not("results_object_key", "is", null);
+
+        const resultKeys = (jobs ?? [])
+          .map((j) => j.results_object_key as string | null)
+          .filter((k): k is string => Boolean(k));
+
+        if (resultKeys.length > 0) {
+          const { error: resultsError } = await supabase.storage
+            .from(RESULTS_BUCKET)
+            .remove(resultKeys);
+
+          if (resultsError) {
+            console.error(
+              `[match delete] results cleanup failed for ${RESULTS_BUCKET}:`,
+              resultsError.message
+            );
+          }
+        }
+      } catch (err) {
+        console.error("[match delete] results cleanup threw:", err);
+      }
+    })(),
+
+    (async () => {
+      try {
+        // 3. Uploaded provider files (SwingVision .xlsx and friends).
+        const { data: files } = await supabase
+          .from("match_files")
+          .select("storage_path, storage_bucket")
+          .eq("match_id", matchId);
+
+        if (files && files.length > 0) {
+          const byBucket = new Map<string, string[]>();
+          for (const f of files) {
+            const bucket = (f.storage_bucket as string | null) ?? "match-data";
+            const path = f.storage_path as string | null;
+            if (!path) continue;
+            const arr = byBucket.get(bucket) ?? [];
+            arr.push(path);
+            byBucket.set(bucket, arr);
+          }
+          for (const [bucket, paths] of byBucket) {
+            const { error: storageError } = await supabase.storage.from(bucket).remove(paths);
+            if (storageError) {
+              console.error(`[match delete] storage cleanup failed for ${bucket}:`, storageError.message);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("[match delete] storage cleanup threw:", err);
+      }
+    })(),
+  ]);
 
   const { error: deleteError } = await supabase
     .from("matches")

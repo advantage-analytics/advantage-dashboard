@@ -138,10 +138,60 @@ async function listR2Objects(s3: S3Client, bucket: string): Promise<string[]> {
   return keys;
 }
 
-function reportOrphans(label: string, all: string[], orphans: string[]): void {
-  console.log(`[${label}] objects: ${all.length}, orphans: ${orphans.length}`);
+/**
+ * One place bytes live. Supabase Storage and R2 differ only in how you enumerate
+ * and how many keys a delete call takes — the orphan rule, the reporting and the
+ * batching are identical, so `sweep()` below owns them once.
+ */
+interface Store {
+  label: string;
+  /** Every object key in the store. */
+  list(): Promise<string[]>;
+  /** Keys per delete call: Supabase Storage takes 100, S3 DeleteObjects 1000. */
+  batchSize: number;
+  /** Deletes one batch, returning how many went. Throwing aborts this store only. */
+  removeBatch(keys: string[]): Promise<number>;
+}
+
+async function sweep(
+  store: Store,
+  validIds: Set<string>
+): Promise<{ orphans: number; deleted: number }> {
+  let all: string[];
+  try {
+    all = await store.list();
+  } catch (err) {
+    console.error(`[${store.label}] could not list — skipping:`, err);
+    return { orphans: 0, deleted: 0 };
+  }
+
+  const orphans = all.filter((p) => {
+    const id = matchIdOf(p);
+    return id !== undefined && !validIds.has(id);
+  });
+
+  console.log(`[${store.label}] objects: ${all.length}, orphans: ${orphans.length}`);
   for (const p of orphans.slice(0, 5)) console.log(`  - ${p}`);
   if (orphans.length > 5) console.log(`  … and ${orphans.length - 5} more`);
+
+  let deleted = 0;
+  if (APPLY && orphans.length > 0) {
+    for (let i = 0; i < orphans.length; i += store.batchSize) {
+      try {
+        deleted += await store.removeBatch(orphans.slice(i, i + store.batchSize));
+      } catch (err) {
+        // A batch that throws failed at the transport or on credentials, so the
+        // next one would too — stop rather than hammer the remaining batches.
+        // Per-key failures do not land here; each store logs those and continues.
+        console.error(`[${store.label}] batch ${i} failed:`, err);
+        break;
+      }
+    }
+    console.log(`[${store.label}] deleted ${deleted}/${orphans.length}.`);
+  }
+  console.log("");
+
+  return { orphans: orphans.length, deleted };
 }
 
 async function main() {
@@ -164,88 +214,53 @@ async function main() {
     process.exit(1);
   }
 
-  let totalOrphans = 0;
-  let totalDeleted = 0;
+  const stores: Store[] = SUPABASE_BUCKETS.map((bucket) => ({
+    label: bucket,
+    batchSize: 100,
+    list: () => listSupabaseObjects(bucket),
+    removeBatch: async (keys) => {
+      const { data, error } = await supabase.storage.from(bucket).remove(keys);
+      if (error) throw error;
+      return data?.length ?? 0;
+    },
+  }));
 
-  /* ── Supabase Storage ── */
-  for (const bucket of SUPABASE_BUCKETS) {
-    let all: string[];
-    try {
-      all = await listSupabaseObjects(bucket);
-    } catch (err) {
-      console.error(`[${bucket}] could not list — skipping:`, err);
-      continue;
-    }
-
-    const orphans = all.filter((p) => {
-      const id = matchIdOf(p);
-      return id && !validIds.has(id);
-    });
-
-    reportOrphans(bucket, all, orphans);
-    totalOrphans += orphans.length;
-
-    if (APPLY && orphans.length > 0) {
-      const BATCH = 100;
-      for (let i = 0; i < orphans.length; i += BATCH) {
-        const batch = orphans.slice(i, i + BATCH);
-        const { data, error } = await supabase.storage.from(bucket).remove(batch);
-        if (error) {
-          console.error(`[${bucket}] batch ${i} failed:`, error.message);
-          break;
-        }
-        totalDeleted += data?.length ?? 0;
-      }
-      console.log(`[${bucket}] deleted.`);
-    }
-    console.log("");
-  }
-
-  /* ── Cloudflare R2 ── */
   const r2 = r2Client();
-  if (!r2) {
+  if (r2) {
+    stores.push({
+      label: r2.bucket,
+      batchSize: 1000,
+      list: () => listR2Objects(r2.s3, r2.bucket),
+      removeBatch: async (keys) => {
+        const res = await r2.s3.send(
+          new DeleteObjectsCommand({
+            Bucket: r2.bucket,
+            Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: false },
+          })
+        );
+        // Per-key failures come back in the response rather than throwing, so
+        // they are reported without aborting the rest of the sweep.
+        for (const e of res.Errors ?? []) {
+          console.error(`[${r2.bucket}] ${e.Key}: ${e.Message}`);
+        }
+        return res.Deleted?.length ?? 0;
+      },
+    });
+  } else {
     console.log(
       "[advantage-videos] SKIPPED — R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / " +
         "R2_SECRET_ACCESS_KEY not in .env.local.\n" +
         "                  This is the bucket where orphans cost real money; " +
         "copy the keys from the Supabase edge-function secrets to sweep it.\n"
     );
-  } else {
-    let all: string[];
-    try {
-      all = await listR2Objects(r2.s3, r2.bucket);
-    } catch (err) {
-      console.error(`[${r2.bucket}] could not list — skipping:`, err);
-      all = [];
-    }
+  }
 
-    const orphans = all.filter((p) => {
-      const id = matchIdOf(p);
-      return id && !validIds.has(id);
-    });
-
-    reportOrphans(r2.bucket, all, orphans);
-    totalOrphans += orphans.length;
-
-    if (APPLY && orphans.length > 0) {
-      // DeleteObjects caps at 1000 keys per call.
-      const BATCH = 1000;
-      for (let i = 0; i < orphans.length; i += BATCH) {
-        const batch = orphans.slice(i, i + BATCH);
-        const res = await r2.s3.send(
-          new DeleteObjectsCommand({
-            Bucket: r2.bucket,
-            Delete: { Objects: batch.map((Key) => ({ Key })), Quiet: false },
-          })
-        );
-        totalDeleted += res.Deleted?.length ?? 0;
-        for (const e of res.Errors ?? []) {
-          console.error(`[${r2.bucket}] ${e.Key}: ${e.Message}`);
-        }
-      }
-      console.log(`[${r2.bucket}] deleted.`);
-    }
-    console.log("");
+  let totalOrphans = 0;
+  let totalDeleted = 0;
+  for (const store of stores) {
+    const { orphans, deleted } = await sweep(store, validIds);
+    totalOrphans += orphans;
+    totalDeleted += deleted;
   }
 
   if (totalOrphans === 0) {

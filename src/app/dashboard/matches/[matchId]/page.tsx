@@ -107,9 +107,12 @@ interface PageProps {
 
 export default async function MatchDetailPage({ params }: PageProps) {
   const { matchId } = await params;
-  const [data, adjacent] = await Promise.all([
+  // The job read only needs `matchId`, so it rides along with the other two
+  // rather than waiting for a page's worth of stats to come back first.
+  const [data, adjacent, jobs] = await Promise.all([
     getMatchDetailData(matchId),
     getAdjacentMatchIds(matchId),
+    createClient().then((supabase) => loadMatchAnalysis(supabase, [matchId])),
   ]);
 
   if (!data) notFound();
@@ -170,7 +173,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // hit no serves" rather than "we're still working" — so the page stops at the
   // identity the player entered plus the pipeline state. Failures take the same
   // path: the reason it stopped is more use than a page of zeroes.
-  const analysis = analysisFor(await loadMatchAnalysis(await createClient(), [matchId]), {
+  const analysis = analysisFor(jobs, {
     id: matchId,
     sourceProvider: match.sourceProvider,
     verificationStatus: match.verificationStatus,

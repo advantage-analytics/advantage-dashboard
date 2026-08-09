@@ -33,18 +33,21 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
       const opponentIds = [...new Set(
         data.map((r) => r.player2_id).filter((id): id is string => id != null)
       )];
-      const opponentMap = new Map<string, { hand: string | null; backhand: string | null }>();
 
-      if (opponentIds.length > 0) {
-        const { data: opponents } = await supabase
-          .from("users")
-          .select("id, hand, backhand")
-          .in("id", opponentIds);
-        if (opponents) {
-          for (const o of opponents) {
-            opponentMap.set(o.id, { hand: o.hand, backhand: o.backhand });
-          }
-        }
+      // Both follow-ups key off the ids in `data` and neither reads the other's
+      // output, so they overlap rather than stack. Analysis state is keyed by
+      // match id, so feeding it every row — including any that transformDbMatch
+      // later drops — costs nothing but an unread map entry.
+      const [{ data: opponents }, jobs] = await Promise.all([
+        opponentIds.length > 0
+          ? supabase.from("users").select("id, hand, backhand").in("id", opponentIds)
+          : Promise.resolve({ data: null }),
+        loadMatchAnalysis(supabase, data.map((r) => r.id)),
+      ]);
+
+      const opponentMap = new Map<string, { hand: string | null; backhand: string | null }>();
+      for (const o of opponents ?? []) {
+        opponentMap.set(o.id, { hand: o.hand, backhand: o.backhand });
       }
 
       matches = (data as (DbMatch & { player2_id: string | null })[])
@@ -56,21 +59,11 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
             display.player2Hand = opp.hand ?? undefined;
             display.player2Backhand = opp.backhand ?? undefined;
           }
+          // Matches with no job row resolve to `imported` or `manual` here.
+          display.analysis = analysisFor(jobs, display);
           return display;
         })
         .filter((m): m is DisplayMatch => m !== null);
-
-      // Real analysis state, one query for the whole page. Matches with no job
-      // row resolve to `imported` or `manual` inside analysisFor().
-      const jobs = await loadMatchAnalysis(
-        supabase,
-        matches.map((m) => m.id)
-      );
-
-      matches = matches.map((display) => ({
-        ...display,
-        analysis: analysisFor(jobs, display),
-      }));
     }
   }
 

@@ -18,6 +18,7 @@ import {
   importedAnalysis,
   manualAnalysis,
 } from './match-analysis';
+import { formatClock } from '@/components/dashboard/matches/new-match-wizard/utils';
 
 /**
  * `processing_jobs.status` → what the UI calls it.
@@ -148,15 +149,14 @@ export function analysisFor(
   return importedAnalysis(match.sourceProvider, Boolean(match.verificationStatus));
 }
 
-/** `billable_seconds` as the pre-formatted window the UI expects. */
+/**
+ * `billable_seconds` as the pre-formatted window the UI expects.
+ *
+ * The guard stays here rather than delegating entirely: formatClock renders 0
+ * as "0:00", which reads as a real zero-length window, where undefined lets the
+ * caller omit the field. The arithmetic itself is formatClock's.
+ */
 function formatWindow(seconds: number | null): string | undefined {
   if (seconds === null || seconds <= 0) return undefined;
-
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-
-  return h > 0
-    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-    : `${m}:${String(s).padStart(2, '0')}`;
+  return formatClock(seconds);
 }
