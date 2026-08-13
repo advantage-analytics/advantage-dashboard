@@ -8,9 +8,13 @@ is internal naming only.
 > **This file is mid-migration.** Source video moved from Cloudflare R2 to Azure Blob
 > Storage. The app code is fully switched over; the retired R2 pieces
 > (`workers/video-access/`, `supabase/functions/upload-video-r2/`,
-> `supabase/functions/delete-video-r2/`, `video-url/worker-token.ts`) are still in the
-> repo on purpose, because nothing has run against a real Azure account yet. Delete
-> them — and rename this file — once one job has round-tripped. See §3.
+> `supabase/functions/delete-video-r2/`) are still in the repo on purpose, because
+> nothing has run against a real Azure account yet. Delete them — and rename this
+> file — once one job has round-tripped. See §3.
+>
+> `video-url/worker-token.ts` is already gone: renaming `revoke()` to
+> `markUrlRetired()` would have meant editing dead code to satisfy an interface it
+> could never be used through.
 
 ---
 
@@ -135,8 +139,8 @@ verified arithmetically, so the only kill switches are rotating the account key 
 every URL at once) or deleting the blob. Container stored-access-policies would give
 per-policy revocation, but Azure allows five per container — they cannot be per-job.
 
-`revoke()` still exists and still writes `video_token_revoked_at`, but it is
-**bookkeeping only**. Its one caller is the submit-failure path, where the POST never
+`markUrlRetired()` still writes `video_token_revoked_at`, but it is **bookkeeping
+only** — and it is not called `revoke()` precisely because it revokes nothing. Its one caller is the submit-failure path, where the POST never
 reached the vendor and nobody outside this system has seen the URL, so the recorded
 intent and the real exposure agree. If that stops being true, delete the blob.
 

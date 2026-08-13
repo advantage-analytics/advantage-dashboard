@@ -7,6 +7,10 @@ import { Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown, X } from "
 import { EmptyMatches } from "./empty-matches";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { isAnalysisFailed, isInFlight } from "@/lib/data/match-analysis";
+import {
+  useLiveMatchAnalysis,
+  withLiveAnalysis,
+} from "@/hooks/use-live-match-analysis";
 import { providers } from "@/lib/providers";
 import { MatchesGrid, type SortField, type SortDir } from "./matches-grid";
 import { MatchesFilterPanel, type FilterGroup } from "./matches-filter-panel";
@@ -17,6 +21,8 @@ function providerName(id: string): string {
 
 interface MatchesPageContentProps {
   matches: DisplayMatch[];
+  /** Signed-in user, for the live job subscription. Absent = no subscription. */
+  userId?: string;
 }
 
 type FilterKey = "result" | "matchType" | "courtType" | "source" | "analysis";
@@ -226,9 +232,42 @@ function SortDropdown({
 }
 
 /* ─── Main content ─── */
-export function MatchesPageContent({ matches }: MatchesPageContentProps): React.JSX.Element {
+export function MatchesPageContent({
+  matches: serverMatches,
+  userId,
+}: MatchesPageContentProps): React.JSX.Element {
   const searchParams = useSearchParams();
   const pathname = usePathname();
+
+  // Live job state, merged over what the server rendered. Without this the bar
+  // is a snapshot from page load — a long upload appears frozen, and a job that
+  // finishes while the tab is open never says so.
+  //
+  // Merged before everything below so filtering, sorting and grouping all see
+  // the live status: a job that fails mid-view should leave the "In progress"
+  // group without a refresh, not just change colour.
+  // Only subscribe when there is something to follow. Otherwise every visit to
+  // this page holds a WebSocket and a 25-second heartbeat for a channel that
+  // will never deliver a message, against a per-project connection cap.
+  //
+  // Trade-off: a match that enters flight from ANOTHER tab will not light up
+  // here without a refresh. Acceptable — uploads start from this app, in the
+  // tab the user is already looking at.
+  const hasInFlight = serverMatches.some(
+    (m) => m.analysis && isInFlight(m.analysis.status)
+  );
+  const livePatches = useLiveMatchAnalysis({
+    by: "user",
+    userId: hasInFlight ? userId : undefined,
+  });
+  const matches = useMemo(() => {
+    if (livePatches.size === 0) return serverMatches;
+    return serverMatches.map((m) => {
+      const patch = livePatches.get(m.id);
+      if (!patch || !m.analysis) return m;
+      return { ...m, analysis: withLiveAnalysis(m.analysis, patch) };
+    });
+  }, [serverMatches, livePatches]);
 
   /* Layout is decided by the viewport alone — there is no view control any
      more. Six columns need the width, so under 1024px the same matches render

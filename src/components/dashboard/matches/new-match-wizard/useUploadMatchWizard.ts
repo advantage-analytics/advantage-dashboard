@@ -23,7 +23,10 @@ import {
   ValidationResult,
 } from "@/lib/services/upload";
 import { getParser, hasParser } from "@/lib/services/upload/parsers";
-import { uploadFileInBlocks } from "@/lib/services/upload/azure-block-upload";
+import {
+  UploadAbortedError,
+  uploadFileInBlocks,
+} from "@/lib/services/upload/azure-block-upload";
 import {
   Step,
   FormData as MatchFormData,
@@ -58,7 +61,34 @@ export interface UseUploadMatchWizardProps {
    * show a success state for one and navigate away for the other.
    */
   onCreated?: (matchId: string) => void;
+  /**
+   * Video transfer lifecycle, for whoever is still on screen to render.
+   *
+   * The wizard unmounts the moment a match is created, but the upload keeps
+   * running in a background closure for up to a couple of hours. So progress
+   * cannot live in this hook's state — it has to be handed to an owner that
+   * outlives the wizard, which is what this is for.
+   */
+  onVideoUpload?: (event: VideoUploadEvent) => void;
 }
+
+/** Bytes moved so far, and what that implies. */
+export interface VideoUploadProgress {
+  pct: number;
+  bytesUploaded: number;
+  bytesTotal: number;
+  /** Cumulative average, not instantaneous — smooth, and slow to react. */
+  speed: number;
+  etaSeconds: number;
+}
+
+export type VideoUploadEvent = { matchId: string } & (
+  | { kind: "started"; fileName: string; cancel: () => void }
+  | { kind: "progress"; progress: VideoUploadProgress }
+  | { kind: "done" }
+  | { kind: "cancelled" }
+  | { kind: "failed"; error: string }
+);
 
 export interface UseUploadMatchWizardReturn {
   // State
@@ -154,7 +184,8 @@ function getDefaultFormData(): MatchFormData {
 export function useUploadMatchWizard({
   open,
   onOpenChange,
-  onCreated
+  onCreated,
+  onVideoUpload,
 }: UseUploadMatchWizardProps): UseUploadMatchWizardReturn {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -819,7 +850,18 @@ export function useUploadMatchWizard({
               // shares, extensions, and anyone opening devtools. The key is
               // what you actually want when debugging anyway.
               console.log("🚀 Upload credential acquired for:", videoObjectKey);
-              console.log(`Starting upload to Azure Blob Storage (${(videoFileToUpload.size / (1024 * 1024)).toFixed(1)} MB)...`);
+              console.log(`Starting upload to Azure Blob Storage (${formatFileSize(videoFileToUpload.size)})...`);
+
+              // Hand the canceller up before any bytes move, so the screen that
+              // replaced this wizard can offer a Cancel that actually works.
+              const controller = new AbortController();
+              const startedAt = Date.now();
+              onVideoUpload?.({
+                matchId,
+                kind: "started",
+                fileName: videoFileToUpload.name,
+                cancel: () => controller.abort(),
+              });
 
               // The wizard has already closed by this point, so this guard is the
               // only thing telling the user the work is not finished.
@@ -856,15 +898,46 @@ export function useUploadMatchWizard({
                 // never disturb the upload itself.
                 let lastWrittenPct = -1;
                 let lastWriteAt = 0;
+                // The UI renders one decimal, so events that cannot change a
+                // rendered digit are dropped before they reach React. On a 5 GB
+                // upload 0.1% is ~7 seconds of transfer, so ~140 consecutive
+                // events would otherwise re-render an identical string.
+                let lastSentTenth = -1;
 
                 await uploadFileInBlocks({
                   file: videoFileToUpload,
                   uploadUrl,
                   contentType: videoFileToUpload.type || "video/mp4",
+                  signal: controller.signal,
                   onProgress: (loaded, total) => {
-                    const pct = Math.floor((loaded / total) * 100);
+                    const exact = (loaded / total) * 100;
+                    const pct = Math.floor(exact);
                     const now = Date.now();
 
+                    // Local UI first: throttled only to the precision it can
+                    // actually show, not to the database's cadence. A bar that
+                    // moves once a minute is the problem this exists to fix.
+                    const tenth = Math.round(exact * 10);
+                    if (tenth !== lastSentTenth) {
+                      lastSentTenth = tenth;
+                      const elapsed = (now - startedAt) / 1000;
+                      const speed = elapsed > 0 ? loaded / elapsed : 0;
+                      onVideoUpload?.({
+                        matchId,
+                        kind: "progress",
+                        progress: {
+                          pct: tenth / 10,
+                          bytesUploaded: loaded,
+                          bytesTotal: total,
+                          speed,
+                          etaSeconds: speed > 0 ? (total - loaded) / speed : 0,
+                        },
+                      });
+                    }
+
+                    // The database write stays throttled. It is a liveness
+                    // heartbeat, not a progress bar, and one write per XHR event
+                    // on a 600-block upload would be tens of thousands.
                     if (pct - lastWrittenPct < 2 && now - lastWriteAt < 60_000) {
                       return;
                     }
@@ -903,15 +976,29 @@ export function useUploadMatchWizard({
                 .update({
                   video_object_key: videoObjectKey,
                   status: "uploaded",
+                  // Explicitly 100. The throttle above skips the final write —
+                  // 99→100 is a 1-point move and the last block rarely takes 60
+                  // seconds — so without this the bar sits at 99 forever.
+                  upload_progress_percent: 100,
                   updated_at: new Date().toISOString(),
                 })
                 .eq("match_id", matchId);
 
               console.log("✅ Successfully updated processing_jobs status to 'uploaded' for match:", matchId);
+              onVideoUpload?.({ matchId, kind: "done" });
             } catch (uploadErr: any) {
-              console.error("❌ Video upload error:", uploadErr);
+              const cancelled = uploadErr instanceof UploadAbortedError;
+              console[cancelled ? "log" : "error"](
+                cancelled ? "Upload cancelled by the user" : "❌ Video upload error:",
+                cancelled ? "" : uploadErr
+              );
 
               const message = uploadErr?.message || "Video upload failed";
+              onVideoUpload?.(
+                cancelled
+                  ? { matchId, kind: "cancelled" }
+                  : { matchId, kind: "failed", error: message }
+              );
 
               await supabase
                 .from("processing_jobs")

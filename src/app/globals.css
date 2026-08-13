@@ -464,3 +464,37 @@
     background-color: var(--color-ink-100);
   }
 }
+
+/* The filled portion of a track whose work is actually moving right now.
+   A static bar at 42% is indistinguishable from one that stalled at 42% twenty
+   minutes ago, and an upload can legitimately sit on the same percent for a
+   minute at a time — the heartbeat that feeds it writes at most every 2 points.
+   So liveness has to come from the track itself, not the number.
+   Follows settings-shimmer's mechanics; the fill colour stays inline so the
+   same class works for any tone. */
+@keyframes progress-sheen {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.progress-fill-live {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    transparent 35%,
+    rgba(255, 255, 255, 0.5) 50%,
+    transparent 65%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: progress-sheen 1.6s ease-in-out infinite;
+  will-change: background-position;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-fill-live {
+    animation: none;
+    background-image: none;
+  }
+}

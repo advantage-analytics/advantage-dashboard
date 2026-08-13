@@ -19,7 +19,6 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { videoObjectKey } from '@/lib/services/splitstep/object-keys';
 import { mintUploadSas } from '@/lib/services/splitstep/video-url';
-import { AZURE_BLOCK_SIZE_BYTES } from '@/lib/services/upload/azure-block-upload';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -32,6 +31,11 @@ interface UploadUrlBody {
 }
 
 export async function POST(request: NextRequest) {
+  // Strictly sequential, deliberately. Auth first means an unauthenticated
+  // caller never reaches the service-role lookup below, and the two things that
+  // could overlap are not worth it: parsing a two-field body is sub-millisecond,
+  // and this route runs once per upload against a transfer measured in tens of
+  // minutes.
   const supabase = await createClient();
   const {
     data: { user },
@@ -109,6 +113,34 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Record where the bytes are ABOUT to go, before handing out the credential.
+  //
+  // This used to be written by the browser after the upload succeeded, which
+  // meant an upload that failed or was abandoned left committed blocks at a name
+  // the database never learned. Deleting that match could not find them — only
+  // the orphan sweeper could, by listing the whole container. Writing it here
+  // costs one round trip on a path that is about to move gigabytes, and makes
+  // every video reachable from its job row regardless of how the upload ends.
+  //
+  // Keyed on match_id to match the wizard's other writes: the insert never
+  // selects the row id back. Deliberately does not touch `status` — the browser
+  // owns that transition.
+  const { error: recordError } = await admin
+    .from('processing_jobs')
+    .update({ video_object_key: blobName })
+    .eq('match_id', matchId);
+
+  if (recordError) {
+    // Not fatal. A blob we cannot name is recoverable via the sweeper; refusing
+    // the upload is not recoverable for the user. Loud, because this is the only
+    // moment the name is known for free.
+    console.error(`${LOG} could not record the blob name — video may strand`, {
+      matchId,
+      blobName,
+      error: recordError.message,
+    });
+  }
+
   console.log(`${LOG} issued`, {
     matchId,
     blobName,
@@ -121,6 +153,5 @@ export async function POST(request: NextRequest) {
     uploadUrl: minted.uploadUrl,
     videoObjectKey: blobName,
     expiresAt: minted.expiresAt.toISOString(),
-    blockSizeBytes: AZURE_BLOCK_SIZE_BYTES,
   });
 }

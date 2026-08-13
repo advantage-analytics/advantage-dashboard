@@ -1,9 +1,15 @@
 /**
- * Vendor video URL — public entry point.
+ * Video storage — public entry point.
  *
- * Callers ask for a strategy and never name a concrete one, which is why
- * replacing the storage provider outright was a change to this file and one new
- * implementation, and touched neither submission nor the webhook.
+ * Submission asks for a strategy and never names a concrete one, so swapping R2
+ * for Azure left api/splitstep/jobs' minting untouched.
+ *
+ * Be honest about the limit of that, though: the interface only ever covered
+ * handing the vendor a read URL. Uploading and deleting are separate exported
+ * functions, so the webhook grew a delete call and submission grew a config
+ * check when the provider changed. A strategy interface that covers one of
+ * three storage operations buys less than its name suggests — worth collapsing
+ * into plain functions over one resolved config if this is ever revisited.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -20,17 +26,20 @@ export type {
   VideoUrlStrategy,
   VideoUrlStrategyId,
 } from './types';
+
+/**
+ * The storage operations callers actually use. Everything else in azure-sas.ts
+ * — the strategy class, the TTL constant, the throwing config resolver — is an
+ * internal that this module composes, and re-exporting it would make the
+ * barrel's surface bigger than its contract.
+ */
 export {
   AZURE_STORAGE_ENV_VARS,
-  AzureSasVideoUrlStrategy,
-  UPLOAD_SAS_TTL_SECONDS,
   deleteVideoBlob,
   mintUploadSas,
-  requireAzureStorageConfig,
   resolveAzureStorageConfig,
   videoContainerClient,
 } from './azure-sas';
-export type { AzureStorageConfig } from './azure-sas';
 
 /**
  * Build the configured vendor URL strategy.

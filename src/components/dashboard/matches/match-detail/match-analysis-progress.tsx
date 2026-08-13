@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * What a match's own page shows while its video is still being analyzed.
  *
@@ -8,37 +10,83 @@
  * there sees the words they just read.
  */
 
+import { useEffect, useState } from "react";
 import { CircleX, Info } from "lucide-react";
 import {
   ANALYSIS_LABEL,
   PIPELINE_STAGES,
+  formatEta,
   isAnalysisFailed,
+  isWorking,
+  uploadEtaSeconds,
   stageFillPercent,
   stageIndexFor,
   type MatchAnalysis,
 } from "@/lib/data/match-analysis";
+import { AnalysisProgressTrack } from "../analysis-progress-track";
+import {
+  useLiveMatchAnalysis,
+  withLiveAnalysis,
+} from "@/hooks/use-live-match-analysis";
 
 const CARD =
   "rounded-[14px] border border-[#F3F3F3] bg-white shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)]";
 
+const STORED_NOTE = "Your video is stored. Nothing else is needed from you.";
+
 /** Reassurance per stage. Every line has to be true of the pipeline as built. */
 const STAGE_NOTE: Partial<Record<MatchAnalysis["status"], string>> = {
   uploading: "Keep this tab open until the transfer finishes. Everything after it runs on our side.",
-  queued: "Your video is stored. Nothing else is needed from you.",
+  // Same line for both: from the player's side there is no difference between
+  // "stored, not yet submitted" and "submitted, waiting" — neither needs them.
+  uploaded: STORED_NOTE,
+  queued: STORED_NOTE,
   processing: "Nothing needs to stay open — this page fills in as soon as the analysis lands.",
   deriving: "Turning detected strokes into points and shots. Almost there.",
 };
 
 interface MatchAnalysisProgressProps {
   analysis: MatchAnalysis;
+  /** Subscribed to so this page and the matches list cannot disagree. */
+  matchId: string;
 }
 
 export function MatchAnalysisProgress({
-  analysis,
+  analysis: serverAnalysis,
+  matchId,
 }: MatchAnalysisProgressProps): React.JSX.Element {
+  // Without this the matches list climbed live while this page sat frozen at
+  // whatever the server rendered — same row, same query, two different numbers
+  // on screen at once.
+  const livePatches = useLiveMatchAnalysis({ by: "match", matchId });
+  const analysis = withLiveAnalysis(serverAnalysis, livePatches.get(matchId));
   const currentIndex = stageIndexFor(analysis.status);
   const failed = isAnalysisFailed(analysis.status);
+  // Two different numbers. The stage bars are positions on the pipeline axis;
+  // the headline is what the person is actually watching, which during a
+  // transfer is their own bytes rather than a quarter-weighted pipeline figure.
   const percent = Math.round(analysis.progressPercent ?? 0);
+  const measured = analysis.uploadPercent;
+
+  // A clock, so the estimate keeps counting down between progress writes rather
+  // than freezing for the minute between them.
+  //
+  // Starts null and is first set by the interval, never synchronously here.
+  // That avoids a hydration mismatch — the server has no "now" the client would
+  // agree with — and the 10-second wait costs nothing, because an estimate
+  // taken in the first seconds of a transfer is noise anyway.
+  const [now, setNow] = useState<number | null>(null);
+  const uploading = analysis.status === "uploading";
+
+  useEffect(() => {
+    // No reset on the way out: uploadEtaSeconds() already returns undefined for
+    // any status but `uploading`, so a stale clock cannot surface an estimate.
+    if (!uploading) return;
+    const id = setInterval(() => setNow(Date.now()), 10_000);
+    return () => clearInterval(id);
+  }, [uploading]);
+
+  const etaSeconds = now === null ? undefined : uploadEtaSeconds(analysis, now);
 
   const facts: { label: string; value: string }[] = [];
   if (analysis.fileName) facts.push({ label: "Video", value: analysis.fileName });
@@ -63,10 +111,21 @@ export function MatchAnalysisProgress({
           >
             {ANALYSIS_LABEL[analysis.status]}
           </p>
-          {!failed && (
-            <p className="text-[28px] font-light tracking-[-0.5px] text-[#3B82F6] tabular-nums">
-              {percent}%
-            </p>
+          {measured !== undefined && (
+            <div className="flex flex-col items-end gap-0.5">
+              <p className="text-[28px] font-light leading-none tracking-[-0.5px] text-[#3B82F6] tabular-nums">
+                {Math.round(measured)}%
+              </p>
+              {/* Derived from elapsed time against percent moved, so it is
+                  available on any device rather than only the tab doing the
+                  uploading. Absent until there is enough of the transfer to
+                  project from. */}
+              {etaSeconds !== undefined && (
+                <p className="text-[11px] text-[#AAAAAA] tabular-nums">
+                  {formatEta(etaSeconds)}
+                </p>
+              )}
+            </div>
           )}
         </div>
 
@@ -88,15 +147,13 @@ export function MatchAnalysisProgress({
                   isDone || isCurrent ? "opacity-100" : "opacity-45"
                 }`}
               >
-                <div className="h-[3px] overflow-hidden rounded-full bg-[#F0F0F0]">
-                  <div
-                    className="h-full rounded-full transition-[width] duration-700 ease-[cubic-bezier(0.25,0.46,0.45,0.94)]"
-                    style={{
-                      width: `${fill}%`,
-                      background: failedHere ? "#E51837" : "#3B82F6",
-                    }}
-                  />
-                </div>
+                <AnalysisProgressTrack
+                  percent={fill}
+                  // Only the stage actually being worked carries the sheen —
+                  // sheening cleared stages would say four things are running.
+                  live={isCurrent && !failed && isWorking(analysis.status)}
+                  tone={failedHere ? "#E51837" : "#3B82F6"}
+                />
                 <span
                   className="truncate text-[12px]"
                   style={{

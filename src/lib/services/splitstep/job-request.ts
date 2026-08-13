@@ -48,8 +48,14 @@ export interface JobRequestInput {
 
   player1Name: string;
   player2Name: string;
-  /** True when player1 stood at the top of frame at video start. */
-  initialTopPlayerIsPlayer1: boolean;
+  /**
+   * True when player1 stood at the top of frame at video start.
+   *
+   * Typed as possibly-absent because the value that reaches here often comes
+   * from a nullable database column, and TypeScript cannot see that. It is
+   * validated below rather than trusted — see the note there.
+   */
+  initialTopPlayerIsPlayer1: boolean | null | undefined;
 
   /** Trim window in seconds, relative to the original (untrimmed) video. */
   startTimeSeconds: number;
@@ -59,8 +65,10 @@ export interface JobRequestInput {
   player1Scores: (number | null)[];
   player2Scores: (number | null)[];
 
-  adScoring: boolean;
-  fixedCamera: boolean;
+  /** Advantage scoring. Nullable for the same reason as initialTopPlayerIsPlayer1. */
+  adScoring: boolean | null | undefined;
+  /** Camera stayed in one position. Same. */
+  fixedCamera: boolean | null | undefined;
 
   /** Used to reject doubles — the provider is singles-only. */
   matchType?: string | null;
@@ -115,6 +123,12 @@ function extractSetScores(
     scores.push([p1, p2]);
   }
 
+  if (scores.every(([p1, p2]) => p1 === 0 && p2 === 0)) {
+    return {
+      error: 'Enter the game scores — every set is currently 0-0.',
+    };
+  }
+
   return { scores };
 }
 
@@ -165,19 +179,53 @@ export function buildSplitStepJobRequest(input: JobRequestInput): JobRequestResu
     errors.push('Trim end must come after trim start.');
   }
 
+  // The three booleans the vendor requires, validated rather than trusted.
+  //
+  // These arrive from nullable columns, and a null coerces to `false` the moment
+  // it is used in a ternary. For adScoring and fixedCamera that is a wrong
+  // answer; for initialTopPlayerIsPlayer1 it is a silent catastrophe — it flips
+  // which end each player started at, so every statistic lands on the wrong
+  // person and the rendered match looks completely normal. Nothing downstream
+  // can detect it, and the vendor cannot either.
+  //
+  // The submit route already refuses a non-boolean, but the guard belongs here,
+  // where every caller inherits it rather than each one remembering.
+  // Everything below is expressed from the camera's point of view.
+  const topIsPlayer1 = input.initialTopPlayerIsPlayer1;
+  const adScoring = input.adScoring;
+  const fixedCamera = input.fixedCamera;
+
+  if (typeof topIsPlayer1 !== 'boolean') {
+    errors.push('Pick which end you started the video on.');
+  }
+  if (typeof adScoring !== 'boolean') {
+    errors.push('Choose ad or no-ad scoring.');
+  }
+  if (typeof fixedCamera !== 'boolean') {
+    errors.push('Say whether the camera stayed in one position.');
+  }
+
   const setResult = extractSetScores(input.player1Scores, input.player2Scores);
   if (setResult.error) {
     errors.push(setResult.error);
   }
 
-  if (errors.length > 0 || !setResult.scores) {
+  // The three `typeof` checks are repeated here, and that repetition is load
+  // bearing: pushing an error does not narrow a type, so without them the
+  // compiler still sees `boolean | null | undefined` below and a `!` assertion
+  // would be the only way out. They cannot drift from the messages above —
+  // both read the same three consts.
+  if (
+    errors.length > 0 ||
+    !setResult.scores ||
+    typeof topIsPlayer1 !== 'boolean' ||
+    typeof adScoring !== 'boolean' ||
+    typeof fixedCamera !== 'boolean'
+  ) {
     return { ok: false, errors };
   }
 
   const player1First = setResult.scores;
-
-  // Everything below is expressed from the camera's point of view.
-  const topIsPlayer1 = input.initialTopPlayerIsPlayer1;
 
   return {
     ok: true,
@@ -192,8 +240,8 @@ export function buildSplitStepJobRequest(input: JobRequestInput): JobRequestResu
       SetGameScores: topIsPlayer1
         ? player1First
         : player1First.map(([p1, p2]): [number, number] => [p2, p1]),
-      FixedCamera: input.fixedCamera,
-      Ad: input.adScoring,
+      FixedCamera: fixedCamera,
+      Ad: adScoring,
     },
   };
 }

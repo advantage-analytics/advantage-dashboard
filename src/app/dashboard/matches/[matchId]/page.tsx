@@ -203,7 +203,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
             </div>
 
             <div className="mt-8">
-              <MatchAnalysisProgress analysis={analysis} />
+              <MatchAnalysisProgress analysis={analysis} matchId={matchId} />
             </div>
           </SectionsStagger>
         </div>

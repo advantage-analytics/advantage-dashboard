@@ -87,7 +87,9 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
 
         <div className="mt-10">
           <Suspense fallback={<MatchesSkeleton />}>
-            <MatchesPageContent matches={matches} />
+            {/* userId drives the realtime subscription's server-side filter, so
+                a busy account never receives other people's job rows. */}
+            <MatchesPageContent matches={matches} userId={user?.id} />
           </Suspense>
         </div>
       </div>

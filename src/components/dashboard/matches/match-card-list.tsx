@@ -9,10 +9,12 @@ import {
   isAnalysisFailed,
   isAnalysisReady,
   isInFlight,
+  isWorking,
   outcomeInk,
   resultInk,
 } from "@/lib/data/match-analysis";
 import { MatchActionsMenu } from "@/components/dashboard/matches/match-actions/match-actions-menu";
+import { AnalysisProgressTrack } from "./analysis-progress-track";
 
 /**
  * Event · Result · Score · Opponent · Analysis · action.
@@ -98,16 +100,19 @@ export function MatchCardList({ match, isNew }: MatchCardListProps): React.JSX.E
               <span className="whitespace-nowrap text-[11px] font-medium text-[#3B82F6]">
                 {ANALYSIS_LABEL[analysis.status]}
               </span>
-              <span className="whitespace-nowrap text-[11px] font-medium text-[#3B82F6] tabular-nums">
-                {Math.round(analysis.progressPercent ?? 0)}%
-              </span>
+              {analysis.uploadPercent !== undefined && (
+                <span className="whitespace-nowrap text-[11px] font-medium text-[#3B82F6] tabular-nums">
+                  {Math.round(analysis.uploadPercent)}%
+                </span>
+              )}
             </div>
-            <div className="h-[2px] overflow-hidden rounded-full bg-[#F0F0F0]">
-              <div
-                className="h-full rounded-full bg-[#3B82F6] transition-[width] duration-700 ease-[cubic-bezier(0.25,0.46,0.45,0.94)]"
-                style={{ width: `${analysis.progressPercent ?? 0}%` }}
-              />
-            </div>
+            {/* 3px, matching the match page's stage bars — the same state
+                should not be two different weights on two screens. */}
+            <AnalysisProgressTrack
+              percent={analysis.progressPercent ?? 0}
+              live={isWorking(analysis.status)}
+              label={ANALYSIS_LABEL[analysis.status]}
+            />
           </div>
         ) : isAnalysisReady(analysis.status) ? (
           <div className="flex items-center gap-[7px]">

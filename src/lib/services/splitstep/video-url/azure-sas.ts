@@ -118,15 +118,23 @@ export function requireAzureStorageConfig(): AzureStorageConfig {
   return resolved.config;
 }
 
-function containerClientFor(config: AzureStorageConfig): ContainerClient {
-  const credential = new StorageSharedKeyCredential(
-    config.account,
-    config.accountKey
-  );
+function credentialFor(config: AzureStorageConfig): StorageSharedKeyCredential {
+  return new StorageSharedKeyCredential(config.account, config.accountKey);
+}
 
+/**
+ * Built per call rather than memoized, deliberately.
+ *
+ * Measured at ~26 µs to construct, against two calls per upload — so caching it
+ * would save under 0.1 ms per multi-GB transfer. It also costs no connections:
+ * @azure/core-client memoizes the underlying NodeHttpClient at module scope, so
+ * every client here shares one keep-alive agent and its sockets. There are no
+ * extra TLS handshakes to save.
+ */
+function containerClientFor(config: AzureStorageConfig): ContainerClient {
   return new BlobServiceClient(
     `https://${config.account}.blob.core.windows.net`,
-    credential
+    credentialFor(config)
   ).getContainerClient(config.container);
 }
 
@@ -145,11 +153,6 @@ function signBlobUrl(params: {
 }): string {
   const { config, blobName, permissions, expiresOn } = params;
 
-  const credential = new StorageSharedKeyCredential(
-    config.account,
-    config.accountKey
-  );
-
   const sas = generateBlobSASQueryParameters(
     {
       containerName: config.container,
@@ -159,7 +162,7 @@ function signBlobUrl(params: {
       expiresOn,
       protocol: SASProtocol.Https,
     },
-    credential
+    credentialFor(config)
   ).toString();
 
   const blobUrl = containerClientFor(config).getBlockBlobClient(blobName).url;
@@ -177,9 +180,8 @@ function signBlobUrl(params: {
 export function mintUploadSas(params: {
   blobName: string;
   ttlSeconds?: number;
-  config?: AzureStorageConfig;
 }): { uploadUrl: string; expiresAt: Date } {
-  const config = params.config ?? requireAzureStorageConfig();
+  const config = requireAzureStorageConfig();
   const ttlSeconds = params.ttlSeconds ?? UPLOAD_SAS_TTL_SECONDS;
   const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
 
@@ -204,11 +206,8 @@ export function mintUploadSas(params: {
  */
 export async function deleteVideoBlob(params: {
   blobName: string;
-  config?: AzureStorageConfig;
 }): Promise<{ deleted: boolean }> {
-  const config = params.config ?? requireAzureStorageConfig();
-
-  const response = await containerClientFor(config)
+  const response = await videoContainerClient()
     .getBlockBlobClient(params.blobName)
     .deleteIfExists();
 
@@ -216,10 +215,8 @@ export async function deleteVideoBlob(params: {
 }
 
 /** Container handle for bulk work — currently only the orphan sweeper. */
-export function videoContainerClient(
-  config: AzureStorageConfig = requireAzureStorageConfig()
-): ContainerClient {
-  return containerClientFor(config);
+export function videoContainerClient(): ContainerClient {
+  return containerClientFor(requireAzureStorageConfig());
 }
 
 export class AzureSasVideoUrlStrategy implements VideoUrlStrategy {
@@ -290,14 +287,15 @@ export class AzureSasVideoUrlStrategy implements VideoUrlStrategy {
    * IMPORTANT: this does not invalidate anything. A SAS signed with the account
    * key is verified by recomputing the signature, so there is nothing to
    * withdraw — see the file header. The URL keeps working until `expiresOn`.
+   * That is why it is not called `revoke`.
    *
    * It is still worth writing. The only caller is the submit-failure path in
    * api/splitstep/jobs, where the POST never reached the vendor and nobody
    * outside this system has ever seen the URL, so the recorded intent and the
    * real exposure agree. If that stops being true, the honest fix is deleting
-   * the blob, not extending this method.
+   * the blob via deleteVideoBlob(), not extending this method.
    */
-  async revoke(jobId: string): Promise<void> {
+  async markUrlRetired(jobId: string): Promise<void> {
     const { error } = await this.supabase
       .from('processing_jobs')
       .update({ video_token_revoked_at: new Date().toISOString() })

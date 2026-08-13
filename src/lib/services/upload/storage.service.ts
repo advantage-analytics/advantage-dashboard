@@ -8,8 +8,14 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { IStorageService, UploadResult } from './types';
 
-/** Storage bucket name for match data */
-const MATCH_DATA_BUCKET = 'match-data';
+/**
+ * Storage bucket name for match data.
+ *
+ * Exported because match deletion has to remove what this service writes, and a
+ * second literal in the delete path is the shape of bug that leaves files behind
+ * without anything looking wrong.
+ */
+export const MATCH_DATA_BUCKET = 'match-data';
 
 /**
  * Supabase Storage Service Implementation

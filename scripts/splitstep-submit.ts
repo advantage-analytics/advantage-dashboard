@@ -25,7 +25,10 @@ import { readFileSync } from 'node:fs';
 
 import { buildSplitStepJobRequest } from '../src/lib/services/splitstep/job-request';
 import { videoObjectKey } from '../src/lib/services/splitstep/object-keys';
-import { createVideoUrlStrategy } from '../src/lib/services/splitstep/video-url';
+import {
+  AZURE_STORAGE_ENV_VARS,
+  createVideoUrlStrategy,
+} from '../src/lib/services/splitstep/video-url';
 import { parseWebhookPayload } from '../src/lib/services/splitstep/webhook-payload';
 
 // ---------------------------------------------------------------------------
@@ -169,9 +172,9 @@ async function main() {
 
   const apiUrl = requireEnv('SPLITSTEP_API_URL');
   const apiKey = requireEnv('SPLITSTEP_API_KEY');
-  requireEnv('AZURE_STORAGE_ACCOUNT');
-  requireEnv('AZURE_STORAGE_KEY');
-  requireEnv('AZURE_STORAGE_CONTAINER');
+  // From the module that reads them, so renaming a variable is one edit rather
+  // than one edit plus a script that fails later and less clearly.
+  for (const name of AZURE_STORAGE_ENV_VARS) requireEnv(name);
 
   if (apiUrl.includes('api.example.com')) {
     fail(

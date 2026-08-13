@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { RESULTS_BUCKET } from "@/lib/services/splitstep/config";
 import { deleteVideoBlob } from "@/lib/services/splitstep/video-url";
+import { MATCH_DATA_BUCKET } from "@/lib/services/upload/storage.service";
 
 // Beta gate: every PATCH forces private = true until we surface the toggle.
 const BETA_FORCE_PRIVATE = true;
@@ -215,6 +216,28 @@ export async function DELETE(
   // Each keeps its own try/catch rather than sharing one. That isolation is the
   // point: a throw in the video step must not skip the other two, which is
   // exactly what a single wrapping try would do.
+  // Both storage cleanups key off the same rows, so they are read once here
+  // rather than issuing two near-identical SELECTs. The try/catch stays around
+  // each deletion, which is what the isolation above is actually protecting.
+  //
+  // The error is bound and logged rather than discarded. If this read fails,
+  // both cleanups silently do nothing and the row is deleted anyway — a
+  // permanent multi-GB leak whose only trace would otherwise be its absence.
+  // The delete still proceeds (a match the user cannot remove is worse), but it
+  // says so, and it prints the match id the sweeper will need.
+  const { data: jobs, error: jobsError } = await supabase
+    .from("processing_jobs")
+    .select("video_object_key, results_object_key")
+    .eq("match_id", matchId);
+
+  if (jobsError) {
+    console.error(
+      `[match delete] could not read storage keys for ${matchId} — video and ` +
+        `results will be stranded, recover with scripts/cleanup-orphan-storage.ts:`,
+      jobsError.message
+    );
+  }
+
   await Promise.all([
     (async () => {
       try {
@@ -222,17 +245,12 @@ export async function DELETE(
         //    this runtime already holds the storage account key, because the
         //    same key signs the vendor's read SAS. Under R2 it did not, which is
         //    the only reason this was ever a separate deployable.
-        const { data: videoJobs } = await supabase
-          .from("processing_jobs")
-          .select("video_object_key")
-          .eq("match_id", matchId)
-          .not("video_object_key", "is", null);
-
-        // Deduped: every job for this match points at the same blob name, so a
-        // re-submitted match would otherwise issue the same delete repeatedly.
+        //
+        //    Deduped: every job for this match points at the same blob name, so
+        //    a re-submitted match would otherwise delete the same blob twice.
         const blobNames = [
           ...new Set(
-            (videoJobs ?? [])
+            (jobs ?? [])
               .map((j) => j.video_object_key as string | null)
               .filter((k): k is string => Boolean(k))
           ),
@@ -255,12 +273,6 @@ export async function DELETE(
       try {
         // 2. Raw provider results in Supabase Storage. Same bucket the webhook
         //    writes to, so this client can remove them directly.
-        const { data: jobs } = await supabase
-          .from("processing_jobs")
-          .select("results_object_key")
-          .eq("match_id", matchId)
-          .not("results_object_key", "is", null);
-
         const resultKeys = (jobs ?? [])
           .map((j) => j.results_object_key as string | null)
           .filter((k): k is string => Boolean(k));
@@ -285,26 +297,38 @@ export async function DELETE(
     (async () => {
       try {
         // 3. Uploaded provider files (SwingVision .xlsx and friends).
-        const { data: files } = await supabase
+        //
+        // This step never ran. It used to select `storage_bucket`, a column
+        // match_files does not have — PostgREST answered 42703, the error was
+        // discarded along with the rest of the response, and `files` was always
+        // null. Every .xlsx uploaded since has leaked on match deletion.
+        //
+        // There is one bucket for these, so it is named directly rather than
+        // read from a row.
+        const { data: files, error: filesError } = await supabase
           .from("match_files")
-          .select("storage_path, storage_bucket")
+          .select("storage_path")
           .eq("match_id", matchId);
 
-        if (files && files.length > 0) {
-          const byBucket = new Map<string, string[]>();
-          for (const f of files) {
-            const bucket = (f.storage_bucket as string | null) ?? "match-data";
-            const path = f.storage_path as string | null;
-            if (!path) continue;
-            const arr = byBucket.get(bucket) ?? [];
-            arr.push(path);
-            byBucket.set(bucket, arr);
-          }
-          for (const [bucket, paths] of byBucket) {
-            const { error: storageError } = await supabase.storage.from(bucket).remove(paths);
-            if (storageError) {
-              console.error(`[match delete] storage cleanup failed for ${bucket}:`, storageError.message);
-            }
+        if (filesError) {
+          console.error("[match delete] could not read match_files:", filesError.message);
+          return;
+        }
+
+        const paths = (files ?? [])
+          .map((f) => f.storage_path as string | null)
+          .filter((p): p is string => Boolean(p));
+
+        if (paths.length > 0) {
+          const { error: storageError } = await supabase.storage
+            .from(MATCH_DATA_BUCKET)
+            .remove(paths);
+
+          if (storageError) {
+            console.error(
+              `[match delete] storage cleanup failed for ${MATCH_DATA_BUCKET}:`,
+              storageError.message
+            );
           }
         }
       } catch (err) {

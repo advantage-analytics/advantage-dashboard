@@ -116,7 +116,7 @@ export function buildMatchData(
     round: formData.round || null,
     format: {
       best_of: bestOf,
-      ad_scoring: formData.adScoring,
+      ad_scoring: formData.adScoring ?? null,
       play_on_lets: formData.playOnLets
     },
     result: formData.result,
@@ -188,6 +188,18 @@ export function formatClipLength(seconds: number): string {
   if (seconds < 60) return `${Math.ceil(seconds)}s`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.ceil(seconds % 60)}s`;
   return `${Math.floor(seconds / 3600)}h ${Math.ceil((seconds % 3600) / 60)}m`;
+}
+
+/**
+ * Format a transfer rate in BYTES PER SECOND ("820 KB/s", "12.4 MB/s").
+ *
+ * Sibling to formatFileSize on purpose: an upload panel shows both, and a size
+ * reading in GB beside a rate reading in bytes/s is unreadable.
+ */
+export function formatTransferSpeed(bytesPerSecond: number): string {
+  return bytesPerSecond < 1024 * 1024
+    ? `${(bytesPerSecond / 1024).toFixed(0)} KB/s`
+    : `${(bytesPerSecond / (1024 * 1024)).toFixed(1)} MB/s`;
 }
 
 /**

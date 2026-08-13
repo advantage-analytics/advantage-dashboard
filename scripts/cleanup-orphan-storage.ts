@@ -27,11 +27,16 @@
  */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
+import type { ContainerClient } from "@azure/storage-blob";
+
+import { RESULTS_BUCKET } from "../src/lib/services/splitstep/config";
+import { MATCH_DATA_BUCKET } from "../src/lib/services/upload/storage.service";
 import {
-  BlobServiceClient,
-  StorageSharedKeyCredential,
-  type ContainerClient,
-} from "@azure/storage-blob";
+  AZURE_STORAGE_ENV_VARS,
+  deleteVideoBlob,
+  resolveAzureStorageConfig,
+  videoContainerClient,
+} from "../src/lib/services/splitstep/video-url";
 
 // Minimal .env.local loader (no dotenv dependency).
 try {
@@ -48,7 +53,9 @@ try {
   // ignore — env may come from shell
 }
 
-const SUPABASE_BUCKETS = ["match-data", "match-results"] as const;
+// From the modules that write them. A second literal here is exactly the
+// write-side/read-side drift this script exists to clean up after.
+const SUPABASE_BUCKETS = [MATCH_DATA_BUCKET, RESULTS_BUCKET] as const;
 const APPLY = process.argv.includes("--apply");
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -99,20 +106,26 @@ async function listSupabaseObjects(bucket: string): Promise<string[]> {
   return paths;
 }
 
-/** Null when Azure is not configured locally — the caller reports and skips. */
+/**
+ * Null when Azure is not configured locally — the caller reports and skips.
+ *
+ * Goes through the app's own resolver rather than reading the three env vars
+ * here. An earlier version did read them directly and defaulted the container to
+ * the literal "advantage-videos", which meant a deployment with
+ * AZURE_STORAGE_CONTAINER unset had the app correctly refusing to mint URLs
+ * while this script happily listed and DELETED from a guessed container. One
+ * definition of "which container holds videos", or the write side and the read
+ * side drift apart again — which is the exact failure the migration away from
+ * R2 set out to remove.
+ */
 function videoContainer(): { container: ContainerClient; name: string } | null {
-  const account = process.env.AZURE_STORAGE_ACCOUNT;
-  const accountKey = process.env.AZURE_STORAGE_KEY;
-  const name = process.env.AZURE_STORAGE_CONTAINER ?? "advantage-videos";
+  const resolved = resolveAzureStorageConfig();
+  if (!resolved.ok) return null;
 
-  if (!account || !accountKey) return null;
-
-  const container = new BlobServiceClient(
-    `https://${account}.blob.core.windows.net`,
-    new StorageSharedKeyCredential(account, accountKey)
-  ).getContainerClient(name);
-
-  return { container, name };
+  return {
+    container: videoContainerClient(),
+    name: resolved.config.container,
+  };
 }
 
 async function listBlobNames(container: ContainerClient): Promise<string[]> {
@@ -226,13 +239,15 @@ async function main() {
         let deleted = 0;
         for (const key of keys) {
           try {
-            // deleteIfExists, not delete: a blob already gone is the desired
-            // state. It also must not throw — sweep() breaks out of the delete
-            // loop on the first throw, so one 404 would abort the whole sweep.
-            const res = await videos.container
-              .getBlockBlobClient(key)
-              .deleteIfExists();
-            if (res.succeeded) deleted++;
+            // Shares deleteVideoBlob() with the app's two delete paths, so
+            // "how we remove a video" — deleteIfExists, absence is success —
+            // has one definition rather than three.
+            //
+            // The try/catch is still needed here: sweep() breaks out of its
+            // delete loop on the first throw, so one unexpected failure would
+            // silently abort the rest of the sweep.
+            const res = await deleteVideoBlob({ blobName: key });
+            if (res.deleted) deleted++;
           } catch (err) {
             console.error(
               `[${videos.name}] ${key}: ${err instanceof Error ? err.message : String(err)}`
@@ -244,8 +259,8 @@ async function main() {
     });
   } else {
     console.log(
-      "[advantage-videos] SKIPPED — AZURE_STORAGE_ACCOUNT / AZURE_STORAGE_KEY " +
-        "not in .env.local.\n" +
+      `[advantage-videos] SKIPPED — ${AZURE_STORAGE_ENV_VARS.join(" / ")} ` +
+        "not all in .env.local.\n" +
         "                  This is the container where orphans cost real money; " +
         "copy the credentials from Vercel to sweep it.\n"
     );

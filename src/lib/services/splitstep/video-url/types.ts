@@ -11,20 +11,17 @@
  * The answer, in their API docs and confirmed by email, is Azure Blob Storage
  * and nothing else — so the comparison it did make was moot.
  *
- *   azure-sas     A SAS-signed blob URL on our Azure storage account. The only
- *                 shape the vendor can fetch, and therefore the only strategy
- *                 in use. See azure-sas.ts for what SAS gives up versus the
- *                 Worker it replaced.
+ * So there is one strategy, `azure-sas` — a SAS-signed blob URL on our own
+ * storage account. See azure-sas.ts for what a SAS gives up versus the Worker it
+ * replaced, which is per-job revocation.
  *
- *   worker-token  A Cloudflare Worker fronting R2, opaque token in the path.
- *                 Revocable per job and logged every fetch. Retired: the vendor
- *                 will not read from our host.
- *
- *   presigned     An S3-style SigV4 presigned GET against R2. Never
- *                 implemented, and now unimplementable for the same reason.
+ * The union stays a union rather than collapsing to a string: it is what makes
+ * `id` mean something on the row, and a second entry costs one word if the
+ * vendor ever widens what `VideoUrl` accepts. `worker-token` and `presigned`
+ * were removed with the implementation — git has them if the ground shifts back.
  */
 
-export type VideoUrlStrategyId = 'azure-sas' | 'worker-token' | 'presigned';
+export type VideoUrlStrategyId = 'azure-sas';
 
 export interface VendorVideoUrl {
   /** The URL handed to the vendor as `VideoUrl` in the job request. */
@@ -36,12 +33,9 @@ export interface VendorVideoUrl {
 export interface MintVendorUrlInput {
   /** `processing_jobs.id` — the row the credential is bound to. */
   jobId: string;
-  /** R2 key of the source video, from `videoObjectKey()`. */
+  /** Blob name of the source video, from `videoObjectKey()`. */
   objectKey: string;
-  /**
-   * Lifetime in seconds. Defaults to VENDOR_URL_TTL_SECONDS. A strategy may
-   * cap this — `presigned` cannot honour anything above 7 days.
-   */
+  /** Lifetime in seconds. Defaults to VENDOR_URL_TTL_SECONDS. */
   ttlSeconds?: number;
 }
 
@@ -59,10 +53,21 @@ export interface VideoUrlStrategy {
   mint(input: MintVendorUrlInput): Promise<VendorVideoUrl>;
 
   /**
-   * Retire a job's URL ahead of its expiry. Call this when a job reaches a
-   * terminal state so the credential's real lifetime is the job's, not the TTL.
+   * Record that a job's URL should no longer be used.
    *
-   * Idempotent — revoking an already-revoked or never-minted job is a no-op.
+   * NOT named `revoke`, because under `azure-sas` nothing is revoked — a SAS is
+   * verified by recomputing its signature, so the URL keeps working until it
+   * expires. The name has to say that, because the paths that will eventually
+   * want this (cancelling a queued job, a user deleting a match mid-processing,
+   * an admin kill switch) are exactly the ones where believing the URL is dead
+   * is a security error rather than an untidiness.
+   *
+   * To actually end access, delete the blob — see deleteVideoBlob(). These are
+   * genuinely two operations: "stop advertising this URL" and "destroy the
+   * video". The submit-failure path wants the first and must not do the second,
+   * because a retry needs the video to still be there.
+   *
+   * Idempotent — marking an already-marked or never-minted job is a no-op.
    */
-  revoke(jobId: string): Promise<void>;
+  markUrlRetired(jobId: string): Promise<void>;
 }

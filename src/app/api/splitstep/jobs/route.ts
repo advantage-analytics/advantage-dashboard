@@ -246,8 +246,12 @@ export async function POST(request: NextRequest) {
     endTimeSeconds: Number(job.end_time_seconds),
     player1Scores: match.score?.player1 ?? [],
     player2Scores: match.score?.player2 ?? [],
-    adScoring: adScoring ?? true,
-    fixedCamera: fixedCamera ?? true,
+    // Passed through, NOT defaulted. These used to fall back to `true` here
+    // while the wizard's own default was `false` — two silent, opposite guesses
+    // at fields that change how the vendor reads the match. The builder refuses
+    // a non-boolean now, so an omission becomes a 422 the caller can act on.
+    adScoring,
+    fixedCamera,
     matchType: match.match_type,
   });
 
@@ -392,12 +396,13 @@ export async function POST(request: NextRequest) {
     await releaseQuota(admin, job.id);
 
     try {
-      await createVideoUrlStrategy(admin).revoke(job.id);
+      await createVideoUrlStrategy(admin).markUrlRetired(job.id);
     } catch {
-      /* Best effort, and worth little: revoke() is bookkeeping only — a SAS
-         cannot be withdrawn. It costs nothing here because we are on the path
-         where the POST never reached the vendor, so nobody outside this system
-         has seen the URL. See video-url/azure-sas.ts. */
+      /* Best effort, and worth little: this is bookkeeping only — a SAS cannot
+         be withdrawn, which is why the method is not called revoke(). It costs
+         nothing here because we are on the path where the POST never reached
+         the vendor, so nobody outside this system has seen the URL. See
+         video-url/azure-sas.ts. */
     }
 
     const { error: markError } = await admin

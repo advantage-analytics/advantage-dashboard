@@ -16,7 +16,13 @@ export interface FormData {
   eventName: string;
   round: string;
   bestOf: string;
-  adScoring: boolean;
+  /**
+   * Advantage scoring. Optional because "not chosen" is a real state the
+   * control already renders — it styles an undefined value as empty. It used to
+   * default to `false`, which meant a player who never opened the field silently
+   * declared no-ad, and the submit route silently declared the opposite.
+   */
+  adScoring?: boolean;
   playOnLets: boolean;
   result: string;
   date: string;
@@ -102,7 +108,8 @@ export interface MatchData {
   round: string | null;
   format: {
     best_of: number;
-    ad_scoring: boolean;
+    /** Null when the player never chose. Not the same as choosing no-ad. */
+    ad_scoring: boolean | null;
     play_on_lets: boolean;
   };
   result: string;
@@ -133,7 +140,7 @@ export const DEFAULT_FORM_DATA: FormData = {
   eventName: "",
   round: "",
   bestOf: "3",
-  adScoring: false,
+  adScoring: undefined,
   playOnLets: false,
   result: "",
   date: "",

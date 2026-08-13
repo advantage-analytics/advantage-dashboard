@@ -15,32 +15,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   type AnalysisStatus,
   type MatchAnalysis,
+  STATUS_MAP,
   importedAnalysis,
   manualAnalysis,
+  pipelinePercent,
 } from './match-analysis';
 import { formatClock } from '@/components/dashboard/matches/new-match-wizard/utils';
-
-/**
- * `processing_jobs.status` → what the UI calls it.
- *
- * The job table tracks more states than a player needs to distinguish. Three
- * of them — a row that exists but has not started, one whose bytes have landed,
- * one being handed to the vendor — are all "we are still getting this ready",
- * so they collapse. `imported` and `manual` are not job statuses at all; they
- * describe matches with no job, and are resolved below.
- */
-const STATUS_MAP: Record<string, AnalysisStatus> = {
-  pending: 'uploading',
-  uploading: 'uploading',
-  uploaded: 'uploading',
-  submitting: 'queued',
-  queued: 'queued',
-  processing: 'processing',
-  deriving: 'deriving',
-  completed: 'completed',
-  failed: 'failed',
-  derivation_failed: 'derivation_failed',
-};
 
 interface JobRow {
   match_id: string;
@@ -113,15 +93,19 @@ export async function loadMatchAnalysis(
       continue;
     }
 
+    const uploadPercent =
+      status === 'uploading' && row.upload_progress_percent !== null
+        ? row.upload_progress_percent
+        : undefined;
+
     out.set(row.match_id, {
       status,
+      progressPercent: pipelinePercent(status, uploadPercent),
       // Only the upload has a real number. The vendor sends status transitions
       // with no percentage, so anything shown for queued/processing/deriving
       // would be invented — better a bare status word than a fake bar.
-      progressPercent:
-        status === 'uploading' && row.upload_progress_percent !== null
-          ? row.upload_progress_percent
-          : undefined,
+      uploadPercent,
+      startedAt: row.created_at,
       providerId: 'splitstep',
       jobReference: row.external_job_id ?? undefined,
       window: formatWindow(row.billable_seconds),

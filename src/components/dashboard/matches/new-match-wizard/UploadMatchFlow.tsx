@@ -10,18 +10,25 @@
  * somewhere to land — a dialog can only close, so success was previously silent.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Check } from "lucide-react";
+import { Check, CircleX } from "lucide-react";
 import {
   Step,
   STEP_CONFIG,
   STEP_CONFIG_PROCESSING,
   CONTINUE_LABEL,
 } from "./types";
-import { useUploadMatchWizard } from "./useUploadMatchWizard";
+import {
+  useUploadMatchWizard,
+  type VideoUploadEvent,
+  type VideoUploadProgress,
+} from "./useUploadMatchWizard";
+import { formatFileSize, formatTransferSpeed } from "./utils";
+import { formatEta } from "@/lib/data/match-analysis";
+import { AnalysisProgressTrack } from "../analysis-progress-track";
 import { StepIndicator } from "./StepIndicator";
 import { ProviderContent } from "./ProviderContent";
 import { UploadContent } from "./UploadContent";
@@ -36,38 +43,207 @@ const EXIT_HREF = "/dashboard/matches";
 
 const CONTENT_CLS = "mx-auto w-full max-w-[820px] px-8";
 
+/**
+ * What one upload is doing, owned HERE rather than in the wizard hook.
+ *
+ * The wizard unmounts the instant a match is created, but its upload closure
+ * runs for up to a couple of hours afterwards. This component survives that, so
+ * it is the only place the progress can live.
+ */
+interface UploadState {
+  matchId: string;
+  phase: "uploading" | "done" | "cancelled" | "failed";
+  fileName: string;
+  progress?: VideoUploadProgress;
+  error?: string;
+  cancel?: () => void;
+}
+
+/** One source for phase colour, so the label ink cannot disagree with the track. */
+const PHASE_INK: Record<UploadState["phase"], string> = {
+  uploading: "#3B82F6",
+  done: "#5DB955",
+  cancelled: "#E51837",
+  failed: "#E51837",
+};
+
+const PHASE_LABEL: Record<Exclude<UploadState["phase"], "uploading">, string> = {
+  done: "Uploaded",
+  cancelled: "Cancelled",
+  failed: "Failed",
+};
+
 export function UploadMatchFlow() {
   const [createdMatchId, setCreatedMatchId] = useState<string | null>(null);
   // Bumping this remounts the wizard, which is how "Upload another" gets a
   // clean hook rather than a hand-written reset that would drift from it.
   const [runId, setRunId] = useState(0);
+  // Keyed by match, because uploads genuinely overlap: "Upload another" starts a
+  // second transfer while the first is still moving bytes. A single slot meant
+  // the second silently replaced the first on screen while both ran, and Cancel
+  // only ever reached the newest one.
+  const [uploads, setUploads] = useState<Map<string, UploadState>>(
+    () => new Map()
+  );
+
+  const handleVideoUpload = useCallback((event: VideoUploadEvent) => {
+    setUploads((prev) => {
+      if (event.kind === "started") {
+        return new Map(prev).set(event.matchId, {
+          matchId: event.matchId,
+          phase: "uploading",
+          fileName: event.fileName,
+          cancel: event.cancel,
+        });
+      }
+
+      // Same Map identity when the match is unknown — returning a fresh one
+      // would re-render the tree for an event we are ignoring.
+      const current = prev.get(event.matchId);
+      if (!current) return prev;
+
+      const patch: Partial<UploadState> =
+        event.kind === "progress"
+          ? { progress: event.progress }
+          : event.kind === "failed"
+          ? { phase: "failed", error: event.error, cancel: undefined }
+          : { phase: event.kind, cancel: undefined };
+
+      return new Map(prev).set(event.matchId, { ...current, ...patch });
+    });
+  }, []);
+
+  const active = [...uploads.values()];
 
   if (createdMatchId) {
     return (
       <UploadMatchSuccess
+        uploads={active}
         onUploadAnother={() => {
           setCreatedMatchId(null);
+          // Settled entries only. Clearing everything would hide transfers that
+          // are still running, which is exactly the bug this keying fixes.
+          setUploads((prev) => {
+            const next = new Map(prev);
+            for (const [id, u] of next) if (u.phase !== "uploading") next.delete(id);
+            return next;
+          });
           setRunId((n) => n + 1);
         }}
       />
     );
   }
 
-  return <UploadMatchWizard key={runId} onCreated={setCreatedMatchId} />;
+  return (
+    <UploadMatchWizard
+      key={runId}
+      onCreated={setCreatedMatchId}
+      onVideoUpload={handleVideoUpload}
+    />
+  );
 }
 
-function UploadMatchSuccess({ onUploadAnother }: { onUploadAnother: () => void }) {
+function UploadMatchSuccess({
+  uploads,
+  onUploadAnother,
+}: {
+  uploads: UploadState[];
+  onUploadAnother: () => void;
+}) {
+  const uploading = uploads.filter((u) => u.phase === "uploading");
+  const problems = uploads.filter(
+    (u) => u.phase === "failed" || u.phase === "cancelled"
+  );
+  const busy = uploading.length > 0;
+
   return (
     <div className={`${CONTENT_CLS} pb-16 pt-10`}>
       <div className="animate-fadeIn flex flex-col items-center gap-3 rounded-[14px] border border-[#F3F3F3] bg-white px-10 py-12 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
-        <div className="flex size-11 items-center justify-center rounded-full bg-[#3B82F6]/[0.08]">
-          <Check className="size-4.5 text-[#3B82F6]" strokeWidth={1.5} />
+        <div
+          className="flex size-11 items-center justify-center rounded-full"
+          style={{
+            background:
+              problems.length > 0 && !busy
+                ? "rgba(229,24,55,0.08)"
+                : "rgba(59,130,246,0.08)",
+          }}
+        >
+          {problems.length > 0 && !busy ? (
+            <CircleX className="size-4.5 text-[#E51837]" strokeWidth={1.5} />
+          ) : (
+            <Check className="size-4.5 text-[#3B82F6]" strokeWidth={1.5} />
+          )}
         </div>
-        <h1 className="text-[24px] font-light tracking-[-0.5px] text-[#1D1D1F]">Match saved.</h1>
-        <p className="max-w-[420px] text-center text-[12px] leading-[1.5] text-[#525252]">
-          It&apos;s on your dashboard now. Analysis results are added to it as soon as
-          they&apos;re ready.
+
+        <h1 className="text-[24px] font-light tracking-[-0.5px] text-[#1D1D1F]">
+          Match saved.
+        </h1>
+
+        {/* The match row is committed either way. Only the video transfer is in
+            doubt, so the headline never changes and this line carries the state. */}
+        <p className="max-w-[440px] text-center text-[12px] leading-[1.5] text-[#525252]">
+          {busy
+            ? uploading.length > 1
+              ? `Keep this tab open until all ${uploading.length} videos finish. The matches themselves are already safe.`
+              : "Keep this tab open until the video finishes. The match itself is already safe."
+            : problems.length > 0
+            ? problems[0].error ?? "The video upload did not finish."
+            : "Analysis results are added as soon as they're ready."}
         </p>
+
+        {/* One row per transfer. Everything here comes from the browser's own
+            XHR progress, so it moves continuously rather than at the
+            once-a-minute cadence of the database heartbeat. */}
+        {uploads.length > 0 && (
+          <ul className="mt-4 flex w-full max-w-[440px] flex-col gap-4">
+            {uploads.map((u) => (
+              <li key={u.matchId} className="flex flex-col gap-1.5">
+                <div className="flex items-baseline justify-between gap-3 text-[11px]">
+                  <span className="min-w-0 truncate text-[#525252]">{u.fileName}</span>
+                  <span
+                    className="shrink-0 tabular-nums"
+                    style={{ color: PHASE_INK[u.phase] }}
+                  >
+                    {u.phase === "uploading"
+                      ? `${(u.progress?.pct ?? 0).toFixed(1)}%`
+                      : PHASE_LABEL[u.phase]}
+                  </span>
+                </div>
+
+                <AnalysisProgressTrack
+                  percent={u.phase === "done" ? 100 : u.progress?.pct ?? 0}
+                  live={u.phase === "uploading"}
+                  tone={PHASE_INK[u.phase]}
+                  label={`${u.fileName} ${u.phase}`}
+                />
+
+                {u.phase === "uploading" && u.progress && (
+                  <div className="flex items-baseline justify-between text-[11px] text-[#AAAAAA] tabular-nums">
+                    <span>
+                      {formatFileSize(u.progress.bytesUploaded)} /{" "}
+                      {formatFileSize(u.progress.bytesTotal)}
+                    </span>
+                    <span>
+                      {formatTransferSpeed(u.progress.speed)} ·{" "}
+                      {formatEta(u.progress.etaSeconds)}
+                    </span>
+                  </div>
+                )}
+
+                {u.phase === "uploading" && u.cancel && (
+                  <button
+                    type="button"
+                    onClick={u.cancel}
+                    className="self-start text-[11px] text-[#888888] underline-offset-2 transition-colors duration-200 hover:text-[#E51837] hover:underline"
+                  >
+                    Cancel this upload
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
         <div className="mt-2 flex gap-2">
           <Button onClick={onUploadAnother} className={ghostBtnCls}>
             Upload another
@@ -76,12 +252,40 @@ function UploadMatchSuccess({ onUploadAnother }: { onUploadAnother: () => void }
             <Link href={EXIT_HREF}>Back to matches</Link>
           </Button>
         </div>
+
+        {/* Leaving is allowed but not free, and the browser's own dialog fires
+            too late to read as a warning. */}
+        {/* Precise on purpose. beforeunload only fires on a real unload, so
+            closing the tab stops the transfer but the "Back to matches" link
+            directly above does not — it keeps running, just without this screen
+            or its cancel button. The old line claimed leaving cancelled it,
+            which was wrong in both directions. */}
+        {busy && (
+          <p className="mt-1 text-center text-[10px] uppercase tracking-[2px] text-[#CCCCCC]">
+            Closing this tab stops {uploading.length > 1 ? "them" : "it"} · leaving this page does not
+          </p>
+        )}
       </div>
     </div>
   );
 }
 
-function UploadMatchWizard({ onCreated }: { onCreated: (matchId: string) => void }) {
+/**
+ * Memoized, and not for tidiness.
+ *
+ * After "Upload another" this is the rendered branch while transfers are still
+ * running, and every XHR progress event sets state on the parent — ~20/s per
+ * upload, reconciling this subtree (DetailsContent alone is >1,200 lines and is
+ * not memoized) to produce nothing visible, because the screen showing progress
+ * is unmounted. Both props are stable, so this bails on every one of them.
+ */
+const UploadMatchWizard = memo(function UploadMatchWizard({
+  onCreated,
+  onVideoUpload,
+}: {
+  onCreated: (matchId: string) => void;
+  onVideoUpload: (event: VideoUploadEvent) => void;
+}) {
   const router = useRouter();
 
   // `onOpenChange(false)` fires both when the user backs out and when a match
@@ -144,6 +348,7 @@ function UploadMatchWizard({ onCreated }: { onCreated: (matchId: string) => void
     open: true,
     onOpenChange: handleOpenChange,
     onCreated: handleCreated,
+    onVideoUpload,
   });
 
   const contentRef = useRef<HTMLDivElement>(null);
@@ -185,6 +390,34 @@ function UploadMatchWizard({ onCreated }: { onCreated: (matchId: string) => void
   const trimSelected =
     (formData.videoEndSeconds ?? 0) - (formData.videoStartSeconds ?? 0);
 
+  // Mirrors what buildSplitStepJobRequest() accepts: at least one set with a
+  // game count above zero. Three sets of 0-0 is a well-formed payload that
+  // describes a match nobody played, and the vendor would take it.
+  const hasAnySetScore =
+    formData.playerScores.some((n) => (n ?? 0) > 0) ||
+    formData.opponentScores.some((n) => (n ?? 0) > 0);
+
+  // A video job's metadata is not optional the way an imported match's is: every
+  // one of these is a REQUIRED field in the vendor's job payload, and a job that
+  // reaches them incomplete is refused after the video has already uploaded.
+  // Blocking here costs a click; blocking there costs an hour of transfer.
+  //
+  // Only for processing providers. A SwingVision import gets its scores from the
+  // parsed file, so demanding them by hand would be asking twice.
+  const videoMetaBlocker = !isProcessingProvider
+    ? null
+    : !formData.opponentName.trim()
+    ? "Add your opponent's name"
+    : !hasAnySetScore
+    ? "Enter the set scores"
+    : formData.initialTopPlayerIsPlayer1 === undefined
+    ? "Pick which end you started on"
+    : formData.fixedCamera === undefined
+    ? "Tell us about the camera"
+    : formData.adScoring === undefined
+    ? "Choose ad or no-ad scoring"
+    : null;
+
   const stepBlockers: Record<Step, string | null> = {
     provider: !selectedProvider ? "Make a selection" : null,
     video: isProbing
@@ -200,11 +433,7 @@ function UploadMatchWizard({ onCreated }: { onCreated: (matchId: string) => void
       ? "Validating file…"
       : !formData.eventName.trim()
       ? "Add a match name"
-      : isProcessingProvider && formData.initialTopPlayerIsPlayer1 === undefined
-      ? "Pick which end you started on"
-      : isProcessingProvider && formData.fixedCamera === undefined
-      ? "Tell us about the camera"
-      : null,
+      : videoMetaBlocker,
     confirm: isCreating ? "Creating match…" : null,
   };
 
@@ -496,4 +725,4 @@ function UploadMatchWizard({ onCreated }: { onCreated: (matchId: string) => void
       </div>
     </div>
   );
-}
+});

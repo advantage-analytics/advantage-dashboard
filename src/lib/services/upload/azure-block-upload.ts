@@ -42,13 +42,19 @@ export interface BlockUploadOptions {
   uploadUrl: string;
   /** Content type recorded on the committed blob. */
   contentType?: string;
-  /** Cancels in-flight and pending blocks. */
-  signal?: AbortSignal;
   /** Called with cumulative bytes accepted by Azure, including the block in flight. */
   onProgress?: (loadedBytes: number, totalBytes: number) => void;
+  /**
+   * Cancels the in-flight block and skips the rest.
+   *
+   * Uncommitted blocks are invisible at the blob name and Azure garbage-collects
+   * them after a week, so a cancelled upload leaves nothing to clean up.
+   */
+  signal?: AbortSignal;
 }
 
-class UploadAbortedError extends Error {
+/** Thrown when `signal` fires. Distinct so callers can tell it from a failure. */
+export class UploadAbortedError extends Error {
   constructor() {
     super('Upload cancelled');
     this.name = 'UploadAbortedError';
@@ -107,7 +113,6 @@ function put(params: {
 
     const onAbort = () => xhr.abort();
     signal?.addEventListener('abort', onAbort, { once: true });
-
     const done = () => signal?.removeEventListener('abort', onAbort);
 
     if (onProgress) {
@@ -162,24 +167,22 @@ function put(params: {
   });
 }
 
-/** Retry wrapper. Backs off 1s then 2s; an abort is never retried. */
+/** Retry wrapper. Backs off 1s then 2s. */
 async function putWithRetry(
   params: Parameters<typeof put>[0],
   label: string
 ): Promise<void> {
-  let lastError: unknown;
-
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_BLOCK; attempt++) {
+  for (let attempt = 1; ; attempt++) {
     try {
       await put(params);
       return;
     } catch (err) {
+      // A cancellation is not a failure to retry — it is the answer.
       if (err instanceof UploadAbortedError) throw err;
 
-      lastError = err;
       const status = (err as { status?: number | null }).status ?? null;
 
-      if (!isRetriable(status) || attempt === MAX_ATTEMPTS_PER_BLOCK) break;
+      if (!isRetriable(status) || attempt === MAX_ATTEMPTS_PER_BLOCK) throw err;
 
       console.warn(
         `Retrying ${label} (attempt ${attempt + 1}/${MAX_ATTEMPTS_PER_BLOCK})`
@@ -187,17 +190,33 @@ async function putWithRetry(
       await new Promise((r) => setTimeout(r, attempt * 1000));
     }
   }
-
-  throw lastError;
 }
 
 /**
  * Upload a file as a block blob and commit it.
  *
- * Blocks go up one at a time. Parallelism would raise throughput on a
- * high-latency link, but it makes progress non-monotonic and turns a partial
- * failure into "which blocks landed" bookkeeping — neither is worth it before
- * the path has carried a real match.
+ * Blocks go up ONE AT A TIME, and that is the main thing to reconsider here.
+ *
+ * The wire sits idle between every block — Azure's durability commit, plus RTT,
+ * plus XHR teardown. At ~150 ms a gap that is ~90 s of dead air on a 5 GB
+ * upload (597 blocks) and ~143 s at the 7.45 GB ceiling (954 blocks). What that
+ * costs depends entirely on uplink: ~2% on the 10 Mbps link this was measured
+ * against, but ~65% on 300 Mbps fibre, where serialisation roughly doubles the
+ * upload. A single TCP stream is also capped at cwnd/RTT, which is why the SDK's
+ * own uploadData defaults to concurrency 5.
+ *
+ * Two arguments were originally given for staying sequential. Only one holds.
+ * Monotonic progress is real, but it is ~10 lines: a Map of in-flight slots
+ * summed with the completed total, clamped with Math.max so a retry cannot go
+ * backwards. "Which blocks landed" bookkeeping does NOT hold — block ids are
+ * derived from the index, uncommitted blocks are invisible until commit, and
+ * nothing here resumes an interrupted upload anyway; a failure fails the job and
+ * the user re-uploads.
+ *
+ * Left sequential for now only because the path was verified end to end in this
+ * exact shape with a real 5 GB match, and changing concurrency invalidates that
+ * without a fresh test. Raise it to ~4 with the progress fix above when there is
+ * an appetite to re-run that test.
  *
  * Resolves once the block list is committed, which is the first moment the blob
  * exists at its name. Rejects with UploadAbortedError if `signal` fires.
@@ -223,8 +242,6 @@ export async function uploadFileInBlocks({
   const blockCount = Math.ceil(file.size / blockSize);
   const blockIds: string[] = [];
 
-  let committedBytes = 0;
-
   for (let index = 0; index < blockCount; index++) {
     const start = index * blockSize;
     const end = Math.min(start + blockSize, file.size);
@@ -238,14 +255,15 @@ export async function uploadFileInBlocks({
         // sends no Content-Type. The blob's type is set once, at commit.
         body: file.slice(start, end),
         signal,
+        // `start` is the previous block's `end`, so it is already the committed
+        // byte count — no need to carry a running total across iterations.
         onProgress: (loadedInThisBlock) =>
-          onProgress?.(committedBytes + loadedInThisBlock, file.size),
+          onProgress?.(start + loadedInThisBlock, file.size),
       },
       `block ${index + 1}/${blockCount}`
     );
 
-    committedBytes = end;
-    onProgress?.(committedBytes, file.size);
+    onProgress?.(end, file.size);
   }
 
   const blockList =
@@ -269,5 +287,3 @@ export async function uploadFileInBlocks({
     'block list commit'
   );
 }
-
-export { UploadAbortedError };
