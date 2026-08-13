@@ -29,6 +29,7 @@ import { parseWebhookPayload } from '@/lib/services/splitstep/webhook-payload';
 import { resultsObjectKey } from '@/lib/services/splitstep/object-keys';
 import { RESULTS_BUCKET } from '@/lib/services/splitstep/config';
 import { deleteVideoBlob } from '@/lib/services/splitstep/video-url';
+import { releaseQuota } from '@/lib/services/splitstep/quota';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -353,6 +354,29 @@ export async function POST(request: NextRequest) {
       // Strictly after the results are stored, never before: while this is the
       // only copy of the match, it is also the only way to re-run a job.
       if (jobId) await deleteSourceVideo({ supabase, jobId });
+    });
+  }
+
+  // A job the vendor accepted and then failed on kept its reserved minutes
+  // forever. releaseQuota had exactly one caller — the submit-failure path in
+  // api/splitstep/jobs, which fires only when the POST itself throws — so a
+  // failure during processing left the allowance spent with nothing to show
+  // for it. Against a 2-hour monthly cap and no vendor cancel endpoint, that is
+  // the leak that made automatic submission dangerous rather than merely bold.
+  //
+  // Safe to run on a redelivery: release_processing_quota() updates only where
+  // `released = false`, so a second failure notice for the same job credits
+  // nothing.
+  //
+  // Nothing is reconciled on success, deliberately. The vendor's completion
+  // payload carries no duration, and the reservation is already the trim window
+  // we asked them to analyse — so the estimate IS the actual, and calling
+  // reconcileQuota() would mean inventing a number to pass it.
+  if (payload.nextStatus === 'failed' && record.matched_job_id) {
+    const failedJobId = record.matched_job_id;
+    after(async () => {
+      await releaseQuota(supabase, failedJobId);
+      console.log(`${LOG} quota released for failed job`, { jobId: failedJobId });
     });
   }
 
