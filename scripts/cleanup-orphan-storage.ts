@@ -3,12 +3,14 @@
  *
  * Covers all three places a match leaves bytes:
  *
- *   match-data      Supabase Storage   uploaded provider files (.xlsx)
- *   match-results   Supabase Storage   raw vendor results JSON (~1 MB)
- *   advantage-videos  Cloudflare R2    source video (1–5 GB) ← the expensive one
+ *   match-data        Supabase Storage   uploaded provider files (.xlsx)
+ *   match-results     Supabase Storage   raw vendor results JSON (~1 MB)
+ *   advantage-videos  Azure Blob         source video (1–8 GB) ← the expensive one
  *
  * All three key layouts put the match id in the THIRD path segment
- * (`.../{userId}/{matchId}/...`), which is what identifies an orphan.
+ * (`.../{userId}/{matchId}/...`), which is what identifies an orphan. That held
+ * across the move from R2 to Azure because the blob name is still whatever
+ * videoObjectKey() produced — the store changed, the layout did not.
  *
  * Run from repo root:
  *   npx tsx scripts/cleanup-orphan-storage.ts            # dry run
@@ -16,10 +18,9 @@
  *
  * Requires NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local.
  *
- * R2 is skipped unless R2_ACCOUNT_ID, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY
- * are also present. Those normally live only in the Supabase edge-function
- * secrets, so copy them into .env.local when you want to sweep R2 — that is the
- * bucket where an orphan actually costs money.
+ * The video container is skipped unless AZURE_STORAGE_ACCOUNT and
+ * AZURE_STORAGE_KEY are also present — that is where an orphan actually costs
+ * money, so copy them from Vercel when you want to sweep it.
  *
  * Deleting a match through the app now cleans all three itself; this exists for
  * strays created before that, and for rows deleted straight from the database.
@@ -27,10 +28,10 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import {
-  S3Client,
-  ListObjectsV2Command,
-  DeleteObjectsCommand,
-} from "@aws-sdk/client-s3";
+  BlobServiceClient,
+  StorageSharedKeyCredential,
+  type ContainerClient,
+} from "@azure/storage-blob";
 
 // Minimal .env.local loader (no dotenv dependency).
 try {
@@ -98,56 +99,43 @@ async function listSupabaseObjects(bucket: string): Promise<string[]> {
   return paths;
 }
 
-/** Null when R2 is not configured locally — the caller reports and skips. */
-function r2Client(): { s3: S3Client; bucket: string } | null {
-  const accountId = process.env.R2_ACCOUNT_ID;
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-  const bucket = process.env.R2_BUCKET_VIDEOS ?? "advantage-videos";
+/** Null when Azure is not configured locally — the caller reports and skips. */
+function videoContainer(): { container: ContainerClient; name: string } | null {
+  const account = process.env.AZURE_STORAGE_ACCOUNT;
+  const accountKey = process.env.AZURE_STORAGE_KEY;
+  const name = process.env.AZURE_STORAGE_CONTAINER ?? "advantage-videos";
 
-  if (!accountId || !accessKeyId || !secretAccessKey) return null;
+  if (!account || !accountKey) return null;
 
-  return {
-    bucket,
-    s3: new S3Client({
-      region: "auto",
-      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-      forcePathStyle: true,
-      credentials: { accessKeyId, secretAccessKey },
-      // R2 rejects the CRC32 checksum headers the SDK adds by default.
-      requestChecksumCalculation: "WHEN_REQUIRED",
-      responseChecksumValidation: "WHEN_REQUIRED",
-    }),
-  };
+  const container = new BlobServiceClient(
+    `https://${account}.blob.core.windows.net`,
+    new StorageSharedKeyCredential(account, accountKey)
+  ).getContainerClient(name);
+
+  return { container, name };
 }
 
-async function listR2Objects(s3: S3Client, bucket: string): Promise<string[]> {
-  const keys: string[] = [];
-  let token: string | undefined;
-
-  do {
-    const page = await s3.send(
-      new ListObjectsV2Command({ Bucket: bucket, ContinuationToken: token })
-    );
-    for (const obj of page.Contents ?? []) {
-      if (obj.Key) keys.push(obj.Key);
-    }
-    token = page.IsTruncated ? page.NextContinuationToken : undefined;
-  } while (token);
-
-  return keys;
+async function listBlobNames(container: ContainerClient): Promise<string[]> {
+  const names: string[] = [];
+  // Paging is handled by the async iterator; `flat` means the layout's slashes
+  // are part of the name rather than virtual directories, which is what keeps
+  // matchIdOf()'s third-segment rule working unchanged.
+  for await (const blob of container.listBlobsFlat()) {
+    names.push(blob.name);
+  }
+  return names;
 }
 
 /**
- * One place bytes live. Supabase Storage and R2 differ only in how you enumerate
- * and how many keys a delete call takes — the orphan rule, the reporting and the
- * batching are identical, so `sweep()` below owns them once.
+ * One place bytes live. Supabase Storage and Azure differ only in how you
+ * enumerate and how many keys a delete call takes — the orphan rule, the
+ * reporting and the batching are identical, so `sweep()` below owns them once.
  */
 interface Store {
   label: string;
   /** Every object key in the store. */
   list(): Promise<string[]>;
-  /** Keys per delete call: Supabase Storage takes 100, S3 DeleteObjects 1000. */
+  /** Keys per delete call: Supabase Storage takes 100, Azure deletes one at a time. */
   batchSize: number;
   /** Deletes one batch, returning how many went. Throwing aborts this store only. */
   removeBatch(keys: string[]): Promise<number>;
@@ -225,33 +213,41 @@ async function main() {
     },
   }));
 
-  const r2 = r2Client();
-  if (r2) {
+  const videos = videoContainer();
+  if (videos) {
     stores.push({
-      label: r2.bucket,
-      batchSize: 1000,
-      list: () => listR2Objects(r2.s3, r2.bucket),
+      label: videos.name,
+      // Azure has no multi-delete verb on the blob API — BlobBatchClient exists
+      // but caps at 256 subrequests and needs its own client. One call per blob
+      // is honest and fast enough: orphaned videos are counted in dozens.
+      batchSize: 1,
+      list: () => listBlobNames(videos.container),
       removeBatch: async (keys) => {
-        const res = await r2.s3.send(
-          new DeleteObjectsCommand({
-            Bucket: r2.bucket,
-            Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: false },
-          })
-        );
-        // Per-key failures come back in the response rather than throwing, so
-        // they are reported without aborting the rest of the sweep.
-        for (const e of res.Errors ?? []) {
-          console.error(`[${r2.bucket}] ${e.Key}: ${e.Message}`);
+        let deleted = 0;
+        for (const key of keys) {
+          try {
+            // deleteIfExists, not delete: a blob already gone is the desired
+            // state. It also must not throw — sweep() breaks out of the delete
+            // loop on the first throw, so one 404 would abort the whole sweep.
+            const res = await videos.container
+              .getBlockBlobClient(key)
+              .deleteIfExists();
+            if (res.succeeded) deleted++;
+          } catch (err) {
+            console.error(
+              `[${videos.name}] ${key}: ${err instanceof Error ? err.message : String(err)}`
+            );
+          }
         }
-        return res.Deleted?.length ?? 0;
+        return deleted;
       },
     });
   } else {
     console.log(
-      "[advantage-videos] SKIPPED — R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / " +
-        "R2_SECRET_ACCESS_KEY not in .env.local.\n" +
-        "                  This is the bucket where orphans cost real money; " +
-        "copy the keys from the Supabase edge-function secrets to sweep it.\n"
+      "[advantage-videos] SKIPPED — AZURE_STORAGE_ACCOUNT / AZURE_STORAGE_KEY " +
+        "not in .env.local.\n" +
+        "                  This is the container where orphans cost real money; " +
+        "copy the credentials from Vercel to sweep it.\n"
     );
   }
 

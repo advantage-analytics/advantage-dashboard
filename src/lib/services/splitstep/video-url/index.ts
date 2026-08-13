@@ -1,14 +1,18 @@
 /**
  * Vendor video URL — public entry point.
  *
- * Callers ask for a strategy and never name a concrete one, so swapping the
- * §3.2 choice is a change to this file alone.
+ * Callers ask for a strategy and never name a concrete one, which is why
+ * replacing the storage provider outright was a change to this file and one new
+ * implementation, and touched neither submission nor the webhook.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { VideoUrlStrategy } from './types';
-import { WorkerTokenVideoUrlStrategy } from './worker-token';
+import {
+  AzureSasVideoUrlStrategy,
+  requireAzureStorageConfig,
+} from './azure-sas';
 
 export type {
   MintVendorUrlInput,
@@ -17,30 +21,28 @@ export type {
   VideoUrlStrategyId,
 } from './types';
 export {
-  VIDEO_ACCESS_PATH_PREFIX,
-  WorkerTokenVideoUrlStrategy,
-} from './worker-token';
+  AZURE_STORAGE_ENV_VARS,
+  AzureSasVideoUrlStrategy,
+  UPLOAD_SAS_TTL_SECONDS,
+  deleteVideoBlob,
+  mintUploadSas,
+  requireAzureStorageConfig,
+  resolveAzureStorageConfig,
+  videoContainerClient,
+} from './azure-sas';
+export type { AzureStorageConfig } from './azure-sas';
 
 /**
  * Build the configured vendor URL strategy.
  *
- * @param supabase A service-role client — see WorkerTokenVideoUrlStrategy.
- * @throws if the Worker origin is unset. Failing here is deliberate: the
- *   alternative is minting a URL against `undefined/v/...` and only finding out
- *   when the vendor fails to fetch it, days later, via an unparseable error
- *   string (§5 Q7).
+ * @param supabase A service-role client — see AzureSasVideoUrlStrategy.
+ * @throws if the Azure storage config is incomplete. Failing here is
+ *   deliberate: the alternative is minting a URL against
+ *   `undefined.blob.core.windows.net` and only finding out when the vendor
+ *   fails to fetch it, days later, via an unparseable error string.
  */
 export function createVideoUrlStrategy(
   supabase: SupabaseClient
 ): VideoUrlStrategy {
-  const workerBaseUrl = process.env.R2_PUBLIC_WORKER_URL;
-
-  if (!workerBaseUrl) {
-    throw new Error(
-      'R2_PUBLIC_WORKER_URL is not set. It must be the public origin of the ' +
-        'video-access Worker (see workers/video-access/README.md).'
-    );
-  }
-
-  return new WorkerTokenVideoUrlStrategy(supabase, workerBaseUrl);
+  return new AzureSasVideoUrlStrategy(supabase, requireAzureStorageConfig());
 }

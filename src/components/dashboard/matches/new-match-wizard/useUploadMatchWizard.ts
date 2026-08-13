@@ -23,6 +23,7 @@ import {
   ValidationResult,
 } from "@/lib/services/upload";
 import { getParser, hasParser } from "@/lib/services/upload/parsers";
+import { uploadFileInBlocks } from "@/lib/services/upload/azure-block-upload";
 import {
   Step,
   FormData as MatchFormData,
@@ -757,7 +758,7 @@ export function useUploadMatchWizard({
       onOpenChange(false);
       setTimeout(() => router.refresh(), 300);
 
-      // Video providers (e.g. Advantage Intelligence): record job & upload video to Cloudflare R2
+      // Video providers (e.g. Advantage Intelligence): record job & upload video to Azure
       if (processingStrategy) {
         const startSeconds = formData.videoStartSeconds ?? 0;
         const endSeconds = formData.videoEndSeconds ?? 0;
@@ -788,36 +789,37 @@ export function useUploadMatchWizard({
           return;
         }
 
-        // Kick off background upload to Cloudflare R2 via upload-video-r2 Edge Function
+        // Kick off background upload to Azure Blob Storage. The vendor will only
+        // fetch a VideoUrl on blob.core.windows.net, so that is where the source
+        // video lives — see src/lib/services/splitstep/video-url/azure-sas.ts.
         if (videoFileToUpload) {
           void (async () => {
             try {
-              const { data: { session } } = await supabase.auth.getSession();
-              const res = await supabase.functions.invoke("upload-video-r2", {
-                body: {
+              const res = await fetch("/api/splitstep/upload-url", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
                   matchId,
                   fileName: videoFileToUpload.name,
-                  contentType: videoFileToUpload.type || "video/mp4",
-                },
-                headers: session?.access_token
-                  ? { Authorization: `Bearer ${session.access_token}` }
-                  : undefined,
+                }),
               });
 
-              if (res.error || !res.data?.success || !res.data?.uploadUrl) {
+              const payload = await res.json().catch(() => null);
+
+              if (!res.ok || !payload?.uploadUrl) {
                 throw new Error(
-                  res.error?.message || res.data?.error || "Failed to acquire presigned R2 upload URL"
+                  payload?.error || `Could not get an upload URL (HTTP ${res.status})`
                 );
               }
 
-              const { uploadUrl, videoObjectKey } = res.data;
-              // Log the key, never the URL. `uploadUrl` is a live presigned
-              // credential — an hour of write access to this object in R2 —
-              // and the browser console outlives the upload: it survives
-              // screen shares, extensions, and anyone opening devtools. The
-              // key is what you actually want when debugging anyway.
-              console.log("🚀 Presigned R2 upload URL acquired for:", videoObjectKey);
-              console.log(`Starting binary upload to Cloudflare R2 (${(videoFileToUpload.size / (1024 * 1024)).toFixed(1)} MB)...`);
+              const { uploadUrl, videoObjectKey } = payload;
+              // Log the key, never the URL. `uploadUrl` is a live write
+              // credential — six hours of write access to this blob — and the
+              // browser console outlives the upload: it survives screen
+              // shares, extensions, and anyone opening devtools. The key is
+              // what you actually want when debugging anyway.
+              console.log("🚀 Upload credential acquired for:", videoObjectKey);
+              console.log(`Starting upload to Azure Blob Storage (${(videoFileToUpload.size / (1024 * 1024)).toFixed(1)} MB)...`);
 
               // The wizard has already closed by this point, so this guard is the
               // only thing telling the user the work is not finished.
@@ -837,70 +839,63 @@ export function useUploadMatchWizard({
               window.addEventListener("beforeunload", handleBeforeUnload);
 
               try {
-                // Upload video binary directly to R2 with live progress logging
-                let lastLoggedPct = -1;
-                await new Promise<void>((resolve, reject) => {
-                  const xhr = new XMLHttpRequest();
-                  xhr.open("PUT", uploadUrl, true);
-                  xhr.setRequestHeader("Content-Type", videoFileToUpload.type || "video/mp4");
+                // Persist progress as it goes. The wizard has already closed by
+                // now and this upload runs in the background, so a console line
+                // is invisible — the matches list is where the user actually
+                // looks, and it reads this column.
+                //
+                // Write on a 2-point move or every 60 seconds, whichever comes
+                // first. The old rule was `pct % 10 === 0`, which skipped the
+                // write entirely whenever a chunk boundary stepped over a
+                // multiple of ten. That is not cosmetic: this column is the
+                // liveness signal reap_stalled_uploads() reads, and 15 minutes
+                // without one marks the job failed — underneath an upload that
+                // is still running.
+                //
+                // Fire-and-forget throughout: a dropped progress write must
+                // never disturb the upload itself.
+                let lastWrittenPct = -1;
+                let lastWriteAt = 0;
 
-                  xhr.upload.onprogress = (e) => {
-                    if (e.lengthComputable) {
-                      const pct = Math.floor((e.loaded / e.total) * 100);
-                      if (pct % 10 === 0 && pct !== lastLoggedPct) {
-                        lastLoggedPct = pct;
-                        console.log(
-                          `Uploading to Cloudflare R2: ${pct}% (${(e.loaded / (1024 * 1024)).toFixed(1)}MB / ${(e.total / (1024 * 1024)).toFixed(1)}MB)`
-                        );
+                await uploadFileInBlocks({
+                  file: videoFileToUpload,
+                  uploadUrl,
+                  contentType: videoFileToUpload.type || "video/mp4",
+                  onProgress: (loaded, total) => {
+                    const pct = Math.floor((loaded / total) * 100);
+                    const now = Date.now();
 
-                        // Persist it too. The wizard has already closed by now
-                        // and this upload runs in the background, so a console
-                        // line is invisible — the matches list is where the user
-                        // actually looks, and it reads this column.
-                        //
-                        // Every ~10% rather than every event: a multi-GB upload
-                        // fires hundreds, and the bar cannot show finer than
-                        // that anyway. Fire-and-forget — a dropped progress
-                        // write must never disturb the upload itself.
-                        void supabase
-                          .from("processing_jobs")
-                          .update({ upload_progress_percent: pct })
-                          // By match_id, matching the status writes below — the
-                          // insert above never selects the row id back.
-                          .eq("match_id", matchId)
-                          .then(({ error }) => {
-                            if (error) {
-                              console.warn(
-                                "Could not record upload progress:",
-                                error.message
-                              );
-                            }
-                          });
-                      }
+                    if (pct - lastWrittenPct < 2 && now - lastWriteAt < 60_000) {
+                      return;
                     }
-                  };
+                    lastWrittenPct = pct;
+                    lastWriteAt = now;
 
-                  xhr.onload = () => {
-                    if (xhr.status >= 200 && xhr.status < 300) {
-                      resolve();
-                    } else {
-                      reject(
-                        new Error(`Cloudflare R2 video upload failed with HTTP status ${xhr.status}: ${xhr.responseText}`)
-                      );
-                    }
-                  };
+                    console.log(
+                      `Uploading to Azure: ${pct}% (${(loaded / (1024 * 1024)).toFixed(1)}MB / ${(total / (1024 * 1024)).toFixed(1)}MB)`
+                    );
 
-                  xhr.onerror = () =>
-                    reject(new Error("Network / CORS error during direct upload to Cloudflare R2"));
-                  xhr.onabort = () => reject(new Error("Cloudflare R2 upload aborted"));
-
-                  xhr.send(videoFileToUpload);
+                    void supabase
+                      .from("processing_jobs")
+                      .update({ upload_progress_percent: pct })
+                      // By match_id, matching the status writes below — the
+                      // insert above never selects the row id back.
+                      .eq("match_id", matchId)
+                      .then(({ error }) => {
+                        if (error) {
+                          console.warn(
+                            "Could not record upload progress:",
+                            error.message
+                          );
+                        }
+                      });
+                  },
                 });
               } finally {
                 window.removeEventListener("beforeunload", handleBeforeUnload);
               }
 
-              console.log("🎉 Cloudflare R2 Upload Completed! Updating processing_jobs row...");
+              console.log("🎉 Upload completed! Updating processing_jobs row...");
 
               // Update processing job status and video key
               await supabase
@@ -914,23 +909,22 @@ export function useUploadMatchWizard({
 
               console.log("✅ Successfully updated processing_jobs status to 'uploaded' for match:", matchId);
             } catch (uploadErr: any) {
-              console.error("❌ R2 video upload error:", uploadErr);
+              console.error("❌ Video upload error:", uploadErr);
+
+              const message = uploadErr?.message || "Video upload failed";
 
               await supabase
                 .from("processing_jobs")
                 .update({
                   status: "failed",
-                  error_message: uploadErr?.message || "Video upload to Cloudflare R2 failed",
+                  error_message: message,
                   updated_at: new Date().toISOString(),
                 })
                 .eq("match_id", matchId);
 
               window.dispatchEvent(
                 new CustomEvent("match-upload-failed", {
-                  detail: {
-                    matchId,
-                    error: uploadErr?.message || "Video upload to Cloudflare R2 failed",
-                  },
+                  detail: { matchId, error: message },
                 })
               );
             }

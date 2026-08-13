@@ -28,6 +28,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { parseWebhookPayload } from '@/lib/services/splitstep/webhook-payload';
 import { resultsObjectKey } from '@/lib/services/splitstep/object-keys';
 import { RESULTS_BUCKET } from '@/lib/services/splitstep/config';
+import { deleteVideoBlob } from '@/lib/services/splitstep/video-url';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -53,13 +54,16 @@ const RESULTS_FETCH_TIMEOUT_MS = 25_000;
 /**
  * Headers the signature might arrive in.
  *
- * The published contract gives the algorithm but never names the header, so
- * this is a candidate list for the same reason webhook-payload.ts uses one for
- * the body keys: guess once and you fail silently on the first real delivery.
- * Collapse to the single real header once one has been observed — the log below
- * prints the full header set whenever none of these match.
+ * `x-hmac-signature` is the vendor's answer, given by email and since added to
+ * their published docs, so it leads. The rest stay for two reasons. They are
+ * still a cheap hedge until a real delivery confirms the documented name — the
+ * log below prints the full header set whenever none of these match. And this
+ * list is also the redaction set for safeHeaders(): dropping `authorization` or
+ * `x-api-key` from it would start writing credential values into the delivery
+ * row, which is a worse outcome than carrying a few dead candidates.
  */
 const SIGNATURE_HEADERS = [
+  'x-hmac-signature',
   'x-splitstep-signature',
   'x-webhook-signature',
   'x-signature',
@@ -339,6 +343,16 @@ export async function POST(request: NextRequest) {
         objectKey: stored.objectKey,
         bytes: stored.bytes,
       });
+
+      // The source video has done its job. Deleting it here is the real bound
+      // on the vendor URL's lifetime: a SAS cannot be withdrawn once signed
+      // (see video-url/azure-sas.ts), so removing the bytes is the only
+      // revocation available. It also stops us paying to store a multi-GB file
+      // nobody reads again — nothing deleted videos post-completion before.
+      //
+      // Strictly after the results are stored, never before: while this is the
+      // only copy of the match, it is also the only way to re-run a job.
+      if (jobId) await deleteSourceVideo({ supabase, jobId });
     });
   }
 
@@ -348,6 +362,54 @@ export async function POST(request: NextRequest) {
   // rests at "processed, analysis pending".
 
   return NextResponse.json({ received: true, deliveryId: record.delivery_id });
+}
+
+/**
+ * Delete a completed job's source video.
+ *
+ * Best-effort by construction — every failure here logs and returns. The blob
+ * is not lost if this misses: scripts/cleanup-orphan-storage.ts sweeps it once
+ * the match is gone, and it expires from the vendor's reach on its own when the
+ * SAS does. Throwing would abort the after() block for a cleanup step, which is
+ * a worse trade than a stranded file.
+ */
+async function deleteSourceVideo(params: {
+  supabase: ReturnType<typeof createAdminClient>;
+  jobId: string;
+}): Promise<void> {
+  const { supabase, jobId } = params;
+
+  // Not carried on the delivery record — record_splitstep_webhook() returns the
+  // results key, not the video's. One read, after the response is already out.
+  const { data, error } = await supabase
+    .from('processing_jobs')
+    .select('video_object_key')
+    .eq('id', jobId)
+    .maybeSingle();
+
+  if (error || !data?.video_object_key) {
+    if (error) {
+      console.warn(`${LOG} could not read video_object_key for cleanup`, {
+        jobId,
+        error: error.message,
+      });
+    }
+    return;
+  }
+
+  try {
+    const { deleted } = await deleteVideoBlob({
+      blobName: data.video_object_key,
+    });
+    console.log(`${LOG} source video ${deleted ? 'deleted' : 'already gone'}`, {
+      jobId,
+    });
+  } catch (err) {
+    console.warn(`${LOG} source video cleanup failed — the sweeper will catch it`, {
+      jobId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 /**

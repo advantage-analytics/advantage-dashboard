@@ -2,7 +2,7 @@
 
 | File | What it is | Read it when |
 |---|---|---|
-| [`r2-and-webhook-overview.md`](r2-and-webhook-overview.md) | **Current state** of the video pipeline: R2, the Cloudflare Worker, the results webhook, quota, deletion, and what a UI redesign can safely touch | You are working on anything SplitStep-related. Start here |
+| [`r2-and-webhook-overview.md`](r2-and-webhook-overview.md) | **Current state** of the video pipeline: Azure Blob storage and SAS URLs, the results webhook, quota, deletion, and what a UI redesign can safely touch. Filename is stale — source video moved off Cloudflare R2; rename it once the retired R2 code is deleted | You are working on anything SplitStep-related. Start here |
 | [`splitstep-integration-spec.md`](splitstep-integration-spec.md) | The original design spec. Kept for the reasoning; several sections are deliberately superseded and marked as such at the top | You want to know *why* something was built this way |
 | [`llm-setup.md`](llm-setup.md) | Configuring the `/api/chat` provider (Anthropic or OpenAI), keys, mock mode, rough costs | Setting up LLM features locally |
 

@@ -1,23 +1,30 @@
 /**
- * Vendor video URL strategy (spec §3.2).
+ * Vendor video URL strategy.
  *
  * The vendor needs a URL it can GET the source video from. How that URL is
- * minted is deliberately behind an interface: the pilot ships `worker-token`,
- * but the choice is reversible without touching submission or the webhook.
+ * minted sits behind an interface, which is the one thing spec §3.2 got right:
+ * it weighed two ways to serve the file from our own infrastructure, and said
+ * "implement behind an interface either way". That hedge is why swapping the
+ * storage provider outright touched neither submission nor the webhook.
  *
- * The two shapes the spec weighed:
+ * What §3.2 never asked was what hosts the vendor's `VideoUrl` field accepts.
+ * The answer, in their API docs and confirmed by email, is Azure Blob Storage
+ * and nothing else — so the comparison it did make was moot.
  *
- *   worker-token  A Worker on our own domain fronting R2, opaque token in the
- *                 path. No expiry ceiling, revocable, and every fetch is logged.
- *                 Chosen — see the migration header for why.
+ *   azure-sas     A SAS-signed blob URL on our Azure storage account. The only
+ *                 shape the vendor can fetch, and therefore the only strategy
+ *                 in use. See azure-sas.ts for what SAS gives up versus the
+ *                 Worker it replaced.
  *
- *   presigned     An S3-style SigV4 presigned GET against R2's S3-compatible
- *                 endpoint. Nothing to deploy, but capped at 7 days, cannot be
- *                 revoked once minted, and gives no signal that the vendor ever
- *                 fetched the file. Not implemented.
+ *   worker-token  A Cloudflare Worker fronting R2, opaque token in the path.
+ *                 Revocable per job and logged every fetch. Retired: the vendor
+ *                 will not read from our host.
+ *
+ *   presigned     An S3-style SigV4 presigned GET against R2. Never
+ *                 implemented, and now unimplementable for the same reason.
  */
 
-export type VideoUrlStrategyId = 'worker-token' | 'presigned';
+export type VideoUrlStrategyId = 'azure-sas' | 'worker-token' | 'presigned';
 
 export interface VendorVideoUrl {
   /** The URL handed to the vendor as `VideoUrl` in the job request. */

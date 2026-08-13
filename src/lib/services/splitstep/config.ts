@@ -20,16 +20,25 @@ export const PROVIDER_ID = 'splitstep' as const;
 // ---------------------------------------------------------------------------
 
 /**
- * Maximum accepted video size.
+ * Maximum accepted video size — the largest file we will take, in bytes.
  *
- * The vendor documents "less than 5 GB", but that ceiling is soft and has been
- * confirmed negotiable to 10–12 GB. We accept up to 12 GB; raise or lower this
- * single constant if the agreement changes.
+ * The vendor's published API docs now state a limit of "less than 8,000,000,000
+ * bytes", marked "Enforced". That supersedes the earlier verbal "5 GB is soft,
+ * negotiable to 10–12 GB", which this constant was set from and which nobody has
+ * re-confirmed since the docs were published.
+ *
+ * We take the documented number because the two failure modes are not
+ * symmetric. Too low rejects at the file picker: instant, legible, recoverable.
+ * Too high lets someone spend an hour uploading a file the vendor refuses at
+ * submit — after we have already paid to store it. Ask before raising it back.
+ *
+ * Note the units. The vendor's bound is decimal and exclusive, so this is
+ * 8e9 - 1 and NOT `8 * 1024 ** 3` (8.59e9, which would exceed it by 7%).
  *
  * Unrelated to `MAX_COMPRESS_SIZE` in src/lib/video/compress.ts (2 GB) — that
  * governs the ffmpeg.wasm path, which SplitStep uploads never take.
  */
-export const MAX_VIDEO_SIZE_BYTES = 12 * 1024 * 1024 * 1024;
+export const MAX_VIDEO_SIZE_BYTES = 8_000_000_000 - 1;
 
 /**
  * Resolution floor. Hard — this is a model constraint, not a policy one, and
@@ -68,19 +77,24 @@ export const MIN_TRIM_DURATION_SECONDS = 60;
  * and they declined to bound the queue wait — on the pilot call they said a
  * 72-hour window was fine "in the Pilot, it depends how many videos we send",
  * with no committed date. So the URL has to outlive a wait we cannot predict,
- * and one that gets worse precisely as volume grows.
+ * and one that gets worse precisely as volume grows. Too short and the cost is
+ * a dead job we notice only via a free-text error string.
  *
- * 30 days is deliberately far past anything observed. It is not an estimate of
- * the queue — it is headroom, because the cost of being wrong is a dead job we
- * only notice via a free-text error string (§5 Q7).
+ * This was 30 days under the Worker, where the number cost nothing: any URL
+ * could be killed on demand, so a long expiry was headroom rather than
+ * exposure. A SAS cannot be withdrawn (see video-url/azure-sas.ts), which makes
+ * the TTL the exposure, not a ceiling above it.
  *
- * A presigned URL could not have been set this long: SigV4 caps expiry at 7
- * days. Nothing here would fit inside that ceiling with room to spare.
+ * 14 days is the compromise: still several times any queue wait observed, but
+ * half the window in which a leaked URL reads someone's match video. The
+ * shorter real bound is deleting the blob once results are stored, which the
+ * webhook now does — expiry is the backstop for jobs that never complete.
  *
- * The real lifetime is shorter than this in practice — revoke the token once
- * the job reaches a terminal state rather than letting it idle to expiry.
+ * Do not read the old rationale here as still applying: it argued this could
+ * not have been a presigned URL because SigV4 caps expiry at 7 days. Azure SAS
+ * has no equivalent ceiling, so nothing about this number is forced.
  */
-export const VENDOR_URL_TTL_SECONDS = 30 * 24 * 60 * 60;
+export const VENDOR_URL_TTL_SECONDS = 14 * 24 * 60 * 60;
 
 /**
  * Flag a job whose video the vendor has never fetched this long after submit.

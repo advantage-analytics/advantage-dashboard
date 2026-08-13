@@ -17,7 +17,8 @@
  * you to read it before anything is spent.
  *
  * Requires in .env.local: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
- * NEXT_PUBLIC_SITE_URL, R2_PUBLIC_WORKER_URL, SPLITSTEP_API_URL, SPLITSTEP_API_KEY.
+ * NEXT_PUBLIC_SITE_URL, SPLITSTEP_API_URL, SPLITSTEP_API_KEY,
+ * AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_KEY, AZURE_STORAGE_CONTAINER.
  */
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'node:fs';
@@ -155,18 +156,22 @@ async function main() {
   );
   console.log(`  Scoring                     : ${request.Ad ? 'ad' : 'no-ad'}`);
   console.log(`  Webhook                     : ${request.WebhookUrl}`);
-  console.log(`  Expected R2 object key      : ${objectKey}`);
+  console.log(`  Expected blob name          : ${objectKey}`);
   console.log('─'.repeat(66) + '\n');
 
   if (!SUBMIT) {
     console.log('Dry run — nothing sent. Re-run with --submit once the readout above is right.');
-    console.log(`Upload the video to R2 at: ${objectKey}\n`);
+    console.log(
+      `Upload the video to the Azure container at blob name: ${objectKey}\n`
+    );
     return;
   }
 
   const apiUrl = requireEnv('SPLITSTEP_API_URL');
   const apiKey = requireEnv('SPLITSTEP_API_KEY');
-  requireEnv('R2_PUBLIC_WORKER_URL');
+  requireEnv('AZURE_STORAGE_ACCOUNT');
+  requireEnv('AZURE_STORAGE_KEY');
+  requireEnv('AZURE_STORAGE_CONTAINER');
 
   if (apiUrl.includes('api.example.com')) {
     fail(

@@ -2,9 +2,14 @@
  * Submit an uploaded match video for analysis (spec §3.3).
  *
  * The upload wizard has already created the `processing_jobs` row and put the
- * video in R2; this is the step that spends an allowance and hands the job to
- * the vendor. Replaces `scripts/splitstep-submit.ts` for real users — the
- * script stays for the smoke test, where hardcoding metadata is the point.
+ * video in Azure Blob Storage; this is the step that spends an allowance and
+ * hands the job to the vendor. Replaces `scripts/splitstep-submit.ts` for real
+ * users — the script stays for the smoke test, where hardcoding metadata is the
+ * point.
+ *
+ * NOTE: nothing in the app calls this route yet. The wizard stops at
+ * `status: 'uploaded'` and submission is still a hand-run script, deliberately,
+ * until one job has round-tripped with the vendor.
  *
  * Order matters, and it is: verify ownership → reserve quota → mint URL →
  * submit → record. Quota is reserved BEFORE the vendor is called, because an
@@ -18,7 +23,10 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { buildSplitStepJobRequest } from '@/lib/services/splitstep/job-request';
 import { parseWebhookPayload } from '@/lib/services/splitstep/webhook-payload';
 import { resolveWebhookUrl } from '@/lib/services/splitstep/config';
-import { createVideoUrlStrategy } from '@/lib/services/splitstep/video-url';
+import {
+  createVideoUrlStrategy,
+  resolveAzureStorageConfig,
+} from '@/lib/services/splitstep/video-url';
 import { releaseQuota, reserveQuota } from '@/lib/services/splitstep/quota';
 
 export const runtime = 'nodejs';
@@ -77,10 +85,12 @@ function resolveDeploymentConfig():
   if (!apiKey) {
     return { ok: false, missing: 'SPLITSTEP_API_KEY' };
   }
-  if (!process.env.R2_PUBLIC_WORKER_URL) {
-    // createVideoUrlStrategy() throws on this — synchronously, deep inside the
-    // submit path. Catch it here where it can still be a clean 503.
-    return { ok: false, missing: 'R2_PUBLIC_WORKER_URL' };
+  // createVideoUrlStrategy() throws on incomplete storage config —
+  // synchronously, deep inside the submit path. Catch it here where it can
+  // still be a clean 503.
+  const storage = resolveAzureStorageConfig();
+  if (!storage.ok) {
+    return { ok: false, missing: storage.missing };
   }
 
   return { ok: true, webhookUrl, apiUrl, apiKey };
@@ -372,18 +382,22 @@ export async function POST(request: NextRequest) {
 
     console.error(`${LOG} submission failed`, { jobId: job.id, message });
 
-    // Hand the allowance back and retire the credential. Each step is isolated
-    // rather than chained: createVideoUrlStrategy() throws SYNCHRONOUSLY when
-    // R2_PUBLIC_WORKER_URL is unset, so a `.catch()` on revoke()'s promise
-    // never sees it — and an escape here would skip the one write that matters,
-    // leaving the job stuck at 'submitting' forever with the caller getting an
-    // unhandled error instead of the 502 below.
+    // Hand the allowance back and record the credential as retired. Each step
+    // is isolated rather than chained: createVideoUrlStrategy() throws
+    // SYNCHRONOUSLY when the Azure storage config is incomplete, so a
+    // `.catch()` on revoke()'s promise never sees it — and an escape here would
+    // skip the one write that matters, leaving the job stuck at 'submitting'
+    // forever with the caller getting an unhandled error instead of the 502
+    // below.
     await releaseQuota(admin, job.id);
 
     try {
       await createVideoUrlStrategy(admin).revoke(job.id);
     } catch {
-      /* best effort; an unused token expiring on its own is untidy, not unsafe */
+      /* Best effort, and worth little: revoke() is bookkeeping only — a SAS
+         cannot be withdrawn. It costs nothing here because we are on the path
+         where the POST never reached the vendor, so nobody outside this system
+         has seen the URL. See video-url/azure-sas.ts. */
     }
 
     const { error: markError } = await admin

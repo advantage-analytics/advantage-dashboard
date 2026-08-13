@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { RESULTS_BUCKET } from "@/lib/services/splitstep/config";
+import { deleteVideoBlob } from "@/lib/services/splitstep/video-url";
 
 // Beta gate: every PATCH forces private = true until we surface the toggle.
 const BETA_FORCE_PRIVATE = true;
@@ -203,40 +204,50 @@ export async function DELETE(
   // load-bearing: `video_object_key` and `results_object_key` live on
   // `processing_jobs`, which cascades away with the match. Delete first and the
   // keys are gone, leaving objects that nothing can even name — a permanent
-  // multi-GB leak in R2's case.
+  // multi-GB leak in the video store's case.
   //
   // Every step is best-effort. A stranded file is recoverable (see
   // scripts/cleanup-orphan-storage.ts); a match the user cannot delete is not.
   // So storage failures log and the row delete proceeds regardless.
   // The three cleanups key only off `matchId` and none reads another's output,
-  // so they run concurrently — the R2 step is an edge-function round trip
-  // (cold start, its own auth, a DeleteObjects call) and serialising behind it
-  // made every deletion cost the sum rather than the slowest.
+  // so they run concurrently rather than costing the sum of their latencies.
   //
   // Each keeps its own try/catch rather than sharing one. That isolation is the
-  // point: a throw in the R2 step must not skip the other two, which is exactly
-  // what a single wrapping try would do.
+  // point: a throw in the video step must not skip the other two, which is
+  // exactly what a single wrapping try would do.
   await Promise.all([
     (async () => {
       try {
-        // 1. Source video in R2. Delegated to the edge function because that is
-        //    where the R2 write credentials already live — the Next runtime has
-        //    no S3 client and no R2 keys, and duplicating them here for one call
-        //    would widen the credential surface for nothing.
-        const { data: r2Result, error: r2Error } = await supabase.functions.invoke(
-          "delete-video-r2",
-          { body: { matchId } }
+        // 1. Source video. Deleted inline rather than through an edge function:
+        //    this runtime already holds the storage account key, because the
+        //    same key signs the vendor's read SAS. Under R2 it did not, which is
+        //    the only reason this was ever a separate deployable.
+        const { data: videoJobs } = await supabase
+          .from("processing_jobs")
+          .select("video_object_key")
+          .eq("match_id", matchId)
+          .not("video_object_key", "is", null);
+
+        // Deduped: every job for this match points at the same blob name, so a
+        // re-submitted match would otherwise issue the same delete repeatedly.
+        const blobNames = [
+          ...new Set(
+            (videoJobs ?? [])
+              .map((j) => j.video_object_key as string | null)
+              .filter((k): k is string => Boolean(k))
+          ),
+        ];
+
+        const removed = await Promise.all(
+          blobNames.map((blobName) => deleteVideoBlob({ blobName }))
         );
 
-        if (r2Error) {
-          console.error("[match delete] R2 video cleanup failed:", r2Error.message);
-        } else if (r2Result?.deleted?.length) {
-          console.log(
-            `[match delete] removed ${r2Result.deleted.length} R2 object(s) for ${matchId}`
-          );
+        const count = removed.filter((r) => r.deleted).length;
+        if (count > 0) {
+          console.log(`[match delete] removed ${count} video blob(s) for ${matchId}`);
         }
       } catch (err) {
-        console.error("[match delete] R2 cleanup threw:", err);
+        console.error("[match delete] video cleanup threw:", err);
       }
     })(),
 

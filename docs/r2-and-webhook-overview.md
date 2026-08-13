@@ -1,24 +1,37 @@
-# Cloudflare R2 + the results webhook — what exists and how it fits together
+# Video storage + the results webhook — what exists and how it fits together
 
 Written for whoever picks this up next. Branch: `splitstep-integration`.
 
 The provider is **"Advantage Intelligence"** in every user-visible string. `splitstep`
 is internal naming only.
 
+> **This file is mid-migration.** Source video moved from Cloudflare R2 to Azure Blob
+> Storage. The app code is fully switched over; the retired R2 pieces
+> (`workers/video-access/`, `supabase/functions/upload-video-r2/`,
+> `supabase/functions/delete-video-r2/`, `video-url/worker-token.ts`) are still in the
+> repo on purpose, because nothing has run against a real Azure account yet. Delete
+> them — and rename this file — once one job has round-tripped. See §3.
+
 ---
 
 ## 0. What changed since the first version of this doc
 
-If you read the earlier copy, these are the deltas. Everything else still holds.
+If you read an earlier copy, these are the deltas. Everything else still holds.
 
 | | Then | Now |
 |---|---|---|
+| **Source video store** | **Cloudflare R2, served via a Worker** | **Azure Blob Storage, served via a SAS URL** (§3) |
+| **Vendor URL revocation** | **per job, on demand** | **not possible; bounded by a 14-day TTL and deleting the blob on completion** (§3) |
+| **Browser upload** | **one PUT of the whole file** | **8 MiB blocks, with retry per block** (§4) |
 | Webhook auth | plaintext shared secret in a header | **HMAC-SHA256, base64**, per the published contract (§5) |
+| Signature header | unknown; a candidate list | **`X-HMAC-Signature`**, confirmed by the vendor (§5) |
 | Results download | inline, before the 200 | **after the 200**, in `after()` (§5) |
-| Deleting a match | left the video in R2 and the results JSON in Storage | **deletes both**, plus the webhook envelopes (§6) |
+| Deleting a match | left the video and the results JSON behind | **deletes both**, plus the webhook envelopes (§6) |
+| **After a job completes** | **the video sat there until the match was deleted** | **the source blob is deleted once results are stored** (§6) |
 | Upload progress | invented — the matches list read a fixture array | **real**, from `processing_jobs` (§7) |
 | A closed tab mid-upload | showed "Uploading 0%" forever | **reaped to `failed` after 15 min of silence** (§7) |
-| Orphan sweeper | Supabase Storage only | **all three stores**, including R2 (§6) |
+| Orphan sweeper | Supabase Storage only | **all three stores**, including the video container (§6) |
+| Max accepted video | 12 GiB, from a verbal agreement | **8,000,000,000 bytes**, the documented enforced limit (§10) |
 | Phase 2 gate | blocked on a real results fixture | **fixture obtained**; now blocked on vendor answers Q8/Q9/Q13 (§11) |
 
 Three known gaps from the earlier copy are closed. The vendor-side ones are not, and
@@ -36,110 +49,161 @@ which problem.
     │  1. pick + trim video, local validation (≥1080p, ≥30fps, singles)
     │     src/components/dashboard/matches/new-match-wizard/
     ▼
-  upload-video-r2  (Supabase edge function)
-    │  2. verifies the caller owns the match, presigns a 1-hour R2 PUT
+  POST /api/splitstep/upload-url
+    │  2. verifies the caller owns the match, mints a 6-hour `cw` SAS
+    │     for exactly one blob name
     ▼
-  browser → R2 direct           bucket: advantage-videos
-    │  3. XHR PUT with progress, then writes video_object_key on the job row
+  browser → Azure direct        container: advantage-videos
+    │  3. Put Block × N (8 MiB each) → Put Block List,
+    │     then writes video_object_key on the job row
     ▼
-  POST /api/splitstep/jobs
-    │  4. ownership → quota reservation → mint vendor URL → submit → record
+  POST /api/splitstep/jobs      ← nothing calls this yet; see §10
+    │  4. ownership → quota reservation → mint vendor SAS → submit → record
     ▼
   SplitStep
-    │  5. fetches the video through OUR Worker, not from R2 directly
-    │     advantage-video-access.advantage-analytics.workers.dev/v/{token}
+    │  5. GETs the blob directly from Azure with the read SAS.
+    │     Their API accepts no other host.
     ▼
   POST /api/webhooks/splitstep
        6. verify HMAC → record every delivery → return 200
-          → download results JSON in after() → store
+          → download results JSON in after() → store → delete the source blob
 ```
 
-Steps 1–3 are the upload path (dklopstein). Steps 4–6 are submission, serving and
-results.
+Steps 1–3 are the upload path. Steps 4–6 are submission, serving and results.
+
+Note step 4: submission is still a **hand-run script** (`scripts/splitstep-submit.ts`).
+The wizard stops at `status: 'uploaded'` and nothing in the app POSTs to
+`/api/splitstep/jobs`. That is deliberate until one job has round-tripped — it means
+you read the payload before anything is spent.
 
 ---
 
-## 2. Two buckets, two systems — and the one coupling that bites
+## 2. Two stores, two systems
 
 | Artifact | Where | Why there |
 |---|---|---|
-| Original video, 1–5 GB | **R2** `advantage-videos` | vendor egress is free on R2; the Worker logs their fetch |
+| Original video, 1–8 GB | **Azure Blob** `advantage-videos` | the only host the vendor's `VideoUrl` accepts (§3) |
 | Raw results JSON, ~1 MB | **Supabase Storage** `match-results` (private) | beside `match-data`, and next to the Edge Function that will read it |
 | Webhook envelopes, ~1 KB | Postgres `splitstep_webhook_deliveries` | needs to be transactional with the job row |
 
-Results JSON was originally specced for R2. It moved: at ~1 MB, R2's zero-egress
-advantage is worth pennies, nobody external reads it, and the derivation engine that
-will consume it runs in Supabase. **Put the data next to whatever computes on it.**
-The video stays in R2 because the *vendor* computes on it.
+Results JSON was originally specced for R2. It moved: at ~1 MB, egress cost is worth
+pennies, nobody external reads it, and the derivation engine that will consume it runs
+in Supabase. **Put the data next to whatever computes on it.** The video sits in Azure
+because that is the only place the *vendor* can read it from.
 
-> ### The coupling
->
-> `R2_BUCKET_VIDEOS` (Supabase edge function secret) and `bucket_name` in
-> `workers/video-access/wrangler.toml` **must be the same string**. They are the
-> write side and the read side of the same object.
->
-> This already went wrong once. A second bucket `advantage-match-videos` was created
-> on the assumption that `advantage-videos` was a stray; it was not, it was the one
-> the upload path writes to. The Worker read from the empty one. Symptom: upload
-> succeeds, `video_object_key` is recorded, and the vendor 404s on every fetch, with
-> nothing looking wrong at either end. Both now say `advantage-videos`, and the edge
-> function requires the variable rather than defaulting, so it cannot drift silently
-> again.
+The blob name is unchanged from the R2 key: `videos/{userId}/{matchId}/original.{ext}`,
+still produced by `videoObjectKey()` in `object-keys.ts`. Keeping it matters — the
+orphan sweeper identifies a stray by the match id in the **third path segment**, so a
+tidier flat layout would have broken it silently.
+
+> **The coupling that used to bite is gone.** `R2_BUCKET_VIDEOS` and `bucket_name` in
+> `workers/video-access/wrangler.toml` had to be the same string — the write side and
+> the read side of the same object, in two systems, with nothing but a human enforcing
+> it. That drifted once and produced a perfect silent failure: uploads succeeded,
+> `video_object_key` was recorded, and the vendor 404'd on every fetch with nothing
+> looking wrong at either end. With one store there is one name, in one variable.
 
 ---
 
-## 3. Why a Worker instead of a presigned R2 URL
+## 3. Why Azure, and what it cost us
 
-The vendor needs a URL they can GET the video from. The obvious answer is a presigned
-S3 URL. We do not use one.
+Not a preference. The vendor's API docs constrain `VideoUrl` to
+`https://<account>.blob.core.windows.net/<container>/<blob>`, "normally with a SAS
+token", and state that other hosts are not supported. Asked directly whether that was
+advisory, they said it was not: *"It needs to be an azure blob, unfortunately."*
 
-A presigned URL cannot be revoked once issued, caps at 7 days (SigV4), and gives no
-signal that anyone ever fetched it. The vendor confirmed they **fetch the video only
-when a GPU worker actually starts the job**, not at submit — and they declined to send
-a "processing started" webhook.
+Everything before that answer served the video from our own infrastructure — R2 behind
+a Cloudflare Worker at `/v/{token}`. It worked, it was cheaper, and the vendor could
+not read it.
 
-So the Worker's download log *is* the processing-started signal they do not provide:
+### What the Worker was for, and what replaced each part
 
-- `processing_jobs.vendor_first_downloaded_at` — when they actually began
-- `vendor_last_downloaded_at`, `vendor_request_count` — retries and range requests
+R2 had no consumer other than the vendor. In-app playback uses a local object URL, not
+the stored file, so when the vendor stopped being able to fetch from our host, the
+whole store lost its reason to exist. Three things justified it:
 
-`workers/video-access/src/index.ts` serves `/v/{token}`, trades the opaque token for
-an object key via the `resolve_video_access_token()` SECURITY DEFINER function (which
-also writes that log), and streams from R2 through an R2 binding — no S3 credentials
-in the Worker at all. Tokens are 32 bytes of base64url, bound to a job, revoked when
-the job reaches a terminal state.
+| Driver | Under the Worker | Now |
+|---|---|---|
+| **Cost** | zero R2 egress on 1–8 GB pulls | ~$0.09/match. Real, and irrelevant at pilot volume |
+| **Observability** | `vendor_first_downloaded_at`, written by `resolve_video_access_token()` on every fetch — the "processing started" signal the vendor declined to send | **lost.** The replacement is their own `GET {BASE_URL}/jobs/{job_id}`, which is a better signal anyway — their actual queue state instead of our inference from a download log. Not wired yet (§10) |
+| **Revocability** | kill one job's URL on demand | **lost.** See below |
 
-Range requests work: verified against the real 1.93 GB match video, `206` with correct
-`content-range` for offset, mid-file and suffix ranges.
+### Revocation, honestly
+
+A SAS signed with the storage account key **cannot be withdrawn**. The signature is
+verified arithmetically, so the only kill switches are rotating the account key (kills
+every URL at once) or deleting the blob. Container stored-access-policies would give
+per-policy revocation, but Azure allows five per container — they cannot be per-job.
+
+`revoke()` still exists and still writes `video_token_revoked_at`, but it is
+**bookkeeping only**. Its one caller is the submit-failure path, where the POST never
+reached the vendor and nobody outside this system has seen the URL, so the recorded
+intent and the real exposure agree. If that stops being true, delete the blob.
+
+Two things bound the exposure instead, and neither is as good as a kill switch:
+
+1. `VENDOR_URL_TTL_SECONDS`, cut from 30 days to **14**. It was 30 when the number cost
+   nothing; now the TTL *is* the exposure rather than a ceiling above it.
+2. **Deleting the source blob once results are stored** (§6). This is the real bound,
+   and it is new — nothing deleted videos post-completion under R2 either.
+
+Note the earlier version of this section argued a presigned URL was unusable because
+SigV4 caps expiry at 7 days. Azure SAS has no equivalent ceiling, so that constraint no
+longer applies to anything here.
 
 ---
 
-## 4. What changed in `upload-video-r2`, and why
+## 4. The upload path
 
-The function was deployed eight times but existed nowhere in git — only on Supabase's
-servers. It is now committed at `supabase/functions/upload-video-r2/`, and the repo
-copy matches what is deployed.
+Two Supabase edge functions became one Next.js route. `upload-video-r2` and
+`delete-video-r2` existed because the Next runtime held no storage credentials — under
+Azure it must, since the same account key signs the vendor's read SAS. Keeping them
+would have meant the same secret in two places.
 
-Two changes on top of the original (deployed as **version 9**):
+**`POST /api/splitstep/upload-url`** — auth via the normal `createClient()` session,
+ownership checked with the admin client, returns a `cw` SAS for one blob name.
 
-**Required config instead of placeholder fallbacks.** It used to read
-`Deno.env.get("R2_ACCOUNT_ID") || "filler_account_id"` and the same for the two keys
-and the bucket. A placeholder still produces a perfectly well-formed presigned URL —
-against a host that does not exist — so a missing secret surfaced at PUT time as an
-opaque DNS or signature error, nowhere near the cause. They now throw, the log names
-the variable, and the caller gets a 503 rather than the variable name.
+- `cw` — create and write, the minimum Put Block and Put Block List need. No read, no
+  delete, no list. Whoever holds the URL can put bytes at exactly one name.
+- **Six hours**, not the one hour the R2 presign used. The validator accepts just under
+  8 GB; at 10 Mbps that transfer takes ~1.8 hours, so the old window would have expired
+  mid-upload with nothing but a 403 on a block PUT to explain it.
+- The blob name comes from `videoObjectKey()`, which **throws** on a container outside
+  `.mp4`/`.mov`. The old edge function's regex silently defaulted an unrecognised name
+  to `.mp4`, producing a blob whose extension disagreed with its bytes.
 
-**`contentType` is no longer applied to the presign.** This was already true in
-version 8 and is now documented rather than left as dead code. Signing with
-`ContentType` binds the signature to that exact header, so the browser must then send
-a byte-identical `Content-Type` or R2 rejects the PUT with `SignatureDoesNotMatch`.
-Dropping it from the presign is what fixed that. The field stays on the request
-interface for compatibility.
+**`src/lib/services/upload/azure-block-upload.ts`** — the browser side. Deliberately no
+SDK: `@azure/storage-blob` exists to build credentials, and this code is handed one, so
+including it would put a few hundred KB in the client bundle to gain nothing.
+`next.config.ts` lists it under `serverExternalPackages` to keep that true.
 
-`verify_jwt` is **false** at the platform level — deliberately. The handler does its
-own check: requires an `Authorization` header, resolves the real user via
-`getUser()`, and 403s unless `match.created_by` matches. Do not flip `verify_jwt` on
-without checking the client still works.
+```
+PUT {sas}&comp=block&blockid={id}    once per 8 MiB chunk
+PUT {sas}&comp=blocklist             once, naming the ids in order
+```
+
+Three things worth knowing:
+
+- **A single PUT could never have worked.** Azure's Put Blob caps below the ~7.45 GB the
+  validator accepts. So did R2's 5 GiB single-PUT ceiling — the old path had the same
+  defect and nobody had hit it yet.
+- **Nothing is visible at the blob name until the block list commits.** An abandoned
+  upload leaves uncommitted blocks that Azure garbage-collects after a week, rather than
+  a corrupt half-video that looks complete.
+- **Block ids must be equal-length base64** or the commit is rejected. They are the
+  index zero-padded to six digits — enough for 20× the 50,000-block ceiling, so the
+  width never changes with file size.
+
+Each block retries up to three times on a dropped connection or a 5xx, and never on a
+403 — that is an expired SAS, and retrying just spends three attempts reaching the same
+answer.
+
+> **CORS is the failure you will hit first.** The upload goes straight from the browser
+> to Azure, so the storage account needs a CORS rule on the **blob service** before any
+> of this works. Without it the browser reports an indistinguishable network error with
+> no CORS wording anywhere. Allowed methods `PUT, GET, HEAD, OPTIONS`; allowed headers
+> `x-ms-blob-type, x-ms-blob-content-type, x-ms-version, content-type`. The error
+> message in `azure-block-upload.ts` names CORS explicitly for this reason.
 
 ---
 
@@ -168,12 +232,16 @@ What it does, in order:
 
 ### Authentication, in detail
 
-The docs give the algorithm but **never name the header**. So rather than guessing one
-and failing silently on the first real delivery, `SIGNATURE_HEADERS` is a candidate
-list — `x-splitstep-signature`, `x-webhook-signature`, `x-signature`,
-`x-signature-256`, `x-hub-signature-256`, `signature`, `x-webhook-secret`,
-`x-api-key`, `authorization` — checked in order. Same tactic `webhook-payload.ts`
-already uses for body keys.
+The signature arrives in **`X-HMAC-Signature`** — confirmed by the vendor by email and
+since added to their published docs. It leads `SIGNATURE_HEADERS`.
+
+The rest of that list (`x-splitstep-signature`, `x-webhook-signature`, `x-signature`,
+`x-signature-256`, `x-hub-signature-256`, `signature`, `x-webhook-secret`, `x-api-key`,
+`authorization`) stays, for two reasons. It is still a cheap hedge until a real delivery
+confirms the documented name in practice. And the same array is the **redaction set**
+for `safeHeaders()` — dropping `authorization` or `x-api-key` from it would start
+writing credential values into `splitstep_webhook_deliveries`, which is worse than
+carrying a few dead candidates.
 
 Three outcomes, and the asymmetry is deliberate:
 
@@ -193,9 +261,11 @@ received, which is exactly what identifies the right one.
 
 > **Flip this before real athlete video goes through.** Set
 > `SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE=true` as soon as one real delivery has confirmed
-> the header name, then collapse `SIGNATURE_HEADERS` to that one value. Leaving it
-> fail-open past the first successful delivery is the single largest security debt in
-> this integration.
+> `X-HMAC-Signature` in practice. Leaving it fail-open past the first successful
+> delivery is the single largest security debt in this integration.
+>
+> Do **not** collapse `SIGNATURE_HEADERS` to one entry when you do — it doubles as the
+> redaction set, as above.
 
 If `SPLITSTEP_WEBHOOK_SECRET` is unset entirely, the route runs unsigned and accepts
 anything, logging a warning on every delivery.
@@ -242,24 +312,37 @@ is lost.
 
 ## 6. Deleting a match — where the bytes go
 
-Deleting a match used to remove the row and leave everything else behind. A 1–5 GB
-video stranded in R2 with nothing left that could even name it: the object key lives on
+Deleting a match used to remove the row and leave everything else behind. A multi-GB
+video stranded with nothing left that could even name it: the object key lives on
 `processing_jobs`, which cascades away with the match.
 
 `DELETE /api/matches/[matchId]` now runs three cleanups **before** the row delete, and
 that ordering is load-bearing for exactly that reason. They run concurrently under
 `Promise.all` — none reads another's output — each with its own `try`/`catch`:
 
-1. **Source video in R2** → delegated to the `delete-video-r2` edge function. The Next
-   runtime has no S3 client and no R2 keys; duplicating them there for one call would
-   widen the credential surface for nothing. The function mirrors `upload-video-r2`'s
-   ownership check, dedupes keys across every job for the match, and issues one
-   `DeleteObjects`.
+1. **Source video blob**, deleted inline. This runtime already holds the storage account
+   key because the same key signs the vendor's read SAS; under R2 it did not, which is
+   the only reason this was ever a separate edge function. Blob names are deduped across
+   every job for the match, since a re-submitted match points several jobs at one blob.
 2. **Raw results JSON** in `match-results`, keyed off `processing_jobs.results_object_key`.
 3. **Uploaded provider files** (SwingVision `.xlsx` and friends) in `match-data`.
 
 Every step is **best-effort**. A stranded file is recoverable; a match the user cannot
 delete is not. Storage failures log and the row delete proceeds regardless.
+
+### The source video is deleted when the job completes
+
+New, and the thing that makes a 14-day unrevocable SAS acceptable. In the webhook's
+`after()` block, once `finalize_splitstep_results` confirms the results JSON is stored,
+the source blob is deleted.
+
+Strictly in that order. While the video is the only copy of the match it is also the
+only way to re-run a job, so deleting before the results are safe would trade a
+recoverable failure for an unrecoverable one. It only fires on success — a `failed` job
+keeps its video, because the whole point of a retry is having something to retry with.
+
+Best-effort by construction: every failure logs and returns. Nothing is lost if it
+misses — the sweeper catches the blob once the match is gone.
 
 ### Webhook deliveries cascade too
 
@@ -286,9 +369,16 @@ third path segment in every layout we write, which is what identifies an orphan.
 or the wrong project than a genuinely empty database, and without that guard it would
 wipe everything.
 
-R2 is skipped unless `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` are
-in `.env.local`. Those normally live only in the Supabase edge-function secrets — copy
-them in when you want to sweep, because R2 is the bucket where an orphan costs money.
+The video container is skipped unless `AZURE_STORAGE_ACCOUNT` and `AZURE_STORAGE_KEY`
+are in `.env.local` — copy them from Vercel when you want to sweep, because that is
+where an orphan costs money.
+
+One Azure-specific wrinkle in `removeBatch`: `sweep()` breaks out of its delete loop on
+the first throw, on the reasoning that a throwing batch means a transport or credential
+failure and the rest would fail identically. Azure's `deleteBlob` throws on a 404, so
+the store uses `deleteIfExists` **and** its own per-key `try`/`catch` — otherwise one
+already-deleted blob would abort the entire sweep. The R2 entry got this for free
+because S3 returns per-key failures in the response body instead of throwing.
 
 Its first real run freed ~360 MB of pre-existing strays. Both live videos were verified
 intact afterwards.
@@ -304,10 +394,16 @@ never touched the database — every status word and percentage on screen was in
 It is gone. `src/lib/data/match-analysis-server.ts` reads real `processing_jobs` rows,
 one query for a whole page rather than one per row.
 
-**Progress is stored, not just displayed.** The browser uploads straight to R2 and is
+**Progress is stored, not just displayed.** The browser uploads straight to Azure and is
 the only party that knows how it is going. `processing_jobs.upload_progress_percent`
-(nullable `smallint`, 0–100) is written coarsely — every ~10%, since a 2 GB upload fires
-hundreds of progress events and the bar cannot show more than a tenth anyway.
+(nullable `smallint`, 0–100) is written coarsely — **on a 2-point move or every 60
+seconds, whichever comes first**.
+
+That rule replaced `pct % 10 === 0`, which had a real bug: a chunk boundary that stepped
+over a multiple of ten skipped the write entirely. On a slow upload enough skips in a
+row is 15 minutes of silence, and the reaper marks the job failed underneath an upload
+that is still running. The 60-second floor is what makes that impossible regardless of
+chunk size.
 
 **A percentage is shown only while uploading.** The vendor sends queue and analysis
 transitions with no percentage attached, so a bar for those stages would be invented
@@ -349,38 +445,39 @@ model exists.
 
 Short answer: **all of it, except one file.**
 
-The pipeline is server-side and database-backed. Nothing about R2, the Worker, the
-webhook, quota or job state depends on how a component looks, what it is called, or
-where it renders. Restyling, re-laying-out, splitting or renaming presentational
-components cannot break the integration.
+The pipeline is server-side and database-backed. Nothing about storage, the webhook,
+quota or job state depends on how a component looks, what it is called, or where it
+renders. Restyling, re-laying-out, splitting or renaming presentational components
+cannot break the integration.
 
 | Layer | Files | Safe to redesign? |
 |---|---|---|
 | Wizard presentation | `new-match-wizard/{ConfirmContent,DetailsContent,ProviderContent,ScoreCell,StepIndicator,UploadContent,VideoMetaFields,VideoStepContent,styles}.tsx` | **Yes, freely** |
 | Matches list & detail | everything under `components/dashboard/matches/` except the wizard hook | **Yes, freely** |
 | Wizard orchestration | `new-match-wizard/useUploadMatchWizard.ts` | **Careful — see below** |
-| Everything server-side | `api/splitstep/jobs/`, `api/webhooks/splitstep/`, `lib/services/splitstep/`, `supabase/functions/`, `workers/` | Untouched by UI work |
+| Everything server-side | `api/splitstep/`, `api/webhooks/splitstep/`, `lib/services/splitstep/`, `lib/services/upload/`, `supabase/functions/` | Untouched by UI work |
 
 ### The one file to be careful with
 
-`useUploadMatchWizard.ts`, roughly **lines 780–920**. That block is the entire
+`useUploadMatchWizard.ts`, roughly **lines 780–930**. That block is the entire
 browser-side upload contract, and it is four things in sequence:
 
-1. `supabase.functions.invoke("upload-video-r2")` → presigned PUT URL + object key
-2. `XMLHttpRequest` PUT to that URL — **XHR, not `fetch`, deliberately**: `fetch` has no
-   upload-progress event, and progress is the whole point
-3. `xhr.upload.onprogress` → writes `upload_progress_percent` every ~10%
-4. `video_object_key` written to the job row, then `POST /api/splitstep/jobs`
+1. `POST /api/splitstep/upload-url` → write SAS + blob name
+2. `uploadFileInBlocks()` from `lib/services/upload/azure-block-upload.ts` — the chunked
+   transfer. **XHR, not `fetch`, deliberately**: `fetch` still has no upload-progress
+   event, and progress is the whole point
+3. its `onProgress` callback → writes `upload_progress_percent`
+4. `video_object_key` written to the job row, `status: 'uploaded'`
 
 Four rules keep it working no matter what the UI looks like:
 
-- **Do not send a `Content-Type` the presign did not sign for.** The presign
-  deliberately omits `ContentType` (§4); the PUT sends `video/mp4` as a fallback. If you
-  change one side, change both, or R2 answers `SignatureDoesNotMatch`.
+- **Never log the SAS URL.** It is a six-hour write credential, and the browser console
+  outlives the upload — it survives screen shares, extensions, and anyone opening
+  devtools. Log the blob name, which is what you want when debugging anyway.
 - **Keep writing `upload_progress_percent`.** Stop and the reaper (§7) fails the job
   after 15 minutes of silence — the progress write *is* the heartbeat.
-- **Keep `video_object_key` written before `POST /api/splitstep/jobs`.** The submit
-  route reads it to mint the vendor URL.
+- **Keep the `beforeunload` guard around the whole transfer.** The wizard has already
+  closed by then, so it is the only thing telling the user the work is not finished.
 - **The upload outlives the wizard.** It continues in the background after the user
   navigates away. If you change navigation or unmount behaviour, verify a large upload
   still completes.
@@ -406,17 +503,30 @@ ordering, and match-deletion cleanup. What remains is almost entirely vendor-sid
 
 **Blocking, on the vendor:**
 
-- **The signature header name is still unknown**, so the webhook remains fail-open on a
-  missing signature (§5). This closes the moment one real delivery lands.
-- **`SPLITSTEP_API_URL` and `SPLITSTEP_API_KEY` are still not issued**, so nothing has
-  been submitted end-to-end. Everything downstream of submission has only been exercised
-  against the local harness.
+- **`SPLITSTEP_API_URL` and `SPLITSTEP_API_KEY` are not yet in hand.** The key and the
+  webhook secret are being sent in separate emails, the link valid two days and
+  single-use. Nothing has been submitted end-to-end; everything downstream of submission
+  has only been exercised against the local harness.
+- **The 8,000,000,000-byte size limit is unconfirmed for our account.** Their docs mark
+  it "Enforced"; an earlier call put it at 10–12 GB. `MAX_VIDEO_SIZE_BYTES` takes the
+  documented number, because rejecting at the file picker is recoverable and having the
+  vendor refuse an uploaded file is not. Ask before raising it back.
 - **Phase 2 (derivation) is gated on three answers** — see §11.
 
 **Ours, not blocking:**
 
-- **The job status endpoint is unused.** `GET {BASE_URL}/jobs/{job_id}` exists and is the
-  recovery path for a delivery lost to an outage. Nothing calls it yet.
+- **Nothing calls `POST /api/splitstep/jobs`.** The wizard stops at `status: 'uploaded'`
+  and submission is a hand-run `scripts/splitstep-submit.ts`. Deliberate until one job
+  round-trips; wiring it is the obvious next piece of work.
+- **The job status endpoint is unused, and now matters more.**
+  `GET {BASE_URL}/jobs/{job_id}` is both the recovery path for a delivery lost to an
+  outage *and* the replacement for `vendor_first_downloaded_at`, which the move to Azure
+  stopped populating (§3). Nothing calls it yet.
+- **`vendor_first_downloaded_at`, `vendor_last_downloaded_at` and `vendor_request_count`
+  are now permanently null.** Only the Worker wrote them. Nothing in `src/` reads them,
+  but `docs/ux-overhaul-brief.md` plans a "Processing" status on the first — that plan
+  needs the job-status endpoint instead. The columns are left in place rather than
+  dropped; decide once the replacement is wired.
 - **`video_id` and the structured `error` object are not promoted to columns.** The
   failure payload carries `error.code` / `category` / `step`; only the free-text
   `message` reaches `processing_jobs.error_message`. The full object is retained in
@@ -459,21 +569,26 @@ branch. The three that block Phase 2 are **Q8** (what `in` means on a serve), **
 
 | Variable | Where | Notes |
 |---|---|---|
-| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | Supabase edge fn secrets | S3 API, used only to presign uploads |
-| `R2_BUCKET_VIDEOS` | Supabase edge fn secrets | **must equal** `bucket_name` in wrangler.toml |
-| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Worker secrets (`wrangler secret put`) | token resolution |
-| `R2_PUBLIC_WORKER_URL` | Vercel | the Worker origin handed to the vendor |
+| `AZURE_STORAGE_ACCOUNT` | Vercel, **per environment** | storage account name |
+| `AZURE_STORAGE_KEY` | Vercel, **per environment** | account key. Signs **both** the browser's write SAS and the vendor's read SAS |
+| `AZURE_STORAGE_CONTAINER` | Vercel, **per environment** | `advantage-videos` |
 | `NEXT_PUBLIC_SITE_URL` | Vercel, **per environment** | builds the vendor's WebhookUrl. One value shared across Production and Preview means a preview hands them the production origin, where the route does not exist |
-| `SPLITSTEP_WEBHOOK_SECRET` | Vercel | HMAC key. Unset = unsigned mode, which accepts anything |
-| `SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE` | Vercel | `true` = fail-closed on a missing signature. **Set this once the header name is known** |
-| `SPLITSTEP_API_URL`, `SPLITSTEP_API_KEY` | Vercel | still blocked on the vendor |
+| `SPLITSTEP_WEBHOOK_SECRET` | Vercel | HMAC key, **issued by the vendor**. Unset = unsigned mode, which accepts anything |
+| `SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE` | Vercel | `true` = fail-closed on a missing signature. **Set this once a real delivery confirms `X-HMAC-Signature`** |
+| `SPLITSTEP_API_URL`, `SPLITSTEP_API_KEY` | Vercel | key issued by the vendor; still in transit |
+| `R2_*` | — | **retired.** Still in `.env.example` until the R2 code is deleted; nothing reads them |
 
-The Worker reads video through an **R2 binding**, not S3 credentials. The R2 API keys
-exist only for the upload presign.
+Note that the account key is the only credential and it does everything, which is why
+the write SAS is scoped to `cw` on one blob name — that scope is the containment, not
+the key.
 
-`.env.example` carries names only, never values. Worker secrets go in via
-`wrangler secret put`, which prompts — never pass a secret on the command line, it lands
-in shell history.
+Per-environment matters as much here as it does for `NEXT_PUBLIC_SITE_URL`. A Preview
+deployment sharing Production's storage account is not a smaller problem than sharing an
+origin: it is test uploads landing in the container real athlete video lives in.
+
+`.env.example` carries names only, never values. Both vendor secrets arrive over a
+single-use link — put them straight into Vercel, and never paste one into a terminal
+where it lands in shell history.
 
 ---
 
@@ -507,6 +622,22 @@ first frame (not player1), and `SetGameScores` is ordered top-player-first. Get 
 backwards and every statistic is attributed to the wrong player with nothing looking off
 in the UI.
 
+### Testing the storage path without the vendor
+
+The SAS mint is verifiable on its own, and it is worth doing before spending a job —
+what the vendor does with the URL is exactly what `curl` does:
+
+```bash
+curl -sI "<the VideoUrl the dry run printed>"
+```
+
+`200` with a `content-length` matching the file means the vendor can fetch it. `403`
+with `AuthenticationFailed` means the SAS is wrong, expired, or not yet valid — the last
+of which is why every SAS is backdated five minutes for clock skew.
+
+For the upload path, **test with a file over 256 MB.** Anything smaller commits in a
+single block and proves nothing about chunking, which is the part that is new.
+
 ---
 
 ## 14. Gotchas that will each cost you an hour
@@ -520,10 +651,19 @@ database already has. After applying through the MCP, read the version back out 
 `supabase_migrations.schema_migrations` and rename the file to match. Ten older files
 still carry this drift.
 
-**`wrangler r2` reads a LOCAL simulated bucket by default.** `wrangler r2 object get`
-will tell you a real 800 MB object "does not exist". Pass `--remote`. Relatedly,
-`wrangler r2 bucket info` metrics are cached and stale — an S3 `ListObjectsV2` is the
-only authoritative answer.
+**A missing Azure CORS rule looks exactly like a network outage.** The browser blocks
+the cross-origin PUT and reports an indistinguishable error with no CORS wording, so the
+job fails with a message that points nowhere near the cause. It is the first thing to
+check on a new storage account. (§4 lists the rule.)
+
+**Azure's `deleteBlob` throws on 404, unlike S3.** Anywhere a delete runs in a loop, use
+`deleteIfExists` and catch per key — the orphan sweeper aborts its whole run on the
+first throw, so one already-deleted blob would silently stop the sweep. (§6.)
+
+**A SAS that is "not yet valid" returns the same 403 as an expired one.** If the server
+clock runs fast, a freshly minted SAS is rejected with `AuthenticationFailed` and
+nothing indicates the start time is the problem. Every SAS here is backdated five
+minutes for that reason; do not remove it.
 
 **Anything added to `processing_jobs_status_check` must also be added to
 `splitstep_status_rank()`.** They are two halves of one state machine and nothing
