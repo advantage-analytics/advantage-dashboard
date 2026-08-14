@@ -6,7 +6,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown, X } from "lucide-react";
 import { EmptyMatches } from "./empty-matches";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
-import { isAnalysisFailed, isInFlight } from "@/lib/data/match-analysis";
+import {
+  isAnalysisFailed,
+  isInFlight,
+  isLiveUpdating,
+} from "@/lib/data/match-analysis";
 import {
   useLiveMatchAnalysis,
   withLiveAnalysis,
@@ -253,8 +257,11 @@ export function MatchesPageContent({
   // Trade-off: a match that enters flight from ANOTHER tab will not light up
   // here without a refresh. Acceptable — uploads start from this app, in the
   // tab the user is already looking at.
+  // isLiveUpdating, not isInFlight. A match parked at `processed` is in flight
+  // but nothing will move it until Phase 2 ships, so subscribing for it would
+  // hold the socket described above open forever rather than briefly.
   const hasInFlight = serverMatches.some(
-    (m) => m.analysis && isInFlight(m.analysis.status)
+    (m) => m.analysis && isLiveUpdating(m.analysis.status)
   );
   const livePatches = useLiveMatchAnalysis({
     by: "user",

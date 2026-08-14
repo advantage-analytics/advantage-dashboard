@@ -63,7 +63,10 @@ export type LiveAnalysisPatch = Pick<
  */
 export type LiveAnalysisFilter =
   | { by: "user"; userId: string | undefined }
-  | { by: "match"; matchId: string };
+  // Undefined for the same reason `userId` is: it is how a caller says "there is
+  // nothing worth following here", and the effect below skips the channel
+  // entirely rather than joining one no event will ever arrive on.
+  | { by: "match"; matchId: string | undefined };
 
 export function useLiveMatchAnalysis(
   filter: LiveAnalysisFilter

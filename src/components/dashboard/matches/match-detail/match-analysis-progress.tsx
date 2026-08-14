@@ -17,6 +17,7 @@ import {
   PIPELINE_STAGES,
   formatEta,
   isAnalysisFailed,
+  isLiveUpdating,
   isWorking,
   uploadEtaSeconds,
   stageFillPercent,
@@ -61,7 +62,15 @@ export function MatchAnalysisProgress({
   // Without this the matches list climbed live while this page sat frozen at
   // whatever the server rendered — same row, same query, two different numbers
   // on screen at once.
-  const livePatches = useLiveMatchAnalysis({ by: "match", matchId });
+  //
+  // Gated on isLiveUpdating so a match parked at `processed` does not hold a
+  // socket open for a row that cannot change until Phase 2 ships. Keyed off the
+  // SERVER status deliberately: reading the merged one would make the hook's
+  // input depend on its own output, and the socket closes on navigation anyway.
+  const livePatches = useLiveMatchAnalysis({
+    by: "match",
+    matchId: isLiveUpdating(serverAnalysis.status) ? matchId : undefined,
+  });
   const analysis = withLiveAnalysis(serverAnalysis, livePatches.get(matchId));
   const currentIndex = stageIndexFor(analysis.status);
   const failed = isAnalysisFailed(analysis.status);

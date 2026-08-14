@@ -331,10 +331,17 @@ video stranded with nothing left that could even name it: the object key lives o
 that ordering is load-bearing for exactly that reason. They run concurrently under
 `Promise.all` — none reads another's output — each with its own `try`/`catch`:
 
-1. **Source video blob**, deleted inline. This runtime already holds the storage account
-   key because the same key signs the vendor's read SAS; under R2 it did not, which is
-   the only reason this was ever a separate edge function. Blob names are deduped across
-   every job for the match, since a re-submitted match points several jobs at one blob.
+1. **Video blobs**, deleted inline — **both** `video_object_key` and
+   `trimmed_object_key`. This runtime already holds the storage account key because the
+   same key signs the vendor's read SAS; under R2 it did not, which is the only reason
+   this was ever a separate edge function. Blob names are deduped across every job for
+   the match, since a re-submitted match points several jobs at one source blob; trimmed
+   keys are per-job and naturally distinct.
+
+   > Reading only the source key was a live bug for one commit. Once the reclaim pass has
+   > removed the source, the trimmed copy is the **only** video for that match, so
+   > deleting the match stranded several GB with nothing able to name it — precisely the
+   > leak this whole section exists to prevent.
 2. **Raw results JSON** in `match-results`, keyed off `processing_jobs.results_object_key`.
 3. **Uploaded provider files** (SwingVision `.xlsx` and friends) in `match-data`.
 
@@ -357,12 +364,38 @@ whole point of a retry is having something to retry with.
 
 Two consequences worth knowing rather than discovering:
 
-- **In practice the webhook usually declines.** A cross-account copy of a real match is
-  still `pending` when the request ends, so the delete defers to
-  `scripts/cleanup-orphan-storage.ts`, which sweeps sources whose trimmed copy has since
-  reached `success`. Until that runs, the vendor's read SAS on the original stays live.
+- **In practice the webhook always declines.** A cross-account copy of a real match is
+  still `pending` when the request ends, and a redelivery cannot pick it up either —
+  by then both artifacts are recorded, so the webhook takes no `after()` path at all.
+  The delete therefore belongs to the scheduled pass below, not to the webhook.
 - **A job whose payload carried no trimmed url keeps its source indefinitely.** Also
   deliberate. One video beats none.
+
+### The scheduled reclaim
+
+`reclaimSupersededSources()` in `src/lib/services/splitstep/reclaim-videos.ts` is the
+pass that actually removes source videos. Two callers, one definition:
+
+- **`/api/cron/reclaim-videos`**, daily at 04:00 UTC via `vercel.json`. This is the
+  automatic path, and it exists because the webhook's own delete is unreachable in
+  practice — without it, ~5 GB accumulated per completed match until a human ran a script.
+- **`scripts/cleanup-orphan-storage.ts`**, the manual handle: a dry run to see what would
+  go, and a way to force a sweep without waiting for the schedule.
+
+It clears `video_object_key` after a successful delete. Without that the same rows
+qualified on every run, re-issuing a no-op delete and reporting "N found / 0 deleted"
+forever — on a destructive script, indistinguishable from a broken sweep.
+
+A copy Azure reports `failed` or `aborted` is surfaced **separately** from one still
+running, and logged at error level. It means the job points at a trimmed video that does
+not exist, and `trimmed_video_url` — the only way to fetch it again — expires about a
+week after completion.
+
+> `CRON_SECRET` fails **closed**: unset, the route returns 503 and deletes nothing. That
+> is the opposite of the webhook's default and deliberately so. The webhook accepts an
+> unverifiable delivery because a refused one is gone permanently; here the repo is
+> public so the path is known, the endpoint destroys data, and a skipped run simply
+> happens tomorrow.
 
 Best-effort by construction: every failure logs and returns.
 
@@ -607,6 +640,7 @@ branch. The three that block Phase 2 are **Q8** (what `in` means on a serve), **
 | `SPLITSTEP_WEBHOOK_SECRET` | Vercel | HMAC key, **issued by the vendor**. Unset = unsigned mode, which accepts anything |
 | `SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE` | Vercel | `true` = fail-closed on a missing signature. **Set this once a real delivery confirms `X-HMAC-Signature`** |
 | `SPLITSTEP_API_URL`, `SPLITSTEP_API_KEY` | Vercel | key issued by the vendor; still in transit |
+| `CRON_SECRET` | Vercel | any long random string. Vercel sends it as `Authorization: Bearer <secret>` to `/api/cron/reclaim-videos`. **Unset = the reclaim never runs** and source videos accumulate |
 | `R2_*` | — | **retired.** Still in `.env.example` until the R2 code is deleted; nothing reads them |
 
 Note that the account key is the only credential and it does everything, which is why

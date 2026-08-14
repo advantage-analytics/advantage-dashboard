@@ -202,10 +202,10 @@ export async function DELETE(
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // Everything below runs BEFORE the row is deleted, and that ordering is
-  // load-bearing: `video_object_key` and `results_object_key` live on
-  // `processing_jobs`, which cascades away with the match. Delete first and the
-  // keys are gone, leaving objects that nothing can even name — a permanent
-  // multi-GB leak in the video store's case.
+  // load-bearing: `video_object_key`, `trimmed_object_key` and
+  // `results_object_key` all live on `processing_jobs`, which cascades away with
+  // the match. Delete first and the keys are gone, leaving objects that nothing
+  // can even name — a permanent multi-GB leak in the video store's case.
   //
   // Every step is best-effort. A stranded file is recoverable (see
   // scripts/cleanup-orphan-storage.ts); a match the user cannot delete is not.
@@ -227,7 +227,7 @@ export async function DELETE(
   // says so, and it prints the match id the sweeper will need.
   const { data: jobs, error: jobsError } = await supabase
     .from("processing_jobs")
-    .select("video_object_key, results_object_key")
+    .select("video_object_key, trimmed_object_key, results_object_key")
     .eq("match_id", matchId);
 
   if (jobsError) {
@@ -241,17 +241,27 @@ export async function DELETE(
   await Promise.all([
     (async () => {
       try {
-        // 1. Source video. Deleted inline rather than through an edge function:
+        // 1. Videos. Deleted inline rather than through an edge function:
         //    this runtime already holds the storage account key, because the
         //    same key signs the vendor's read SAS. Under R2 it did not, which is
         //    the only reason this was ever a separate deployable.
         //
-        //    Deduped: every job for this match points at the same blob name, so
-        //    a re-submitted match would otherwise delete the same blob twice.
+        //    BOTH keys, not just the source. `trimmed_object_key` is our copy of
+        //    the vendor's re-encode, and once the sweeper has removed the source
+        //    it is the ONLY video for this match — several GB of it. Reading one
+        //    key and not the other left it stranded the moment processing_jobs
+        //    cascaded away, which is precisely the leak the note above describes.
+        //
+        //    Deduped: every job for this match points at the same source blob, so
+        //    a re-submitted match would otherwise delete the same blob twice. The
+        //    trimmed keys are per-job and so are naturally distinct.
         const blobNames = [
           ...new Set(
             (jobs ?? [])
-              .map((j) => j.video_object_key as string | null)
+              .flatMap((j) => [
+                j.video_object_key as string | null,
+                j.trimmed_object_key as string | null,
+              ])
               .filter((k): k is string => Boolean(k))
           ),
         ];

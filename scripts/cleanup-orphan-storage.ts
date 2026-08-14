@@ -41,9 +41,9 @@ import {
   AZURE_STORAGE_ENV_VARS,
   deleteVideoBlob,
   resolveAzureStorageConfig,
-  trimmedCopyStatus,
   videoContainerClient,
 } from "../src/lib/services/splitstep/video-url";
+import { reclaimSupersededSources } from "../src/lib/services/splitstep/reclaim-videos";
 
 // Minimal .env.local loader (no dotenv dependency).
 try {
@@ -210,79 +210,42 @@ async function sweep(
  * bytes for matches that very much do. The justification is different too —
  * we hold a better copy of the same match, trimmed and re-encoded.
  *
- * This exists because the webhook usually cannot do it. It starts an Azure
- * server-side copy and returns; for a real match that copy is still `pending`
- * when the request ends, so the delete defers to here rather than blocking a
- * webhook on gigabytes. Until this runs, the original stays and the vendor's
- * 14-day read SAS on it stays live.
- *
- * Three conditions, all required, all checked per job:
- *   1. `trimmed_object_key` is set — a copy was started
- *   2. Azure reports that copy `success` — it actually finished
- *   3. `video_object_key` is set — there is a source to remove
+ * The logic lives in src/lib/services/splitstep/reclaim-videos.ts because
+ * /api/cron/reclaim-videos runs the same pass daily. This wrapper is the manual
+ * handle on it: a dry run to see what would go, and a way to force a sweep
+ * without waiting for the schedule.
  */
 async function sweepSupersededSources(): Promise<{
   candidates: number;
   deleted: number;
 }> {
-  const { data, error } = await supabase
-    .from("processing_jobs")
-    .select("id, video_object_key, trimmed_object_key")
-    .not("video_object_key", "is", null)
-    .not("trimmed_object_key", "is", null);
-
-  if (error) {
-    console.error("[superseded] could not read processing_jobs — skipping:", error);
-    return { candidates: 0, deleted: 0 };
-  }
-
-  const jobs = (data ?? []) as {
-    id: string;
-    video_object_key: string;
-    trimmed_object_key: string;
-  }[];
-
-  const ready: typeof jobs = [];
-  for (const job of jobs) {
-    // Per job rather than batched: Azure only reports copy state on the
-    // destination blob itself, and the candidate set is jobs that completed,
-    // which is dozens even in a busy month.
-    const status = await trimmedCopyStatus({ blobName: job.trimmed_object_key });
-    if (status === "success") {
-      ready.push(job);
-    } else {
-      console.log(`  · ${job.id}: trimmed copy ${status}, keeping source`);
-    }
-  }
+  const outcome = await reclaimSupersededSources({
+    supabase,
+    apply: APPLY,
+    log: (line: string) => console.log(`  · ${line}`),
+  });
 
   console.log(
-    `[superseded] jobs with a trimmed copy: ${jobs.length}, ` +
-      `copies confirmed complete: ${ready.length}`
+    `[superseded] jobs with a trimmed copy: ${outcome.examined}, ` +
+      `safe to reclaim: ${outcome.eligible}` +
+      (APPLY ? `, reclaimed: ${outcome.reclaimed}` : "") +
+      `, still copying: ${outcome.pending}`
   );
-  for (const job of ready.slice(0, 5)) console.log(`  - ${job.video_object_key}`);
-  if (ready.length > 5) console.log(`  … and ${ready.length - 5} more`);
 
-  let deleted = 0;
-  if (APPLY) {
-    for (const job of ready) {
-      try {
-        const res = await deleteVideoBlob({ blobName: job.video_object_key });
-        // `deleted: false` means it was already gone, which is the desired end
-        // state and not worth counting as work done.
-        if (res.deleted) deleted++;
-      } catch (err) {
-        console.error(
-          `[superseded] ${job.video_object_key}: ${
-            err instanceof Error ? err.message : String(err)
-          }`
-        );
-      }
+  if (outcome.broken.length > 0) {
+    console.error(
+      `[superseded] ${outcome.broken.length} trimmed copy/copies FAILED — the job ` +
+        `points at a video that does not exist. Re-copy from trimmed_video_url ` +
+        `before it expires (about a week after completion):`
+    );
+    for (const b of outcome.broken) {
+      console.error(`    ${b.jobId}  ${b.status}  ${b.blobName}`);
     }
-    console.log(`[superseded] deleted ${deleted}/${ready.length}.`);
   }
+
   console.log("");
 
-  return { candidates: ready.length, deleted };
+  return { candidates: outcome.eligible, deleted: outcome.reclaimed };
 }
 
 async function main() {

@@ -34,6 +34,10 @@ import { createHmac } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { RESULTS_BUCKET } from '../src/lib/services/splitstep/config';
 import {
+  resultsObjectKey,
+  trimmedObjectKey,
+} from '../src/lib/services/splitstep/object-keys';
+import {
   AZURE_STORAGE_ENV_VARS,
   deleteVideoBlob,
   resolveAzureStorageConfig,
@@ -185,15 +189,18 @@ async function deliveryCount(externalJobId: string): Promise<number> {
 
 /* ─── fixtures ─── */
 
-const createdJobIds: string[] = [];
-
 /**
- * Set once the webhook records where it copied the trimmed video, so cleanup
- * can remove it. Module-level rather than threaded through, for the same reason
- * createdJobIds is: cleanup() runs from the failure path too, and a test that
- * leaves multi-gigabyte blobs behind when it fails is worse than no test.
+ * Every job this run created, with the ids needed to DERIVE the object keys the
+ * webhook will write under.
+ *
+ * Deriving beats observing. An earlier version removed the results object only
+ * inside `if (key)` after its assertion passed, and the trimmed blob only after
+ * a poll succeeded — so the run that failed was exactly the run that leaked, and
+ * it did: an 82-byte result object sat in `match-results` under a real match
+ * until someone went looking. The keys are pure functions of these three ids, so
+ * cleanup can name them whether or not anything worked.
  */
-let trimmedBlobToClean: string | null = null;
+const createdJobs: { id: string; matchId: string; userId: string }[] = [];
 
 /**
  * Whether this machine can talk to Azure.
@@ -230,35 +237,57 @@ async function makeJob(externalJobId: string): Promise<{ id: string }> {
   if (error) throw new Error(`Could not create test job: ${error.message}`);
 
   const job = data as { id: string };
-  createdJobIds.push(job.id);
+  createdJobs.push({ id: job.id, matchId: row.id, userId: row.created_by });
   return job;
 }
 
 async function cleanup(): Promise<void> {
-  if (createdJobIds.length) {
-    await supabase.from('processing_jobs').delete().in('id', createdJobIds);
-  }
-  await supabase.storage.from(RESULTS_BUCKET).remove([FIXTURE_KEY, VIDEO_FIXTURE_KEY]);
+  // Object keys FIRST, while the ids are still meaningful, then the rows.
+  //
+  // Both keys are derived rather than read back from the job row, so a run that
+  // failed halfway still removes whatever the webhook managed to write. Removing
+  // a key that was never written is a no-op in both stores.
+  const resultKeys = createdJobs.map((j) =>
+    resultsObjectKey({ userId: j.userId, matchId: j.matchId, jobId: j.id })
+  );
 
-  // The blob the webhook copied into the real videos container. Nothing else
-  // will ever remove it: the sweeper only deletes blobs whose match is gone,
+  await supabase.storage
+    .from(RESULTS_BUCKET)
+    .remove([FIXTURE_KEY, VIDEO_FIXTURE_KEY, ...resultKeys]);
+
+  // Blobs the webhook copied into the REAL videos container. Nothing else will
+  // ever remove them: the orphan sweeper only deletes blobs whose match is gone,
   // and this test attaches to a match that very much still exists.
-  if (trimmedBlobToClean) {
-    if (azureConfigured) {
-      try {
-        await deleteVideoBlob({ blobName: trimmedBlobToClean });
-      } catch (err) {
-        console.error(
-          `Could not remove the test blob ${trimmedBlobToClean} — delete it by hand:`,
-          err instanceof Error ? err.message : err
-        );
-      }
-    } else {
+  for (const j of createdJobs) {
+    const blobName = trimmedObjectKey({
+      userId: j.userId,
+      matchId: j.matchId,
+      jobId: j.id,
+    });
+
+    if (!azureConfigured) {
       console.error(
-        `LEFTOVER: ${trimmedBlobToClean} is in the videos container and this ` +
-          `machine has no Azure credentials to remove it. Delete it by hand.`
+        `LEFTOVER: ${blobName} may be in the videos container and this machine ` +
+          `has no Azure credentials to remove it. Delete it by hand.`
+      );
+      continue;
+    }
+
+    try {
+      await deleteVideoBlob({ blobName });
+    } catch (err) {
+      console.error(
+        `Could not remove the test blob ${blobName} — delete it by hand:`,
+        err instanceof Error ? err.message : err
       );
     }
+  }
+
+  if (createdJobs.length) {
+    await supabase
+      .from('processing_jobs')
+      .delete()
+      .in('id', createdJobs.map((j) => j.id));
   }
   // Results the webhook itself wrote, under the real key layout.
   const { data: leftovers } = await supabase.storage
@@ -407,9 +436,9 @@ async function main(): Promise<void> {
 
     check("the vendor's url is recorded for recovery", Boolean(job?.trimmed_video_url));
 
+    // No bookkeeping for cleanup here — it derives the key from the job's ids,
+    // so a failure anywhere above still gets swept.
     if (job?.trimmed_object_key) {
-      trimmedBlobToClean = job.trimmed_object_key;
-
       if (azureConfigured) {
         // A few bytes cross-account still is not instantaneous, so poll. A real
         // match takes minutes, which is exactly why the source delete defers to

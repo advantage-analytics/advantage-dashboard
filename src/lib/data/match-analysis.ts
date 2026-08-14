@@ -358,6 +358,17 @@ const IN_FLIGHT = new Set<AnalysisStatus>([
  * the state will change — but animating them would claim work is happening.
  */
 const IDLE = new Set<AnalysisStatus>(["uploaded", "processed"]);
+/**
+ * In flight, but only a DEPLOY will move it — no running process will.
+ *
+ * `processed` waits on the derivation engine, which is gated on Q8/Q9/Q13. Until
+ * that ships, the row never changes, so no realtime event is ever coming.
+ *
+ * Distinct from IDLE, and the difference is the whole point: `uploaded` is also
+ * idle, but submission fires automatically within seconds, so it is very much
+ * worth watching. Empty this set when Phase 2 lands and delete it.
+ */
+const STALLED = new Set<AnalysisStatus>(["processed"]);
 const FAILED = new Set<AnalysisStatus>(["failed", "derivation_failed"]);
 const READY = new Set<AnalysisStatus>(["completed", "imported"]);
 
@@ -380,6 +391,25 @@ export function isInFlight(status: AnalysisStatus): boolean {
  */
 export function isWorking(status: AnalysisStatus): boolean {
   return IN_FLIGHT.has(status) && !IDLE.has(status);
+}
+
+/**
+ * Is a database update actually coming for this row?
+ *
+ * The question a Realtime subscription should ask, and it is NOT isInFlight.
+ * `processed` is in flight — it will change eventually — but only when Phase 2
+ * ships, which is a deploy rather than a running process. Subscribing on it
+ * meant every user holding one analysed match kept a WebSocket and a 25-second
+ * heartbeat open on every page visit, indefinitely, against a per-project
+ * connection cap. That is the exact cost the subscription guards exist to avoid,
+ * and isInFlight quietly stopped preventing it the moment `processed` was added.
+ *
+ * Not isWorking() either: `uploaded` does nothing right now, so it must not
+ * animate, but auto-submit moves it within seconds — so it absolutely should be
+ * watched. Three questions, three predicates.
+ */
+export function isLiveUpdating(status: AnalysisStatus): boolean {
+  return IN_FLIGHT.has(status) && !STALLED.has(status);
 }
 
 export function isAnalysisFailed(status: AnalysisStatus): boolean {
