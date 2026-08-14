@@ -1,14 +1,19 @@
 /**
- * R2 object key layout (spec §3.2).
+ * Object key layout (spec §3.2).
  *
- * Originals and results live in separate buckets (R2_BUCKET_VIDEOS /
- * R2_BUCKET_RESULTS), so these prefixes are redundant within their own bucket.
- * They are kept anyway: the keys show up in logs and in the Worker, and a bare
- * `{user_id}/{match_id}/original.mp4` reads identically in both buckets.
+ * Videos live in an Azure container and results in a Supabase Storage bucket, so
+ * the leading prefix is redundant within either one. It is kept anyway: keys
+ * show up in logs and in the sweeper, a bare `{user_id}/{match_id}/original.mp4`
+ * reads identically in both stores, and cleanup-orphan-storage.ts identifies an
+ * orphan by the match id being the THIRD path segment — which only holds while
+ * every layout here carries a prefix.
  *
- * Keys are never exposed to the vendor. The URL they receive carries an opaque
- * token; the Worker resolves that to a key server-side. Anything derivable from
- * a key — user id, match id — therefore stays internal.
+ * ── Keys are no longer private ───────────────────────────────────────────────
+ * Under R2 the vendor received an opaque token and a Worker resolved it to a key
+ * server-side, so user and match ids stayed internal. A SAS URL has no such
+ * indirection: it names the blob. The vendor therefore sees the user id and
+ * match id of anything we hand them, and both are opaque uuids that grant
+ * nothing on their own. Do not read a new secret into this layout.
  */
 
 import { ACCEPTED_VIDEO_EXTENSIONS } from './config';
@@ -52,4 +57,27 @@ export function resultsObjectKey(params: {
   jobId: string;
 }): string {
   return `results/${params.userId}/${params.matchId}/${params.jobId}.json`;
+}
+
+/**
+ * `trimmed/{user_id}/{match_id}/{job_id}.mp4` — our copy of the vendor's
+ * trimmed, re-encoded video.
+ *
+ * Keyed by job rather than by match, like the results key and unlike
+ * videoObjectKey: a match resubmitted after a failure produces a second job, and
+ * both trimmed videos are legitimately different cuts of the same match. Keying
+ * by match would have the retry silently overwrite the first.
+ *
+ * `.mp4` is asserted, not derived. The vendor re-encodes rather than passing the
+ * container through, and their docs describe the output only as "trimmed and
+ * re-encoded" — so there is no source extension to carry over and nothing to
+ * derive one from. If a job ever comes back in another container, this is the
+ * line that is wrong.
+ */
+export function trimmedObjectKey(params: {
+  userId: string;
+  matchId: string;
+  jobId: string;
+}): string {
+  return `trimmed/${params.userId}/${params.matchId}/${params.jobId}.mp4`;
 }

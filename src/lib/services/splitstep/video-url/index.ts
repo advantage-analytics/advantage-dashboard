@@ -38,8 +38,11 @@ export {
   deleteVideoBlob,
   mintUploadSas,
   resolveAzureStorageConfig,
+  startTrimmedVideoCopy,
+  trimmedCopyStatus,
   videoContainerClient,
 } from './azure-sas';
+export type { BlobCopyStatus } from './azure-sas';
 
 /**
  * Build the configured vendor URL strategy.

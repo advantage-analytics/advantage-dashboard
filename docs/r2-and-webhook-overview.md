@@ -86,9 +86,16 @@ you read the payload before anything is spent.
 
 | Artifact | Where | Why there |
 |---|---|---|
-| Original video, 1–8 GB | **Azure Blob** `advantage-videos` | the only host the vendor's `VideoUrl` accepts (§3) |
+| Original video, 1–8 GB | **Azure Blob** `advantage-videos`, `videos/…` | the only host the vendor's `VideoUrl` accepts (§3) |
+| **Trimmed video**, returned by the vendor | **Azure Blob** `advantage-videos`, `trimmed/…` | copied server-side from their SAS; the only video that outlives the job |
 | Raw results JSON, ~1 MB | **Supabase Storage** `match-results` (private) | beside `match-data`, and next to the Edge Function that will read it |
 | Webhook envelopes, ~1 KB | Postgres `splitstep_webhook_deliveries` | needs to be transactional with the job row |
+
+The trimmed video is the match with dead time cut, re-encoded by the vendor and handed
+back on `trimmed_video_url` beside `sas_url`. We ignored that field until 2026-08-13
+while also deleting our own source video, so a successful job ended with **no video
+anywhere**. `startTrimmedVideoCopy()` now issues Azure's async Copy Blob, which means
+Azure pulls the bytes directly and none pass through a Vercel function bounded at 60s.
 
 Results JSON was originally specced for R2. It moved: at ~1 MB, egress cost is worth
 pennies, nobody external reads it, and the derivation engine that will consume it runs
@@ -334,19 +341,30 @@ that ordering is load-bearing for exactly that reason. They run concurrently und
 Every step is **best-effort**. A stranded file is recoverable; a match the user cannot
 delete is not. Storage failures log and the row delete proceeds regardless.
 
-### The source video is deleted when the job completes
+### The source video is deleted once something better is safely ours
 
-New, and the thing that makes a 14-day unrevocable SAS acceptable. In the webhook's
-`after()` block, once `finalize_splitstep_results` confirms the results JSON is stored,
-the source blob is deleted.
+The thing that makes a 14-day unrevocable SAS acceptable. In the webhook's `after()`
+block, once the results JSON is stored **and** the vendor's trimmed re-encode has been
+confirmed copied into our container, the source blob is deleted.
 
-Strictly in that order. While the video is the only copy of the match it is also the
-only way to re-run a job, so deleting before the results are safe would trade a
-recoverable failure for an unrecoverable one. It only fires on success — a `failed` job
-keeps its video, because the whole point of a retry is having something to retry with.
+Strictly in that order, and the second condition is not optional. While the video is the
+only copy of the match it is also the only way to re-run a job, so deleting before the
+results are safe would trade a recoverable failure for an unrecoverable one. The
+original version checked only the results and deleted unconditionally — which destroyed
+the last video in existence for that match, because we were not capturing the trimmed
+one. It only fires on success either way: a `failed` job keeps its video, because the
+whole point of a retry is having something to retry with.
 
-Best-effort by construction: every failure logs and returns. Nothing is lost if it
-misses — the sweeper catches the blob once the match is gone.
+Two consequences worth knowing rather than discovering:
+
+- **In practice the webhook usually declines.** A cross-account copy of a real match is
+  still `pending` when the request ends, so the delete defers to
+  `scripts/cleanup-orphan-storage.ts`, which sweeps sources whose trimmed copy has since
+  reached `success`. Until that runs, the vendor's read SAS on the original stays live.
+- **A job whose payload carried no trimmed url keeps its source indefinitely.** Also
+  deliberate. One video beats none.
+
+Best-effort by construction: every failure logs and returns.
 
 ### Webhook deliveries cascade too
 
@@ -519,9 +537,18 @@ ordering, and match-deletion cleanup. What remains is almost entirely vendor-sid
 
 **Ours, not blocking:**
 
-- **Nothing calls `POST /api/splitstep/jobs`.** The wizard stops at `status: 'uploaded'`
-  and submission is a hand-run `scripts/splitstep-submit.ts`. Deliberate until one job
-  round-trips; wiring it is the obvious next piece of work.
+- **~~Nothing calls `POST /api/splitstep/jobs`.~~** Closed. The wizard submits automatically
+  once the upload finishes, and a submit failure leaves the job at `status: 'uploaded'`
+  rather than marking it failed, so a retry needs nothing re-uploaded.
+- **Playback is not wired.** We now keep the vendor's trimmed video (§3), but nothing
+  renders it: `MatchVideoPanel` is orphaned and built for the upload flow, and the
+  `matches/[matchId]/video/` route CLAUDE.md describes does not exist. The asset is
+  secured; showing it is a separate piece of work.
+- **Trimmed videos are in Azure, and R2 would be cheaper.** Egress is the whole argument:
+  ~$0.087/GB against R2's $0, with storage a wash. Azure won on the deadline, not on
+  merit — a SAS expires and Azure→Azure copy is one server-side call, while Azure→R2
+  means streaming gigabytes through a Worker. Revisit when playback lands, and note this
+  is the reason Phase 4 (retire R2) is on hold rather than done.
 - **The job status endpoint is unused, and now matters more.**
   `GET {BASE_URL}/jobs/{job_id}` is both the recovery path for a delivery lost to an
   outage *and* the replacement for `vendor_first_downloaded_at`, which the move to Azure
@@ -602,18 +629,30 @@ where it lands in shell history.
 npx tsx scripts/splitstep-webhook-test.ts --url https://www.advantage-analytics.dev
 ```
 
-Nine checks: queued → completed → duplicate → out-of-order → failed → unmatched →
+Nine scenarios: queued → completed → duplicate → out-of-order → failed → unmatched →
 malformed → wrong-secret → **valid signature over a tampered body**. It asserts what
 actually landed in the database and the bucket, and it **signs payloads with a real
 HMAC** rather than sending the raw secret, so it exercises the same path a vendor
 delivery will.
 
-The `sas_url` is not mocked: it uploads a fixture to `match-results` and signs it, so
-the download path runs over real HTTP. Because the download now happens in `after()`,
-the assertions poll rather than checking immediately. Everything it creates is removed
-on the way out.
+Neither url on a completion is mocked: it uploads two fixtures to `match-results` and
+signs them, one standing in for the results JSON and one for the trimmed video, so both
+the download and the Azure server-side copy run over real HTTP. Because both happen in
+`after()`, the assertions poll rather than checking immediately.
 
-Last run: all nine green, `signature_verified: true`, results stored.
+Everything it creates is removed on the way out — including a blob in the **real** videos
+container. Without local `AZURE_STORAGE_*` it cannot verify or clean that blob, so it
+skips the check and prints the key to delete by hand.
+
+> Two traps this suite fell into itself, both worth not repeating: the
+> `results_object_key` assertion read once instead of polling (`status` flips
+> synchronously inside the RPC, so the wait it relied on returns before the download
+> starts), and the duplicate-delivery body was a hand-maintained second copy that
+> stopped being byte-identical the moment a field was added to the first. It is one
+> `completionBody` const now, because "identical body" is that test's entire premise.
+
+Last run: all green, `signature_verified: true`, results stored, trimmed copy confirmed
+`success` in Azure.
 
 > If every delivery comes back `signature_verified: false`, the deployed build predates
 > the secret being set. Redeploy — Vercel injects env vars at deploy time. This has

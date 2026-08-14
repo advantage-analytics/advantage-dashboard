@@ -24,6 +24,12 @@
  *
  * Deleting a match through the app now cleans all three itself; this exists for
  * strays created before that, and for rows deleted straight from the database.
+ *
+ * It also runs a SECOND, different sweep — see sweepSupersededSources(). That
+ * one deletes source videos for matches that still exist, once the vendor's
+ * trimmed re-encode has been confirmed copied into our container. The webhook
+ * starts that copy but cannot wait for it, so this is where the original
+ * actually gets removed.
  */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
@@ -35,6 +41,7 @@ import {
   AZURE_STORAGE_ENV_VARS,
   deleteVideoBlob,
   resolveAzureStorageConfig,
+  trimmedCopyStatus,
   videoContainerClient,
 } from "../src/lib/services/splitstep/video-url";
 
@@ -195,6 +202,89 @@ async function sweep(
   return { orphans: orphans.length, deleted };
 }
 
+/**
+ * Delete source videos that a confirmed trimmed copy has superseded.
+ *
+ * Distinct from the orphan sweep above, and worth keeping distinct: that one
+ * deletes bytes belonging to matches that no longer exist, this one deletes
+ * bytes for matches that very much do. The justification is different too —
+ * we hold a better copy of the same match, trimmed and re-encoded.
+ *
+ * This exists because the webhook usually cannot do it. It starts an Azure
+ * server-side copy and returns; for a real match that copy is still `pending`
+ * when the request ends, so the delete defers to here rather than blocking a
+ * webhook on gigabytes. Until this runs, the original stays and the vendor's
+ * 14-day read SAS on it stays live.
+ *
+ * Three conditions, all required, all checked per job:
+ *   1. `trimmed_object_key` is set — a copy was started
+ *   2. Azure reports that copy `success` — it actually finished
+ *   3. `video_object_key` is set — there is a source to remove
+ */
+async function sweepSupersededSources(): Promise<{
+  candidates: number;
+  deleted: number;
+}> {
+  const { data, error } = await supabase
+    .from("processing_jobs")
+    .select("id, video_object_key, trimmed_object_key")
+    .not("video_object_key", "is", null)
+    .not("trimmed_object_key", "is", null);
+
+  if (error) {
+    console.error("[superseded] could not read processing_jobs — skipping:", error);
+    return { candidates: 0, deleted: 0 };
+  }
+
+  const jobs = (data ?? []) as {
+    id: string;
+    video_object_key: string;
+    trimmed_object_key: string;
+  }[];
+
+  const ready: typeof jobs = [];
+  for (const job of jobs) {
+    // Per job rather than batched: Azure only reports copy state on the
+    // destination blob itself, and the candidate set is jobs that completed,
+    // which is dozens even in a busy month.
+    const status = await trimmedCopyStatus({ blobName: job.trimmed_object_key });
+    if (status === "success") {
+      ready.push(job);
+    } else {
+      console.log(`  · ${job.id}: trimmed copy ${status}, keeping source`);
+    }
+  }
+
+  console.log(
+    `[superseded] jobs with a trimmed copy: ${jobs.length}, ` +
+      `copies confirmed complete: ${ready.length}`
+  );
+  for (const job of ready.slice(0, 5)) console.log(`  - ${job.video_object_key}`);
+  if (ready.length > 5) console.log(`  … and ${ready.length - 5} more`);
+
+  let deleted = 0;
+  if (APPLY) {
+    for (const job of ready) {
+      try {
+        const res = await deleteVideoBlob({ blobName: job.video_object_key });
+        // `deleted: false` means it was already gone, which is the desired end
+        // state and not worth counting as work done.
+        if (res.deleted) deleted++;
+      } catch (err) {
+        console.error(
+          `[superseded] ${job.video_object_key}: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        );
+      }
+    }
+    console.log(`[superseded] deleted ${deleted}/${ready.length}.`);
+  }
+  console.log("");
+
+  return { candidates: ready.length, deleted };
+}
+
 async function main() {
   console.log(`[cleanup] mode=${APPLY ? "APPLY" : "DRY-RUN"}\n`);
 
@@ -274,12 +364,26 @@ async function main() {
     totalDeleted += deleted;
   }
 
-  if (totalOrphans === 0) {
-    console.log("[cleanup] nothing orphaned. Done.");
+  // Only meaningful with Azure configured — it reads copy state off the
+  // destination blob, and without credentials every job would read `pending`
+  // and nothing would ever be swept.
+  let superseded = { candidates: 0, deleted: 0 };
+  if (videos) {
+    superseded = await sweepSupersededSources();
+  }
+
+  const totalCandidates = totalOrphans + superseded.candidates;
+  const totalRemoved = totalDeleted + superseded.deleted;
+
+  if (totalCandidates === 0) {
+    console.log("[cleanup] nothing orphaned or superseded. Done.");
   } else if (!APPLY) {
-    console.log(`[cleanup] ${totalOrphans} orphan(s) found. Rerun with --apply to delete.`);
+    console.log(
+      `[cleanup] ${totalOrphans} orphan(s) and ${superseded.candidates} ` +
+        `superseded source video(s) found. Rerun with --apply to delete.`
+    );
   } else {
-    console.log(`[cleanup] done. removed ${totalDeleted}/${totalOrphans} object(s).`);
+    console.log(`[cleanup] done. removed ${totalRemoved}/${totalCandidates} object(s).`);
   }
 }
 

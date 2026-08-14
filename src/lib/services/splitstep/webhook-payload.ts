@@ -30,6 +30,16 @@ export interface ParsedWebhook {
   /** Short-lived URL to the results JSON. Present on completion. */
   sasUrl: string | null;
   /**
+   * Short-lived URL to the trimmed, re-encoded video the vendor processed.
+   * Present on completion, alongside — and distinct from — `sasUrl`.
+   *
+   * This is the match with dead time cut, and it is the only video that
+   * survives a job: the webhook deletes our own source once results are stored.
+   * It is a SAS, so it expires; the URL is worth recording, but the bytes are
+   * what actually need securing.
+   */
+  trimmedVideoUrl: string | null;
+  /**
    * Vendor error text. Free-form, with raw underlying errors in it — store and
    * log, never parse for control flow (handoff §7 Q7).
    */
@@ -132,6 +142,25 @@ const SAS_URL_KEYS = [
 const ERROR_KEYS = ['errormessage', 'error', 'message', 'reason', 'detail'];
 const MATCH_ID_KEYS = ['matchid'];
 
+/**
+ * The trimmed video, which arrives beside `sas_url` on a completion.
+ *
+ * The documented name leads; the other two are the same cheap hedge the
+ * signature header list makes, for a payload whose real shape one delivery has
+ * yet to confirm.
+ *
+ * Deliberately nothing as broad as `videourl`. `VideoUrl` is the field WE send
+ * on the job request, so a vendor that echoes its input back would hand us the
+ * original as if it were the trimmed output — and the two are indistinguishable
+ * once stored. Narrow candidates fail closed; a broad one fails silently in the
+ * one direction that matters.
+ */
+const TRIMMED_VIDEO_URL_KEYS = [
+  'trimmedvideourl',
+  'trimmedurl',
+  'processedvideourl',
+];
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -158,6 +187,7 @@ export function parseWebhookPayload(body: unknown): ParsedWebhook {
     // `url` is last in the candidate list and broad enough to catch our own
     // echoed VideoUrl, so only accept something that looks fetchable.
     sasUrl: asHttpUrl(findFirst(body, SAS_URL_KEYS)),
+    trimmedVideoUrl: asHttpUrl(findFirst(body, TRIMMED_VIDEO_URL_KEYS)),
     errorMessage,
     // Guarded: the fallback lookup passes this straight into a uuid column.
     matchId: matchId && UUID_RE.test(matchId) ? matchId : null,

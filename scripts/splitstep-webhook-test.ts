@@ -15,17 +15,30 @@
  *
  * Requires in .env.local: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
  *
- * The `sas_url` is not mocked. The script uploads a fixture into the
- * `match-results` bucket and signs it, so the download path is exercised
- * end-to-end over real HTTP without depending on any external host.
+ * Neither url on a completion is mocked. The script uploads two fixtures into
+ * the `match-results` bucket and signs them — one standing in for the results
+ * JSON, one for the trimmed video — so both the download and the Azure
+ * server-side copy run end-to-end over real HTTP without an external host.
  *
- * Everything it creates is removed on the way out, including after a failure.
+ * The copy is worth testing precisely because its failure is silent: the vendor
+ * sends `trimmed_video_url` alongside `sas_url`, we used to ignore it, and the
+ * webhook then deleted our own source video. Nothing about that looked wrong
+ * until someone went looking for the match and found no video at all.
+ *
+ * Everything it creates is removed on the way out, including after a failure,
+ * and that now includes a blob in the real videos container.
  */
 
 import { readFileSync } from 'node:fs';
 import { createHmac } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { RESULTS_BUCKET } from '../src/lib/services/splitstep/config';
+import {
+  AZURE_STORAGE_ENV_VARS,
+  deleteVideoBlob,
+  resolveAzureStorageConfig,
+  trimmedCopyStatus,
+} from '../src/lib/services/splitstep/video-url';
 
 /* ─── env ─── */
 
@@ -76,6 +89,20 @@ const FIXTURE_KEY = `__webhook_test__/${Date.now()}-strokes.json`;
 const FIXTURE = JSON.stringify([
   { pred_rally_id: 1, pred_rally_stroke_number: 1, stroke_type: 'serve', in: true },
 ]);
+
+/**
+ * Stands in for the vendor's trimmed video.
+ *
+ * A handful of bytes rather than a real encode: what is under test is that the
+ * url is parsed, the Azure server-side copy is started and the key recorded —
+ * none of which cares what the bytes are. A real video would make the run take
+ * minutes and prove nothing extra.
+ *
+ * It does have to be genuinely fetchable over public HTTPS, because AZURE pulls
+ * it, not this script. A mock url would fail in Azure with nothing to read.
+ */
+const VIDEO_FIXTURE_KEY = `__webhook_test__/${Date.now()}-trimmed.mp4`;
+const VIDEO_FIXTURE = 'not-a-real-video-just-bytes-to-copy';
 
 /* ─── assertions ─── */
 
@@ -160,6 +187,23 @@ async function deliveryCount(externalJobId: string): Promise<number> {
 
 const createdJobIds: string[] = [];
 
+/**
+ * Set once the webhook records where it copied the trimmed video, so cleanup
+ * can remove it. Module-level rather than threaded through, for the same reason
+ * createdJobIds is: cleanup() runs from the failure path too, and a test that
+ * leaves multi-gigabyte blobs behind when it fails is worse than no test.
+ */
+let trimmedBlobToClean: string | null = null;
+
+/**
+ * Whether this machine can talk to Azure.
+ *
+ * The COPY always happens — it runs on the server under test, which has its own
+ * credentials. This only decides whether the script can verify and clean up
+ * afterwards. Same resolver the app uses, so "configured" means one thing.
+ */
+const azureConfigured = resolveAzureStorageConfig().ok;
+
 async function makeJob(externalJobId: string): Promise<{ id: string }> {
   const { data: match } = await supabase
     .from('matches')
@@ -194,7 +238,28 @@ async function cleanup(): Promise<void> {
   if (createdJobIds.length) {
     await supabase.from('processing_jobs').delete().in('id', createdJobIds);
   }
-  await supabase.storage.from(RESULTS_BUCKET).remove([FIXTURE_KEY]);
+  await supabase.storage.from(RESULTS_BUCKET).remove([FIXTURE_KEY, VIDEO_FIXTURE_KEY]);
+
+  // The blob the webhook copied into the real videos container. Nothing else
+  // will ever remove it: the sweeper only deletes blobs whose match is gone,
+  // and this test attaches to a match that very much still exists.
+  if (trimmedBlobToClean) {
+    if (azureConfigured) {
+      try {
+        await deleteVideoBlob({ blobName: trimmedBlobToClean });
+      } catch (err) {
+        console.error(
+          `Could not remove the test blob ${trimmedBlobToClean} — delete it by hand:`,
+          err instanceof Error ? err.message : err
+        );
+      }
+    } else {
+      console.error(
+        `LEFTOVER: ${trimmedBlobToClean} is in the videos container and this ` +
+          `machine has no Azure credentials to remove it. Delete it by hand.`
+      );
+    }
+  }
   // Results the webhook itself wrote, under the real key layout.
   const { data: leftovers } = await supabase.storage
     .from(RESULTS_BUCKET)
@@ -230,6 +295,26 @@ async function main(): Promise<void> {
   }
   const sasUrl = signed.data.signedUrl;
 
+  // The same treatment for the trimmed video, so the copy path runs against a
+  // real url that Azure can reach rather than a string that only looks like one.
+  const videoUpload = await supabase.storage
+    .from(RESULTS_BUCKET)
+    .upload(VIDEO_FIXTURE_KEY, new Blob([VIDEO_FIXTURE], { type: 'video/mp4' }), {
+      contentType: 'video/mp4',
+      upsert: true,
+    });
+  if (videoUpload.error) {
+    throw new Error(`Video fixture upload failed: ${videoUpload.error.message}`);
+  }
+
+  const signedVideo = await supabase.storage
+    .from(RESULTS_BUCKET)
+    .createSignedUrl(VIDEO_FIXTURE_KEY, 600);
+  if (signedVideo.error || !signedVideo.data) {
+    throw new Error(`Could not sign video fixture: ${signedVideo.error?.message}`);
+  }
+  const trimmedVideoUrl = signedVideo.data.signedUrl;
+
   const completedExtId = `test-completed-${Date.now()}`;
   const failedExtId = `test-failed-${Date.now()}`;
   const unknownExtId = `test-orphan-${Date.now()}`;
@@ -245,13 +330,23 @@ async function main(): Promise<void> {
     check('delivery recorded', (await deliveryCount(completedExtId)) === 1);
   }
 
-  console.log('2. job_completed — results fetched and stored');
+  // Declared once and reused by the duplicate check below, because "identical
+  // body" is the entire premise of that test and dedupe is on a hash of the
+  // bytes. Two hand-maintained copies drifted the moment a field was added to
+  // one of them, and the duplicate test failed for a reason that had nothing to
+  // do with deduping.
+  const completionBody = {
+    status: 'job_completed',
+    externalJobId: completedExtId,
+    sas_url: sasUrl,
+    // Named exactly as the vendor's docs have it. If they ever rename it, this
+    // is the check that fails rather than a silent loss of the video.
+    trimmed_video_url: trimmedVideoUrl,
+  };
+
+  console.log('2. job_completed — results fetched and stored, trimmed video copied');
   {
-    const r = await post({
-      status: 'job_completed',
-      externalJobId: completedExtId,
-      sas_url: sasUrl,
-    });
+    const r = await post(completionBody);
     check('returns 200', r.status === 200, r);
 
     // The download runs in after(), so it completes AFTER the 200 — that is the
@@ -262,13 +357,21 @@ async function main(): Promise<void> {
     );
     check('job reaches completed (async, after the 200)', reached);
 
-    const { data } = await supabase
-      .from('processing_jobs')
-      .select('results_object_key')
-      .eq('id', completedJob.id)
-      .maybeSingle();
-    const key = (data as { results_object_key: string | null } | null)?.results_object_key;
-    check('results_object_key is set', Boolean(key), key);
+    // Polled, not read once. `status` flips synchronously inside
+    // record_splitstep_webhook, so the wait above returns the instant the 200
+    // lands — while the download it is standing in for has not started. Reading
+    // the key straight after was a race that happened to keep winning.
+    let key: string | null | undefined;
+    const gotKey = await waitFor(async () => {
+      const { data } = await supabase
+        .from('processing_jobs')
+        .select('results_object_key')
+        .eq('id', completedJob.id)
+        .maybeSingle();
+      key = (data as { results_object_key: string | null } | null)?.results_object_key;
+      return Boolean(key);
+    });
+    check('results_object_key is set', gotKey, key);
 
     if (key) {
       const dl = await supabase.storage.from(RESULTS_BUCKET).download(key);
@@ -278,16 +381,57 @@ async function main(): Promise<void> {
       });
       await supabase.storage.from(RESULTS_BUCKET).remove([key]);
     }
+
+    // The trimmed video. Its own poll: the copy is started in the same after()
+    // block but finishes independently of the results download.
+    const gotTrimmedKey = await waitFor(async () => {
+      const { data } = await supabase
+        .from('processing_jobs')
+        .select('trimmed_object_key')
+        .eq('id', completedJob.id)
+        .maybeSingle();
+      return Boolean((data as { trimmed_object_key: string | null } | null)?.trimmed_object_key);
+    });
+    check('trimmed_object_key is set — the video url was not dropped', gotTrimmedKey);
+
+    const { data: jobRow } = await supabase
+      .from('processing_jobs')
+      .select('trimmed_object_key, trimmed_video_url, video_object_key')
+      .eq('id', completedJob.id)
+      .maybeSingle();
+    const job = jobRow as {
+      trimmed_object_key: string | null;
+      trimmed_video_url: string | null;
+      video_object_key: string | null;
+    } | null;
+
+    check("the vendor's url is recorded for recovery", Boolean(job?.trimmed_video_url));
+
+    if (job?.trimmed_object_key) {
+      trimmedBlobToClean = job.trimmed_object_key;
+
+      if (azureConfigured) {
+        // A few bytes cross-account still is not instantaneous, so poll. A real
+        // match takes minutes, which is exactly why the source delete defers to
+        // the sweeper rather than blocking the webhook.
+        const copied = await waitFor(
+          async () =>
+            (await trimmedCopyStatus({ blobName: job.trimmed_object_key! })) === 'success',
+          30_000
+        );
+        check('Azure reports the copy succeeded', copied);
+      } else {
+        console.log(
+          `  SKIP  copy verification — ${AZURE_STORAGE_ENV_VARS.join(' / ')} not in .env.local`
+        );
+      }
+    }
   }
 
   console.log('3. duplicate delivery is a no-op');
   {
     const before = await deliveryCount(completedExtId);
-    const r = await post({
-      status: 'job_completed',
-      externalJobId: completedExtId,
-      sas_url: sasUrl,
-    });
+    const r = await post(completionBody);
     check('returns 200', r.status === 200, r);
     check('job still completed', (await jobStatus(completedJob.id)) === 'completed');
     check(

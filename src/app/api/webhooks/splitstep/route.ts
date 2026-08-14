@@ -11,9 +11,17 @@
  * Vercel Hobby, where the platform ceiling is 60s. A full match of strokes
  * through derivation is not something to bet on fitting.
  *
- * So: verify → record → return 200 → fetch the results JSON in after().
+ * So: verify → record → return 200 → secure both artifacts in after().
  * Derivation runs later in a Supabase Edge Function, mirroring the SwingVision
  * `process-match` fire-and-forget pattern.
+ *
+ * A completion carries TWO urls, and both are short-lived SAS:
+ *   • `sas_url` — the stroke-by-stroke results JSON, downloaded and written to
+ *     the `match-results` bucket.
+ *   • `trimmed_video_url` — their trimmed, re-encoded video, copied server-side
+ *     into our own container. This one was dropped entirely until now, while
+ *     the code below deleted our source video, so a successful job used to end
+ *     with no video anywhere.
  *
  * Nothing slow happens before the response. The vendor confirmed a 30s
  * connection timeout and NO retry policy, which makes their timeout the hard
@@ -26,9 +34,16 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { parseWebhookPayload } from '@/lib/services/splitstep/webhook-payload';
-import { resultsObjectKey } from '@/lib/services/splitstep/object-keys';
+import {
+  resultsObjectKey,
+  trimmedObjectKey,
+} from '@/lib/services/splitstep/object-keys';
 import { RESULTS_BUCKET } from '@/lib/services/splitstep/config';
-import { deleteVideoBlob } from '@/lib/services/splitstep/video-url';
+import {
+  deleteVideoBlob,
+  startTrimmedVideoCopy,
+  trimmedCopyStatus,
+} from '@/lib/services/splitstep/video-url';
 import { releaseQuota } from '@/lib/services/splitstep/quota';
 
 export const runtime = 'nodejs';
@@ -256,6 +271,7 @@ export async function POST(request: NextRequest) {
       p_event: payload.event,
       p_next_status: payload.nextStatus,
       p_sas_url: payload.sasUrl,
+      p_trimmed_video_url: payload.trimmedVideoUrl,
       p_error_message: payload.errorMessage,
       p_match_id: payload.matchId,
     })
@@ -279,6 +295,7 @@ export async function POST(request: NextRequest) {
     job_status: string | null;
     results_object_key: string | null;
     already_stored: boolean;
+    trimmed_object_key: string | null;
   };
 
   if (!record.matched_job_id) {
@@ -305,56 +322,111 @@ export async function POST(request: NextRequest) {
   // confirmed no retry policy exists, so a 500 bought nothing and only risked
   // the timeout. Recovery is by hand from the stored sas_url, or via
   // GET {BASE_URL}/jobs/{job_id}, which the docs now expose.
-  if (payload.nextStatus === 'completed' && payload.sasUrl && !record.already_stored) {
-    const objectKey = record.matched_job_id
-      ? resultsObjectKey({
-          userId: record.created_by!,
-          matchId: record.match_id!,
-          jobId: record.matched_job_id,
-        })
-      : `orphaned/${payload.externalJobId ?? 'unknown'}/${record.delivery_id}.json`;
-
-    const sasUrl = payload.sasUrl;
+  if (payload.nextStatus === 'completed') {
     const deliveryId = record.delivery_id;
     const jobId = record.matched_job_id;
 
-    after(async () => {
-      const stored = await storeResults({ supabase, sasUrl, objectKey });
+    // Two independent assets with two independent guards. Gating both on
+    // `already_stored` — which is only ever about the JSON — would mean a video
+    // copy that failed once never got another chance, on a url that expires.
+    const sasUrl = record.already_stored ? null : payload.sasUrl;
+    const trimmedVideoUrl = record.trimmed_object_key
+      ? null
+      : payload.trimmedVideoUrl;
 
-      await supabase.rpc('finalize_splitstep_results', {
-        p_delivery_id: deliveryId,
-        p_job_id: jobId,
-        p_results_object_key: stored.ok ? stored.objectKey : null,
-        p_error: stored.ok ? null : stored.error,
-      });
-
-      if (!stored.ok) {
-        // Loud, because nothing retries this. The sas_url is in the delivery
-        // row and stays valid for days — it can be fetched by hand.
-        console.error(`${LOG} results download FAILED — recover from the stored sas_url`, {
-          deliveryId,
+    const resultsKey = jobId
+      ? resultsObjectKey({
+          userId: record.created_by!,
+          matchId: record.match_id!,
           jobId,
-          error: stored.error,
-        });
-        return;
-      }
+        })
+      : `orphaned/${payload.externalJobId ?? 'unknown'}/${deliveryId}.json`;
 
-      console.log(`${LOG} results stored`, {
-        jobId,
-        objectKey: stored.objectKey,
-        bytes: stored.bytes,
+    // No orphan fallback for the video, unlike the results key above. The
+    // results JSON is small and worth keeping under any key just to have it; a
+    // multi-gigabyte video filed under a key nobody can attribute to a user is
+    // a storage bill with no owner and no deletion path.
+    const trimmedKey =
+      jobId && record.created_by && record.match_id
+        ? trimmedObjectKey({
+            userId: record.created_by,
+            matchId: record.match_id,
+            jobId,
+          })
+        : null;
+
+    if (sasUrl || trimmedVideoUrl) {
+      after(async () => {
+        // Is the analysis durably ours? Either an earlier delivery stored it or
+        // this one does. Tracked rather than assumed, because it is what gates
+        // the delete below — and a completion that arrives with no sas_url at
+        // all must NOT be read as "nothing left to save".
+        let resultsSecured = record.already_stored;
+
+        if (sasUrl) {
+          const stored = await storeResults({
+            supabase,
+            sasUrl,
+            objectKey: resultsKey,
+          });
+
+          await supabase.rpc('finalize_splitstep_results', {
+            p_delivery_id: deliveryId,
+            p_job_id: jobId,
+            p_results_object_key: stored.ok ? stored.objectKey : null,
+            p_error: stored.ok ? null : stored.error,
+          });
+
+          resultsSecured = stored.ok;
+
+          if (stored.ok) {
+            console.log(`${LOG} results stored`, {
+              jobId,
+              objectKey: stored.objectKey,
+              bytes: stored.bytes,
+            });
+          } else {
+            // Loud, because nothing retries this. The sas_url is in the delivery
+            // row and stays valid for days — it can be fetched by hand.
+            console.error(
+              `${LOG} results download FAILED — recover from the stored sas_url`,
+              { deliveryId, jobId, error: stored.error }
+            );
+          }
+        }
+
+        // The trimmed video. Attempted even when the results download failed:
+        // they are separate urls on separate expiries, and skipping this would
+        // lose the video for a reason that has nothing to do with it.
+        //
+        // This is the only video that survives the job — ours is deleted below
+        // and theirs is a SAS with about a week on it.
+        if (trimmedVideoUrl && trimmedKey && jobId) {
+          await copyTrimmedVideo({
+            supabase,
+            jobId,
+            sourceUrl: trimmedVideoUrl,
+            blobName: trimmedKey,
+          });
+        }
+
+        // The source video has done its job. Deleting it is the real bound on
+        // the vendor URL's lifetime: a SAS cannot be withdrawn once signed (see
+        // video-url/azure-sas.ts), so removing the bytes is the only revocation
+        // available. It also stops us paying to store a multi-GB file.
+        //
+        // Strictly after BOTH artifacts are safe, never before: while this is
+        // the only copy of the match, it is also the only way to re-run a job.
+        // In practice a cross-account copy of a real match is still `pending`
+        // when this runs, so the delete usually defers to
+        // scripts/cleanup-orphan-storage.ts — which is the intended behaviour,
+        // not a fallback. The cost is that the vendor's 14-day read SAS on the
+        // original stays live until the sweeper runs.
+        if (jobId && resultsSecured) {
+          await deleteSourceVideo({ supabase, jobId });
+        }
       });
-
-      // The source video has done its job. Deleting it here is the real bound
-      // on the vendor URL's lifetime: a SAS cannot be withdrawn once signed
-      // (see video-url/azure-sas.ts), so removing the bytes is the only
-      // revocation available. It also stops us paying to store a multi-GB file
-      // nobody reads again — nothing deleted videos post-completion before.
-      //
-      // Strictly after the results are stored, never before: while this is the
-      // only copy of the match, it is also the only way to re-run a job.
-      if (jobId) await deleteSourceVideo({ supabase, jobId });
-    });
+    }
   }
 
   // A job the vendor accepted and then failed on kept its reserved minutes
@@ -389,13 +461,82 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * Delete a completed job's source video.
+ * Copy the vendor's trimmed video into our own container.
+ *
+ * This is the asset the player actually wants — their match with the dead time
+ * cut — and until now we threw the url away and then deleted our own source, so
+ * a finished job ended with no video anywhere.
+ *
+ * Best-effort, like every other cleanup step here: a failure logs and returns
+ * rather than throwing, because aborting after() would take the source-video
+ * delete down with it. The url survives on `processing_jobs.trimmed_video_url`
+ * for about a week either way, which is the manual recovery path.
+ *
+ * The copy is STARTED, not awaited. Azure moves the bytes server-side; see
+ * startTrimmedVideoCopy(). `pending` is the expected outcome for a real match
+ * and is not a failure.
+ */
+async function copyTrimmedVideo(params: {
+  supabase: ReturnType<typeof createAdminClient>;
+  jobId: string;
+  sourceUrl: string;
+  blobName: string;
+}): Promise<void> {
+  const { supabase, jobId, sourceUrl, blobName } = params;
+
+  try {
+    const { copyStatus } = await startTrimmedVideoCopy({ blobName, sourceUrl });
+
+    // Recorded as soon as the copy is accepted, not once it finishes. The key
+    // is what a later delivery checks to avoid starting a second copy, and what
+    // the sweeper needs to know a source video has a successor.
+    const { error } = await supabase.rpc('record_splitstep_trimmed_copy', {
+      p_job_id: jobId,
+      p_trimmed_object_key: blobName,
+    });
+
+    if (error) {
+      // The bytes are on their way to a key nothing points at. Loud, because
+      // the only way back is reading this line.
+      console.error(
+        `${LOG} trimmed copy started but the key was NOT recorded — ` +
+          `the blob will be orphaned`,
+        { jobId, blobName, error: error.message }
+      );
+      return;
+    }
+
+    console.log(`${LOG} trimmed video copy ${copyStatus}`, { jobId, blobName });
+  } catch (err) {
+    console.error(
+      `${LOG} trimmed video copy FAILED — recover from trimmed_video_url ` +
+        `on the job row, which is valid for about a week`,
+      { jobId, error: err instanceof Error ? err.message : String(err) }
+    );
+  }
+}
+
+/**
+ * Delete a completed job's source video, once something better is safely ours.
  *
  * Best-effort by construction — every failure here logs and returns. The blob
  * is not lost if this misses: scripts/cleanup-orphan-storage.ts sweeps it once
  * the match is gone, and it expires from the vendor's reach on its own when the
  * SAS does. Throwing would abort the after() block for a cleanup step, which is
  * a worse trade than a stranded file.
+ *
+ * ── Why this is now conditional ──────────────────────────────────────────────
+ * It used to delete unconditionally as soon as the results JSON stored, on the
+ * reasoning that nobody reads the video again. That reasoning skipped the
+ * vendor's trimmed re-encode, which we were not capturing — so the delete was
+ * destroying the last video in existence for that match. It now refuses unless
+ * a trimmed copy is confirmed `success`.
+ *
+ * Two consequences worth stating rather than discovering:
+ *   • A real match is still copying when this runs, so this usually declines
+ *     and the sweeper does it later.
+ *   • A job whose payload carried no trimmed url keeps its source video
+ *     indefinitely. That is deliberate: one video beats none.
  */
 async function deleteSourceVideo(params: {
   supabase: ReturnType<typeof createAdminClient>;
@@ -407,7 +548,7 @@ async function deleteSourceVideo(params: {
   // results key, not the video's. One read, after the response is already out.
   const { data, error } = await supabase
     .from('processing_jobs')
-    .select('video_object_key')
+    .select('video_object_key, trimmed_object_key')
     .eq('id', jobId)
     .maybeSingle();
 
@@ -418,6 +559,27 @@ async function deleteSourceVideo(params: {
         error: error.message,
       });
     }
+    return;
+  }
+
+  if (!data.trimmed_object_key) {
+    console.log(
+      `${LOG} keeping source video — no trimmed copy exists for this job`,
+      { jobId }
+    );
+    return;
+  }
+
+  const copyStatus = await trimmedCopyStatus({
+    blobName: data.trimmed_object_key,
+  });
+
+  if (copyStatus !== 'success') {
+    console.log(
+      `${LOG} keeping source video — trimmed copy is ${copyStatus}; ` +
+        `the sweeper will delete it once the copy lands`,
+      { jobId }
+    );
     return;
   }
 

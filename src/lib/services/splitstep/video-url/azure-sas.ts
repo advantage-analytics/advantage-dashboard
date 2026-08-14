@@ -219,6 +219,63 @@ export function videoContainerClient(): ContainerClient {
   return containerClientFor(requireAzureStorageConfig());
 }
 
+/** What Azure reports for a copy. `pending` is the normal answer for a big one. */
+export type BlobCopyStatus = 'pending' | 'success' | 'aborted' | 'failed';
+
+/**
+ * Copy the vendor's trimmed video into our own container.
+ *
+ * Server-side. `beginCopyFromURL` issues Azure's async Copy Blob operation, so
+ * AZURE pulls from their SAS directly and not one byte passes through this
+ * function — which is the only reason this is possible at all inside a webhook
+ * bounded by maxDuration = 60. A multi-gigabyte transfer would otherwise need
+ * infrastructure we do not have.
+ *
+ * Do NOT swap this for syncCopyFromURL. It looks tidier because it returns when
+ * the copy is done, and it caps at 256 MiB — roughly two orders of magnitude
+ * under a trimmed match, so it would fail on every real job and pass on every
+ * fixture small enough to test with.
+ *
+ * The returned status is almost always `pending`: the poller is started, not
+ * awaited, because waiting for gigabytes is exactly what we are avoiding. That
+ * is why the source video's deletion cannot key off this call — see
+ * trimmedCopyStatus(), which is what answers "is it safe to delete yet".
+ */
+export async function startTrimmedVideoCopy(params: {
+  blobName: string;
+  sourceUrl: string;
+}): Promise<{ copyStatus: BlobCopyStatus }> {
+  const poller = await videoContainerClient()
+    .getBlockBlobClient(params.blobName)
+    .beginCopyFromURL(params.sourceUrl);
+
+  const result = poller.getResult();
+  return { copyStatus: (result?.copyStatus as BlobCopyStatus) ?? 'pending' };
+}
+
+/**
+ * Where a previously started copy has got to.
+ *
+ * Read from the destination blob's properties rather than tracked by us: Azure
+ * owns the transfer, so Azure is the only thing that knows. A blob that does not
+ * exist yet reports `pending` — the copy was accepted and has not materialised —
+ * which keeps the "not safe to delete the source" answer the same for both
+ * "still running" and "never started".
+ */
+export async function trimmedCopyStatus(params: {
+  blobName: string;
+}): Promise<BlobCopyStatus> {
+  const client = videoContainerClient().getBlockBlobClient(params.blobName);
+
+  try {
+    const properties = await client.getProperties();
+    return (properties.copyStatus as BlobCopyStatus) ?? 'pending';
+  } catch {
+    // 404 while a cross-account copy is in flight is normal, not exceptional.
+    return 'pending';
+  }
+}
+
 export class AzureSasVideoUrlStrategy implements VideoUrlStrategy {
   readonly id = 'azure-sas' as const;
 
