@@ -13,12 +13,11 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
-  type AnalysisStatus,
   type MatchAnalysis,
-  STATUS_MAP,
   importedAnalysis,
   manualAnalysis,
   pipelinePercent,
+  resolveAnalysisStatus,
 } from './match-analysis';
 import { formatClock } from '@/components/dashboard/matches/new-match-wizard/utils';
 
@@ -30,6 +29,11 @@ interface JobRow {
   billable_seconds: number | null;
   external_job_id: string | null;
   created_at: string;
+  /**
+   * Stamped by the derivation engine. Null means the vendor's `completed` has
+   * not been turned into points and shots yet — see resolveAnalysisStatus().
+   */
+  derivation_version: string | null;
 }
 
 /**
@@ -64,7 +68,7 @@ export async function loadMatchAnalysis(
   const { data, error } = await supabase
     .from('processing_jobs')
     .select(
-      'match_id, status, upload_progress_percent, error_message, billable_seconds, external_job_id, created_at'
+      'match_id, status, upload_progress_percent, error_message, billable_seconds, external_job_id, created_at, derivation_version'
     )
     .in('match_id', matchIds)
     // Newest first, so the reduce below keeps the latest attempt per match.
@@ -85,7 +89,7 @@ export async function loadMatchAnalysis(
     // its current attempt rather than a stale one.
     if (out.has(row.match_id)) continue;
 
-    const status = STATUS_MAP[row.status];
+    const status = resolveAnalysisStatus(row.status, row.derivation_version);
     if (!status) {
       console.warn('[match-analysis] unmapped processing_jobs.status', {
         status: row.status,

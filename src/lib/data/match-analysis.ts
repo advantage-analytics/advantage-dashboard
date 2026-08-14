@@ -39,6 +39,20 @@ export type AnalysisStatus =
    * something untrue about where their match is.
    */
   | "uploaded"
+  /**
+   * The vendor is finished and our derivation engine has not run.
+   *
+   * Not a `processing_jobs.status` — the row says `completed`, which is true of
+   * the vendor's half and only that. Derivation is gated (Phase 2, on Q8/Q9/Q13),
+   * so no points, shots or match_stats exist yet, and treating `completed` as
+   * "Analyzed" sent the player to a stats page rendering `[]` for every section.
+   * An empty serve chart reads as "you hit no serves", not "we're still working".
+   *
+   * Resolved from `derivation_version` being null — see resolveAnalysisStatus().
+   * It retires itself: the moment the engine stamps that column this state stops
+   * being reachable, with no code change.
+   */
+  | "processed"
   /* --- derived, not job statuses --- */
   /** Arrived complete from a file import. Never had a processing job. */
   | "imported"
@@ -119,12 +133,47 @@ export const STATUS_MAP: Record<string, AnalysisStatus> = {
   derivation_failed: "derivation_failed",
 };
 
+/**
+ * A job row's two status columns → what the UI calls it.
+ *
+ * `status` alone is not enough. The vendor's `completed` means their half is
+ * done, and says nothing about whether we have turned the stroke stream into
+ * points and shots — so a job sat at "Analyzed" with a stats page full of empty
+ * charts. `derivation_version` is the column that distinguishes them: written
+ * only by the derivation engine, null until it runs.
+ *
+ * CONTRACT: derivation must stamp `derivation_version` in the same transaction
+ * that writes stats. Nothing enforces it, and if it is ever skipped every
+ * analysed match reads "Stats pending" forever.
+ *
+ * Both the server loader and the realtime hook go through here. STATUS_MAP was
+ * consolidated into this module for exactly that reason once already; adding a
+ * second column to one caller and not the other would put the matches list and
+ * the match page back to disagreeing about the same row.
+ *
+ * Returns undefined for a status the UI has no word for — callers warn and skip
+ * rather than rendering a job in a state nobody designed.
+ */
+export function resolveAnalysisStatus(
+  dbStatus: string,
+  derivationVersion: string | null | undefined
+): AnalysisStatus | undefined {
+  const status = STATUS_MAP[dbStatus];
+  if (!status) return undefined;
+
+  return status === "completed" && !derivationVersion ? "processed" : status;
+}
+
 export const ANALYSIS_LABEL: Record<AnalysisStatus, string> = {
   uploading: "Uploading",
   uploaded: "Uploaded",
   queued: "Queued",
   processing: "Processing",
   deriving: "Analyzing",
+  // Same family as "Stats failed" and "Stats unavailable", and deliberately not
+  // a variant of "Processing" — the two would be one letter apart on screen
+  // while meaning opposite things about whether anything is still running.
+  processed: "Stats pending",
   completed: "Analyzed",
   failed: "Failed",
   derivation_failed: "Stats failed",
@@ -279,6 +328,11 @@ export function stageIndexFor(status: AnalysisStatus): number {
       return 1;
     case "processing":
     case "deriving":
+    // The Analyzing stage covers both halves of the work — their detection and
+    // our derivation — so a job between them sits in it, having cleared the
+    // first half. There is no percentage to show either way: the vendor sends
+    // transitions without one.
+    case "processed":
     case "failed":
       return 2;
     case "derivation_failed":
@@ -294,7 +348,16 @@ const IN_FLIGHT = new Set<AnalysisStatus>([
   "queued",
   "processing",
   "deriving",
+  "processed",
 ]);
+/**
+ * In flight, but nothing is moving right now.
+ *
+ * Both are waiting on something outside the pipeline: `uploaded` on submission,
+ * `processed` on a derivation engine that is gated. They belong in IN_FLIGHT —
+ * the state will change — but animating them would claim work is happening.
+ */
+const IDLE = new Set<AnalysisStatus>(["uploaded", "processed"]);
 const FAILED = new Set<AnalysisStatus>(["failed", "derivation_failed"]);
 const READY = new Set<AnalysisStatus>(["completed", "imported"]);
 
@@ -306,16 +369,17 @@ export function isInFlight(status: AnalysisStatus): boolean {
 /**
  * Something is happening RIGHT NOW. Narrower than isInFlight.
  *
- * `uploaded` is the first status where the two diverge: the transfer is done and
- * nothing moves again until a human runs the submit script, possibly days later.
- * Conflating them made a finished upload animate forever on the match page while
- * the matches list, which special-cased it separately, did not — one state, two
- * answers, on the two screens the shared track was meant to reconcile.
+ * `uploaded` was the first status where the two diverged: the transfer is done
+ * and nothing moves again until submission. Conflating them made a finished
+ * upload animate forever on the match page while the matches list, which
+ * special-cased it separately, did not — one state, two answers, on the two
+ * screens the shared track was meant to reconcile. `processed` is the same shape
+ * of thing, which is why the exception is a set rather than a second `&&`.
  *
- * Drives the progress track's `live` flag. If it animates, bytes are moving.
+ * Drives the progress track's `live` flag. If it animates, work is happening.
  */
 export function isWorking(status: AnalysisStatus): boolean {
-  return IN_FLIGHT.has(status) && status !== "uploaded";
+  return IN_FLIGHT.has(status) && !IDLE.has(status);
 }
 
 export function isAnalysisFailed(status: AnalysisStatus): boolean {
@@ -334,11 +398,19 @@ export interface AnalysisAction {
   hoverInk: string;
 }
 
-/** Row action. Every state carries one, styled as a text link rather than a button. */
+/**
+ * Row action, styled as a text link rather than a button.
+ *
+ * Null when there is genuinely nothing to offer. `processed` is the case: the
+ * vendor has finished, so "Cancel" would be offering to stop work that is over,
+ * and "View stats" would lead to the empty page this state exists to prevent.
+ */
 export function analysisAction(
   analysis: MatchAnalysis,
   matchId: string
-): AnalysisAction {
+): AnalysisAction | null {
+  if (analysis.status === "processed") return null;
+
   if (isAnalysisReady(analysis.status)) {
     return {
       label: "View stats",

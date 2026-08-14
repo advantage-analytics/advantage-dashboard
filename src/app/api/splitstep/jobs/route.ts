@@ -7,9 +7,10 @@
  * users — the script stays for the smoke test, where hardcoding metadata is the
  * point.
  *
- * NOTE: nothing in the app calls this route yet. The wizard stops at
- * `status: 'uploaded'` and submission is still a hand-run script, deliberately,
- * until one job has round-tripped with the vendor.
+ * Called automatically by the upload wizard the moment a transfer finishes —
+ * see useUploadMatchWizard.ts. A submit failure here deliberately does NOT mark
+ * the job failed: the bytes are safely in Azure and `status: 'uploaded'` is the
+ * one state a retry needs nothing re-uploaded from.
  *
  * Order matters, and it is: verify ownership → reserve quota → mint URL →
  * submit → record. Quota is reserved BEFORE the vendor is called, because an

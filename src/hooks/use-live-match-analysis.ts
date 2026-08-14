@@ -22,9 +22,9 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/client";
 import {
-  STATUS_MAP,
   type MatchAnalysis,
   pipelinePercent,
+  resolveAnalysisStatus,
 } from "@/lib/data/match-analysis";
 
 /** The columns a live update can change. Everything else comes from the server render. */
@@ -35,6 +35,12 @@ interface LiveJobRow {
   error_message: string | null;
   external_job_id: string | null;
   created_at: string;
+  /**
+   * Already on the wire without asking: under default replica identity the
+   * UPDATE payload carries the whole NEW row, so this needs declaring rather
+   * than fetching.
+   */
+  derivation_version: string | null;
 }
 
 export type LiveAnalysisPatch = Pick<
@@ -117,7 +123,10 @@ export function useLiveMatchAnalysis(
             const row = payload.new as Partial<LiveJobRow> | null;
             if (!row?.match_id || !row.status) return;
 
-            const status = STATUS_MAP[row.status];
+            const status = resolveAnalysisStatus(
+              row.status,
+              row.derivation_version
+            );
             if (!status) {
               console.warn("[live-analysis] unmapped processing_jobs.status", {
                 status: row.status,

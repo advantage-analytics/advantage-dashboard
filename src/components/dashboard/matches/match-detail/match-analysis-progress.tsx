@@ -43,6 +43,9 @@ const STAGE_NOTE: Partial<Record<MatchAnalysis["status"], string>> = {
   queued: STORED_NOTE,
   processing: "Nothing needs to stay open — this page fills in as soon as the analysis lands.",
   deriving: "Turning detected strokes into points and shots. Almost there.",
+  // Deliberately not "almost there". This state waits on work that is gated, so
+  // the honest version says what is done and does not promise when the rest is.
+  processed: "Your video came back analyzed and is saved. Turning it into your match stats is still in progress.",
 };
 
 interface MatchAnalysisProgressProps {
