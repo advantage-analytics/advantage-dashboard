@@ -28,6 +28,10 @@ import {
   uploadFileInBlocks,
 } from "@/lib/services/upload/azure-block-upload";
 import {
+  currentBillingMonth,
+  getMonthlyCapSeconds,
+} from "@/lib/services/splitstep/config";
+import {
   Step,
   FormData as MatchFormData,
   UploadedFile,
@@ -86,6 +90,15 @@ export type VideoUploadEvent = { matchId: string } & (
   | { kind: "started"; fileName: string; cancel: () => void }
   | { kind: "progress"; progress: VideoUploadProgress }
   | { kind: "done" }
+  /** Handed to the vendor. The transfer AND the submission both succeeded. */
+  | { kind: "submitted" }
+  /**
+   * Uploaded, but the vendor would not take it.
+   *
+   * Distinct from `failed`: the video is safely stored and the job row still
+   * says `uploaded`, so this is retryable without re-uploading anything.
+   */
+  | { kind: "submit_failed"; error: string }
   | { kind: "cancelled" }
   | { kind: "failed"; error: string }
 );
@@ -117,6 +130,11 @@ export interface UseUploadMatchWizardReturn {
   isProbing: boolean;
   /** Provider-owned media rules, so the wizard never names a vendor. */
   minTrimSeconds: number;
+  /**
+   * Seconds left in this month's allowance, for the trim step's cost note.
+   * Undefined while it loads, and for providers that do not bill.
+   */
+  remainingQuotaSeconds?: number;
   acceptString: string;
   requirementChips: readonly string[];
   onVideoPick: (file: File | null) => void;
@@ -233,6 +251,53 @@ export function useUploadMatchWizard({
   // identity change that cannot happen.
   const stepOrder = STEP_ORDER_BY_KIND[providerKind];
   const isProcessingProvider = providerKind === "processing";
+
+  /**
+   * Seconds left in this month's allowance, for the trim step's cost warning.
+   *
+   * Advisory only — reserve_processing_quota() is still the authority and
+   * refuses with a 429 at submit time. This mirrors its arithmetic exactly:
+   * unreleased rows for the current month, actual_seconds where a job finished
+   * and the reservation standing in until then. Getting it wrong here shows a
+   * misleading number; it cannot let anything through.
+   */
+  const [remainingQuotaSeconds, setRemainingQuotaSeconds] = useState<
+    number | undefined
+  >(undefined);
+
+  useEffect(() => {
+    if (!isProcessingProvider) return;
+    let cancelled = false;
+
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+
+      const { data, error } = await supabase
+        .from("processing_usage")
+        .select("reserved_seconds, actual_seconds")
+        .eq("account_id", user.id)
+        .eq("billing_month", currentBillingMonth())
+        .eq("released", false);
+
+      if (error || cancelled) return;
+
+      const used = (data ?? []).reduce(
+        (n, row) => n + (row.actual_seconds ?? row.reserved_seconds ?? 0),
+        0
+      );
+      setRemainingQuotaSeconds(
+        Math.max(0, getMonthlyCapSeconds("individual") - used)
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isProcessingProvider, supabase]);
+
 
   // Media rules, trim floor and billing all come from the provider rather than
   // from a vendor config the wizard imports directly — the wizard is written
@@ -795,17 +860,25 @@ export function useUploadMatchWizard({
         const endSeconds = formData.videoEndSeconds ?? 0;
         const videoFileToUpload = uploadedFile?.file;
 
-        const { error: jobError } = await supabase.from("processing_jobs").insert({
-          match_id: matchId,
-          created_by: userId,
-          provider: selectedProvider,
-          status: videoFileToUpload ? "uploading" : "pending",
-          start_time_seconds: startSeconds,
-          end_time_seconds: endSeconds,
-          billable_seconds: processingStrategy.billableSeconds(startSeconds, endSeconds),
-        });
+        // The id comes back now. Submission is keyed on it, and so is every
+        // write below — previously they all matched on match_id because this
+        // insert discarded it, which silently touches every job a resubmitted
+        // match has ever had.
+        const { data: jobRow, error: jobError } = await supabase
+          .from("processing_jobs")
+          .insert({
+            match_id: matchId,
+            created_by: userId,
+            provider: selectedProvider,
+            status: videoFileToUpload ? "uploading" : "pending",
+            start_time_seconds: startSeconds,
+            end_time_seconds: endSeconds,
+            billable_seconds: processingStrategy.billableSeconds(startSeconds, endSeconds),
+          })
+          .select("id")
+          .single();
 
-        if (jobError) {
+        if (jobError || !jobRow) {
           console.error("Processing job insert error:", jobError);
           // Roll back the match row so the user gets a clean retry
           await supabase.from("matches").delete().eq("id", matchId);
@@ -951,9 +1024,7 @@ export function useUploadMatchWizard({
                     void supabase
                       .from("processing_jobs")
                       .update({ upload_progress_percent: pct })
-                      // By match_id, matching the status writes below — the
-                      // insert above never selects the row id back.
-                      .eq("match_id", matchId)
+                      .eq("id", jobRow.id)
                       .then(({ error }) => {
                         if (error) {
                           console.warn(
@@ -982,10 +1053,60 @@ export function useUploadMatchWizard({
                   upload_progress_percent: 100,
                   updated_at: new Date().toISOString(),
                 })
-                .eq("match_id", matchId);
+                .eq("id", jobRow.id);
 
               console.log("✅ Successfully updated processing_jobs status to 'uploaded' for match:", matchId);
               onVideoUpload?.({ matchId, kind: "done" });
+
+              // Hand it to the vendor. The route owns everything from here:
+              // ownership, quota reservation, payload build, the POST, and
+              // recording external_job_id.
+              //
+              // Reported separately from the transfer, and deliberately does NOT
+              // mark the job failed. The bytes are safely in Azure and the row
+              // still says `uploaded`, which is both true and retryable — the
+              // one state from which a resubmit needs nothing re-uploaded.
+              try {
+                const submitRes = await fetch("/api/splitstep/jobs", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    jobId: jobRow.id,
+                    initialTopPlayerIsPlayer1: formData.initialTopPlayerIsPlayer1,
+                    adScoring: formData.adScoring,
+                    fixedCamera: formData.fixedCamera,
+                  }),
+                });
+
+                const submitPayload = await submitRes.json().catch(() => null);
+
+                if (!submitRes.ok) {
+                  // details[] is the payload builder's field list on a 422 —
+                  // far more use than the summary line.
+                  const detail = Array.isArray(submitPayload?.details)
+                    ? submitPayload.details.join(" ")
+                    : "";
+                  throw new Error(
+                    [submitPayload?.error ?? `Submission failed (HTTP ${submitRes.status})`, detail]
+                      .filter(Boolean)
+                      .join(" ")
+                  );
+                }
+
+                console.log("📤 Submitted for analysis:", submitPayload?.externalJobId ?? "(no id returned)");
+                onVideoUpload?.({ matchId, kind: "submitted" });
+              } catch (submitErr: any) {
+                const message = submitErr?.message || "Could not submit for analysis";
+                console.error("Submission failed — the video is uploaded and can be retried:", message);
+
+                // Recorded, not fatal. Status stays `uploaded`.
+                await supabase
+                  .from("processing_jobs")
+                  .update({ error_message: message, updated_at: new Date().toISOString() })
+                  .eq("id", jobRow.id);
+
+                onVideoUpload?.({ matchId, kind: "submit_failed", error: message });
+              }
             } catch (uploadErr: any) {
               const cancelled = uploadErr instanceof UploadAbortedError;
               console[cancelled ? "log" : "error"](
@@ -1007,7 +1128,7 @@ export function useUploadMatchWizard({
                   error_message: message,
                   updated_at: new Date().toISOString(),
                 })
-                .eq("match_id", matchId);
+                .eq("id", jobRow.id);
 
               window.dispatchEvent(
                 new CustomEvent("match-upload-failed", {
@@ -1108,6 +1229,7 @@ export function useUploadMatchWizard({
     videoWarnings,
     isProbing,
     minTrimSeconds: processingStrategy?.minTrimSeconds ?? 0,
+    remainingQuotaSeconds,
     acceptString: processingStrategy?.getAcceptString() ?? "",
     requirementChips: processingStrategy?.requirementChips ?? [],
     onVideoPick,

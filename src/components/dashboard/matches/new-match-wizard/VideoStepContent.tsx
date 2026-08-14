@@ -20,6 +20,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clapperboard,
+  Info,
   Loader2,
   Pause,
   Play,
@@ -52,6 +53,11 @@ export interface VideoStepContentProps {
   isOver: boolean;
   /** Provider-supplied floor, so this component never names a vendor. */
   minTrimSeconds: number;
+  /**
+   * Seconds left in this month's allowance, for the untrimmed-cost note.
+   * Undefined while it loads, or for providers that do not bill.
+   */
+  remainingQuotaSeconds?: number;
   /** From the provider strategy — keeps the picker and the validator in sync. */
   acceptString: string;
   /** Requirement chips, derived from provider config rather than hardcoded. */
@@ -120,6 +126,7 @@ interface ViewWindow {
 function VideoStepContentImpl({
   videoFile,
   probe,
+  remainingQuotaSeconds,
   warnings,
   isProbing,
   error,
@@ -151,6 +158,18 @@ function VideoStepContentImpl({
   const end = endSeconds ?? duration;
   const selectedDuration = Math.max(0, end - start);
   const tooShort = duration > 0 && selectedDuration < minTrimSeconds;
+
+  // Untrimmed means the whole recording gets analysed, and the allowance is
+  // charged for it. That is legitimate when the recording really is just the
+  // match, so this informs rather than blocks — but the number belongs here,
+  // beside the handles that can change it, not on a summary screen after the
+  // upload has already run.
+  const untrimmed = duration > 0 && start <= 0 && end >= duration - 1;
+  const costNote =
+    untrimmed && remainingQuotaSeconds !== undefined
+      ? `Not trimmed. This will use ${Math.ceil(selectedDuration / 60)} of your ` +
+        `${Math.floor(remainingQuotaSeconds / 60)} remaining minutes this month.`
+      : null;
 
   /** One frame, when we know the rate. Falls back to a reasonable nudge. */
   const frameStep = probe?.fps ? 1 / probe.fps : 0.1;
@@ -983,13 +1002,28 @@ function VideoStepContentImpl({
             </p>
           </div>
         ) : (
-          <p className="text-[12px] leading-[1.5] text-[#888888]">
-            Hold a handle to zoom into that part of the video — the strip magnifies so
-            each pixel moves frames, not minutes. Set the start just before the first
-            serve and the end just after the final point. The window must contain{" "}
-            <span className="text-[#525252]">complete games</span> matching the score you
-            enter next — cutting into the middle of a game throws off every point after it.
-          </p>
+          <>
+            {costNote && (
+              <div className="flex items-start gap-2 rounded-[10px] border border-[#E0902E]/25 bg-[#E0902E]/[0.05] px-3 py-2.5">
+                <Info
+                  className="mt-px size-3.5 shrink-0 text-[#E0902E]"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+                <p className="text-[12px] leading-[1.5] text-[#525252]">
+                  {costNote} Trimming to just the match keeps the rest for other
+                  uploads.
+                </p>
+              </div>
+            )}
+            <p className="text-[12px] leading-[1.5] text-[#888888]">
+              Hold a handle to zoom into that part of the video — the strip magnifies so
+              each pixel moves frames, not minutes. Set the start just before the first
+              serve and the end just after the final point. The window must contain{" "}
+              <span className="text-[#525252]">complete games</span> matching the score you
+              enter next — cutting into the middle of a game throws off every point after it.
+            </p>
+          </>
         )}
       </div>
     </div>

@@ -52,7 +52,19 @@ const CONTENT_CLS = "mx-auto w-full max-w-[820px] px-8";
  */
 interface UploadState {
   matchId: string;
-  phase: "uploading" | "done" | "cancelled" | "failed";
+  /**
+   * `done` means the bytes landed; `submitted` means the vendor took the job.
+   * `submit_failed` is deliberately separate from `failed` — the video is
+   * stored and the row still says `uploaded`, so it is retryable without
+   * re-uploading anything.
+   */
+  phase:
+    | "uploading"
+    | "done"
+    | "submitted"
+    | "submit_failed"
+    | "cancelled"
+    | "failed";
   fileName: string;
   progress?: VideoUploadProgress;
   error?: string;
@@ -62,13 +74,19 @@ interface UploadState {
 /** One source for phase colour, so the label ink cannot disagree with the track. */
 const PHASE_INK: Record<UploadState["phase"], string> = {
   uploading: "#3B82F6",
-  done: "#5DB955",
+  // Uploaded but not yet handed over is still in motion, so it reads as action
+  // rather than success — the green is reserved for the vendor accepting it.
+  done: "#3B82F6",
+  submitted: "#5DB955",
+  submit_failed: "#E51837",
   cancelled: "#E51837",
   failed: "#E51837",
 };
 
 const PHASE_LABEL: Record<Exclude<UploadState["phase"], "uploading">, string> = {
-  done: "Uploaded",
+  done: "Submitting…",
+  submitted: "Submitted",
+  submit_failed: "Not submitted",
   cancelled: "Cancelled",
   failed: "Failed",
 };
@@ -152,9 +170,12 @@ function UploadMatchSuccess({
 }) {
   const uploading = uploads.filter((u) => u.phase === "uploading");
   const problems = uploads.filter(
-    (u) => u.phase === "failed" || u.phase === "cancelled"
+    (u) =>
+      u.phase === "failed" ||
+      u.phase === "cancelled" ||
+      u.phase === "submit_failed"
   );
-  const busy = uploading.length > 0;
+  const busy = uploading.length > 0 || uploads.some((u) => u.phase === "done");
 
   return (
     <div className={`${CONTENT_CLS} pb-16 pt-10`}>
@@ -187,8 +208,11 @@ function UploadMatchSuccess({
               ? `Keep this tab open until all ${uploading.length} videos finish. The matches themselves are already safe.`
               : "Keep this tab open until the video finishes. The match itself is already safe."
             : problems.length > 0
-            ? problems[0].error ?? "The video upload did not finish."
-            : "Analysis results are added as soon as they're ready."}
+            ? problems[0].error ??
+              (problems[0].phase === "submit_failed"
+                ? "Your video is stored, but it could not be sent for analysis."
+                : "The video upload did not finish.")
+            : "Sent for analysis. Results are added as soon as they're ready."}
         </p>
 
         {/* One row per transfer. Everything here comes from the browser's own
@@ -211,8 +235,13 @@ function UploadMatchSuccess({
                 </div>
 
                 <AnalysisProgressTrack
-                  percent={u.phase === "done" ? 100 : u.progress?.pct ?? 0}
-                  live={u.phase === "uploading"}
+                  percent={
+                    u.phase === "uploading" ? u.progress?.pct ?? 0 : 100
+                  }
+                  // `done` keeps the sheen: bytes have landed but the job is
+                  // still being handed over, and a still bar would read as
+                  // finished.
+                  live={u.phase === "uploading" || u.phase === "done"}
                   tone={PHASE_INK[u.phase]}
                   label={`${u.fileName} ${u.phase}`}
                 />
@@ -339,6 +368,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     videoWarnings,
     isProbing,
     minTrimSeconds,
+    remainingQuotaSeconds,
     acceptString,
     requirementChips,
     onVideoPick,
@@ -603,6 +633,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
               endSeconds={formData.videoEndSeconds}
               isOver={isOver}
               minTrimSeconds={minTrimSeconds}
+              remainingQuotaSeconds={remainingQuotaSeconds}
               acceptString={acceptString}
               requirementChips={requirementChips}
               onDragOver={onDragOver}
