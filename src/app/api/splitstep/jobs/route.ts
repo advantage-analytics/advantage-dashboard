@@ -18,9 +18,10 @@
  * the reservation hands it back.
  */
 
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse, after, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { adoptOrphanedDeliveries } from '@/lib/services/splitstep/adopt-deliveries';
 import { buildSplitStepJobRequest } from '@/lib/services/splitstep/job-request';
 import { parseWebhookPayload } from '@/lib/services/splitstep/webhook-payload';
 import { resolveWebhookUrl } from '@/lib/services/splitstep/config';
@@ -372,6 +373,56 @@ export async function POST(request: NextRequest) {
       jobId: job.id,
       externalJobId,
       billableSeconds,
+    });
+
+    // Pick up any delivery that beat this write. The vendor fires `job_queued`
+    // on acceptance, and on the first real job it landed 0.9s after our POST —
+    // before `external_job_id` existed to match it against, and their payload
+    // does not echo `MatchID`, so the usual fallback had nothing to work with.
+    //
+    // In after(), and deliberately NOT inside the try above: a throw there runs
+    // the catch block, which releases quota and retires the video URL. Undoing a
+    // submission the vendor has already accepted, because a bookkeeping fixup
+    // failed, would be far worse than the orphan it is fixing.
+    after(async () => {
+      try {
+        const result = await adoptOrphanedDeliveries({
+          supabase: admin,
+          jobId: job.id,
+          externalJobId,
+        });
+
+        if (result.adopted === 0) return;
+
+        console.log(`${LOG} adopted ${result.adopted} early delivery/deliveries`, {
+          jobId: job.id,
+          jobStatus: result.jobStatus,
+        });
+
+        // The reason this is not merely cosmetic. A `job_failed` that lost the
+        // race never reached the webhook's quota release, so those minutes would
+        // stay spent against a 2-hour monthly cap with nothing to show for it.
+        // releaseQuota() is idempotent via `released = false`.
+        if (result.jobStatus === 'failed') {
+          await releaseQuota(admin, job.id);
+          console.log(`${LOG} quota released for adopted failure`, { jobId: job.id });
+        }
+
+        if (result.owedResultsDownload) {
+          console.error(
+            `${LOG} an adopted delivery carried a results URL that was never ` +
+              `downloaded — fetch sas_url from splitstep_webhook_deliveries by ` +
+              `hand; it stays valid about a week`,
+            { jobId: job.id, externalJobId }
+          );
+        }
+      } catch (err) {
+        console.error(`${LOG} could not adopt early deliveries`, {
+          jobId: job.id,
+          externalJobId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     });
 
     return NextResponse.json({
