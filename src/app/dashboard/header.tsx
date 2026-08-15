@@ -131,31 +131,17 @@ export function Header() {
     fetchMatchCrumb();
   }, [matchId]);
 
-  // Map match sub-route slugs to display labels
-  const matchSubRouteLabels: Record<string, string> = {
-    insights: "Insights",
-    performance: "Performance",
-    statistics: "Statistics",
-    video: "Video",
-    visuals: "Visuals",
-  };
-
-  const matchSubRoute = isMatchDetailPage && matchId
-    ? pathname.match(new RegExp(`^/dashboard/matches/${matchId}/([^/]+)$`))?.[1]
-    : null;
-
+  // A match detail page is one page. `matches/[matchId]/` has no
+  // sub-directories — only error/layout/loading/not-found/page — so the trail
+  // that used to be built here for insights/performance/statistics/video/visuals
+  // matched routes that cannot be reached. It rendered a deeper crumb than the
+  // app actually has, and the regex that fed it never matched anything.
   const breadcrumbs: { label: string; href?: string }[] =
     isMatchDetailPage && matchCrumb
       ? [
           { label: "Matches", href: "/dashboard/matches" },
           { label: matchCrumb.tournamentName },
-          {
-            label: `${matchCrumb.player1Name} vs ${matchCrumb.player2Name}`,
-            ...(matchSubRoute ? { href: `/dashboard/matches/${matchId}` } : {}),
-          },
-          ...(matchSubRoute && matchSubRouteLabels[matchSubRoute]
-            ? [{ label: matchSubRouteLabels[matchSubRoute] }]
-            : []),
+          { label: `${matchCrumb.player1Name} vs ${matchCrumb.player2Name}` },
         ]
       : (getStaticBreadcrumbs(pathname) ?? []);
 

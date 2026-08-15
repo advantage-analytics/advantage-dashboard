@@ -37,7 +37,14 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: ["⌘", "K"], action: "Open the search command palette" },
       { keys: ["/"], action: "Focus search from anywhere outside an input" },
       { keys: ["⌘", "B"], action: "Toggle the sidebar" },
-      { keys: ["⌘", "U"], action: "Open the upload-match modal" },
+      {
+        keys: ["⌘", "U"],
+        // Not a modal any more — it navigates to /dashboard/matches/new. And
+        // the listener is mounted by create-match-button.tsx, so the shortcut
+        // only exists on pages that render that button.
+        action: "Start a new match",
+        note: "On pages that show the Create Match button.",
+      },
       { keys: ["esc"], action: "Close the active modal, dropdown, or palette" },
       {
         keys: ["←"],

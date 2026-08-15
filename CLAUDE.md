@@ -25,7 +25,7 @@ Tests use Playwright but no test files exist yet. The scripts (`npm run test`, `
 **Dashboard** (`src/app/dashboard/`): Protected area with sidebar + header layout.
 - `(home)/` — Home dashboard (KPIs, charts, activity feed, recent matches)
 - `matches/` — Match list with gallery/list views
-- `matches/[matchId]/` — Match detail page. The main `page.tsx` renders all sections inline (overview, performance, court, statistics, video) with a Table of Contents sidebar. The layout at `matches/[matchId]/layout.tsx` fetches match data and provides it via `MatchDataProvider` context. Sub-routes (`insights/`, `performance/`, `statistics/`, `video/`, `visuals/`) exist as deep-link destinations from home page widgets.
+- `matches/[matchId]/` — Match detail page. A single page with **no sub-routes** — the directory holds only `error/layout/loading/not-found/page`. Sections are scroll anchors on the one page, not routes. The layout at `matches/[matchId]/layout.tsx` wraps children in `MatchDataProvider` (see Match Detail Data Sharing below). `page.tsx` short-circuits when the match is still being analysed or has failed: it renders the hero, summary row and `MatchAnalysisProgress` instead of the stat sections, because every one of them would otherwise draw zeroes and an empty serve chart reads as "you hit no serves".
 - `statistics/` — Aggregate stats across matches with match selector filters
 - `settings/{account,profile,subscription}/` — Settings sub-pages
 - `help/` — Help page
@@ -51,7 +51,7 @@ Key tables: `matches`, `match_stats`, `points`, `shots`, `users`. The `match_sta
 
 ### Match Detail Data Sharing
 
-`MatchDataProvider` (`src/components/dashboard/matches/match-data-provider.tsx`) is a React Context that holds match metadata, statistics, and points. The match detail layout fetches everything server-side and passes it into the provider. The main page and sub-route pages consume the context — no re-fetching per route.
+`MatchDataProvider` (`src/components/dashboard/matches/match-data-provider.tsx`) is a React Context that holds match metadata, statistics, and points. The layout and `page.tsx` each call `getMatchDetailData()` from `src/lib/data/match-detail-server.ts`, which is wrapped in React `cache()` — so the two calls share one fetch per request rather than duplicating it. The page passes data to its cards as props; client components deeper in the tree (e.g. `ServePlacementCard`) read the context via `useMatchData()` instead of prop-drilling.
 
 ### Statistics Data Layer
 
@@ -102,7 +102,7 @@ If unsure, ask the user "widgetless or card-wrapped?" before starting.
 
 When the user references a page (e.g., "the match detail page", "the home dashboard", "the video section"), **open the route file first** and follow the import chain to identify the exact rendered component. State the file path before proposing edits.
 
-Do NOT assume based on filename similarity — this project has multiple components with overlapping names that render in different routes (e.g., `serve-placement-home.tsx` vs `CourtPlacementSection`, the full video page at `matches/[matchId]/video/` vs the video widget inside the match detail page). Picking the wrong one wastes a cycle.
+Do NOT assume based on filename similarity — this project has multiple components with overlapping names that render in different routes. Serve placement exists three times: `home/serve-placement-home.tsx` on the home dashboard, `matches/match-detail/serve-placement-card.tsx` on match detail, and `statistics/serve-placement-stats.tsx` on statistics. Picking the wrong one wastes a cycle.
 
 ## Key Conventions
 
