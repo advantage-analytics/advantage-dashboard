@@ -64,7 +64,16 @@ v2 is rebuilt from the live product code on the `splitstep-integration` branch �
 
 - **Lucide only**, strokeWidth 1.5. Sizes: 14px inline/nav (`size-3.5`), 15px header chrome, 12/16/20px supporting, 32px empty states. Never emoji, never hand-rolled SVGs.
 - Product marks live in `/public/icons` (tennis-court, tournament, verified ×2). Provider logos: SwingVision, ATP.
-- Logos in `/public/logos`. v2 also defines `logo-wordmark.svg` (sidebar, 141×24) and `logo-mark.svg` (collapsed swoosh, 30×21), which are **not yet in this repo** — pull them from the design project when the sidebar is rebuilt. White-on-dark via `filter: brightness(0) invert(1)`.
+- Logos in `/public/logos`. The design project renames them; the art is the same and already here:
+
+  | v2 name | In this repo | Size |
+  |---|---|---|
+  | `logo-wordmark.svg` (sidebar) | `logo4.svg` | 141×24 — exact match |
+  | `logo-mark.svg` (collapsed swoosh) | `logo3.svg` | 46×31 (v2 exports at 30×21; SVG, so it scales) |
+  | `logo.svg` (auth lockup) | `logo.svg` | 320×57 |
+  | alternates | `logo2.svg`, `logo5.svg` | |
+
+  Nothing needs pulling from the design project. White-on-dark via `filter: brightness(0) invert(1)`.
 
 ## Component library — in the design project, not the repo
 
