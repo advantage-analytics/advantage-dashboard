@@ -1,0 +1,211 @@
+/* Advantage DS v2 — color tokens. Source: advantage-dashboard globals.css
+   (splitstep-integration branch). Light values on :root, dark on .dark.
+
+   IMPORTED VERBATIM from the Claude Design project "Advantage Design System v2"
+   (932d1406-360f-4a6e-8617-5a3c600ecb67). Every name here was checked against
+   globals.css before import: none of them collide, so this file adds vocabulary
+   and changes nothing that already renders. globals.css keeps its shadcn-shaped
+   --color-* set; migrate components onto these names deliberately, not in bulk. */
+:root{
+  /* Ink scale — neutral text/border ramp */
+  /* Ink scale — numbered neutral ramp (review: option C). Any gray that must
+     be READ is ≥600 (4.5:1+); 500/400 are decorative; 300 disabled only. */
+  --ink-900:#0D0D0D;
+  --ink-700:#525252;
+  --ink-600:#71717A; /* muted-but-readable — fills the AA gap */
+  --ink-500:#888888;
+  --ink-400:#AAAAAA;
+  --ink-300:#CCCCCC;
+  --ink-200:#E5E5EA;
+  --ink-100:#F3F3F3;
+  --ink-border:var(--ink-200); /* merged — #EAECF0 was a near-twin */
+  /* Legacy names — aliases only */
+  --ink-dialog:var(--ink-900);
+  --ink-tertiary:var(--ink-600);
+  --ink-faint:var(--ink-300);
+
+  /* Semantic text aliases */
+  --text-heading:var(--ink-900);
+  --text-body:#525252;
+  --text-muted:var(--ink-500);
+  --text-label:var(--ink-400);
+  --text-disabled:var(--ink-300);
+
+  /* Surfaces */
+  --surface-page:#FAFAFA;
+  --surface-card:#FFFFFF;
+  --surface-muted:#FAFAFA;
+  --surface-raised:#FFFFFF;
+  --surface-subtle:#F5F5F5;
+  /* Twins merged (review U2) — aliases only */
+  --surface-field:var(--surface-subtle);
+  --surface-skeleton:var(--ink-100);
+  --radar-grid:var(--ink-100);
+  --surface-dark:#0D0D0D;
+  --border-card:var(--ink-100);
+  --border-hairline:var(--ink-100);
+  --border-medium:#E5E5EA;
+  --border-field:var(--ink-200); /* merged — #EAECF0 was a near-twin of ink-200 */
+  --border-subtle:rgba(0,0,0,0.1);
+  --border-faint:rgba(0,0,0,0.05);
+  /* Chrome grays — header + sidebar item ink (iOS-derived) */
+  --nav-fg:#8A8A8E;
+  --nav-fg-hover:#3C3C43;
+
+  /* Signal Blue — the single accent. Two washes + rings; nothing in between. */
+  --blue:#3B82F6;
+  --blue-hover:#2563EB;
+  --blue-tint-08:rgba(59,130,246,0.08); /* wash — nav active, tinted footnotes */
+  --blue-tint-12:rgba(59,130,246,0.12); /* selection — ::selection, active chips */
+  --blue-tint-04:var(--blue-tint-08); /* deprecated alias — 4% was indistinguishable from 8% */
+  --blue-soft:#EBF2FD; /* baked-hex wash for opaque contexts (nav rows) */
+  --blue-pressed:#EFF4FF; /* baked-hex pressed wash */
+  --blue-ring-30:rgba(59,130,246,0.30); /* border hint — outline-button hover */
+  --blue-ring-40:rgba(59,130,246,0.40); /* focus ring */
+  --blue-glow:rgba(59,130,246,0.15);
+  /* Text-on-tint retired (review): informational capsules are neutral —
+     surface-subtle bg + ink text. Aliases kept so nothing breaks. */
+  --blue-ink-deep:var(--ink-900);
+  --blue-ink-mid:var(--ink-700);
+
+  /* Outcome — win/loss only, never mood or decoration */
+  --success:#5DB955;
+  --success-hover:#4EA84A;
+  --success-tint-04:rgba(93,185,85,0.04);
+  --success-tint-12:rgba(115,230,104,0.12);
+  --success-tint-15:rgba(115,230,104,0.15);
+  --success-tint-20:rgba(93,185,85,0.20);
+  --danger:#E51837;
+  --danger-hover:#C41530;
+  --danger-tint-15:rgba(229,24,55,0.15);
+  --danger-tint-70:rgba(229,24,55,0.70);
+  /* Inline form errors (auth vocabulary, iOS-red, distinct from Loss Red) */
+  --error:#FF453A;
+  --error-bg:rgba(255,69,58,0.08);
+
+  /* Player attribution — you own Signal Blue; the opponent recedes to cool
+     slate (review decision C: violet retired from attribution). */
+  --player-1:#3B82F6;
+  --player-1-text:#1D4ED8;
+  --player-1-soft:#EFF4FF;
+  --player-1-bar-tint:#BFD5FB;
+  --player-2:#64748B;
+  --player-2-text:#475569;
+  --player-2-soft:#F1F5F9;
+  --player-2-bar-tint:#CBD5E1;
+
+  /* Data-viz (charts ONLY — never chrome). Role-based palette (review M1):
+     You = blue steps · Opponent/context = slate steps · Good/Bad = outcome ·
+     amber = key moments only · density/grid support. Violet + surface hues retired. */
+  --viz-you:#3B82F6;
+  --viz-you-deep:#2563EB;
+  --viz-you-mid:#60A5FA;
+  --viz-you-light:#93C5FD;
+  --viz-opp:#64748B;
+  --viz-opp-deep:#475569;
+  --viz-opp-mid:#94A3B8;
+  --viz-opp-light:#CBD5E1;
+  --viz-good:#5DB955;
+  --viz-good-soft:rgba(93,185,85,0.35);
+  --viz-bad:#E51837;
+  --viz-bad-soft:rgba(229,24,55,0.30);
+  --viz-key:#E0902E; /* key moments ONLY — break points, momentum shifts */
+  --viz-heatmap-0:#F2F2F2;
+  --viz-heatmap-1:#B8D4F9;
+  --viz-heatmap-2:#6AABFF;
+  --viz-heatmap-3:#3B82F6;
+  --viz-court-fill:#D6E4F9;
+  /* Legacy aliases (pre-M1 names) */
+  --viz-won:var(--viz-good);
+  --viz-lost:var(--viz-bad);
+  --viz-amber:var(--viz-key);
+  --viz-slate-deep:var(--viz-opp-deep);
+  --viz-slate:var(--viz-opp);
+  --viz-slate-light:var(--viz-opp-mid);
+  --viz-blue-deep:var(--viz-you-deep);
+  --viz-blue:var(--viz-you);
+  --viz-blue-mid:var(--viz-you-mid);
+  --viz-blue-light:var(--viz-you-light);
+}
+
+/* Dark mode — same token names, values flip. WCAG AA verified on #0E0E10:
+   ink-900=18.6:1, 700=9.2, 500=5.4, 400=5.0 (AA), 300=3.6 (AA Large only).
+
+   globals.css already declares `@custom-variant dark (&:is(.dark *))` and two
+   .dark blocks of its own, so this scope activates with the same class. These
+   are additional names, not overrides of those. */
+.dark{
+  --ink-900:#F5F5F5;
+  --ink-700:#B5B5B5;
+  --ink-600:#9A9A9A;
+  --ink-500:#8A8A8A;
+  --ink-400:#828282;
+  --ink-300:#6A6A6A;
+  --ink-200:#2E2E2E;
+  --ink-100:#1F1F1F;
+  --ink-border:var(--ink-200);
+  --ink-dialog:var(--ink-900);
+  --ink-tertiary:var(--ink-600);
+  --ink-faint:var(--ink-300);
+  --text-heading:var(--ink-900);
+  --text-body:#B5B5B5;
+  --surface-page:#0A0A0B;
+  --surface-card:#0E0E10;
+  --surface-muted:#161618;
+  --surface-raised:#1F1F1F;
+  --surface-subtle:#1A1A1C;
+  --surface-field:var(--surface-subtle);
+  --surface-skeleton:var(--ink-100);
+  --border-card:var(--ink-100);
+  --border-hairline:var(--ink-100);
+  --border-medium:#2E2E2E;
+  --border-field:var(--ink-200);
+  --border-subtle:rgba(255,255,255,0.1);
+  --border-faint:rgba(255,255,255,0.05);
+  --radar-grid:var(--ink-100);
+  --nav-fg:#8A8A8A;
+  --nav-fg-hover:#D5D5D5;
+  --blue:#60A5FA;
+  --blue-hover:#93C5FD;
+  --blue-tint-08:rgba(96,165,250,0.10);
+  --blue-tint-12:rgba(96,165,250,0.16);
+  --blue-tint-04:var(--blue-tint-08);
+  --blue-soft:rgba(96,165,250,0.10);
+  --blue-pressed:rgba(96,165,250,0.14);
+  --blue-ring-30:rgba(96,165,250,0.30);
+  --blue-ring-40:rgba(96,165,250,0.40);
+  --blue-ink-deep:var(--ink-900);
+  --blue-ink-mid:var(--ink-700);
+  --danger:#FF6478;
+  --danger-hover:#FF8294;
+  --danger-tint-15:rgba(255,100,120,0.18);
+  --danger-tint-70:rgba(255,100,120,0.70);
+  /* Success #5DB955 holds — already clears 8:1 on dark */
+  /* Player attribution — lifted like the blues */
+  --player-1:#60A5FA;
+  --player-1-text:#93C5FD;
+  --player-1-soft:rgba(96,165,250,0.12);
+  --player-1-bar-tint:rgba(96,165,250,0.35);
+  --player-2:#94A3B8;
+  --player-2-text:#CBD5E1;
+  --player-2-soft:rgba(148,163,184,0.12);
+  --player-2-bar-tint:rgba(148,163,184,0.35);
+  /* Data-viz — you/opp lift one step; bad follows danger; density ramp
+     rebuilt dark→bright; court deepens. good + key hold. */
+  --viz-you:#60A5FA;
+  --viz-you-deep:#3B82F6;
+  --viz-you-mid:#93C5FD;
+  --viz-you-light:#BFDBFE;
+  --viz-opp:#94A3B8;
+  --viz-opp-deep:#64748B;
+  --viz-opp-mid:#CBD5E1;
+  --viz-opp-light:#E2E8F0;
+  --viz-bad:#FF6478;
+  --viz-bad-soft:rgba(255,100,120,0.30);
+  --viz-good-soft:rgba(93,185,85,0.30);
+  --viz-heatmap-0:#1F1F1F;
+  --viz-heatmap-1:#1E3A5F;
+  --viz-heatmap-2:#2563EB;
+  --viz-heatmap-3:#60A5FA;
+  --viz-court-fill:#16283F;
+}

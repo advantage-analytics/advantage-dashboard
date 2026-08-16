@@ -1,0 +1,36 @@
+/* Advantage DS v2 — type. One sans (Inter), one mono (Roboto Mono, machine
+   values only — confirmed in review). Voice comes from weight contrast +
+   tracking. 300 carries heroes, large numbers and match scores; numerals
+   never exceed 400 (review W3) — ink contrast separates, not weight.
+
+   ── ADAPTED ON IMPORT ──────────────────────────────────────────────────────
+   v2 declares --font-sans and --font-mono as literal font stacks, because the
+   design project loads webfonts from the Google Fonts CDN. This app loads the
+   same two families through next/font (self-hosted, no extra request, no
+   layout shift), which generates its own CSS variables. Redeclaring the stacks
+   here would fight those, so the two variables defer to next/font instead.
+   v2's tokens/fonts.css is deliberately NOT imported for the same reason. */
+:root{
+  --font-sans:var(--font-inter),ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  --font-mono:var(--font-roboto-mono),ui-monospace,'SF Mono',Menlo,monospace;
+}
+/* Semantic text styles — the documented scale. Never invent sizes outside it.
+   Review T1: all six body/label steps kept; 12 (body-sm) and 9 (eyebrow-sm)
+   are component-internal — new layouts choose from 14/13/11/10. */
+.text-display{font-family:var(--font-sans);font-size:30px;font-weight:300;line-height:36px;letter-spacing:-0.6px;color:var(--ink-900)}
+/* Merged into display (review D2) — alias kept so nothing breaks */
+.text-headline{font-family:var(--font-sans);font-size:30px;font-weight:300;line-height:36px;letter-spacing:-0.6px;color:var(--ink-900)}
+.text-title-lg{font-family:var(--font-sans);font-size:24px;font-weight:300;line-height:1.2;letter-spacing:-0.4px;color:var(--ink-900)}
+.text-title{font-family:var(--font-sans);font-size:16px;font-weight:400;line-height:1.5;letter-spacing:-0.4px;color:var(--ink-900)}
+.text-data{font-family:var(--font-sans);font-size:14px;font-weight:400;line-height:1.5;color:var(--ink-900)}
+.text-body{font-family:var(--font-sans);font-size:13px;font-weight:400;line-height:1.5;color:var(--text-body)}
+.text-body-sm{font-family:var(--font-sans);font-size:12px;font-weight:400;line-height:1.5;color:var(--text-body)}
+.text-micro{font-family:var(--font-sans);font-size:11px;font-weight:400;line-height:1.4;color:var(--ink-500)}
+.eyebrow{font-family:var(--font-sans);font-size:10px;font-weight:500;letter-spacing:2.5px;text-transform:uppercase;color:var(--ink-400)}
+.eyebrow-sm{font-family:var(--font-sans);font-size:9px;font-weight:400;letter-spacing:2.5px;text-transform:uppercase;color:var(--ink-400)}
+.text-score{font-family:var(--font-sans);font-size:40px;font-weight:300;letter-spacing:-1px;color:var(--ink-900);font-variant-numeric:tabular-nums}
+.text-scoreboard{font-family:var(--font-sans);font-size:18px;font-weight:400;letter-spacing:-0.3px;font-variant-numeric:tabular-nums;color:var(--ink-900)}
+.text-scoreboard-sm{font-family:var(--font-sans);font-size:14px;font-weight:400;letter-spacing:-0.3px;font-variant-numeric:tabular-nums;color:var(--ink-900)}
+.text-brand-hero{font-family:var(--font-sans);font-size:56px;font-weight:300;line-height:1.02;letter-spacing:-1.5px}
+.tabular{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--font-mono)}
