@@ -80,6 +80,20 @@ Filter configs: `src/components/dashboard/matches/visuals/configs/` (serve, retu
 
 `/api/chat` streams responses from Claude or GPT-4o. Provider abstracted in `src/lib/llm/adapter.ts` with `getLLMStream()`. Set `LLM_PROVIDER=anthropic` or `openai` in env. Falls back to mock mode if no API key configured. LLM SDKs are dynamically imported — only the configured provider is loaded.
 
+### Video analysis (Advantage Intelligence)
+
+A working pipeline carries real athlete video to a third-party vendor and back:
+browser → Azure Blob → vendor → webhook → results JSON + trimmed video. It has
+processed a real full-length match.
+
+**Before changing any dashboard UI, read [`docs/ui-revamp-guardrails.md`](docs/ui-revamp-guardrails.md).**
+It lists what must not be touched, which UI files carry invariants the pipeline
+depends on, and the three wizard inputs that — when wrong — attribute every
+statistic to the wrong player with nothing looking broken on screen.
+
+The provider is **"Advantage Intelligence"** in every user-visible string.
+`splitstep` is internal naming only.
+
 ## Design System
 
 **Read `.skills/advantage-analytics-design/SKILL.md` before building any UI.** It defines the complete Advantage Analytics design language — every typography token, color value, spacing unit, border radius, shadow, animation curve, and component pattern extracted from the live codebase. The SKILL.md is authoritative.

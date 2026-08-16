@@ -2,6 +2,7 @@
 
 | File | What it is | Read it when |
 |---|---|---|
+| [`ui-revamp-guardrails.md`](ui-revamp-guardrails.md) | What the video pipeline needs from the UI: what must not be touched, which UI seams carry non-obvious invariants, the three inputs that silently attribute every statistic to the wrong player, and the open non-UI action items | **You are redesigning any part of the dashboard.** Read before touching the upload wizard, the matches list, or the match detail page |
 | [`r2-and-webhook-overview.md`](r2-and-webhook-overview.md) | **Current state** of the video pipeline: Azure Blob storage and SAS URLs, the results webhook, quota, deletion, and what a UI redesign can safely touch. Filename is stale — source video moved off Cloudflare R2; rename it once the retired R2 code is deleted | You are working on anything SplitStep-related. Start here |
 | [`splitstep-integration-spec.md`](splitstep-integration-spec.md) | The original design spec. Kept for the reasoning; several sections are deliberately superseded and marked as such at the top | You want to know *why* something was built this way |
 | [`llm-setup.md`](llm-setup.md) | Configuring the `/api/chat` provider (Anthropic or OpenAI), keys, mock mode, rough costs | Setting up LLM features locally |
