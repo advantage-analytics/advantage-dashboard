@@ -16,6 +16,16 @@
 > overlap the existing shadcn set in `src/components/ui/`. Porting them is the UI
 > revamp itself, one component at a time — see
 > [`docs/ui-revamp-guardrails.md`](docs/ui-revamp-guardrails.md) first.
+>
+> **Deferred on purpose — available, not rolled out:**
+> - **Dark mode.** The `.dark` ramp below is defined and `@custom-variant dark`
+>   is wired, but no component reads these tokens yet, so nothing renders dark.
+>   It arrives surface by surface as pages are reworked, not as a switch.
+> - **The v2 shadow values.** `--shadow-card-elevated` and `--shadow-tooltip`
+>   still hold this app's original values, deliberately — v2's differ and a bulk
+>   swap would restyle every elevated card and tooltip at once. Use
+>   `--shadow-card-emphasis` / `--shadow-dropdown` explicitly on a page you are
+>   already reworking.
 
 Design system for **Advantage Analytics** — performance intelligence for competitive tennis. Players (college athletes, serious club players, coaches, parents of juniors) upload match video or SwingVision exports and get trustworthy statistical breakdowns, court visualizations and AI match commentary. The brand voice: **Modern. Athletic. Innovative.** A pro-level training room, not a consumer app.
 
