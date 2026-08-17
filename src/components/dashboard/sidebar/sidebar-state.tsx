@@ -93,7 +93,14 @@ export function SidebarStateProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const effectivePinned = pinned && !narrow;
-  pinnedRef.current = effectivePinned;
+
+  // Synced in an effect, not written during render — a ref mutation in the
+  // render body is what `react-hooks/refs` forbids, and under concurrent
+  // rendering a discarded render would leave the ref describing a state that
+  // never committed.
+  useEffect(() => {
+    pinnedRef.current = effectivePinned;
+  }, [effectivePinned]);
 
   const togglePinned = useCallback(() => {
     setPinned((current) => {
