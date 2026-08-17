@@ -33,6 +33,13 @@ Verified against a real job (Revelli vs Stepanov, 86 min, vendor job
 Turnaround was 75 minutes for an 86-minute video. Their results SAS expires
 after ~7 days.
 
+**What the trimmed video actually is** (watched 2026-08-16, after the table
+above was written): the `StartTime`/`EndTime` window from our own job request,
+re-encoded. Not dead time removed, no annotations, no overlays. Submitted window
+5181.207s, returned video 5181.268s. Anything in the UI that offers this file to
+a player should call it the match video, never a highlight or condensed cut —
+for a player who trimmed nothing it is their upload at a lower bitrate.
+
 ---
 
 ## 2. Never touch
@@ -194,6 +201,10 @@ the start of the match and the ambiguity disappears.
   10–12 GB. `MAX_VIDEO_SIZE_BYTES` takes the conservative number.
 - Is a lost delivery recoverable? `GET /jobs/{job_id}` returns status but not
   `sas_url`/`trimmed_video_url`, so it does not get the results back.
+- Is dead-time removal or an annotated render available at all? `trimmed_video_url`
+  returns our submitted window re-encoded and nothing else. If a rally-only cut or
+  an overlay render exists behind a flag we are not setting, that changes what the
+  video surface can offer — and whether keeping their copy over ours is worth it.
 
 **Code, non-UI**
 - **Promote the five quality scores to columns.** `homography`, `ball_detection`,
@@ -202,6 +213,13 @@ the start of the match and the ambiguity disappears.
 - **Wire `GET {BASE_URL}/jobs/{job_id}`.** Three separate moments have wanted it:
   recovering a lost delivery, replacing the `vendor_first_downloaded_at` signal
   the Azure move killed, and answering "has it started yet".
+- **Revisit the source-video delete now that "trimmed" is understood.** The
+  policy retires our 1.54 GB master once the vendor's copy lands, which was
+  written believing that copy was a shorter, better cut. It is the same footage
+  at 2.2 Mbps minus the trim window, so the swap is a downgrade. Options: keep
+  the source, keep whichever is longer, or keep theirs only when the player
+  actually trimmed something. Not urgent — one job has run — but it decides
+  what a player can still be given if Phase 2 ever needs a re-submit.
 - **`trimmedCopyStatus()` cannot distinguish a failed copy from a pending one**
   (`video-url/azure-sas.ts`) — the catch returns `pending` for a 404. A copy
   whose blob never materialises looks in-progress forever while

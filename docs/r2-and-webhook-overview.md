@@ -91,11 +91,25 @@ you read the payload before anything is spent.
 | Raw results JSON, ~1 MB | **Supabase Storage** `match-results` (private) | beside `match-data`, and next to the Edge Function that will read it |
 | Webhook envelopes, ~1 KB | Postgres `splitstep_webhook_deliveries` | needs to be transactional with the job row |
 
-The trimmed video is the match with dead time cut, re-encoded by the vendor and handed
-back on `trimmed_video_url` beside `sas_url`. We ignored that field until 2026-08-13
-while also deleting our own source video, so a successful job ended with **no video
-anywhere**. `startTrimmedVideoCopy()` now issues Azure's async Copy Blob, which means
-Azure pulls the bytes directly and none pass through a Vercel function bounded at 60s.
+The vendor hands their processed video back on `trimmed_video_url` beside `sas_url`. We
+ignored that field until 2026-08-13 while also deleting our own source video, so a
+successful job ended with **no video anywhere**. `startTrimmedVideoCopy()` now issues
+Azure's async Copy Blob, which means Azure pulls the bytes directly and none pass
+through a Vercel function bounded at 60s.
+
+> **"Trimmed" means trimmed to the window we submitted — not dead time removed.**
+> This doc previously claimed the opposite, and the assumption survived until someone
+> watched the file. `job-request.ts` sends `StartTime`/`EndTime`; the vendor returns
+> exactly that span, re-encoded. Measured on the Revelli/Stepanov job (2026-08-14):
+> window 15.136 → 5196.343 = **5181.207s**, returned video **5181.268s**, a 0.06s
+> match. No annotations, no rally detection, no cuts.
+>
+> Two consequences. A player who selects their whole video gets their whole video
+> back, so §3's delete of our 1.54 GB source in favour of a 1.33 GB / 2.2 Mbps
+> re-encode of the same footage is a **downgrade**, not the upgrade the policy was
+> written for — worth revisiting before more jobs run. And the offset between their
+> timeline and ours is not unknown: it is `start_time_seconds` on the job row (see
+> §3.6 of the integration spec).
 
 Results JSON was originally specced for R2. It moved: at ~1 MB, egress cost is worth
 pennies, nobody external reads it, and the derivation engine that will consume it runs

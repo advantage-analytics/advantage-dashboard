@@ -463,9 +463,14 @@ export async function POST(request: NextRequest) {
 /**
  * Copy the vendor's trimmed video into our own container.
  *
- * This is the asset the player actually wants — their match with the dead time
- * cut — and until now we threw the url away and then deleted our own source, so
- * a finished job ended with no video anywhere.
+ * Until now we threw the url away and then deleted our own source, so a finished
+ * job ended with no video anywhere.
+ *
+ * Note what this asset is NOT. "Trimmed" means trimmed to the StartTime/EndTime
+ * window we sent, not dead time removed — so for a player who selected their
+ * whole video it is the same match at a lower bitrate, and deleting our source
+ * in its favour is a downgrade rather than an upgrade. See webhook-payload.ts
+ * for the measurement.
  *
  * Best-effort, like every other cleanup step here: a failure logs and returns
  * rather than throwing, because aborting after() would take the source-video

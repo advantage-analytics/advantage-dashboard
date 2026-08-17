@@ -33,10 +33,15 @@ export interface ParsedWebhook {
    * Short-lived URL to the trimmed, re-encoded video the vendor processed.
    * Present on completion, alongside — and distinct from — `sasUrl`.
    *
-   * This is the match with dead time cut, and it is the only video that
-   * survives a job: the webhook deletes our own source once results are stored.
-   * It is a SAS, so it expires; the URL is worth recording, but the bytes are
-   * what actually need securing.
+   * "Trimmed" means trimmed to the `StartTime`/`EndTime` window WE sent on the
+   * job request — not dead time removed. Measured on the first real job: the
+   * window was 5181.207s and the returned video ran 5181.268s, so the output is
+   * the submitted window re-encoded, nothing more. A player who selects their
+   * whole video gets their whole video back at a lower bitrate.
+   *
+   * It is still the only video that survives a job — the webhook deletes our own
+   * source once results are stored. It is a SAS, so it expires; the URL is worth
+   * recording, but the bytes are what actually need securing.
    */
   trimmedVideoUrl: string | null;
   /**
