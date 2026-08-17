@@ -58,24 +58,9 @@ export default async function ProgramStatusPage({
         heading={`${owner} manages Advantage here`}
         sub={`They're listed on the staff for ${program.schoolName}. Ask for access and they can add you with the right role.`}
       >
-        <form action={`/claim/${programKey}/request`} method="post">
-          <label
-            htmlFor="note"
-            className="mb-1.5 block text-[12px] text-[var(--ink-600)]"
-          >
-            Add a note (optional)
-          </label>
-          <textarea
-            id="note"
-            name="note"
-            rows={3}
-            placeholder="Hi — I'm the new volunteer assistant, I'd like access to the match reports."
-            className="w-full resize-none rounded-[10px] border border-[var(--border-medium)] bg-[var(--surface-card)] px-3.5 py-3 text-[13px] leading-[1.5] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)] focus:border-[var(--ink-900)]"
-          />
-          <button type="submit" className={`${CLAIM_BUTTON} mt-4`}>
-            Request an invite
-          </button>
-        </form>
+        <Link href={`/claim/${programKey}/request`} className={CLAIM_BUTTON}>
+          Request an invite
+        </Link>
 
         <div className="mt-4 flex flex-col gap-2">
           <Link href={`/claim/${programKey}/object`} className={CLAIM_LINK}>
@@ -111,11 +96,9 @@ export default async function ProgramStatusPage({
           analyzed.
         </p>
 
-        <form action={`/claim/${programKey}/request`} method="post">
-          <button type="submit" className={CLAIM_BUTTON}>
-            Request an invite
-          </button>
-        </form>
+        <Link href={`/claim/${programKey}/request`} className={CLAIM_BUTTON}>
+          Request an invite
+        </Link>
         <div className="mt-4">
           <Link href={`/claim/${programKey}/object`} className={CLAIM_LINK}>
             This isn&#39;t right

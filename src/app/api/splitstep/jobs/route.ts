@@ -30,6 +30,7 @@ import {
   resolveAzureStorageConfig,
 } from '@/lib/services/splitstep/video-url';
 import { releaseQuota, reserveQuota } from '@/lib/services/splitstep/quota';
+import { getWorkspaceContext } from '@/lib/workspace/active-workspace-server';
 
 export const runtime = 'nodejs';
 
@@ -215,7 +216,7 @@ export async function POST(request: NextRequest) {
   // 4. Match metadata — players, scores, and the singles/doubles gate.
   const { data: matchRow, error: matchError } = await admin
     .from('matches')
-    .select('id, player1_name, player2_name, score, match_type')
+    .select('id, player1_name, player2_name, score, match_type, program_id')
     .eq('id', job.match_id)
     .maybeSingle();
 
@@ -231,6 +232,8 @@ export async function POST(request: NextRequest) {
     player2_name: string;
     score: { player1: number[]; player2: number[] } | null;
     match_type: string | null;
+    /** The workspace this match belongs to. NULL = personal. */
+    program_id: string | null;
   };
 
   // 5. Build and validate before anything is spent. buildSplitStepJobRequest
@@ -270,10 +273,28 @@ export async function POST(request: NextRequest) {
   );
 
   // 6. Reserve the allowance. Refuses here, before a job is spent.
+  //
+  // Billed to the MATCH's workspace, not whichever one the caller happens to
+  // have selected. A coach can switch workspaces between starting an upload and
+  // submitting it, and the budget that pays for a match is the one the match
+  // belongs to.
+  const workspaceContext = await getWorkspaceContext();
+  const billingWorkspace = match.program_id
+    ? workspaceContext?.available.find((w) => w.id === match.program_id)
+    : workspaceContext?.available.find((w) => w.kind === 'personal');
+
+  if (!billingWorkspace) {
+    return NextResponse.json(
+      { error: 'You do not have access to the workspace this match belongs to.' },
+      { status: 403 }
+    );
+  }
+
   const reservation = await reserveQuota({
     supabase: admin,
     jobId: job.id,
     userId: user.id,
+    workspace: billingWorkspace,
     seconds: billableSeconds,
   });
 

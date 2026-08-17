@@ -1,8 +1,10 @@
 import { cache } from 'react';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { getInitials } from '@/lib/data/match-utils';
 import type {
+  ProgramRole,
   Viewer,
   Workspace,
   WorkspaceContextValue,
@@ -43,18 +45,56 @@ function personalWorkspace(viewer: Viewer): Workspace {
 /**
  * Team workspaces the viewer belongs to.
  *
- * Returns nothing until the program tables land — `programs` and
- * `program_members` do not exist yet, and querying a missing table is an error
- * rather than an empty result. This is the seam Track B fills: when membership
- * is real, this reads `program_members` joined to `programs` and everything
- * above it already works.
+ * `program_members` is RLS-scoped to the caller — a member sees their own row,
+ * staff see the roster — so this needs no explicit user filter and cannot
+ * return somebody else's membership.
  *
- * Deliberately not faked. A synthetic team workspace here would let the whole
- * shell be built against a shape the database never confirms, which is how a
- * switcher ships that cannot switch.
+ * `canSubmitVideo` comes from the program's claim state, not from the
+ * membership: a program still in review can invite people and build a roster
+ * but must not spend the vendor budget, because that spend cannot be taken
+ * back. `programStatusFor()` maps a claim to `claim_pending`, which is exactly
+ * the state that withholds it.
  */
-async function listProgramWorkspaces(): Promise<Workspace[]> {
-  return [];
+async function listProgramWorkspaces(
+  supabase: SupabaseClient
+): Promise<Workspace[]> {
+  const { data, error } = await supabase
+    .from('program_members')
+    .select('role, programs!inner(id, school_name, team, status)')
+    .order('joined_at');
+
+  if (error) {
+    // Never fatal: a viewer who cannot load their programs should still get
+    // their personal workspace rather than a broken dashboard.
+    console.error('[workspace] could not load program memberships', {
+      error: error.message,
+    });
+    return [];
+  }
+
+  return (data ?? []).flatMap((row) => {
+    const program = (
+      Array.isArray(row.programs) ? row.programs[0] : row.programs
+    ) as
+      | { id: string; school_name: string; team: string; status: string }
+      | undefined;
+    if (!program) return [];
+
+    return [
+      {
+        id: program.id,
+        kind: 'team' as const,
+        name: program.school_name,
+        team: program.team === 'womens' ? ('womens' as const) : ('mens' as const),
+        role: row.role as ProgramRole,
+        mark: program.school_name.trim().charAt(0).toUpperCase(),
+        // 'active' means the claim settled. 'claim_pending' is a live workspace
+        // whose video submission waits — see /claim/review, which promises
+        // exactly that.
+        canSubmitVideo: program.status === 'active',
+      },
+    ];
+  });
 }
 
 function toViewer(
@@ -105,7 +145,7 @@ export const getWorkspaceContext = cache(
 
     const available = [
       personalWorkspace(viewer),
-      ...(await listProgramWorkspaces()),
+      ...(await listProgramWorkspaces(supabase)),
     ];
 
     const cookieStore = await cookies();

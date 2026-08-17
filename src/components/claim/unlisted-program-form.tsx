@@ -3,12 +3,8 @@
 import { useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 import { submitUnlistedProgram } from "@/lib/services/programs/claim-actions";
-import { CLAIM_BUTTON } from "./claim-shell";
+import { CLAIM_BUTTON, CLAIM_FIELD, CLAIM_LABEL } from "./claim-shell";
 import { cn } from "@/lib/utils";
-
-const FIELD =
-  "h-10 w-full rounded-[8px] border border-[var(--border-medium)] bg-[var(--surface-card)] px-3.5 text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)] focus:border-[var(--ink-900)]";
-const LABEL = "mb-1.5 block text-[12px] text-[var(--ink-600)]";
 
 /**
  * Three fields, deliberately. The spec says resist adding a fourth: this lands
@@ -47,17 +43,17 @@ export function UnlistedProgramForm() {
     <form onSubmit={onSubmit} noValidate>
       <div className="flex flex-col gap-4">
         <div>
-          <label htmlFor="school" className={LABEL}>School</label>
+          <label htmlFor="school" className={CLAIM_LABEL}>School</label>
           <input
             id="school"
             value={school}
             onChange={(e) => setSchool(e.target.value)}
-            className={FIELD}
+            className={CLAIM_FIELD}
           />
         </div>
 
         <div>
-          <span className={LABEL}>Team</span>
+          <span className={CLAIM_LABEL}>Team</span>
           <div role="radiogroup" aria-label="Team" className="flex gap-2">
             {(["mens", "womens"] as const).map((value) => (
               <button
@@ -80,14 +76,14 @@ export function UnlistedProgramForm() {
         </div>
 
         <div>
-          <label htmlFor="email" className={LABEL}>Your email</label>
+          <label htmlFor="email" className={CLAIM_LABEL}>Your email</label>
           <input
             id="email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
-            className={FIELD}
+            className={CLAIM_FIELD}
           />
           {/* Any address works. Many D2, D3 and NAIA coaches have no
               institutional address, and this path must not imply otherwise. */}

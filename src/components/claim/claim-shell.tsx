@@ -130,6 +130,16 @@ export function AsidePanel({
 export const CLAIM_BUTTON =
   "inline-flex h-10 w-full items-center justify-center rounded-[6px] bg-[var(--ink-900)] px-5 text-[13px] font-medium text-white transition-opacity duration-150 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]";
 
+/**
+ * The form chrome. Here rather than in each form because three files had
+ * byte-identical copies of both, and this file is already where the flow's
+ * shared styling lives.
+ */
+export const CLAIM_FIELD =
+  "h-10 w-full rounded-[8px] border border-[var(--border-medium)] bg-[var(--surface-card)] px-3.5 text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)] focus:border-[var(--ink-900)]";
+
+export const CLAIM_LABEL = "mb-1.5 block text-[12px] text-[var(--ink-600)]";
+
 /** The quieter second action — "Someone else should own it", "This isn't right". */
 export const CLAIM_LINK =
   "text-[12px] text-[var(--ink-500)] underline decoration-[var(--ink-300)] underline-offset-2 transition-colors hover:text-[var(--ink-900)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)] rounded-sm";

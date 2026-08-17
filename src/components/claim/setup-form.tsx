@@ -4,8 +4,8 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { checkClaimEmail, type ClaimProgram } from "@/lib/services/programs/domain-match";
-import { submitClaim } from "@/lib/services/programs/claim-actions";
-import { CLAIM_BUTTON } from "./claim-shell";
+import { startClaim } from "@/lib/services/programs/claim-actions";
+import { CLAIM_BUTTON, CLAIM_FIELD, CLAIM_LABEL } from "./claim-shell";
 
 const ROLES = [
   { value: "head_coach", label: "Head coach" },
@@ -14,10 +14,6 @@ const ROLES = [
   { value: "operations", label: "Operations" },
   { value: "other", label: "Other" },
 ];
-
-const FIELD =
-  "h-10 w-full rounded-[8px] border border-[var(--border-medium)] bg-[var(--surface-card)] px-3.5 text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)] focus:border-[var(--ink-900)]";
-const LABEL = "mb-1.5 block text-[12px] text-[var(--ink-600)]";
 
 /**
  * F4 and F4.1 are the same form.
@@ -61,15 +57,17 @@ export function SetupForm({
     event.preventDefault();
     setError(null);
     startTransition(async () => {
-      const result = await submitClaim({ programKey, fullName, role, email });
+      const result = await startClaim({ programKey, fullName, role, email });
       if (!result.ok) {
         setError(result.error);
         return;
       }
+      // Nothing has been claimed yet — only a link sent. The claim itself is
+      // created when that link is opened, which is what keeps this action from
+      // being able to park an open claim on every program in the directory.
       router.push(
         `/claim/check-email?to=${encodeURIComponent(email)}` +
-          `&program=${encodeURIComponent(programKey)}` +
-          (result.skipsReview ? "" : "&review=1")
+          `&program=${encodeURIComponent(programKey)}`
       );
     });
   }
@@ -78,23 +76,23 @@ export function SetupForm({
     <form onSubmit={onSubmit} noValidate>
       <div className="flex flex-col gap-4">
         <div>
-          <label htmlFor="fullName" className={LABEL}>Full name</label>
+          <label htmlFor="fullName" className={CLAIM_LABEL}>Full name</label>
           <input
             id="fullName"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             autoComplete="name"
-            className={FIELD}
+            className={CLAIM_FIELD}
           />
         </div>
 
         <div>
-          <label htmlFor="role" className={LABEL}>Role</label>
+          <label htmlFor="role" className={CLAIM_LABEL}>Role</label>
           <select
             id="role"
             value={role}
             onChange={(e) => setRole(e.target.value)}
-            className={`${FIELD} cursor-pointer`}
+            className={`${CLAIM_FIELD} cursor-pointer`}
           >
             {ROLES.map((r) => (
               <option key={r.value} value={r.value}>{r.label}</option>
@@ -103,21 +101,19 @@ export function SetupForm({
         </div>
 
         <div>
-          <label htmlFor="email" className={LABEL}>School email</label>
+          <label htmlFor="email" className={CLAIM_LABEL}>School email</label>
           <input
             id="email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
-            className={FIELD}
+            className={CLAIM_FIELD}
           />
           {/* Quiet, never blocking, and never styled as an error. */}
           {note && (
             <p className="mt-1.5 text-[11px] leading-[1.5] text-[var(--ink-500)]">
-              {note.skipsManualReview
-                ? `Recognized as a ${schoolName} address.`
-                : "We'll confirm this one manually. Everything except sending video works while we do."}
+{note.inlineNote}
             </p>
           )}
         </div>
