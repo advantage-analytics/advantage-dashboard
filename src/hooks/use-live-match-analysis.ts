@@ -191,10 +191,17 @@ export function useLiveMatchAnalysis(
   return patches;
 }
 
-/** Merge a live patch over the server-rendered analysis, if one has arrived. */
-export function withLiveAnalysis(
-  analysis: MatchAnalysis,
+/**
+ * Merge a live patch over the server-rendered analysis, if one has arrived.
+ *
+ * Generic over anything carrying at least the patchable fields, so a caller
+ * that serializes a narrower projection than the full `MatchAnalysis` — the
+ * header activity tray reads four of its fields, not eleven — can still use
+ * this rather than hand-rolling the same spread.
+ */
+export function withLiveAnalysis<T extends LiveAnalysisPatch>(
+  analysis: T,
   patch: LiveAnalysisPatch | undefined
-): MatchAnalysis {
+): T {
   return patch ? { ...analysis, ...patch } : analysis;
 }

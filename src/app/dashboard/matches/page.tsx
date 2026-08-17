@@ -42,7 +42,7 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
         opponentIds.length > 0
           ? supabase.from("users").select("id, hand, backhand").in("id", opponentIds)
           : Promise.resolve({ data: null }),
-        loadMatchAnalysis(supabase, data.map((r) => r.id)),
+        loadMatchAnalysis(supabase, data.map((r) => r.id), { reap: true }),
       ]);
 
       const opponentMap = new Map<string, { hand: string | null; backhand: string | null }>();

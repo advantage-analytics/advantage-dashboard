@@ -280,7 +280,9 @@ const MIN_PERCENT_FOR_ETA = 5;
  * useful failure to watch.
  */
 export function uploadEtaSeconds(
-  analysis: MatchAnalysis,
+  // Only the three fields it reads, so a caller holding a narrower projection
+  // does not have to carry eight unused ones to ask this question.
+  analysis: Pick<MatchAnalysis, 'status' | 'uploadPercent' | 'startedAt'>,
   nowMs: number
 ): number | undefined {
   if (analysis.status !== "uploading") return undefined;

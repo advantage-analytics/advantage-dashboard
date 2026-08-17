@@ -112,7 +112,9 @@ export default async function MatchDetailPage({ params }: PageProps) {
   const [data, adjacent, jobs] = await Promise.all([
     getMatchDetailData(matchId),
     getAdjacentMatchIds(matchId),
-    createClient().then((supabase) => loadMatchAnalysis(supabase, [matchId])),
+    createClient().then((supabase) =>
+      loadMatchAnalysis(supabase, [matchId], { reap: true })
+    ),
   ]);
 
   if (!data) notFound();

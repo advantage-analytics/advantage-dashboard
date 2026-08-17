@@ -44,7 +44,8 @@ interface JobRow {
  */
 export async function loadMatchAnalysis(
   supabase: SupabaseClient,
-  matchIds: string[]
+  matchIds: string[],
+  options: { reap?: boolean } = {}
 ): Promise<Map<string, MatchAnalysis>> {
   const out = new Map<string, MatchAnalysis>();
   if (matchIds.length === 0) return out;
@@ -57,12 +58,21 @@ export async function loadMatchAnalysis(
   // and it avoids enabling pg_cron for one statement. Runs under the caller's
   // RLS, so a user only ever reaps their own. The predicate almost always
   // matches nothing and is served by processing_jobs_status_idx.
-  const { error: reapError } = await supabase.rpc('reap_stalled_uploads');
-  if (reapError) {
-    // Never fatal — the list is more useful slightly stale than not at all.
-    console.warn('[match-analysis] could not reap stalled uploads', {
-      error: reapError.message,
-    });
+  //
+  // OPT-IN, because it is a WRITE. It belongs to the surfaces that draw a
+  // progress bar large enough for a frozen one to mislead — the matches list
+  // and match detail. When the header activity tray started calling this
+  // loader, the reap came with it and began firing an UPDATE on every dashboard
+  // page in the app, twice per request on the matches list. A read path that
+  // quietly writes is only safe while its callers are few enough to enumerate.
+  if (options.reap) {
+    const { error: reapError } = await supabase.rpc('reap_stalled_uploads');
+    if (reapError) {
+      // Never fatal — the list is more useful slightly stale than not at all.
+      console.warn('[match-analysis] could not reap stalled uploads', {
+        error: reapError.message,
+      });
+    }
   }
 
   const { data, error } = await supabase
