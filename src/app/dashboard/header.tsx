@@ -6,14 +6,12 @@ import { usePathname } from "next/navigation";
 import {
   ChevronRight,
   ChevronDown,
-  PanelLeft,
   Search,
   SlidersHorizontal,
   Timer,
   CircleHelp,
   LogOut,
 } from "lucide-react";
-import { useSidebar } from "@/components/ui/sidebar";
 import { SearchCommandPalette } from "@/components/dashboard/search/search-command-palette";
 import {
   Popover,
@@ -87,7 +85,6 @@ const MENU_ITEM_CLASS =
   "flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-[7px] text-[12px] text-[var(--ink-900)] transition-colors duration-100 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none cursor-pointer";
 
 export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
-  const { toggleSidebar } = useSidebar();
   const pathname = usePathname();
   const { active, viewer } = useWorkspace();
   const requestLogout = useRequestLogout();
@@ -166,7 +163,8 @@ export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
     setIsProfileOpen(false);
   }, [pathname]);
 
-  // Keyboard shortcut: Cmd+K (search). Cmd+B (sidebar) is SidebarProvider's.
+  // Keyboard shortcut: Cmd+K (search). Cmd+\ (sidebar pin) belongs to
+  // SidebarStateProvider, which owns the toggle now that it lives in the rail.
   useEffect(() => {
     function handleShortcuts(event: KeyboardEvent) {
       if (!(event.metaKey || event.ctrlKey)) return;
@@ -200,34 +198,12 @@ export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
           scrolled ? "border-[#EBEBEB]" : "border-transparent"
         )}
       >
-        {/* Left: toggle + breadcrumbs */}
+        {/* Left: breadcrumbs. The collapse toggle moved into the sidebar's
+            bottom group, where it never shifts relative to Settings and Help. */}
         <div className="flex min-w-0 flex-1 items-center">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={toggleSidebar}
-                className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-[#8A8A8E] transition-colors duration-150 hover:bg-[#F5F5F5] hover:text-[#3C3C43] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
-                aria-label="Toggle sidebar"
-              >
-                <PanelLeft
-                  className="h-[15px] w-[15px]"
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" sideOffset={4}>
-              Toggle sidebar
-              {isMac !== null && (
-                <span className="ml-1.5 text-white/50">
-                  {isMac ? "⌘B" : "⌃B"}
-                </span>
-              )}
-            </TooltipContent>
-          </Tooltip>
 
           {isMatchDetailPage && matchCrumbLoading && !matchCrumb && (
-            <div className="ml-1 flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5">
               <span className="inline-block h-3 w-14 animate-pulse rounded bg-[#F0F0F0]" />
               <ChevronRight
                 className="h-3 w-3 shrink-0 text-[#CCCCCC]"
@@ -247,7 +223,7 @@ export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
           {breadcrumbs.length > 0 && !(isMatchDetailPage && matchCrumbLoading) && (
             <nav
               aria-label="Breadcrumb"
-              className="ml-1 flex min-w-0 items-center gap-0.5 text-[11px] font-normal"
+              className="flex min-w-0 items-center gap-0.5 text-[11px] font-normal"
             >
               {breadcrumbs.map((crumb, i) => (
                 <span key={i} className="flex min-w-0 items-center gap-0.5">

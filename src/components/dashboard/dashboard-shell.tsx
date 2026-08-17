@@ -6,18 +6,21 @@ import { Header } from "@/app/dashboard/header";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
 import { MobileGate } from "@/components/dashboard/mobile-gate";
 import { PageTransition } from "@/components/dashboard/page-transition";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { SidebarStateProvider } from "@/components/dashboard/sidebar/sidebar-state";
 import { UnsavedChangesProvider } from "@/components/dashboard/settings/unsaved-changes-context";
 import { LogoutProvider } from "@/components/dashboard/logout-dialog";
-import type { ActivityFeed } from "@/lib/data/activity-server";
 
 /**
  * The client half of the dashboard layout.
  *
- * Split out when workspaces arrived: the layout has to resolve the viewer's
- * workspaces on the server, and a `"use client"` layout cannot. Everything
- * here is unchanged from when this lived in `layout.tsx` — the providers, the
- * shell, and the upload-storage cleanup below.
+ * Split out when workspaces arrived: the layout resolves the viewer's
+ * workspaces on the server, and a `"use client"` layout cannot.
+ *
+ * A plain flex row rather than the shadcn `SidebarProvider`. That component
+ * models one width that pushes content; this sidebar has two widths AND a peek
+ * that overlays without pushing, which is the behaviour the collapse spec is
+ * built around. Keeping it would have meant fighting its layout to get the
+ * float role.
  */
 export function DashboardShell({
   activitySlot,
@@ -53,19 +56,18 @@ export function DashboardShell({
       {/* Inside UnsavedChangesProvider — the confirmation warns about unsaved
           work, so it has to be able to read it. */}
       <LogoutProvider>
-        <SidebarProvider
-          defaultOpen={false}
-          style={{ "--sidebar-width": "240px" } as React.CSSProperties}
-        >
-          <AppSidebar />
-          <SidebarInset className="bg-white h-screen overflow-y-auto scroll-smooth motion-reduce:scroll-auto">
-            <Header activitySlot={activitySlot} />
-            <main>
-              <PageTransition>{children}</PageTransition>
-            </main>
-          </SidebarInset>
+        <SidebarStateProvider>
+          <div className="flex h-screen w-full overflow-hidden bg-white">
+            <AppSidebar />
+            <div className="flex min-w-0 flex-1 flex-col overflow-y-auto scroll-smooth motion-reduce:scroll-auto">
+              <Header activitySlot={activitySlot} />
+              <main>
+                <PageTransition>{children}</PageTransition>
+              </main>
+            </div>
+          </div>
           <MobileGate />
-        </SidebarProvider>
+        </SidebarStateProvider>
       </LogoutProvider>
     </UnsavedChangesProvider>
   );
