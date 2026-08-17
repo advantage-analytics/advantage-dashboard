@@ -7,16 +7,22 @@ Everything below is measured against three real full-match results payloads:
 
 | Payload | Strokes | Rallies | Quality grade |
 |---|---|---|---|
-| `tests/fixtures/splitstep/quan-friend-2025-09-28.json` | 1,076 | 156 | medium |
-| `tests/fixtures/splitstep/rudyquan-usc-2025-05-08.json` | 1,130 | 168 | low |
+| `tests/fixtures/splitstep/clean-match.json` | 1,076 | 156 | medium |
+| `tests/fixtures/splitstep/degraded-match.json` | 1,130 | 168 | low |
 | job `2a11168d`, match `2a312682` (Supabase `match-results`) | 596 | 114 | low |
 
 Reproduce the first two with `npx playwright test tests/splitstep-derivation.spec.ts`.
 Throughout, "clean" is the first fixture and "degraded" the second.
 
-The third is **not committed** — it is a real customer match naming two
-identifiable athletes, and this repository is public. Pull it from Supabase
-Storage when you need it.
+This repository is public, so nothing here identifies a player. The two
+committed fixtures have had their `pred_player_id` and `video_id` values
+replaced with `Player A` / `Player B` and neutral video ids; every number is
+untouched. The third payload is **not committed** at all — it is a live customer
+match. Pull it from Supabase Storage when you need it.
+
+When quoting these matches to the vendor, use the real `video_id` values from
+the job records rather than the fixture names — the vendor indexes by their own
+ids.
 
 ---
 

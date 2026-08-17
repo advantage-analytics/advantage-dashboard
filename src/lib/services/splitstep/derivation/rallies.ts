@@ -67,9 +67,10 @@ export function groupIntoRallies(strokes: SplitStepStroke[]): RallyGrouping {
  * The distinct player labels in the stream, in order of first appearance.
  *
  * The vendor echoes back whatever names were submitted with the job, so these
- * are free text and have been seen to differ from the match record's spelling
- * ("Quann" for a player recorded as "Quan"). Map them to player1/player2 by
- * position via `matches.initial_top_player_is_player1`, never by string match.
+ * are free text and have been observed misspelled relative to the match record
+ * — one real payload carried a surname with a doubled final letter. Map them to
+ * player1/player2 by position via `matches.initial_top_player_is_player1`,
+ * never by matching the string.
  */
 export function playerLabels(strokes: SplitStepStroke[]): string[] {
   const seen: string[] = [];

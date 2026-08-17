@@ -32,8 +32,8 @@ function loadFixture(name: string): unknown {
   return JSON.parse(readFileSync(path.join(FIXTURES, name), 'utf8'));
 }
 
-const clean = loadFixture('quan-friend-2025-09-28.json');
-const degraded = loadFixture('rudyquan-usc-2025-05-08.json');
+const clean = loadFixture('clean-match.json');
+const degraded = loadFixture('degraded-match.json');
 
 test.describe('court conversion', () => {
   test('maps the four court landmarks exactly', () => {
@@ -162,7 +162,10 @@ test.describe('rally grouping', () => {
     expect(result.rallies).toHaveLength(156);
     expect(result.malformedNumbering).toEqual([]);
     expect(result.missingOpeningServe).toEqual([]);
-    expect(result.players).toEqual(['Quan', 'Friend']);
+    // Labels are anonymised in the fixtures; what matters is that the library
+    // reports them in order of first appearance, which is how top/bottom maps
+    // onto player1/player2.
+    expect(result.players).toEqual(['Player A', 'Player B']);
     expect(result.droppedStrokes).toBe(0);
   });
 
