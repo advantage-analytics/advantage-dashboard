@@ -4,7 +4,6 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Check, ChevronsUpDown, Plus, Loader2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { setActiveWorkspace } from "@/lib/workspace/actions";
@@ -108,21 +107,11 @@ export function WorkspaceRow({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      {expanded ? (
-        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-      ) : (
-        // Collapsed, the row answers with a dark tooltip on its own 40px
-        // target, like every other row.
-        <Tooltip delayDuration={400}>
-          <TooltipTrigger asChild>
-            <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-          </TooltipTrigger>
-          <TooltipContent side="right" sideOffset={8} className="rounded-[12px]">
-            {active.name}
-            <span className="ml-2 text-white/50">Switch workspace</span>
-          </TooltipContent>
-        </Tooltip>
-      )}
+      {/* No collapsed tooltip. Hovering the rail opens the peek at 120ms, well
+          before a 400ms tooltip could fire, so the row is already showing its
+          name and sub-label by the time one would have appeared. `aria-label`
+          carries it for assistive tech either way. */}
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
 
       <PopoverContent
         align="start"
