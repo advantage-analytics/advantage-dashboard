@@ -276,7 +276,7 @@ SplitStep's `time` field is seconds since the start of the *processed* (trimmed)
 
 At ingest, add `start_time_seconds` to every `time` value so everything is stored in original-video time. Do this once, in the derivation engine, and assert it in a test.
 
-**Confirmed empirically, 2026-08-16.** The offset really is exactly `start_time_seconds` and nothing else. The vendor's "trimmed" output is the `StartTime`/`EndTime` window from our own job request, re-encoded — it does not additionally cut dead time, which would have made the mapping piecewise and unrecoverable from a single scalar. Measured on the Revelli/Stepanov job: submitted window 15.136 → 5196.343 = 5181.207s, returned video 5181.268s. So `original_time = splitstep_time + start_time_seconds` holds for the whole file, and the job row carries the only number needed.
+**Confirmed empirically, 2026-08-16.** The offset really is exactly `start_time_seconds` and nothing else. The vendor's "trimmed" output is the `StartTime`/`EndTime` window from our own job request, re-encoded — it does not additionally cut dead time, which would have made the mapping piecewise and unrecoverable from a single scalar. Measured on job `2a11168d`: submitted window 15.136 → 5196.343 = 5181.207s, returned video 5181.268s. So `original_time = splitstep_time + start_time_seconds` holds for the whole file, and the job row carries the only number needed.
 
 This is the load-bearing assumption of that formula. If the vendor ever ships real dead-time trimming, a single offset stops working and this section is where it breaks first.
 
