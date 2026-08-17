@@ -4,18 +4,27 @@
  * This library is deliberately pure: it reads a results payload and returns
  * facts about it. It writes nothing.
  *
- * That is not tidiness, it is a schema constraint. `points.won_by_player1` is
- * NOT NULL and `shots.point_id` is NOT NULL, so there is no way to persist a
- * single derived shot without first committing to a winner for every point —
- * and the vendor emits no point-winner field. The two signals that could
- * stand in for one (score deltas, and the last stroke's in/net flags) agree on
- * 88% of points in one sample match and 43% in the other, with no way to tell
- * which is wrong on any given point.
+ * The vendor emits no point-winner field, and `points.won_by_player1` is NOT
+ * NULL, so for a while it looked as though nothing could be persisted at all.
+ * That was too pessimistic. A third payload, from a match whose true final
+ * score we hold, showed the vendor's score stream folds forward to that score
+ * exactly — 20 games, 12-8, 6-4 and 6-4 — and yields a winner for 94-99% of
+ * points across all three matches. The winner is derivable, and `matches.score`
+ * checks it.
  *
- * So until the vendor answers, a SplitStep match reaches "processed, analysis
- * pending" with a quality report attached and no statistics. See
- * docs/splitstep-vendor-questions.md for the open questions and the agreed
- * design for the point-winner engine.
+ * What is still missing is the outcome *type*: winner vs forced vs unforced
+ * error, and ace vs service winner. Nothing in the payload says whether a
+ * returner reached a ball, so those are not recoverable at any confidence.
+ *
+ * This library stays read-only because the write path needs the reconciliation
+ * gate built first — a match whose fold does not match the user's entered score
+ * must be refused, not published. That is the next piece of work, not a
+ * permanent state. See docs/splitstep-vendor-questions.md §5 and §6.
+ *
+ * Note for whoever builds it: do NOT feed the last stroke's in/net_hit flags
+ * into the winner decision. They agree with the score stream on 90% of points
+ * in a well-tracked match and 43% in a badly-tracked one, and the score stream
+ * is the half that reproduces reality.
  */
 
 export type {

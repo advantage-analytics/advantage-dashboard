@@ -3,16 +3,20 @@
 Supersedes §5 of `docs/splitstep-integration-spec.md`. Question numbers are kept
 so existing `TODO(splitstep-qN)` comments in the code stay valid.
 
-Everything below is measured against two real full-match results payloads,
-committed as fixtures:
+Everything below is measured against three real full-match results payloads:
 
-| Fixture | Strokes | Rallies | Quality grade |
+| Payload | Strokes | Rallies | Quality grade |
 |---|---|---|---|
 | `tests/fixtures/splitstep/quan-friend-2025-09-28.json` | 1,076 | 156 | medium |
 | `tests/fixtures/splitstep/rudyquan-usc-2025-05-08.json` | 1,130 | 168 | low |
+| job `2a11168d`, match `2a312682` (Supabase `match-results`) | 596 | 114 | low |
 
-Reproduce any number here with `npx playwright test tests/splitstep-derivation.spec.ts`.
+Reproduce the first two with `npx playwright test tests/splitstep-derivation.spec.ts`.
 Throughout, "clean" is the first fixture and "degraded" the second.
+
+The third is **not committed** — it is a real customer match naming two
+identifiable athletes, and this repository is public. Pull it from Supabase
+Storage when you need it.
 
 ---
 
@@ -20,15 +24,24 @@ Throughout, "clean" is the first fixture and "degraded" the second.
 
 | | Status |
 |---|---|
-| Real full-match JSON committed as a fixture | ✅ done, two of them |
+| Real full-match JSON available | ✅ three of them |
 | Q1 — are faulted serves emitted? | ✅ **answered from data: yes** |
 | Q3 — does stroke numbering restart per rally, and do faults count? | ✅ **answered from data: yes to both** |
+| Q13 — can point winners be derived? | ✅ **answered from data: yes, from the score stream** |
 | Q2 — how are lets handled? | ❌ still open |
 | Q4–Q7 | ❌ still open, unchanged |
-| **New blockers found in the data (Q8–Q13)** | ❌ open |
+| Q8–Q12 | ❌ open |
 
-Phase 2 stays gated. What changed is *why*: it is no longer waiting on a
-sample, it is waiting on answers to Q8, Q9 and Q13.
+**The gate has substantially lifted.** The third payload settled the question
+that mattered most: its match has a known true final score (6-4, 6-4), and
+folding the vendor's own score stream forward reproduces it **exactly** — 20
+games, 12–8, both sets ending 5-4 with the server holding. Point-winner coverage
+from the score stream is 99%, 99% and 94% across the three matches.
+
+So `points.won_by_player1` is derivable and independently checkable. What
+remains blocked is `points.result_type` — the winner / forced error / unforced
+error classification — which needs stroke-level outcome and attribution that the
+payload does not carry. See §5.
 
 ---
 
@@ -108,14 +121,38 @@ Is there a per-serve confidence we can threshold on? `line_confidence` does not
 serve — it floors at 0.500, caps at 0.900, and does not move when the data
 degrades.
 
-### Q9 — Where do deuce and advantage points go? **Blocks point reconstruction.**
+### Q8b — `net_hit` contradicts the vendor's own `height_at_net_m`
+
+Sharper than Q8, and checkable inside a single record. Taking `net_hit: true`
+strokes and reading their `height_at_net_m` (net is 0.914 m at centre, 1.07 m at
+the posts):
+
+| Payload | `net_hit: true` | of those, height **above** the net | median height |
+|---|---|---|---|
+| clean | 66 | 5 | 0.66 m |
+| third | 89 | 37 | 0.92 m |
+| degraded | 327 | **209** | 1.22 m |
+
+On the clean fixture the two fields agree — 0.66 m is genuinely into the net. On
+the degraded one, 64% of balls flagged as hitting the net are simultaneously
+reported as passing well over it.
+
+This is why `net_hit` cannot be used as an error signal without per-file
+calibration, and it is the most likely single fix on the vendor side.
+
+### Q9 — How is advantage scoring represented? **Partly resolved.**
 
 `pred_point_score` only ever takes the values `0`, `15`, `30`, `40`. There is no
-`AD` rung. Nine games in the clean fixture and six in the degraded one reach
-`40-40`, and **zero further points are recorded in any of them**.
+`AD` rung, and every game reaching `40-40` records zero further points.
 
-Is no-ad scoring assumed? Is the `Ad` request parameter honoured? If a deuce game
-runs long, what happens to those points — dropped, or folded into the next game?
+The third payload explains part of this: that match is genuinely **no-ad**
+(`matches.format.ad_scoring = false`), so `40-40` as a deciding point is
+*correct* there, and its 20 games reconstruct perfectly.
+
+What we still cannot confirm is behaviour on an **ad-scoring** match, because we
+have no sample of one — we do not know the setting used for the other two
+fixtures. So the question narrows to: is the `Ad` request parameter honoured, and
+what does `pred_point_score` emit at advantage when it is true?
 
 ### Q10 — Score orientation and string format
 
@@ -159,31 +196,56 @@ When the model does not detect a stroke that happened, is anything emitted, or
 is the stroke simply absent? This determines whether a rally that ends
 unexpectedly means "the point ended" or "we lost the ball".
 
-### Q13 — Is a point-winner or rally-outcome field on the roadmap? **The single highest-value item.**
+### Q13 — Is a rally-outcome field on the roadmap? **Reframed — the winner is solved, the outcome type is not.**
 
-There is no point-winner field, and it is the field our entire statistics layer
-is built on. The two signals we can derive one from disagree:
+**Resolved from data: point winners are derivable, and the score stream is the
+signal to trust.** The third payload's match has a known true score (6-4, 6-4).
+Folding the vendor's score stream forward reproduces it exactly: 20 games, 12–8,
+both sets ending 5-4 with the server holding.
 
-| | Clean | Degraded |
-|---|---|---|
-| Score-delta winner vs last-stroke `in` winner, agreement | **88%** (113/129) | **43%** (56/131) |
+Coverage and cross-check, over point-to-point transitions:
 
-43% is worse than chance, and there is no third signal to arbitrate. A
-`point_winner`, or even a rally-end reason (`winner` / `error` / `out` / `net`),
-would unblock everything downstream of this document.
+| | Clean | Degraded | Third |
+|---|---|---|---|
+| Winner derivable from the score stream | 153/155 (99%) | 157/167 (94%) | 112/113 (99%) |
+| Last-stroke `in` heuristic agrees with it | 86% | **43%** | 90% |
+
+The earlier reading of this table was wrong in two ways, both worth recording so
+they are not repeated. Game boundaries are *not* a blind spot — the winner comes
+from the game-score delta once the server-perspective flip is handled. And the
+two signals are not symmetric: with ground truth now available on one match, the
+score stream is right and the last-stroke heuristic is the unreliable one, its
+disagreement tracking stroke-tracking quality almost exactly.
+
+**What is still missing is the outcome *type*.** Whether a point ended in a
+winner, a forced error or an unforced error is not recoverable: there is no
+signal for whether a returner reached a ball, which also makes Ace and Service
+Winner indistinguishable. A `rally_end_reason` (`winner` / `out` / `net`), or
+anything marking that a player attempted and missed a shot, would unblock the
+remaining half.
 
 ---
 
-## 5. Why nothing is written to the database yet
+## 5. What can and cannot be written to the database
 
-`points.won_by_player1` is `NOT NULL` and `shots.point_id` is `NOT NULL`. There
-is no schema-legal way to persist a single derived shot without first committing
-to a winner for **every** point in the match. Given Q13, we cannot.
+`points.won_by_player1` is `NOT NULL` and `shots.point_id` is `NOT NULL`, so
+nothing persists without a winner for **every** point. Q13 now supplies one, so
+this is no longer the hard blocker it first appeared to be:
 
-So `src/lib/services/splitstep/derivation/` is a pure read-only library. It
-parses, groups, brackets, and grades — and writes nothing. A completed SplitStep
-job reaches "processed, analysis pending" with a quality report attached, which
-is the clean state Phase 1 acceptance already contemplates.
+- **Writable** — `won_by_player1`, `server_is_player1`, point/game/set numbering
+  and scores, `rally_length`, `video_time`, `duration`, and the whole `shots`
+  row apart from outcome. Fold the score stream, then validate against
+  `matches.score` per spec §4.4 and refuse to write on mismatch.
+- **Not writable yet** — `result_type`. It is nullable, and 410 production rows
+  already carry NULL, so leaving it unset is an established state rather than a
+  new one. Ace, Service Winner, and the forced/unforced split all depend on
+  Q13's second half.
+
+Until that lands, `src/lib/services/splitstep/derivation/` stays a pure
+read-only library: it parses, groups, brackets, and grades, and writes nothing.
+Turning on the write path is a deliberate next step, not an oversight — it needs
+the reconciliation gate built first, so that a match whose fold does not match
+the user's entered score is refused rather than published.
 
 **Sentinel handling is non-negotiable**, and `parse.ts` is the only place it
 happens. `-9999.0` (float), `-9999` (int) and `"None"` (string) become NULL at
@@ -197,11 +259,12 @@ and which affects 22.7% of one fixture.
 consolidation. It is restated here because it is a standing constraint on the
 code, not a status note.)
 
-Deferred until Q8, Q9 and Q13 are answered: `points` and `shots` rows,
-`result_type` classification, break/set/match-point flags, and the
-`calculate_match_stats` call.
+Break/set/match-point flags fold out of the point winners for free, so they
+arrive with the write path. The `calculate_match_stats` call waits on
+`result_type`, since most of what it computes is built on outcome types.
 
-Also unreachable regardless of those answers, and worth flagging early:
+Also unreachable regardless of the vendor's answers on `in` and `net_hit`, and
+worth flagging early:
 
 - **Ace vs Service Winner.** An ace is a serve the returner never touched.
   Nothing says whether a stroke was attempted and missed — a missed swing is
@@ -217,27 +280,27 @@ Also unreachable regardless of those answers, and worth flagging early:
 
 ## 6. Agreed design for the point-winner engine
 
-Settled now so it is not relitigated when the answers arrive.
+**The anchor is the user's entered final score.** `matches.score` is collected at
+upload and is ground truth. The engine folds the vendor's score stream forward
+and reconciles against it, and where the two cannot be made to agree the match is
+refused rather than published.
 
-**The anchor is the user's entered final score, not the vendor's score stream.**
-`matches.score` is collected at upload and is ground truth. The engine
-constraint-solves the point-winner assignment that best fits it, treating the
-vendor's score deltas and the last stroke's `in`/`net_hit` as weighted evidence
-rather than authorities.
+The third payload is the evidence this works: its fold reproduces the entered
+6-4, 6-4 exactly, which is spec §4.4's `derivation_confidence = 'high'` case
+occurring naturally rather than being assumed.
 
-Why this way round:
+One simplification against the original design. That design treated the vendor's
+score deltas and the last stroke's `in`/`net_hit` as co-equal weighted evidence
+to be constraint-solved. With ground truth in hand they are plainly not co-equal:
+the score stream reproduces the true result, while the last-stroke heuristic
+agrees with it only 43% of the time on the degraded payload. **So fold the score
+stream and use the entered score as the check. Do not feed the last-stroke flags
+into the winner decision at all** — they belong to `result_type`, which is a
+different problem with a different failure mode.
 
-- It makes spec §4.4 reconciliation the *mechanism* rather than a check bolted on
-  afterwards. Under the alternative — fold the vendor's stream forward, compare
-  at the end — a mismatch tells you something is wrong but not where, and there
-  is nothing to do but mark the match low.
-- It degrades honestly. Where no assignment fits the true score, that is a
-  reportable fact about the match, not a silently wrong number.
-- The clean fixture shows the vendor's score stream is genuinely good when
-  tracking holds up — 26/26 valid game transitions and 129/129 clean in-game
-  point transitions, once the server-perspective flip is accounted for. So it
-  earns real weight as evidence. It just cannot be the authority, because the
-  degraded fixture shows it failing exactly where it is least visible.
+A constraint solver is still the right shape for the case where the fold *misses*
+the entered score, since that is where an assignment has to be searched for. It
+is just not needed for the common case, which is a straight fold.
 
 Implementation notes for whoever picks this up:
 
