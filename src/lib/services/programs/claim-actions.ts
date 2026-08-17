@@ -121,12 +121,21 @@ export async function submitClaim(input: {
     return { ok: false, error: "We could not record that. Try again." };
   }
 
-  // The program moves to claim_pending so the status screen tells the next
-  // visitor the truth immediately, rather than only after the link is opened.
-  await db
-    .from("programs")
-    .update({ status: "claim_pending", claimed_at: now.toISOString() })
-    .eq("id", program.id);
+  // `programs.status` deliberately does NOT move here.
+  //
+  // It used to, so the directory would show "being set up" immediately. That
+  // combination was a denial of service: this action is unauthenticated and
+  // unthrottled, the program keys are enumerable through the public search
+  // endpoint, and `program_claims_one_open_per_program` allows exactly one live
+  // claim each. A loop over the 1,940 keys would have parked every program in
+  // `claim_pending` with no email sent and no way back except 1,940 rows edited
+  // by hand.
+  //
+  // The transition belongs to the link click, which the header above already
+  // calls the actual gate: until someone proves they can read the address, a
+  // submission is a request rather than a claim. `programStatusFor()` in
+  // claim-state.ts derives the column from the live claim, so the status screen
+  // stays truthful without this write.
 
   // TODO(email): send the magic link, and announce the claim to every other
   // address in `program_contacts` with a one-click objection link. Both go

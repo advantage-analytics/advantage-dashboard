@@ -70,6 +70,8 @@ export function SidebarStateProvider({ children }: { children: React.ReactNode }
   const [narrow, setNarrow] = useState(false);
 
   const timers = useRef<{ in?: ReturnType<typeof setTimeout>; out?: ReturnType<typeof setTimeout> }>({});
+  // Read inside openPeek without making the callback depend on it.
+  const pinnedRef = useRef(false);
 
   useEffect(() => {
     try {
@@ -91,6 +93,7 @@ export function SidebarStateProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const effectivePinned = pinned && !narrow;
+  pinnedRef.current = effectivePinned;
 
   const togglePinned = useCallback(() => {
     setPinned((current) => {
@@ -112,6 +115,10 @@ export function SidebarStateProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const openPeek = useCallback(() => {
+    // Pinned, the panel is already open and a peek is meaningless — without
+    // this, every hover set a timer and flipped state that the render guards
+    // then discarded.
+    if (pinnedRef.current) return;
     if (timers.current.out) clearTimeout(timers.current.out);
     if (timers.current.in) return;
     timers.current.in = setTimeout(() => {
@@ -147,17 +154,21 @@ export function SidebarStateProvider({ children }: { children: React.ReactNode }
         togglePinned();
         return;
       }
-      if (event.key === "Escape") setPeeking(false);
+      // closePeek, not setPeeking(false): a pending 120ms open timer would
+      // otherwise re-open the peek immediately after Escape dismissed it.
+      if (event.key === "Escape") closePeek();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [togglePinned]);
+  }, [togglePinned, closePeek]);
 
   const value = useMemo<SidebarState>(
     () => ({
       pinned: effectivePinned,
       peeking: peeking && !effectivePinned,
-      expanded: effectivePinned || (peeking && !effectivePinned),
+      // `A || (B && !A)` is just `A || B`. The guard is real on `peeking`
+      // above, which drives the float shadow; here it was noise.
+      expanded: effectivePinned || peeking,
       togglePinned,
       openPeek,
       closePeek,

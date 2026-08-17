@@ -130,6 +130,16 @@ export function ActivityTray({ feed }: { feed: ActivityFeed }) {
    * cap. This tray renders on EVERY dashboard page, so it is the worst possible
    * place to get that predicate wrong.
    */
+  /**
+   * Gated on the SERVER feed, not the merged list, and that is a deliberate
+   * limit rather than an oversight. Deriving it from `merged` is circular —
+   * merged needs `patches`, which needs the subscription, which needs this.
+   * Breaking the cycle costs an extra state plus an effect to latch "the last
+   * job settled", for a socket that closes on the next navigation anyway.
+   *
+   * So: if nothing was live at render, no socket opens at all. If something
+   * was, it stays open until you navigate. That is the tradeoff.
+   */
   const hasLiveWork = feed.items.some((item) =>
     isLiveUpdating(item.analysis.status)
   );
@@ -150,7 +160,9 @@ export function ActivityTray({ feed }: { feed: ActivityFeed }) {
       inFlight: merged.filter((item) => isInFlight(item.analysis.status)),
       settled: merged.filter((item) => !isInFlight(item.analysis.status)),
     };
-  }, [feed, patches]);
+    // `feed.items`, not `feed`: the wrapper object is a fresh identity on every
+    // RSC payload.
+  }, [feed.items, patches]);
 
   const unread = inFlight.length;
 
