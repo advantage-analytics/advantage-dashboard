@@ -45,6 +45,7 @@ import {
   trimmedCopyStatus,
 } from '@/lib/services/splitstep/video-url';
 import { releaseQuota } from '@/lib/services/splitstep/quota';
+import { gradeResults } from '@/lib/services/splitstep/grade-results';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -363,6 +364,10 @@ export async function POST(request: NextRequest) {
         // all must NOT be read as "nothing left to save".
         let resultsSecured = record.already_stored;
 
+        // Set only when this delivery did the download. Left undefined on a
+        // redelivery, which makes gradeResults read from storage instead.
+        let resultsBody: string | undefined;
+
         if (sasUrl) {
           const stored = await storeResults({
             supabase,
@@ -380,6 +385,7 @@ export async function POST(request: NextRequest) {
           resultsSecured = stored.ok;
 
           if (stored.ok) {
+            resultsBody = stored.body;
             console.log(`${LOG} results stored`, {
               jobId,
               objectKey: stored.objectKey,
@@ -425,6 +431,22 @@ export async function POST(request: NextRequest) {
         if (jobId && resultsSecured) {
           await deleteSourceVideo({ supabase, jobId });
         }
+
+        // Grade last. It is the only step here that is purely informational —
+        // everything above either secures an asset or frees storage, and none
+        // of them should wait behind it.
+        //
+        // Gated on resultsSecured rather than on this delivery having done the
+        // download, so a redelivery still grades a job whose first attempt
+        // stored the analysis but failed to grade it.
+        if (jobId && resultsSecured) {
+          await gradeResults({
+            supabase,
+            jobId,
+            objectKey: resultsKey,
+            body: resultsBody,
+          });
+        }
       });
     }
   }
@@ -452,10 +474,17 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // TODO(splitstep-phase2): trigger the derivation Edge Function here, once it
-  // exists. Fire-and-forget — do not await it (handoff §2.2). Phase 2 is hard
-  // gated on a real results fixture, so a completed job currently and correctly
-  // rests at "processed, analysis pending".
+  // Grading now runs in the completed-branch after() above. No Edge Function:
+  // a full match parses and grades in about 3 ms, and after() already returns
+  // the 200 before any of it runs, which was the other reason the spec gave for
+  // moving this out of process.
+  //
+  // TODO(splitstep-phase2): the write path — points and shots rows, then
+  // calculate_match_stats — is still closed, waiting on result_type (vendor
+  // Q13's second half). A completed job therefore rests at "processed, analysis
+  // pending" with a quality grade attached, which is correct rather than
+  // incomplete. Reassess the Edge Function question there, not here: bulk
+  // inserts have a duration nobody has measured, unlike this.
 
   return NextResponse.json({ received: true, deliveryId: record.delivery_id });
 }
@@ -614,7 +643,8 @@ async function storeResults(params: {
   sasUrl: string;
   objectKey: string;
 }): Promise<
-  { ok: true; objectKey: string; bytes: number } | { ok: false; error: string }
+  | { ok: true; objectKey: string; bytes: number; body: string }
+  | { ok: false; error: string }
 > {
   const { supabase, sasUrl, objectKey } = params;
 
@@ -658,7 +688,10 @@ async function storeResults(params: {
     return { ok: false, error: `Storage upload failed: ${error.message}` };
   }
 
-  return { ok: true, objectKey, bytes: body.length };
+  // The body comes back with the result so the grading step can work from what
+  // is already in memory. Re-reading it from storage would be a second network
+  // round trip for bytes we are holding.
+  return { ok: true, objectKey, bytes: body.length, body };
 }
 
 /**

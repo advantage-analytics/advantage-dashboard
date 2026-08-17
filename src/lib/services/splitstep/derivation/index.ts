@@ -27,6 +27,19 @@
  * is the half that reproduces reality.
  */
 
+/**
+ * Version tag for whatever this library currently computes.
+ *
+ * Written to `processing_jobs.derivation_version` alongside every quality
+ * report, so a report can be traced to the code that produced it. Bump it
+ * whenever a threshold moves, a check is added or removed, or the parse layer
+ * changes what it discards — all three change the grade for the same input,
+ * and a grade you cannot attribute to a version is a grade you cannot compare.
+ *
+ * `-quality` marks the scope: this build grades, it does not derive points.
+ */
+export const DERIVATION_VERSION = '0.1.0-quality';
+
 export type {
   RawSplitStepStroke,
   SplitStepStroke,
