@@ -15,8 +15,8 @@ Redesign freely around those.
 
 ## 1. What is done — do not re-litigate
 
-Verified against a real job (Revelli vs Stepanov, 86 min, vendor job
-`778912d7`), not a test harness:
+Verified against a real job (86 min, vendor job `778912d7`, our job
+`2a11168d`), not a test harness:
 
 | | Evidence |
 |---|---|
