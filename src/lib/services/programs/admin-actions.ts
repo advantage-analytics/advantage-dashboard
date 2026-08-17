@@ -50,7 +50,7 @@ async function requireAdmin(): Promise<{ id: string } | null> {
  */
 async function transition(
   claimId: string,
-  event: { type: "approve" } | { type: "reject" },
+  event: { type: "approve" } | { type: "reject" } | { type: "object" },
   notes: string | null
 ): Promise<AdminOutcome> {
   const admin = await requireAdmin();
@@ -67,7 +67,7 @@ async function transition(
 
   const next = nextClaimStatus(claim.status as ClaimStatus, event);
   if (!next) {
-    return { ok: false, error: `A ${claim.status} claim cannot be ${event.type}d.` };
+    return { ok: false, error: `A ${claim.status} claim cannot be ${event.type}ed.` };
   }
 
   const { error } = await db
@@ -124,6 +124,23 @@ export async function approveClaim(claimId: string, notes?: string): Promise<Adm
  */
 export async function rejectClaim(claimId: string, notes?: string): Promise<AdminOutcome> {
   return transition(claimId, { type: "reject" }, notes?.trim() || null);
+}
+
+/**
+ * Undo an automatic approval.
+ *
+ * A claim that matched a recorded staff contact is already live, and neither
+ * `approve` nor `reject` is a legal move out of `objection_window` — the state
+ * machine only accepts `object`. That is deliberate rather than an oversight:
+ * the one failure mode auto-approval has is a coach who has since left the
+ * school claiming the program they used to run, and `object` is the transition
+ * written for exactly that.
+ *
+ * It lands on `objected`, which derives to an `unclaimed` program, so the
+ * membership goes with it and the right person can claim it.
+ */
+export async function handBackClaim(claimId: string, notes?: string): Promise<AdminOutcome> {
+  return transition(claimId, { type: "object" }, notes?.trim() || null);
 }
 
 /** Close an invite request, dispute, or unlisted-program submission. */

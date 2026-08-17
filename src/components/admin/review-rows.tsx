@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { ExternalLink, Loader2 } from "lucide-react";
 import {
   approveClaim,
+  handBackClaim,
   rejectClaim,
   resolveRequest,
 } from "@/lib/services/programs/admin-actions";
@@ -46,8 +47,16 @@ export function ClaimRow({ claim }: { claim: Row }) {
       if (!result.ok) setError(result.error);
     });
 
+  const status = claim.status as string;
+  const contactMatched = Boolean(claim.contact_matched);
   const matched = Boolean(claim.domain_matched);
   const lowRisk = Boolean(claim.skips_manual_review);
+
+  // Which moves the state machine actually allows from here. Rendering a button
+  // the machine will refuse is a promise the UI cannot keep — `objection_window`
+  // takes neither approve nor reject, and `objected` is terminal.
+  const decidable = status === "pending_review";
+  const reversible = status === "objection_window";
 
   return (
     <div className={CARD}>
@@ -57,11 +66,11 @@ export function ClaimRow({ claim }: { claim: Row }) {
         </span>
         <span className="text-[12px] text-[var(--ink-500)]">
           {program?.team ? teamLabel(program.team) : ""}
-          {program?.division ? ` · ${divisionLabel(program.division)}` : ""}
-          {program?.state ? ` · ${program.state}` : ""}
+          {program?.division ? ` \u00b7 ${divisionLabel(program.division)}` : ""}
+          {program?.state ? ` \u00b7 ${program.state}` : ""}
         </span>
         <div className="flex-1" />
-        <span className="text-[11px] text-[var(--ink-400)]">{claim.status as string}</span>
+        <span className="text-[11px] text-[var(--ink-400)]">{status}</span>
       </div>
 
       <p className="mt-2 text-[13px] text-[var(--ink-700)]">
@@ -75,17 +84,25 @@ export function ClaimRow({ claim }: { claim: Row }) {
       </p>
 
       {/* Why the automatic check said what it said. "Routed to review" with no
-          explanation is a decision somebody has to make twice. */}
+          explanation is a decision somebody has to make twice. A contact match
+          is its own chip because it is the only signal that decided anything —
+          the other two are evidence a reviewer weighs. */}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <span
           className={cn(
             "rounded-full px-2 py-0.5 text-[10px]",
-            lowRisk
+            contactMatched || lowRisk
               ? "bg-[rgba(93,185,85,0.12)] text-[#3F8A39]"
               : "bg-[var(--surface-subtle)] text-[var(--ink-600)]"
           )}
         >
-          {lowRisk ? "Low risk" : matched ? "Matched, needs a look" : "No domain match"}
+          {contactMatched
+            ? "On the staff list"
+            : lowRisk
+              ? "Low risk"
+              : matched
+                ? "Matched, needs a look"
+                : "No domain match"}
         </span>
         {program?.staff_page_url && (
           <a
@@ -102,40 +119,66 @@ export function ClaimRow({ claim }: { claim: Row }) {
       {(claim.match_reason || program?.review_reasons) && (
         <p className="mt-2 text-[11px] leading-[1.5] text-[var(--ink-500)]">
           {(claim.match_reason as string) ?? ""}
-          {program?.review_reasons ? ` — ${program.review_reasons}` : ""}
+          {program?.review_reasons ? ` \u2014 ${program.review_reasons}` : ""}
         </p>
       )}
 
-      <input
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        placeholder="Note (optional, kept on the claim)"
-        className="mt-3 h-8 w-full rounded-[6px] border border-[var(--border-medium)] bg-[var(--surface-card)] px-2.5 text-[12px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)] focus:border-[var(--ink-900)]"
-      />
+      {(decidable || reversible) && (
+        <input
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Note (optional, kept on the claim)"
+          className="mt-3 h-8 w-full rounded-[6px] border border-[var(--border-medium)] bg-[var(--surface-card)] px-2.5 text-[12px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)] focus:border-[var(--ink-900)]"
+        />
+      )}
 
-      <div className="mt-3 flex items-center gap-2">
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => act(approveClaim)}
-          className={cn(BTN, "bg-[var(--ink-900)] text-white hover:opacity-90")}
-        >
-          {pending ? <Loader2 className="size-3 animate-spin" aria-hidden="true" /> : "Approve"}
-        </button>
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => act(rejectClaim)}
-          className={cn(BTN, "border border-[var(--border-medium)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]")}
-        >
-          Reject
-        </button>
-        {/* Rejection hands the program back and removes the membership, so the
-            right person can claim it. It is not a dead end for the claimant. */}
-        <span className="text-[11px] text-[var(--ink-400)]">
-          Rejecting frees the program
-        </span>
-      </div>
+      {decidable && (
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => act(approveClaim)}
+            className={cn(BTN, "bg-[var(--ink-900)] text-white hover:opacity-90")}
+          >
+            {pending ? <Loader2 className="size-3 animate-spin" aria-hidden="true" /> : "Approve"}
+          </button>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => act(rejectClaim)}
+            className={cn(BTN, "border border-[var(--border-medium)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]")}
+          >
+            Reject
+          </button>
+          {/* Rejection hands the program back and removes the membership, so the
+              right person can claim it. It is not a dead end for the claimant. */}
+          <span className="text-[11px] text-[var(--ink-400)]">
+            Rejecting frees the program
+          </span>
+        </div>
+      )}
+
+      {reversible && (
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => act(handBackClaim)}
+            className={cn(BTN, "border border-[var(--border-medium)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]")}
+          >
+            {pending ? <Loader2 className="size-3 animate-spin" aria-hidden="true" /> : "Hand it back"}
+          </button>
+          <span className="text-[11px] text-[var(--ink-400)]">
+            Already live — nothing to approve
+          </span>
+        </div>
+      )}
+
+      {!decidable && !reversible && (
+        <p className="mt-3 text-[11px] text-[var(--ink-400)]">
+          Settled. The program is free for someone else to claim.
+        </p>
+      )}
 
       <Result error={error} />
     </div>
