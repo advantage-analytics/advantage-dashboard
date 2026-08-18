@@ -9,6 +9,7 @@ import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { setActiveWorkspace } from "@/lib/workspace/actions";
 import { teamLabel, workspaceSubtitle, type Workspace } from "@/lib/workspace/types";
 import { PANEL_WIDTH } from "./sidebar-state";
+import { RailTooltip } from "./rail-tooltip";
 
 /**
  * The workspace row — the only thing at the top of both widths, and also the
@@ -22,13 +23,7 @@ import { PANEL_WIDTH } from "./sidebar-state";
  * The open menu carries the single blue-soft row in the whole sidebar — the
  * current workspace. That is the only chroma the sidebar spends.
  */
-export function WorkspaceRow({
-  expanded,
-  onNavigate,
-}: {
-  expanded: boolean;
-  onNavigate?: () => void;
-}) {
+export function WorkspaceRow({ expanded }: { expanded: boolean }) {
   const { active, available } = useWorkspace();
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -48,7 +43,6 @@ export function WorkspaceRow({
       await setActiveWorkspace(workspace.id);
       setPendingId(null);
       setOpen(false);
-      onNavigate?.();
     });
   }
 
@@ -107,13 +101,21 @@ export function WorkspaceRow({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      {/* No collapsed tooltip. Hovering the rail opens the peek at 120ms, well
-          before a 400ms tooltip could fire, so the row is already showing its
-          name and sub-label by the time one would have appeared. `aria-label`
-          carries it for assistive tech either way. */}
-      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      {/* Collapsed, the row answers with the same dark tooltip as every other
+          rail row — name on top, what the row does underneath. Suppressed once
+          the menu is open, which says both of those things already. */}
+      <RailTooltip
+        label={active.name}
+        detail="Switch workspace"
+        hidden={expanded || open}
+      >
+        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      </RailTooltip>
 
       <PopoverContent
+        // Collapsed, a 232px menu anchored under a 40px row would cover the
+        // rail it was opened from; beside it, the icons stay visible.
+        side={expanded ? "bottom" : "right"}
         align="start"
         sideOffset={8}
         style={{ width: PANEL_WIDTH }}

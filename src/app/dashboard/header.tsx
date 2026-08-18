@@ -158,7 +158,7 @@ export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
     setIsProfileOpen(false);
   }, [pathname]);
 
-  // Keyboard shortcut: Cmd+K (search). Cmd+\ (sidebar pin) belongs to
+  // Keyboard shortcut: Cmd+K (search). Cmd+\ (sidebar collapse) belongs to
   // SidebarStateProvider, which owns the toggle now that it lives in the rail.
   useEffect(() => {
     function handleShortcuts(event: KeyboardEvent) {
