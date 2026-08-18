@@ -143,6 +143,139 @@ export async function handBackClaim(claimId: string, notes?: string): Promise<Ad
   return transition(claimId, { type: "object" }, notes?.trim() || null);
 }
 
+/**
+ * Put a settled claim back in the queue, and give the program back with it.
+ *
+ * The mirror of a rejection or an objection, and it has to be a separate
+ * function rather than another `transition()` event because the side effects
+ * run the other way. Rejecting DELETES the membership and clears the owner;
+ * `transition()` only ever tears down. Reopening has to rebuild both, or the
+ * claim returns to the queue pointing at a program nobody owns and approving it
+ * would grant nothing.
+ *
+ * It lands on `pending_review`, never straight back to live — see
+ * `nextClaimStatus`. The admin still has to approve, which is the same decision
+ * they would make on any other claim in the queue.
+ */
+export async function reopenClaim(claimId: string, notes?: string): Promise<AdminOutcome> {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false, error: "Not authorized." };
+
+  const db = createAdminClient();
+  const { data: claim } = await db
+    .from("program_claims")
+    .select("id, status, program_id, claimant_user_id, claimed_email")
+    .eq("id", claimId)
+    .maybeSingle();
+
+  if (!claim) return { ok: false, error: "That claim no longer exists." };
+
+  const next = nextClaimStatus(claim.status as ClaimStatus, { type: "reopen" });
+  if (!next) {
+    return { ok: false, error: `A ${claim.status} claim cannot be reopened.` };
+  }
+
+  // GUARD: the program has to still be free. Rejecting released it, so somebody
+  // else may have claimed it in the meantime — and quietly taking it back would
+  // be a worse mistake than the one being undone.
+  const { data: program } = await db
+    .from("programs")
+    .select("status")
+    .eq("id", claim.program_id)
+    .maybeSingle();
+
+  if (!program) return { ok: false, error: "That program no longer exists." };
+  if (program.status !== "unclaimed") {
+    return {
+      ok: false,
+      error: "Someone else has set this program up since. Reopening would take it from them.",
+    };
+  }
+
+  const { count: liveClaims } = await db
+    .from("program_claims")
+    .select("id", { count: "exact", head: true })
+    .eq("program_id", claim.program_id)
+    .not("status", "in", "(rejected,objected)")
+    .neq("id", claim.id);
+
+  if ((liveClaims ?? 0) > 0) {
+    return { ok: false, error: "Another claim on this program is already open." };
+  }
+
+  // The claimant. `program_claims.claimant_user_id` is ON DELETE SET NULL, so a
+  // claimant who deleted their account and signed up again leaves the claim
+  // orphaned — the address is the durable identity here, and it is the one that
+  // was actually verified. Re-resolve from it and write the id back.
+  let ownerId = claim.claimant_user_id as string | null;
+  if (!ownerId) {
+    // `ilike` and not `eq`, because `users.email` is not stored lowercased —
+    // but the wildcards are escaped first. An address containing `_` is legal
+    // and common, and `_` is a single-character wildcard in LIKE, so an
+    // unescaped `a_b@x.com` would also match `axb@x.com`. This function hands
+    // over ownership of a program; resolving to the wrong account here is not a
+    // cosmetic bug.
+    const pattern = (claim.claimed_email as string)
+      .trim()
+      .replace(/([\\%_])/g, "\\$1");
+    const { data: user } = await db
+      .from("users")
+      .select("id")
+      .ilike("email", pattern)
+      .maybeSingle();
+    ownerId = user?.id ?? null;
+  }
+
+  if (!ownerId) {
+    return {
+      ok: false,
+      error: "That claimant no longer has an account, so there is nobody to give the program back to.",
+    };
+  }
+
+  const { error: claimError } = await db
+    .from("program_claims")
+    .update({
+      status: next,
+      claimant_user_id: ownerId,
+      reviewed_by: admin.id,
+      review_notes: notes,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", claim.id);
+
+  if (claimError) {
+    console.error("[admin] reopen failed", { error: claimError.message });
+    return { ok: false, error: "Could not reopen that claim." };
+  }
+
+  // Derived, not hand-written — `programStatusFor('pending_review')` is
+  // 'claim_pending', which also stops anyone else claiming it while it is being
+  // reconsidered.
+  await db
+    .from("programs")
+    .update({
+      status: programStatusFor(next),
+      owner_user_id: ownerId,
+      claimed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", claim.program_id);
+
+  // Rebuilt because the rejection deleted it. `pending_review` withholds video
+  // submission on its own, so this restores the workspace without restoring the
+  // budget.
+  await db
+    .from("program_members")
+    .upsert(
+      { program_id: claim.program_id, user_id: ownerId, role: "owner", upload_enabled: true },
+      { onConflict: "program_id,user_id" }
+    );
+
+  revalidatePath("/admin/claims");
+  return { ok: true };
+}
+
 /** Close an invite request, dispute, or unlisted-program submission. */
 export async function resolveRequest(
   requestId: string,

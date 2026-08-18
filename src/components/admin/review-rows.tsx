@@ -6,6 +6,7 @@ import {
   approveClaim,
   handBackClaim,
   rejectClaim,
+  reopenClaim,
   resolveRequest,
 } from "@/lib/services/programs/admin-actions";
 import { divisionLabel, teamLabel } from "@/lib/data/programs-server";
@@ -57,6 +58,9 @@ export function ClaimRow({ claim }: { claim: Row }) {
   // takes neither approve nor reject, and `objected` is terminal.
   const decidable = status === "pending_review";
   const reversible = status === "objection_window";
+  // Settled, but not permanent. Reopening returns it to the queue and gives the
+  // program back — the admin still has to approve it from there.
+  const reopenable = status === "rejected" || status === "objected";
 
   return (
     <div className={CARD}>
@@ -123,7 +127,7 @@ export function ClaimRow({ claim }: { claim: Row }) {
         </p>
       )}
 
-      {(decidable || reversible) && (
+      {(decidable || reversible || reopenable) && (
         <input
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
@@ -174,7 +178,23 @@ export function ClaimRow({ claim }: { claim: Row }) {
         </div>
       )}
 
-      {!decidable && !reversible && (
+      {reopenable && (
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => act(reopenClaim)}
+            className={cn(BTN, "border border-[var(--border-medium)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]")}
+          >
+            {pending ? <Loader2 className="size-3 animate-spin" aria-hidden="true" /> : "Put back in the queue"}
+          </button>
+          <span className="text-[11px] text-[var(--ink-400)]">
+            Returns the program to them, still needing your approval
+          </span>
+        </div>
+      )}
+
+      {!decidable && !reversible && !reopenable && (
         <p className="mt-3 text-[11px] text-[var(--ink-400)]">
           Settled. The program is free for someone else to claim.
         </p>

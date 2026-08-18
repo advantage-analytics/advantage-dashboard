@@ -25,6 +25,12 @@ export const dynamic = "force-dynamic";
  * because approving something in the first section moves it here — grouping is
  * by status, not by which route got it there. The per-row chip carries that
  * distinction.
+ *
+ * A third section exists because `rejected` claims were being fetched nowhere.
+ * They were invisible, and once the state machine gained `reopen` that also
+ * made them unreachable: a rejection could not be undone because there was no
+ * screen showing it. Closed claims are listed so a wrong decision has a way
+ * back.
  */
 const CLAIM_FIELDS =
   "id, claimed_email, claimant_name, claimant_role, domain_matched, skips_manual_review, contact_matched, match_reason, status, created_at, programs(school_name, team, division, state, staff_page_url, review_reasons)";
@@ -40,19 +46,25 @@ function EmptyNote({ children }: { children: React.ReactNode }) {
 export default async function ReviewQueuePage() {
   const db = createAdminClient();
 
-  const [{ data: waiting }, { data: settled }, { data: requests }] =
+  const [{ data: waiting }, { data: settled }, { data: closed }, { data: requests }] =
     await Promise.all([
       db
         .from("program_claims")
         .select(CLAIM_FIELDS)
         // `objected` sits here too: it is terminal, but it is the one outcome
         // that means somebody disputed a program, which is worth seeing.
-        .in("status", ["pending_review", "objected"])
+        .eq("status", "pending_review")
         .order("created_at", { ascending: true }),
       db
         .from("program_claims")
         .select(CLAIM_FIELDS)
         .eq("status", "objection_window")
+        .order("created_at", { ascending: false })
+        .limit(50),
+      db
+        .from("program_claims")
+        .select(CLAIM_FIELDS)
+        .in("status", ["rejected", "objected"])
         .order("created_at", { ascending: false })
         .limit(50),
       db
@@ -66,6 +78,7 @@ export default async function ReviewQueuePage() {
 
   const waitingCount = waiting?.length ?? 0;
   const settledCount = settled?.length ?? 0;
+  const closedCount = closed?.length ?? 0;
   const requestCount = requests?.length ?? 0;
 
   return (
@@ -106,6 +119,26 @@ export default async function ReviewQueuePage() {
         <div className="mt-5 flex flex-col gap-3">
           {settledCount === 0 && <EmptyNote>None yet.</EmptyNote>}
           {settled?.map((claim) => (
+            <ClaimRow key={claim.id as string} claim={claim} />
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="text-[16px] font-medium text-[var(--ink-900)]">
+          Closed
+          {closedCount > 0 && (
+            <span className="text-[var(--ink-400)]"> · {closedCount}</span>
+          )}
+        </h2>
+        <p className="mt-1.5 text-[12px] text-[var(--ink-500)]">
+          Rejected, or objected to. The program went back to unclaimed. Put one
+          back in the queue if the decision was wrong.
+        </p>
+
+        <div className="mt-5 flex flex-col gap-3">
+          {closedCount === 0 && <EmptyNote>Nothing closed.</EmptyNote>}
+          {closed?.map((claim) => (
             <ClaimRow key={claim.id as string} claim={claim} />
           ))}
         </div>
