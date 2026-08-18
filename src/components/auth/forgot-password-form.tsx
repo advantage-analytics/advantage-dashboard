@@ -4,30 +4,52 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import FormHeader from "./form-header";
 import FormField from "./form-field";
+import AuthButton from "./auth-button";
+import AuthFooter, { AUTH_LINK } from "./auth-footer";
+import FormError from "./form-error";
+import { toAuthError, validateEmail, type AuthError } from "@/lib/auth/error-messages";
+import {
+  recoveryRedirectTo,
+  writeRecoveryHandoff,
+} from "@/lib/auth/recovery-handoff";
 
 export function ForgotPasswordForm() {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<AuthError | null>(null);
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    // Caught here rather than at the round trip: Supabase answers `name@host`
+    // with generic text, and the specific "missing its domain" nudge is the
+    // whole point of putting the message on the field.
+    const emailProblem = validateEmail(email);
+    if (emailProblem) {
+      setError({ field: "email", message: emailProblem });
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       const supabase = createClient();
-      const { error: resetError } =
-        await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/update-password`,
-        });
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+        email,
+        { redirectTo: recoveryRedirectTo(window.location.origin) },
+      );
       if (resetError) throw resetError;
+      // Hand the address and the send time to /check-email so it can name the
+      // address and count down both the link expiry and the resend cooldown.
+      writeRecoveryHandoff(email);
       router.push("/check-email");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
+      setError(toAuthError(err));
     } finally {
       setIsLoading(false);
     }
@@ -40,15 +62,14 @@ export function ForgotPasswordForm() {
       style={{ animation: "fadeUp 0.5s ease-out" }}
     >
       <FormHeader
+        eyebrow="Account recovery"
         title="Reset Password."
-        description="We'll help you regain access to your account securely."
-        subtitle="Enter the email address associated with your account and we'll send you a recovery link."
+        description="We'll send a recovery link to the address on your account."
       />
 
-      {/* Fields */}
       <div className="flex flex-col gap-[20px]">
         <FormField
-          label="EMAIL ADDRESS"
+          label="Email"
           id="reset-email"
           placeholder="name@university.edu"
           type="email"
@@ -56,66 +77,26 @@ export function ForgotPasswordForm() {
           onChange={(e) => setEmail(e.target.value)}
           required
           autoComplete="email"
-          hasError={!!error}
+          error={error?.field === "email" ? error.message : null}
         />
-
-        {/* Error message */}
-        {error ? (
-          <div
-            className="flex w-full items-center gap-[8px] rounded-[6px] bg-[var(--color-error-bg)] px-[12px] py-[10px]"
-            style={{ animation: "shake 0.4s ease-in-out" }}
-            role="alert"
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="var(--color-error)"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="shrink-0"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
-            <span className="text-[12px] leading-[1.4] text-[var(--color-error)]">
-              {error}
-            </span>
-          </div>
-        ) : null}
       </div>
 
-      {/* Actions */}
-      <div className="flex flex-col items-center gap-[18px]">
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="flex h-[44px] w-full items-center justify-center rounded-[6px] bg-[var(--color-accent-blue)] text-[13px] font-medium tracking-[1px] text-white transition-all duration-200 hover:bg-[var(--color-accent-blue-hover)] hover:shadow-[0_0_20px_var(--color-accent-blue-glow)] active:scale-[0.97] disabled:pointer-events-none disabled:opacity-60"
-        >
-          {isLoading ? "Sending..." : "Send Recovery Link"}
-        </button>
+      <div className="flex flex-col gap-[16px]">
+        <FormError error={error} inlineFields={["email"]} />
 
-        <Link href="/login" className="flex items-center gap-[6px]">
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="var(--color-text-dim)"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+        <AuthButton type="submit" disabled={isLoading}>
+          {isLoading ? "Sending..." : "Send Recovery Link"}
+        </AuthButton>
+
+        <AuthFooter>
+          <Link
+            href="/login"
+            className={`inline-flex items-center gap-[6px] text-[12px] ${AUTH_LINK}`}
           >
-            <line x1="19" y1="12" x2="5" y2="12" />
-            <polyline points="12 19 5 12 12 5" />
-          </svg>
-          <span className="text-[12px] text-[var(--color-text-secondary)]">
-            Back to Sign In
-          </span>
-        </Link>
+            <ArrowLeft size={14} strokeWidth={1.5} aria-hidden="true" />
+            Back to sign in
+          </Link>
+        </AuthFooter>
       </div>
     </form>
   );
