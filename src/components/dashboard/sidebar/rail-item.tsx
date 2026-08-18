@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { RailTooltip } from "./rail-tooltip";
 
 /**
  * One row of the sidebar, at either width.
@@ -15,16 +16,11 @@ import { cn } from "@/lib/utils";
  * left stripe: blue is reserved for actions, and where you already are is not
  * an action.
  *
- * ── No tooltips ─────────────────────────────────────────────────────────────
- * The spec describes a 400ms tooltip on each collapsed row AND a 120ms hover
- * peek over the rail. Shipping both means the peek always wins: measured on the
- * built page, hovering a collapsed icon for 600ms gives a 232px panel and no
- * tooltip, because the peek opened 280ms earlier. Focusing a row opens the peek
- * too, so the keyboard path is covered as well.
- *
- * So the peek IS the label affordance, and a Tooltip per row would be a Radix
- * wrapper on a path a pointer cannot reach. `aria-label` still carries the name
- * for assistive tech at both widths.
+ * Collapsed, the label moves to a tooltip on the row's own 40px target. (An
+ * earlier pass dropped tooltips because the 120ms hover peek always beat the
+ * 400ms tooltip to the punch. The panel is toggle-driven now — hovering the
+ * rail does nothing — so the tooltip is the only way a collapsed row can say
+ * its name to a pointer.)
  */
 export function RailItem({
   href,
@@ -32,8 +28,11 @@ export function RailItem({
   icon: Icon,
   active,
   expanded,
-  /** Rendered inline once expanded — only the toggle uses it. */
+  /** Rendered inline once expanded, and inside the tooltip when collapsed —
+   *  only the toggle uses it. */
   shortcut,
+  /** Set by the toggle row, which is the control for the panel's own state. */
+  ariaExpanded,
   onClick,
   as = "link",
 }: {
@@ -43,6 +42,7 @@ export function RailItem({
   active?: boolean;
   expanded: boolean;
   shortcut?: string;
+  ariaExpanded?: boolean;
   onClick?: () => void;
   as?: "link" | "button";
 }) {
@@ -71,7 +71,8 @@ export function RailItem({
         <span
           aria-hidden="true"
           className={cn(
-            "mr-2 shrink-0 font-mono text-[11px] text-[var(--ink-400)] transition-opacity ease-[var(--ease-primary)]",
+            "mr-2.5 shrink-0 font-mono text-[10px] text-[var(--ink-400)] transition-opacity ease-[var(--ease-primary)]",
+            "group-hover/row:text-[var(--ink-600)]",
             fade
           )}
         >
@@ -82,29 +83,40 @@ export function RailItem({
   );
 
   const className = cn(
-    "flex h-10 w-full items-center overflow-hidden rounded-[8px] text-left transition-colors duration-200 ease-[var(--ease-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)] cursor-pointer",
+    "group/row flex h-10 w-full items-center overflow-hidden rounded-[8px] text-left transition-colors duration-200 ease-[var(--ease-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)] cursor-pointer",
     active
       ? "bg-[var(--surface-subtle)] font-medium text-[var(--ink-900)]"
       : "text-[var(--nav-fg)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]"
   );
 
-  if (as === "button") {
-    return (
-      <button type="button" onClick={onClick} className={className} aria-label={label}>
+  const row =
+    as === "button" ? (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={label}
+        aria-expanded={ariaExpanded}
+        // The press is the only transform in this component, and it sits out
+        // under reduced motion.
+        className={cn(className, "active:scale-[0.998] motion-reduce:active:scale-100")}
+      >
         {body}
       </button>
+    ) : (
+      <Link
+        href={href ?? "#"}
+        onClick={onClick}
+        aria-current={active ? "page" : undefined}
+        aria-label={label}
+        className={className}
+      >
+        {body}
+      </Link>
     );
-  }
 
   return (
-    <Link
-      href={href ?? "#"}
-      onClick={onClick}
-      aria-current={active ? "page" : undefined}
-      aria-label={label}
-      className={className}
-    >
-      {body}
-    </Link>
+    <RailTooltip label={label} shortcut={shortcut} hidden={expanded}>
+      {row}
+    </RailTooltip>
   );
 }
