@@ -11,7 +11,6 @@
   <noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>
   <![endif]-->
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
     body { margin:0; padding:0; width:100% !important; background:#FAFAFA;
       -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%;
       -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
@@ -42,6 +41,24 @@
       .logo-dark { display:inline-block !important; width:140px !important; max-height:none !important; }
     }
 </style>
+
+  <!-- Inter sits in its own <style> block, deliberately after the layout rules.
+       Gmail strips @font-face and can discard the whole block it lives in, so the
+       expendable thing goes last: losing this costs the font and leaves the
+       responsive rules above untouched. Hidden from Outlook, which ignores
+       @font-face and drops to Times New Roman when it sees one. Order relative to
+       usage doesn't matter — @font-face registers at parse time.
+       One file covers all three weights; Inter v20 is a variable font. -->
+  <!--[if !mso]><!-->
+  <style>
+    @font-face { font-family:'Inter'; font-style:normal; font-weight:300; font-display:swap;
+      src:url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7W0Q5nw.woff2) format('woff2'); }
+    @font-face { font-family:'Inter'; font-style:normal; font-weight:400; font-display:swap;
+      src:url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7W0Q5nw.woff2) format('woff2'); }
+    @font-face { font-family:'Inter'; font-style:normal; font-weight:500; font-display:swap;
+      src:url(https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7W0Q5nw.woff2) format('woff2'); }
+  </style>
+  <!--<![endif]-->
 </head>
 <body class="bg" style="margin:0; padding:0; background:#FAFAFA;">
   <span style="display:none !important; visibility:hidden; opacity:0; color:transparent; height:0; width:0; overflow:hidden; mso-hide:all;">Confirm your email address to finish setting up your Advantage Analytics account.</span>
