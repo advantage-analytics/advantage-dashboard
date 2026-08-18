@@ -6,6 +6,7 @@ import { purgeMatchStorage } from "@/lib/services/matches/purge-match-storage";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
+import { recoveryRedirectTo } from "@/lib/auth/recovery-handoff";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -74,7 +75,7 @@ export async function requestPasswordReset(): Promise<ActionResult> {
     `${headerList.get("x-forwarded-proto") ?? "https"}://${headerList.get("host")}`;
 
   const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
-    redirectTo: `${origin}/auth/update-password`,
+    redirectTo: recoveryRedirectTo(origin),
   });
 
   if (error) {
