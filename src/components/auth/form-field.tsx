@@ -1,15 +1,18 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import { useId, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { ErrorText } from "./form-error";
 
 interface FormFieldProps {
   label: string;
   placeholder?: string;
   type?: string;
-  hasError?: boolean;
-  rightLabel?: { text: string; href?: string };
+  /**
+   * Plain-language message for this field. Present means the rule turns red and
+   * the message renders beneath it — the one error region the set spec allows.
+   */
+  error?: string | null;
   showPasswordToggle?: boolean;
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -19,12 +22,20 @@ interface FormFieldProps {
   autoComplete?: string;
 }
 
+/**
+ * The DS v2 underline input — the same field vocabulary as the upload wizard
+ * and settings, rather than the hand-built one auth used to carry.
+ *
+ * Differences from the as-built field: the value sits at the DS 14px instead of
+ * 16px, the show/hide mark is at the DS 1.5px stroke instead of 2px, the label
+ * reads at `--ink-500` instead of a sub-AA gray, and errors live here on the
+ * field instead of in a tinted, shaking banner under the whole group.
+ */
 export default function FormField({
   label,
   placeholder,
   type = "text",
-  hasError = false,
-  rightLabel,
+  error,
   showPasswordToggle = false,
   value,
   onChange,
@@ -34,6 +45,10 @@ export default function FormField({
   autoComplete,
 }: FormFieldProps) {
   const [showPassword, setShowPassword] = useState(false);
+  const generatedId = useId();
+  const fieldId = id ?? generatedId;
+  const messageId = `${fieldId}-message`;
+
   const inputType = showPasswordToggle
     ? showPassword
       ? "text"
@@ -41,26 +56,17 @@ export default function FormField({
     : type;
 
   return (
-    <div className="group flex flex-col gap-[6px]">
-      <div className="flex items-center justify-between">
-        <label
-          htmlFor={id}
-          className="text-[10px] font-medium uppercase tracking-[2.5px] text-[var(--color-text-muted)]"
-        >
-          {label}
-        </label>
-        {rightLabel ? (
-          <Link
-            href={rightLabel.href || "#"}
-            className="text-[11px] text-[var(--color-accent-blue)] transition-colors hover:text-[var(--color-accent-blue-hover)]"
-          >
-            {rightLabel.text}
-          </Link>
-        ) : null}
-      </div>
+    <div className="group flex flex-col gap-[8px]">
+      <label
+        htmlFor={fieldId}
+        className="text-[10px] font-medium tracking-[2.5px] text-[var(--ink-500)] uppercase"
+      >
+        {label}
+      </label>
+
       <div className="flex w-full items-center justify-between pb-[10px]">
         <input
-          id={id}
+          id={fieldId}
           name={name}
           type={inputType}
           value={value}
@@ -68,30 +74,36 @@ export default function FormField({
           placeholder={placeholder}
           required={required}
           autoComplete={autoComplete}
-          className="w-full bg-transparent text-[16px] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-dim)] sm:text-[14px]"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? messageId : undefined}
+          className="w-full bg-transparent text-[14px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)]"
         />
         {showPasswordToggle ? (
           <button
             type="button"
             onClick={() => setShowPassword((prev) => !prev)}
-            className="-my-3 -mr-3 flex h-11 w-11 shrink-0 items-center justify-center text-[var(--color-text-dim)] transition-colors hover:text-[var(--color-text-secondary)]"
+            className="-my-3 -mr-3 flex h-11 w-11 shrink-0 items-center justify-center text-[var(--ink-500)] transition-colors hover:text-[var(--ink-700)]"
             aria-label={showPassword ? "Hide password" : "Show password"}
           >
             {showPassword ? (
-              <Eye size={18} strokeWidth={2} />
+              <Eye size={16} strokeWidth={1.5} />
             ) : (
-              <EyeOff size={18} strokeWidth={2} />
+              <EyeOff size={16} strokeWidth={1.5} />
             )}
           </button>
         ) : null}
       </div>
+
+      {/* The rule carries the state: hairline at rest, 2px blue on focus, red on error. */}
       <div
         className={
-          hasError
-            ? "h-[1px] w-full bg-[var(--color-error)]"
-            : "h-[1px] w-full bg-[var(--color-border-subtle)] transition-all duration-300 group-focus-within:h-[2px] group-focus-within:bg-[var(--color-accent-blue)]"
+          error
+            ? "h-[1px] w-full bg-[var(--error)]"
+            : "h-[1px] w-full bg-[var(--border-hairline)] transition-[height,background-color] duration-300 ease-[var(--ease-primary)] group-hover:bg-[var(--border-medium)] group-focus-within:h-[2px] group-focus-within:bg-[var(--blue)]"
         }
       />
+
+      {error ? <ErrorText id={messageId}>{error}</ErrorText> : null}
     </div>
   );
 }
