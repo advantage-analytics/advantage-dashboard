@@ -23,7 +23,10 @@ export interface Preferences {
   statDefinitionsOnHover: boolean;
 }
 
-export const DEFAULT_PREFERENCES: Preferences = {
+/** Local to this module: `savePreferences` takes a complete object, so nothing
+ *  outside needs to merge against these. Must stay in step with the column
+ *  defaults in 20260818040318_user_preferences.sql. */
+const DEFAULT_PREFERENCES: Preferences = {
   notifyAnalysisReady: true,
   notifyAnalysisFailed: true,
   weeklyTeamDigest: false,

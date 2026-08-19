@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { generateToken, hashToken, INVITE_TTL_HOURS } from "@/lib/services/programs/tokens";
 import type { ActionResult } from "@/components/dashboard/settings/actions";
 import type { MemberRole } from "@/lib/data/team-settings-server";
@@ -17,9 +18,24 @@ import type { MemberRole } from "@/lib/data/team-settings-server";
  * The raw invite token is minted here and never returned. Only its hash goes to
  * the database, which is the same rule the claim flow follows: a database dump
  * must not be a set of working links into someone's program.
+ *
+ * None of these take a program id. Which program is being edited is server
+ * state — a cookie-backed workspace the context already resolves — so accepting
+ * it from the form meant every caller relaying a value back that the server was
+ * about to look up anyway, and a parameter that had to be treated as untrusted
+ * on arrival. `revokeInvite` never took one; the rest now match it.
  */
 
 const SETTINGS_PATH = "/dashboard/settings/team";
+
+/** The program the caller is currently in, or null if they are not in one. */
+async function activeProgramId(): Promise<string | null> {
+  const workspace = await getWorkspaceContext();
+  if (!workspace || workspace.active.kind !== "team") return null;
+  return workspace.active.id;
+}
+
+const NOT_IN_PROGRAM = "Switch to your team workspace to change it.";
 
 /** Postgres RAISE messages are written for people; pass them straight through. */
 function toMessage(error: { message: string } | null, fallback: string): string {
@@ -28,7 +44,6 @@ function toMessage(error: { message: string } | null, fallback: string): string 
 }
 
 export interface TeamSettingsInput {
-  programId: string;
   schoolName: string;
   team: "mens" | "womens";
   conference: string;
@@ -42,10 +57,12 @@ export interface TeamSettingsInput {
 export async function saveTeamSettings(
   input: TeamSettingsInput
 ): Promise<ActionResult> {
-  const supabase = await createClient();
+  const programId = await activeProgramId();
+  if (!programId) return { ok: false, error: NOT_IN_PROGRAM };
 
+  const supabase = await createClient();
   const { error } = await supabase.rpc("update_program_settings", {
-    p_program_id: input.programId,
+    p_program_id: programId,
     p_school_name: input.schoolName,
     p_team: input.team,
     p_conference: input.conference,
@@ -73,18 +90,19 @@ export async function saveTeamSettings(
  * call rather than a third code path.
  */
 export async function inviteMember(input: {
-  programId: string;
   email: string;
   role: MemberRole;
 }): Promise<ActionResult> {
-  const supabase = await createClient();
+  const programId = await activeProgramId();
+  if (!programId) return { ok: false, error: NOT_IN_PROGRAM };
 
+  const supabase = await createClient();
   const expiresAt = new Date(
     Date.now() + INVITE_TTL_HOURS * 60 * 60 * 1000
   ).toISOString();
 
   const { error } = await supabase.rpc("create_program_invite", {
-    p_program_id: input.programId,
+    p_program_id: programId,
     p_email: input.email,
     p_role: input.role,
     p_token_hash: hashToken(generateToken()),
@@ -113,14 +131,14 @@ export async function revokeInvite(inviteId: string): Promise<ActionResult> {
   return { ok: true };
 }
 
-export async function removeMember(input: {
-  programId: string;
-  userId: string;
-}): Promise<ActionResult> {
+export async function removeMember(userId: string): Promise<ActionResult> {
+  const programId = await activeProgramId();
+  if (!programId) return { ok: false, error: NOT_IN_PROGRAM };
+
   const supabase = await createClient();
   const { error } = await supabase.rpc("remove_program_member", {
-    p_program_id: input.programId,
-    p_user_id: input.userId,
+    p_program_id: programId,
+    p_user_id: userId,
   });
 
   if (error) {

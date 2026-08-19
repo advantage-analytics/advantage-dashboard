@@ -76,6 +76,16 @@ export async function getPersonalUsage(
   return { usedSeconds, capSeconds, billingMonth };
 }
 
+/** A program's zeroed ledger — what a caller outside a program should see. */
+export function emptyProgramUsage(billingMonth: string): ProgramUsage {
+  return {
+    usedSeconds: 0,
+    capSeconds: getMonthlyCapSeconds("program"),
+    billingMonth,
+    lines: [],
+  };
+}
+
 /**
  * A program's shared allowance for one month.
  *

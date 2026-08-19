@@ -96,7 +96,6 @@ export function TeamSettingsForm({ data }: { data: TeamSettingsData }) {
     setError(null);
     startSaving(async () => {
       const result = await saveTeamSettings({
-        programId: data.program.id,
         schoolName: draft.schoolName,
         team: draft.team,
         conference: draft.conference,
@@ -117,7 +116,6 @@ export function TeamSettingsForm({ data }: { data: TeamSettingsData }) {
     setError(null);
     startRosterWork(async () => {
       const result = await inviteMember({
-        programId: data.program.id,
         email,
         // Every invitation from this screen joins as a player. Promoting
         // someone is a role change, and roles v1 has no editor for one.
@@ -269,10 +267,7 @@ export function TeamSettingsForm({ data }: { data: TeamSettingsData }) {
                   disabled={isRosterBusy}
                   onClick={() =>
                     startRosterWork(async () => {
-                      const result = await removeMember({
-                        programId: data.program.id,
-                        userId: member.userId,
-                      });
+                      const result = await removeMember(member.userId);
                       if (!result.ok) setError(result.error);
                     })
                   }
@@ -304,7 +299,6 @@ export function TeamSettingsForm({ data }: { data: TeamSettingsData }) {
                 onClick={() =>
                   startRosterWork(async () => {
                     const result = await inviteMember({
-                      programId: data.program.id,
                       email: invite.email,
                       role: invite.role === "owner" ? "player" : invite.role,
                     });

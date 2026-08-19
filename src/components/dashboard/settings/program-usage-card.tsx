@@ -26,12 +26,10 @@ import { cn } from "@/lib/utils";
  * transition only ever covers a month the person asked for.
  */
 export function ProgramUsageCard({
-  programId,
   programName,
   initial,
   currentMonth,
 }: {
-  programId: string;
   programName: string;
   initial: ProgramUsage;
   /** The live month — the stepper will not walk past it. */
@@ -44,7 +42,7 @@ export function ProgramUsageCard({
     const next = shiftBillingMonth(usage.billingMonth, months);
     if (next > currentMonth) return;
     startTransition(async () => {
-      setUsage(await loadProgramUsage(programId, next));
+      setUsage(await loadProgramUsage(next));
     });
   };
 

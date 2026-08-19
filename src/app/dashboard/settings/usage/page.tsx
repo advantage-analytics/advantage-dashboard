@@ -72,7 +72,6 @@ export default async function UsagePage() {
 
       {program && (
         <ProgramUsageCard
-          programId={workspace.active.id}
           programName={workspace.active.name}
           initial={program}
           currentMonth={billingMonth}
