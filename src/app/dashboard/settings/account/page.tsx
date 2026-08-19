@@ -1,107 +1,86 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Mail } from "lucide-react";
-import { SettingsSection } from "@/components/dashboard/settings/settings-section";
-import { SettingsButton } from "@/components/dashboard/settings/settings-button";
+import { useCallback, useState, useTransition } from "react";
+import Link from "next/link";
+import { Monitor, Users } from "lucide-react";
 import { SettingsAlert } from "@/components/dashboard/settings/settings-alert";
-import { SettingsInput } from "@/components/dashboard/settings/settings-input";
+import { SettingsButton } from "@/components/dashboard/settings/settings-button";
+import { SettingsSectionHeading } from "@/components/dashboard/settings/settings-card";
 import {
   deleteAccount,
   requestPasswordReset,
 } from "@/components/dashboard/settings/actions";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { createClient } from "@/lib/supabase/client";
+import { SUPPORT_EMAIL } from "@/lib/constants";
+import { cn } from "@/lib/utils";
 
-const SUPPORT_EMAIL = "support@advantageanalytics.app";
-
+/**
+ * Settings › Account.
+ *
+ * Facts as rows rather than paragraphs: label, value, and the one action that
+ * changes it, on the same line. Deletion is bounded inside its own frame and
+ * gated on typing the address — it used to be a loose red button under a
+ * paragraph, in the same rhythm as "Reset password".
+ *
+ * The email comes from the workspace context. Fetching it again after hydration
+ * bought a skeleton bar and an extra auth round trip for a string the server had
+ * already resolved.
+ */
 export default function AccountPage() {
-  const [email, setEmail] = useState<string | null>(null);
-  const [resetLoading, setResetLoading] = useState(false);
-  const [deleteLoading, setDeleteLoading] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const { active, viewer } = useWorkspace();
+
   const [confirmText, setConfirmText] = useState("");
-  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [message, setMessage] = useState<{
     type: "success" | "error";
     text: string;
   } | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isResetting, startReset] = useTransition();
+  const [isSigningOut, startSignOut] = useTransition();
+  const [isDeleting, startDelete] = useTransition();
 
-  useEffect(() => {
-    let cancelled = false;
-    const supabase = createClient();
-    (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!cancelled) setEmail(user?.email ?? "");
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const cancelDelete = useCallback(() => {
-    setShowDeleteConfirm(false);
-    setConfirmText("");
-    setDeleteError(null);
-  }, []);
-
-  useEffect(() => {
-    if (!showDeleteConfirm) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") cancelDelete();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [showDeleteConfirm, cancelDelete]);
-
-  const handlePasswordReset = async () => {
-    setResetLoading(true);
-    try {
+  const handlePasswordReset = useCallback(() => {
+    startReset(async () => {
       const result = await requestPasswordReset();
-      if (result.ok) {
-        setMessage({
-          type: "success",
-          text: "Reset link sent. Check your inbox.",
-        });
-      } else {
-        setMessage({
-          type: "error",
-          text: result.error || "Couldn't send the reset link.",
-        });
-      }
-    } catch {
-      setMessage({
-        type: "error",
-        text: "Couldn't send the reset link. Try again in a moment.",
-      });
-    } finally {
-      setResetLoading(false);
-    }
-  };
-
-  const handleDeleteAccount = async () => {
-    setDeleteLoading(true);
-    setDeleteError(null);
-    try {
-      const result = await deleteAccount();
-      if (!result.ok) {
-        setDeleteError(result.error);
-        setDeleteLoading(false);
-      }
-    } catch {
-      setDeleteError(
-        "Couldn't reach the server. Check your connection and try again."
+      setMessage(
+        result.ok
+          ? { type: "success", text: "Reset link sent. Check your inbox." }
+          : { type: "error", text: result.error }
       );
-      setDeleteLoading(false);
-    }
-  };
+    });
+  }, []);
 
-  const canDelete = !!email && confirmText === email;
+  /**
+   * Global sign-out. Supabase revokes every refresh token on the account, so
+   * the phone that uploaded courtside goes with it — which is the whole reason
+   * somebody presses this.
+   */
+  const handleSignOutEverywhere = useCallback(() => {
+    startSignOut(async () => {
+      const { error } = await createClient().auth.signOut({ scope: "global" });
+      if (error) {
+        setMessage({ type: "error", text: error.message });
+        return;
+      }
+      window.location.href = "/login";
+    });
+  }, []);
+
+  const handleDelete = useCallback(() => {
+    setDeleteError(null);
+    startDelete(async () => {
+      const result = await deleteAccount();
+      // Success redirects out of the app; only a failure ever returns here.
+      if (!result.ok) setDeleteError(result.error);
+    });
+  }, []);
+
+  const canDelete = confirmText === viewer.email;
+  const ownsProgram = active.kind === "team" && active.role === "owner";
 
   return (
-    <div className="max-w-xl flex flex-col gap-10">
-      {/* Message */}
+    <div className="flex max-w-[660px] flex-col gap-10">
       {message && (
         <SettingsAlert
           type={message.type}
@@ -110,166 +89,187 @@ export default function AccountPage() {
         />
       )}
 
-      {/* Identity strip — three-line stack: meta · value · hint.
-          Each line owns one job, eyebrow no longer carries help text. */}
-      <section className="flex items-start gap-3.5 pb-6 border-b border-[var(--color-ink-100)]">
-        <div className="size-9 rounded-full flex items-center justify-center flex-shrink-0 bg-[var(--color-blue-tint-04)] mt-0.5">
-          <Mail
-            className="size-4 text-[var(--color-blue)]"
-            strokeWidth={1.5}
-            aria-hidden="true"
-          />
-        </div>
-        <div className="min-w-0 flex-1 flex flex-col gap-1">
-          <p className="text-[10px] font-medium text-[var(--color-ink-400)] uppercase tracking-[2.5px]">
-            Account email
-          </p>
-          {email === null ? (
-            <div
-              role="status"
-              aria-busy="true"
-              aria-label="Loading email"
-              className="h-[14px] w-48 rounded-[2px] settings-skeleton-bar"
-            />
-          ) : (
-            <p className="text-[14px] leading-[20px] text-[var(--color-ink-900)] truncate">
-              {email}
-            </p>
-          )}
-          <p className="text-[11px] text-[var(--color-ink-400)] leading-[1.45]">
+      {/* 01 · Sign-in */}
+      <section className="flex flex-col gap-[18px]">
+        <SettingsSectionHeading number="01" title="Sign-in" />
+        <div className="flex flex-col">
+          <FactRow label="Account email">
+            <span className="truncate text-[13px] text-[var(--ink-900)]">
+              {viewer.email}
+            </span>
             <a
               href={`mailto:${SUPPORT_EMAIL}?subject=Change%20account%20email`}
-              className="underline decoration-[var(--color-ink-200)] underline-offset-2 transition-colors hover:text-[var(--color-ink-700)] hover:decoration-[var(--color-ink-400)]"
+              className="ml-auto shrink-0 text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
             >
               Contact support
-            </a>{" "}
-            to change.
-          </p>
+            </a>
+          </FactRow>
+
+          <FactRow label="Method">
+            <span className="text-[13px] text-[var(--ink-900)]">
+              Email &amp; password
+            </span>
+            <span className="ml-auto shrink-0 text-[11px] text-[var(--ink-500)]">
+              Magic link also enabled
+            </span>
+          </FactRow>
+
+          <FactRow label="Password" className="border-b">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[13px] text-[var(--ink-900)]">
+                Reset by email
+              </span>
+              <span className="text-[11px] text-[var(--ink-500)]">
+                We email a one-time link; it expires in an hour.
+              </span>
+            </div>
+            <SettingsButton
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              onClick={handlePasswordReset}
+              loading={isResetting}
+            >
+              Reset password
+            </SettingsButton>
+          </FactRow>
         </div>
       </section>
 
-      {/* Security — explanation reads first, action sits at the bottom right */}
-      <SettingsSection number="01" title="Security">
-        <p className="text-[12px] text-[var(--color-ink-500)] leading-[1.55]">
-          We&apos;ll email you a one-time link to set a new password. The link
-          expires in one hour.
-        </p>
-        <div className="flex justify-start pt-2">
+      {/* 02 · Sessions.
+
+          One row, not a device list: nothing in the app records where an
+          account has been signed in, and a list assembled from the current
+          session would show one device while implying it was all of them. The
+          action below is genuinely global. */}
+      <section className="flex flex-col gap-[18px]">
+        <SettingsSectionHeading number="02" title="Where you're signed in" />
+        <div className="flex items-center gap-3.5 border-y border-[var(--border-hairline)] py-3">
+          <Monitor
+            className="size-3.5 shrink-0 text-[var(--ink-600)]"
+            strokeWidth={1.5}
+            aria-hidden="true"
+          />
+          <div className="min-w-0">
+            <div className="text-[12px] text-[var(--ink-900)]">This device</div>
+            <div className="mt-0.5 text-[11px] text-[var(--ink-500)]">
+              Signing out everywhere ends every other session too — phones
+              included.
+            </div>
+          </div>
           <SettingsButton
             variant="outline"
-            onClick={handlePasswordReset}
-            loading={resetLoading}
+            size="sm"
+            className="ml-auto"
+            onClick={handleSignOutEverywhere}
+            loading={isSigningOut}
           >
-            Reset password
+            Sign out everywhere
           </SettingsButton>
         </div>
-      </SettingsSection>
+      </section>
 
-      {/* Delete Account — danger zone. Pulled away from Security with mt-12
-          so the page reads: routine account info → routine action → big gap →
-          destructive action. Generous separation marks the boundary. */}
-      <SettingsSection
-        number="02"
-        title="Danger Zone"
-        description="Permanently remove your account and all data."
-        tone="danger"
-        className="mt-12"
-      >
-        {!showDeleteConfirm ? (
-          <>
-            <p className="text-[12px] text-[var(--color-ink-500)] leading-[1.55]">
-              Removes match data, statistics, reports, and your account
-              record. This action cannot be undone.
-            </p>
-            <div className="flex justify-start pt-2">
-              <SettingsButton
-                variant="danger"
-                onClick={() => setShowDeleteConfirm(true)}
-              >
-                Delete account
-              </SettingsButton>
-            </div>
-          </>
-        ) : (
-          <form
-            className="flex flex-col"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (canDelete && !deleteLoading) handleDeleteAccount();
-            }}
-          >
-            <p className="text-[12px] font-medium text-[var(--color-error-strong)] leading-[1.55] mb-6">
-              Type your email below to confirm. All match data and reports will
-              be removed permanently.
-            </p>
-            <SettingsInput
-              id="confirm-delete"
-              label="Confirm with your email"
-              tone="danger"
-              type="text"
-              value={confirmText}
-              onChange={(e) => setConfirmText(e.target.value)}
-              placeholder={email || "your email"}
-              autoFocus
-              autoComplete="off"
-              spellCheck={false}
-              hint={
-                <>
-                  Press{" "}
-                  <kbd className="rounded-[3px] border border-[var(--color-ink-200)] px-[5px] py-[1px] text-[10px] font-medium text-[var(--color-ink-700)]">
-                    Enter
-                  </kbd>{" "}
-                  to confirm,{" "}
-                  <kbd className="rounded-[3px] border border-[var(--color-ink-200)] px-[5px] py-[1px] text-[10px] font-medium text-[var(--color-ink-700)]">
-                    Esc
-                  </kbd>{" "}
-                  to cancel.
-                </>
-              }
-            />
-            {deleteError && (
-              <div
-                role="alert"
-                className="mt-4 flex flex-col gap-1 text-[12px] leading-[1.55]"
-              >
-                <p className="text-[var(--color-error-strong)]">{deleteError}</p>
-                <p className="text-[var(--color-ink-400)]">
-                  Still stuck?{" "}
-                  <a
-                    href={`mailto:${SUPPORT_EMAIL}?subject=Account%20deletion%20failed`}
-                    className="underline decoration-[var(--color-ink-200)] underline-offset-2 transition-colors hover:text-[var(--color-ink-700)] hover:decoration-[var(--color-ink-400)]"
+      {/* 03 · Delete account — bounded, and the only thing in its own frame. */}
+      <section className="mt-2 flex flex-col overflow-hidden rounded-[14px] border border-[var(--border-card)]">
+        <div className="px-5 pb-3 pt-4">
+          <SettingsSectionHeading number="03" title="Delete account" />
+        </div>
+
+        <div className="flex flex-col gap-3 px-5 pb-4">
+          <span className="text-[12px] leading-[1.55] text-[var(--ink-600)]">
+            Removes match data, statistics, reports, and your account record.
+            This cannot be undone.
+          </span>
+
+          {ownsProgram && (
+            <div className="flex items-start gap-3 rounded-[8px] bg-[var(--surface-muted)] px-3.5 py-3">
+              <Users
+                className="mt-0.5 size-[13px] shrink-0 text-[var(--ink-600)]"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+              <div>
+                <div className="text-[12px] text-[var(--ink-900)]">
+                  You own {active.name}
+                </div>
+                <div className="mt-0.5 text-[11px] leading-[1.5] text-[var(--ink-600)]">
+                  Transfer ownership first, or the program goes with you.{" "}
+                  <Link
+                    href="/dashboard/settings/team"
+                    className="text-[var(--blue)] hover:text-[var(--blue-hover)]"
                   >
-                    Contact support
-                  </a>
-                  .
-                </p>
+                    Team settings
+                  </Link>
+                </div>
               </div>
-            )}
-            <div className="flex items-center gap-2 mt-6">
-              <SettingsButton
-                variant="danger"
-                type="submit"
-                loading={deleteLoading}
-                disabled={!canDelete}
-                className={
-                  canDelete
-                    ? "bg-[var(--color-error-strong)] text-white border-transparent hover:bg-[var(--color-danger-hover)] hover:text-white"
-                    : ""
-                }
-              >
-                {deleteError ? "Try again" : "Yes, delete my account"}
-              </SettingsButton>
-              <SettingsButton
-                variant="secondary"
-                type="button"
-                onClick={cancelDelete}
-              >
-                Cancel
-              </SettingsButton>
             </div>
-          </form>
-        )}
-      </SettingsSection>
+          )}
+
+          {deleteError && (
+            <p role="alert" className="text-[12px] text-[var(--danger)]">
+              {deleteError}
+            </p>
+          )}
+        </div>
+
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (canDelete && !isDeleting) handleDelete();
+          }}
+          className="flex flex-wrap items-center gap-3 border-t border-[var(--border-hairline)] bg-[var(--surface-muted)] px-5 py-3.5"
+        >
+          <label
+            htmlFor="confirm-delete"
+            className="text-[11px] text-[var(--ink-600)]"
+          >
+            Type your email to confirm
+          </label>
+          <input
+            id="confirm-delete"
+            type="text"
+            autoComplete="off"
+            spellCheck={false}
+            value={confirmText}
+            onChange={(event) => setConfirmText(event.target.value)}
+            placeholder={viewer.email}
+            className="h-[30px] w-[220px] rounded-[6px] border border-[var(--border-field)] bg-[var(--surface-card)] px-3 text-[12px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)] focus:border-[var(--danger)]"
+          />
+          <SettingsButton
+            type="submit"
+            variant="danger"
+            className="ml-auto"
+            disabled={!canDelete}
+            loading={isDeleting}
+          >
+            Delete account
+          </SettingsButton>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function FactRow({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-4 border-t border-[var(--border-hairline)] py-3.5",
+        className
+      )}
+    >
+      <span className="w-[130px] shrink-0 text-[11px] text-[var(--ink-600)]">
+        {label}
+      </span>
+      {children}
     </div>
   );
 }

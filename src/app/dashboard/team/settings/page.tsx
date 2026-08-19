@@ -1,12 +1,10 @@
-import { ComingSoonPage } from "@/components/dashboard/coming-soon";
+import { redirect } from "next/navigation";
 
-export default function TeamSettingsPage() {
-  return (
-    <ComingSoonPage
-      title="Team Settings"
-      heading="How the program is run"
-      description="Program details, who owns the workspace, whether players can see each other's matches, and how the monthly processing allowance is divided."
-      showHelp={false}
-    />
-  );
+/**
+ * Team settings live in the settings rail now, beside Profile and Plan, so
+ * there is one place a person looks for anything called settings. The team
+ * menu still points here, and this keeps that link — and any bookmark — working.
+ */
+export default function TeamSettingsRedirect() {
+  redirect("/dashboard/settings/team");
 }

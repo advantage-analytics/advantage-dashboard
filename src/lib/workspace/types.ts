@@ -65,8 +65,29 @@ export interface Viewer {
   /** Display name, already falling back to the email local part. */
   name: string;
   initials: string;
-  /** `users.plan` — 'free' | 'pro'. Drives the plan chip. */
+  /** `users.plan` — 'free' | 'pro'. The paid entitlement, and only that. */
   plan: string;
+  /**
+   * `users.role` — the self-described persona (player/coach/parent/academy).
+   * Shapes what the app shows; never what the account is entitled to. See
+   * `lib/user/roles.ts` for why those two had to be split.
+   */
+  role: string | null;
+  /** `users.created_at` as "Mon YYYY", or null for a row without one. */
+  memberSince: string | null;
+}
+
+/**
+ * May this viewer administer the active workspace?
+ *
+ * The presentation-side twin of the SQL `is_program_staff`, and the single
+ * spelling of a rule the rail and the Team page each used to write in the
+ * opposite direction ("kind === team && role !== player" vs "kind !== team ||
+ * role === player"). Neither is authorization — the database is — but they have
+ * to agree, or a rail item bounces you off the page it points at.
+ */
+export function isProgramStaff(workspace: Workspace): boolean {
+  return workspace.kind === 'team' && workspace.role !== 'player';
 }
 
 /** The label under the workspace name in the switcher. */

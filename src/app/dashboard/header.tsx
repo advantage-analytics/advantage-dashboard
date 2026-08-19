@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { navLabel } from "@/lib/dashboard/nav";
+import { navLabel, settingsSection } from "@/lib/dashboard/nav";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { WorkspaceOptionList } from "@/components/dashboard/workspace-switcher";
 import { useRequestLogout } from "@/components/dashboard/logout-dialog";
@@ -56,6 +56,16 @@ function getStaticBreadcrumbs(
   // The one page that is a step within a destination rather than one itself.
   if (pathname === "/dashboard/matches/new") {
     return [MATCHES_CRUMB, { label: "New match" }];
+  }
+
+  // Settings is the one destination with sub-pages of its own, so the trail
+  // reaches them: "Settings › Usage" rather than six pages all called Settings.
+  const section = settingsSection(pathname);
+  if (section) {
+    return [
+      { label: "Settings", href: "/dashboard/settings" },
+      { label: section.label },
+    ];
   }
 
   const label = navLabel(pathname);
@@ -363,7 +373,7 @@ export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
                 Preferences
               </Link>
               <Link
-                href="/dashboard/settings/subscription"
+                href="/dashboard/settings/plan"
                 className={MENU_ITEM_CLASS}
               >
                 <Timer

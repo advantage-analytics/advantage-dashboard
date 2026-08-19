@@ -104,6 +104,8 @@ function toViewer(
     first_name: string | null;
     last_name: string | null;
     plan: string | null;
+    role: string | null;
+    created_at: string | null;
   } | null
 ): Viewer {
   const firstName = row?.first_name ?? null;
@@ -120,6 +122,17 @@ function toViewer(
     // inline version here did not.
     initials: (fullName && getInitials(fullName)) || localPart.slice(0, 2).toUpperCase(),
     plan: row?.plan ?? 'free',
+    role: row?.role ?? null,
+    // Formatted here rather than on each page: Profile and Plan both rendered
+    // "Mon YYYY" from their own client-side fetch of this same column, in two
+    // copies that were not pinned to the same timezone.
+    memberSince: row?.created_at
+      ? new Date(row.created_at).toLocaleDateString('en-US', {
+          month: 'short',
+          year: 'numeric',
+          timeZone: 'UTC',
+        })
+      : null,
   };
 }
 
@@ -137,7 +150,7 @@ export const getWorkspaceContext = cache(
     // select from here.
     const { data: row } = await supabase
       .from('users')
-      .select('first_name, last_name, plan')
+      .select('first_name, last_name, plan, role, created_at')
       .eq('id', user.id)
       .single();
 
