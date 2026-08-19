@@ -1,6 +1,5 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkClaimEmail } from "./domain-match";
@@ -12,15 +11,20 @@ export type ActionOutcome = { ok: true } | { ok: false; error: string };
  * Where a half-finished claim lives between submitting the form and clicking
  * the emailed link.
  *
- * httpOnly, so the claimant cannot edit which program they are claiming on the
- * way back. Putting it in the redirect URL would have been simpler and would
- * have let anyone swap the program key for another school's; putting it in
- * Supabase user metadata does not work at all, because `signInWithOtp`'s `data`
- * is applied on user CREATION and would be silently dropped for anyone who
- * already has an account.
+ * This was an httpOnly cookie, which meant the program key existed in exactly
+ * one browser. A coach filling the form on a laptop and opening the mail on a
+ * phone got "We lost track of which program" — the ordinary way people do this,
+ * failing at the last step.
+ *
+ * So it lives server-side, keyed by address, and the emailed link now works from
+ * any device. `pending_claims` has no constraint on the program, which is what
+ * keeps this from reopening the denial of service the cookie was introduced to
+ * fix — see the migration for the full argument.
+ *
+ * Not Supabase user metadata: `signInWithOtp`'s `data` is applied on user
+ * CREATION and is silently dropped for anyone who already has an account.
  */
-const PENDING_CLAIM_COOKIE = "advantage_pending_claim";
-const PENDING_CLAIM_TTL_SECONDS = 60 * 60 * 24; // matches the link's own life
+const PENDING_CLAIM_TTL_HOURS = 24; // matches the link's own life
 
 interface PendingClaim {
   programKey: string;
@@ -34,11 +38,11 @@ function siteUrl(): string {
 }
 
 /**
- * Begin a claim. Writes NOTHING to the database.
+ * Begin a claim. Creates no CLAIM, and touches no program.
  *
- * That is the entire point. This action is reachable without an account — it
- * has to be, since you pick your program before you have one — and the earlier
- * version inserted a `program_claims` row on submit. Combined with
+ * That distinction is the entire point. This action is reachable without an
+ * account — it has to be, since you pick your program before you have one — and
+ * the earlier version inserted a `program_claims` row on submit. Combined with
  * `program_claims_one_open_per_program`, a script walking the 1,940 program
  * keys (enumerable through the public search endpoint) would have parked an
  * open claim on every program and blocked every legitimate claimant. Moving the
@@ -47,6 +51,10 @@ function siteUrl(): string {
  * So the order is inverted: prove you can read the address, THEN create the
  * claim. Supabase Auth rate-limits OTP sends per address and per IP, so the
  * throttle this action always needed comes with it.
+ *
+ * The one row this DOES write is `pending_claims`, which carries the program
+ * key across to the emailed link. It is not a claim and it has no constraint on
+ * the program, so no number of them blocks anybody — see the migration.
  */
 export async function startClaim(input: {
   programKey: string;
@@ -97,33 +105,96 @@ export async function startClaim(input: {
     };
   }
 
-  const store = await cookies();
-  store.set(
-    PENDING_CLAIM_COOKIE,
-    JSON.stringify({ programKey: input.programKey, fullName, role: input.role, email }),
+  // AFTER the send, deliberately. Row creation is then gated by Supabase's
+  // email rate limit and its per-address and per-IP OTP throttles — pending
+  // claims cannot be created faster than mail actually goes out.
+  const expiresAt = new Date(Date.now() + PENDING_CLAIM_TTL_HOURS * 60 * 60 * 1000);
+
+  const { error: pendingError } = await db.from("pending_claims").upsert(
     {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: PENDING_CLAIM_TTL_SECONDS,
-    }
+      email,
+      program_key: input.programKey,
+      full_name: fullName,
+      role: input.role,
+      created_at: new Date().toISOString(),
+      expires_at: expiresAt.toISOString(),
+    },
+    { onConflict: "email" }
   );
+
+  if (pendingError) {
+    // The link is already gone, so failing here would strand a claimant who has
+    // a working email in front of them. Report it rather than pretending: the
+    // link will land on "start again", which is recoverable and honest.
+    console.error("[claim] could not record the pending claim", {
+      error: pendingError.message,
+    });
+    return {
+      ok: false,
+      error: "We could not start that setup. Try again in a moment.",
+    };
+  }
+
+  // Opportunistic sweep. There is no scheduled job on this project, and this is
+  // the only path that creates these rows, so it is the natural place.
+  await db.from("pending_claims").delete().lt("expires_at", new Date().toISOString());
 
   return { ok: true };
 }
 
 export type CompleteClaimResult =
-  | { ok: true; programKey: string; schoolName: string; alreadyOwned: boolean }
-  | { ok: false; error: string; needsRestart?: boolean };
+  | {
+      ok: true;
+      programKey: string;
+      programId: string;
+      schoolName: string;
+      email: string;
+      alreadyOwned: boolean;
+      /**
+       * The address is a recorded non-freemail contact for this exact program,
+       * so the claim is live and no one has to look at it. Decides which screen
+       * the claimant lands on, and it is the RPC's answer — never recomputed
+       * here, because the contact list has no grants and must not leave the
+       * database.
+       */
+      autoApproved: boolean;
+    }
+  | { ok: false; reason: ClaimFailure };
+
+/**
+ * Why a claim could not be finished.
+ *
+ * A code rather than a sentence, because the failure screen is reached by
+ * redirect and the reason rides in the URL. Passing the copy itself would let
+ * anyone hand a coach a link that renders whatever text they chose on our own
+ * domain, under our logo. The copy lives in the screen; only the code travels.
+ */
+export type ClaimFailure =
+  | "no-session"
+  | "no-pending"
+  | "expired"
+  | "unknown-program"
+  | "taken"
+  | "failed";
+
+/** What `complete_program_claim` returns. One jsonb object, not a row. */
+interface ClaimRpcResult {
+  program_id: string;
+  status: ClaimStatus;
+  already_owned: boolean;
+  contact_matched: boolean;
+}
 
 /**
  * Finish a claim after the emailed link is clicked.
  *
  * The domain check runs HERE, against the program row read from the database —
- * never against anything the form posted and never against the cookie. The
- * claim form's live inline note is a courtesy that says what will probably
- * happen; this decides what does.
+ * never against anything the form posted. The claim form's live inline note is
+ * a courtesy that says what will probably happen; this decides what does.
+ *
+ * Which claim this is comes from the VERIFIED session address, so a link opened
+ * on a phone finishes the claim started on a laptop, and there is still no id
+ * anywhere for anyone to tamper with.
  */
 export async function completeClaim(): Promise<CompleteClaimResult> {
   const supabase = await createClient();
@@ -131,64 +202,81 @@ export async function completeClaim(): Promise<CompleteClaimResult> {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) return { ok: false, error: "Open the link from your email to finish." };
+  if (!user) return { ok: false, reason: "no-session" };
 
-  const store = await cookies();
-  const raw = store.get(PENDING_CLAIM_COOKIE)?.value;
-  if (!raw) {
-    return {
-      ok: false,
-      needsRestart: true,
-      error: "We could not find the program you were setting up. Pick it again and we'll resend the link.",
-    };
-  }
-
-  let pending: PendingClaim;
-  try {
-    pending = JSON.parse(raw) as PendingClaim;
-  } catch {
-    return { ok: false, needsRestart: true, error: "That link has expired. Start again." };
-  }
+  const email = (user.email ?? "").trim().toLowerCase();
+  if (!email) return { ok: false, reason: "no-session" };
 
   const db = createAdminClient();
+
+  // Looked up by the VERIFIED session address, never by anything in the URL.
+  // That is what makes a server-side row safe where a URL parameter would not
+  // be: there is no program key to swap on the way back.
+  const { data: row } = await db
+    .from("pending_claims")
+    .select("program_key, full_name, role, expires_at")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (!row) return { ok: false, reason: "no-pending" };
+  if (new Date(row.expires_at as string) < new Date()) {
+    await db.from("pending_claims").delete().eq("email", email);
+    return { ok: false, reason: "expired" };
+  }
+
+  const pending: PendingClaim = {
+    programKey: row.program_key as string,
+    fullName: row.full_name as string,
+    role: row.role as string,
+    email,
+  };
   const { data: program } = await db
     .from("programs")
     .select("school_name, primary_domain, athletics_domains, domain_match_skips_review")
     .eq("program_key", pending.programKey)
     .maybeSingle();
 
-  if (!program) return { ok: false, needsRestart: true, error: "We could not find that program." };
+  if (!program) return { ok: false, reason: "unknown-program" };
 
   // Against the verified session address, not the one typed into the form.
-  const check = checkClaimEmail(user.email ?? pending.email, program);
+  const check = checkClaimEmail(email, program);
 
-  const { data, error } = await supabase
-    .rpc("complete_program_claim", {
-      p_program_key: pending.programKey,
-      p_claimed_email: user.email ?? pending.email,
-      p_claimant_name: pending.fullName,
-      p_claimant_role: pending.role,
-      p_domain_matched: check.domainMatched,
-      p_skips_manual_review: check.skipsManualReview,
-      p_match_reason: check.reason,
-    })
-    .single();
+  const { data, error } = await supabase.rpc("complete_program_claim", {
+    p_program_key: pending.programKey,
+    p_claimed_email: email,
+    p_claimant_name: pending.fullName,
+    p_claimant_role: pending.role,
+    p_domain_matched: check.domainMatched,
+    p_skips_manual_review: check.skipsManualReview,
+    p_match_reason: check.reason,
+  });
 
   if (error) {
     console.error("[claim] completion failed", { error: error.message });
     if (error.code === "23505") {
-      return { ok: false, error: "Someone else finished setting up this program first." };
+      return { ok: false, reason: "taken" };
     }
-    return { ok: false, error: "We could not finish setting this up. Try the link again." };
+    return { ok: false, reason: "failed" };
   }
 
-  store.delete(PENDING_CLAIM_COOKIE);
+  // Single use. Leaving it would let a second click re-run the RPC, which is
+  // idempotent for the owner but would also keep a live row naming a program
+  // the claimant already owns.
+  await db.from("pending_claims").delete().eq("email", email);
+
+  const rpc = data as ClaimRpcResult | null;
 
   return {
     ok: true,
     programKey: pending.programKey,
+    programId: rpc?.program_id ?? "",
     schoolName: program.school_name as string,
-    alreadyOwned: Boolean((data as { already_owned?: boolean })?.already_owned),
+    email,
+    alreadyOwned: Boolean(rpc?.already_owned),
+    // `contact_matched` is the decision; `status` is what it produced. Reading
+    // the decision keeps this one line ahead of any future status the machine
+    // grows.
+    autoApproved: Boolean(rpc?.contact_matched),
   };
 }
 

@@ -12,13 +12,18 @@
  * boolean and would have auto-approved every case the four guards below exist
  * to catch.
  *
- * A match's only effect is skipping manual review. It does not grant access,
- * does not skip the objection window, does not assign a role, and does not make
- * a claim final. Whether the claimant is the right owner is answered by the
- * announcement and the objection window instead — 17 of 18 duplicated coaches
- * in the outreach data had changed schools inside two months.
+ * ── What this decides now: nothing ──────────────────────────────────────────
+ * It used to decide whether a claim skipped review. It no longer does. What
+ * approves a claim is an EXACT match against `program_contacts` — the address
+ * recorded for this team's staff — checked server-side inside
+ * `complete_program_claim`, which this module cannot see and must not.
  *
- * A non-match is never a rejection. Many D2, D3 and NAIA coaches have no
+ * Both answers here are now EVIDENCE, recorded on the claim and shown to whoever
+ * reviews it. A domain match says "someone at this school", which is a student,
+ * an alum with a lifetime address, or anyone in the faculty; that was never
+ * enough on its own, and the announcement that used to backstop it was cut.
+ *
+ * A non-match is still never a rejection. Many D2, D3 and NAIA coaches have no
  * institutional address at all; they route to review and a human approves them.
  *
  * ── The four guards ─────────────────────────────────────────────────────────
@@ -70,8 +75,27 @@ const ACADEMIC_SUFFIX = new Set<string>([
   ...[...MULTI_SUFFIX].filter((s) => s.startsWith('ac.') || s.startsWith('edu.')),
 ]);
 
+/**
+ * The only two things the browser may say about an address.
+ *
+ * It must NOT say whether the address is on the program's recorded staff list,
+ * because that is what decides the claim. A note that flipped on a match would
+ * be an enumeration oracle: type addresses until it changes and you have
+ * harvested 3,117 real people's work emails out of `program_contacts`.
+ *
+ * So the split is on freemail, which is the one thing that is both knowable
+ * here and always true. `complete_program_claim` requires `not is_freemail`
+ * before it auto-approves, so a personal address genuinely always reaches a
+ * person — and freemail-ness is computed from the public list above, not from
+ * anything of ours.
+ *
+ * Everything else gets a line that promises nothing, because for a school
+ * address the honest answer is that this screen does not know.
+ */
 export const NOTE_REVIEW =
-  "We'll confirm this one manually. It usually takes under a day.";
+  'A personal address always needs a manual check. A school address is usually quicker.';
+
+export const NOTE_CONFIRM = "We'll send a link here to confirm it's yours.";
 
 /**
  * Hostname labels: letters, digits, hyphens; no empty labels, no leading or
@@ -196,7 +220,10 @@ export interface ClaimCheck {
   skipsManualReview: boolean;
   /** Why, in words. Goes into the admin review email. */
   reason: string;
-  /** The quiet line under the email field. Never blocking. */
+  /**
+   * The quiet line under the email field. Never blocking, and deliberately
+   * unable to predict the outcome — see NOTE_REVIEW.
+   */
   inlineNote: string;
 }
 
@@ -204,7 +231,6 @@ export function checkClaimEmail(
   email: string | null | undefined,
   program: ClaimProgram
 ): ClaimCheck {
-  const school = program.school_name || 'your school';
   const domain = emailDomain(email);
   const registrable = registrableDomain(domain);
 
@@ -221,9 +247,12 @@ export function checkClaimEmail(
     matchedOn,
     skipsManualReview,
     reason,
-    inlineNote: skipsManualReview
-      ? `Recognized as a ${school} address.`
-      : NOTE_REVIEW,
+    // Deliberately NOT keyed on `skipsManualReview`. That reported the domain
+    // decision, which stopped deciding anything when contact matching landed —
+    // it told a recorded coach to expect a manual wait and then approved them
+    // instantly, and told any student on a matching domain they were
+    // "recognized" before routing them to review.
+    inlineNote: isFreemail(domain) ? NOTE_REVIEW : NOTE_CONFIRM,
   });
 
   if (!domain) return out(false, '', false, 'malformed email address');

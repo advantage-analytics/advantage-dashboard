@@ -24,22 +24,21 @@ import {
 /**
  * Two committed widths: a 64px icon rail and a 232px panel.
  *
- * The rail is the default. Reaching for navigation opens a PEEK — the panel
- * floats over the page rather than pushing it — which is the reason this shape
- * was chosen over a plain toggle: a match report, a KPI strip or a chart never
- * reflows while you reach past it. Pinning is the opt-in, and pinned is layout
- * rather than overlay.
+ * The toggle is the committed control — one persistent state, no hover
+ * surprises. Content reflows with the panel, and that is the trade the button
+ * makes versus a hover peek: it only happens on a deliberate click, so a match
+ * report, a KPI strip or a chart never resizes under the cursor while you are
+ * reading it.
  *
- * The outer element holds the LAYOUT width and the inner one the VISUAL width.
- * When peeking they disagree — the layout box stays at 64 while the panel
- * overlays at 232 — and that disagreement is the whole feature.
+ * Icons sit in a fixed 40px column pinned to the panel's left padding at BOTH
+ * widths, so nothing shifts horizontally — only the panel edge travels, and the
+ * labels fade in behind it.
  */
 export function AppSidebar() {
   const pathname = usePathname();
   const { active } = useWorkspace();
   const requestLogout = useRequestLogout();
-  const { pinned, peeking, expanded, togglePinned, openPeek, cancelPeek, closePeek } =
-    useSidebarState();
+  const { expanded, toggle } = useSidebarState();
 
   const isTeam = active.kind === "team";
   const mainLinks = isTeam ? TEAM_NAV : PERSONAL_NAV;
@@ -47,80 +46,67 @@ export function AppSidebar() {
   const current = activeHref(pathname, [...mainLinks, ...bottomLinks]);
 
   return (
-    <div
-      // Layout width. Only the pin moves this; a peek deliberately does not.
-      className="relative z-40 shrink-0 transition-[width] duration-200 ease-[var(--ease-primary)] motion-reduce:transition-none"
-      style={{ width: pinned ? PANEL_WIDTH : RAIL_WIDTH }}
-      onMouseEnter={openPeek}
-      onMouseLeave={cancelPeek}
+    <nav
+      aria-label="Main"
+      className={cn(
+        "relative z-40 flex shrink-0 flex-col overflow-hidden p-3",
+        "border-r border-[var(--border-hairline)] bg-[var(--surface-card)]",
+        "transition-[width] duration-200 ease-[var(--ease-primary)] motion-reduce:transition-none"
+      )}
+      style={{
+        width: expanded ? PANEL_WIDTH : RAIL_WIDTH,
+        // Collapsing reverses the order: the labels leave in the first 80ms and
+        // only then does the edge travel, so text never clips mid-word.
+        transitionDelay: expanded ? "0ms" : "80ms",
+      }}
     >
-      <nav
-        aria-label="Main"
-        // Focusing any rail item opens the peek — keyboard users must never be
-        // asked to navigate by icon alone.
-        onFocus={openPeek}
-        className={cn(
-          "absolute inset-y-0 left-0 flex flex-col border-r border-[var(--border-hairline)] bg-[var(--surface-card)] p-3",
-          "transition-[width,box-shadow] duration-200 ease-[var(--ease-primary)] motion-reduce:transition-none",
-          // Float role. The system already reserves shadow for exactly this.
-          peeking && "shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]"
-        )}
-        style={{
-          width: expanded ? PANEL_WIDTH : RAIL_WIDTH,
-          // Collapsing: labels leave first, then the edge travels, so text
-          // never clips mid-word.
-          transitionDelay: expanded ? "0ms" : "80ms",
-        }}
-      >
-        <WorkspaceRow expanded={expanded} onNavigate={closePeek} />
+      <WorkspaceRow expanded={expanded} />
 
-        <div className="h-6 shrink-0" />
+      <div className="h-6 shrink-0" />
 
-        <div className="flex flex-col gap-1">
-          {mainLinks.map((link) => (
-            <RailItem
-              key={link.href}
-              href={link.href}
-              label={link.name}
-              icon={link.icon}
-              active={current === link.href}
-              expanded={expanded}
-              onClick={closePeek}
-            />
-          ))}
-        </div>
-
-        <div className="flex-1" />
-
-        <div className="flex flex-col gap-1">
-          {bottomLinks.map((link) => (
-            <RailItem
-              key={link.href}
-              href={link.href}
-              label={link.name}
-              icon={link.icon}
-              active={current === link.href}
-              expanded={expanded}
-              onClick={closePeek}
-            />
-          ))}
-
-          {/* The toggle is the last row of the bottom group at BOTH widths, so
-              it never moves relative to Settings and Help. Icon and label both
-              flip; there is no glyph rotation. */}
+      <div className="flex flex-col gap-1">
+        {mainLinks.map((link) => (
           <RailItem
-            as="button"
-            label={pinned ? "Collapse" : "Expand sidebar"}
-            icon={pinned ? PanelLeftClose : PanelLeftOpen}
+            key={link.href}
+            href={link.href}
+            label={link.name}
+            icon={link.icon}
+            active={current === link.href}
             expanded={expanded}
-            shortcut="⌘\"
-            onClick={togglePinned}
           />
-        </div>
+        ))}
+      </div>
 
-        <ViewerFooter expanded={expanded} onSignOut={requestLogout} />
-      </nav>
-    </div>
+      <div className="flex-1" />
+
+      <div className="flex flex-col gap-1">
+        {bottomLinks.map((link) => (
+          <RailItem
+            key={link.href}
+            href={link.href}
+            label={link.name}
+            icon={link.icon}
+            active={current === link.href}
+            expanded={expanded}
+          />
+        ))}
+
+        {/* The toggle is the last row of the bottom group at BOTH widths, so it
+            never moves relative to Settings and Help. Icon and label both flip;
+            the icons cross-fade in place, with no glyph rotation. */}
+        <RailItem
+          as="button"
+          label={expanded ? "Collapse" : "Expand sidebar"}
+          icon={expanded ? PanelLeftClose : PanelLeftOpen}
+          expanded={expanded}
+          shortcut="⌘\"
+          ariaExpanded={expanded}
+          onClick={toggle}
+        />
+      </div>
+
+      <ViewerFooter expanded={expanded} onSignOut={requestLogout} />
+    </nav>
   );
 }
 

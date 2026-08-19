@@ -10,7 +10,17 @@ import { teamLabel, programSubtitle } from "@/lib/data/programs-server";
 /** Long enough to stop typing, short enough not to feel laggy. */
 const DEBOUNCE_MS = 180;
 
-export function ProgramSearch() {
+/**
+ * What picking a row means.
+ *
+ * `claim` is the coach's path and the default, so every existing caller keeps
+ * today's behaviour. `join` is the player's: they land on the invite request
+ * rather than the status page, because the status page's unclaimed branch leads
+ * with "Set up this program" and a player must never be routed at that.
+ */
+export type SearchIntent = "claim" | "join";
+
+export function ProgramSearch({ intent = "claim" }: { intent?: SearchIntent }) {
   const router = useRouter();
   const [term, setTerm] = useState("");
   const [results, setResults] = useState<ProgramSearchResult[]>([]);
@@ -89,7 +99,13 @@ export function ProgramSearch() {
               <li key={program.programKey}>
                 <button
                   type="button"
-                  onClick={() => router.push(`/claim/${program.programKey}`)}
+                  onClick={() =>
+                    router.push(
+                      intent === "join"
+                        ? `/claim/${program.programKey}/request`
+                        : `/claim/${program.programKey}`
+                    )
+                  }
                   className="flex w-full items-center gap-4 border-b border-[var(--border-hairline)] px-4 py-3 text-left transition-colors duration-150 last:border-b-0 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none cursor-pointer"
                 >
                   <span className="min-w-0 flex-1">
@@ -111,7 +127,11 @@ export function ProgramSearch() {
                       taken ? "text-[var(--ink-700)]" : "text-[var(--ink-400)]"
                     }`}
                   >
-                    {taken ? (program.ownerDisplay ?? "Set up") : "not set up"}
+                    {taken
+                      ? (program.ownerDisplay ?? "Set up")
+                      : intent === "join"
+                        ? "no one yet"
+                        : "not set up"}
                   </span>
                 </button>
               </li>

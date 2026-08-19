@@ -76,8 +76,10 @@ const eslintConfig = [
   // Priority order, highest value first:
   //   1. react-hooks/refs — CLEARED, promoted to error (see below).
   //   2. react-hooks/set-state-in-effect — mixed. Some are real cascading
-  //      renders (src/hooks/use-mobile.ts wants useSyncExternalStore); others
-  //      are harmless mount-time init. Triage case by case.
+  //      renders that want useSyncExternalStore; others are harmless
+  //      mount-time init. Triage case by case. (The example this used to
+  //      name, src/hooks/use-mobile.ts, was deleted with the unused shadcn
+  //      sidebar it served.)
   //   3. The rest are one-offs.
   //
   // NOTE: fixing these changes component runtime behavior (animation timing,

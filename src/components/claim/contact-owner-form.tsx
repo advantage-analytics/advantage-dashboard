@@ -105,7 +105,7 @@ export function ContactOwnerForm({
             rows={3}
             placeholder={
               kind === "request"
-                ? "Hi — I'm the new volunteer assistant, I'd like access to the match reports."
+                ? "Add anything that helps them place you — your role, or when you joined."
                 : "They left the program in June."
             }
             className={`${CLAIM_FIELD} h-auto resize-none py-3 leading-[1.5]`}

@@ -30,12 +30,18 @@ const OPTIONS: { id: Choice; label: string; sub: string }[] = [
  *
  * An individual player leaves for the existing consumer signup rather than
  * being walked through a collegiate flow that does not apply to them — the spec
- * calls that out specifically. A player on a program lands on the same program
- * search, because asking their coach for an invite starts by naming the school.
+ * calls that out specifically.
+ *
+ * A player on a program starts at the same search, because asking to be added
+ * begins by naming the school — but with `intent=join`, and that is not
+ * cosmetic. Without it the search pushed every persona to the program's status
+ * page, whose unclaimed branch makes "Set up this program" the primary action.
+ * A player answering this question honestly was being handed ownership of their
+ * own coach's program.
  */
 const DESTINATION: Record<Choice, string> = {
   coach: "/claim/program",
-  player: "/claim/program",
+  player: "/claim/program?intent=join",
   individual: "/sign-up",
 };
 

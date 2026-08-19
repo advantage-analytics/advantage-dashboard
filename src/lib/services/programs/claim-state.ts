@@ -48,7 +48,18 @@ export type ClaimEvent =
   /** The objection window elapsed with no objection. */
   | { type: 'settle' }
   /** The magic link expired unused. */
-  | { type: 'expire' };
+  | { type: 'expire' }
+  /**
+   * An admin puts a settled claim back in the queue.
+   *
+   * Only an admin, and only through a server action that re-checks the session
+   * — never from an objection link. That distinction is the whole reason the
+   * terminal states were terminal: a public link that could reverse ownership
+   * would let anyone evict a legitimate owner. An authenticated admin already
+   * decides these claims, so letting them undo their own mistake adds no
+   * authority they did not have.
+   */
+  | { type: 'reopen' };
 
 /**
  * Apply an event. Returns the next status, or null if the move is illegal.
@@ -85,17 +96,31 @@ export function nextClaimStatus(
       if (event.type === 'settle') return 'approved';
       return null;
 
-    // Terminal. An objection after approval is a support conversation, not a
-    // state transition — reversing ownership automatically would let anyone
-    // holding an objection link evict a legitimate owner.
-    case 'approved':
+    // A settled decision can be undone by an admin, and lands back in the
+    // queue rather than back where it was. `reopen` never grants anything on
+    // its own: the admin still has to approve, which is the same decision they
+    // would make on any new claim. Restoring straight to `objection_window`
+    // would silently re-grant a program that a claim from `pending_review`
+    // never had.
     case 'rejected':
     case 'objected':
+      if (event.type === 'reopen') return 'pending_review';
+      return null;
+
+    // Approved is not undone, it is objected to — the transition already
+    // exists, and an approved claim is live rather than a mistake sitting in a
+    // queue.
+    case 'approved':
       return null;
   }
 }
 
-/** Nothing more will happen to this claim without a person getting involved. */
+/**
+ * Nothing more will happen to this claim on its own.
+ *
+ * Still true after `reopen`: an admin acting deliberately is exactly the
+ * "person getting involved" this describes.
+ */
 export function isTerminal(status: ClaimStatus): boolean {
   return status === 'approved' || status === 'rejected' || status === 'objected';
 }

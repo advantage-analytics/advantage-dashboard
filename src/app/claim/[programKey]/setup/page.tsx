@@ -7,10 +7,17 @@ import { SetupForm } from "@/components/claim/setup-form";
 /**
  * F4 / F4.1 — set up the program.
  *
- * The aside states the announced claim UP FRONT. It is the verification, so it
- * should not be a surprise afterwards: everyone else on the recorded staff is
- * told you claimed this, with one click to object. That sentence is the whole
- * reason a stale directory does not become a wrong owner.
+ * The aside used to promise that everyone else on the recorded staff would be
+ * told, with one click to object. That announcement was cut — mailing scraped
+ * addresses on every claim is unsolicited bulk mail to people who never signed
+ * up — so the sentence was a promise the system does not keep, made at the
+ * moment a coach commits. What replaced it is what actually happens: an address
+ * already on the staff list settles immediately, and anything else reaches a
+ * person.
+ *
+ * The aside deliberately does NOT say whether THIS address is on that list.
+ * Telling the browser would turn the form into an enumeration oracle over
+ * 3,117 real people's work addresses.
  */
 export default async function SetupProgramPage({
   params,
@@ -52,10 +59,13 @@ export default async function SetupProgramPage({
           items={[
             { text: "You manage staff, roster and permissions" },
             {
-              text: "Everyone else on the recorded staff is told you claimed it, with one click to object",
+              text: "An address already on the program's staff list settles straight away",
             },
             {
-              text: "Inviting people works immediately; sending video waits only if the claim needs review",
+              text: "Anything else reaches a person, usually inside a day",
+            },
+            {
+              text: "Inviting people works immediately; only sending video waits on that check",
             },
           ]}
         />

@@ -16,11 +16,11 @@ import { LogoutProvider } from "@/components/dashboard/logout-dialog";
  * Split out when workspaces arrived: the layout resolves the viewer's
  * workspaces on the server, and a `"use client"` layout cannot.
  *
- * A plain flex row rather than the shadcn `SidebarProvider`. That component
- * models one width that pushes content; this sidebar has two widths AND a peek
- * that overlays without pushing, which is the behaviour the collapse spec is
- * built around. Keeping it would have meant fighting its layout to get the
- * float role.
+ * A plain flex row rather than the shadcn `SidebarProvider`. Its cookie, its
+ * mobile sheet and its own trigger are all things this sidebar owns itself —
+ * the collapse spec puts the toggle in the rail's bottom group and remembers
+ * the width per device — so the provider was scaffolding around a state this
+ * layout already keeps.
  */
 export function DashboardShell({
   activitySlot,
