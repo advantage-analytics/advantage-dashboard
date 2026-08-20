@@ -256,11 +256,62 @@ export async function recordResult(
     return { error: "Both sides need a name before a result can be saved." };
   }
 
-  const matchId = crypto.randomUUID();
   const format = (event.format ?? {}) as {
     best_of?: number;
     ad_scoring?: boolean | null;
   };
+
+  const round = input.round ?? (entry.slot as string | null);
+
+  // Never mint a second match for the same line.
+  //
+  // A dual line has at most one match ever; a tournament entry has one per
+  // ROUND. Both collapse to "one match per (entry, round)", so a repeat call —
+  // a coach scoring courtside while the upload wizard holds a snapshot taken
+  // before that score existed — updates the row instead of duplicating it.
+  //
+  // Without this the wizard silently created a twin: same line, same players,
+  // a different score, and a team total counting the line twice. That is
+  // exactly the duplicate 22e's "fills 3 of 9" receipt promises cannot happen.
+  //
+  // `limit(1)` on an array, NOT maybeSingle(): where a duplicate already exists
+  // maybeSingle() errors, the error gets swallowed, and this would mint a
+  // THIRD row — a de-duplicator that makes things worse the one time it
+  // actually matters.
+  const { data: existingRows } = await supabase
+    .from("matches")
+    .select("id")
+    .eq("event_entry_id", entry.id)
+    .eq("round", round ?? "")
+    .limit(1);
+
+  const existing = existingRows?.[0];
+
+  const scorePayload = {
+    player1: input.ourGames,
+    player2: input.theirGames,
+    player1_tiebreaks: input.ourTiebreaks,
+    player2_tiebreaks: input.theirTiebreaks,
+  };
+
+  if (existing?.id) {
+    const { error: updateError } = await supabase
+      .from("matches")
+      .update({
+        player1_name: ourLabel,
+        player2_name: theirLabel,
+        score: scorePayload,
+      })
+      .eq("id", existing.id as string);
+
+    if (updateError) return { error: updateError.message };
+
+    revalidatePath("/dashboard/team/schedule");
+    revalidatePath(`/dashboard/team/schedule/${entry.event_id}`);
+    return { matchId: existing.id as string };
+  }
+
+  const matchId = crypto.randomUUID();
 
   const { error: matchError } = await supabase.from("matches").insert({
     id: matchId,
@@ -273,19 +324,14 @@ export async function recordResult(
     program_id: auth.programId,
     event_entry_id: entry.id,
     tournament_name: event.name,
-    round: input.round ?? (entry.slot as string | null),
+    round,
     date: event.starts_on,
     format: {
       best_of: format.best_of ?? 3,
       ad_scoring: format.ad_scoring ?? null,
       play_on_lets: false,
     },
-    score: {
-      player1: input.ourGames,
-      player2: input.theirGames,
-      player1_tiebreaks: input.ourTiebreaks,
-      player2_tiebreaks: input.theirTiebreaks,
-    },
+    score: scorePayload,
     // The context string, not an outcome — who won is derived from the games.
     result: "Final Score",
     match_type: entry.discipline === "doubles" ? "Doubles" : "Singles",

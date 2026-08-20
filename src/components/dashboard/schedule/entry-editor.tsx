@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus, X } from "lucide-react";
+import { splitNames } from "@/lib/schedule/format";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 
 export interface DraftEntry {
@@ -94,11 +95,12 @@ export function EntryEditor({
               value={entry.labels.join(" / ")}
               placeholder={discipline === "doubles" ? "Name / Name" : "Name"}
               onChange={(event) => {
-                const labels = event.target.value
-                  .split("/")
-                  .map((part) => part.trim())
-                  .filter(Boolean);
-                const userIds = labels
+                // Raw, as one element. Trimming per keystroke eats the space
+                // the user just pressed — see splitNames()'s note. Roster ids
+                // are resolved from the split form, which is stable enough for
+                // matching while the raw text keeps typing usable.
+                const raw = event.target.value;
+                const userIds = splitNames(raw)
                   .map(
                     (label) =>
                       roster.find(
@@ -107,7 +109,7 @@ export function EntryEditor({
                       )?.userId
                   )
                   .filter((id): id is string => Boolean(id));
-                update(entry.key, { labels, userIds });
+                update(entry.key, { labels: [raw], userIds });
               }}
               className="w-full min-w-0 bg-transparent text-[14px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-300)]"
             />

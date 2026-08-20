@@ -15,6 +15,7 @@ import {
   FieldCellText,
 } from "@/components/dashboard/schedule/field-row";
 import { createDual } from "@/lib/schedule/actions";
+import { splitNames } from "@/lib/schedule/format";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 import type { EventSite } from "@/lib/schedule/types";
 
@@ -74,14 +75,21 @@ export function DualForm({
   // is back on the bench without a second piece of state to keep in step.
   const bench = useMemo(() => {
     const named = new Set(
-      lines.flatMap((line) => line.ourLabels.map((label) => label.toLowerCase()))
+      lines.flatMap((line) =>
+        splitNames(line.ourLabels.join(" / ")).map((label) => label.toLowerCase())
+      )
     );
     return ladder.filter((player) => !named.has(player.name.toLowerCase()));
   }, [lines, ladder]);
 
-  const filled = lines.filter(
-    (line) => line.ourLabels.length > 0 && line.theirLabels.length > 0
-  );
+  // A line counts once BOTH sides are named. Half a line has nobody to play.
+  const filled = lines
+    .map((line) => ({
+      line,
+      ours: splitNames(line.ourLabels.join(" / ")),
+      theirs: splitNames(line.theirLabels.join(" / ")),
+    }))
+    .filter((row) => row.ours.length > 0 && row.theirs.length > 0);
 
   function submit() {
     setError(null);
@@ -95,13 +103,13 @@ export function DualForm({
         surface,
         bestOf: Number(bestOf),
         adScoring: adScoring === "true",
-        lines: filled.map((line, index) => ({
-          discipline: line.discipline,
-          slot: line.slot,
+        lines: filled.map((row, index) => ({
+          discipline: row.line.discipline,
+          slot: row.line.slot,
           position: index,
-          playerUserIds: line.ourIds,
-          playerLabels: line.ourLabels,
-          opponentLabels: line.theirLabels,
+          playerUserIds: row.line.ourIds,
+          playerLabels: row.ours,
+          opponentLabels: row.theirs,
         })),
       });
 

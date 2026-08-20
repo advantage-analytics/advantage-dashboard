@@ -89,14 +89,16 @@ export function LineupEditor({
   }
 
   function setLabels(key: string, column: Column, value: string) {
-    const parts = value.split("/").map((part) => part.trim()).filter(Boolean);
     onChange(
       lines.map((line) =>
         line.key === key
           ? {
               ...line,
-              [column === "ours" ? "ourLabels" : "theirLabels"]:
-                parts.length > 0 ? parts : [],
+              // Stored raw, as one element. Splitting on "/" and trimming here
+              // would run on every keystroke and eat the space the user just
+              // pressed — "Dana Brooks" could only be typed as "DanaBrooks".
+              // splitNames() does that work at the boundaries instead.
+              [column === "ours" ? "ourLabels" : "theirLabels"]: [value],
               // A name typed over a rostered player is a different person. Drop
               // the id rather than attributing their match to whoever was here.
               ...(column === "ours" ? { ourIds: [] } : {}),

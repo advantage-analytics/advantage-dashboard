@@ -14,6 +14,7 @@ import {
   FieldCellText,
 } from "@/components/dashboard/schedule/field-row";
 import { createTournament } from "@/lib/schedule/actions";
+import { splitNames } from "@/lib/schedule/format";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 import type { EventSite } from "@/lib/schedule/types";
 
@@ -67,7 +68,9 @@ export function TournamentForm({
   const [singles, setSingles] = useState<DraftEntry[]>([]);
   const [doubles, setDoubles] = useState<DraftEntry[]>([]);
 
-  const named = [...singles, ...doubles].filter((entry) => entry.labels.length > 0);
+  const named = [...singles, ...doubles]
+    .map((entry) => ({ entry, labels: splitNames(entry.labels.join(" / ")) }))
+    .filter((row) => row.labels.length > 0);
 
   function submit() {
     setError(null);
@@ -82,13 +85,13 @@ export function TournamentForm({
         host: host.trim() || null,
         bestOf: Number(bestOf),
         adScoring: adScoring === "true",
-        entries: named.map((entry, index) => ({
-          discipline: entry.discipline,
+        entries: named.map((row, index) => ({
+          discipline: row.entry.discipline,
           position: index,
-          draw: entry.draw,
-          seed: entry.seed ? Number(entry.seed) : null,
-          playerUserIds: entry.userIds,
-          playerLabels: entry.labels,
+          draw: row.entry.draw,
+          seed: row.entry.seed ? Number(row.entry.seed) : null,
+          playerUserIds: row.entry.userIds,
+          playerLabels: row.labels,
         })),
       });
 

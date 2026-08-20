@@ -78,3 +78,18 @@ export function formatScore(
     .map((game, index) => `${game}–${theirs[index] ?? 0}`)
     .join(" ");
 }
+
+/**
+ * "Brooks / Reid" → ["Brooks", "Reid"].
+ *
+ * Applied at the BOUNDARIES — on submit, and when comparing against the roster
+ * — never on every keystroke. Trimming as the user types eats the space they
+ * just pressed, so "Dana Brooks" can only ever be typed as "DanaBrooks": the
+ * field looks broken and there is no error to explain it.
+ */
+export function splitNames(text: string): string[] {
+  return text
+    .split("/")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}

@@ -98,8 +98,11 @@ export function DualDetail({
             </StatusChip>
           ) : (
             <span className="text-micro" style={{ color: "var(--ink-600)" }}>
+              {/* "lines", not "matches" — the create footer promised lines, and
+                  until one is played that is exactly what these are. Two words
+                  for one object is how a reader stops trusting either. */}
               <span className="tabular">{entries.length}</span>{" "}
-              {entries.length === 1 ? "match" : "matches"} ·{" "}
+              {entries.length === 1 ? "line" : "lines"} ·{" "}
               {anyPlayed ? `${withoutVideo} without video` : "no results yet"}
             </span>
           )}
