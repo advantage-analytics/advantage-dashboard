@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ScoreEntry } from "@/components/dashboard/schedule/score-entry";
-import { entryState, matchWon } from "@/lib/schedule/entry-state";
+import { entryState, matchWon, supportsVideo } from "@/lib/schedule/entry-state";
 import { formatScore } from "@/lib/schedule/format";
 import type { EntryMatch, EventEntry } from "@/lib/schedule/types";
 
@@ -96,6 +96,7 @@ export function LineRow({
           state={state}
           match={match}
           entryId={entry.id}
+          videoAllowed={supportsVideo(entry)}
           canEdit={canEdit}
           onScore={() => setScoring(true)}
         />
@@ -108,12 +109,14 @@ function Action({
   state,
   match,
   entryId,
+  videoAllowed,
   canEdit,
   onScore,
 }: {
   state: ReturnType<typeof entryState>;
   match: EntryMatch | null;
   entryId: string;
+  videoAllowed: boolean;
   canEdit: boolean;
   onScore: () => void;
 }) {
@@ -138,6 +141,12 @@ function Action({
     );
   }
 
+  if (state === "waiting") {
+    // Blue, but not pulsing — the same distinction isWorking draws. Something
+    // is queued, nothing is moving.
+    return <StatusChip tone="blue">In line</StatusChip>;
+  }
+
   if (state === "failed") {
     return <StatusChip tone="loss">Analysis failed</StatusChip>;
   }
@@ -153,16 +162,20 @@ function Action({
     );
   }
 
-  // Played, scored, no video. The one thing left to do with this line — and the
-  // pinned entry point 22f describes: the wizard opens on its video step with
-  // this line already the destination.
+  // Played, scored, nothing sent. The one thing left to do with this line — and
+  // the pinned entry point 22f describes: the wizard opens on its video step
+  // with this line already the destination.
+  //
+  // "Add file" on a doubles line, not "Add video": the vision pipeline is
+  // singles-only, so a doubles line can only take a SwingVision export and a
+  // button promising video would be a promise the submit route refuses.
   if (!canEdit) return null;
   return (
     <Link
       href={`/dashboard/team/upload?entry=${entryId}`}
       className="text-[11px] font-medium text-[var(--blue)]"
     >
-      Add video
+      {videoAllowed ? "Add video" : "Add file"}
     </Link>
   );
 }

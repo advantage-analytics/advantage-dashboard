@@ -53,6 +53,13 @@ export interface CreateTournamentInput {
   site: EventSite;
   surface: string;
   host: string | null;
+  bestOf: number;
+  /**
+   * Ad or no-ad. Not optional even though a tournament has no single format in
+   * theory: the vision pipeline refuses a job without it, and leaving it null
+   * meant every tournament video failed submission after the coach had gone.
+   */
+  adScoring: boolean;
   entries: TournamentEntryInput[];
 }
 
@@ -167,7 +174,7 @@ export async function createTournament(
       site: input.site,
       surface: input.surface || null,
       host: input.host || null,
-      format: {},
+      format: { best_of: input.bestOf, ad_scoring: input.adScoring },
       created_by: auth.userId,
     })
     .select("id")

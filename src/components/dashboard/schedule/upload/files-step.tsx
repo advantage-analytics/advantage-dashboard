@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { ArrowRight, FileSpreadsheet, Trash2, Upload } from "lucide-react";
 import { probeVideo } from "@/lib/video/probe";
+import { supportsVideo } from "@/lib/schedule/entry-state";
 import { TrimRail } from "@/components/dashboard/schedule/upload/trim-rail";
 import {
   billableSeconds,
@@ -64,6 +65,7 @@ export function FilesStep({
             (entry.matches[0]?.opponentLabels ?? entry.opponentLabels).join(" / ") ||
             "—"
           }`}
+          videoAllowed={supportsVideo(entry)}
           attached={files[entry.id] ?? null}
           expanded={expanded === entry.id}
           onExpand={() => setExpanded(expanded === entry.id ? null : entry.id)}
@@ -84,6 +86,7 @@ export function FilesStep({
 
 function FileCard({
   label,
+  videoAllowed,
   attached,
   expanded,
   onExpand,
@@ -92,6 +95,8 @@ function FileCard({
   onTrim,
 }: {
   label: string;
+  /** False on a doubles line — the vision pipeline is singles-only. */
+  videoAllowed: boolean;
   attached: AttachedFile | null;
   expanded: boolean;
   onExpand: () => void;
@@ -101,6 +106,7 @@ function FileCard({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [probing, setProbing] = useState(false);
+  const [rejected, setRejected] = useState<string | null>(null);
 
   async function take(file: File) {
     const lower = file.name.toLowerCase();
@@ -113,6 +119,14 @@ function FileCard({
     }
 
     if (!VIDEO_EXTENSIONS.some((extension) => lower.endsWith(extension))) return;
+
+    if (!videoAllowed) {
+      setRejected(
+        "Video analysis is singles only — this line takes a SwingVision export."
+      );
+      return;
+    }
+    setRejected(null);
 
     setProbing(true);
     try {
@@ -181,7 +195,11 @@ function FileCard({
             >
               <Upload strokeWidth={1.5} className="size-4 text-[var(--ink-300)]" />
               <span className="text-[13px] font-medium text-[var(--ink-900)]">
-                {probing ? "Reading the file…" : "Drop the match video or a SwingVision export"}
+                {probing
+                  ? "Reading the file…"
+                  : videoAllowed
+                    ? "Drop the match video or a SwingVision export"
+                    : "Drop a SwingVision export"}
               </span>
             </button>
           )}
@@ -232,10 +250,20 @@ function FileCard({
         />
       ) : null}
 
+      {!videoAllowed || rejected ? (
+        <p className="text-micro mt-2" style={{ color: rejected ? "var(--danger)" : "var(--ink-500)" }}>
+          {rejected ??
+            "Video analysis is singles only. A doubles line takes a SwingVision export — numbers, no vision pass."}
+        </p>
+      ) : null}
+
       <input
         ref={inputRef}
         type="file"
-        accept={[...VIDEO_EXTENSIONS, ...IMPORT_EXTENSIONS].join(",")}
+        accept={(videoAllowed
+          ? [...VIDEO_EXTENSIONS, ...IMPORT_EXTENSIONS]
+          : IMPORT_EXTENSIONS
+        ).join(",")}
         className="hidden"
         onChange={(event) => {
           const file = event.target.files?.[0];

@@ -12,6 +12,7 @@ import {
   uploadAndSubmitVideo,
 } from "@/lib/services/splitstep/submit-match-video";
 import { PROVIDER_ID } from "@/lib/services/splitstep/config";
+import type { ProviderId } from "@/lib/services/upload";
 import { MatchQueueStep } from "@/components/dashboard/schedule/upload/match-queue-step";
 import { FilesStep } from "@/components/dashboard/schedule/upload/files-step";
 import { DetailsStep } from "@/components/dashboard/schedule/upload/details-step";
@@ -27,6 +28,13 @@ import {
   type UploadStep,
 } from "@/components/dashboard/schedule/upload/types";
 import type { UploadQueueGroup } from "@/lib/schedule/types";
+
+/**
+ * SwingVision's id in the strategy registry — hyphenated, and typed so a
+ * mismatched literal is a build error rather than an "Unsupported provider"
+ * the coach only meets after picking a file.
+ */
+const SWINGVISION_PROVIDER_ID: ProviderId = "swing-vision";
 
 /**
  * 22a–22f — the team upload wizard.
@@ -185,10 +193,14 @@ export function TeamUploadFlow({
 
         if (attached.kind === "import") {
           // The untouched file-import path. Numbers only — a different job.
+          //
+          // The id is `swing-vision`, hyphenated. It is the ProviderId union's
+          // spelling, not the product's, and /api/upload rejects anything else
+          // with "Unsupported provider" — a runtime failure no build catches.
           const body = new FormData();
           body.append("file", attached.file);
           body.append("matchId", matchId);
-          body.append("providerId", "swingvision");
+          body.append("providerId", SWINGVISION_PROVIDER_ID);
           const response = await fetch("/api/upload", { method: "POST", body });
           const payload = await response.json();
           if (!response.ok || !payload.success) {
@@ -202,16 +214,15 @@ export function TeamUploadFlow({
         } = await supabase.auth.getUser();
         if (!user) throw new Error("Not signed in");
 
-        // The camera answers belong to the video, so they land on the match row
-        // the vendor payload is built from.
-        await supabase
-          .from("matches")
-          .update({
-            fixed_camera: fixedCamera,
-            initial_top_player_is_player1: line?.startsTop ?? null,
-          })
-          .eq("id", matchId);
-
+        // The camera answers are NOT written onto the match row. They travel in
+        // the submit body and /api/splitstep/jobs persists them onto
+        // processing_jobs, which is the only thing that reads them — the
+        // matches columns are write-only leftovers from the personal wizard.
+        //
+        // Writing them here would also be a lie half the time: the matches
+        // UPDATE policy is `auth.uid() = created_by`, so a coach uploading
+        // video for a line a colleague scored would update zero rows with no
+        // error at all.
         const job = await createProcessingJob({
           supabase,
           matchId,

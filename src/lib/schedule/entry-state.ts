@@ -10,6 +10,7 @@
 import {
   isAnalysisFailed,
   isAnalysisReady,
+  isInFlight,
   isWorking,
 } from "@/lib/data/match-analysis";
 import type { EntryMatch, EventEntry } from "./types";
@@ -19,6 +20,19 @@ export type EntryState =
   | "empty"
   /** Played and scored, but no video was ever sent. */
   | "no-video"
+  /**
+   * Sent, and nothing is moving yet.
+   *
+   * Exactly the two idle-in-flight states, `uploaded` and `processed` — the
+   * ones `isWorking` excludes because nothing is running. `queued` is NOT here:
+   * the vendor has it, so it reads as working and pulses, which is what it does
+   * on the match page too.
+   *
+   * Without this state both fell through to `no-video`, which told a coach
+   * there was no video for a line they had just uploaded one for, and hid a job
+   * whose submission had failed and needed a retry.
+   */
+  | "waiting"
   /** Something is happening right now — this is the state that pulses. */
   | "working"
   /** There is a report to read. */
@@ -50,6 +64,23 @@ function setsWon(match: EntryMatch): { us: number; them: number } | null {
   return { us, them };
 }
 
+/**
+ * Can this line be sent for video analysis?
+ *
+ * No, if it is doubles. `job-request.ts` rejects a doubles match_type outright
+ * with "Video analysis supports singles matches only", so offering a doubles
+ * line an Upload button produces a 422 the coach only meets after picking a
+ * multi-gigabyte file. A doubles line can still take a SwingVision export —
+ * that path parses numbers and never goes near the vision pipeline.
+ *
+ * The frames in round 22 draw a doubles video (`doubles2.mp4 → D2`) because
+ * they were designed before the vendor's singles-only limit was known. This is
+ * the correction.
+ */
+export function supportsVideo(entry: EventEntry): boolean {
+  return entry.discipline === "singles";
+}
+
 /** Did we win this match? Null when it has no score, or the sets are level. */
 export function matchWon(match: EntryMatch): boolean | null {
   const sets = setsWon(match);
@@ -79,6 +110,9 @@ export function entryState(entry: EventEntry): EntryState {
   if (entry.matches.some((match) => isWorking(match.status))) return "working";
   if (entry.matches.some((match) => isAnalysisReady(match.status) && match.hasVideo)) {
     return "ready";
+  }
+  if (entry.matches.some((match) => match.hasVideo && isInFlight(match.status))) {
+    return "waiting";
   }
   return "no-video";
 }

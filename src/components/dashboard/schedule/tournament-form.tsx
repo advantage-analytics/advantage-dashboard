@@ -27,6 +27,22 @@ const SURFACES = ["Hard", "Clay", "Grass", "Indoor hard", "Carpet"].map(
   (surface) => ({ value: surface, label: surface })
 );
 
+/**
+ * Ad or no-ad, asked here rather than per upload.
+ *
+ * It is one of the five fields the vision pipeline refuses a job without, and
+ * it is a fact about the tournament rather than about any one video — so the
+ * event owns it, exactly as the dual form owns it. Without this the format was
+ * `{}`, adScoring arrived null, and every tournament video failed submission
+ * with "Choose ad or no-ad scoring" long after the coach had left the wizard.
+ */
+const FORMATS = [
+  { value: "3|false", label: "Best of 3 · no-ad" },
+  { value: "3|true", label: "Best of 3 · ad" },
+  { value: "1|false", label: "One set · no-ad" },
+  { value: "1|true", label: "One set · ad" },
+];
+
 /** 25e — a tournament as facts plus who's going. */
 export function TournamentForm({
   roster,
@@ -46,6 +62,7 @@ export function TournamentForm({
   const [site, setSite] = useState<EventSite>("away");
   const [surface, setSurface] = useState(defaultSurface || "Hard");
   const [host, setHost] = useState("");
+  const [format, setFormat] = useState("3|true");
 
   const [singles, setSingles] = useState<DraftEntry[]>([]);
   const [doubles, setDoubles] = useState<DraftEntry[]>([]);
@@ -55,6 +72,7 @@ export function TournamentForm({
   function submit() {
     setError(null);
     startTransition(async () => {
+      const [bestOf, adScoring] = format.split("|");
       const result = await createTournament({
         name,
         startsOn,
@@ -62,6 +80,8 @@ export function TournamentForm({
         site,
         surface,
         host: host.trim() || null,
+        bestOf: Number(bestOf),
+        adScoring: adScoring === "true",
         entries: named.map((entry, index) => ({
           discipline: entry.discipline,
           position: index,
@@ -143,8 +163,14 @@ export function TournamentForm({
               onChange={setSurface}
             />
           </FieldRow>
-          <div className="mt-3.5 max-w-[420px]">
+          <div className="mt-3.5 grid grid-cols-4 gap-8">
             <FieldCellText label="Hosted by" value={host} onChange={setHost} />
+            <FieldCellSelect
+              label="Format"
+              value={format}
+              options={FORMATS}
+              onChange={setFormat}
+            />
           </div>
         </div>
 
