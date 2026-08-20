@@ -570,7 +570,33 @@ export function dualScore(entries: EventEntry[]): {
 }
 ```
 
-Check the real spelling of a win in `matches.result` before writing this — read `determineWinner` in `src/components/dashboard/matches/new-match-wizard/utils.ts` and `transformDbMatch` in `src/lib/data/matches-list-types.ts`, and use whatever value those write. The `"win" || "won"` above is a placeholder for that lookup and must be replaced with the single real value.
+**Resolved before implementation:** `matches.result` does **not** hold win/loss. It is a context string — `transformDbMatch` reads it as `matchContext: row.result ?? "Final Score"`, and the wizard writes values like `"Unfinished"`. A win is **derived from the set scores**: count sets where `score.player1[i] > score.player2[i]` against the reverse, exactly as `transformDbMatch` does, with `player1` being our side because the wizard always writes `player1_name = playerName`.
+
+So `dualScore` must not test `result` at all. Replace the `won`/`played` helpers above with:
+
+```ts
+/** Sets won by each side, from the game counts. `player1` is always our side. */
+function setsWon(match: EntryMatch): { us: number; them: number } | null {
+  const ours = match.score?.player1 ?? [];
+  const theirs = match.score?.player2 ?? [];
+  if (ours.length === 0 || theirs.length === 0) return null;
+  let us = 0;
+  let them = 0;
+  for (let i = 0; i < ours.length; i++) {
+    if (ours[i] > (theirs[i] ?? 0)) us++;
+    else if ((theirs[i] ?? 0) > ours[i]) them++;
+  }
+  return { us, them };
+}
+
+export function matchWon(match: EntryMatch): boolean | null {
+  const sets = setsWon(match);
+  if (!sets || sets.us === sets.them) return null;
+  return sets.us > sets.them;
+}
+```
+
+`played(entry)` becomes "some match has a non-null `matchWon`", and `won(entry)` becomes "some match has `matchWon === true`". Export `matchWon` — Task 8's row and Task 9's run strip both need it, and deriving a win two ways is how two screens start disagreeing about one line.
 
 - [ ] **Step 3: Write `src/lib/data/schedule-server.ts`**
 
@@ -1118,4 +1144,4 @@ git commit -m "Fix what the full-flow pass turned up"
 
 **Type consistency.** `entryState` returns the five states used verbatim in Task 8's action-cell table. `EventEntry.matches: EntryMatch[]` is what `entryState` and `dualScore` both walk. `submitMatchVideo`'s signature in Task 10 matches its call in Task 12 Step 3.
 
-**Known soft spot.** Task 3 Step 2's `result === "win" || "won"` is explicitly flagged as a lookup to resolve against `determineWinner` and `transformDbMatch` before writing — it is the one value this plan does not already know, and guessing it would make a dual's team score quietly wrong.
+**Resolved soft spot.** Task 3 Step 2 originally guessed that `matches.result` held win/loss. It does not — it is a context string (`"Final Score"`, `"Unfinished"`), and a win is derived from set counts. The task now carries `matchWon()` and the correction. Had this shipped as written, every dual's team score would have read 0–0 forever with nothing on screen looking broken.
