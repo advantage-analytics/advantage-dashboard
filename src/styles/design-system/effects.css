@@ -44,3 +44,11 @@
   --shadow-dropdown:0 8px 30px rgba(0,0,0,0.5),0 1px 3px rgba(0,0,0,0.3);
   --shadow-keycap:0 1px 0 rgba(0,0,0,0.45);
 }
+
+/* StatusChip's live dot — see src/components/ui/status-chip.tsx. Opacity only,
+   so it costs no layout, and it is disabled outright under reduced motion by
+   the component rather than being softened here. */
+@keyframes adv-status-pulse{
+  0%,100%{opacity:1}
+  50%{opacity:0.35}
+}

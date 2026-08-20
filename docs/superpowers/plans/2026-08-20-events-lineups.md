@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **No test files exist in this repo.** `package.json` configures Playwright but `CLAUDE.md` records that no test files exist yet. This plan does **not** invent a test harness. Each task's verification cycle is `npx tsc --noEmit` + `npm run lint`, and behavioural tasks add a browser check through the preview tools. `npm run build` runs once at the end (Task 13) — it is slow and every task before it is typechecked.
-- **Lint baseline:** `npm run lint` has **43 pre-existing warnings, 0 errors** (guardrails §7). A task passes when it adds no errors and no new warnings.
+- **Lint baseline:** `npm run lint` has **39 pre-existing warnings, 0 errors** on this branch, measured at Task 2. Guardrails §7 says 43; that number is stale. A task passes when it adds no errors and no new warnings against 39.
 - **Never touch:** `swingvision-parser.ts`, `swingvision-validator.ts`, the `process-match` edge function, `calculate_match_stats`, or any applied migration. Never edit a file under `supabase/migrations/` that already exists.
 - **Never rename a user-visible string to "SplitStep".** The provider is **"Advantage Intelligence"** in every user-visible string; `splitstep` is internal naming only.
 - **The five vendor-required fields** (guardrails §3.1) must still reach `job-request.ts`: both player names, at least one non-zero set score, `initialTopPlayerIsPlayer1`, `fixedCamera`, `adScoring`. They are typed `boolean | null | undefined` on purpose — never narrow them to `boolean` with a default.
