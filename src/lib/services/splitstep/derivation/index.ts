@@ -57,7 +57,7 @@ export {
 } from './parse';
 
 export {
-  metersToNormalized,
+  metersToCourtFrame,
   kmhToMph,
   serveCourtSide,
   isInServiceBox,
@@ -68,7 +68,7 @@ export {
   BASELINE_M,
   MAX_PLAUSIBLE_X_M,
   MAX_PLAUSIBLE_Y_M,
-  type NormalizedPosition,
+  type CourtPosition,
 } from './court';
 
 export {
@@ -96,6 +96,45 @@ export {
   type QualityGrade,
   type CheckVerdict,
 } from './quality';
+
+export {
+  serveZone,
+  directionZone,
+} from './court';
+
+export {
+  resolvePointWinners,
+  resolveWinner,
+  type PointWinner,
+  type WinnerResolution,
+} from './winners';
+
+export {
+  reconcile,
+  foldGames,
+  scoreIsSelfMirroring,
+  type MatchScore,
+  type Reconciliation,
+} from './reconcile';
+
+export {
+  classifyPoint,
+  shotResult,
+  shotNumber,
+  lastServeIndex,
+  type ResultType,
+  type ShotResult,
+} from './result-type';
+
+export { flagPoint, flagStroke, POINT_FLAGS, SHOT_FLAGS } from './flags';
+
+export {
+  buildTranscript,
+  type Transcript,
+  type DerivedPoint,
+  type DerivedShot,
+  type BuildOptions,
+} from './transcript';
 
 import { parseStrokes, type ParseOptions } from './parse';
 import { groupIntoRallies, playerLabels } from './rallies';

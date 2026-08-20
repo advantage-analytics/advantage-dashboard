@@ -8,10 +8,12 @@ import {
   BASELINE_M,
   DOUBLES_HALF_WIDTH_M,
   kmhToMph,
+  directionZone,
   MAX_PLAUSIBLE_X_M,
   MAX_PLAUSIBLE_Y_M,
-  metersToNormalized,
+  metersToCourtFrame,
   parseStrokes,
+  serveZone,
   SERVICE_LINE_M,
   SINGLES_HALF_WIDTH_M,
   serveShotType,
@@ -36,35 +38,41 @@ const clean = loadFixture('clean-match.json');
 const degraded = loadFixture('degraded-match.json');
 
 test.describe('court conversion', () => {
-  test('maps the four court landmarks exactly', () => {
-    expect(metersToNormalized(-DOUBLES_HALF_WIDTH_M, 0).x).toBeCloseTo(0, 10);
-    expect(metersToNormalized(DOUBLES_HALF_WIDTH_M, 0).x).toBeCloseTo(1, 10);
-    expect(metersToNormalized(0, -BASELINE_M).y).toBeCloseTo(0, 10);
-    expect(metersToNormalized(0, BASELINE_M).y).toBeCloseTo(1, 10);
-
-    const centre = metersToNormalized(0, 0);
-    expect(centre.x).toBeCloseTo(0.5, 10);
-    expect(centre.y).toBeCloseTo(0.5, 10);
-  });
-
-  test('places the singles sideline and service line where they belong', () => {
-    // Singles sideline sits inside the doubles court by the alley width.
-    expect(metersToNormalized(SINGLES_HALF_WIDTH_M, 0).x).toBeCloseTo(
-      (SINGLES_HALF_WIDTH_M + DOUBLES_HALF_WIDTH_M) / (2 * DOUBLES_HALF_WIDTH_M),
-      10
-    );
-    // Service line is 6.4 of 11.885 metres from the net toward the baseline.
-    expect(metersToNormalized(0, SERVICE_LINE_M).y).toBeCloseTo(
-      0.5 + SERVICE_LINE_M / (2 * BASELINE_M),
+  test('maps vendor metres onto the database court frame', () => {
+    // y = 0 at one baseline, 11.885 at the net, 23.77 at the other. Confirmed
+    // against live SwingVision: in-serve landing_y occupies exactly the two
+    // service boxes, 5.49-11.87 and 11.93-18.29.
+    expect(metersToCourtFrame(0, 0).y).toBeCloseTo(BASELINE_M, 10);
+    expect(metersToCourtFrame(0, -BASELINE_M).y).toBeCloseTo(0, 10);
+    expect(metersToCourtFrame(0, BASELINE_M).y).toBeCloseTo(2 * BASELINE_M, 10);
+    expect(metersToCourtFrame(0, SERVICE_LINE_M).y).toBeCloseTo(
+      BASELINE_M + SERVICE_LINE_M,
       10
     );
   });
 
-  test('does not clamp out-of-court positions', () => {
-    // An out ball must normalize outside 0-1, or a placement chart would
-    // silently redraw it as landing on the line.
-    expect(metersToNormalized(0, BASELINE_M + 1).y).toBeGreaterThan(1);
-    expect(metersToNormalized(-DOUBLES_HALF_WIDTH_M - 1, 0).x).toBeLessThan(0);
+  test('leaves x untouched — it is already the database convention', () => {
+    // calculate_match_stats compares abs(landing_x) against 2.74 and 1.37, the
+    // singles half-width in thirds. Rescaling x would zero serve_wide and
+    // serve_body while reading 100% T, with nothing erroring.
+    expect(metersToCourtFrame(SINGLES_HALF_WIDTH_M, 0).x).toBe(SINGLES_HALF_WIDTH_M);
+    expect(metersToCourtFrame(-2.74, 0).x).toBe(-2.74);
+    expect(metersToCourtFrame(0, 0).x).toBe(0);
+  });
+
+  test('a T serve lands under the wide and body thresholds', () => {
+    const t = metersToCourtFrame(0.5, 5.0);
+    expect(Math.abs(t.x)).toBeLessThan(1.37);
+    expect(serveZone(t.x)).toBe('T');
+    expect(serveZone(metersToCourtFrame(2.0, 5.0).x)).toBe('Body');
+    expect(serveZone(metersToCourtFrame(3.5, 5.0).x)).toBe('Wide');
+  });
+
+  test('return direction matches how the stats function classifies it', () => {
+    expect(directionZone(0.5, -3.0)).toBe('Middle');
+    expect(directionZone(3.0, -3.0)).toBe('Crosscourt');
+    expect(directionZone(-3.0, -3.0)).toBe('Down the Line');
+    expect(directionZone(null, -3.0)).toBeNull();
   });
 
   test('converts km/h to mph', () => {
