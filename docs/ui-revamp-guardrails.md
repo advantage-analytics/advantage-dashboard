@@ -280,6 +280,20 @@ The webhook suite needs `SPLITSTEP_WEBHOOK_SECRET` in `.env.local` to match the
 value in Vercel, or every signed delivery returns 401 — that is a local key
 mismatch, not a broken deployment.
 
+**Uploading from a port other than 3000 fails until Azure knows about it.** The
+browser PUTs blocks straight to Blob Storage, so the storage account's CORS rule
+is what decides which origins may upload. The rule on `advantagedashboard` lists
+the two deployed hosts plus `http://localhost:3000` and `http://localhost:3101` —
+a worktree on any other port gets `Network error uploading to Azure`, the job is
+marked failed, and nothing about the app is wrong. Add the origin rather than
+replacing the rule; the same rule serves production:
+
+```ts
+const props = await svc.getProperties();          // @azure/storage-blob
+props.cors[0].allowedOrigins += ",http://localhost:<port>";
+await svc.setProperties(props);
+```
+
 To check a job end to end:
 
 ```sql
