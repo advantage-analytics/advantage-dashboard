@@ -26,9 +26,10 @@ import {
 import { getParser, hasParser } from "@/lib/services/upload/parsers";
 import { providers } from "@/lib/providers";
 import {
-  UploadAbortedError,
-  uploadFileInBlocks,
-} from "@/lib/services/upload/azure-block-upload";
+  createProcessingJob,
+  uploadAndSubmitVideo,
+  type VideoUploadEvent,
+} from "@/lib/services/splitstep/submit-match-video";
 import {
   currentBillingMonth,
   getMonthlyCapSeconds,
@@ -92,32 +93,16 @@ export interface UseUploadMatchWizardProps {
   onVideoUpload?: (event: VideoUploadEvent) => void;
 }
 
-/** Bytes moved so far, and what that implies. */
-export interface VideoUploadProgress {
-  pct: number;
-  bytesUploaded: number;
-  bytesTotal: number;
-  /** Cumulative average, not instantaneous — smooth, and slow to react. */
-  speed: number;
-  etaSeconds: number;
-}
-
-export type VideoUploadEvent = { matchId: string } & (
-  | { kind: "started"; fileName: string; cancel: () => void }
-  | { kind: "progress"; progress: VideoUploadProgress }
-  | { kind: "done" }
-  /** Handed to the vendor. The transfer AND the submission both succeeded. */
-  | { kind: "submitted" }
-  /**
-   * Uploaded, but the vendor would not take it.
-   *
-   * Distinct from `failed`: the video is safely stored and the job row still
-   * says `uploaded`, so this is retryable without re-uploading anything.
-   */
-  | { kind: "submit_failed"; error: string }
-  | { kind: "cancelled" }
-  | { kind: "failed"; error: string }
-);
+/**
+ * The video-upload event stream.
+ *
+ * Defined in `lib/services/splitstep/submit-match-video.ts` now that two
+ * wizards emit it, and re-exported here so existing importers do not move.
+ */
+export type {
+  VideoUploadEvent,
+  VideoUploadProgress,
+} from "@/lib/services/splitstep/submit-match-video";
 
 export interface UseUploadMatchWizardReturn {
   // State
@@ -908,289 +893,71 @@ export function useUploadMatchWizard({
       onOpenChange(false);
       setTimeout(() => router.refresh(), 300);
 
-      // Video providers (e.g. Advantage Intelligence): record job & upload video to Azure
+      // Video providers (e.g. Advantage Intelligence): record job & upload video
+      // to Azure. The sequence itself lives in
+      // `lib/services/splitstep/submit-match-video.ts` so the team upload
+      // wizard runs the same one per video rather than keeping a second copy of
+      // the invariants in guardrails 3.1.
       if (processingStrategy) {
         const startSeconds = formData.videoStartSeconds ?? 0;
         const endSeconds = formData.videoEndSeconds ?? 0;
         const videoFileToUpload = uploadedFile?.file;
 
-        // The id comes back now. Submission is keyed on it, and so is every
-        // write below — previously they all matched on match_id because this
-        // insert discarded it, which silently touches every job a resubmitted
-        // match has ever had.
-        const { data: jobRow, error: jobError } = await supabase
-          .from("processing_jobs")
-          .insert({
-            match_id: matchId,
-            created_by: userId,
+        let jobId: string;
+        try {
+          const job = await createProcessingJob({
+            supabase,
+            matchId,
+            userId,
             provider: selectedProvider,
-            status: videoFileToUpload ? "uploading" : "pending",
-            start_time_seconds: startSeconds,
-            end_time_seconds: endSeconds,
-            billable_seconds: processingStrategy.billableSeconds(startSeconds, endSeconds),
-          })
-          .select("id")
-          .single();
-
-        if (jobError || !jobRow) {
-          console.error("Processing job insert error:", jobError);
-          // Roll back the match row so the user gets a clean retry
+            startSeconds,
+            endSeconds,
+            billableSeconds: processingStrategy.billableSeconds(startSeconds, endSeconds),
+            hasFile: Boolean(videoFileToUpload),
+          });
+          jobId = job.id;
+        } catch (jobErr) {
+          console.error("Processing job insert error:", jobErr);
+          // Roll back the match row so the user gets a clean retry. This stays
+          // here rather than inside the service: a personal match row exists
+          // only to carry this video, but a dual line's match is a recorded
+          // result and must survive a failed job insert.
           await supabase.from("matches").delete().eq("id", matchId);
           window.dispatchEvent(
             new CustomEvent("match-upload-failed", {
               detail: {
                 matchId,
-                error: jobError.message || "Couldn't queue this match for analysis",
+                error:
+                  jobErr instanceof Error
+                    ? jobErr.message
+                    : "Couldn't queue this match for analysis",
               },
             })
           );
           return;
         }
 
-        // Kick off background upload to Azure Blob Storage. The vendor will only
-        // fetch a VideoUrl on blob.core.windows.net, so that is where the source
-        // video lives — see src/lib/services/splitstep/video-url/azure-sas.ts.
+        // Background: the wizard has already closed by now.
         if (videoFileToUpload) {
-          void (async () => {
-            try {
-              const res = await fetch("/api/splitstep/upload-url", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  matchId,
-                  fileName: videoFileToUpload.name,
-                }),
-              });
-
-              const payload = await res.json().catch(() => null);
-
-              if (!res.ok || !payload?.uploadUrl) {
-                throw new Error(
-                  payload?.error || `Could not get an upload URL (HTTP ${res.status})`
-                );
-              }
-
-              const { uploadUrl, videoObjectKey } = payload;
-              // Log the key, never the URL. `uploadUrl` is a live write
-              // credential — six hours of write access to this blob — and the
-              // browser console outlives the upload: it survives screen
-              // shares, extensions, and anyone opening devtools. The key is
-              // what you actually want when debugging anyway.
-              console.log("🚀 Upload credential acquired for:", videoObjectKey);
-              console.log(`Starting upload to Azure Blob Storage (${formatFileSize(videoFileToUpload.size)})...`);
-
-              // Hand the canceller up before any bytes move, so the screen that
-              // replaced this wizard can offer a Cancel that actually works.
-              const controller = new AbortController();
-              const startedAt = Date.now();
-              onVideoUpload?.({
-                matchId,
-                kind: "started",
-                fileName: videoFileToUpload.name,
-                cancel: () => controller.abort(),
-              });
-
-              // The wizard has already closed by this point, so this guard is the
-              // only thing telling the user the work is not finished.
-              //
-              // Says what is actually at risk: the match itself is saved and
-              // survives, only the video transfer dies with the page. Leaving
-              // used to strand the job at `uploading` forever with no error —
-              // reap_stalled_uploads() now marks it failed, but a cancelled
-              // upload still means starting the transfer over, so it is worth
-              // stopping rather than merely recovering from.
-              const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-                e.preventDefault();
-                e.returnValue =
-                  "Your video is still uploading. The match is saved, but leaving now cancels the upload and you'll have to add the video again.";
-                return e.returnValue;
-              };
-              window.addEventListener("beforeunload", handleBeforeUnload);
-
-              try {
-                // Persist progress as it goes. The wizard has already closed by
-                // now and this upload runs in the background, so a console line
-                // is invisible — the matches list is where the user actually
-                // looks, and it reads this column.
-                //
-                // Write on a 2-point move or every 60 seconds, whichever comes
-                // first. The old rule was `pct % 10 === 0`, which skipped the
-                // write entirely whenever a chunk boundary stepped over a
-                // multiple of ten. That is not cosmetic: this column is the
-                // liveness signal reap_stalled_uploads() reads, and 15 minutes
-                // without one marks the job failed — underneath an upload that
-                // is still running.
-                //
-                // Fire-and-forget throughout: a dropped progress write must
-                // never disturb the upload itself.
-                let lastWrittenPct = -1;
-                let lastWriteAt = 0;
-                // The UI renders one decimal, so events that cannot change a
-                // rendered digit are dropped before they reach React. On a 5 GB
-                // upload 0.1% is ~7 seconds of transfer, so ~140 consecutive
-                // events would otherwise re-render an identical string.
-                let lastSentTenth = -1;
-
-                await uploadFileInBlocks({
-                  file: videoFileToUpload,
-                  uploadUrl,
-                  contentType: videoFileToUpload.type || "video/mp4",
-                  signal: controller.signal,
-                  onProgress: (loaded, total) => {
-                    const exact = (loaded / total) * 100;
-                    const pct = Math.floor(exact);
-                    const now = Date.now();
-
-                    // Local UI first: throttled only to the precision it can
-                    // actually show, not to the database's cadence. A bar that
-                    // moves once a minute is the problem this exists to fix.
-                    const tenth = Math.round(exact * 10);
-                    if (tenth !== lastSentTenth) {
-                      lastSentTenth = tenth;
-                      const elapsed = (now - startedAt) / 1000;
-                      const speed = elapsed > 0 ? loaded / elapsed : 0;
-                      onVideoUpload?.({
-                        matchId,
-                        kind: "progress",
-                        progress: {
-                          pct: tenth / 10,
-                          bytesUploaded: loaded,
-                          bytesTotal: total,
-                          speed,
-                          etaSeconds: speed > 0 ? (total - loaded) / speed : 0,
-                        },
-                      });
-                    }
-
-                    // The database write stays throttled. It is a liveness
-                    // heartbeat, not a progress bar, and one write per XHR event
-                    // on a 600-block upload would be tens of thousands.
-                    if (pct - lastWrittenPct < 2 && now - lastWriteAt < 60_000) {
-                      return;
-                    }
-                    lastWrittenPct = pct;
-                    lastWriteAt = now;
-
-                    console.log(
-                      `Uploading to Azure: ${pct}% (${(loaded / (1024 * 1024)).toFixed(1)}MB / ${(total / (1024 * 1024)).toFixed(1)}MB)`
-                    );
-
-                    void supabase
-                      .from("processing_jobs")
-                      .update({ upload_progress_percent: pct })
-                      .eq("id", jobRow.id)
-                      .then(({ error }) => {
-                        if (error) {
-                          console.warn(
-                            "Could not record upload progress:",
-                            error.message
-                          );
-                        }
-                      });
-                  },
-                });
-              } finally {
-                window.removeEventListener("beforeunload", handleBeforeUnload);
-              }
-
-              console.log("🎉 Upload completed! Updating processing_jobs row...");
-
-              // Update processing job status and video key
-              await supabase
-                .from("processing_jobs")
-                .update({
-                  video_object_key: videoObjectKey,
-                  status: "uploaded",
-                  // Explicitly 100. The throttle above skips the final write —
-                  // 99→100 is a 1-point move and the last block rarely takes 60
-                  // seconds — so without this the bar sits at 99 forever.
-                  upload_progress_percent: 100,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq("id", jobRow.id);
-
-              console.log("✅ Successfully updated processing_jobs status to 'uploaded' for match:", matchId);
-              onVideoUpload?.({ matchId, kind: "done" });
-
-              // Hand it to the vendor. The route owns everything from here:
-              // ownership, quota reservation, payload build, the POST, and
-              // recording external_job_id.
-              //
-              // Reported separately from the transfer, and deliberately does NOT
-              // mark the job failed. The bytes are safely in Azure and the row
-              // still says `uploaded`, which is both true and retryable — the
-              // one state from which a resubmit needs nothing re-uploaded.
-              try {
-                const submitRes = await fetch("/api/splitstep/jobs", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    jobId: jobRow.id,
-                    initialTopPlayerIsPlayer1: formData.initialTopPlayerIsPlayer1,
-                    adScoring: formData.adScoring,
-                    fixedCamera: formData.fixedCamera,
-                  }),
-                });
-
-                const submitPayload = await submitRes.json().catch(() => null);
-
-                if (!submitRes.ok) {
-                  // details[] is the payload builder's field list on a 422 —
-                  // far more use than the summary line.
-                  const detail = Array.isArray(submitPayload?.details)
-                    ? submitPayload.details.join(" ")
-                    : "";
-                  throw new Error(
-                    [submitPayload?.error ?? `Submission failed (HTTP ${submitRes.status})`, detail]
-                      .filter(Boolean)
-                      .join(" ")
-                  );
-                }
-
-                console.log("📤 Submitted for analysis:", submitPayload?.externalJobId ?? "(no id returned)");
-                onVideoUpload?.({ matchId, kind: "submitted" });
-              } catch (submitErr: any) {
-                const message = submitErr?.message || "Could not submit for analysis";
-                console.error("Submission failed — the video is uploaded and can be retried:", message);
-
-                // Recorded, not fatal. Status stays `uploaded`.
-                await supabase
-                  .from("processing_jobs")
-                  .update({ error_message: message, updated_at: new Date().toISOString() })
-                  .eq("id", jobRow.id);
-
-                onVideoUpload?.({ matchId, kind: "submit_failed", error: message });
-              }
-            } catch (uploadErr: any) {
-              const cancelled = uploadErr instanceof UploadAbortedError;
-              console[cancelled ? "log" : "error"](
-                cancelled ? "Upload cancelled by the user" : "❌ Video upload error:",
-                cancelled ? "" : uploadErr
-              );
-
-              const message = uploadErr?.message || "Video upload failed";
-              onVideoUpload?.(
-                cancelled
-                  ? { matchId, kind: "cancelled" }
-                  : { matchId, kind: "failed", error: message }
-              );
-
-              await supabase
-                .from("processing_jobs")
-                .update({
-                  status: "failed",
-                  error_message: message,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq("id", jobRow.id);
-
+          void uploadAndSubmitVideo({
+            supabase,
+            jobId,
+            matchId,
+            file: videoFileToUpload,
+            answers: {
+              initialTopPlayerIsPlayer1: formData.initialTopPlayerIsPlayer1,
+              adScoring: formData.adScoring,
+              fixedCamera: formData.fixedCamera,
+            },
+            onEvent: (event) => onVideoUpload?.(event),
+            onTransferFailed: (message) => {
               window.dispatchEvent(
                 new CustomEvent("match-upload-failed", {
                   detail: { matchId, error: message },
                 })
               );
-            }
-          })();
+            },
+          });
         }
 
         return;
