@@ -47,34 +47,22 @@ export const focusRingCls =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40";
 
 /**
- * Chrome icon button — back/close/remove/nudge affordances.
+ * Destructive icon button — the remove affordances.
  *
- * Source: SKILL.md › Component Patterns › Chrome Icon Button
- *   h-7 w-7 rounded-lg, text-muted #888888 → text-primary on hover, bg-subtle
- *   #F5F5F5 hover. SKILL.md's pairing rule requires every icon button in a
- *   dismissible surface to share size, shape, hover and focus, so this exists
- *   to stop the modal shipping two different-looking remove buttons.
- *
- * Pass `size` for the compact variant used inside dense control rows. Sizes are
- * spelled out rather than interpolated — Tailwind scans source text, so a
- * constructed `h-${n}` class never gets generated.
+ * Source: SKILL.md › Component Patterns › Chrome Icon Button, h-7 w-7 rounded-lg,
+ * text-muted #888888 on a #F5F5F5 hover.
  */
-const ICON_BTN_SIZE = {
-  6: "h-6 w-6",
-  7: "h-7 w-7",
-} as const;
+export const dangerIconBtnCls =
+  `h-7 w-7 rounded-lg flex items-center justify-center text-[#888888] hover:bg-[#F5F5F5] hover:text-[#E51837] transition-colors duration-200 ${focusRingCls}`;
 
-const iconBtnBase =
-  `rounded-lg flex items-center justify-center text-[#888888] hover:bg-[#F5F5F5] transition-colors duration-200 ${focusRingCls}`;
-
-export function iconBtnCls(size: 6 | 7 = 7): string {
-  return `${ICON_BTN_SIZE[size]} ${iconBtnBase} hover:text-[#0D0D0D]`;
-}
-
-/** Destructive variant of {@link iconBtnCls} — remove/delete affordances. */
-export function dangerIconBtnCls(size: 6 | 7 = 7): string {
-  return `${ICON_BTN_SIZE[size]} ${iconBtnBase} hover:text-[#E51837]`;
-}
+/**
+ * The floating menu surface — the repo's popover spec, spelled once.
+ *
+ * #E5E5EA hairline, 12px radius and a two-layer float shadow. Overrides
+ * `ui/popover.tsx`'s own defaults, which are a different radius and shadow.
+ */
+export const floatMenuCls =
+  "rounded-[12px] border-[#E5E5EA] shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]";
 
 /**
  * Dashed drop zone surface. Shared by the file and video pick steps so their

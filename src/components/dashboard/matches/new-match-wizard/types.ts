@@ -104,6 +104,8 @@ export interface MatchData {
   player1_name: string;
   player2_id: string | null;
   player2_name: string;
+  /** Workspace the match belongs to. NULL = personal workspace. */
+  program_id: string | null;
   tournament_name: string | null;
   round: string | null;
   format: {
@@ -182,16 +184,18 @@ export const STEP_ORDER_BY_KIND: Record<ProviderKind, Step[]> = {
 export const STEP_CONFIG: Record<Step, { title: string; description: string }> = {
   provider: {
     title: "Choose your data source",
-    description: "Select the platform you exported from."
+    description: "Select where this match's numbers come from."
   },
   video: {
-    title: "Add your video",
-    description: "We'll check it works before anything uploads, then you can trim to the match itself."
+    title: "Add your match video",
+    description: "Drop the file and trim to the first serve — details come last."
   },
   match: {
     title: "Add your match",
     description: "Drop your file — we'll auto-fill the details for you to review."
   },
+  // Not rendered: the confirm step opens on the match's own hero, which says
+  // all of this better than a heading above it could.
   confirm: {
     title: "Ready to save",
     description: "A final review before this match is saved to your dashboard."
@@ -208,7 +212,8 @@ export const STEP_CONFIG_PROCESSING: Partial<
   Record<Step, Partial<{ title: string; description: string }>>
 > = {
   match: {
-    description: "Tell us how the match went — the analysis needs the final score to line up with your video."
+    title: "Match details",
+    description: "Everything the report needs — score, context, and the two video answers."
   },
   confirm: {
     description: "A final review before this match is queued for analysis."

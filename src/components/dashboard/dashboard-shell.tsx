@@ -9,6 +9,7 @@ import { PageTransition } from "@/components/dashboard/page-transition";
 import { SidebarStateProvider } from "@/components/dashboard/sidebar/sidebar-state";
 import { UnsavedChangesProvider } from "@/components/dashboard/settings/unsaved-changes-context";
 import { LogoutProvider } from "@/components/dashboard/logout-dialog";
+import { HeaderStatusProvider } from "@/components/dashboard/header-status";
 
 /**
  * The client half of the dashboard layout.
@@ -57,15 +58,18 @@ export function DashboardShell({
           work, so it has to be able to read it. */}
       <LogoutProvider>
         <SidebarStateProvider>
-          <div className="flex h-screen w-full overflow-hidden bg-white">
-            <AppSidebar />
-            <div className="flex min-w-0 flex-1 flex-col overflow-y-auto scroll-smooth motion-reduce:scroll-auto">
-              <Header activitySlot={activitySlot} />
-              <main>
-                <PageTransition>{children}</PageTransition>
-              </main>
+          {/* Wraps both, because the page sets the status and the header reads it. */}
+          <HeaderStatusProvider>
+            <div className="flex h-screen w-full overflow-hidden bg-white">
+              <AppSidebar />
+              <div className="flex min-w-0 flex-1 flex-col overflow-y-auto scroll-smooth motion-reduce:scroll-auto">
+                <Header activitySlot={activitySlot} />
+                <main>
+                  <PageTransition>{children}</PageTransition>
+                </main>
+              </div>
             </div>
-          </div>
+          </HeaderStatusProvider>
           <MobileGate />
         </SidebarStateProvider>
       </LogoutProvider>

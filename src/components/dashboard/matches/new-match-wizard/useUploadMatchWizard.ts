@@ -17,12 +17,14 @@ import {
   getProviderStrategy,
   getProviderKind,
   isProviderSupported,
+  providerKindOrNull,
   IProcessingProviderStrategy,
   ProviderId,
   ProviderKind,
   ValidationResult,
 } from "@/lib/services/upload";
 import { getParser, hasParser } from "@/lib/services/upload/parsers";
+import { providers } from "@/lib/providers";
 import {
   UploadAbortedError,
   uploadFileInBlocks,
@@ -31,6 +33,9 @@ import {
   currentBillingMonth,
   getMonthlyCapSeconds,
 } from "@/lib/services/splitstep/config";
+import { accountTypeFor } from "@/lib/services/splitstep/quota";
+import { formatResetDate } from "@/lib/data/usage-format";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import {
   Step,
   FormData as MatchFormData,
@@ -53,6 +58,17 @@ import {
   STORAGE_KEYS,
   MatchMetadata
 } from "./utils";
+
+/**
+ * The source a new match starts on.
+ *
+ * Resolved from the registry by KIND rather than named, so the wizard stays
+ * written against "your own video" instead of against a particular vendor.
+ */
+const DEFAULT_PROVIDER_ID: ProviderId | null =
+  providers.find(
+    (p) => p.available !== false && providerKindOrNull(p.id) === "processing"
+  )?.id ?? null;
 
 export interface UseUploadMatchWizardProps {
   open: boolean;
@@ -107,14 +123,12 @@ export interface UseUploadMatchWizardReturn {
   // State
   step: Step;
   selectedProvider: ProviderId | null;
-  sourceType: string;
   uploadedFile: UploadedFile | null;
   isOver: boolean;
   isCreating: boolean;
   isUploading: boolean;
   error: string | null;
   uploadError: string | null;
-  isPrivateMatch: boolean;
   formData: MatchFormData;
   parsingState: ParsingState;
 
@@ -135,6 +149,10 @@ export interface UseUploadMatchWizardReturn {
    * Undefined while it loads, and for providers that do not bill.
    */
   remainingQuotaSeconds?: number;
+  /** This month's allowance for the active workspace — 2h personal, 75h program. */
+  quotaCapSeconds: number;
+  /** When the allowance comes back, already formatted — "Sep 1". */
+  quotaResetsOn: string;
   acceptString: string;
   requirementChips: readonly string[];
   onVideoPick: (file: File | null) => void;
@@ -142,13 +160,11 @@ export interface UseUploadMatchWizardReturn {
   handleRemoveVideo: () => void;
 
   // Step navigation
-  setStep: (step: Step) => void;
   handleProviderSelect: (providerId: string | null) => void;
   handleProviderContinue: () => void;
   handleVideoContinue: () => void;
   handleMatchContinue: () => void;
   handleBack: () => void;
-  handleClose: () => void;
   /** Deep-link from Confirm back to Match with a specific detail field focused. */
   goEditDetail: (field: DetailField) => void;
   /** When set, DetailsContent should auto-expand details and focus this field. */
@@ -158,8 +174,6 @@ export interface UseUploadMatchWizardReturn {
 
   // File handling
   setIsOver: (isOver: boolean) => void;
-  setSourceType: (type: string) => void;
-  onDrop: (files: FileList | null) => void;
   handleDrop: React.DragEventHandler<HTMLDivElement>;
   handleFileChange: React.ChangeEventHandler<HTMLInputElement>;
   handleRemoveFile: () => void;
@@ -207,11 +221,14 @@ export function useUploadMatchWizard({
 }: UseUploadMatchWizardProps): UseUploadMatchWizardReturn {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
+  // The workspace this match will belong to and be billed against. Resolved
+  // server-side once per request by the dashboard layout, so reading it here
+  // costs nothing and cannot disagree with the sidebar's switcher.
+  const { active: activeWorkspace } = useWorkspace();
 
   // State
   const [step, setStep] = useState<Step>("provider");
   const [selectedProvider, setSelectedProvider] = useState<ProviderId | null>(null);
-  const [sourceType, setSourceType] = useState<string>("swing-vision");
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
   const [isOver, setIsOver] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -221,8 +238,7 @@ export function useUploadMatchWizard({
   const [isPrivateMatch] = useState(true);
   const [formData, setFormData] = useState<MatchFormData>(getDefaultFormData);
   // Set when Confirm asks Match to focus a specific detail field. DetailsContent
-  // reads this on mount, expands its Details disclosure, focuses the matching
-  // <select>, and clears the request.
+  // reads this on mount, focuses the matching cell, and clears the request.
   const [pendingDetailFocus, setPendingDetailFocus] = useState<DetailField | null>(null);
   const [parsingState, setParsingState] = useState<ParsingState>({
     isParsing: false,
@@ -253,7 +269,23 @@ export function useUploadMatchWizard({
   const isProcessingProvider = providerKind === "processing";
 
   /**
-   * Seconds left in this month's allowance, for the trim step's cost warning.
+   * The allowance this upload will be billed against.
+   *
+   * Keyed by the ACTIVE WORKSPACE, not the signed-in user: `Workspace.id` is
+   * `processing_usage.account_id` — the user's id for a personal workspace, the
+   * program's for a team one — and the two tiers have different caps. Reading
+   * the personal ledger while a coach sits in a program showed 2 hours against
+   * a 75-hour budget.
+   */
+  const quotaAccountType = accountTypeFor(activeWorkspace);
+  const quotaCapSeconds = getMonthlyCapSeconds(quotaAccountType);
+  // "Sep 1". Settings › Usage already answers "when does this come back" from
+  // the same billing-month key, so the wizard asks it rather than re-deriving.
+  const quotaResetsOn = formatResetDate(currentBillingMonth());
+
+  /**
+   * Seconds left in this month's allowance, for the trim step's cost warning
+   * and the footer meter.
    *
    * Advisory only — reserve_processing_quota() is still the authority and
    * refuses with a 429 at submit time. This mirrors its arithmetic exactly:
@@ -270,15 +302,11 @@ export function useUploadMatchWizard({
     let cancelled = false;
 
     (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user || cancelled) return;
-
       const { data, error } = await supabase
         .from("processing_usage")
         .select("reserved_seconds, actual_seconds")
-        .eq("account_id", user.id)
+        .eq("account_id", activeWorkspace.id)
+        .eq("account_type", quotaAccountType)
         .eq("billing_month", currentBillingMonth())
         .eq("released", false);
 
@@ -288,15 +316,19 @@ export function useUploadMatchWizard({
         (n, row) => n + (row.actual_seconds ?? row.reserved_seconds ?? 0),
         0
       );
-      setRemainingQuotaSeconds(
-        Math.max(0, getMonthlyCapSeconds("individual") - used)
-      );
+      setRemainingQuotaSeconds(Math.max(0, quotaCapSeconds - used));
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [isProcessingProvider, supabase]);
+  }, [
+    isProcessingProvider,
+    supabase,
+    activeWorkspace.id,
+    quotaAccountType,
+    quotaCapSeconds,
+  ]);
 
 
   // Media rules, trim floor and billing all come from the provider rather than
@@ -320,8 +352,13 @@ export function useUploadMatchWizard({
     let resumedProvider = false;
     if (existingProvider && isProviderSupported(existingProvider)) {
       setSelectedProvider(existingProvider as ProviderId);
-      setSourceType(existingProvider);
       resumedProvider = true;
+    } else if (DEFAULT_PROVIDER_ID) {
+      // Your own video is the default source — it is what most people came to
+      // do, and the alternative is an import from somewhere else. Deliberately
+      // NOT written to storage: a default is not a choice, and persisting it
+      // would make the next visit resume past the step that offers it.
+      setSelectedProvider(DEFAULT_PROVIDER_ID);
     }
 
     const storedFormData = loadFormDataFromStorage();
@@ -381,7 +418,6 @@ export function useUploadMatchWizard({
     // Validate provider ID before setting
     if (providerId && isProviderSupported(providerId)) {
       setSelectedProvider(providerId as ProviderId);
-      setSourceType(providerId);
       localStorage.setItem(STORAGE_KEYS.SELECTED_PROVIDER, providerId);
     } else {
       setSelectedProvider(null);
@@ -444,11 +480,18 @@ export function useUploadMatchWizard({
       // Default the trim to the whole video. The user narrows it on the rail;
       // starting at the full extent means a straight-through flow still submits
       // a valid window.
-      setFormData((prev) => ({
-        ...prev,
-        videoStartSeconds: 0,
-        videoEndSeconds: summary?.durationSeconds ?? prev.videoEndSeconds,
-      }));
+      setFormData((prev) => {
+        const end = summary?.durationSeconds ?? prev.videoEndSeconds;
+        return {
+          ...prev,
+          videoStartSeconds: 0,
+          videoEndSeconds: end,
+          // Same rule as handleTrimChange: the untrimmed clip is the starting
+          // window, so it is also the starting duration. It narrows with the
+          // handles.
+          duration: end !== undefined ? Math.max(0, Math.round(end)) * 1000 : prev.duration,
+        };
+      });
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Couldn't read this video.");
     } finally {
@@ -462,6 +505,11 @@ export function useUploadMatchWizard({
       ...prev,
       videoStartSeconds: startSeconds,
       videoEndSeconds: endSeconds,
+      // The window IS the match: it was trimmed to the first serve and the
+      // final point, so how long it runs is how long the match took. Typing
+      // that a second time only creates a chance to disagree with the
+      // "analysed window" printed two screens later.
+      duration: Math.max(0, Math.round(endSeconds - startSeconds)) * 1000,
     }));
   }, []);
 
@@ -474,6 +522,8 @@ export function useUploadMatchWizard({
       ...prev,
       videoStartSeconds: undefined,
       videoEndSeconds: undefined,
+      // The duration came from the window; without a video there is no window.
+      duration: 0,
     }));
   }, []);
 
@@ -802,7 +852,11 @@ export function useUploadMatchWizard({
         // electronic line-calling data the provider already computed.
         analysisMethod: isProcessingProvider ? 'ai' : 'elc',
         matchType: formData.matchType,
-        courtType: formData.courtType
+        courtType: formData.courtType,
+        // NULL for a personal workspace, which is what the column means. The
+        // jobs route reads this back to pick the ledger, so a team upload has
+        // to carry the program or it silently bills the uploader.
+        programId: activeWorkspace.kind === "team" ? activeWorkspace.id : null,
       };
 
       const matchData = buildMatchData(matchId, { ...formData, eventName }, winner, loser, isPrivateMatch, metadata);
@@ -1184,38 +1238,34 @@ export function useUploadMatchWizard({
     } finally {
       setIsCreating(false);
     }
-  }, [formData, uploadedFile, selectedProvider, isProcessingProvider, supabase, isPrivateMatch, onOpenChange, onCreated, router]);
+    // activeWorkspace is in here on purpose: a coach who switches workspaces
+    // with the wizard open must not create the match against the one they left.
+  }, [formData, uploadedFile, selectedProvider, isProcessingProvider, supabase, isPrivateMatch, onOpenChange, onCreated, router, activeWorkspace.id, activeWorkspace.kind]);
 
   return {
     // State
     step,
     selectedProvider,
-    sourceType,
     uploadedFile,
     isOver,
     isCreating,
     isUploading,
     error,
     uploadError,
-    isPrivateMatch,
     formData,
     parsingState,
     pendingDetailFocus,
 
     // Step navigation
-    setStep,
     handleProviderSelect,
     handleProviderContinue,
     handleMatchContinue,
     handleBack,
-    handleClose,
     goEditDetail,
     consumePendingDetailFocus,
 
     // File handling
     setIsOver,
-    setSourceType,
-    onDrop,
     handleDrop,
     handleFileChange,
     handleRemoveFile,
@@ -1230,6 +1280,8 @@ export function useUploadMatchWizard({
     isProbing,
     minTrimSeconds: processingStrategy?.minTrimSeconds ?? 0,
     remainingQuotaSeconds,
+    quotaCapSeconds,
+    quotaResetsOn,
     acceptString: processingStrategy?.getAcceptString() ?? "",
     requirementChips: processingStrategy?.requirementChips ?? [],
     onVideoPick,

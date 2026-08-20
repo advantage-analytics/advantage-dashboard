@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useHeaderStatus } from "@/components/dashboard/header-status";
 import {
   ChevronRight,
   ChevronDown,
@@ -91,6 +92,7 @@ const MENU_ITEM_CLASS =
 
 export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
   const pathname = usePathname();
+  const headerStatus = useHeaderStatus();
   const { active, viewer } = useWorkspace();
   const requestLogout = useRequestLogout();
 
@@ -264,8 +266,15 @@ export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
           )}
         </div>
 
-        {/* Right: search + activity + profile */}
+        {/* Right: page status + search + activity + profile */}
         <div className="flex shrink-0 items-center gap-1.5">
+          {/* Whatever the current page wants said up here — the upload wizard's
+              "Draft saved", and nothing else so far. */}
+          {headerStatus && (
+            <span className="mr-1.5 text-[11px] text-[var(--ink-400)]">
+              {headerStatus}
+            </span>
+          )}
           {/* Named, not just an icon — a bare magnifier does not say what it
               searches, and the palette covers matches, players and help. */}
           <button

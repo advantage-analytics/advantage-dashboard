@@ -1,14 +1,20 @@
 "use client";
 
 /**
- * ProviderContent — Step 1
- * Vertical list of providers; each row carries logo, name, description, and state.
+ * ProviderContent — Step 1.
+ *
+ * Two groups, not one list: your own video is a different proposition from an
+ * import, and a flat list made them look like competing brands. The grouping is
+ * read off the provider registry's KIND, so adding a provider files itself.
  */
 
 import { memo } from "react";
 import { Check, Lock, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { providers } from "@/lib/providers";
+import { providers, type Provider } from "@/lib/providers";
+import { providerKindOrNull } from "@/lib/services/upload";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { eyebrowLabelCls } from "./styles";
 
 export interface ProviderContentProps {
   selectedProvider: string | null;
@@ -16,9 +22,25 @@ export interface ProviderContentProps {
 }
 
 function ProviderContentImpl({ selectedProvider, onProviderSelect }: ProviderContentProps) {
-  return (
-    <div className="flex flex-col gap-2.5 py-2">
-      {providers.map((provider) => {
+  const { active } = useWorkspace();
+
+  // A coming-soon row has no strategy, so this asks the registry the question
+  // it is allowed to answer with null rather than a throw.
+  const isVideoProvider = (p: Provider) =>
+    providerKindOrNull(p.id) === "processing";
+
+  const videoProviders = providers.filter(isVideoProvider);
+  const importProviders = providers.filter((p) => !isVideoProvider(p));
+
+  /**
+   * A program still being confirmed can build a roster but must not spend the
+   * vendor budget. Advisory only — `reserveQuota()` is the choke point every
+   * submission passes and the only thing that actually refuses. This exists so
+   * a coach hears it before uploading gigabytes, not after.
+   */
+  const videoBlocked = active.kind === "team" && !active.canSubmitVideo;
+
+  const renderProvider = (provider: Provider) => {
         const isAvailable = provider.available !== false;
         const isSelected = selectedProvider === provider.id;
         return (
@@ -129,7 +151,32 @@ function ProviderContentImpl({ selectedProvider, onProviderSelect }: ProviderCon
             </div>
           </button>
         );
-      })}
+  };
+
+  return (
+    <div className="flex flex-col gap-6 py-2">
+      {videoProviders.length > 0 && (
+        <div>
+          <span className={eyebrowLabelCls}>Your video</span>
+          <div className="mt-2.5 flex flex-col gap-2.5">
+            {videoProviders.map(renderProvider)}
+          </div>
+          {videoBlocked && (
+            <p className="mt-2.5 text-[12px] leading-[1.5] text-[#888888]">
+              {active.name} is still being confirmed. You can invite staff and build
+              your roster now; sending video opens as soon as that&apos;s done.
+            </p>
+          )}
+        </div>
+      )}
+      {importProviders.length > 0 && (
+        <div>
+          <span className={eyebrowLabelCls}>Import from a provider</span>
+          <div className="mt-2.5 flex flex-col gap-2.5">
+            {importProviders.map(renderProvider)}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

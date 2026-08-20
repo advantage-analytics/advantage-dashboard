@@ -81,6 +81,21 @@ export function getProviderKind(providerId: ProviderId) {
   return getProviderStrategy(providerId).kind;
 }
 
+/**
+ * Provider kind for an id that may not be registered at all.
+ *
+ * The display list in `lib/providers.ts` is allowed to run ahead of this
+ * registry — ATP is drawn as "Soon" and has no strategy — and
+ * `getProviderKind()` throws on an id it has never heard of. Callers iterating
+ * the display list need the question answered, not thrown at, so the guard
+ * lives here beside the throw rather than being remembered at each call site.
+ */
+export function providerKindOrNull(providerId: string) {
+  return isProviderSupported(providerId)
+    ? getProviderKind(providerId as ProviderId)
+    : null;
+}
+
 // Re-export individual strategies for direct access if needed
 export { swingVisionStrategy } from './swingvision';
 export { splitStepStrategy } from './splitstep';

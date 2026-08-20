@@ -17,30 +17,81 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   AlertTriangle,
-  ChevronLeft,
-  ChevronRight,
-  Clapperboard,
-  Info,
   Loader2,
   Pause,
   Play,
   Trash2,
+  Upload,
   Volume2,
   VolumeX,
   XCircle,
 } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useVideoFilmstrip } from "@/hooks/use-video-filmstrip";
 import type { VideoProbeSummary } from "./types";
 import {
-  primaryBtnCls,
   ghostBtnCls,
   eyebrowLabelCls,
-  iconBtnCls,
   dangerIconBtnCls,
   dropZoneCls,
+  floatMenuCls,
   focusRingCls,
 } from "./styles";
 import { formatFileSize, formatClipLength, formatClock } from "./utils";
+
+/**
+ * The recording rules, on demand.
+ *
+ * The chips carry the shape of the answer; this carries the reason. A popover
+ * rather than a page because the rules only matter in the ten seconds before
+ * you pick a file, and a link away from the wizard at that moment loses the
+ * file you were about to drop.
+ */
+function RecordingRequirements({ chips }: { chips: readonly string[] }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={`rounded-sm text-[11px] text-[#3B82F6] transition-colors duration-150 hover:text-[#2563EB] ${focusRingCls}`}
+        >
+          Recording requirements
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        sideOffset={8}
+        className={`w-[300px] p-3.5 ${floatMenuCls}`}
+      >
+        <p className={eyebrowLabelCls}>What the analysis needs</p>
+        <ul className="mt-2.5 flex flex-col gap-2 text-[12px] leading-[1.5] text-[#525252]">
+          {chips.length > 0 && (
+            <li>
+              <span className="text-[#0D0D0D]">The file</span> — {chips.join(", ").toLowerCase()}.
+            </li>
+          )}
+          <li>
+            <span className="text-[#0D0D0D]">One camera, one position</span> — a tripod or
+            a phone propped against the fence. Following the play breaks the court
+            mapping.
+          </li>
+          <li>
+            <span className="text-[#0D0D0D]">Behind the baseline</span>, high enough to
+            see both service boxes, with all four corners of the court in frame.
+          </li>
+          <li>
+            <span className="text-[#0D0D0D]">Singles only</span>, and complete games —
+            the window you trim to has to match the score you enter next.
+          </li>
+        </ul>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export interface VideoStepContentProps {
   videoFile: File | null;
@@ -53,11 +104,6 @@ export interface VideoStepContentProps {
   isOver: boolean;
   /** Provider-supplied floor, so this component never names a vendor. */
   minTrimSeconds: number;
-  /**
-   * Seconds left in this month's allowance, for the untrimmed-cost note.
-   * Undefined while it loads, or for providers that do not bill.
-   */
-  remainingQuotaSeconds?: number;
   /** From the provider strategy — keeps the picker and the validator in sync. */
   acceptString: string;
   /** Requirement chips, derived from provider config rather than hardcoded. */
@@ -92,8 +138,6 @@ const ZOOM_ANIM_MS = 260;
 const AUTOPAN_EDGE = 0.06;
 const AUTOPAN_STEP = 0.04;
 
-const TICK_COUNT = 5;
-
 /** Floating frame preview. Height follows the video's own aspect ratio. */
 const PREVIEW_WIDTH_PX = 132;
 
@@ -126,7 +170,6 @@ interface ViewWindow {
 function VideoStepContentImpl({
   videoFile,
   probe,
-  remainingQuotaSeconds,
   warnings,
   isProbing,
   error,
@@ -158,18 +201,6 @@ function VideoStepContentImpl({
   const end = endSeconds ?? duration;
   const selectedDuration = Math.max(0, end - start);
   const tooShort = duration > 0 && selectedDuration < minTrimSeconds;
-
-  // Untrimmed means the whole recording gets analysed, and the allowance is
-  // charged for it. That is legitimate when the recording really is just the
-  // match, so this informs rather than blocks — but the number belongs here,
-  // beside the handles that can change it, not on a summary screen after the
-  // upload has already run.
-  const untrimmed = duration > 0 && start <= 0 && end >= duration - 1;
-  const costNote =
-    untrimmed && remainingQuotaSeconds !== undefined
-      ? `Not trimmed. This will use ${Math.ceil(selectedDuration / 60)} of your ` +
-        `${Math.floor(remainingQuotaSeconds / 60)} remaining minutes this month.`
-      : null;
 
   /** One frame, when we know the rate. Falls back to a reasonable nudge. */
   const frameStep = probe?.fps ? 1 / probe.fps : 0.1;
@@ -252,8 +283,7 @@ function VideoStepContentImpl({
     };
   }, [objectUrl]);
 
-  // Rail width drives how many thumbnails tile across it, and the
-  // seconds-per-pixel figure in the precision badge.
+  // Rail width drives how many thumbnails tile across it.
   useEffect(() => {
     const el = railRef.current;
     if (!el) return;
@@ -568,27 +598,6 @@ function VideoStepContentImpl({
     });
   }, [aspect, railWidth, filmstrip.frames, duration, view]);
 
-  const ticks = useMemo(
-    () =>
-      Array.from({ length: TICK_COUNT }, (_, i) => {
-        const fraction = i / (TICK_COUNT - 1);
-        return {
-          key: i,
-          label: formatClock(view.start + fraction * view.span),
-          left: `${fraction * 100}%`,
-          translate:
-            i === 0 ? "translateX(0)" : i === TICK_COUNT - 1 ? "translateX(-100%)" : "translateX(-50%)",
-        };
-      }),
-    [view]
-  );
-
-  const secondsPerPixel = railWidth > 0 ? view.span / railWidth : 0;
-  const precisionLabel =
-    probe?.fps && secondsPerPixel < 1
-      ? `1px ≈ ${Math.max(1, Math.round(secondsPerPixel * probe.fps))} frames`
-      : `1px ≈ ${secondsPerPixel.toFixed(1)}s`;
-
   // ---- Empty / loading / error states ----
 
   if (!videoFile) {
@@ -607,24 +616,18 @@ function VideoStepContentImpl({
             <div className="flex flex-col items-center gap-3">
               <Loader2 className="size-5 animate-spin text-[#3B82F6]" strokeWidth={1.5} />
               <p className="text-[13px] text-[#525252]">Checking your video…</p>
-              <p className="text-[11px] text-[#AAAAAA]">
-                Reading resolution and frame rate. Nothing is uploading yet.
-              </p>
+              <p className="text-[11px] text-[#AAAAAA]">Nothing is uploading yet.</p>
             </div>
           ) : (
             <>
-              <div className="flex size-12 items-center justify-center rounded-[10px] bg-[#3B82F6]">
-                <Clapperboard className="size-5 text-white" strokeWidth={1.5} />
-              </div>
-              <p className="mt-4 text-[14px] font-medium text-[#0D0D0D]">
-                {isOver ? "Drop it here" : "Drag & drop your match video"}
+              <Upload className="size-8 text-[#CCCCCC]" strokeWidth={1.5} />
+              <p className="mt-3.5 text-[15px] font-medium text-[#0D0D0D]">
+                {isOver ? "Drop it here" : "Drop match video here"}
               </p>
-              <p className="mt-1 text-[12px] text-[#888888]">
-                We check it works before anything uploads
-              </p>
+              <p className="mt-1.5 text-[12px] text-[#888888]">One video per match</p>
               <Button
                 onClick={() => document.getElementById("video-input-wizard")?.click()}
-                className={`${primaryBtnCls} mt-4`}
+                className={`${ghostBtnCls} mt-3.5 h-8 px-3.5 text-[12px]`}
               >
                 Browse files
               </Button>
@@ -635,18 +638,23 @@ function VideoStepContentImpl({
                 className="hidden"
                 onChange={(e) => onPick(e.target.files?.[0] ?? null)}
               />
-              <div className="mt-5 flex items-center gap-2">
-                {requirementChips.map((chip) => (
-                  <span
-                    key={chip}
-                    className="rounded-[6px] bg-white px-2 py-1 text-[10px] font-medium uppercase tracking-[1.5px] text-[#AAAAAA] border border-[#F3F3F3]"
-                  >
-                    {chip}
-                  </span>
-                ))}
-              </div>
             </>
           )}
+        </div>
+
+        {/* Out of the zone: inside it they read as decoration on a target, and
+            the target is the thing you are meant to hit. */}
+        <div className="flex items-center gap-2 border-t border-[#F3F3F3] py-3.5">
+          {requirementChips.map((chip) => (
+            <span
+              key={chip}
+              className="inline-flex h-[22px] items-center rounded-[6px] border border-[#F3F3F3] bg-white px-2 text-[10px] font-medium uppercase tracking-[1.5px] text-[#AAAAAA]"
+            >
+              {chip}
+            </span>
+          ))}
+          <span className="flex-1" />
+          <RecordingRequirements chips={requirementChips} />
         </div>
 
         {error ? (
@@ -695,7 +703,7 @@ function VideoStepContentImpl({
         <button
           onClick={onRemove}
           aria-label="Remove video"
-          className={`shrink-0 ${dangerIconBtnCls()}`}
+          className={`shrink-0 ${dangerIconBtnCls}`}
         >
           <Trash2 className="size-3.5" strokeWidth={1.5} />
         </button>
@@ -801,11 +809,6 @@ function VideoStepContentImpl({
         <div className="flex items-baseline gap-3">
           <span className={`${eyebrowLabelCls} whitespace-nowrap`}>Trim to the match</span>
           <span className="flex-1" />
-          {precision ? (
-            <span className="rounded-full bg-[#3B82F6]/[0.08] px-2 py-0.5 text-[9px] font-medium uppercase tracking-[2px] tabular-nums text-[#3B82F6]">
-              Precision · {precisionLabel}
-            </span>
-          ) : null}
           <span className="text-[11px] tabular-nums text-[#888888]">
             {formatClipLength(selectedDuration)} selected
           </span>
@@ -940,57 +943,30 @@ function VideoStepContentImpl({
             ) : null}
           </div>
 
-          {/* Timestamps for the window the rail currently spans */}
-          <div className="relative mt-1.5 h-4">
-            {ticks.map((tick) => (
-              <span
-                key={tick.key}
-                className="absolute text-[10px] tabular-nums text-[#AAAAAA]"
-                style={{ left: tick.left, transform: tick.translate }}
-              >
-                {tick.label}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* Precise controls for each end */}
-        <div className="grid grid-cols-2 gap-3">
-          {HANDLES.map((handle) => {
-            const value = handle === "start" ? start : end;
-            return (
-              <div key={handle} className="flex flex-col gap-1.5">
-                <span className={eyebrowLabelCls}>
-                  {handle === "start" ? "Start" : "End"}
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <span className="min-w-[58px] text-[14px] tabular-nums text-[#0D0D0D]">
-                    {formatClock(value, { tenths: true })}
+          {/* Start and end read under their own handles rather than as a fixed
+              scale across the rail. A tick strip described the view; these
+              describe the two decisions, and they move with them. */}
+          <div className="relative mt-2 h-5">
+            {HANDLES.map((handle) => {
+              const value = handle === "start" ? start : end;
+              const handlePct = pct(value);
+              if (handlePct < 0 || handlePct > 100) return null;
+              return (
+                <span
+                  key={handle}
+                  className="absolute inline-flex -translate-x-1/2 items-baseline gap-1.5 whitespace-nowrap"
+                  style={{ left: `${handlePct}%` }}
+                >
+                  <span className="text-[9px] font-medium uppercase tracking-[1.5px] text-[#AAAAAA]">
+                    {handle === "start" ? "Start" : "End"}
                   </span>
-                  <button
-                    onClick={() => nudge(handle, -1)}
-                    aria-label={`Nudge ${handle} back one frame`}
-                    className={iconBtnCls(6)}
-                  >
-                    <ChevronLeft className="size-3.5" strokeWidth={1.5} />
-                  </button>
-                  <button
-                    onClick={() => nudge(handle, 1)}
-                    aria-label={`Nudge ${handle} forward one frame`}
-                    className={iconBtnCls(6)}
-                  >
-                    <ChevronRight className="size-3.5" strokeWidth={1.5} />
-                  </button>
-                  <Button
-                    onClick={() => moveHandle(handle, playheadRef.current)}
-                    className={`${ghostBtnCls} h-6 px-2 text-[11px]`}
-                  >
-                    Use playhead
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
+                  <span className="text-[12px] font-medium tabular-nums text-[#0D0D0D]">
+                    {formatClock(value)}
+                  </span>
+                </span>
+              );
+            })}
+          </div>
         </div>
 
         {tooShort ? (
@@ -1002,28 +978,16 @@ function VideoStepContentImpl({
             </p>
           </div>
         ) : (
-          <>
-            {costNote && (
-              <div className="flex items-start gap-2 rounded-[10px] border border-[#E0902E]/25 bg-[#E0902E]/[0.05] px-3 py-2.5">
-                <Info
-                  className="mt-px size-3.5 shrink-0 text-[#E0902E]"
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-                <p className="text-[12px] leading-[1.5] text-[#525252]">
-                  {costNote} Trimming to just the match keeps the rest for other
-                  uploads.
-                </p>
-              </div>
-            )}
-            <p className="text-[12px] leading-[1.5] text-[#888888]">
-              Hold a handle to zoom into that part of the video — the strip magnifies so
-              each pixel moves frames, not minutes. Set the start just before the first
-              serve and the end just after the final point. The window must contain{" "}
-              <span className="text-[#525252]">complete games</span> matching the score you
-              enter next — cutting into the middle of a game throws off every point after it.
-            </p>
-          </>
+          /* The one rule that cannot be recovered from afterwards: a window that
+             cuts into a game throws off every point after it. Hold-to-zoom is
+             discoverable by accident; this is not. What the trim COSTS used to
+             be spelled out here too — the footer's allowance meter now says it
+             continuously, and says it whether or not the handles have moved. */
+          <p className="text-[12px] leading-[1.5] text-[#888888]">
+            Hold a handle to zoom. The window must contain{" "}
+            <span className="text-[#525252]">complete games</span> matching the score you
+            enter next.
+          </p>
         )}
       </div>
     </div>

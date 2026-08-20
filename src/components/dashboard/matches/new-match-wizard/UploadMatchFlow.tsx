@@ -10,7 +10,7 @@
  * somewhere to land — a dialog can only close, so success was previously silent.
  */
 
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -26,14 +26,20 @@ import {
   type VideoUploadEvent,
   type VideoUploadProgress,
 } from "./useUploadMatchWizard";
-import { formatFileSize, formatTransferSpeed } from "./utils";
+import {
+  formatFileSize,
+  formatHoursMinutes,
+  formatTransferSpeed,
+} from "./utils";
 import { formatEta } from "@/lib/data/match-analysis";
+import { usageFraction } from "@/lib/data/usage-format";
 import { AnalysisProgressTrack } from "../analysis-progress-track";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { usePublishHeaderStatus } from "@/components/dashboard/header-status";
 import { StepIndicator } from "./StepIndicator";
 import { ProviderContent } from "./ProviderContent";
 import { UploadContent } from "./UploadContent";
 import { VideoStepContent } from "./VideoStepContent";
-import { VideoMetaFields } from "./VideoMetaFields";
 import { DetailsContent } from "./DetailsContent";
 import { ConfirmContent } from "./ConfirmContent";
 import { primaryBtnCls, ghostBtnCls } from "./styles";
@@ -41,7 +47,8 @@ import { primaryBtnCls, ghostBtnCls } from "./styles";
 /** Where the flow returns to when it is dismissed or finished. */
 const EXIT_HREF = "/dashboard/matches";
 
-const CONTENT_CLS = "mx-auto w-full max-w-[820px] px-8";
+/** The design's column: 780px of content inside 56px gutters. */
+const CONTENT_CLS = "mx-auto w-full max-w-[780px] px-14";
 
 /**
  * What one upload is doing, owned HERE rather than in the wizard hook.
@@ -300,6 +307,93 @@ function UploadMatchSuccess({
 }
 
 /**
+ * Does this element own its own Enter key?
+ *
+ * Used by both the footer hint (which swaps to the chord while you are typing)
+ * and the Enter handler (which must not submit out from under a form control).
+ * One rule, because two shapes of it in one file is how they drift.
+ */
+function isFormControl(el: EventTarget | null): boolean {
+  const node = el as HTMLElement | null;
+  if (!node) return false;
+  const tag = node.tagName;
+  return (
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    tag === "SELECT" ||
+    node.isContentEditable ||
+    node.getAttribute("role") === "combobox"
+  );
+}
+
+/**
+ * The monthly allowance, in the footer beside the primary action.
+ *
+ * Advisory: `reserve_processing_quota()` is the authority and refuses at submit
+ * time. It reads two ways depending on whether there is a window to price yet —
+ * before a trim it is the allowance you have, after one it is what this video
+ * costs out of it. One ring cannot mean both at once, so the caption says which.
+ */
+function QuotaMeter({
+  remainingSeconds,
+  capSeconds,
+  resetsOn,
+  selectedSeconds,
+}: {
+  remainingSeconds: number;
+  capSeconds: number;
+  resetsOn: string;
+  selectedSeconds?: number;
+}) {
+  const CIRCUMFERENCE = 2 * Math.PI * 6;
+  const priced = selectedSeconds !== undefined && selectedSeconds > 0;
+  const fraction = priced
+    ? // Share of what is LEFT that this video eats — "1h 12m for this video"
+      // reads against the remainder, not the cap. An empty remainder is a full
+      // ring rather than a divide-by-zero.
+      remainingSeconds > 0
+      ? usageFraction(selectedSeconds, remainingSeconds)
+      : 1
+    : usageFraction(remainingSeconds, capSeconds);
+  const arc = fraction * CIRCUMFERENCE;
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      <svg viewBox="0 0 16 16" aria-hidden="true" className="size-3.5 -rotate-90">
+        <circle cx="8" cy="8" r="6" fill="none" stroke="#F3F3F3" strokeWidth="3" />
+        <circle
+          cx="8"
+          cy="8"
+          r="6"
+          fill="none"
+          stroke="#3B82F6"
+          strokeWidth="3"
+          strokeDasharray={`${arc} ${CIRCUMFERENCE - arc}`}
+        />
+      </svg>
+      <span className="mono tabular text-[11px]" style={{ color: "#525252" }}>
+        {formatHoursMinutes(priced ? selectedSeconds! : remainingSeconds)}
+      </span>
+      <span className="whitespace-nowrap text-[11px] text-[#888888]">
+        {priced ? (
+          <>
+            for this video ·{" "}
+            <span className="mono tabular">
+              {formatHoursMinutes(Math.max(0, remainingSeconds - selectedSeconds!))}
+            </span>{" "}
+            left after
+          </>
+        ) : (
+          <>
+            of {formatHoursMinutes(capSeconds)} left · resets {resetsOn}
+          </>
+        )}
+      </span>
+    </span>
+  );
+}
+
+/**
  * Memoized, and not for tidiness.
  *
  * After "Upload another" this is the rendered branch while transfers are still
@@ -316,6 +410,8 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
   onVideoUpload: (event: VideoUploadEvent) => void;
 }) {
   const router = useRouter();
+  // Which workspace this match will be created in, and billed against.
+  const workspaces = useWorkspace();
 
   // `onOpenChange(false)` fires both when the user backs out and when a match
   // is committed. onCreated lands first in the success path, so this ref tells
@@ -369,6 +465,8 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     isProbing,
     minTrimSeconds,
     remainingQuotaSeconds,
+    quotaCapSeconds,
+    quotaResetsOn,
     acceptString,
     requirementChips,
     onVideoPick,
@@ -382,6 +480,11 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
   });
 
   const contentRef = useRef<HTMLDivElement>(null);
+
+  // Every keystroke on the later steps is already written to localStorage, and
+  // the flow resumes from it. Saying so in the header is what makes leaving the
+  // page feel survivable. Not on step 1, where there is nothing to lose yet.
+  usePublishHeaderStatus(step === "provider" ? null : "Draft saved");
 
   const onDragOver = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
@@ -415,8 +518,6 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     ...(isProcessingProvider ? STEP_CONFIG_PROCESSING[step] : undefined),
   };
 
-  // Per-step gate. A table rather than a ternary chain so a new step is one
-  // entry rather than an edit threaded through three chained conditionals.
   const trimSelected =
     (formData.videoEndSeconds ?? 0) - (formData.videoStartSeconds ?? 0);
 
@@ -427,28 +528,52 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     formData.playerScores.some((n) => (n ?? 0) > 0) ||
     formData.opponentScores.some((n) => (n ?? 0) > 0);
 
-  // A video job's metadata is not optional the way an imported match's is: every
-  // one of these is a REQUIRED field in the vendor's job payload, and a job that
-  // reaches them incomplete is refused after the video has already uploaded.
-  // Blocking here costs a click; blocking there costs an hour of transfer.
-  //
-  // Only for processing providers. A SwingVision import gets its scores from the
-  // parsed file, so demanding them by hand would be asking twice.
-  const videoMetaBlocker = !isProcessingProvider
-    ? null
-    : !formData.opponentName.trim()
-    ? "Add your opponent's name"
-    : !hasAnySetScore
-    ? "Enter the set scores"
-    : formData.initialTopPlayerIsPlayer1 === undefined
-    ? "Pick which end you started on"
-    : formData.fixedCamera === undefined
-    ? "Tell us about the camera"
-    : formData.adScoring === undefined
-    ? "Choose ad or no-ad scoring"
-    : null;
+  /**
+   * What is still unanswered — a list, not the first offender.
+   *
+   * A video job's metadata is not optional the way an imported match's is:
+   * every one of these is a REQUIRED field in the vendor's job payload
+   * (`docs/ui-revamp-guardrails.md` §3.1), and a job that reaches them
+   * incomplete is refused after the video has already uploaded. Blocking here
+   * costs a click; blocking there costs an hour of transfer.
+   *
+   * Counting them out loud is the point: naming one at a time meant filling a
+   * field, pressing Continue, and being told about the next one.
+   *
+   * Only for processing providers. A SwingVision import gets its scores and
+   * names from the parsed file, so demanding them by hand would ask twice.
+   */
+  const missing = useMemo(() => {
+    const labels: string[] = [];
+    if (!formData.eventName.trim()) labels.push("name");
+    if (isProcessingProvider) {
+      if (!formData.playerName.trim()) labels.push("your name");
+      if (!formData.opponentName.trim()) labels.push("opponent");
+      if (!hasAnySetScore) labels.push("score");
+      if (formData.adScoring === undefined) labels.push("scoring");
+      if (formData.fixedCamera === undefined) labels.push("camera");
+      if (formData.initialTopPlayerIsPlayer1 === undefined) labels.push("your end");
+    }
+    // Confirm has its own sentence for the case where only the camera answers
+    // are outstanding, so the shape is decided here beside the list rather than
+    // re-derived from label strings three hundred lines away.
+    const onlyVideoAnswers =
+      labels.length > 0 && labels.every((l) => l === "camera" || l === "your end");
+    return { labels, onlyVideoAnswers };
+  }, [
+    formData.eventName,
+    formData.playerName,
+    formData.opponentName,
+    formData.adScoring,
+    formData.fixedCamera,
+    formData.initialTopPlayerIsPlayer1,
+    hasAnySetScore,
+    isProcessingProvider,
+  ]);
 
-  const stepBlockers: Record<Step, string | null> = {
+  // Work in progress, per step. Separate from `missing` because these are
+  // states to wait out rather than fields to fill, and they read differently.
+  const busyLabel: Record<Step, string | null> = {
     provider: !selectedProvider ? "Make a selection" : null,
     video: isProbing
       ? "Checking your video…"
@@ -461,16 +586,15 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
       ? "Drop or browse a file"
       : isUploading
       ? "Validating file…"
-      : !formData.eventName.trim()
-      ? "Add a match name"
-      : videoMetaBlocker,
+      : null,
     confirm: isCreating ? "Creating match…" : null,
   };
 
-  // Non-null means "cannot continue", and the string doubles as the footer hint
-  // explaining why. Read once so the two uses cannot disagree.
-  const blocker = stepBlockers[step];
-  const continueDisabled = blocker !== null;
+  const stepBusy = busyLabel[step];
+  // Both of the last two steps can see the same answers, so both wait on them.
+  const gatedByMissing =
+    (step === "match" || step === "confirm") && missing.labels.length > 0;
+  const continueDisabled = stepBusy !== null || gatedByMissing;
 
   // Platform detection for the right modifier glyph in the footer hint. Gated
   // behind null until mounted so SSR doesn't render a Mac chord on a Linux box.
@@ -487,18 +611,6 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
   // so we surface ⌘/Ctrl↵ instead.
   const [focusInForm, setFocusInForm] = useState(false);
   useEffect(() => {
-    const isFormControl = (el: EventTarget | null) => {
-      const node = el as HTMLElement | null;
-      if (!node) return false;
-      const tag = node.tagName;
-      return (
-        tag === "INPUT" ||
-        tag === "TEXTAREA" ||
-        tag === "SELECT" ||
-        node.isContentEditable ||
-        node.getAttribute("role") === "combobox"
-      );
-    };
     const onFocusIn = (e: FocusEvent) => setFocusInForm(isFormControl(e.target));
     const onFocusOut = () => setFocusInForm(false);
     document.addEventListener("focusin", onFocusIn);
@@ -564,16 +676,28 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
+      // Cheapest test first: this listener sees EVERY keystroke on the page, and
+      // only two keys can do anything below. Scanning the document for open
+      // popovers before this check meant paying two full-document
+      // querySelectors per character typed into the score boxes.
+      if (e.key !== "Escape" && e.key !== "Enter") return;
+
+      // An open menu owns the keyboard, and this runs in the CAPTURE phase to
+      // find out. Radix dismisses its popovers from a document-level listener,
+      // which fires before a window-level one — so by the time a bubble-phase
+      // handler saw the event, aria-expanded had already flipped back to false
+      // and Escape popped the wizard step as well as the menu it was aimed at.
+      // Capturing means the question "is something open?" is asked while the
+      // answer is still true, and the menu still gets its Escape afterwards.
+      const active = document.activeElement as HTMLElement | null;
+      if (
+        active?.tagName === "SELECT" ||
+        document.querySelector('[aria-expanded="true"]')
+      ) {
+        return;
+      }
+
       if (e.key === "Escape" && step !== "provider") {
-        // Bail when a transient popup is open — Esc should close that first,
-        // not pop the wizard step. Covers native <select> dropdowns (browser
-        // closes them on Esc), open comboboxes (aria-expanded="true"), and
-        // the InfoTooltip popover (role="tooltip" mounts only while open).
-        const active = document.activeElement as HTMLElement | null;
-        const inSelect = active?.tagName === "SELECT";
-        const openCombobox = !!document.querySelector('[aria-expanded="true"]');
-        const tooltipOpen = !!document.querySelector('[role="tooltip"]');
-        if (inSelect || openCombobox || tooltipOpen) return;
         e.preventDefault();
         e.stopPropagation();
         handleBack();
@@ -587,34 +711,41 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
         return;
       }
 
-      const target = e.target as HTMLElement | null;
-      if (target) {
-        const tag = target.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-        if (target.isContentEditable) return;
-        if (target.getAttribute("role") === "combobox") return;
-      }
+      if (isFormControl(e.target)) return;
       if (continueDisabled) return;
       e.preventDefault();
       continueHandler();
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [continueDisabled, continueHandler, step, handleBack]);
 
   return (
-    <div className="flex min-h-[calc(100vh-56px)] flex-col">
-      <div className={`${CONTENT_CLS} pb-10 pt-7`}>
-        <StepIndicator currentStep={currentStepIndex} totalSteps={stepOrder.length} />
+    <div className="flex min-h-[calc(100vh-44px)] flex-col">
+      {/* Full-bleed under the app header. Inside the content column it read as
+          a rule belonging to the title; spanning the pane it reads as chrome
+          measuring the whole flow. */}
+      <StepIndicator currentStep={currentStepIndex} totalSteps={stepOrder.length} />
 
-        <h1 className="mt-6 text-[24px] font-light leading-[30px] tracking-[-0.5px] text-[#1D1D1F]">
-          {title}
-        </h1>
-        <p className="mt-1.5 max-w-[460px] text-[12px] leading-[1.5] text-[#525252]">
-          {description}
-        </p>
+      <div className={`${CONTENT_CLS} pb-10 pt-[26px]`}>
+        {/* Confirm opens on the match's own hero — a heading above it would
+            say less than the name already does. */}
+        {step !== "confirm" && (
+          <>
+            <h1 className="text-[24px] font-light leading-[30px] tracking-[-0.5px] text-[#1D1D1F]">
+              {title}
+            </h1>
+            <p className="mt-1.5 max-w-[460px] text-[12px] leading-[1.5] text-[#525252]">
+              {description}
+            </p>
+          </>
+        )}
 
-        <div ref={contentRef} key={step} className="animate-fadeIn mt-7">
+        <div
+          ref={contentRef}
+          key={step}
+          className={`animate-fadeIn ${step === "confirm" ? "" : "mt-7"}`}
+        >
           {step === "provider" && (
             <ProviderContent
               selectedProvider={selectedProvider}
@@ -633,7 +764,6 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
               endSeconds={formData.videoEndSeconds}
               isOver={isOver}
               minTrimSeconds={minTrimSeconds}
-              remainingQuotaSeconds={remainingQuotaSeconds}
               acceptString={acceptString}
               requirementChips={requirementChips}
               onDragOver={onDragOver}
@@ -647,11 +777,10 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
 
           {step === "match" && (
             <div className="flex flex-col gap-6">
-              {/* Processing providers already picked their video on the
-                  previous step — this step is metadata only. */}
-              {isProcessingProvider ? (
-                <VideoMetaFields formData={formData} onInputChange={handleInputChange} />
-              ) : (
+              {/* Processing providers picked their video on the previous step,
+                  so this step is metadata only — including the two camera
+                  answers, which sit in the details grid rather than above it. */}
+              {!isProcessingProvider && (
                 <UploadContent
                   selectedProvider={selectedProvider}
                   uploadedFile={uploadedFile}
@@ -672,6 +801,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
                   onInputChange={handleInputChange}
                   onScoreChange={handleScoreChange}
                   onTiebreakChange={handleTiebreakChange}
+                  isProcessingProvider={isProcessingProvider}
                   pendingDetailFocus={pendingDetailFocus}
                   onPendingDetailFocusConsumed={consumePendingDetailFocus}
                 />
@@ -686,6 +816,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
               error={error}
               onEditDetail={goEditDetail}
               isProcessingProvider={isProcessingProvider}
+              sourceDurationSeconds={videoProbe?.durationSeconds}
             />
           )}
         </div>
@@ -697,61 +828,122 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
           White on a hairline, matching the app header rather than the tinted
           bar this had while it was a dialog footer. In a dialog the tint
           separated the action row from the body; on a page it was a full-bleed
-          grey band under a centred 820px column, weighted to nothing in the
+          grey band under a centred column, weighted to nothing in the
           composition. The header is the only other persistent chrome in the
           dashboard and it is white, so this follows it. The border is
           unconditional where the header's is scroll-triggered: the header at
           scroll-top is genuinely part of the page, while an action bar is
           always chrome and should always be delineated. */}
       <div className="sticky bottom-0 mt-auto border-t border-[#F3F3F3] bg-white">
-        <div className={`${CONTENT_CLS} flex items-center justify-between py-3.5`}>
-          <div className="inline-flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
-            {blocker !== null ? (
-              <span>{blocker}</span>
-            ) : (
-              <>
-                <span>Press</span>
-                {/* When focus is mid-form, plain Enter is suppressed so we surface
-                    the chord users can still rely on. Platform-detected per
-                    SKILL.md › Keyboard Shortcut Chip conventions: ⌘ on Mac
-                    concatenates without `+`, Ctrl+ elsewhere. Render is gated
-                    until isMac resolves to avoid SSR mismatches. */}
-                <kbd
-                  aria-hidden="true"
-                  className="inline-block rounded bg-[#F0F0F0] px-1 py-0.5 text-[10px] font-medium leading-none text-[#AAAAAA]"
-                >
-                  {focusInForm && isMac !== null ? (isMac ? "⌘↵" : "Ctrl+↵") : "↵"}
-                </kbd>
-                <span>
-                  {focusInForm
-                    ? "to next field"
-                    : step === "confirm"
-                    ? "to create"
-                    : "to continue"}
-                </span>
-              </>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            {currentStepIndex > 0 ? (
-              <Button onClick={handleBack} className={ghostBtnCls}>
-                Back
-              </Button>
-            ) : (
-              <Button asChild className={ghostBtnCls}>
-                <Link href={EXIT_HREF}>Cancel</Link>
-              </Button>
-            )}
-            <Button
-              onClick={continueHandler}
-              disabled={continueDisabled}
-              data-wizard-continue
-              className={primaryBtnCls}
-            >
-              {isCreating ? "Creating…" : CONTINUE_LABEL[step]}
+        <div className={`${CONTENT_CLS} flex h-16 items-center gap-3.5`}>
+          {currentStepIndex > 0 ? (
+            <Button onClick={handleBack} className={ghostBtnCls}>
+              Back
             </Button>
-          </div>
+          ) : (
+            /* The frames leave this slot empty on step 1. Kept, because Esc is
+               deliberately inert there and the breadcrumb is not obviously an
+               exit — without it the flow has no way out that looks like one. */
+            <Button asChild className={ghostBtnCls}>
+              <Link href={EXIT_HREF}>Cancel</Link>
+            </Button>
+          )}
+
+          {stepBusy !== null ? (
+            <span className="text-[11px] text-[#525252]">{stepBusy}</span>
+          ) : gatedByMissing ? (
+            step === "confirm" ? (
+              <span className="text-[11px] text-[#525252]">
+                Create waits on{" "}
+                {missing.onlyVideoAnswers
+                  ? "the video answers"
+                  : missing.labels.join(" · ")}{" "}
+                —{" "}
+                <button
+                  type="button"
+                  onClick={handleBack}
+                  className="text-[#3B82F6] underline-offset-2 transition-colors duration-150 hover:text-[#2563EB] hover:underline"
+                >
+                  answer them on Match details
+                </button>
+              </span>
+            ) : (
+              <span className="whitespace-nowrap text-[11px] text-[#525252]">
+                <span className="font-medium tabular-nums text-[#0D0D0D]">
+                  {missing.labels.length}
+                </span>{" "}
+                to go — {missing.labels.slice(0, 3).join(" · ")}
+                {/* Naming all six wrapped this bar onto two lines and squeezed
+                    the meter beside it. Three is enough to start on; the count
+                    carries the rest, and the fields themselves are marked. */}
+                {missing.labels.length > 3
+                  ? ` +${missing.labels.length - 3} more`
+                  : ""}
+              </span>
+            )
+          ) : step === "confirm" && workspaces.available.length > 1 ? (
+            /* Only when there is a choice to get wrong. `program_id` on the row
+               follows this exact workspace, and the jobs route bills whichever
+               one it names. */
+            <span className="text-[11px] text-[#525252]">
+              Creates in{" "}
+              <span className="font-medium text-[#0D0D0D]">
+                {workspaces.active.name}
+              </span>
+            </span>
+          ) : (
+            <div className="inline-flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+              <span>Press</span>
+              {/* When focus is mid-form, plain Enter is suppressed so we surface
+                  the chord users can still rely on. Platform-detected per
+                  SKILL.md › Keyboard Shortcut Chip conventions: ⌘ on Mac
+                  concatenates without `+`, Ctrl+ elsewhere. Render is gated
+                  until isMac resolves to avoid SSR mismatches. */}
+              <kbd
+                aria-hidden="true"
+                className="inline-block rounded bg-[#F0F0F0] px-1 py-0.5 text-[10px] font-medium leading-none text-[#AAAAAA]"
+              >
+                {focusInForm && isMac !== null ? (isMac ? "⌘↵" : "Ctrl+↵") : "↵"}
+              </kbd>
+              <span>
+                {focusInForm
+                  ? "to next field"
+                  : step === "confirm"
+                  ? "to create"
+                  : "to continue"}
+              </span>
+            </div>
+          )}
+
+          <div className="flex-1" />
+
+          {/* Not on the source step: there is no video to price yet, and an
+              allowance shown before a file is picked reads as a warning. */}
+          {isProcessingProvider &&
+            step !== "provider" &&
+            remainingQuotaSeconds !== undefined && (
+            <QuotaMeter
+              remainingSeconds={remainingQuotaSeconds}
+              capSeconds={quotaCapSeconds}
+              resetsOn={quotaResetsOn}
+              /* Only once there is a video to price. A resumed draft keeps its
+                 trim window in localStorage but cannot keep the File, so the
+                 handles alone would have the meter costing a video that is no
+                 longer picked. */
+              selectedSeconds={
+                uploadedFile?.file && trimSelected > 0 ? trimSelected : undefined
+              }
+            />
+          )}
+
+          <Button
+            onClick={continueHandler}
+            disabled={continueDisabled}
+            data-wizard-continue
+            className={primaryBtnCls}
+          >
+            {isCreating ? "Creating…" : CONTINUE_LABEL[step]}
+          </Button>
         </div>
       </div>
     </div>
