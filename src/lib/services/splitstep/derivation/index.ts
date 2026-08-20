@@ -36,9 +36,12 @@
  * changes what it discards — all three change the grade for the same input,
  * and a grade you cannot attribute to a version is a grade you cannot compare.
  *
- * `-quality` marks the scope: this build grades, it does not derive points.
+ * The suffix marks the scope. `-transcript` means this build derives points and
+ * shots but does not publish statistics: `calculate_match_stats` is not called,
+ * because several stat families are not measurable from this vendor's output
+ * and the suppression pass that would handle them does not exist yet.
  */
-export const DERIVATION_VERSION = '0.1.0-quality';
+export const DERIVATION_VERSION = '0.2.0-transcript';
 
 export type {
   RawSplitStepStroke,

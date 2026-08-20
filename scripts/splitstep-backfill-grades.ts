@@ -59,7 +59,7 @@ async function main() {
 
   let query = supabase
     .from('processing_jobs')
-    .select('id, match_id, results_object_key, derivation_version, derivation_confidence')
+    .select('id, match_id, results_object_key, derivation_quality, derivation_confidence')
     .eq('status', 'completed')
     .not('results_object_key', 'is', null);
 
@@ -79,8 +79,12 @@ async function main() {
   let failed = 0;
 
   for (const job of jobs) {
-    if (!force && job.derivation_version === DERIVATION_VERSION) {
-      console.log(`  ${job.id}  skip (already ${job.derivation_version})`);
+    // Read the grader version out of the report, not out of
+    // `derivation_version` — that column belongs to the row-writing engine and
+    // grading must leave it null. See grade-results.ts.
+    const gradedBy = (job.derivation_quality as { gradedBy?: string } | null)?.gradedBy;
+    if (!force && gradedBy === DERIVATION_VERSION) {
+      console.log(`  ${job.id}  skip (already ${gradedBy})`);
       skipped += 1;
       continue;
     }

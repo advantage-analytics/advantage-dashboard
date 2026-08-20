@@ -72,12 +72,19 @@ export async function gradeResults(params: {
     // write path's problem, not this one's.
     const analysis = analyzeResults(JSON.parse(text));
 
+    // Deliberately does NOT write `derivation_version`. That column means "the
+    // engine produced the points and shots rows", and `resolveAnalysisStatus()`
+    // in src/lib/data/match-analysis.ts reads it as exactly that: a job that is
+    // `completed` with a non-null version resolves to "Analyzed" rather than
+    // "processed". Stamping it here made a graded-but-underived match claim to
+    // be analysed while carrying zero points and zero match_stats, which is the
+    // empty-charts state that column was introduced to prevent. Grading
+    // produces a grade; the version of the grader travels inside the report.
     const { error } = await supabase
       .from('processing_jobs')
       .update({
         derivation_confidence: analysis.quality.grade,
-        derivation_version: DERIVATION_VERSION,
-        derivation_quality: analysis.quality,
+        derivation_quality: { ...analysis.quality, gradedBy: DERIVATION_VERSION },
       })
       .eq('id', jobId);
 
