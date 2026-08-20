@@ -5,17 +5,13 @@ import {
   teamLabel,
   programSubtitle,
 } from "@/lib/data/programs-server";
-import { ClaimShell } from "@/components/claim/claim-shell";
+import { ClaimShell, ClaimHeading } from "@/components/claim/claim-shell";
 import { ContactOwnerForm } from "@/components/claim/contact-owner-form";
 
 export const metadata = { title: "Request an invite" };
 
 /**
  * "Request an invite" — the primary action on F3.3 and F3.4.
- *
- * This route did not exist. It was linked four times and returned a 404, so the
- * main thing a coach could do about a program somebody else already had was
- * hit a dead end.
  *
  * It reaches the owner and queues nothing for the requester: no account is
  * created, no claim is opened, and the program's state does not move. That is
@@ -43,17 +39,25 @@ export default async function RequestInvitePage({
   const owner = program.ownerDisplay;
 
   return (
-    <ClaimShell
-      eyebrow={eyebrow}
-      heading={owner ? `Ask ${owner} for access` : "Ask for access"}
-      sub={
-        owner
+    <ClaimShell width={720} gap={20} back={`/claim/${programKey}`}>
+      <ClaimHeading
+        gap={2}
+        eyebrow={eyebrow}
+        title={owner ? `Ask ${owner} for access` : "Ask for access"}
+        titlePadTop={8}
+      />
+      <p className="text-body max-w-[58ch]">
+        {owner
           ? `They manage Advantage for ${program.schoolName} and can add you with the right role.`
-          : `Whoever is setting up ${program.schoolName} can add you with the right role.`
-      }
-      footer="No account is created for you, and nothing is queued — they add you when they're ready."
-    >
-      <ContactOwnerForm programKey={programKey} kind="request" ownerDisplay={owner} />
+          : `Whoever is setting up ${program.schoolName} can add you with the right role.`}
+      </p>
+      <ContactOwnerForm
+        programKey={programKey}
+        kind="request"
+        boxed
+        ownerDisplay={owner}
+        micro="No account is created for you, and nothing is queued — they add you when they're ready."
+      />
     </ClaimShell>
   );
 }

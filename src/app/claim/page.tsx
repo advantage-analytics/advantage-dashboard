@@ -1,27 +1,28 @@
-import { ClaimShell } from "@/components/claim/claim-shell";
+import { ClaimShell, ClaimHeading } from "@/components/claim/claim-shell";
 import { RoleChoice } from "@/components/claim/role-choice";
 
 export const metadata = { title: "How do you use Advantage?" };
 
 /**
- * F2 — the branch point.
+ * F2 — question one, who are you here as.
  *
- * One question on a 1000px page. The design's own note: it "looks empty in a
- * screenshot and reads correctly in use", because the answer changes everything
- * downstream, so it gets the whole page.
+ * One question, three cards, 840px of page. Identical to Onboarding 0.2 — one
+ * question vocabulary product-wide. "I coach" goes straight to F3 program
+ * setup; the other two answers leave this flow.
  *
- * An individual player leaves this flow entirely for the existing consumer
- * signup. The spec is explicit that they must not get a collegiate-flavoured
- * dead end.
+ * No back: the account already exists behind this screen, so there is nothing
+ * of this flow to go back to. ✕ leaves setup with the account intact.
  */
 export default function ClaimStartPage() {
   return (
-    <ClaimShell
-      step="Step 1 of 2"
-      heading="How do you use Advantage?"
-      sub="This decides which setup you get. It doesn't limit what you can do later."
-      footer="You can change this in settings."
-    >
+    <ClaimShell width={840} gap={28}>
+      <ClaimHeading
+        gap={8}
+        step="Step 1 of 2"
+        title="How do you use Advantage?"
+        body="This sets what your dashboard opens on. You can change it in settings."
+        bodyMax="60ch"
+      />
       <RoleChoice />
     </ClaimShell>
   );

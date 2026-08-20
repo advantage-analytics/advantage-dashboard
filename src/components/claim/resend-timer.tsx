@@ -24,12 +24,12 @@ export function ResendTimer({ email }: { email: string }) {
     const mins = Math.floor(left / 60);
     const secs = String(left % 60).padStart(2, "0");
     return (
-      <p className="text-[12px] text-[var(--ink-500)]">
+      <span className="text-micro">
         Resend in{" "}
-        <span className="font-mono text-[var(--ink-700)]">
+        <span className="mono tabular">
           {mins}:{secs}
         </span>
-      </p>
+      </span>
     );
   }
 
@@ -37,7 +37,7 @@ export function ResendTimer({ email }: { email: string }) {
     <button
       type="button"
       onClick={() => setLeft(RESEND_AFTER_SECONDS)}
-      className="text-[12px] text-[var(--blue)] underline decoration-[var(--blue)]/30 underline-offset-2 transition-colors hover:decoration-[var(--blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)] rounded-sm cursor-pointer"
+      className="cursor-pointer rounded-sm text-[11px] text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]"
     >
       Resend the link to {email}
     </button>

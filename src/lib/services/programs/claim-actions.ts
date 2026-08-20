@@ -148,6 +148,8 @@ export type CompleteClaimResult =
       programKey: string;
       programId: string;
       schoolName: string;
+      /** "mens" | "womens" — which of the two workspaces this claim made. */
+      team: string;
       email: string;
       alreadyOwned: boolean;
       /**
@@ -232,7 +234,7 @@ export async function completeClaim(): Promise<CompleteClaimResult> {
   };
   const { data: program } = await db
     .from("programs")
-    .select("school_name, primary_domain, athletics_domains, domain_match_skips_review")
+    .select("school_name, team, primary_domain, athletics_domains, domain_match_skips_review")
     .eq("program_key", pending.programKey)
     .maybeSingle();
 
@@ -271,6 +273,7 @@ export async function completeClaim(): Promise<CompleteClaimResult> {
     programKey: pending.programKey,
     programId: rpc?.program_id ?? "",
     schoolName: program.school_name as string,
+    team: program.team as string,
     email,
     alreadyOwned: Boolean(rpc?.already_owned),
     // `contact_matched` is the decision; `status` is what it produced. Reading

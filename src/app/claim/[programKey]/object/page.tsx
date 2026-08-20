@@ -6,7 +6,7 @@ import {
   teamLabel,
   programSubtitle,
 } from "@/lib/data/programs-server";
-import { ClaimShell } from "@/components/claim/claim-shell";
+import { ClaimShell, ClaimHeading } from "@/components/claim/claim-shell";
 import { ContactOwnerForm } from "@/components/claim/contact-owner-form";
 
 export const metadata = { title: "This isn't right" };
@@ -50,23 +50,33 @@ export default async function ObjectPage({
   const owner = program.ownerDisplay;
 
   return (
-    <ClaimShell
-      eyebrow={eyebrow}
-      heading={pending ? "Tell us this claim is wrong" : "Tell us who should have this"}
-      sub={
-        pending
+    <ClaimShell width={720} gap={20} back={`/claim/${programKey}`}>
+      <ClaimHeading
+        gap={2}
+        eyebrow={eyebrow}
+        title={
+          pending ? "Tell us this claim is wrong" : "Tell us who should have this"
+        }
+        titlePadTop={8}
+      />
+      <p className="text-body max-w-[58ch]">
+        {pending
           ? `Someone set this up${age ? ` ${age} ago` : " recently"}. If that wasn't right, say so and we'll put the program back so the right person can claim it.`
           : owner
             ? `${owner} manages Advantage for ${program.schoolName}. If they've left, tell us and a person will check before anything changes.`
-            : "If the person listed has left, tell us and a person will check before anything changes."
-      }
-      footer={
-        pending
-          ? "Nothing has been analyzed yet, so nothing is lost."
-          : "Nothing is reversed automatically. We check first."
-      }
-    >
-      <ContactOwnerForm programKey={programKey} kind="object" ownerDisplay={owner} />
+            : "If the person listed has left, tell us and a person will check before anything changes."}
+      </p>
+      <ContactOwnerForm
+        programKey={programKey}
+        kind="object"
+        boxed
+        ownerDisplay={owner}
+        micro={
+          pending
+            ? "Nothing has been analyzed yet, so nothing is lost."
+            : "Nothing is reversed automatically. We check first."
+        }
+      />
     </ClaimShell>
   );
 }
