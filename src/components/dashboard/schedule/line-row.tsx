@@ -96,6 +96,7 @@ export function LineRow({
           state={state}
           match={match}
           entryId={entry.id}
+          matchId={match?.id ?? null}
           videoAllowed={supportsVideo(entry)}
           canEdit={canEdit}
           onScore={() => setScoring(true)}
@@ -109,6 +110,7 @@ function Action({
   state,
   match,
   entryId,
+  matchId,
   videoAllowed,
   canEdit,
   onScore,
@@ -116,6 +118,8 @@ function Action({
   state: ReturnType<typeof entryState>;
   match: EntryMatch | null;
   entryId: string;
+  /** Which of the entry's matches this row is. Null on an unplayed line. */
+  matchId: string | null;
   videoAllowed: boolean;
   canEdit: boolean;
   onScore: () => void;
@@ -170,9 +174,17 @@ function Action({
   // singles-only, so a doubles line can only take a SwingVision export and a
   // button promising video would be a promise the submit route refuses.
   if (!canEdit) return null;
+  // The match id rides along, because a tournament ENTRY has many matches. A
+  // link carrying only the entry would preset every round's upload to whichever
+  // match came back first — attaching a video to Q1 when the coach clicked R32,
+  // with nothing on screen to show for it.
   return (
     <Link
-      href={`/dashboard/team/upload?entry=${entryId}`}
+      href={
+        matchId
+          ? `/dashboard/team/upload?entry=${entryId}&match=${matchId}`
+          : `/dashboard/team/upload?entry=${entryId}`
+      }
       className="text-[11px] font-medium text-[var(--blue)]"
     >
       {videoAllowed ? "Add video" : "Add file"}

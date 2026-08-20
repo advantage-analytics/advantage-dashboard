@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/server";
 import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import { isWorking } from "@/lib/data/match-analysis";
 import { dualScore, entryPlayed } from "@/lib/schedule/entry-state";
+import { roundRank } from "@/lib/schedule/format";
 import type {
   EntryMatch,
   EventDetail,
@@ -177,7 +178,11 @@ async function readSchedule(
       playerLabels: row.player_labels ?? [],
       opponentLabels: row.opponent_labels ?? [],
       opponentSchool: row.opponent_school,
-      matches: matchesByEntry.get(row.id) ?? [],
+      // Sorted by the round ladder: `matches` has no created_at, so without
+      // this a tournament run renders in whatever order Postgres returned.
+      matches: (matchesByEntry.get(row.id) ?? []).sort(
+        (a, b) => roundRank(a.round) - roundRank(b.round)
+      ),
     };
     const list = entriesByEvent.get(row.event_id);
     if (list) list.push(entry);
@@ -221,6 +226,11 @@ export const getScheduleRows = cache(async function getScheduleRows(
   });
 });
 
+/** Did this entry produce any match at all? Distinguishes "unplayed" from "filmed". */
+function hasAnyMatch(all: EventEntry[], entryId: string): boolean {
+  return (all.find((entry) => entry.id === entryId)?.matches.length ?? 0) > 0;
+}
+
 /** One event and its entries, or null when it is not this program's. */
 export const getEventDetail = cache(async function getEventDetail(
   programId: string,
@@ -246,13 +256,29 @@ export const getUploadQueue = cache(async function getUploadQueue(
   return events
     .map((event) => {
       const all = entriesByEvent.get(event.id) ?? [];
-      const withVideo = all.filter((entry) =>
-        entry.matches.some((match) => match.hasVideo)
-      ).length;
-      const waiting = all.filter(
-        (entry) => !entry.matches.some((match) => match.hasVideo)
+
+      // Filtered per MATCH, not per entry. A tournament entry is a whole run,
+      // so dropping the entry as soon as any one round had video hid the other
+      // rounds entirely — a coach who filmed R32 could no longer reach Q1.
+      const waiting = all
+        .map((entry) => ({
+          ...entry,
+          matches: entry.matches.filter((match) => !match.hasVideo),
+        }))
+        // An entry with no matches at all is still uploadable: the wizard
+        // collects the score on the way through.
+        .filter((entry) => entry.matches.length > 0 || !hasAnyMatch(all, entry.id));
+
+      const withVideo = all.reduce(
+        (count, entry) => count + entry.matches.filter((m) => m.hasVideo).length,
+        0
       );
-      return { event, entries: waiting, withVideo, total: all.length };
+      const total = all.reduce(
+        (count, entry) => count + Math.max(1, entry.matches.length),
+        0
+      );
+
+      return { event, entries: waiting, withVideo, total };
     })
     .filter((group) => group.entries.length > 0);
 });

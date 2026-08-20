@@ -3,9 +3,12 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { ScoreEntry } from "@/components/dashboard/schedule/score-entry";
+import { ROUND_ORDER } from "@/lib/schedule/format";
 import type { EventEntry } from "@/lib/schedule/types";
 
-const ROUNDS = ["Q1", "Q2", "Q3", "R64", "R32", "R16", "QF", "SF", "F", "C1", "C2"];
+// The same ladder the run is sorted by. Two lists would let the picker offer a
+// round the sort does not know, which sends that match to the end of the run.
+const ROUNDS = ROUND_ORDER;
 
 /**
  * "Add first result" / "Add result" under a tournament entry.
@@ -17,6 +20,21 @@ const ROUNDS = ["Q1", "Q2", "Q3", "R64", "R32", "R16", "QF", "SF", "F", "C1", "C
 export function AddResultRow({ entry }: { entry: EventEntry }) {
   const [open, setOpen] = useState(false);
   const [round, setRound] = useState(() => nextRound(entry));
+
+  /**
+   * Recompute the suggested round every time the form OPENS, not once at mount.
+   *
+   * This component stays mounted across the refresh that follows a save, so a
+   * `useState` initializer keeps offering the round that was just recorded.
+   * Combined with recordResult's (entry, round) de-duplication that is worse
+   * than a wrong default: saving would UPDATE the round just entered instead of
+   * adding the next one, and the coach's previous result would vanish with no
+   * error.
+   */
+  function openForm() {
+    setRound(nextRound(entry));
+    setOpen(true);
+  }
 
   if (open) {
     return (
@@ -49,7 +67,7 @@ export function AddResultRow({ entry }: { entry: EventEntry }) {
   return (
     <button
       type="button"
-      onClick={() => setOpen(true)}
+      onClick={openForm}
       className="inline-flex cursor-pointer items-center gap-1.5 py-2.5 text-[11px] font-medium text-[var(--blue)]"
     >
       <Plus strokeWidth={2} className="size-3" />

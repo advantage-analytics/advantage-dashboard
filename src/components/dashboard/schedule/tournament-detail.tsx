@@ -7,7 +7,11 @@ import { LineRow } from "@/components/dashboard/schedule/line-row";
 import { RunStrip, runRecord } from "@/components/dashboard/schedule/run-strip";
 import { AddResultRow } from "@/components/dashboard/schedule/add-result-row";
 import { entryState } from "@/lib/schedule/entry-state";
-import { formatEventSpanWithYear, siteTitle } from "@/lib/schedule/format";
+import {
+  drawOfRound,
+  formatEventSpanWithYear,
+  siteTitle,
+} from "@/lib/schedule/format";
 import type { EventDetail, EventEntry } from "@/lib/schedule/types";
 
 const COLUMNS = "grid-cols-[44px_52px_1fr_168px_110px]";
@@ -36,9 +40,13 @@ export function TournamentDetail({
     (count, entry) => count + (entryState(entry) === "working" ? 1 : 0),
     0
   );
-  const withoutVideo = entries.filter(
-    (entry) => entryState(entry) === "no-video"
-  ).length;
+  // Matches, not entries. A coach reading "1 without video" under a tournament
+  // is counting films to make, and one entry can be a four-match run — counting
+  // entries told them to film once when four were waiting.
+  const withoutVideo = entries.reduce(
+    (count, entry) => count + entry.matches.filter((match) => !match.hasVideo).length,
+    0
+  );
 
   return (
     <EventShell
@@ -55,7 +63,10 @@ export function TournamentDetail({
             >
               {formatEventSpanWithYear(event.startsOn, event.endsOn)}
             </span>
-            {played > 0 ? " · final" : ""}
+            {/* No "· final" here. A dual is final when every line is in — a
+                fact the page can check. A tournament has no such signal: one
+                result played is not a finished weekend, and printing "final"
+                after the first one says the opposite of what is true. */}
           </span>
           <div
             className="mt-2.5 text-[30px] font-light leading-[34px] tracking-[-0.6px]"
@@ -140,7 +151,7 @@ function EntryRun({ entry, canEdit }: { entry: EventEntry; canEdit: boolean }) {
   // Segment only where a player actually moved. One draw across a whole run is
   // the normal case, and heading it "Main draw" tells the reader nothing.
   const draws = new Set(
-    entry.matches.map((match) => drawOf(match.round) ?? entry.draw ?? "Main draw")
+    entry.matches.map((match) => drawOfRound(match.round) ?? entry.draw ?? "Main draw")
   );
   const segmented = draws.size > 1;
 
@@ -159,9 +170,10 @@ function EntryRun({ entry, canEdit }: { entry: EventEntry; canEdit: boolean }) {
               <span className="tabular">{entry.seed}</span>
             </>
           ) : null}
-          {!segmented && entry.matches.length > 0
-            ? " · no segments — never left it"
-            : ""}
+          {/* The design annotates a single-draw run with "no segments — never
+              left it". That reads as a claim about a FINISHED run, and after
+              one match it is just noise — the absence of segment headings
+              already says the player has not moved draws. */}
         </span>
         <div className="flex-1" />
         <RunStrip matches={entry.matches} />
@@ -209,28 +221,13 @@ function EntryRun({ entry, canEdit }: { entry: EventEntry; canEdit: boolean }) {
   );
 }
 
-/**
- * Which draw a round belongs to, read off the round label.
- *
- * 'Q1'/'Q2' are qualifying, 'C…' is consolation, everything else is where the
- * entry started. Derived rather than stored because a result's round is what a
- * coach actually types, and asking them to also re-declare the draw on every
- * row would be asking the same question twice.
- */
-function drawOf(round: string | null): string | null {
-  if (!round) return null;
-  if (/^Q\d/i.test(round)) return "Qualifying";
-  if (/^C/i.test(round)) return "Consolation";
-  return null;
-}
-
 function groupByDraw(entry: EventEntry) {
   const home = entry.draw ?? "Main draw";
   const order: string[] = [];
   const buckets = new Map<string, EventEntry["matches"]>();
 
   for (const match of entry.matches) {
-    const draw = drawOf(match.round) ?? home;
+    const draw = drawOfRound(match.round) ?? home;
     if (!buckets.has(draw)) {
       buckets.set(draw, []);
       order.push(draw);

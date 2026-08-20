@@ -93,3 +93,44 @@ export function splitNames(text: string): string[] {
     .map((part) => part.trim())
     .filter(Boolean);
 }
+
+/**
+ * Tournament rounds, in the order a weekend is played.
+ *
+ * Consolation sits at the end because it is entered after the loss that sent a
+ * player there — a run reads Q1, Q2, R32, R16, then C1, which is the sequence
+ * the matches actually happened in.
+ *
+ * Shared by the round picker and the run's sort. `matches` has no `created_at`,
+ * so this ladder IS the chronology; without it a run renders in whatever order
+ * Postgres returned, and Osei's weekend read R32, Q1, Q2.
+ */
+export const ROUND_ORDER = [
+  "Q1", "Q2", "Q3",
+  "R128", "R64", "R32", "R16", "QF", "SF", "F",
+  "C1", "C2", "C3",
+];
+
+/** Sort key for a round, or a large number for one we do not recognise. */
+export function roundRank(round: string | null): number {
+  if (!round) return Number.MAX_SAFE_INTEGER;
+  const index = ROUND_ORDER.indexOf(round.toUpperCase());
+  return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+}
+
+/**
+ * Which draw a round belongs to — read from the ROUND, not from the entry.
+ *
+ * `Q*` is qualifying, `C*` is consolation, anything else is the main draw. The
+ * entry's `draw` records where a player STARTED; using it to label their later
+ * rounds put a qualifier's R32 under "Qualifying" and hid the fact they had
+ * come through, which is the one thing the segments exist to show.
+ */
+export function drawOfRound(round: string | null): string | null {
+  if (!round) return null;
+  const upper = round.toUpperCase();
+  if (/^Q\d/.test(upper)) return "Qualifying";
+  if (/^C\d/.test(upper)) return "Consolation";
+  if (/^(R\d+|QF|SF|F)$/.test(upper)) return "Main draw";
+  return null;
+}

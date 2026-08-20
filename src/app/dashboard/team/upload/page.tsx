@@ -28,9 +28,9 @@ import type { EventPreset } from "@/components/dashboard/matches/new-match-wizar
 export default async function TeamUploadPage({
   searchParams,
 }: {
-  searchParams: Promise<{ entry?: string }>;
+  searchParams: Promise<{ entry?: string; match?: string }>;
 }) {
-  const { entry: entryId } = await searchParams;
+  const { entry: entryId, match: matchId } = await searchParams;
 
   const workspace = await getWorkspaceContext();
   if (!workspace) redirect("/login");
@@ -46,7 +46,15 @@ export default async function TeamUploadPage({
       const entry = group.entries.find((candidate) => candidate.id === entryId);
       if (!entry) continue;
 
-      const match = entry.matches[0] ?? null;
+      // The row that was clicked, not just the entry's first match. A
+      // tournament entry is a whole run, so `?match=` is what says which round
+      // this video belongs to.
+      const match =
+        (matchId
+          ? entry.matches.find((candidate) => candidate.id === matchId)
+          : undefined) ??
+        entry.matches[0] ??
+        null;
       const preset: EventPreset = {
         entryId: entry.id,
         eventId: group.event.id,
@@ -119,28 +127,43 @@ function LinePicker({
                 className="text-micro tabular"
                 style={{ color: "var(--ink-600)" }}
               >
-                {group.entries.length} without video
+                {/* Rows, not entries — a tournament run contributes one row
+                    per round, and counting entries said 4 above 6 links. */}
+                {group.entries.reduce(
+                  (count, entry) => count + Math.max(1, entry.matches.length),
+                  0
+                )}{" "}
+                without video
               </span>
             </div>
 
-            {group.entries.map((entry) => (
+            {group.entries.flatMap((entry) =>
+              // One row per videoless MATCH, so a tournament run offers each
+              // round separately. An entry with no matches yet is one row.
+              (entry.matches.length > 0
+                ? entry.matches.map((match) => ({ match, key: match.id }))
+                : [{ match: null, key: entry.id }]
+              ).map(({ match, key }) => (
               <Link
-                key={entry.id}
-                href={`/dashboard/team/upload?entry=${entry.id}`}
+                key={key}
+                href={
+                  match
+                    ? `/dashboard/team/upload?entry=${entry.id}&match=${match.id}`
+                    : `/dashboard/team/upload?entry=${entry.id}`
+                }
                 className="grid grid-cols-[44px_1fr_120px_16px] items-center gap-3.5 border-b border-[var(--border-hairline)] py-3 transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)]"
               >
                 <span
                   className="mono text-[11px]"
                   style={{ color: "var(--ink-600)" }}
                 >
-                  {entry.slot ?? entry.matches[0]?.round ?? "—"}
+                  {entry.slot ?? match?.round ?? "—"}
                 </span>
                 <span className="min-w-0 truncate text-[13px] text-[var(--ink-900)]">
                   {entry.playerLabels.join(" / ")}{" "}
                   <span style={{ color: "var(--ink-600)" }}>vs</span>{" "}
-                  {(entry.matches[0]?.opponentLabels ?? entry.opponentLabels).join(
-                    " / "
-                  ) || "—"}
+                  {(match?.opponentLabels ?? entry.opponentLabels).join(" / ") ||
+                    "—"}
                 </span>
                 <span
                   className="text-micro text-right"
@@ -153,7 +176,8 @@ function LinePicker({
                   className="size-3.5 text-[var(--ink-400)]"
                 />
               </Link>
-            ))}
+              ))
+            )}
           </div>
         ))}
       </div>
