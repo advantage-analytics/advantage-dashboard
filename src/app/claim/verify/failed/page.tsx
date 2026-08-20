@@ -1,6 +1,13 @@
 import Link from "next/link";
 import type { ClaimFailure } from "@/lib/services/programs/claim-actions";
-import { ClaimShell, CLAIM_BUTTON, CLAIM_LINK } from "@/components/claim/claim-shell";
+import {
+  ClaimShell,
+  ClaimHeading,
+  ClaimActions,
+  CLAIM_BUTTON,
+  CLAIM_LINK,
+  CLAIM_MICRO,
+} from "@/components/claim/claim-shell";
 
 export const metadata = { title: "We couldn't finish this" };
 
@@ -57,26 +64,29 @@ export default async function ClaimFailedPage({
   const copy = COPY[reason as ClaimFailure] ?? COPY.failed;
 
   return (
-    <ClaimShell heading={copy.heading} sub={copy.sub}>
+    <ClaimShell width={720} gap={20} back="/claim/program">
+      <ClaimHeading gap={6} title={copy.heading} body={copy.sub} bodyMax="58ch" />
       {copy.restart ? (
         <>
-          <Link href="/claim/program" className={CLAIM_BUTTON}>
-            Find your program again
-          </Link>
-          <p className="mt-4 text-[12px] leading-[1.6] text-[var(--ink-500)]">
+          <ClaimActions>
+            <Link href="/claim/program" className={CLAIM_BUTTON}>
+              Find your program again
+            </Link>
+          </ClaimActions>
+          <span className={CLAIM_MICRO}>
             Nothing was created, and no one has been told anything. Picking the
             program again sends a fresh link.
-          </p>
+          </span>
         </>
       ) : (
-        <div className="flex flex-col gap-4">
+        <ClaimActions>
           <Link href="/dashboard" className={CLAIM_BUTTON}>
             Go to your account
           </Link>
           <Link href="/claim/program" className={CLAIM_LINK}>
             Choose a different program
           </Link>
-        </div>
+        </ClaimActions>
       )}
     </ClaimShell>
   );

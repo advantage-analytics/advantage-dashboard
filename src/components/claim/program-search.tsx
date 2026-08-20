@@ -11,12 +11,29 @@ import { teamLabel, programSubtitle } from "@/lib/data/programs-server";
 const DEBOUNCE_MS = 180;
 
 /**
+ * The four columns, once.
+ *
+ * At page scale the result list is a table, not a stack of two-line cards:
+ * school, squad, division and who has it already, each in its own column so a
+ * coach scanning for their own program reads down one column instead of across
+ * every row. Below `sm` it falls back to a stack, because four columns in
+ * 375px is four columns of nothing.
+ *
+ * The division column is wider than the frame's `1fr`. Real conference names
+ * are "Mississippi Association of Community Colleges Conference", not the "Big
+ * Sky" the mock happened to use, and it is the one column here with no second
+ * chance to be read.
+ */
+const ROW_GRID =
+  "grid gap-2 sm:grid-cols-[minmax(0,1.5fr)_90px_minmax(0,1.3fr)_110px] sm:items-center sm:gap-4";
+
+/**
  * What picking a row means.
  *
- * `claim` is the coach's path and the default, so every existing caller keeps
- * today's behaviour. `join` is the player's: they land on the invite request
- * rather than the status page, because the status page's unclaimed branch leads
- * with "Set up this program" and a player must never be routed at that.
+ * `claim` is the coach's path and the default. `join` is the player's: they
+ * land on the invite request rather than the status page, because the status
+ * page's unclaimed branch leads with "Set up this program" and a player must
+ * never be routed at that.
  */
 export type SearchIntent = "claim" | "join";
 
@@ -67,10 +84,10 @@ export function ProgramSearch({ intent = "claim" }: { intent?: SearchIntent }) {
   }, [query, active]);
 
   return (
-    <div>
-      <div className="flex items-center gap-2.5 rounded-[10px] border border-[var(--border-medium)] bg-[var(--surface-card)] px-3.5 focus-within:border-[var(--ink-900)]">
+    <div className="flex flex-col gap-5">
+      <div className="flex h-[38px] items-center gap-2.5 rounded-[var(--radius-element)] border border-[var(--border-field)] bg-[var(--surface-card)] px-3 focus-within:border-[var(--blue)] focus-within:ring-2 focus-within:ring-[var(--blue-ring-40)]">
         <Search
-          className="size-[15px] shrink-0 text-[var(--ink-400)]"
+          className="size-[15px] shrink-0 text-[var(--ink-600)]"
           strokeWidth={1.5}
           aria-hidden="true"
         />
@@ -81,7 +98,7 @@ export function ProgramSearch({ intent = "claim" }: { intent?: SearchIntent }) {
           placeholder="Search by school"
           aria-label="Search for your program"
           autoFocus
-          className="h-11 w-full bg-transparent text-[14px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)]"
+          className="h-full w-full bg-transparent text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)]"
         />
         {loading && (
           <Loader2
@@ -92,11 +109,14 @@ export function ProgramSearch({ intent = "claim" }: { intent?: SearchIntent }) {
       </div>
 
       {active && visible.length > 0 && (
-        <ul className="mt-2 overflow-hidden rounded-[10px] border border-[var(--border-hairline)] bg-[var(--surface-card)]">
+        <ul className="overflow-hidden rounded-[var(--radius-element)] border border-[var(--border-medium)] bg-[var(--surface-card)]">
           {visible.map((program) => {
             const taken = program.status !== "unclaimed";
             return (
-              <li key={program.programKey}>
+              <li
+                key={program.programKey}
+                className="border-t border-[var(--border-hairline)] first:border-t-0"
+              >
                 <button
                   type="button"
                   onClick={() =>
@@ -106,27 +126,21 @@ export function ProgramSearch({ intent = "claim" }: { intent?: SearchIntent }) {
                         : `/claim/${program.programKey}`
                     )
                   }
-                  className="flex w-full items-center gap-4 border-b border-[var(--border-hairline)] px-4 py-3 text-left transition-colors duration-150 last:border-b-0 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none cursor-pointer"
+                  className={`${ROW_GRID} w-full cursor-pointer px-4 py-3 text-left transition-colors duration-[var(--duration-fast)] hover:bg-[var(--surface-page)] focus-visible:bg-[var(--surface-page)] focus-visible:outline-none`}
                 >
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] text-[var(--ink-900)]">
-                      {program.schoolName}{" "}
-                      <span className="text-[var(--ink-500)]">
-                        {teamLabel(program.team)}
-                      </span>
-                    </span>
-                    <span className="mt-0.5 block truncate text-[11px] text-[var(--ink-500)]">
-                      {programSubtitle(program.division, program.conference)}
-                    </span>
+                  <span className="truncate text-[13px] text-[var(--ink-900)]">
+                    {program.schoolName}
+                  </span>
+                  <span className="text-body-sm">
+                    {teamLabel(program.team)}
+                  </span>
+                  <span className="text-body-sm truncate">
+                    {programSubtitle(program.division, program.conference)}
                   </span>
 
                   {/* The whole point of the list: it says which programs are
                       already claimed before anyone commits to a row. */}
-                  <span
-                    className={`shrink-0 text-[11px] ${
-                      taken ? "text-[var(--ink-700)]" : "text-[var(--ink-400)]"
-                    }`}
-                  >
+                  <span className="text-micro truncate sm:text-right">
                     {taken
                       ? (program.ownerDisplay ?? "Set up")
                       : intent === "join"
@@ -141,19 +155,16 @@ export function ProgramSearch({ intent = "claim" }: { intent?: SearchIntent }) {
       )}
 
       {active && searched && !loading && visible.length === 0 && (
-        <p className="mt-3 text-[12px] text-[var(--ink-500)]">
-          Nothing matched that.
-        </p>
+        <p className="text-body-sm">Nothing matched that.</p>
       )}
 
-      {/* Persistent, not a last resort at the bottom of an empty result. All
-          1,940 teams are in the directory now, so this is the rare path — but
-          it must never feel like an error when it happens. */}
-      <p className="mt-4 text-[12px] text-[var(--ink-500)]">
+      {/* Persistent, not a last resort at the bottom of an empty result. It
+          must never feel like an error when it happens. */}
+      <p className="text-micro">
         Can&#39;t find it?{" "}
         <Link
           href="/claim/program/new"
-          className="text-[var(--blue)] underline decoration-[var(--blue)]/30 underline-offset-2 hover:decoration-[var(--blue)]"
+          className="text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
         >
           Tell us the program
         </Link>{" "}

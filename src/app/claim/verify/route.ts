@@ -35,6 +35,7 @@ export async function GET() {
 
   const params = new URLSearchParams({
     school: result.schoolName,
+    team: result.team,
     email: result.email,
   });
 

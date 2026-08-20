@@ -27,6 +27,7 @@ import type { MemberRole } from "@/lib/data/team-settings-server";
  */
 
 const SETTINGS_PATH = "/dashboard/settings/team";
+const TEAM_HOME_PATH = "/dashboard/team";
 
 /** The program the caller is currently in, or null if they are not in one. */
 async function activeProgramId(): Promise<string | null> {
@@ -78,6 +79,7 @@ export async function saveTeamSettings(
   }
 
   revalidatePath(SETTINGS_PATH);
+  revalidatePath(TEAM_HOME_PATH);
   return { ok: true };
 }
 
@@ -114,6 +116,7 @@ export async function inviteMember(input: {
   }
 
   revalidatePath(SETTINGS_PATH);
+  revalidatePath(TEAM_HOME_PATH);
   return { ok: true };
 }
 
@@ -128,6 +131,7 @@ export async function revokeInvite(inviteId: string): Promise<ActionResult> {
   }
 
   revalidatePath(SETTINGS_PATH);
+  revalidatePath(TEAM_HOME_PATH);
   return { ok: true };
 }
 
@@ -146,5 +150,62 @@ export async function removeMember(userId: string): Promise<ActionResult> {
   }
 
   revalidatePath(SETTINGS_PATH);
+  revalidatePath(TEAM_HOME_PATH);
+  return { ok: true };
+}
+
+/**
+ * Flip one permission without opening the settings page.
+ *
+ * The invite dialog states this rule at the moment it becomes true for
+ * somebody — "off, their matches still appear when you send them" — so the
+ * switch beside that sentence has to be the real permission, not a copy of it
+ * that Settings could contradict an hour later.
+ *
+ * It re-reads the row and writes it back through the same RPC rather than
+ * patching one column, because `update_program_settings` is where the staff
+ * check lives. The read is the program's own row, which staff may read; the
+ * write is refused in SQL if they may not.
+ */
+export async function setPlayersCanUpload(
+  next: boolean
+): Promise<ActionResult> {
+  const programId = await activeProgramId();
+  if (!programId) return { ok: false, error: NOT_IN_PROGRAM };
+
+  const supabase = await createClient();
+  const { data: program, error: readError } = await supabase
+    .from("programs")
+    .select(
+      "school_name, team, conference, home_venue, default_surface, season, roster_visible"
+    )
+    .eq("id", programId)
+    .maybeSingle();
+
+  if (readError || !program) {
+    return { ok: false, error: "Couldn't read the program's settings." };
+  }
+
+  const { error } = await supabase.rpc("update_program_settings", {
+    p_program_id: programId,
+    p_school_name: program.school_name,
+    p_team: program.team,
+    p_conference: program.conference ?? "",
+    p_home_venue: program.home_venue ?? "",
+    p_default_surface: program.default_surface,
+    p_season: program.season ?? "",
+    p_roster_visible: program.roster_visible,
+    p_players_can_upload: next,
+  });
+
+  if (error) {
+    return {
+      ok: false,
+      error: toMessage(error, "Couldn't change that permission."),
+    };
+  }
+
+  revalidatePath(SETTINGS_PATH);
+  revalidatePath(TEAM_HOME_PATH);
   return { ok: true };
 }

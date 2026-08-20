@@ -2,47 +2,70 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CLAIM_BUTTON } from "./claim-shell";
+import { User, Users, Shield } from "lucide-react";
+import { CLAIM_BUTTON, ClaimActions, CLAIM_MICRO } from "./claim-shell";
 import { cn } from "@/lib/utils";
 
-type Choice = "coach" | "player" | "individual";
+type Choice = "play" | "coach" | "junior";
 
-const OPTIONS: { id: Choice; label: string; sub: string }[] = [
+/**
+ * Three cards across, not three rows down.
+ *
+ * At page scale the answers are siblings and should be read as a set — a
+ * stacked list makes the first one look like the recommendation. Each card
+ * carries an icon, the answer, and what it gets you, which is all a person
+ * needs to pick without reading twice.
+ *
+ * The wording is Onboarding 0.2's, verbatim: one question vocabulary
+ * product-wide, so the same three answers mean the same three things wherever
+ * they are asked.
+ */
+const OPTIONS: {
+  id: Choice;
+  icon: typeof User;
+  label: string;
+  sub: string;
+}[] = [
+  {
+    id: "play",
+    icon: User,
+    label: "I play",
+    sub: "My own matches, my own numbers.",
+  },
   {
     id: "coach",
-    label: "I coach or work with a college program",
-    sub: "You'll set up the program and invite the rest.",
+    icon: Users,
+    label: "I coach",
+    sub: "A roster of players, one shared budget.",
   },
   {
-    id: "player",
-    label: "I play for a college program",
-    sub: "Your coach invites you — or you can ask.",
-  },
-  {
-    id: "individual",
-    label: "I'm an individual player",
-    sub: "Club, junior, or unattached.",
+    id: "junior",
+    icon: Shield,
+    label: "I manage a junior's account",
+    sub: "Parent or academy staff.",
   },
 ];
 
 /**
  * Where each answer goes.
  *
- * An individual player leaves for the existing consumer signup rather than
- * being walked through a collegiate flow that does not apply to them — the spec
- * calls that out specifically.
+ * "I coach" skips the player branch and goes straight to F3 program setup, and
+ * "I manage a junior's account" leaves for the standard signup rather than
+ * being walked through a collegiate path that does not apply — no
+ * collegiate-flavoured dead end.
  *
- * A player on a program starts at the same search, because asking to be added
- * begins by naming the school — but with `intent=join`, and that is not
- * cosmetic. Without it the search pushed every persona to the program's status
- * page, whose unclaimed branch makes "Set up this program" the primary action.
- * A player answering this question honestly was being handed ownership of their
- * own coach's program.
+ * "I play" is the one answer routed against the design's note, which sends it
+ * out to Onboarding 0.3 along with the parent. 0.3 is where the invited-player
+ * branch lives and it does not exist yet, so leaving here would send a player
+ * on a program to consumer signup and orphan the request-an-invite path
+ * entirely. `intent=join` keeps them on the search but off the "Set up this
+ * program" action, which is the one thing a player must never be routed at.
+ * Point this at 0.3 when 0.3 ships.
  */
 const DESTINATION: Record<Choice, string> = {
+  play: "/claim/program?intent=join",
   coach: "/claim/program",
-  player: "/claim/program?intent=join",
-  individual: "/sign-up",
+  junior: "/sign-up",
 };
 
 export function RoleChoice() {
@@ -50,10 +73,15 @@ export function RoleChoice() {
   const [choice, setChoice] = useState<Choice | null>(null);
 
   return (
-    <div>
-      <div role="radiogroup" aria-label="How do you use Advantage?" className="flex flex-col gap-2.5">
+    <div className="flex flex-col gap-7">
+      <div
+        role="radiogroup"
+        aria-label="How do you use Advantage?"
+        className="grid gap-3 sm:grid-cols-3"
+      >
         {OPTIONS.map((option) => {
           const selected = choice === option.id;
+          const Icon = option.icon;
           return (
             <button
               key={option.id}
@@ -62,31 +90,43 @@ export function RoleChoice() {
               aria-checked={selected}
               onClick={() => setChoice(option.id)}
               className={cn(
-                "rounded-[10px] border px-4 py-3.5 text-left transition-colors duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]",
+                "flex cursor-pointer flex-col gap-2 rounded-[var(--radius-element)] border p-5 text-left transition-colors duration-[var(--duration-fast)]",
+                "focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]",
                 selected
-                  ? "border-[var(--ink-900)] bg-[var(--surface-card)]"
-                  : "border-[var(--border-medium)] bg-[var(--surface-card)] hover:border-[var(--ink-300)]"
+                  ? "border-[var(--blue)] bg-[var(--blue-soft)]"
+                  : "border-[var(--border-field)] bg-[var(--surface-card)] hover:bg-[var(--surface-subtle)]"
               )}
             >
-              <span className="block text-[13px] font-medium text-[var(--ink-900)]">
+              <Icon
+                className={cn(
+                  "size-5",
+                  selected ? "text-[var(--blue)]" : "text-[var(--ink-600)]"
+                )}
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+              <span className="text-[14px] text-[var(--ink-900)]">
                 {option.label}
               </span>
-              <span className="mt-0.5 block text-[12px] text-[var(--ink-500)]">
-                {option.sub}
-              </span>
+              <span className="text-body-sm">{option.sub}</span>
             </button>
           );
         })}
       </div>
 
-      <button
-        type="button"
-        disabled={!choice}
-        onClick={() => choice && router.push(DESTINATION[choice])}
-        className={cn(CLAIM_BUTTON, "mt-6")}
-      >
-        Continue
-      </button>
+      <ClaimActions gap={16}>
+        <button
+          type="button"
+          disabled={!choice}
+          onClick={() => choice && router.push(DESTINATION[choice])}
+          className={CLAIM_BUTTON}
+        >
+          Continue
+        </button>
+        <span className={CLAIM_MICRO}>
+          Coaches take a different second step.
+        </span>
+      </ClaimActions>
     </div>
   );
 }
