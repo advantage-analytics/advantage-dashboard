@@ -22,6 +22,36 @@ one — entering credentials is not something this agent does. The walkthrough i
 Step 3, and the personal-wizard regression check in Step 4, both still need a
 human at the keyboard.
 
+**Second pass, same day — a static integration audit stood in for part of it.**
+Rather than only re-checking types, every constant and policy the new code
+crosses into existing systems with was verified against the database and the
+route handlers. Five bugs that type-check and build clean but fail the moment a
+coach uses them:
+
+1. `providerId: "swingvision"` — the registry spells it `swing-vision`, so every
+   SwingVision import returned "Unsupported provider". Now a typed `ProviderId`.
+2. `createTournament` wrote `format: {}`, so `adScoring` reached `job-request.ts`
+   as null and every tournament video was refused with "Choose ad or no-ad
+   scoring". The tournament form now asks, as the dual form already did.
+3. The wizard wrote `fixed_camera` / `initial_top_player_is_player1` onto
+   `matches`. Nothing reads those columns, and the `matches` UPDATE policy is
+   `created_by = auth.uid()` — so a coach uploading for a line a colleague
+   scored updated zero rows with no error. Dropped.
+4. `job-request.ts` refuses doubles outright ("Video analysis supports singles
+   matches only"), which round 22's frames predate — 22c draws `doubles2.mp4 →
+   D2`. Doubles lines now read "Add file", accept a SwingVision export only, and
+   say why. **This is a design-vs-reality conflict worth a decision:** either the
+   vendor gains doubles support, or the frames need updating.
+5. `entryState` sent an uploaded-but-not-yet-running line to `no-video` — telling
+   a coach there was no video for one they had just uploaded. New `waiting`
+   state covers exactly the two idle-in-flight statuses (`uploaded`,
+   `processed`); `queued` stays `working`, matching `isWorking` so a state that
+   pulses here pulses on the match page.
+
+The harness was re-run with `waiting` and `supportsVideo` cases: 22 checks, all
+passing. One expectation in it was wrong rather than the code — `queued` is
+working, not waiting — and was corrected against `match-analysis.ts`'s sets.
+
 What was verified instead, because a wrong answer there is silent: the pure
 predicates in `lib/schedule/entry-state.ts` were exercised through a throwaway
 `tsx` harness — 18 cases, all passing, covering tiebreak sets counting games
