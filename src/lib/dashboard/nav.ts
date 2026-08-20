@@ -76,7 +76,19 @@ export const TEAM_BOTTOM: readonly NavLink[] = [
   { name: "Help Center", href: "/dashboard/help", icon: HelpCircle },
 ];
 
+/**
+ * Destinations that are NOT rail items but still need naming.
+ *
+ * The header reads `navLabel(pathname)` for its crumb, and longest-match over
+ * the rail alone put "Team Home" above the upload wizard — a crumb naming a
+ * page you are not on. These carry a name without claiming a place in the rail.
+ */
+const UNLISTED: readonly NavLink[] = [
+  { name: "Upload video", href: "/dashboard/team/upload", icon: Calendar },
+];
+
 const ALL_LINKS: readonly NavLink[] = [
+  ...UNLISTED,
   ...PERSONAL_NAV,
   ...TEAM_NAV,
   ...PERSONAL_BOTTOM,

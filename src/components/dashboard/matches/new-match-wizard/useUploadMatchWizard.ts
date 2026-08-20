@@ -45,7 +45,8 @@ import {
   DetailField,
   VideoProbeSummary,
   DEFAULT_FORM_DATA,
-  STEP_ORDER_BY_KIND
+  STEP_ORDER_BY_KIND,
+  type EventPreset
 } from "./types";
 import {
   determineWinner,
@@ -91,6 +92,15 @@ export interface UseUploadMatchWizardProps {
    * outlives the wizard, which is what this is for.
    */
   onVideoUpload?: (event: VideoUploadEvent) => void;
+  /**
+   * Set in a team workspace: the event line this upload belongs to.
+   *
+   * When present the wizard stops being a match CREATOR and becomes a match
+   * FILLER — the line already exists, so provider, players, date, surface,
+   * format and often the score all arrive answered, and the only thing left is
+   * the video and the two questions no lineup can know.
+   */
+  preset?: EventPreset | null;
 }
 
 /**
@@ -203,6 +213,7 @@ export function useUploadMatchWizard({
   onOpenChange,
   onCreated,
   onVideoUpload,
+  preset,
 }: UseUploadMatchWizardProps): UseUploadMatchWizardReturn {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -333,6 +344,33 @@ export function useUploadMatchWizard({
   useEffect(() => {
     if (!open) return;
 
+    // A team upload never resumes a personal draft. The line it is filling is
+    // named in the URL, and restoring a half-finished personal match over it
+    // would put another player's opponent and score on somebody else's court.
+    if (preset) {
+      setSelectedProvider(DEFAULT_PROVIDER_ID);
+      setFormData((prev) => ({
+        ...prev,
+        eventName: preset.eventName,
+        round: preset.round ?? "",
+        playerName: preset.playerName,
+        opponentName: preset.opponentName,
+        date: preset.date,
+        courtType: preset.surface ?? prev.courtType,
+        bestOf: String(preset.bestOf),
+        adScoring: preset.adScoring ?? undefined,
+        matchType: preset.supportsVideo ? "Singles" : "Doubles",
+        ...(preset.score
+          ? {
+              playerScores: preset.score.player1,
+              opponentScores: preset.score.player2,
+              numberOfSets: preset.score.player1.length,
+            }
+          : {}),
+      }));
+      return;
+    }
+
     const existingProvider = localStorage.getItem(STORAGE_KEYS.SELECTED_PROVIDER);
     let resumedProvider = false;
     if (existingProvider && isProviderSupported(existingProvider)) {
@@ -396,7 +434,7 @@ export function useUploadMatchWizard({
     return () => {
       cancelled = true;
     };
-  }, [open, supabase]);
+  }, [open, supabase, preset]);
 
   // Step navigation handlers
   const handleProviderSelect = useCallback((providerId: string | null) => {
@@ -807,7 +845,12 @@ export function useUploadMatchWizard({
         cachedUserIdRef.current = userId;
       }
 
-      const matchId = crypto.randomUUID();
+      // A preset line that has already been scored HAS a match — reuse it.
+      // Minting a second would give one court two results and count it twice in
+      // the dual's team score, which is the duplicate 22e's "fills 3 of 9"
+      // receipt exists to rule out.
+      const matchId = preset?.matchId ?? crypto.randomUUID();
+      const reusingMatch = Boolean(preset?.matchId);
 
       const adjustedPlayerScores = getAdjustedScores(
         formData.playerScores,
@@ -855,7 +898,28 @@ export function useUploadMatchWizard({
           }
         : matchData;
 
-      const { error: matchError } = await supabase.from("matches").insert(matchRow);
+      // Fill vs create. A preset line whose match exists gets its score and the
+      // camera answers written onto the row it already has; everything else
+      // inserts. `event_entry_id` is what ties a new one back to its line.
+      const { error: matchError } = reusingMatch
+        ? await supabase
+            .from("matches")
+            .update({
+              score: matchRow.score,
+              player1_name: matchRow.player1_name,
+              player2_name: matchRow.player2_name,
+              ...(isProcessingProvider
+                ? {
+                    fixed_camera: formData.fixedCamera ?? null,
+                    initial_top_player_is_player1:
+                      formData.initialTopPlayerIsPlayer1 ?? null,
+                  }
+                : {}),
+            })
+            .eq("id", matchId)
+        : await supabase
+            .from("matches")
+            .insert({ ...matchRow, event_entry_id: preset?.entryId ?? null });
 
       if (matchError) {
         console.error("Supabase insert error:", matchError);
@@ -918,11 +982,14 @@ export function useUploadMatchWizard({
           jobId = job.id;
         } catch (jobErr) {
           console.error("Processing job insert error:", jobErr);
-          // Roll back the match row so the user gets a clean retry. This stays
-          // here rather than inside the service: a personal match row exists
-          // only to carry this video, but a dual line's match is a recorded
-          // result and must survive a failed job insert.
-          await supabase.from("matches").delete().eq("id", matchId);
+          // Roll back the match row so the user gets a clean retry — but ONLY
+          // one this wizard just created. A personal match row exists purely to
+          // carry its video, so removing it is the clean retry; an event line's
+          // match is a recorded result that predates this upload, and deleting
+          // it would destroy a score somebody entered courtside.
+          if (!reusingMatch) {
+            await supabase.from("matches").delete().eq("id", matchId);
+          }
           window.dispatchEvent(
             new CustomEvent("match-upload-failed", {
               detail: {
@@ -981,7 +1048,11 @@ export function useUploadMatchWizard({
         } catch (err) {
           console.error("Background file upload error:", err);
           // Roll back the phantom match row so the user has a clean retry path.
-          await supabase.from("matches").delete().eq("id", matchId);
+          // Same exemption as above: never delete a row that already carried a
+          // result before this upload started.
+          if (!reusingMatch) {
+            await supabase.from("matches").delete().eq("id", matchId);
+          }
           window.dispatchEvent(
             new CustomEvent("match-upload-failed", {
               detail: {

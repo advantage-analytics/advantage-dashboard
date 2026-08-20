@@ -20,6 +20,7 @@ import {
   STEP_CONFIG,
   STEP_CONFIG_PROCESSING,
   CONTINUE_LABEL,
+  type EventPreset,
 } from "./types";
 import {
   useUploadMatchWizard,
@@ -38,6 +39,7 @@ import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { usePublishHeaderStatus } from "@/components/dashboard/header-status";
 import { StepIndicator } from "./StepIndicator";
 import { ProviderContent } from "./ProviderContent";
+import { PinnedMatchContent } from "./PinnedMatchContent";
 import { UploadContent } from "./UploadContent";
 import { VideoStepContent } from "./VideoStepContent";
 import { DetailsContent } from "./DetailsContent";
@@ -45,7 +47,7 @@ import { ConfirmContent } from "./ConfirmContent";
 import { primaryBtnCls, ghostBtnCls } from "./styles";
 
 /** Where the flow returns to when it is dismissed or finished. */
-const EXIT_HREF = "/dashboard/matches";
+const PERSONAL_EXIT_HREF = "/dashboard/matches";
 
 /** The design's column: 780px of content inside 56px gutters. */
 const CONTENT_CLS = "mx-auto w-full max-w-[780px] px-14";
@@ -98,7 +100,10 @@ const PHASE_LABEL: Record<Exclude<UploadState["phase"], "uploading">, string> = 
   failed: "Failed",
 };
 
-export function UploadMatchFlow() {
+export function UploadMatchFlow({ preset }: { preset?: EventPreset | null } = {}) {
+  // A team upload came from a line and goes back to it. A personal one has the
+  // matches list, which is where its match will appear.
+  const EXIT_HREF = preset?.eventHref ?? PERSONAL_EXIT_HREF;
   const [createdMatchId, setCreatedMatchId] = useState<string | null>(null);
   // Bumping this remounts the wizard, which is how "Upload another" gets a
   // clean hook rather than a hand-written reset that would drift from it.
@@ -144,6 +149,8 @@ export function UploadMatchFlow() {
     return (
       <UploadMatchSuccess
         uploads={active}
+        exitHref={EXIT_HREF}
+        preset={preset ?? null}
         onUploadAnother={() => {
           setCreatedMatchId(null);
           // Settled entries only. Clearing everything would hide transfers that
@@ -164,6 +171,8 @@ export function UploadMatchFlow() {
       key={runId}
       onCreated={setCreatedMatchId}
       onVideoUpload={handleVideoUpload}
+      exitHref={EXIT_HREF}
+      preset={preset ?? null}
     />
   );
 }
@@ -171,9 +180,13 @@ export function UploadMatchFlow() {
 function UploadMatchSuccess({
   uploads,
   onUploadAnother,
+  exitHref,
+  preset,
 }: {
   uploads: UploadState[];
   onUploadAnother: () => void;
+  exitHref: string;
+  preset: EventPreset | null;
 }) {
   const uploading = uploads.filter((u) => u.phase === "uploading");
   const problems = uploads.filter(
@@ -285,7 +298,9 @@ function UploadMatchSuccess({
             Upload another
           </Button>
           <Button asChild className={primaryBtnCls}>
-            <Link href={EXIT_HREF}>Back to matches</Link>
+            <Link href={exitHref}>
+              {preset ? "Back to the event" : "Back to matches"}
+            </Link>
           </Button>
         </div>
 
@@ -405,9 +420,13 @@ function QuotaMeter({
 const UploadMatchWizard = memo(function UploadMatchWizard({
   onCreated,
   onVideoUpload,
+  exitHref,
+  preset,
 }: {
   onCreated: (matchId: string) => void;
   onVideoUpload: (event: VideoUploadEvent) => void;
+  exitHref: string;
+  preset: EventPreset | null;
 }) {
   const router = useRouter();
   // Which workspace this match will be created in, and billed against.
@@ -426,9 +445,9 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
   );
   const handleOpenChange = useCallback(
     (open: boolean) => {
-      if (!open && !createdRef.current) router.push(EXIT_HREF);
+      if (!open && !createdRef.current) router.push(exitHref);
     },
-    [router]
+    [router, exitHref]
   );
 
   const {
@@ -477,6 +496,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     onOpenChange: handleOpenChange,
     onCreated: handleCreated,
     onVideoUpload,
+    preset,
   });
 
   const contentRef = useRef<HTMLDivElement>(null);
@@ -516,6 +536,16 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
   const { title, description } = {
     ...STEP_CONFIG[step],
     ...(isProcessingProvider ? STEP_CONFIG_PROCESSING[step] : undefined),
+    // A pinned line changes what step 1 asks, so it has to change what step 1
+    // is called. "Choose your data source" above a match that is already chosen
+    // is the heading contradicting the panel underneath it.
+    ...(preset && step === "provider"
+      ? {
+          title: "Which match is this?",
+          description:
+            "The event answered everything but the video. Check it, then add the file.",
+        }
+      : undefined),
   };
 
   const trimSelected =
@@ -746,12 +776,18 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
           key={step}
           className={`animate-fadeIn ${step === "confirm" ? "" : "mt-7"}`}
         >
-          {step === "provider" && (
-            <ProviderContent
-              selectedProvider={selectedProvider}
-              onProviderSelect={handleProviderSelect}
-            />
-          )}
+          {step === "provider" &&
+            (preset ? (
+              // Same step, different question. In a team workspace "where do
+              // the numbers come from?" has one answer, so this slot confirms
+              // the destination instead of asking for a source.
+              <PinnedMatchContent preset={preset} />
+            ) : (
+              <ProviderContent
+                selectedProvider={selectedProvider}
+                onProviderSelect={handleProviderSelect}
+              />
+            ))}
 
           {step === "video" && (
             <VideoStepContent
@@ -845,7 +881,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
                deliberately inert there and the breadcrumb is not obviously an
                exit — without it the flow has no way out that looks like one. */
             <Button asChild className={ghostBtnCls}>
-              <Link href={EXIT_HREF}>Cancel</Link>
+              <Link href={exitHref}>Cancel</Link>
             </Button>
           )}
 

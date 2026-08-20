@@ -235,3 +235,46 @@ export interface ParsingState {
   parseWarnings: string[];
   parseSuccess: boolean;
 }
+
+/**
+ * What an event already knows about a line, handed to the wizard so it can
+ * pre-answer everything except the video.
+ *
+ * This is what makes the team flow the SAME wizard rather than a second one.
+ * In a personal workspace step 1 asks "where do the numbers come from?"; in a
+ * team workspace the lineup already minted the line and the result already
+ * named the players, so the only open question is which match this file is —
+ * and that arrives answered.
+ *
+ * A check here is a fact the EVENT owns. Wrong ones are corrected on the event,
+ * never re-typed in the wizard, or the two disagree and the event loses.
+ */
+export interface EventPreset {
+  entryId: string;
+  eventId: string;
+  /** Opponent school for a dual, tournament name for a tournament. */
+  eventName: string;
+  /** The match this line already produced, when somebody has scored it. */
+  matchId: string | null;
+  /** 'S1' for a dual line, 'R16' for a tournament round. */
+  round: string | null;
+  /** Our side. `player1` everywhere downstream — see job-request.ts. */
+  playerName: string;
+  opponentName: string;
+  /** YYYY-MM-DD, from the event. */
+  date: string;
+  surface: string | null;
+  bestOf: number;
+  /**
+   * Ad or no-ad, from the event's format. Nullable because the pipeline
+   * refuses a job without a real answer and a `false` default would be a wrong
+   * answer that looks like a real one.
+   */
+  adScoring: boolean | null;
+  /** Already recorded courtside, so the wizard does not ask again. */
+  score: { player1: number[]; player2: number[] } | null;
+  /** Doubles lines cannot be video-analysed — job-request.ts refuses them. */
+  supportsVideo: boolean;
+  /** Where Cancel and success return to. */
+  eventHref: string;
+}
