@@ -1,16 +1,18 @@
 /**
  * Per-job data quality scoring.
  *
- * The vendor gives us no signal for how well a given video was tracked.
- * `line_confidence` looks like one but is not: it is quantised, floors at
- * 0.500, never exceeds 0.900, and does not move when the underlying data
- * falls apart.
+ * The vendor gives us no per-job signal for how well a video was tracked.
+ * `line_confidence` is the closest thing, and it is only usable in aggregate:
+ * the docs specify a 0.5–0.9 range, so the floor and ceiling are by design
+ * rather than a defect. Per stroke that band is too coarse to threshold on,
+ * but its median does track quality across the three real payloads
+ * (0.900 / 0.854 / 0.716), as does the share pinned at the 0.9 ceiling
+ * (54.6% / 37.6% / 30.0%). Worth adding as a check; not yet done.
  *
- * It matters because quality is camera-dependent and varies enormously
- * between jobs. Of the two sample matches, one carries corrupt bounce
- * coordinates on 7% of strokes and the other on 30% — with values up to
- * `bounce_y_m: 371.7` on a court that ends at 11.885 m — and nothing in
- * either payload announces the difference.
+ * We compute our own because quality is camera-dependent and varies
+ * enormously between jobs with nothing in the payload announcing it. Of the
+ * three real matches, unusable bounce coordinates run 4.3% / 10.4% / 22.7% —
+ * with values up to `bounce_y_m: 371.7` on a court whose fence is at 18.3 m.
  *
  * So we compute our own. Each check below is something that is impossible or
  * near-impossible in a correctly tracked singles match, which makes its rate
@@ -24,10 +26,17 @@ import { serveBracket } from './serves';
 import type { SplitStepRally, SplitStepStroke } from './types';
 
 export type QualityGrade = 'high' | 'medium' | 'low';
-export type CheckVerdict = 'pass' | 'warn' | 'fail';
+
+/**
+ * `insufficient` is distinct from `fail` on purpose: it means the check had
+ * nothing to measure, not that what it measured was bad. Collapsing the two
+ * made a payload with no usable score fields look exactly like one whose
+ * every transition was broken.
+ */
+export type CheckVerdict = 'pass' | 'warn' | 'fail' | 'insufficient';
 
 export interface QualityCheck {
-  id: string;
+  id: CheckId;
   /** Plain-language statement of what was measured. */
   label: string;
   /** Measured value, 0–1. */
@@ -66,7 +75,7 @@ interface Threshold {
   higherIsBetter: boolean;
 }
 
-const THRESHOLDS: Record<string, Threshold> = {
+const THRESHOLDS = {
   unusable_bounce: { warn: 0.05, fail: 0.15, higherIsBetter: false },
   serve_net_hit_mid_rally: { warn: 0.05, fail: 0.2, higherIsBetter: false },
   illegal_same_player_sequence: { warn: 0.005, fail: 0.02, higherIsBetter: false },
@@ -74,11 +83,22 @@ const THRESHOLDS: Record<string, Threshold> = {
   game_transition_valid: { warn: 0.98, fail: 0.92, higherIsBetter: true },
   point_transition_clean: { warn: 0.98, fail: 0.92, higherIsBetter: true },
   first_serve_spread: { warn: 0.1, fail: 0.2, higherIsBetter: false },
-};
+} as const satisfies Record<string, Threshold>;
 
-function verdictFor(id: string, value: number): CheckVerdict {
-  const t = THRESHOLDS[id];
-  if (!t) return 'pass';
+/**
+ * The check ids that have thresholds — derived from THRESHOLDS rather than
+ * declared separately, so adding a check without a threshold, or renaming one
+ * on only one side, is a compile error instead of a check that silently never
+ * fires.
+ */
+export type CheckId = keyof typeof THRESHOLDS;
+
+function verdictFor(id: CheckId, value: number): CheckVerdict {
+  const t: Threshold | undefined = THRESHOLDS[id];
+  // Unreachable while CheckId is derived from THRESHOLDS. Fails rather than
+  // passes so that if it ever does happen — a threshold deleted at runtime,
+  // a cast — the effect is a match held back, not one published unchecked.
+  if (!t) return 'fail';
   if (t.higherIsBetter) {
     if (value < t.fail) return 'fail';
     if (value < t.warn) return 'warn';
@@ -90,12 +110,17 @@ function verdictFor(id: string, value: number): CheckVerdict {
 }
 
 function check(
-  id: string,
+  id: CheckId,
   label: string,
   observed: number,
   total: number
 ): QualityCheck {
-  const value = total === 0 ? 0 : observed / total;
+  // Nothing to divide by means nothing to judge. Reporting 0 here made every
+  // higherIsBetter check read as a total failure on an empty denominator.
+  if (total === 0) {
+    return { id, label, value: 0, observed, total, verdict: 'insufficient' };
+  }
+  const value = observed / total;
   return { id, label, value, observed, total, verdict: verdictFor(id, value) };
 }
 
@@ -155,9 +180,18 @@ function unusableBounces(strokes: SplitStepStroke[]): QualityCheck {
 /**
  * Serves flagged as hitting the net that the rally then continued past.
  *
- * A serve into the net ends the point or brings a second serve. If play
- * carries on from it, the flag is wrong. One sample match shows this on 6% of
- * serves and the other on 40%.
+ * Read this as a rate, not as a per-stroke verdict. The vendor documents
+ * `net_hit` as contact anywhere in the ball's trajectory, and a net-cord serve
+ * can legitimately clip and land in — so a rally continuing past one is not
+ * by itself wrong, especially where `format.play_on_lets` is true.
+ *
+ * What makes the rate meaningful is that `net_hit: true` comes with
+ * `in: false` on 98–99% of strokes in all three real payloads, so in practice
+ * the vendor treats it as failure-to-clear. Against that, 6.4% / 25.6% / 41.9%
+ * of serves is far past any plausible net-cord rate. The vendor's own
+ * `height_at_net_m` agrees it is wrong: 10% / 37% / 58% of `net_hit` strokes
+ * report a height above the net. That contradiction is the sharper test and
+ * is the better basis for this check when we come back to it.
  */
 function serveNetHitMidRally(rallies: SplitStepRally[]): QualityCheck {
   let offenders = 0;
@@ -250,8 +284,13 @@ function gameTransitions(rallies: SplitStepRally[]): QualityCheck {
     const curGame = pairOf(cur.gameScore);
     const nextGame = pairOf(next.gameScore);
 
-    total += 1;
+    // Skip rather than count as invalid. An unparseable score string is a
+    // parse-layer defect that unusable_bounce and its siblings already
+    // measure; charging it here too penalised the game sequence for a fault
+    // that has nothing to do with the game sequence, and did so
+    // inconsistently — pointTransitions skips the identical case.
     if (!curSet || !nextSet || !curGame || !nextGame) continue;
+    total += 1;
 
     if (!samePair(curSet, nextSet)) {
       // A real set boundary. The only valid successor is a fresh 0-0.
@@ -389,9 +428,20 @@ export function scoreQuality(
 
   const failures = checks.filter((c) => c.verdict === 'fail').map((c) => c.id);
   const warnings = checks.filter((c) => c.verdict === 'warn').map((c) => c.id);
+  // A check with no data neither condemns a match nor clears it. It cannot
+  // reach 'low' on its own, but it does block 'high', because 'high' is the
+  // grade that lets numbers reach a coach and we did not actually verify this
+  // one.
+  const unmeasured = checks
+    .filter((c) => c.verdict === 'insufficient')
+    .map((c) => c.id);
 
   const grade: QualityGrade =
-    failures.length > 0 ? 'low' : warnings.length > 0 ? 'medium' : 'high';
+    failures.length > 0
+      ? 'low'
+      : warnings.length > 0 || unmeasured.length > 0
+        ? 'medium'
+        : 'high';
 
   return {
     grade,

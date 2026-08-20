@@ -368,6 +368,14 @@ export async function POST(request: NextRequest) {
         // redelivery, which makes gradeResults read from storage instead.
         let resultsBody: string | undefined;
 
+        // Where the analysis actually is, which is not always where this
+        // request would compute it to be. A delivery that arrived before its
+        // job id was known was stored under the `orphaned/…` fallback below;
+        // once adopt-deliveries.ts matches it to a job, the row still points
+        // at that key. Trust the recorded key over a recomputed one, and the
+        // key we just wrote over both.
+        let storedKey = record.results_object_key ?? resultsKey;
+
         if (sasUrl) {
           const stored = await storeResults({
             supabase,
@@ -386,6 +394,7 @@ export async function POST(request: NextRequest) {
 
           if (stored.ok) {
             resultsBody = stored.body;
+            storedKey = stored.objectKey;
             console.log(`${LOG} results stored`, {
               jobId,
               objectKey: stored.objectKey,
@@ -443,7 +452,7 @@ export async function POST(request: NextRequest) {
           await gradeResults({
             supabase,
             jobId,
-            objectKey: resultsKey,
+            objectKey: storedKey,
             body: resultsBody,
           });
         }

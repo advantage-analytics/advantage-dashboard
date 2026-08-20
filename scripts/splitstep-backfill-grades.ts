@@ -36,10 +36,24 @@ try {
   // Fine when the variables are already exported in the environment.
 }
 
+const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 async function main() {
   const force = process.argv.includes('--force');
   const jobFlag = process.argv.indexOf('--job');
   const onlyJob = jobFlag !== -1 ? process.argv[jobFlag + 1] : null;
+
+  // Refuse rather than widen. `--job` with its uuid missing or eaten by the
+  // shell used to leave onlyJob undefined, which fell through the filter and
+  // quietly ran against EVERY completed job — destructively so with --force.
+  // A request to narrow that cannot be honoured must not silently broaden.
+  if (jobFlag !== -1 && !UUID.test(onlyJob ?? '')) {
+    console.error(
+      `--job needs a job uuid; got ${onlyJob === undefined ? 'nothing' : `"${onlyJob}"`}.`
+    );
+    process.exit(1);
+  }
 
   const supabase = createAdminClient();
 

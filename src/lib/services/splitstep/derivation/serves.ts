@@ -133,22 +133,28 @@ export function serveBracket(rallies: SplitStepRally[]): ServeBracket {
 
   for (const rally of servicePoints) {
     const firstServe = rally.serves[0];
-    const secondServe = rally.serves[1];
+    const onlyServe = rally.serves.length === 1;
+    // The serve the point was actually decided on. Reading serves[1] assumed
+    // a rally can never hold more than two, which neither the docs nor the
+    // vendor confirm — Q2 (let handling) is still open, and a replayed let
+    // would land here as a third serve. Taking the last one keeps the
+    // double-fault tests pointed at the deciding serve either way.
+    const decidingServe = rally.serves[rally.serves.length - 1];
     const lastStroke = rally.strokes[rally.strokes.length - 1];
 
     // --- by rally structure ---
-    // A second serve is the vendor telling us the first one faulted. Absence
-    // of one is the strongest evidence available that the first serve was
-    // legal, because play continued from it.
-    if (!secondServe) structureIn += 1;
+    // A further serve is the vendor telling us the previous one faulted.
+    // Absence of one is the strongest evidence available that the first serve
+    // was legal, because play continued from it.
+    if (onlyServe) structureIn += 1;
     // A double fault ends the point on the serve. If any stroke follows the
-    // second serve, the returner played it, so it was in whatever the flag
+    // deciding serve, the returner played it, so it was in whatever the flag
     // says.
-    if (secondServe && lastStroke === secondServe) structureDoubleFaults += 1;
+    if (!onlyServe && lastStroke === decidingServe) structureDoubleFaults += 1;
 
     // --- by in flag ---
-    if (!secondServe && firstServe?.in) flagIn += 1;
-    if (secondServe && !secondServe.in) flagDoubleFaults += 1;
+    if (onlyServe && firstServe?.in) flagIn += 1;
+    if (!onlyServe && decidingServe && !decidingServe.in) flagDoubleFaults += 1;
   }
 
   const byRallyStructure: ServeReading = {
@@ -180,11 +186,14 @@ export function serveBracket(rallies: SplitStepRally[]): ServeBracket {
 /**
  * Serve ordinal → our `shots.shot_type` value.
  *
- * Safe to use: it depends only on position within the rally, which both
- * sample matches confirm is reliable. Neither sample contains a rally with
- * more than two serves, so a third would mean either a let we cannot see
- * (vendor question Q2, still open) or two points merged — treated as second
- * serve and counted by quality.ts.
+ * Safe to use: it depends only on position within the rally, which all three
+ * real payloads confirm is reliable.
+ *
+ * Every ordinal above 0 maps to 'Second Serve' because that is the whole of
+ * the `shots.shot_type` serve vocabulary — there is no third value to emit. A
+ * rally with three serves (a replayed let, per open question Q2, or two points
+ * merged) therefore loses the distinction here. Callers that need to know
+ * should read `rally.serves.length` rather than infer it from this.
  */
 export function serveShotType(ordinal: number): 'First Serve' | 'Second Serve' {
   return ordinal === 0 ? 'First Serve' : 'Second Serve';

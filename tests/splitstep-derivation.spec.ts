@@ -282,7 +282,7 @@ test.describe('quality scorer', () => {
     for (const c of quality.checks) {
       expect(c.label.length).toBeGreaterThan(0);
       expect(c.total).toBeGreaterThan(0);
-      expect(['pass', 'warn', 'fail']).toContain(c.verdict);
+      expect(['pass', 'warn', 'fail', 'insufficient']).toContain(c.verdict);
     }
   });
 });

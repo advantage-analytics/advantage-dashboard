@@ -54,9 +54,25 @@ function str(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   if (!trimmed || trimmed === STRING_SENTINEL) return null;
-  // Both `nan-nan` and `NaN` have been seen in pred_set_score.
-  if (/^nan([.-]|$)/i.test(trimmed)) return null;
   return trimmed;
+}
+
+/**
+ * A score string, with the vendor's undocumented NaN sentinel removed.
+ *
+ * `"nan-nan"` appears in `pred_set_score` and is a fourth sentinel form the
+ * docs do not mention (they list only `-9999.0`, `-9999` and `"None"`).
+ *
+ * Deliberately NOT part of str(). The rule was originally there, which meant
+ * it also ran over `pred_player_id` — and it matches the bare token "Nan", a
+ * real given name. A player called Nan would have had every one of their
+ * strokes dropped by normalizeStroke's `!playerLabel` guard, silently losing
+ * half of every rally.
+ */
+function scoreStr(value: unknown): string | null {
+  const trimmed = str(value);
+  if (trimmed === null) return null;
+  return /^nan([.-]|$)/i.test(trimmed) ? null : trimmed;
 }
 
 function strokeType(value: unknown): StrokeType | null {
@@ -136,9 +152,9 @@ export function normalizeStroke(
     strokeNumber,
     playerLabel,
 
-    predPointScore: str(raw.pred_point_score),
-    predGameScore: str(raw.pred_game_score),
-    predSetScore: str(raw.pred_set_score),
+    predPointScore: scoreStr(raw.pred_point_score),
+    predGameScore: scoreStr(raw.pred_game_score),
+    predSetScore: scoreStr(raw.pred_set_score),
 
     strokeType: strokeType(raw.stroke_type),
     strokeSide: strokeSide(raw.stroke_side),
