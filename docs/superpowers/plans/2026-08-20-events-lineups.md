@@ -10,6 +10,32 @@
 
 **Spec:** [`docs/superpowers/specs/2026-08-20-events-lineups-design.md`](../specs/2026-08-20-events-lineups-design.md)
 
+## Status — 2026-08-20
+
+Tasks 1–12 implemented and committed. Task 13's static half passes: `npx tsc
+--noEmit` clean, `npm run lint` at the 39-warning baseline with 0 errors, and
+`npm run build` green with all five new routes emitted.
+
+**Task 13's interactive half is not done.** The dev server on :3101 has no
+signed-in session and neither the in-app browser nor Claude-in-Chrome can supply
+one — entering credentials is not something this agent does. The walkthrough in
+Step 3, and the personal-wizard regression check in Step 4, both still need a
+human at the keyboard.
+
+What was verified instead, because a wrong answer there is silent: the pure
+predicates in `lib/schedule/entry-state.ts` were exercised through a throwaway
+`tsx` harness — 18 cases, all passing, covering tiebreak sets counting games
+rather than points, `uploaded` not pulsing (the `isWorking` distinction), ITA
+doubles resolving to one team point rather than three, and a tournament run
+counting every match under one entry. The harness was deleted; it is recorded
+here rather than kept, since this repo has no test runner and adding one was out
+of scope.
+
+A test fixture was written to the live database to make the team workspace
+reachable at all: one `program_members` row granting the signed-in user `owner`
+on Michigan State (mens), `5241273d-900c-42b5-a4ca-db6b423ede80`. Undo with
+`delete from program_members where program_id = '5241273d-900c-42b5-a4ca-db6b423ede80' and user_id = '303b22e6-3a20-44f2-9c0c-689284890412';`
+
 ## Global Constraints
 
 - **No test files exist in this repo.** `package.json` configures Playwright but `CLAUDE.md` records that no test files exist yet. This plan does **not** invent a test harness. Each task's verification cycle is `npx tsc --noEmit` + `npm run lint`, and behavioural tasks add a browser check through the preview tools. `npm run build` runs once at the end (Task 13) — it is slow and every task before it is typechecked.
