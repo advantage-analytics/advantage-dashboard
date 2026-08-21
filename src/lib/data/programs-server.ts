@@ -35,6 +35,23 @@ export function teamLabel(team: string): string {
 }
 
 /**
+ * The program's full name, for anywhere it appears without the squad beside it.
+ *
+ * The workspace switcher shows the school and the squad as two lines, so a
+ * screen inside a program can say "Stanford" and be understood. An email, an
+ * invitation, or a join screen has no such context — and a coach who runs both
+ * squads would otherwise get two messages that are word-for-word identical
+ * with no way to tell which roster they concern.
+ */
+export function programDisplayName(
+  schoolName: string,
+  team: string | null
+): string {
+  if (!team) return schoolName;
+  return `${schoolName} ${teamLabel(team)} Tennis`;
+}
+
+/**
  * The dataset stores `D1`; every screen in the design writes `D-I`.
  *
  * NAIA and JUCO are already how they are said out loud, so they pass through.

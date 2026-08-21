@@ -123,17 +123,30 @@ export function InviteDialog({
       // Sequential, not parallel: `create_program_invite` upserts on the
       // one-open-invite index, and a pasted list with the same address twice
       // would otherwise race itself for that row.
+      // A send that fails does NOT stop the run. Every invite before it is
+      // already written, and abandoning the rest would leave a pasted roster
+      // half-invited with no way to tell which half — so the addresses that
+      // did not get mail are collected and named at the end instead.
+      const unsent: string[] = [];
+
       for (const email of all) {
         const result = await inviteMember({ email, role: copy.role });
         if (!result.ok) {
           setError(result.error);
           return;
         }
+        if (result.warning) unsent.push(email);
       }
 
       setEmails([]);
       setDraft("");
       setSent(all.length);
+
+      if (unsent.length > 0) {
+        setError(
+          `Saved, but the email didn't send to ${unsent.join(", ")}. Resend from Settings › Team.`
+        );
+      }
     });
   }
 
