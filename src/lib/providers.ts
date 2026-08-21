@@ -30,7 +30,7 @@ export const providers: Provider[] = [
   {
     id: "swing-vision",
     name: "SwingVision",
-    description: "AI-powered tennis analysis",
+    description: "AI-powered tennis analysis — bring the match export, numbers only",
     logo: "/providers/swingvision.png",
     pillBg: "#2D8B4E",
     pillText: "#FFFFFF",
@@ -40,7 +40,7 @@ export const providers: Provider[] = [
     // presented as our own analysis engine.
     id: "splitstep",
     name: "Advantage Intelligence",
-    description: "Upload match video for AI analysis",
+    description: "Your own match video — every shot, placement and pattern",
     // TODO: placeholder artwork. Swap for a dedicated
     // /providers/advantage.png once the official asset exists.
     logo: "/logos/logo.svg",

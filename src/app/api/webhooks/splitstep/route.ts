@@ -4,16 +4,23 @@
  * The vendor POSTs here when a job changes state. Expect at least two
  * deliveries per job (`job_queued`, then `job_completed`), plus retries.
  *
- * DELIBERATELY THIN (handoff §2.2). The spec's §2 diagram had this route also
- * running the derivation engine and calling `calculate_match_stats`; that is
- * wrong twice over. Webhook senders retry on timeout, so slow inline work
- * produces duplicate deliveries against partial state — and this app is on
- * Vercel Hobby, where the platform ceiling is 60s. A full match of strokes
- * through derivation is not something to bet on fitting.
+ * NOTHING SLOW BEFORE THE 200. Webhook senders retry on timeout, so inline work
+ * produces duplicate deliveries against partial state. The shape is therefore:
+ * verify → record → return 200 → do everything else in after().
  *
- * So: verify → record → return 200 → secure both artifacts in after().
- * Derivation runs later in a Supabase Edge Function, mirroring the SwingVision
- * `process-match` fire-and-forget pattern.
+ * Derivation runs in that after() block, NOT in a Supabase Edge Function as the
+ * spec's §2 diagram assumed. That design was written against the 60s Vercel
+ * ceiling and an unmeasured workload. The ceiling is real — maxDuration is set
+ * explicitly below — but the workload is not: parsing and grading a full match
+ * takes about 3 ms and the whole write lands well under two seconds, none of it
+ * on the vendor's critical path because the response has already gone. An Edge
+ * Function would have meant a second copy of the derivation in Deno, and the
+ * player mapping and shot numbering are precisely the subtleties that drift
+ * between two copies — each of which misattributes an entire match when it does.
+ *
+ * What DOES still need building is reprocessing: when DERIVATION_VERSION bumps,
+ * every stored match must be rebuilt and no webhook will fire for those jobs
+ * again. That wants a paged cron route calling the same deriveAndPublish().
  *
  * A completion carries TWO urls, and both are short-lived SAS:
  *   • `sas_url` — the stroke-by-stroke results JSON, downloaded and written to
@@ -45,6 +52,8 @@ import {
   trimmedCopyStatus,
 } from '@/lib/services/splitstep/video-url';
 import { releaseQuota } from '@/lib/services/splitstep/quota';
+import { gradeResults } from '@/lib/services/splitstep/grade-results';
+import { deriveAndPublish } from '@/lib/services/splitstep/derive-and-publish';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -363,6 +372,18 @@ export async function POST(request: NextRequest) {
         // all must NOT be read as "nothing left to save".
         let resultsSecured = record.already_stored;
 
+        // Set only when this delivery did the download. Left undefined on a
+        // redelivery, which makes gradeResults read from storage instead.
+        let resultsBody: string | undefined;
+
+        // Where the analysis actually is, which is not always where this
+        // request would compute it to be. A delivery that arrived before its
+        // job id was known was stored under the `orphaned/…` fallback below;
+        // once adopt-deliveries.ts matches it to a job, the row still points
+        // at that key. Trust the recorded key over a recomputed one, and the
+        // key we just wrote over both.
+        let storedKey = record.results_object_key ?? resultsKey;
+
         if (sasUrl) {
           const stored = await storeResults({
             supabase,
@@ -380,6 +401,8 @@ export async function POST(request: NextRequest) {
           resultsSecured = stored.ok;
 
           if (stored.ok) {
+            resultsBody = stored.body;
+            storedKey = stored.objectKey;
             console.log(`${LOG} results stored`, {
               jobId,
               objectKey: stored.objectKey,
@@ -425,6 +448,33 @@ export async function POST(request: NextRequest) {
         if (jobId && resultsSecured) {
           await deleteSourceVideo({ supabase, jobId });
         }
+
+        // Grade last. It is the only step here that is purely informational —
+        // everything above either secures an asset or frees storage, and none
+        // of them should wait behind it.
+        //
+        // Gated on resultsSecured rather than on this delivery having done the
+        // download, so a redelivery still grades a job whose first attempt
+        // stored the analysis but failed to grade it.
+        if (jobId && resultsSecured) {
+          await gradeResults({
+            supabase,
+            jobId,
+            objectKey: storedKey,
+            body: resultsBody,
+          });
+
+          // Then derive. After grading, so `derivation_quality` is already on
+          // the row, and last overall because it is the only step here that can
+          // be re-run by hand from the stored results — everything above either
+          // secures an asset that expires or frees storage that costs money.
+          //
+          // Not an Edge Function. Measured at well under two seconds against a
+          // route that already declares maxDuration = 60 and has returned its
+          // 200 before any of this starts. The spec asked for one against an
+          // unmeasured workload; the workload turned out not to need it.
+          await deriveAndPublish({ supabase, jobId });
+        }
       });
     }
   }
@@ -452,10 +502,20 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // TODO(splitstep-phase2): trigger the derivation Edge Function here, once it
-  // exists. Fire-and-forget — do not await it (handoff §2.2). Phase 2 is hard
-  // gated on a real results fixture, so a completed job currently and correctly
-  // rests at "processed, analysis pending".
+  // Grading AND derivation both run in the completed-branch after() above, and
+  // neither is an Edge Function. The spec's §2 design assumed one because of the
+  // 60-second Vercel ceiling against an unmeasured workload: parsing and grading
+  // is ~3 ms and the whole write is well under two seconds, while after() has
+  // already sent the 200, which was the other reason given. A Deno copy of the
+  // derivation would have been the more expensive mistake — the player mapping
+  // and the shot numbering are exactly the subtleties that drift between two
+  // copies, and both misattribute an entire match when they do.
+  //
+  // Still open, and genuinely needed: reprocessing. When DERIVATION_VERSION
+  // bumps, every stored match must be rebuilt and no webhook will ever fire for
+  // those jobs again. That wants a paged, authenticated route driven by a
+  // scheduler — the src/app/api/cron/reclaim-videos pattern — calling the same
+  // deriveAndPublish() this does, not a second implementation.
 
   return NextResponse.json({ received: true, deliveryId: record.delivery_id });
 }
@@ -614,7 +674,8 @@ async function storeResults(params: {
   sasUrl: string;
   objectKey: string;
 }): Promise<
-  { ok: true; objectKey: string; bytes: number } | { ok: false; error: string }
+  | { ok: true; objectKey: string; bytes: number; body: string }
+  | { ok: false; error: string }
 > {
   const { supabase, sasUrl, objectKey } = params;
 
@@ -658,7 +719,10 @@ async function storeResults(params: {
     return { ok: false, error: `Storage upload failed: ${error.message}` };
   }
 
-  return { ok: true, objectKey, bytes: body.length };
+  // The body comes back with the result so the grading step can work from what
+  // is already in memory. Re-reading it from storage would be a second network
+  // round trip for bytes we are holding.
+  return { ok: true, objectKey, bytes: body.length, body };
 }
 
 /**

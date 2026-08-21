@@ -197,6 +197,54 @@ export function mintUploadSas(params: {
 }
 
 /**
+ * How long a playback URL stays good.
+ *
+ * Minutes, not days, and it is the one SAS in this file whose short life costs
+ * nothing: the page mints a fresh one on every load, so the only thing an
+ * expiry breaks is a URL somebody copied out of devtools and sat on. Contrast
+ * `VENDOR_URL_TTL_SECONDS` at fourteen days, which is long because the vendor
+ * fetches on their schedule and a dead link there is a dead job.
+ *
+ * Long enough that a paused video resumed twenty minutes later still plays,
+ * because the browser re-requests ranges against the same URL and a mid-match
+ * expiry would look like the video breaking rather than a credential ending.
+ */
+const PLAYBACK_SAS_TTL_SECONDS = 30 * 60;
+
+/**
+ * A read credential for one video, for a browser to play.
+ *
+ * `r` — read and nothing else. Whoever holds this URL can stream exactly one
+ * blob and can neither overwrite it, delete it, nor discover what else the
+ * container holds.
+ *
+ * Streaming straight from Azure rather than proxying through a route handler
+ * is not a shortcut: a Vercel function is bounded at 60s and would have to
+ * hold a multi-gigabyte body for the length of the watch, and proxying breaks
+ * HTTP range requests, which is what makes seeking work at all. The trade is
+ * Azure egress at roughly $0.087/GB — real, and the reason
+ * `r2-and-webhook-overview.md` says to revisit R2 when playback ships.
+ */
+export function mintPlaybackSas(params: {
+  blobName: string;
+  ttlSeconds?: number;
+}): { playbackUrl: string; expiresAt: Date } {
+  const config = requireAzureStorageConfig();
+  const ttlSeconds = params.ttlSeconds ?? PLAYBACK_SAS_TTL_SECONDS;
+  const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
+
+  return {
+    playbackUrl: signBlobUrl({
+      config,
+      blobName: params.blobName,
+      permissions: 'r',
+      expiresOn: expiresAt,
+    }),
+    expiresAt,
+  };
+}
+
+/**
  * Remove a source video.
  *
  * `deleteIfExists` rather than `delete`: every caller is cleanup, and all of

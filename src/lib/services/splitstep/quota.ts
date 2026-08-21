@@ -20,6 +20,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Workspace } from '@/lib/workspace/types';
 import {
   currentBillingMonth,
   getMonthlyCapSeconds,
@@ -27,13 +28,20 @@ import {
 } from './config';
 
 /**
- * Which allowance a user draws against.
+ * Which allowance a submission draws against.
  *
- * Always `individual` until a program membership model exists — see the note
- * above. Kept as a function so the call sites are already correct when it does.
+ * Takes the workspace, because the workspace already knows. It used to take
+ * nothing and return `'individual'` unconditionally, which was correct only
+ * while no team workspace could exist — the moment one could, a coach in a
+ * program would have billed their personal 2-hour cap instead of the program's
+ * 75, silently and with no error anywhere.
+ *
+ * `Workspace.id` IS `processing_usage.account_id`: a personal workspace is
+ * keyed by user id, which is what that ledger has always used, and a team one
+ * by program id.
  */
-export function accountTypeFor(): AccountType {
-  return 'individual';
+export function accountTypeFor(workspace: Pick<Workspace, 'kind'>): AccountType {
+  return workspace.kind === 'team' ? 'program' : 'individual';
 }
 
 export type QuotaReservation =
@@ -52,19 +60,37 @@ export async function reserveQuota(params: {
   supabase: SupabaseClient;
   jobId: string;
   userId: string;
+  /** The workspace being billed. Decides both the ledger and the cap. */
+  workspace: Workspace;
   seconds: number;
   now?: Date;
 }): Promise<QuotaReservation> {
-  const { supabase, jobId, userId, seconds, now } = params;
+  const { supabase, jobId, userId, workspace, seconds, now } = params;
 
-  const accountType = accountTypeFor();
+  // The one choke point every submission passes through, which is why the
+  // check belongs here rather than in the wizard. A program still under review
+  // can invite staff and build a roster but must not spend the vendor budget —
+  // that spend cannot be taken back, and /claim/review promises it is paused.
+  if (!workspace.canSubmitVideo) {
+    return {
+      ok: false,
+      usedSeconds: 0,
+      capSeconds: 0,
+      message:
+        `${workspace.name} is still being confirmed. You can invite staff and ` +
+        `build your roster now; sending video opens as soon as that's done.`,
+    };
+  }
+
+  const accountType = accountTypeFor(workspace);
   const capSeconds = getMonthlyCapSeconds(accountType);
 
   const { data, error } = await supabase
     .rpc('reserve_processing_quota', {
       p_job_id: jobId,
-      // Account is the user until programs exist; then it becomes the program.
-      p_account_id: userId,
+      // The workspace's own id: the user for a personal workspace, the program
+      // for a team one. Two workspaces, one ledger.
+      p_account_id: workspace.id,
       p_account_type: accountType,
       p_created_by: userId,
       p_billing_month: currentBillingMonth(now),

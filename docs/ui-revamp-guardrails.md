@@ -15,8 +15,8 @@ Redesign freely around those.
 
 ## 1. What is done — do not re-litigate
 
-Verified against a real job (Revelli vs Stepanov, 86 min, vendor job
-`778912d7`), not a test harness:
+Verified against a real job (86 min, vendor job `778912d7`, our job
+`2a11168d`), not a test harness:
 
 | | Evidence |
 |---|---|
@@ -151,8 +151,10 @@ copy, navigation, empty states, the progress track's appearance
 (`analysis-progress-track.tsx`), and the wizard's step *presentation* — as long
 as §3.1's five fields still get collected.
 
-`match-video-panel.tsx` and `use-video-upload.ts` are **dead** (nothing imports
-the first; only it imports the second). Safe to delete.
+~~`match-video-panel.tsx` and `use-video-upload.ts` are **dead**.~~ **Deleted**
+on `claude/pilot-program-roadmap-724bdb`, once real playback existed to replace
+them — a dead near-duplicate beside working code is how the wrong one gets
+edited later.
 
 ---
 
@@ -242,9 +244,12 @@ the start of the match and the ambiguity disappears.
 - **Phase 2 derivation** — blocked on vendor questions Q8/Q9/Q13. This is what
   makes "Stats pending" resolve into real numbers. A real 596-stroke / 114-rally
   payload now exists as an input.
-- **Playback.** The trimmed video is stored but nothing renders it. Needs a
-  read-SAS endpoint and a player. If playback ships, revisit R2 — egress is $0
-  there against Azure's ~$0.087/GB.
+- ~~**Playback.**~~ **Shipped** on `claude/pilot-program-roadmap-724bdb` —
+  `mintPlaybackSas()` (read-only, 30 minutes) plus `MatchVideoCard` on the match
+  page, streamed direct from Azure because proxying breaks range requests. The
+  R2 question it raised is now live rather than hypothetical: egress is $0 there
+  against Azure's ~$0.087/GB, and video is being served. See
+  [`pilot-branch-handoff.md`](pilot-branch-handoff.md).
 
 ---
 
@@ -279,6 +284,20 @@ npx tsx scripts/cleanup-orphan-storage.ts           # dry run, deletes nothing
 The webhook suite needs `SPLITSTEP_WEBHOOK_SECRET` in `.env.local` to match the
 value in Vercel, or every signed delivery returns 401 — that is a local key
 mismatch, not a broken deployment.
+
+**Uploading from a port other than 3000 fails until Azure knows about it.** The
+browser PUTs blocks straight to Blob Storage, so the storage account's CORS rule
+is what decides which origins may upload. The rule on `advantagedashboard` lists
+the two deployed hosts plus `http://localhost:3000` and `http://localhost:3101` —
+a worktree on any other port gets `Network error uploading to Azure`, the job is
+marked failed, and nothing about the app is wrong. Add the origin rather than
+replacing the rule; the same rule serves production:
+
+```ts
+const props = await svc.getProperties();          // @azure/storage-blob
+props.cors[0].allowedOrigins += ",http://localhost:<port>";
+await svc.setProperties(props);
+```
 
 To check a job end to end:
 

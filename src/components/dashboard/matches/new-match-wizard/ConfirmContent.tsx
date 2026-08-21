@@ -9,7 +9,12 @@ import { AlertCircle, FileSpreadsheet } from "lucide-react";
 import { MatchMetadataRow } from "@/components/dashboard/matches/match-metadata-row";
 import { formatPlayerStyle } from "@/lib/data/match-utils";
 import { FormData, UploadedFile, DetailField } from "./types";
-import { getAdjustedScores, formatDuration, formatClock } from "./utils";
+import {
+  getAdjustedScores,
+  formatDuration,
+  formatClock,
+  leadingOnSets,
+} from "./utils";
 import { eyebrowLabelCls } from "./styles";
 
 export interface ConfirmContentProps {
@@ -20,34 +25,34 @@ export interface ConfirmContentProps {
   onEditDetail?: (field: DetailField) => void;
   /** Video-analysis provider — show the trim window and camera orientation. */
   isProcessingProvider?: boolean;
+  /**
+   * Length of the picked video, for telling a deliberate full-length window
+   * apart from one nobody touched. Both submit the same seconds; only one of
+   * them is a decision.
+   */
+  sourceDurationSeconds?: number;
 }
 
 
+/**
+ * The picked day, rendered as the day that was picked.
+ *
+ * `new Date("2026-08-15")` is parsed as UTC midnight, which `toLocaleDateString`
+ * then renders in local time — so west of Greenwich the readback showed the day
+ * BEFORE the one in the field above it. The parts are split by hand rather than
+ * appending "T00:00" because that also depends on the runtime being lenient.
+ */
 function formatDate(dateString: string): string {
   if (!dateString) return "";
-  const date = new Date(dateString);
+  const [y, m, d] = dateString.slice(0, 10).split("-").map(Number);
+  const date =
+    y && m && d ? new Date(y, m - 1, d) : new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
   });
-}
-
-function getSetWinner(
-  playerScores: (number | null)[],
-  opponentScores: (number | null)[]
-): "player" | "opponent" | null {
-  let p = 0;
-  let o = 0;
-  for (let i = 0; i < playerScores.length; i++) {
-    const ps = playerScores[i] ?? 0;
-    const os = opponentScores[i] ?? 0;
-    if (ps > os) p++;
-    else if (os > ps) o++;
-  }
-  if (p > o) return "player";
-  if (o > p) return "opponent";
-  return null;
 }
 
 function getMatchStatus(result: string | undefined): string {
@@ -135,14 +140,13 @@ function PlayerRow({
   );
 }
 
-const labelCls = eyebrowLabelCls;
-
 function ConfirmContentImpl({
   formData,
   uploadedFile,
   error,
   onEditDetail,
   isProcessingProvider = false,
+  sourceDurationSeconds,
 }: ConfirmContentProps) {
   const { playerScores, opponentScores, playerTiebreaks, opponentTiebreaks } = useMemo(() => ({
     playerScores: getAdjustedScores(formData.playerScores, formData.bestOf, formData.numberOfSets),
@@ -160,7 +164,7 @@ function ConfirmContentImpl({
 
   const playerName = formData.playerName || "Player";
   const opponentName = formData.opponentName || "Opponent";
-  const winner = getSetWinner(playerScores, opponentScores);
+  const winner = leadingOnSets(playerScores, opponentScores);
   const playerStyle = formatPlayerStyle(formData.playerHand, formData.playerBackhand);
   const opponentStyle = formatPlayerStyle(formData.opponentHand, formData.opponentBackhand);
   const eventTitle =
@@ -408,6 +412,11 @@ function ConfirmContentImpl({
             <dd className="text-[13px] leading-[18px] text-[#0D0D0D] tabular-nums">
               {formatClock(formData.videoStartSeconds)} –{" "}
               {formatClock(formData.videoEndSeconds)}
+              {sourceDurationSeconds !== undefined &&
+                (formData.videoStartSeconds ?? 0) <= 0 &&
+                (formData.videoEndSeconds ?? 0) >= sourceDurationSeconds - 1 && (
+                  <span className="text-[#AAAAAA]"> · untrimmed</span>
+                )}
             </dd>
           </div>
         </dl>

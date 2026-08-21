@@ -104,6 +104,8 @@ export interface MatchData {
   player1_name: string;
   player2_id: string | null;
   player2_name: string;
+  /** Workspace the match belongs to. NULL = personal workspace. */
+  program_id: string | null;
   tournament_name: string | null;
   round: string | null;
   format: {
@@ -182,16 +184,18 @@ export const STEP_ORDER_BY_KIND: Record<ProviderKind, Step[]> = {
 export const STEP_CONFIG: Record<Step, { title: string; description: string }> = {
   provider: {
     title: "Choose your data source",
-    description: "Select the platform you exported from."
+    description: "Select where this match's numbers come from."
   },
   video: {
-    title: "Add your video",
-    description: "We'll check it works before anything uploads, then you can trim to the match itself."
+    title: "Add your match video",
+    description: "Drop the file and trim to the first serve — details come last."
   },
   match: {
     title: "Add your match",
     description: "Drop your file — we'll auto-fill the details for you to review."
   },
+  // Not rendered: the confirm step opens on the match's own hero, which says
+  // all of this better than a heading above it could.
   confirm: {
     title: "Ready to save",
     description: "A final review before this match is saved to your dashboard."
@@ -208,7 +212,8 @@ export const STEP_CONFIG_PROCESSING: Partial<
   Record<Step, Partial<{ title: string; description: string }>>
 > = {
   match: {
-    description: "Tell us how the match went — the analysis needs the final score to line up with your video."
+    title: "Match details",
+    description: "Everything the report needs — score, context, and the two video answers."
   },
   confirm: {
     description: "A final review before this match is queued for analysis."
@@ -229,4 +234,76 @@ export interface ParsingState {
   parseError: string | null;
   parseWarnings: string[];
   parseSuccess: boolean;
+}
+
+/**
+ * What an event already knows about a line, handed to the wizard so it can
+ * pre-answer everything except the video.
+ *
+ * This is what makes the team flow the SAME wizard rather than a second one.
+ * In a personal workspace step 1 asks "where do the numbers come from?"; in a
+ * team workspace the lineup already minted the line and the result already
+ * named the players, so the only open question is which match this file is —
+ * and that arrives answered.
+ *
+ * A check here is a fact the EVENT owns. Wrong ones are corrected on the event,
+ * never re-typed in the wizard, or the two disagree and the event loses.
+ */
+export interface EventPreset {
+  /**
+   * Which shape this is.
+   *
+   * `line` — a dual court or a tournament round. The event knows everything.
+   * `single` — a challenge, practice set or outside event. The workspace knows
+   *   only WHOSE match it is, which is the one question the personal wizard
+   *   cannot answer here; the rest is the personal details step, unchanged.
+   */
+  kind: "line" | "single";
+  /** Null on a single match — there is no event and no line. */
+  entryId: string | null;
+  eventId: string | null;
+  /** Opponent school for a dual, tournament name for a tournament. */
+  eventName: string | null;
+  /** Single only: the program's players, to pick from. */
+  roster?: { userId: string; name: string; ladderPosition: number | null }[];
+  /** The match this line already produced, when somebody has scored it. */
+  matchId: string | null;
+  /** 'S1' for a dual line, 'R16' for a tournament round. */
+  round: string | null;
+  /** Our side. `player1` everywhere downstream — see job-request.ts. */
+  playerName: string;
+  /**
+   * The ACCOUNT behind `playerName`, when there is one. Written to
+   * `matches.player1_id`.
+   *
+   * This has to travel separately from the name because in a team workspace
+   * the uploader and the player are different people. The wizard used to write
+   * the signed-in uploader's id here, so a coach uploading for a roster
+   * athlete produced `{player1_name: "<athlete>", player1_id: <coach>}` — and
+   * every consumer that keys on the id rather than the label then attributed
+   * the athlete's match to the coach, with nothing on screen looking wrong.
+   *
+   * NULL is a real answer and the only safe default. A player with no account,
+   * a doubles line, a name typed by hand — all of them get null. `player1_id`
+   * is also half of the `matches` SELECT policy, so a wrong id is not merely a
+   * mislabelled row: it hands read access to the wrong person.
+   */
+  playerUserId: string | null;
+  opponentName: string;
+  /** YYYY-MM-DD, from the event. */
+  date: string;
+  surface: string | null;
+  bestOf: number;
+  /**
+   * Ad or no-ad, from the event's format. Nullable because the pipeline
+   * refuses a job without a real answer and a `false` default would be a wrong
+   * answer that looks like a real one.
+   */
+  adScoring: boolean | null;
+  /** Already recorded courtside, so the wizard does not ask again. */
+  score: { player1: number[]; player2: number[] } | null;
+  /** Doubles lines cannot be video-analysed — job-request.ts refuses them. */
+  supportsVideo: boolean;
+  /** Where Cancel and success return to. */
+  eventHref: string;
 }

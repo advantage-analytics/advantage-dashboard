@@ -30,6 +30,7 @@ import {
   resolveAzureStorageConfig,
 } from '@/lib/services/splitstep/video-url';
 import { releaseQuota, reserveQuota } from '@/lib/services/splitstep/quota';
+import { getWorkspaceContext } from '@/lib/workspace/active-workspace-server';
 
 export const runtime = 'nodejs';
 
@@ -46,12 +47,19 @@ interface SubmitBody {
   jobId?: string;
   /**
    * Camera-relative at the FIRST FRAME, not player1/player2. Players change
-   * ends every odd game; this refers only to the start.
+   * ends every odd game; this refers only to the start. Get it wrong and every
+   * statistic belongs to the wrong player, with nothing in the UI looking off.
    *
-   * Not persisted on processing_jobs — no column exists — so the client sends
-   * it at submit time. That is the weakest link here: get it wrong and every
-   * statistic is attributed to the wrong player, with nothing in the UI looking
-   * off. A column for this (and the two below) is the obvious hardening.
+   * OPTIONAL, and that is new. This comment used to say "not persisted on
+   * processing_jobs — no column exists", which stopped being true when
+   * migration 20260807072714 added all three columns and this route started
+   * writing them at submit. So the wizard still sends them on a first submit,
+   * where the columns are still null; a resubmission sends none of them and
+   * the row supplies the answers instead.
+   *
+   * That is what makes retry safe. The alternative — asking again — would put
+   * the three questions that silently misattribute a whole match in front of
+   * somebody whose only intent was to press "try again".
    */
   initialTopPlayerIsPlayer1?: boolean;
   adScoring?: boolean;
@@ -123,14 +131,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'jobId is required' }, { status: 400 });
   }
 
-  if (typeof initialTopPlayerIsPlayer1 !== 'boolean') {
-    // Refused rather than defaulted. A default here is a coin flip on which
-    // player every statistic belongs to.
-    return NextResponse.json(
-      { error: 'initialTopPlayerIsPlayer1 is required and must be a boolean' },
-      { status: 400 }
-    );
-  }
+  // The orientation check used to sit here, before anything was loaded. It has
+  // moved below the job AND match lookups, so a RESUBMISSION can take the
+  // answer from a row instead of the body — see `effective*`. Still refused
+  // rather than defaulted, just later and from three sources instead of one.
 
   // Before touching the database or an allowance: can this deployment finish
   // the job at all?
@@ -151,7 +155,7 @@ export async function POST(request: NextRequest) {
   const { data: jobRow, error: jobError } = await admin
     .from('processing_jobs')
     .select(
-      'id, match_id, created_by, status, external_job_id, video_object_key, start_time_seconds, end_time_seconds'
+      'id, match_id, created_by, status, external_job_id, video_object_key, start_time_seconds, end_time_seconds, attempt_count, initial_top_player_is_player1, ad_scoring, fixed_camera'
     )
     .eq('id', jobId)
     .maybeSingle();
@@ -176,6 +180,10 @@ export async function POST(request: NextRequest) {
     video_object_key: string | null;
     start_time_seconds: number | null;
     end_time_seconds: number | null;
+    attempt_count: number | null;
+    initial_top_player_is_player1: boolean | null;
+    ad_scoring: boolean | null;
+    fixed_camera: boolean | null;
   };
 
   // 3. Is it actually submittable?
@@ -212,10 +220,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
+
   // 4. Match metadata — players, scores, and the singles/doubles gate.
   const { data: matchRow, error: matchError } = await admin
     .from('matches')
-    .select('id, player1_name, player2_name, score, match_type')
+    .select('id, player1_name, player2_name, score, match_type, program_id, format, fixed_camera, initial_top_player_is_player1')
     .eq('id', job.match_id)
     .maybeSingle();
 
@@ -231,7 +240,61 @@ export async function POST(request: NextRequest) {
     player2_name: string;
     score: { player1: number[]; player2: number[] } | null;
     match_type: string | null;
+    /** The workspace this match belongs to. NULL = personal. */
+    program_id: string | null;
+    /** `ad_scoring` lives in here, not in a column of its own. */
+    format: { ad_scoring?: boolean } | null;
+    fixed_camera: boolean | null;
+    initial_top_player_is_player1: boolean | null;
   };
+
+  // ── The three vendor answers: body, then job, then match ──────────────────
+  //
+  // A first submit carries them in the body — the wizard has just asked. A
+  // RESUBMISSION carries none, because the only caller that knows them is a
+  // wizard that closed long ago, and re-asking would put the three questions
+  // that silently misattribute every statistic in front of somebody whose only
+  // intent was to press "try again".
+  //
+  // Three sources because two were not enough, and the reason is worth keeping.
+  // Migration 20260807072714 added these columns to `processing_jobs` so the
+  // answers would outlive the request — but this route only WRITES them at
+  // submit, and the outer catch marks a failed submit `failed`, not
+  // `uploaded`. So a job still sitting at `uploaded` is precisely one where the
+  // route was never reached or returned early, and its job columns are null.
+  // The retry case and the populated-job case are disjoint.
+  //
+  // The match row is what closes that gap: the wizard writes
+  // `initial_top_player_is_player1`, `fixed_camera` and `format.ad_scoring`
+  // when it creates the match, before any upload begins. Those are the answers
+  // the person actually gave.
+  //
+  // Order is most-specific-first. Body is an explicit statement of intent; the
+  // job row is what the last attempt used; the match row is what was originally
+  // answered.
+  const effectiveTopPlayer =
+    typeof initialTopPlayerIsPlayer1 === 'boolean'
+      ? initialTopPlayerIsPlayer1
+      : job.initial_top_player_is_player1 ?? match.initial_top_player_is_player1;
+  const effectiveAdScoring =
+    typeof adScoring === 'boolean'
+      ? adScoring
+      : job.ad_scoring ?? match.format?.ad_scoring;
+  const effectiveFixedCamera =
+    typeof fixedCamera === 'boolean'
+      ? fixedCamera
+      : job.fixed_camera ?? match.fixed_camera;
+
+  if (typeof effectiveTopPlayer !== 'boolean') {
+    // Refused rather than defaulted. A default here is a coin flip on which
+    // player every statistic belongs to. Reaching this means neither the job
+    // nor the match recorded an orientation, which is a match created before
+    // those columns existed — a human has to answer again.
+    return NextResponse.json(
+      { error: 'initialTopPlayerIsPlayer1 is required and must be a boolean' },
+      { status: 400 }
+    );
+  }
 
   // 5. Build and validate before anything is spent. buildSplitStepJobRequest
   //    enforces singles-only, a trim consistent with the score, and the
@@ -243,7 +306,7 @@ export async function POST(request: NextRequest) {
     webhookUrl: config.webhookUrl,
     player1Name: match.player1_name,
     player2Name: match.player2_name,
-    initialTopPlayerIsPlayer1,
+    initialTopPlayerIsPlayer1: effectiveTopPlayer,
     startTimeSeconds: Number(job.start_time_seconds),
     endTimeSeconds: Number(job.end_time_seconds),
     player1Scores: match.score?.player1 ?? [],
@@ -252,8 +315,8 @@ export async function POST(request: NextRequest) {
     // while the wizard's own default was `false` — two silent, opposite guesses
     // at fields that change how the vendor reads the match. The builder refuses
     // a non-boolean now, so an omission becomes a 422 the caller can act on.
-    adScoring,
-    fixedCamera,
+    adScoring: effectiveAdScoring ?? undefined,
+    fixedCamera: effectiveFixedCamera ?? undefined,
     matchType: match.match_type,
   });
 
@@ -270,10 +333,28 @@ export async function POST(request: NextRequest) {
   );
 
   // 6. Reserve the allowance. Refuses here, before a job is spent.
+  //
+  // Billed to the MATCH's workspace, not whichever one the caller happens to
+  // have selected. A coach can switch workspaces between starting an upload and
+  // submitting it, and the budget that pays for a match is the one the match
+  // belongs to.
+  const workspaceContext = await getWorkspaceContext();
+  const billingWorkspace = match.program_id
+    ? workspaceContext?.available.find((w) => w.id === match.program_id)
+    : workspaceContext?.available.find((w) => w.kind === 'personal');
+
+  if (!billingWorkspace) {
+    return NextResponse.json(
+      { error: 'You do not have access to the workspace this match belongs to.' },
+      { status: 403 }
+    );
+  }
+
   const reservation = await reserveQuota({
     supabase: admin,
     jobId: job.id,
     userId: user.id,
+    workspace: billingWorkspace,
     seconds: billableSeconds,
   });
 
@@ -304,8 +385,11 @@ export async function POST(request: NextRequest) {
       .update({
         status: 'submitting',
         billable_seconds: billableSeconds,
-        attempt_count: 1,
-        initial_top_player_is_player1: initialTopPlayerIsPlayer1,
+        // Counted, not pinned. This was `1`, which reset the tally on every
+        // resubmission and made "how many times has this been tried" a
+        // question the column could not answer.
+        attempt_count: (job.attempt_count ?? 0) + 1,
+        initial_top_player_is_player1: effectiveTopPlayer,
         ad_scoring: vendorRequest.Ad,
         fixed_camera: vendorRequest.FixedCamera,
       })

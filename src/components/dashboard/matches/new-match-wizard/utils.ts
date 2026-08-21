@@ -37,7 +37,12 @@ export function determineWinner(
   playerScores: (number | null)[],
   opponentScores: (number | null)[],
   _bestOf: number, // Used for future validation of sets to win
-  userId: string,
+  /**
+   * The account behind `playerName` — NOT the signed-in uploader. Null when
+   * the player has no account, which is an ordinary case in a team workspace
+   * and must never be filled in with the uploader's id.
+   */
+  playerUserId: string | null,
   playerName: string,
   opponentName: string
 ): WinnerLoserResult {
@@ -60,11 +65,11 @@ export function determineWinner(
 
   return {
     winner: playerWon
-      ? { id: userId, name: playerName, scores: playerScoresNum }
+      ? { id: playerUserId, name: playerName, scores: playerScoresNum }
       : { id: null, name: opponentName, scores: opponentScoresNum },
     loser: playerWon
       ? { id: null, name: opponentName, scores: opponentScoresNum }
-      : { id: userId, name: playerName, scores: playerScoresNum }
+      : { id: playerUserId, name: playerName, scores: playerScoresNum }
   };
 }
 
@@ -75,6 +80,14 @@ export interface MatchMetadata {
   analysisMethod: string;
   matchType?: string;
   courtType?: string;
+  /**
+   * The workspace this match belongs to. NULL is the personal workspace — see
+   * migration `20260817074043`. `/api/splitstep/jobs` reads it back to decide
+   * which allowance the analysis is billed against, so a team upload that
+   * leaves it null quietly spends the uploader's own 2 hours instead of the
+   * program's 75.
+   */
+  programId?: string | null;
 }
 
 /**
@@ -112,6 +125,7 @@ export function buildMatchData(
     player1_name: formData.playerName,
     player2_id: playerWon ? loser.id : winner.id,
     player2_name: formData.opponentName,
+    program_id: metadata.programId ?? null,
     tournament_name: formData.eventName || null,
     round: formData.round || null,
     format: {
@@ -236,6 +250,69 @@ export function formatDuration(ms: number | undefined): string {
   if (hours === 0) return `${minutes}M`;
   if (minutes === 0) return `${hours}H`;
   return `${hours}H ${minutes}M`;
+}
+
+/**
+ * Who is ahead on sets.
+ *
+ * Lives here rather than in a component because BOTH the Match step's WON tag
+ * and the Confirm step's readback have to answer it the same way — a rule
+ * enforced by one function instead of by remembering to copy it.
+ *
+ * Deliberately looser than `deriveOutcome`: this reports who is ahead right
+ * now, which is what a tag beside a name means, while that one refuses to name
+ * a winner until the sets actually decide the match.
+ */
+export function leadingOnSets(
+  playerScores: (number | null)[],
+  opponentScores: (number | null)[]
+): "player" | "opponent" | null {
+  let p = 0;
+  let o = 0;
+  for (let i = 0; i < playerScores.length; i++) {
+    const ps = playerScores[i] ?? 0;
+    const os = opponentScores[i] ?? 0;
+    if (ps > os) p++;
+    else if (os > ps) o++;
+  }
+  if (p > o) return "player";
+  if (o > p) return "opponent";
+  return null;
+}
+
+/**
+ * Play a one-shot ring pulse on an element.
+ *
+ * The `void offsetWidth` is a forced reflow, and it is load-bearing: without it
+ * re-adding the class mid-animation does nothing, so a second pulse would be
+ * silent. Shared because that subtlety survives exactly one copy-paste.
+ */
+export function pulseOnce(el: HTMLElement): void {
+  el.classList.remove("animate-chord-pulse");
+  void el.offsetWidth;
+  el.classList.add("animate-chord-pulse");
+  const onEnd = () => {
+    el.classList.remove("animate-chord-pulse");
+    el.removeEventListener("animationend", onEnd);
+  };
+  el.addEventListener("animationend", onEnd);
+}
+
+/**
+ * A span of SECONDS as "1h 47m", "35m", "2h".
+ *
+ * The third member of this file's formatter family, and the one for spans a
+ * person reasons about in hours: a monthly allowance and a match length. Note
+ * the siblings above — `formatClipLength` keeps seconds because a trim handle
+ * needs them, and `formatDuration` shouts in caps for the eyebrow rows that
+ * carry match metadata elsewhere in the app. Same quantity, three audiences.
+ */
+export function formatHoursMinutes(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds));
+  const h = Math.floor(total / 3600);
+  const m = Math.round((total % 3600) / 60);
+  if (h === 0) return `${m}m`;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
 /**

@@ -31,6 +31,7 @@ export {
   getProviderStrategy,
   getImportProviderStrategy,
   getProviderKind,
+  providerKindOrNull,
   isProviderSupported,
   getSupportedProviders,
   swingVisionStrategy,

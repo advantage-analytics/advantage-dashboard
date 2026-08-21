@@ -17,20 +17,26 @@ import {
   getProviderStrategy,
   getProviderKind,
   isProviderSupported,
+  providerKindOrNull,
   IProcessingProviderStrategy,
   ProviderId,
   ProviderKind,
   ValidationResult,
 } from "@/lib/services/upload";
 import { getParser, hasParser } from "@/lib/services/upload/parsers";
+import { providers } from "@/lib/providers";
 import {
-  UploadAbortedError,
-  uploadFileInBlocks,
-} from "@/lib/services/upload/azure-block-upload";
+  createProcessingJob,
+  uploadAndSubmitVideo,
+  type VideoUploadEvent,
+} from "@/lib/services/splitstep/submit-match-video";
 import {
   currentBillingMonth,
   getMonthlyCapSeconds,
 } from "@/lib/services/splitstep/config";
+import { accountTypeFor } from "@/lib/services/splitstep/quota";
+import { formatResetDate } from "@/lib/data/usage-format";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import {
   Step,
   FormData as MatchFormData,
@@ -39,7 +45,8 @@ import {
   DetailField,
   VideoProbeSummary,
   DEFAULT_FORM_DATA,
-  STEP_ORDER_BY_KIND
+  STEP_ORDER_BY_KIND,
+  type EventPreset
 } from "./types";
 import {
   determineWinner,
@@ -53,6 +60,38 @@ import {
   STORAGE_KEYS,
   MatchMetadata
 } from "./utils";
+
+/**
+ * The source a new match starts on.
+ *
+ * Resolved from the registry by KIND rather than named, so the wizard stays
+ * written against "your own video" instead of against a particular vendor.
+ */
+const DEFAULT_PROVIDER_ID: ProviderId | null =
+  providers.find(
+    (p) => p.available !== false && providerKindOrNull(p.id) === "processing"
+  )?.id ?? null;
+
+/**
+ * Where a line that CANNOT take video starts instead.
+ *
+ * A doubles line was handed the processing provider like every other preset,
+ * and `PinnedMatchContent` replaces the provider step, so there was no way to
+ * choose anything else. The coach picked a multi-gigabyte file and met
+ * "Video analysis supports singles matches only" from `job-request.ts` after
+ * the upload — a 422 at the end of the most expensive step, with an orphaned
+ * blob and a job stuck at `uploaded`.
+ *
+ * `supportsVideo()` already knows this at page-build time, and the import
+ * provider is a real path for a doubles line: it parses numbers and never goes
+ * near the vision pipeline. Its step order also skips the video step, so the
+ * wizard asks for a file instead of a video and the "Add file" label the
+ * schedule row already shows becomes true.
+ */
+const DEFAULT_IMPORT_PROVIDER_ID: ProviderId | null =
+  providers.find(
+    (p) => p.available !== false && providerKindOrNull(p.id) === "import"
+  )?.id ?? null;
 
 export interface UseUploadMatchWizardProps {
   open: boolean;
@@ -74,47 +113,38 @@ export interface UseUploadMatchWizardProps {
    * outlives the wizard, which is what this is for.
    */
   onVideoUpload?: (event: VideoUploadEvent) => void;
-}
-
-/** Bytes moved so far, and what that implies. */
-export interface VideoUploadProgress {
-  pct: number;
-  bytesUploaded: number;
-  bytesTotal: number;
-  /** Cumulative average, not instantaneous — smooth, and slow to react. */
-  speed: number;
-  etaSeconds: number;
-}
-
-export type VideoUploadEvent = { matchId: string } & (
-  | { kind: "started"; fileName: string; cancel: () => void }
-  | { kind: "progress"; progress: VideoUploadProgress }
-  | { kind: "done" }
-  /** Handed to the vendor. The transfer AND the submission both succeeded. */
-  | { kind: "submitted" }
   /**
-   * Uploaded, but the vendor would not take it.
+   * Set in a team workspace: the event line this upload belongs to.
    *
-   * Distinct from `failed`: the video is safely stored and the job row still
-   * says `uploaded`, so this is retryable without re-uploading anything.
+   * When present the wizard stops being a match CREATOR and becomes a match
+   * FILLER — the line already exists, so provider, players, date, surface,
+   * format and often the score all arrive answered, and the only thing left is
+   * the video and the two questions no lineup can know.
    */
-  | { kind: "submit_failed"; error: string }
-  | { kind: "cancelled" }
-  | { kind: "failed"; error: string }
-);
+  preset?: EventPreset | null;
+}
+
+/**
+ * The video-upload event stream.
+ *
+ * Defined in `lib/services/splitstep/submit-match-video.ts` now that two
+ * wizards emit it, and re-exported here so existing importers do not move.
+ */
+export type {
+  VideoUploadEvent,
+  VideoUploadProgress,
+} from "@/lib/services/splitstep/submit-match-video";
 
 export interface UseUploadMatchWizardReturn {
   // State
   step: Step;
   selectedProvider: ProviderId | null;
-  sourceType: string;
   uploadedFile: UploadedFile | null;
   isOver: boolean;
   isCreating: boolean;
   isUploading: boolean;
   error: string | null;
   uploadError: string | null;
-  isPrivateMatch: boolean;
   formData: MatchFormData;
   parsingState: ParsingState;
 
@@ -135,6 +165,10 @@ export interface UseUploadMatchWizardReturn {
    * Undefined while it loads, and for providers that do not bill.
    */
   remainingQuotaSeconds?: number;
+  /** This month's allowance for the active workspace — 2h personal, 75h program. */
+  quotaCapSeconds: number;
+  /** When the allowance comes back, already formatted — "Sep 1". */
+  quotaResetsOn: string;
   acceptString: string;
   requirementChips: readonly string[];
   onVideoPick: (file: File | null) => void;
@@ -142,13 +176,11 @@ export interface UseUploadMatchWizardReturn {
   handleRemoveVideo: () => void;
 
   // Step navigation
-  setStep: (step: Step) => void;
   handleProviderSelect: (providerId: string | null) => void;
   handleProviderContinue: () => void;
   handleVideoContinue: () => void;
   handleMatchContinue: () => void;
   handleBack: () => void;
-  handleClose: () => void;
   /** Deep-link from Confirm back to Match with a specific detail field focused. */
   goEditDetail: (field: DetailField) => void;
   /** When set, DetailsContent should auto-expand details and focus this field. */
@@ -158,14 +190,18 @@ export interface UseUploadMatchWizardReturn {
 
   // File handling
   setIsOver: (isOver: boolean) => void;
-  setSourceType: (type: string) => void;
-  onDrop: (files: FileList | null) => void;
   handleDrop: React.DragEventHandler<HTMLDivElement>;
   handleFileChange: React.ChangeEventHandler<HTMLInputElement>;
   handleRemoveFile: () => void;
 
   // Form handling
   handleInputChange: (field: keyof MatchFormData, value: string | number | boolean | undefined) => void;
+  /**
+   * Set alongside `playerName` whenever a roster row is picked, and set to null
+   * for a name typed by hand. Not part of `MatchFormData` because it is not a
+   * field anyone fills in, and the personal wizard never needs it.
+   */
+  setPickedPlayerUserId: (userId: string | null) => void;
   handleScoreChange: (player: "player" | "opponent", index: number, value: string) => void;
   handleTiebreakChange: (player: "player" | "opponent", index: number, value: string) => void;
 
@@ -204,14 +240,18 @@ export function useUploadMatchWizard({
   onOpenChange,
   onCreated,
   onVideoUpload,
+  preset,
 }: UseUploadMatchWizardProps): UseUploadMatchWizardReturn {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
+  // The workspace this match will belong to and be billed against. Resolved
+  // server-side once per request by the dashboard layout, so reading it here
+  // costs nothing and cannot disagree with the sidebar's switcher.
+  const { active: activeWorkspace } = useWorkspace();
 
   // State
   const [step, setStep] = useState<Step>("provider");
   const [selectedProvider, setSelectedProvider] = useState<ProviderId | null>(null);
-  const [sourceType, setSourceType] = useState<string>("swing-vision");
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
   const [isOver, setIsOver] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -220,9 +260,17 @@ export function useUploadMatchWizard({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isPrivateMatch] = useState(true);
   const [formData, setFormData] = useState<MatchFormData>(getDefaultFormData);
+  /**
+   * The account behind `formData.playerName`, kept beside the form rather than
+   * in it — nobody types this, and the personal wizard has no use for it.
+   *
+   * A dual or tournament line seeds it from the entry. A single match gets it
+   * when a roster row is picked, and keeps it null when the name was typed by
+   * hand, because a typed name is not evidence of an account.
+   */
+  const [pickedPlayerUserId, setPickedPlayerUserId] = useState<string | null>(null);
   // Set when Confirm asks Match to focus a specific detail field. DetailsContent
-  // reads this on mount, expands its Details disclosure, focuses the matching
-  // <select>, and clears the request.
+  // reads this on mount, focuses the matching cell, and clears the request.
   const [pendingDetailFocus, setPendingDetailFocus] = useState<DetailField | null>(null);
   const [parsingState, setParsingState] = useState<ParsingState>({
     isParsing: false,
@@ -253,7 +301,23 @@ export function useUploadMatchWizard({
   const isProcessingProvider = providerKind === "processing";
 
   /**
-   * Seconds left in this month's allowance, for the trim step's cost warning.
+   * The allowance this upload will be billed against.
+   *
+   * Keyed by the ACTIVE WORKSPACE, not the signed-in user: `Workspace.id` is
+   * `processing_usage.account_id` — the user's id for a personal workspace, the
+   * program's for a team one — and the two tiers have different caps. Reading
+   * the personal ledger while a coach sits in a program showed 2 hours against
+   * a 75-hour budget.
+   */
+  const quotaAccountType = accountTypeFor(activeWorkspace);
+  const quotaCapSeconds = getMonthlyCapSeconds(quotaAccountType);
+  // "Sep 1". Settings › Usage already answers "when does this come back" from
+  // the same billing-month key, so the wizard asks it rather than re-deriving.
+  const quotaResetsOn = formatResetDate(currentBillingMonth());
+
+  /**
+   * Seconds left in this month's allowance, for the trim step's cost warning
+   * and the footer meter.
    *
    * Advisory only — reserve_processing_quota() is still the authority and
    * refuses with a 429 at submit time. This mirrors its arithmetic exactly:
@@ -270,15 +334,11 @@ export function useUploadMatchWizard({
     let cancelled = false;
 
     (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user || cancelled) return;
-
       const { data, error } = await supabase
         .from("processing_usage")
         .select("reserved_seconds, actual_seconds")
-        .eq("account_id", user.id)
+        .eq("account_id", activeWorkspace.id)
+        .eq("account_type", quotaAccountType)
         .eq("billing_month", currentBillingMonth())
         .eq("released", false);
 
@@ -288,15 +348,19 @@ export function useUploadMatchWizard({
         (n, row) => n + (row.actual_seconds ?? row.reserved_seconds ?? 0),
         0
       );
-      setRemainingQuotaSeconds(
-        Math.max(0, getMonthlyCapSeconds("individual") - used)
-      );
+      setRemainingQuotaSeconds(Math.max(0, quotaCapSeconds - used));
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [isProcessingProvider, supabase]);
+  }, [
+    isProcessingProvider,
+    supabase,
+    activeWorkspace.id,
+    quotaAccountType,
+    quotaCapSeconds,
+  ]);
 
 
   // Media rules, trim floor and billing all come from the provider rather than
@@ -316,12 +380,49 @@ export function useUploadMatchWizard({
   useEffect(() => {
     if (!open) return;
 
+    // A team upload never resumes a personal draft. The line it is filling is
+    // named in the URL, and restoring a half-finished personal match over it
+    // would put another player's opponent and score on somebody else's court.
+    if (preset) {
+      // The line already knows whose match it is; a single match learns it when
+      // somebody picks from the roster. Both land in the same piece of state.
+      setPickedPlayerUserId(preset.playerUserId);
+      setSelectedProvider(
+        preset.supportsVideo ? DEFAULT_PROVIDER_ID : DEFAULT_IMPORT_PROVIDER_ID
+      );
+      setFormData((prev) => ({
+        ...prev,
+        eventName: preset.eventName ?? "",
+        round: preset.round ?? "",
+        playerName: preset.playerName,
+        opponentName: preset.opponentName,
+        date: preset.date,
+        courtType: preset.surface ?? prev.courtType,
+        bestOf: String(preset.bestOf),
+        adScoring: preset.adScoring ?? undefined,
+        matchType: preset.supportsVideo ? "Singles" : "Doubles",
+        ...(preset.score
+          ? {
+              playerScores: preset.score.player1,
+              opponentScores: preset.score.player2,
+              numberOfSets: preset.score.player1.length,
+            }
+          : {}),
+      }));
+      return;
+    }
+
     const existingProvider = localStorage.getItem(STORAGE_KEYS.SELECTED_PROVIDER);
     let resumedProvider = false;
     if (existingProvider && isProviderSupported(existingProvider)) {
       setSelectedProvider(existingProvider as ProviderId);
-      setSourceType(existingProvider);
       resumedProvider = true;
+    } else if (DEFAULT_PROVIDER_ID) {
+      // Your own video is the default source — it is what most people came to
+      // do, and the alternative is an import from somewhere else. Deliberately
+      // NOT written to storage: a default is not a choice, and persisting it
+      // would make the next visit resume past the step that offers it.
+      setSelectedProvider(DEFAULT_PROVIDER_ID);
     }
 
     const storedFormData = loadFormDataFromStorage();
@@ -374,14 +475,13 @@ export function useUploadMatchWizard({
     return () => {
       cancelled = true;
     };
-  }, [open, supabase]);
+  }, [open, supabase, preset]);
 
   // Step navigation handlers
   const handleProviderSelect = useCallback((providerId: string | null) => {
     // Validate provider ID before setting
     if (providerId && isProviderSupported(providerId)) {
       setSelectedProvider(providerId as ProviderId);
-      setSourceType(providerId);
       localStorage.setItem(STORAGE_KEYS.SELECTED_PROVIDER, providerId);
     } else {
       setSelectedProvider(null);
@@ -393,12 +493,20 @@ export function useUploadMatchWizard({
   }, []);
 
   const handleProviderContinue = useCallback(() => {
-    if (selectedProvider) {
-      // Processing providers get a video step before the form; import providers
-      // go straight to the merged file+details step.
-      setStep(stepOrder[1]);
-    }
-  }, [selectedProvider, stepOrder]);
+    if (!selectedProvider) return;
+    // Belt as well as braces. The preset above already opens a doubles line on
+    // the import provider, but nothing else stops a processing provider being
+    // selected for one, and the cost of getting it wrong is paid entirely by
+    // the coach — a full video upload, then a 422.
+    if (preset && !preset.supportsVideo && isProcessingProvider) return;
+    // A single match in a team workspace cannot move on without a player: it is
+    // the one thing the workspace does not already know, and a match created
+    // without it belongs to nobody's season.
+    if (preset?.kind === "single" && !formData.playerName.trim()) return;
+    // Processing providers get a video step before the form; import providers
+    // go straight to the merged file+details step.
+    setStep(stepOrder[1]);
+  }, [selectedProvider, stepOrder, preset, formData.playerName, isProcessingProvider]);
 
   const handleVideoContinue = useCallback(() => {
     setStep("match");
@@ -444,11 +552,18 @@ export function useUploadMatchWizard({
       // Default the trim to the whole video. The user narrows it on the rail;
       // starting at the full extent means a straight-through flow still submits
       // a valid window.
-      setFormData((prev) => ({
-        ...prev,
-        videoStartSeconds: 0,
-        videoEndSeconds: summary?.durationSeconds ?? prev.videoEndSeconds,
-      }));
+      setFormData((prev) => {
+        const end = summary?.durationSeconds ?? prev.videoEndSeconds;
+        return {
+          ...prev,
+          videoStartSeconds: 0,
+          videoEndSeconds: end,
+          // Same rule as handleTrimChange: the untrimmed clip is the starting
+          // window, so it is also the starting duration. It narrows with the
+          // handles.
+          duration: end !== undefined ? Math.max(0, Math.round(end)) * 1000 : prev.duration,
+        };
+      });
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Couldn't read this video.");
     } finally {
@@ -462,6 +577,11 @@ export function useUploadMatchWizard({
       ...prev,
       videoStartSeconds: startSeconds,
       videoEndSeconds: endSeconds,
+      // The window IS the match: it was trimmed to the first serve and the
+      // final point, so how long it runs is how long the match took. Typing
+      // that a second time only creates a chance to disagree with the
+      // "analysed window" printed two screens later.
+      duration: Math.max(0, Math.round(endSeconds - startSeconds)) * 1000,
     }));
   }, []);
 
@@ -474,6 +594,8 @@ export function useUploadMatchWizard({
       ...prev,
       videoStartSeconds: undefined,
       videoEndSeconds: undefined,
+      // The duration came from the window; without a video there is no window.
+      duration: 0,
     }));
   }, []);
 
@@ -617,18 +739,67 @@ export function useUploadMatchWizard({
           const parseResult = await parser.parse(file);
 
           if (parseResult.success && parseResult.data) {
-            // Merge parsed data with existing form data
+            /**
+             * THE EVENT OUTRANKS THE FILE.
+             *
+             * With a preset, these answers came from the event and
+             * `PinnedMatchContent` tells the coach in as many words that they
+             * are not re-asked here. A parsed file may FILL BLANKS; it may not
+             * overwrite.
+             *
+             * This only became reachable when doubles lines started opening on
+             * the import provider: every preset used to get the processing
+             * provider, which has no parser, so this block never ran for one.
+             * Now it does, and a SwingVision export names one account holder
+             * and one opponent — so an unguarded merge replaced a doubles
+             * line's "Chen / Alvarez" with a single name and its courtside
+             * score with the file's. The line still carries `event_entry_id`,
+             * so the schedule would render that court under the wrong names,
+             * and `reusingMatch` would write it over the recorded result.
+             *
+             * Scores are held only when the event actually supplied one — a
+             * line that has been played but not yet scored is a genuine blank
+             * the file should fill. Tiebreaks travel with the score they
+             * belong to, or they end up describing a different match's sets.
+             */
+            const eventOwns = Boolean(preset);
+            const eventScored = Boolean(preset?.score);
+
             setFormData((prev) => ({
               ...prev,
-              playerName: parseResult.data?.playerName || prev.playerName,
-              opponentName: parseResult.data?.opponentName || prev.opponentName,
-              playerScores: parseResult.data?.playerScores || prev.playerScores,
-              opponentScores: parseResult.data?.opponentScores || prev.opponentScores,
-              playerTiebreaks: parseResult.data?.playerTiebreaks || prev.playerTiebreaks,
-              opponentTiebreaks: parseResult.data?.opponentTiebreaks || prev.opponentTiebreaks,
-              bestOf: parseResult.data?.bestOf || prev.bestOf,
-              numberOfSets: parseResult.data?.numberOfSets ?? prev.numberOfSets,
-              adScoring: parseResult.data?.adScoring !== undefined ? parseResult.data.adScoring : prev.adScoring,
+              playerName:
+                eventOwns && prev.playerName.trim()
+                  ? prev.playerName
+                  : parseResult.data?.playerName || prev.playerName,
+              opponentName:
+                eventOwns && prev.opponentName.trim()
+                  ? prev.opponentName
+                  : parseResult.data?.opponentName || prev.opponentName,
+              playerScores: eventScored
+                ? prev.playerScores
+                : parseResult.data?.playerScores || prev.playerScores,
+              opponentScores: eventScored
+                ? prev.opponentScores
+                : parseResult.data?.opponentScores || prev.opponentScores,
+              playerTiebreaks: eventScored
+                ? prev.playerTiebreaks
+                : parseResult.data?.playerTiebreaks || prev.playerTiebreaks,
+              opponentTiebreaks: eventScored
+                ? prev.opponentTiebreaks
+                : parseResult.data?.opponentTiebreaks || prev.opponentTiebreaks,
+              // Format comes off the event, which declared it once for every
+              // line, rather than off one player's export of one match.
+              bestOf: eventOwns ? prev.bestOf : parseResult.data?.bestOf || prev.bestOf,
+              numberOfSets: eventScored
+                ? prev.numberOfSets
+                : parseResult.data?.numberOfSets ?? prev.numberOfSets,
+              adScoring:
+                eventOwns && preset?.adScoring !== null
+                  ? prev.adScoring
+                  : parseResult.data?.adScoring !== undefined
+                    ? parseResult.data.adScoring
+                    : prev.adScoring,
+              // Not seeded by a preset, so the file is the only source.
               result: parseResult.data?.result || prev.result,
               duration: parseResult.data?.duration || prev.duration,
               // Preserve existing date/time if parser didn't provide them
@@ -662,7 +833,9 @@ export function useUploadMatchWizard({
         });
       }
     }
-  }, [selectedProvider]);
+    // `preset` is read inside: with a preset the event's answers win over the
+    // parsed file, so a stale closure here would silently restore the overwrite.
+  }, [selectedProvider, preset]);
 
   const handleDrop: React.DragEventHandler<HTMLDivElement> = useCallback(
     (e) => {
@@ -772,7 +945,12 @@ export function useUploadMatchWizard({
         cachedUserIdRef.current = userId;
       }
 
-      const matchId = crypto.randomUUID();
+      // A preset line that has already been scored HAS a match — reuse it.
+      // Minting a second would give one court two results and count it twice in
+      // the dual's team score, which is the duplicate 22e's "fills 3 of 9"
+      // receipt exists to rule out.
+      const matchId = preset?.matchId ?? crypto.randomUUID();
+      const reusingMatch = Boolean(preset?.matchId);
 
       const adjustedPlayerScores = getAdjustedScores(
         formData.playerScores,
@@ -784,11 +962,22 @@ export function useUploadMatchWizard({
         formData.bestOf,
         formData.numberOfSets
       );
+      // WHOSE match this is, which in a team workspace is not the uploader.
+      //
+      // No preset means the personal wizard, where the uploader IS the player.
+      // With a preset the answer comes from the roster — and `null` when the
+      // named player has no account is the correct answer, not a gap to fill
+      // with `userId`. Falling back to the uploader is exactly the bug this
+      // replaces: it attributes an athlete's match to their coach, and since
+      // `player1_id` is half the `matches` SELECT policy, it also hands the
+      // coach read access the athlete then loses.
+      const playerUserId = preset ? pickedPlayerUserId : userId;
+
       const { winner, loser } = determineWinner(
         adjustedPlayerScores,
         adjustedOpponentScores,
         parseInt(formData.bestOf),
-        userId,
+        playerUserId,
         formData.playerName,
         formData.opponentName
       );
@@ -802,7 +991,11 @@ export function useUploadMatchWizard({
         // electronic line-calling data the provider already computed.
         analysisMethod: isProcessingProvider ? 'ai' : 'elc',
         matchType: formData.matchType,
-        courtType: formData.courtType
+        courtType: formData.courtType,
+        // NULL for a personal workspace, which is what the column means. The
+        // jobs route reads this back to pick the ledger, so a team upload has
+        // to carry the program or it silently bills the uploader.
+        programId: activeWorkspace.kind === "team" ? activeWorkspace.id : null,
       };
 
       const matchData = buildMatchData(matchId, { ...formData, eventName }, winner, loser, isPrivateMatch, metadata);
@@ -816,12 +1009,55 @@ export function useUploadMatchWizard({
           }
         : matchData;
 
-      const { error: matchError } = await supabase.from("matches").insert(matchRow);
+      // Fill vs create. A preset line whose match exists gets its score and the
+      // camera answers written onto the row it already has; everything else
+      // inserts. `event_entry_id` is what ties a new one back to its line.
+      const { data: written, error: matchError } = reusingMatch
+        ? await supabase
+            .from("matches")
+            .update({
+              score: matchRow.score,
+              player1_name: matchRow.player1_name,
+              player2_name: matchRow.player2_name,
+              ...(isProcessingProvider
+                ? {
+                    fixed_camera: formData.fixedCamera ?? null,
+                    initial_top_player_is_player1:
+                      formData.initialTopPlayerIsPlayer1 ?? null,
+                  }
+                : {}),
+            })
+            .eq("id", matchId)
+            // `.select()` so an update that matched NO ROW is visible. This is
+            // a browser-client write against a policy of `auth.uid() =
+            // created_by`, and a coach filling a line somebody else recorded
+            // is not the creator — so RLS silently filtered the row out and
+            // PostgREST returned success with `error: null`. The score
+            // correction was discarded, and `fixed_camera` /
+            // `initial_top_player_is_player1` never persisted, which is
+            // exactly the fallback `/api/splitstep/jobs` reads when the wizard
+            // could not answer the camera questions. The submission then 400s
+            // permanently with nothing explaining why.
+            .select("id")
+        : await supabase
+            .from("matches")
+            .insert({ ...matchRow, event_entry_id: preset?.entryId ?? null })
+            .select("id");
 
       if (matchError) {
         console.error("Supabase insert error:", matchError);
         throw new Error(
           `Database error: ${matchError.message || matchError.details || JSON.stringify(matchError)}`
+        );
+      }
+
+      if (!written || written.length === 0) {
+        throw new Error(
+          reusingMatch
+            ? "This match belongs to someone else on the program, so we could not " +
+              "save the changes. Ask whoever recorded it to make them, or record " +
+              "a new result for this line."
+            : "The match could not be saved. Nothing was uploaded — try again."
         );
       }
 
@@ -854,289 +1090,74 @@ export function useUploadMatchWizard({
       onOpenChange(false);
       setTimeout(() => router.refresh(), 300);
 
-      // Video providers (e.g. Advantage Intelligence): record job & upload video to Azure
+      // Video providers (e.g. Advantage Intelligence): record job & upload video
+      // to Azure. The sequence itself lives in
+      // `lib/services/splitstep/submit-match-video.ts` so the team upload
+      // wizard runs the same one per video rather than keeping a second copy of
+      // the invariants in guardrails 3.1.
       if (processingStrategy) {
         const startSeconds = formData.videoStartSeconds ?? 0;
         const endSeconds = formData.videoEndSeconds ?? 0;
         const videoFileToUpload = uploadedFile?.file;
 
-        // The id comes back now. Submission is keyed on it, and so is every
-        // write below — previously they all matched on match_id because this
-        // insert discarded it, which silently touches every job a resubmitted
-        // match has ever had.
-        const { data: jobRow, error: jobError } = await supabase
-          .from("processing_jobs")
-          .insert({
-            match_id: matchId,
-            created_by: userId,
+        let jobId: string;
+        try {
+          const job = await createProcessingJob({
+            supabase,
+            matchId,
+            userId,
             provider: selectedProvider,
-            status: videoFileToUpload ? "uploading" : "pending",
-            start_time_seconds: startSeconds,
-            end_time_seconds: endSeconds,
-            billable_seconds: processingStrategy.billableSeconds(startSeconds, endSeconds),
-          })
-          .select("id")
-          .single();
-
-        if (jobError || !jobRow) {
-          console.error("Processing job insert error:", jobError);
-          // Roll back the match row so the user gets a clean retry
-          await supabase.from("matches").delete().eq("id", matchId);
+            startSeconds,
+            endSeconds,
+            billableSeconds: processingStrategy.billableSeconds(startSeconds, endSeconds),
+            hasFile: Boolean(videoFileToUpload),
+          });
+          jobId = job.id;
+        } catch (jobErr) {
+          console.error("Processing job insert error:", jobErr);
+          // Roll back the match row so the user gets a clean retry — but ONLY
+          // one this wizard just created. A personal match row exists purely to
+          // carry its video, so removing it is the clean retry; an event line's
+          // match is a recorded result that predates this upload, and deleting
+          // it would destroy a score somebody entered courtside.
+          if (!reusingMatch) {
+            await supabase.from("matches").delete().eq("id", matchId);
+          }
           window.dispatchEvent(
             new CustomEvent("match-upload-failed", {
               detail: {
                 matchId,
-                error: jobError.message || "Couldn't queue this match for analysis",
+                error:
+                  jobErr instanceof Error
+                    ? jobErr.message
+                    : "Couldn't queue this match for analysis",
               },
             })
           );
           return;
         }
 
-        // Kick off background upload to Azure Blob Storage. The vendor will only
-        // fetch a VideoUrl on blob.core.windows.net, so that is where the source
-        // video lives — see src/lib/services/splitstep/video-url/azure-sas.ts.
+        // Background: the wizard has already closed by now.
         if (videoFileToUpload) {
-          void (async () => {
-            try {
-              const res = await fetch("/api/splitstep/upload-url", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  matchId,
-                  fileName: videoFileToUpload.name,
-                }),
-              });
-
-              const payload = await res.json().catch(() => null);
-
-              if (!res.ok || !payload?.uploadUrl) {
-                throw new Error(
-                  payload?.error || `Could not get an upload URL (HTTP ${res.status})`
-                );
-              }
-
-              const { uploadUrl, videoObjectKey } = payload;
-              // Log the key, never the URL. `uploadUrl` is a live write
-              // credential — six hours of write access to this blob — and the
-              // browser console outlives the upload: it survives screen
-              // shares, extensions, and anyone opening devtools. The key is
-              // what you actually want when debugging anyway.
-              console.log("🚀 Upload credential acquired for:", videoObjectKey);
-              console.log(`Starting upload to Azure Blob Storage (${formatFileSize(videoFileToUpload.size)})...`);
-
-              // Hand the canceller up before any bytes move, so the screen that
-              // replaced this wizard can offer a Cancel that actually works.
-              const controller = new AbortController();
-              const startedAt = Date.now();
-              onVideoUpload?.({
-                matchId,
-                kind: "started",
-                fileName: videoFileToUpload.name,
-                cancel: () => controller.abort(),
-              });
-
-              // The wizard has already closed by this point, so this guard is the
-              // only thing telling the user the work is not finished.
-              //
-              // Says what is actually at risk: the match itself is saved and
-              // survives, only the video transfer dies with the page. Leaving
-              // used to strand the job at `uploading` forever with no error —
-              // reap_stalled_uploads() now marks it failed, but a cancelled
-              // upload still means starting the transfer over, so it is worth
-              // stopping rather than merely recovering from.
-              const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-                e.preventDefault();
-                e.returnValue =
-                  "Your video is still uploading. The match is saved, but leaving now cancels the upload and you'll have to add the video again.";
-                return e.returnValue;
-              };
-              window.addEventListener("beforeunload", handleBeforeUnload);
-
-              try {
-                // Persist progress as it goes. The wizard has already closed by
-                // now and this upload runs in the background, so a console line
-                // is invisible — the matches list is where the user actually
-                // looks, and it reads this column.
-                //
-                // Write on a 2-point move or every 60 seconds, whichever comes
-                // first. The old rule was `pct % 10 === 0`, which skipped the
-                // write entirely whenever a chunk boundary stepped over a
-                // multiple of ten. That is not cosmetic: this column is the
-                // liveness signal reap_stalled_uploads() reads, and 15 minutes
-                // without one marks the job failed — underneath an upload that
-                // is still running.
-                //
-                // Fire-and-forget throughout: a dropped progress write must
-                // never disturb the upload itself.
-                let lastWrittenPct = -1;
-                let lastWriteAt = 0;
-                // The UI renders one decimal, so events that cannot change a
-                // rendered digit are dropped before they reach React. On a 5 GB
-                // upload 0.1% is ~7 seconds of transfer, so ~140 consecutive
-                // events would otherwise re-render an identical string.
-                let lastSentTenth = -1;
-
-                await uploadFileInBlocks({
-                  file: videoFileToUpload,
-                  uploadUrl,
-                  contentType: videoFileToUpload.type || "video/mp4",
-                  signal: controller.signal,
-                  onProgress: (loaded, total) => {
-                    const exact = (loaded / total) * 100;
-                    const pct = Math.floor(exact);
-                    const now = Date.now();
-
-                    // Local UI first: throttled only to the precision it can
-                    // actually show, not to the database's cadence. A bar that
-                    // moves once a minute is the problem this exists to fix.
-                    const tenth = Math.round(exact * 10);
-                    if (tenth !== lastSentTenth) {
-                      lastSentTenth = tenth;
-                      const elapsed = (now - startedAt) / 1000;
-                      const speed = elapsed > 0 ? loaded / elapsed : 0;
-                      onVideoUpload?.({
-                        matchId,
-                        kind: "progress",
-                        progress: {
-                          pct: tenth / 10,
-                          bytesUploaded: loaded,
-                          bytesTotal: total,
-                          speed,
-                          etaSeconds: speed > 0 ? (total - loaded) / speed : 0,
-                        },
-                      });
-                    }
-
-                    // The database write stays throttled. It is a liveness
-                    // heartbeat, not a progress bar, and one write per XHR event
-                    // on a 600-block upload would be tens of thousands.
-                    if (pct - lastWrittenPct < 2 && now - lastWriteAt < 60_000) {
-                      return;
-                    }
-                    lastWrittenPct = pct;
-                    lastWriteAt = now;
-
-                    console.log(
-                      `Uploading to Azure: ${pct}% (${(loaded / (1024 * 1024)).toFixed(1)}MB / ${(total / (1024 * 1024)).toFixed(1)}MB)`
-                    );
-
-                    void supabase
-                      .from("processing_jobs")
-                      .update({ upload_progress_percent: pct })
-                      .eq("id", jobRow.id)
-                      .then(({ error }) => {
-                        if (error) {
-                          console.warn(
-                            "Could not record upload progress:",
-                            error.message
-                          );
-                        }
-                      });
-                  },
-                });
-              } finally {
-                window.removeEventListener("beforeunload", handleBeforeUnload);
-              }
-
-              console.log("🎉 Upload completed! Updating processing_jobs row...");
-
-              // Update processing job status and video key
-              await supabase
-                .from("processing_jobs")
-                .update({
-                  video_object_key: videoObjectKey,
-                  status: "uploaded",
-                  // Explicitly 100. The throttle above skips the final write —
-                  // 99→100 is a 1-point move and the last block rarely takes 60
-                  // seconds — so without this the bar sits at 99 forever.
-                  upload_progress_percent: 100,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq("id", jobRow.id);
-
-              console.log("✅ Successfully updated processing_jobs status to 'uploaded' for match:", matchId);
-              onVideoUpload?.({ matchId, kind: "done" });
-
-              // Hand it to the vendor. The route owns everything from here:
-              // ownership, quota reservation, payload build, the POST, and
-              // recording external_job_id.
-              //
-              // Reported separately from the transfer, and deliberately does NOT
-              // mark the job failed. The bytes are safely in Azure and the row
-              // still says `uploaded`, which is both true and retryable — the
-              // one state from which a resubmit needs nothing re-uploaded.
-              try {
-                const submitRes = await fetch("/api/splitstep/jobs", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    jobId: jobRow.id,
-                    initialTopPlayerIsPlayer1: formData.initialTopPlayerIsPlayer1,
-                    adScoring: formData.adScoring,
-                    fixedCamera: formData.fixedCamera,
-                  }),
-                });
-
-                const submitPayload = await submitRes.json().catch(() => null);
-
-                if (!submitRes.ok) {
-                  // details[] is the payload builder's field list on a 422 —
-                  // far more use than the summary line.
-                  const detail = Array.isArray(submitPayload?.details)
-                    ? submitPayload.details.join(" ")
-                    : "";
-                  throw new Error(
-                    [submitPayload?.error ?? `Submission failed (HTTP ${submitRes.status})`, detail]
-                      .filter(Boolean)
-                      .join(" ")
-                  );
-                }
-
-                console.log("📤 Submitted for analysis:", submitPayload?.externalJobId ?? "(no id returned)");
-                onVideoUpload?.({ matchId, kind: "submitted" });
-              } catch (submitErr: any) {
-                const message = submitErr?.message || "Could not submit for analysis";
-                console.error("Submission failed — the video is uploaded and can be retried:", message);
-
-                // Recorded, not fatal. Status stays `uploaded`.
-                await supabase
-                  .from("processing_jobs")
-                  .update({ error_message: message, updated_at: new Date().toISOString() })
-                  .eq("id", jobRow.id);
-
-                onVideoUpload?.({ matchId, kind: "submit_failed", error: message });
-              }
-            } catch (uploadErr: any) {
-              const cancelled = uploadErr instanceof UploadAbortedError;
-              console[cancelled ? "log" : "error"](
-                cancelled ? "Upload cancelled by the user" : "❌ Video upload error:",
-                cancelled ? "" : uploadErr
-              );
-
-              const message = uploadErr?.message || "Video upload failed";
-              onVideoUpload?.(
-                cancelled
-                  ? { matchId, kind: "cancelled" }
-                  : { matchId, kind: "failed", error: message }
-              );
-
-              await supabase
-                .from("processing_jobs")
-                .update({
-                  status: "failed",
-                  error_message: message,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq("id", jobRow.id);
-
+          void uploadAndSubmitVideo({
+            supabase,
+            jobId,
+            matchId,
+            file: videoFileToUpload,
+            answers: {
+              initialTopPlayerIsPlayer1: formData.initialTopPlayerIsPlayer1,
+              adScoring: formData.adScoring,
+              fixedCamera: formData.fixedCamera,
+            },
+            onEvent: (event) => onVideoUpload?.(event),
+            onTransferFailed: (message) => {
               window.dispatchEvent(
                 new CustomEvent("match-upload-failed", {
                   detail: { matchId, error: message },
                 })
               );
-            }
-          })();
+            },
+          });
         }
 
         return;
@@ -1160,7 +1181,11 @@ export function useUploadMatchWizard({
         } catch (err) {
           console.error("Background file upload error:", err);
           // Roll back the phantom match row so the user has a clean retry path.
-          await supabase.from("matches").delete().eq("id", matchId);
+          // Same exemption as above: never delete a row that already carried a
+          // result before this upload started.
+          if (!reusingMatch) {
+            await supabase.from("matches").delete().eq("id", matchId);
+          }
           window.dispatchEvent(
             new CustomEvent("match-upload-failed", {
               detail: {
@@ -1184,38 +1209,34 @@ export function useUploadMatchWizard({
     } finally {
       setIsCreating(false);
     }
-  }, [formData, uploadedFile, selectedProvider, isProcessingProvider, supabase, isPrivateMatch, onOpenChange, onCreated, router]);
+    // activeWorkspace is in here on purpose: a coach who switches workspaces
+    // with the wizard open must not create the match against the one they left.
+  }, [formData, uploadedFile, selectedProvider, isProcessingProvider, supabase, isPrivateMatch, onOpenChange, onCreated, router, activeWorkspace.id, activeWorkspace.kind]);
 
   return {
     // State
     step,
     selectedProvider,
-    sourceType,
     uploadedFile,
     isOver,
     isCreating,
     isUploading,
     error,
     uploadError,
-    isPrivateMatch,
     formData,
     parsingState,
     pendingDetailFocus,
 
     // Step navigation
-    setStep,
     handleProviderSelect,
     handleProviderContinue,
     handleMatchContinue,
     handleBack,
-    handleClose,
     goEditDetail,
     consumePendingDetailFocus,
 
     // File handling
     setIsOver,
-    setSourceType,
-    onDrop,
     handleDrop,
     handleFileChange,
     handleRemoveFile,
@@ -1230,6 +1251,8 @@ export function useUploadMatchWizard({
     isProbing,
     minTrimSeconds: processingStrategy?.minTrimSeconds ?? 0,
     remainingQuotaSeconds,
+    quotaCapSeconds,
+    quotaResetsOn,
     acceptString: processingStrategy?.getAcceptString() ?? "",
     requirementChips: processingStrategy?.requirementChips ?? [],
     onVideoPick,
@@ -1239,6 +1262,8 @@ export function useUploadMatchWizard({
 
     // Form handling
     handleInputChange,
+    /** Set together with `playerName` whenever a roster row is picked. */
+    setPickedPlayerUserId,
     handleScoreChange,
     handleTiebreakChange,
 

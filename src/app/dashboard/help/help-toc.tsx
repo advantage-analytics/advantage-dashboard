@@ -2,29 +2,42 @@
 
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { Kbd } from "@/components/ui/kbd";
 
 type TocItem = { id: string; label: string };
 
+/**
+ * The seven topics, in reading order.
+ *
+ * Getting started leads because the question it answers — "there are two ways
+ * in, which one is mine?" — is the one a new account has before it has any
+ * others, and it was previously answered nowhere.
+ */
 const ITEMS: TocItem[] = [
+  { id: "getting-started", label: "Getting started — two sources" },
+  { id: "advantage-intelligence", label: "Advantage Intelligence" },
+  { id: "swingvision", label: "Importing from SwingVision" },
+  { id: "teams", label: "Teams" },
   { id: "shortcuts", label: "Keyboard shortcuts" },
-  { id: "upload", label: "Upload SwingVision data" },
   { id: "glossary", label: "Glossary" },
+  { id: "support", label: "Contact support" },
 ];
 
 // Hoisted to module scope so the IntersectionObserver effect isn't recreated each render.
 const ITEM_IDS = ITEMS.map((i) => i.id);
 
-function getInitialActive(): string {
-  if (typeof window !== "undefined") {
-    const hash = window.location.hash.slice(1);
-    if (hash && ITEM_IDS.includes(hash)) return hash;
-  }
-  return ITEM_IDS[0];
-}
-
 function useActiveSection(): string {
-  const [active, setActive] = useState<string>(getInitialActive);
+  /**
+   * Always the first topic on the first render, on both sides.
+   *
+   * This used to seed from `window.location.hash`, which the server cannot
+   * see — so arriving on `/help#teams` rendered `aria-current` on "Getting
+   * started" server-side and on "Teams" client-side, and React reported a
+   * hydration mismatch it explicitly does not patch up. The observer below
+   * fires on its first callback with the sections' initial intersection, so
+   * the correct row lights up immediately anyway; the hash needs no special
+   * handling.
+   */
+  const [active, setActive] = useState<string>(ITEM_IDS[0]);
 
   useEffect(() => {
     const elements = ITEM_IDS.map((id) => document.getElementById(id)).filter(
@@ -79,6 +92,14 @@ function isTextInput(target: EventTarget | null): boolean {
   );
 }
 
+/**
+ * On-page navigation for the help centre.
+ *
+ * Left rail on desktop, matching the settings rail beside it — the two pages
+ * are the same shape and used the same way, and having one rail on the left and
+ * one on the right made them feel like different products. Mobile keeps the
+ * sticky pill bar, because a 200px column is not a thing a phone has.
+ */
 export function HelpToc() {
   const active = useActiveSection();
   const desktopFirstLinkRef = useRef<HTMLAnchorElement>(null);
@@ -114,7 +135,7 @@ export function HelpToc() {
 
   // Smooth-scroll all in-page anchor clicks on the help page.
   // Event-delegated from document so we don't have to wire onClick onto every link
-  // (TOC pills, glossary jump-row, back-to-top, footer mailto's are all caught here).
+  // (TOC rows, glossary jump-row, back-to-top, footer mailto's are all caught here).
   // Respects prefers-reduced-motion and preserves modifier-key default behavior.
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -157,9 +178,9 @@ export function HelpToc() {
         className="
           lg:hidden
           sticky top-11 z-20
-          -ml-12 -mr-8 pl-12 pr-8
-          bg-[var(--color-surface-card)]
-          border-b border-[var(--color-ink-100)]
+          -mx-6 px-6 sm:-mx-8 sm:px-8
+          bg-[var(--surface-card)]
+          border-b border-[var(--border-hairline)]
           flex gap-2 overflow-x-auto whitespace-nowrap
           py-3
         "
@@ -173,13 +194,12 @@ export function HelpToc() {
               href={`#${item.id}`}
               aria-current={isActive ? "page" : undefined}
               className={cn(
-                "inline-flex items-center h-11 px-4 rounded-full",
-                "text-[13px] font-medium transition-colors",
-                "border",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-blue-ring-40)]",
+                "inline-flex h-11 items-center rounded-full px-4",
+                "border text-[13px] font-medium transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]",
                 isActive
-                  ? "bg-[var(--color-surface-raised)] border-[var(--color-blue)] text-[var(--color-ink-900)]"
-                  : "bg-[var(--color-surface-muted)] border-[var(--color-ink-100)] text-[var(--color-ink-700)] hover:bg-[var(--color-surface-raised)] hover:border-[var(--color-ink-200)] hover:text-[var(--color-ink-900)]",
+                  ? "border-[var(--blue)] bg-[var(--surface-raised)] text-[var(--ink-900)]"
+                  : "border-[var(--border-hairline)] bg-[var(--surface-muted)] text-[var(--ink-700)] hover:border-[var(--ink-200)] hover:bg-[var(--surface-raised)] hover:text-[var(--ink-900)]",
               )}
             >
               {item.label}
@@ -188,45 +208,37 @@ export function HelpToc() {
         })}
       </nav>
 
-      {/* Desktop — sticky right-rail TOC */}
+      {/* Desktop — sticky left rail */}
       <nav
         aria-label="Help topics"
-        className="
-          hidden lg:block
-          sticky top-14
-          self-start
-          flex-shrink-0
-          w-[208px]
-        "
+        className="hidden w-[200px] shrink-0 self-start lg:sticky lg:top-6 lg:block"
       >
-        <div className="flex items-baseline justify-between mb-4">
-          <p className="text-[10px] font-medium text-[var(--color-ink-500)] uppercase tracking-[2.5px]">
+        <div className="mb-2 flex items-baseline justify-between px-2.5">
+          <p className="text-[10px] font-medium uppercase tracking-[1.8px] text-[var(--ink-500)]">
             On this page
           </p>
           <span
-            className="inline-flex items-baseline gap-1 text-[10px] text-[var(--color-ink-500)] tracking-[0.2px]"
+            className="text-[10px] tracking-[0.2px] text-[var(--ink-400)]"
             title="Press ? from anywhere on this page"
           >
-            press <Kbd size="sm">?</Kbd>
+            ?
           </span>
         </div>
-        <ul className="flex flex-col">
+        <ul className="flex flex-col gap-0.5">
           {ITEMS.map((item, idx) => {
             const isActive = active === item.id;
             return (
-              <li key={item.id} className="relative">
+              <li key={item.id}>
                 <a
                   ref={idx === 0 ? desktopFirstLinkRef : undefined}
                   href={`#${item.id}`}
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
-                    "block py-2 pl-4 pr-2",
-                    "text-[12.5px] leading-[1.5] transition-colors",
-                    "border-l",
-                    "focus-visible:outline-none focus-visible:bg-[var(--color-blue-tint-08)]",
+                    "block rounded-[8px] px-2.5 py-1.5 text-[12px] leading-[1.5] transition-colors duration-150",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]",
                     isActive
-                      ? "text-[var(--color-ink-900)] font-medium border-[var(--color-blue)]"
-                      : "text-[var(--color-ink-700)] border-[var(--color-ink-100)] hover:text-[var(--color-ink-900)] hover:border-[var(--color-ink-300)]",
+                      ? "bg-[var(--surface-subtle)] font-medium text-[var(--ink-900)]"
+                      : "text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]",
                   )}
                 >
                   {item.label}

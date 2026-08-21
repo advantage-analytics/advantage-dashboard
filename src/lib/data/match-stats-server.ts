@@ -1,3 +1,4 @@
+import { meanOfPresent, num, pct } from "./aggregate";
 import { createClient } from "@/lib/supabase/server";
 import type { MatchDetailedStats, PlayerStatistics, StatFraction } from "./types";
 
@@ -111,23 +112,27 @@ export async function getPlayerAverageStats(
 
   if (!rows?.length) return null;
 
-  const avgPct = (field: string) => {
-    const vals = rows
-      .map((r) => parseFloat((r as Record<string, string | null>)[field] ?? "0"))
-      .filter((v) => !isNaN(v) && v > 0);
-    return vals.length
-      ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)
-      : 0;
-  };
+  // Absent is excluded from the mean, not counted as zero, and a mean over
+  // nothing is undefined rather than 0. This is the career baseline behind the
+  // "vs your average" deltas on every match page, so a video-derived match
+  // withholding its ace count used to drag that baseline toward zero for every
+  // OTHER match the player has ever played.
+  //
+  // `?? 0` was the direct cause; the old percentage helper also filtered on
+  // `v > 0`, which discarded absent values by accident AND discarded real zeros
+  // with them — a match where the player genuinely converted no break points was
+  // dropped from their conversion average rather than counted in it.
+  const avgPct = (field: string) =>
+    meanOfPresent(
+      rows.map((r) => pct((r as Record<string, string | null>)[field])),
+      0
+    ) ?? undefined;
 
-  const avgNum = (field: string) => {
-    const vals = rows
-      .map((r) => Number((r as Record<string, number | null>)[field] ?? 0))
-      .filter((v) => !isNaN(v));
-    return vals.length
-      ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)
-      : 0;
-  };
+  const avgNum = (field: string) =>
+    meanOfPresent(
+      rows.map((r) => num((r as Record<string, number | null>)[field])),
+      0
+    ) ?? undefined;
 
   const netWon = rows.reduce(
     (a, r) => a + ((r as Record<string, number | null>).net_points_won ?? 0),
@@ -148,7 +153,7 @@ export async function getPlayerAverageStats(
     firstReturnWonPct: avgPct("first_return_won_pct"),
     secondReturnWonPct: avgPct("second_return_won_pct"),
     returnGamesWonPct: avgPct("return_games_won_pct"),
-    netPointsWonPct: netTotal > 0 ? Math.round((netWon / netTotal) * 100) : 0,
+    netPointsWonPct: netTotal > 0 ? Math.round((netWon / netTotal) * 100) : undefined,
     shortRallyWonPct: avgPct("short_rally_won_pct"),
     mediumRallyWonPct: avgPct("medium_rally_won_pct"),
     longRallyWonPct: avgPct("long_rally_won_pct"),
@@ -226,11 +231,11 @@ function countTiebreaksWon(score: DbMatchScore | null): TiebreakCounts {
 }
 
 const DEFAULT_STATS: PlayerStatistics = {
-  aces: 0,
-  doubleFaults: 0,
+  aces: null,
+  doubleFaults: null,
   firstServeInPct: 0,
   firstServeWinPct: 0,
-  secondServeWinPct: 0,
+  secondServeWinPct: null,
   breakpointsWon: 0,
   tiebreaksWon: 0,
   servicePointsWon: 0,
@@ -320,12 +325,18 @@ function transformToPlayerStats(
 ): PlayerStatistics {
   if (!row) return DEFAULT_STATS;
 
+  // These five are the ones suppress_derived_match_stats() can null, so they
+  // must stay null all the way to the render. `?? 0` here is what made a
+  // video-derived match report "0 aces" — a statement about the player rather
+  // than about the analysis — even though the column was correctly suppressed.
+  const round = (v: number | null) => (v === null ? null : Math.round(v));
+
   return {
-    aces: row.aces ?? 0,
-    doubleFaults: row.double_faults ?? 0,
+    aces: num(row.aces),
+    doubleFaults: num(row.double_faults),
     firstServeInPct: Math.round(parseFloat(row.first_serve_pct ?? "0")),
     firstServeWinPct: Math.round(parseFloat(row.first_serve_won_pct ?? "0")),
-    secondServeWinPct: Math.round(parseFloat(row.second_serve_won_pct ?? "0")),
+    secondServeWinPct: round(pct(row.second_serve_won_pct)),
     breakpointsWon: row.break_points_converted ?? 0,
     tiebreaksWon,
     servicePointsWon:
@@ -337,8 +348,8 @@ function transformToPlayerStats(
     firstReturnPointsWon: row.first_return_points_won ?? 0,
     secondReturnPointsWon: row.second_return_points_won ?? 0,
     returnGamesWon: row.return_games_won ?? 0,
-    firstReturnInPct: Math.round(parseFloat(row.first_return_in_pct ?? "0")),
-    secondReturnInPct: Math.round(parseFloat(row.second_return_in_pct ?? "0")),
+    firstReturnInPct: round(pct(row.first_return_in_pct)),
+    secondReturnInPct: round(pct(row.second_return_in_pct)),
     firstReturnWonPct: Math.round(parseFloat(row.first_return_won_pct ?? "0")),
     secondReturnWonPct: Math.round(parseFloat(row.second_return_won_pct ?? "0")),
     returnGamesWonPct: Math.round(parseFloat(row.return_games_won_pct ?? "0")),

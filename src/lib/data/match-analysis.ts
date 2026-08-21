@@ -53,6 +53,27 @@ export type AnalysisStatus =
    * being reachable, with no code change.
    */
   | "processed"
+  /**
+   * A verified point-by-point transcript exists; aggregate statistics do not.
+   *
+   * The state between "still working" and "here are your numbers", and the
+   * reason it has to exist: derivation produces two very different things from
+   * one payload. The point timeline is checkable — it is folded from the
+   * vendor's score stream and refused outright unless it reproduces the score
+   * the player entered — so a point on it is a claim we can defend. The
+   * aggregates are not: several families are contaminated by the vendor
+   * recording points that ended on the serve as multi-stroke rallies, and aces
+   * cannot be separated from service winners at all.
+   *
+   * Without this state the page is all-or-nothing, and both ends are wrong. Held
+   * at `processed` it shows nothing for a match we have fully transcribed;
+   * promoted to `completed` it shows stat cards reading zero, which a coach
+   * reads as "you hit no aces".
+   *
+   * Not a `processing_jobs.status`. Resolved by withStatsPublished() from
+   * whether `match_stats` rows actually exist.
+   */
+  | "timeline"
   /* --- derived, not job statuses --- */
   /** Arrived complete from a file import. Never had a processing job. */
   | "imported"
@@ -100,6 +121,10 @@ export interface MatchAnalysis {
   fileName?: string;
   /** Trimmed length, pre-formatted. This is also what the job is billed on. */
   window?: string;
+  /** `processing_jobs.id`, so a stalled submission has something to retry. */
+  jobId?: string;
+  /** When the row last moved, ISO. The staleness input for `isSubmitStalled`. */
+  updatedAt?: string;
   jobReference?: string;
   /** What the engine is doing right now. Never a frame count we don't receive. */
   stageNote?: string;
@@ -164,6 +189,28 @@ export function resolveAnalysisStatus(
   return status === "completed" && !derivationVersion ? "processed" : status;
 }
 
+/**
+ * Downgrade a finished analysis to `timeline` when no statistics were published.
+ *
+ * Deliberately NOT folded into resolveAnalysisStatus(). That function projects a
+ * `processing_jobs` row and nothing else, and both the server loader and the
+ * realtime hook call it — the hook receives job rows over a websocket and has no
+ * access to `match_stats`. Giving it a parameter only one caller could supply is
+ * how the two screens started disagreeing about the same row last time.
+ *
+ * So this is a second, explicit step for callers that have actually loaded the
+ * statistics and can answer the question honestly. A caller that cannot should
+ * not guess: leaving a match at `completed` overstates it, but only by the width
+ * of a label, whereas a hook inventing `timeline` from a job row would put two
+ * different words on the same match on two different screens.
+ */
+export function withStatsPublished(
+  status: AnalysisStatus,
+  statsPublished: boolean
+): AnalysisStatus {
+  return status === "completed" && !statsPublished ? "timeline" : status;
+}
+
 export const ANALYSIS_LABEL: Record<AnalysisStatus, string> = {
   uploading: "Uploading",
   uploaded: "Uploaded",
@@ -174,6 +221,10 @@ export const ANALYSIS_LABEL: Record<AnalysisStatus, string> = {
   // a variant of "Processing" — the two would be one letter apart on screen
   // while meaning opposite things about whether anything is still running.
   processed: "Stats pending",
+  // Says what IS there rather than what is missing. "Partial" or "Stats
+  // unavailable" would describe the same row by its gap, and the timeline is
+  // the more useful half of the analysis, not a consolation for the other.
+  timeline: "Timeline ready",
   completed: "Analyzed",
   failed: "Failed",
   derivation_failed: "Stats failed",
@@ -280,7 +331,9 @@ const MIN_PERCENT_FOR_ETA = 5;
  * useful failure to watch.
  */
 export function uploadEtaSeconds(
-  analysis: MatchAnalysis,
+  // Only the three fields it reads, so a caller holding a narrower projection
+  // does not have to carry eight unused ones to ask this question.
+  analysis: Pick<MatchAnalysis, 'status' | 'uploadPercent' | 'startedAt'>,
   nowMs: number
 ): number | undefined {
   if (analysis.status !== "uploading") return undefined;
@@ -336,6 +389,7 @@ export function stageIndexFor(status: AnalysisStatus): number {
     case "failed":
       return 2;
     case "derivation_failed":
+    case "timeline":
     case "completed":
     case "imported":
       return 3;
@@ -370,7 +424,11 @@ const IDLE = new Set<AnalysisStatus>(["uploaded", "processed"]);
  */
 const STALLED = new Set<AnalysisStatus>(["processed"]);
 const FAILED = new Set<AnalysisStatus>(["failed", "derivation_failed"]);
-const READY = new Set<AnalysisStatus>(["completed", "imported"]);
+// `timeline` is terminal in the sense that matters here: nothing is running and
+// no event is coming. It is deliberately NOT in IN_FLIGHT — holding it there
+// would keep the match page on the progress card, hiding a transcript we have
+// already verified.
+const READY = new Set<AnalysisStatus>(["completed", "imported", "timeline"]);
 
 /** Not terminal. Drives grouping and filtering — "is this still going to change?" */
 export function isInFlight(status: AnalysisStatus): boolean {
@@ -418,6 +476,50 @@ export function isAnalysisFailed(status: AnalysisStatus): boolean {
 
 export function isAnalysisReady(status: AnalysisStatus): boolean {
   return READY.has(status);
+}
+
+/**
+ * How long an `uploaded` job may sit before we stop calling it healthy.
+ *
+ * Auto-submit fires within seconds of the terminal `status: 'uploaded'` write,
+ * so three minutes is many times any normal gap while still being far too
+ * short to accuse a working job. It only has to beat "seconds".
+ */
+const SUBMIT_STALL_MS = 3 * 60 * 1000;
+
+/**
+ * Did the submission never happen?
+ *
+ * `uploaded` is the one in-flight state with no engine behind it. The bytes are
+ * in Azure and the wizard is meant to submit immediately — but a submit failure
+ * deliberately does NOT mark the job failed, because `uploaded` is the single
+ * state a retry needs nothing re-uploaded from. The cost of that good decision
+ * is this: a job whose submit failed looks exactly like a job whose submit is
+ * about to succeed, and the progress panel reassures the player that "your
+ * video is stored, nothing else is needed from you" — which is true of the
+ * bytes and false about the analysis, forever.
+ *
+ * Nothing reaps it either. `reap_stalled_uploads()` deliberately leaves
+ * `uploaded` alone, precisely because the bytes are safe. So without a clock
+ * this state is invisible.
+ *
+ * Time is the only signal available: no error was recorded, because from the
+ * job's point of view nothing went wrong. Hence a threshold rather than a flag.
+ */
+export function isSubmitStalled(
+  analysis: Pick<MatchAnalysis, 'status' | 'updatedAt' | 'jobReference'>,
+  nowMs: number = Date.now()
+): boolean {
+  if (analysis.status !== 'uploaded') return false;
+  // A job the vendor has already accepted is not stalled, whatever its status
+  // says — belt and braces, since `uploaded` should never carry a reference.
+  if (analysis.jobReference) return false;
+  if (!analysis.updatedAt) return false;
+
+  const movedAt = Date.parse(analysis.updatedAt);
+  if (!Number.isFinite(movedAt)) return false;
+
+  return nowMs - movedAt > SUBMIT_STALL_MS;
 }
 
 export interface AnalysisAction {

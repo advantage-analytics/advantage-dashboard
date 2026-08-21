@@ -100,7 +100,7 @@ through a Vercel function bounded at 60s.
 > **"Trimmed" means trimmed to the window we submitted — not dead time removed.**
 > This doc previously claimed the opposite, and the assumption survived until someone
 > watched the file. `job-request.ts` sends `StartTime`/`EndTime`; the vendor returns
-> exactly that span, re-encoded. Measured on the Revelli/Stepanov job (2026-08-14):
+> exactly that span, re-encoded. Measured on job `2a11168d` (2026-08-14):
 > window 15.136 → 5196.343 = **5181.207s**, returned video **5181.268s**, a 0.06s
 > match. No annotations, no rally detection, no cuts.
 >
@@ -556,12 +556,14 @@ appear on which step — is presentation and can move freely.
 
 ### Two UI gaps worth fixing during the redesign
 
-- **There is no toast or banner system.** A background upload failure is currently
-  invisible: `match-upload-failed` is dispatched to nobody. The reaper eventually turns
-  it into a "Failed" row on the matches list, but the user gets no notification at the
-  moment it happens. If you are building UI anyway, this is the natural time.
-- **The matches list does not live-update.** Analysis state is read server-side at
-  render, so a job moving `queued → processing → completed` only appears on refresh.
+- ~~**There is no toast or banner system.**~~ **Closed** on
+  `claude/pilot-program-roadmap-724bdb`. `ToastProvider` wraps the dashboard shell and
+  `UploadFailureListener` subscribes to `match-upload-failed`, which had been dispatched
+  from three places to nobody. Errors do not auto-dismiss; success and info do.
+- ~~**The matches list does not live-update.**~~ **Already false when this was
+  written.** `useLiveMatchAnalysis` drives the matches list, the activity tray and the
+  match page's progress panel. A job moving `queued → processing → completed` updates in
+  place.
 
 ---
 

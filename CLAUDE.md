@@ -58,9 +58,10 @@ Key tables: `matches`, `match_stats`, `points`, `shots`, `users`. The `match_sta
 Server/client split pattern for statistics:
 - `src/lib/data/statistics-server.ts` — Server-side initial data load (`getStatisticsPageData()`, `getSelectableMatches()`)
 - `src/lib/data/statistics-client.ts` — Client-side recomputation (`computeStatistics()`) when match filters change
-- `src/lib/data/stat-configs.ts` — Shared stat definitions (24 stats in 3 tabs: Serve/Return/Other)
 
 Both files produce the same `StatisticsPageData` shape. The client version operates on `SelectableMatch[]` to avoid round-trips when users toggle filters.
+
+Stat definitions are **not** shared. `STAT_CONFIG` (20 stats, grouped into Serve/Return/Other tabs by a `category` field) is a private const inside `src/components/dashboard/statistics/stat-progression-chart.tsx` — it is not exported, and there is no `stat-configs.ts` module. Extract it before reaching for it from a second component.
 
 ### File Upload Pipeline
 
@@ -148,3 +149,13 @@ LLM_PROVIDER=anthropic|openai
 ANTHROPIC_API_KEY=<key>
 OPENAI_API_KEY=<key>
 ```
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

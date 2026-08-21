@@ -1,0 +1,171 @@
+import { siteUrl } from "@/lib/site-url";
+import { renderEmail, renderText, type EmailContent } from "../shell";
+import type { EmailMessage } from "../send";
+
+/**
+ * The three emails a program claim produces.
+ *
+ * None of them is preference-driven, and none carries a "turn this off" line.
+ * Each is the direct consequence of something a person did — claiming a
+ * program, or being the recorded contact for one somebody else claimed — and
+ * an account-level notice with an unsubscribe link is one people switch off
+ * and then miss.
+ *
+ * The state machine behind them is in `services/programs/claim-state.ts`. Two
+ * details from it shape the copy and are easy to get wrong:
+ *
+ *  1. A claim that clears review lands in `objection_window`, not `approved`,
+ *     and **a program in `objection_window` is fully usable**. So the "you're
+ *     in" email fires at that transition and must not tell anyone to wait.
+ *  2. `approved` is the quiet settle at the end of the window. It needs no
+ *     email of its own — nothing changes for the coach, who has been working
+ *     in the program the whole time.
+ */
+
+export interface ClaimApprovedInput {
+  to: string;
+  programName: string;
+  /** Job title from the setup form — "Head coach", "Director of tennis". */
+  claimantTitle: string;
+  /** When the objection window closes, already formatted. */
+  windowClosesOn: string;
+}
+
+export function claimApprovedEmail(input: ClaimApprovedInput): EmailMessage {
+  const { to, programName, claimantTitle, windowClosesOn } = input;
+
+  const content: EmailContent = {
+    preheader: `${programName} is set up and ready to use.`,
+    eyebrow: "Program claimed",
+    heading: `${programName} is yours`,
+    body: [
+      `You're set up as ${claimantTitle} for ${programName}. The workspace is open now — invite your staff and players, and start sending matches.`,
+      "Nothing is pending and nothing is waiting on us.",
+    ],
+    facts: [
+      { label: "Program", value: programName },
+      { label: "You are", value: claimantTitle },
+    ],
+    cta: { label: "Open your team", url: `${siteUrl()}/dashboard/team` },
+    // Said plainly rather than hidden. The window is real, someone at the
+    // school can still contest it, and a coach who first hears about that when
+    // a colleague objects has been kept in the dark by omission.
+    note: `We've let the program's listed contacts know. If nobody raises a concern by ${windowClosesOn}, the claim settles for good — there's nothing for you to do either way.`,
+  };
+
+  return {
+    to,
+    subject: `${programName} is ready`,
+    html: renderEmail(content),
+    text: renderText(content),
+    tags: { type: "claim_approved" },
+  };
+}
+
+export interface ClaimDeclinedInput {
+  to: string;
+  programName: string;
+  /** The reviewer's note, where they left one. */
+  reason: string | null;
+  /** Key for the program page, so the alternative route is one click. */
+  programKey: string;
+}
+
+export function claimDeclinedEmail(input: ClaimDeclinedInput): EmailMessage {
+  const { to, programName, reason, programKey } = input;
+
+  const content: EmailContent = {
+    preheader: `We couldn't approve your claim to ${programName}.`,
+    eyebrow: "Claim not approved",
+    heading: `We couldn't approve your claim to ${programName}`,
+    body: [
+      // No apology and no euphemism. The most likely reason by far is an
+      // address we could not tie to the school, which is a fixable thing
+      // rather than a judgement about the person.
+      "This usually means we couldn't confirm the address you used belongs to the program. It isn't a judgement about whether you coach there.",
+      "If someone from your program already runs the workspace, asking them for an invite is the fastest way in — it takes them one click.",
+    ],
+    facts: [
+      { label: "Program", value: programName },
+      ...(reason ? [{ label: "Reviewer's note", value: reason }] : []),
+    ],
+    cta: {
+      label: "Request an invite instead",
+      url: `${siteUrl()}/claim/${encodeURIComponent(programKey)}/request`,
+    },
+    note: "If you think this is wrong, reply to this email — a person reads it, and a claim can be reopened.",
+  };
+
+  return {
+    to,
+    subject: `Your claim to ${programName}`,
+    html: renderEmail(content),
+    text: renderText(content),
+    tags: { type: "claim_declined" },
+  };
+}
+
+export interface ClaimObjectionNoticeInput {
+  /** A contact recorded against the program, not the claimant. */
+  to: string;
+  programName: string;
+  claimantName: string;
+  /** Masked at the call site if it should be — this template prints it as given. */
+  claimantEmail: string;
+  claimantTitle: string;
+  windowClosesOn: string;
+  programKey: string;
+}
+
+/**
+ * "Somebody claimed your program."
+ *
+ * The one email here that goes to a person who never signed up for anything,
+ * which sets its tone: it explains itself completely, asks for nothing unless
+ * something is wrong, and never implies wrongdoing by the claimant. In the
+ * overwhelming majority of cases the recipient knows exactly who this is.
+ */
+export function claimObjectionNoticeEmail(
+  input: ClaimObjectionNoticeInput
+): EmailMessage {
+  const {
+    to,
+    programName,
+    claimantName,
+    claimantEmail,
+    claimantTitle,
+    windowClosesOn,
+    programKey,
+  } = input;
+
+  const content: EmailContent = {
+    preheader: `${claimantName} now manages ${programName} on Advantage.`,
+    eyebrow: "For your awareness",
+    heading: `${claimantName} claimed ${programName}`,
+    body: [
+      `You're listed as a contact for ${programName}, so we're letting you know that ${claimantName} has set it up on Advantage Analytics — a match analysis tool for collegiate programs.`,
+      "If that's expected, there's nothing to do. This email is the only one you'll get about it.",
+      `If it isn't, tell us before ${windowClosesOn} and we'll pause the account while we sort it out.`,
+    ],
+    facts: [
+      { label: "Program", value: programName },
+      { label: "Claimed by", value: `${claimantName} (${claimantEmail})` },
+      { label: "Claimed as", value: claimantTitle },
+    ],
+    cta: {
+      label: "This isn't right",
+      url: `${siteUrl()}/claim/${encodeURIComponent(programKey)}/object`,
+    },
+    note: "You're getting this because your address is on file as a contact for this program. We don't add contacts to any mailing list.",
+  };
+
+  return {
+    to,
+    // Deliberately not alarming. "Action required" on a message that needs no
+    // action from nine recipients in ten is how a real warning gets ignored.
+    subject: `${programName} was claimed on Advantage`,
+    html: renderEmail(content),
+    text: renderText(content),
+    tags: { type: "claim_objection_notice" },
+  };
+}
