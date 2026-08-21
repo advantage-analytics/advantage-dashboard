@@ -43,6 +43,16 @@ export const SUPPORT_ADDRESS = "team@advantage-analytics.com";
 export const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
 /**
+ * Where we ask whether an address is on the account's suppression list.
+ *
+ * 404 means clear. 200 means Resend will accept the send, hand back an id, and
+ * then silently drop the message — which is the entire reason this endpoint is
+ * consulted at all. See `send.ts`.
+ */
+export const RESEND_SUPPRESSION_ENDPOINT =
+  "https://api.resend.com/suppressions";
+
+/**
  * How long a send is allowed to take before we give up on it.
  *
  * Bounded because these run inside server actions the user is waiting on. A

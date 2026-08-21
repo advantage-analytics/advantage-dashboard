@@ -1,4 +1,9 @@
-import { FROM_ADDRESS, RESEND_ENDPOINT, SEND_TIMEOUT_MS } from "./config";
+import {
+  FROM_ADDRESS,
+  RESEND_ENDPOINT,
+  RESEND_SUPPRESSION_ENDPOINT,
+  SEND_TIMEOUT_MS,
+} from "./config";
 
 /**
  * The one place this application sends mail from.
@@ -46,6 +51,19 @@ export async function sendEmail(message: EmailMessage): Promise<EmailResult> {
   const apiKey = process.env.RESEND_API_KEY;
 
   if (!apiKey) return logInsteadOfSending(message);
+
+  // Asked BEFORE sending, because afterwards is too late to find out.
+  if (await isSuppressed(message.to, apiKey)) {
+    console.warn("[email] refusing a suppressed recipient", {
+      to: redactAddress(message.to),
+      subject: message.subject,
+    });
+    return {
+      ok: false,
+      error:
+        "That address is on the do-not-send list, so mail to it is dropped. Use another address, or remove it from the suppression list.",
+    };
+  }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
@@ -153,6 +171,72 @@ function logInsteadOfSending(message: EmailMessage): EmailResult {
   );
 
   return { ok: true, id: null };
+}
+
+/**
+ * Is this address on the account's do-not-send list?
+ *
+ * ── Why this call exists at all ─────────────────────────────────────────────
+ * Sending to a suppressed address does not fail. Resend answers 200, returns a
+ * real message id, and then drops the message — the refusal only appears later
+ * as `status: suppressed` on the email record, which nothing in a request/
+ * response cycle ever reads. So `sendEmail` reported success for mail that was
+ * never delivered, `inviteMember` returned no warning, and a coach saw a
+ * confirmed invitation that had already been thrown away.
+ *
+ * That is precisely the failure this module was built to prevent — the whole
+ * warning path exists so a failed send is never a green tick — and it slipped
+ * through one layer below where the guard was placed. It was found the only
+ * way it could be: a real invitation to a real person that never arrived.
+ *
+ * It matters well past one inbox. A suppression list fills up with addresses
+ * from outreach, bounces and unsubscribes, and any coach on it becomes
+ * silently un-invitable: the roster reads "outstanding" forever and nobody can
+ * see why.
+ *
+ * ── Fail OPEN, deliberately ─────────────────────────────────────────────────
+ * A network error or an unexpected status here returns false — "not
+ * suppressed" — and the send proceeds. This check exists to convert a silent
+ * drop into a visible warning, not to become a new reason mail cannot go out.
+ * If the lookup is down, the worst case is the behaviour we had before it
+ * existed; refusing instead would let a blip on a secondary endpoint block
+ * every invitation in the product.
+ *
+ * One extra round trip per send. At invite volume that is nothing, and the
+ * thing it buys is the difference between a coach retrying with another
+ * address and a coach concluding the product is broken.
+ */
+async function isSuppressed(to: string, apiKey: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(
+      `${RESEND_SUPPRESSION_ENDPOINT}/${encodeURIComponent(to)}`,
+      {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal: controller.signal,
+      }
+    );
+
+    if (response.status === 404) return false; // the common, healthy answer
+    if (response.ok) return true;
+
+    // Anything else — 401, 429, 5xx — is not an answer about this address.
+    console.warn("[email] suppression check inconclusive", {
+      status: response.status,
+      to: redactAddress(to),
+    });
+    return false;
+  } catch (error) {
+    console.warn("[email] suppression check failed", {
+      to: redactAddress(to),
+      reason: (error as Error)?.message,
+    });
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /** Enough of an address to identify a report, not enough to harvest one. */
