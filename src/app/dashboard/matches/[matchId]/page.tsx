@@ -9,9 +9,11 @@ import { shortName } from "@/lib/data/match-utils";
 import {
   isAnalysisFailed,
   isInFlight,
+  withStatsPublished,
 } from "@/lib/data/match-analysis";
 import { analysisFor, loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import { MatchAnalysisProgress } from "@/components/dashboard/matches/match-detail/match-analysis-progress";
+import { UnpublishedStatsNotice } from "@/components/dashboard/matches/match-detail/unpublished-stats-notice";
 
 import { MatchSummaryRow } from "@/components/dashboard/matches/match-detail/match-summary-row";
 import { MatchKpiRow } from "@/components/dashboard/matches/match-detail/match-kpi-row";
@@ -173,11 +175,25 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // hit no serves" rather than "we're still working" — so the page stops at the
   // identity the player entered plus the pipeline state. Failures take the same
   // path: the reason it stopped is more use than a page of zeroes.
-  const analysis = analysisFor(jobs, {
+  const jobAnalysis = analysisFor(jobs, {
     id: matchId,
     sourceProvider: match.sourceProvider,
     verificationStatus: match.verificationStatus,
   });
+
+  // Derivation produces two things of very different trustworthiness, and the
+  // page has to be able to say so. The point timeline is folded from the
+  // vendor's score stream and refused unless it reproduces the score the player
+  // entered, so every point on it is checkable. The aggregates are not — several
+  // families are contaminated by the vendor recording points that ended on the
+  // serve as rallies, and aces cannot be told from service winners at all. When
+  // the derivation ran but no statistics were published, this resolves to
+  // `timeline` and the sections below split accordingly.
+  const statsPublished = Boolean(p1 && p2);
+  const analysis = {
+    ...jobAnalysis,
+    status: withStatsPublished(jobAnalysis.status, statsPublished),
+  };
   const isAwaitingAnalysis =
     isInFlight(analysis.status) || isAnalysisFailed(analysis.status);
 
@@ -249,6 +265,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
           />
         </div>
 
+        {statsPublished && (
         <div className="mt-8">
           <MatchKpiRow
             duration={match.duration}
@@ -260,6 +277,13 @@ export default async function MatchDetailPage({ params }: PageProps) {
             p2Name={p2Short}
           />
         </div>
+        )}
+
+        {!statsPublished && (
+          <div className="mt-8">
+            <UnpublishedStatsNotice />
+          </div>
+        )}
 
         <div className="mt-8 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-8">
           <main
@@ -331,11 +355,13 @@ export default async function MatchDetailPage({ params }: PageProps) {
                 )}
               </div>
             </AiInsightCard>
-            <PerformanceProfileCard
-              data={radarData}
-              p1Name={p1Short}
-              p2Name={p2Short}
-            />
+            {radarData.length > 0 && (
+              <PerformanceProfileCard
+                data={radarData}
+                p1Name={p1Short}
+                p2Name={p2Short}
+              />
+            )}
             <KeyMomentsCard
               points={points}
               narrativeMoments={keyMoments}
