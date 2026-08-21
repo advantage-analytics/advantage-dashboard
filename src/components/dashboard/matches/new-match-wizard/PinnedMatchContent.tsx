@@ -28,7 +28,7 @@ export function PinnedMatchContent({
   preset: EventPreset;
   /** The current form value, so the picker can show what is chosen. */
   playerName: string;
-  onPickPlayer: (name: string) => void;
+  onPickPlayer: (name: string, userId: string | null) => void;
 }) {
   if (preset.kind === "single") {
     return (
@@ -50,7 +50,11 @@ function SinglePlayerPicker({
 }: {
   roster: NonNullable<EventPreset["roster"]>;
   playerName: string;
-  onPick: (name: string) => void;
+  /**
+   * `userId` is null for a name typed by hand — that is the answer, not a
+   * gap. Writing the uploader's id there would attribute the match to them.
+   */
+  onPick: (name: string, userId: string | null) => void;
 }) {
   const [term, setTerm] = useState("");
 
@@ -84,7 +88,7 @@ function SinglePlayerPicker({
               <button
                 key={player.userId}
                 type="button"
-                onClick={() => onPick(player.name)}
+                onClick={() => onPick(player.name, player.userId)}
                 className={`flex cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] px-[13px] py-2.5 text-left transition-colors duration-[var(--duration-hover)] ${
                   chosen ? "bg-[var(--blue-soft)]" : "hover:bg-[var(--surface-subtle)]"
                 }`}
@@ -112,7 +116,7 @@ function SinglePlayerPicker({
           {term.trim() && !shown.some((p) => p.name === term.trim()) ? (
             <button
               type="button"
-              onClick={() => onPick(term.trim())}
+              onClick={() => onPick(term.trim(), null)}
               className={`flex cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] px-[13px] py-2.5 text-left transition-colors duration-[var(--duration-hover)] ${
                 playerName === term.trim()
                   ? "bg-[var(--blue-soft)]"

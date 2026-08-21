@@ -14,6 +14,8 @@ import type { AnalysisStatus } from "@/lib/data/match-analysis";
 export interface TeamSingleMatch {
   id: string;
   playerName: string;
+  /** The account behind `playerName`, when the match is linked to one. */
+  playerUserId: string | null;
   opponentName: string;
   /** Whatever the coach called it — "Cincinnati Racquet Club", a tournament. */
   context: string | null;
@@ -39,6 +41,7 @@ export interface TeamSingleMatch {
 
 interface DbRow {
   id: string;
+  player1_id: string | null;
   player1_name: string;
   player2_name: string;
   tournament_name: string | null;
@@ -59,7 +62,7 @@ export const getTeamSingleMatch = cache(async function getTeamSingleMatch(
   const { data } = await supabase
     .from("matches")
     .select(
-      "id, player1_name, player2_name, tournament_name, round, date, score, match_type, court_type, insights"
+      "id, player1_id, player1_name, player2_name, tournament_name, round, date, score, match_type, court_type, insights"
     )
     .eq("id", matchId)
     .eq("program_id", programId)
@@ -78,6 +81,9 @@ export const getTeamSingleMatch = cache(async function getTeamSingleMatch(
   return {
     id: row.id,
     playerName: row.player1_name,
+    // Carried so a re-upload of this match keeps whoever it already belongs to,
+    // rather than re-deriving the player from whoever happens to be uploading.
+    playerUserId: row.player1_id,
     opponentName: row.player2_name,
     context: row.tournament_name,
     round: row.round,

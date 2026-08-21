@@ -272,6 +272,23 @@ export interface EventPreset {
   round: string | null;
   /** Our side. `player1` everywhere downstream — see job-request.ts. */
   playerName: string;
+  /**
+   * The ACCOUNT behind `playerName`, when there is one. Written to
+   * `matches.player1_id`.
+   *
+   * This has to travel separately from the name because in a team workspace
+   * the uploader and the player are different people. The wizard used to write
+   * the signed-in uploader's id here, so a coach uploading for a roster
+   * athlete produced `{player1_name: "<athlete>", player1_id: <coach>}` — and
+   * every consumer that keys on the id rather than the label then attributed
+   * the athlete's match to the coach, with nothing on screen looking wrong.
+   *
+   * NULL is a real answer and the only safe default. A player with no account,
+   * a doubles line, a name typed by hand — all of them get null. `player1_id`
+   * is also half of the `matches` SELECT policy, so a wrong id is not merely a
+   * mislabelled row: it hands read access to the wrong person.
+   */
+  playerUserId: string | null;
   opponentName: string;
   /** YYYY-MM-DD, from the event. */
   date: string;

@@ -479,6 +479,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     handleFileChange,
     handleRemoveFile,
     handleInputChange,
+    setPickedPlayerUserId,
     handleScoreChange,
     handleTiebreakChange,
     handleCreateMatch,
@@ -804,7 +805,10 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
               <PinnedMatchContent
                 preset={preset}
                 playerName={formData.playerName}
-                onPickPlayer={(name) => handleInputChange("playerName", name)}
+                onPickPlayer={(name, pickedUserId) => {
+                  handleInputChange("playerName", name);
+                  setPickedPlayerUserId(pickedUserId);
+                }}
               />
             ) : (
               <ProviderContent

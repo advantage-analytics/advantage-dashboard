@@ -47,6 +47,9 @@ export default async function NewSingleMatchPage() {
     roster,
     // Chosen in step 1. Empty is what gates Continue.
     playerName: "",
+    // Also chosen in step 1 — the roster row carries it. Null until then, and
+    // null for good if the name is typed rather than picked.
+    playerUserId: null,
     opponentName: "",
     // Today, not an event's date — a single match has no event to inherit one
     // from. The details step can change it.

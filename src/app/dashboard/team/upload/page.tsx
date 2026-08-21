@@ -57,6 +57,7 @@ export default async function TeamUploadPage({
       matchId: single.id,
       round: single.round,
       playerName: single.playerName,
+      playerUserId: single.playerUserId,
       opponentName: single.opponentName,
       date: single.date.slice(0, 10),
       surface: single.surface,
@@ -95,6 +96,13 @@ export default async function TeamUploadPage({
         matchId: match?.id ?? null,
         round: entry.slot ?? match?.round ?? null,
         playerName: entry.playerLabels.join(" / "),
+        // Singles only. A doubles line has two accounts and one `player1_id`
+        // column, so there is no non-arbitrary answer and null is the honest
+        // one — see the note on EventPreset.playerUserId.
+        playerUserId:
+          entry.discipline === "doubles"
+            ? null
+            : (entry.playerUserIds[0] ?? null),
         opponentName:
           (match?.opponentLabels ?? entry.opponentLabels).join(" / ") || "",
         date: group.event.startsOn,

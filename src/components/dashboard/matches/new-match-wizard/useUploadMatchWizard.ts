@@ -175,6 +175,12 @@ export interface UseUploadMatchWizardReturn {
 
   // Form handling
   handleInputChange: (field: keyof MatchFormData, value: string | number | boolean | undefined) => void;
+  /**
+   * Set alongside `playerName` whenever a roster row is picked, and set to null
+   * for a name typed by hand. Not part of `MatchFormData` because it is not a
+   * field anyone fills in, and the personal wizard never needs it.
+   */
+  setPickedPlayerUserId: (userId: string | null) => void;
   handleScoreChange: (player: "player" | "opponent", index: number, value: string) => void;
   handleTiebreakChange: (player: "player" | "opponent", index: number, value: string) => void;
 
@@ -233,6 +239,15 @@ export function useUploadMatchWizard({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isPrivateMatch] = useState(true);
   const [formData, setFormData] = useState<MatchFormData>(getDefaultFormData);
+  /**
+   * The account behind `formData.playerName`, kept beside the form rather than
+   * in it — nobody types this, and the personal wizard has no use for it.
+   *
+   * A dual or tournament line seeds it from the entry. A single match gets it
+   * when a roster row is picked, and keeps it null when the name was typed by
+   * hand, because a typed name is not evidence of an account.
+   */
+  const [pickedPlayerUserId, setPickedPlayerUserId] = useState<string | null>(null);
   // Set when Confirm asks Match to focus a specific detail field. DetailsContent
   // reads this on mount, focuses the matching cell, and clears the request.
   const [pendingDetailFocus, setPendingDetailFocus] = useState<DetailField | null>(null);
@@ -348,6 +363,9 @@ export function useUploadMatchWizard({
     // named in the URL, and restoring a half-finished personal match over it
     // would put another player's opponent and score on somebody else's court.
     if (preset) {
+      // The line already knows whose match it is; a single match learns it when
+      // somebody picks from the roster. Both land in the same piece of state.
+      setPickedPlayerUserId(preset.playerUserId);
       setSelectedProvider(DEFAULT_PROVIDER_ID);
       setFormData((prev) => ({
         ...prev,
@@ -865,11 +883,22 @@ export function useUploadMatchWizard({
         formData.bestOf,
         formData.numberOfSets
       );
+      // WHOSE match this is, which in a team workspace is not the uploader.
+      //
+      // No preset means the personal wizard, where the uploader IS the player.
+      // With a preset the answer comes from the roster — and `null` when the
+      // named player has no account is the correct answer, not a gap to fill
+      // with `userId`. Falling back to the uploader is exactly the bug this
+      // replaces: it attributes an athlete's match to their coach, and since
+      // `player1_id` is half the `matches` SELECT policy, it also hands the
+      // coach read access the athlete then loses.
+      const playerUserId = preset ? pickedPlayerUserId : userId;
+
       const { winner, loser } = determineWinner(
         adjustedPlayerScores,
         adjustedOpponentScores,
         parseInt(formData.bestOf),
-        userId,
+        playerUserId,
         formData.playerName,
         formData.opponentName
       );
@@ -1132,6 +1161,8 @@ export function useUploadMatchWizard({
 
     // Form handling
     handleInputChange,
+    /** Set together with `playerName` whenever a roster row is picked. */
+    setPickedPlayerUserId,
     handleScoreChange,
     handleTiebreakChange,
 

@@ -233,7 +233,9 @@ export async function recordResult(
 
   const { data: entry, error: entryError } = await supabase
     .from("program_event_entries")
-    .select("id, event_id, program_id, slot, player_labels, discipline")
+    .select(
+      "id, event_id, program_id, slot, player_labels, player_user_ids, discipline"
+    )
     .eq("id", input.entryId)
     .single();
 
@@ -294,12 +296,38 @@ export async function recordResult(
     player2_tiebreaks: input.theirTiebreaks,
   };
 
+  /**
+   * WHOSE match this is, not just what it is called.
+   *
+   * `player1_name` is a label off the entry; `player1_id` is the account, and
+   * it is half of the `matches` SELECT policy:
+   *
+   *   auth.uid() in (created_by, player1_id, player2_id)
+   *     or is_program_staff(program_id)
+   *     or (user_program_role(program_id) = 'player' and <program>.roster_visible)
+   *
+   * Leaving it null used to mean a player could not read their own recorded
+   * match. `created_by` is the coach, staff they are not, and `roster_visible`
+   * DEFAULTS TO FALSE — so every clause failed and the line rendered with a
+   * blank score on the player's own schedule. It also kept the pair out of
+   * Compare, which counts only non-null ids.
+   *
+   * Singles slots map one entry to one account. A doubles line has two
+   * accounts and one column, so there is no non-arbitrary choice and null is
+   * the honest answer — the same rule the upload wizard's preset follows.
+   */
+  const playerUserId =
+    entry.discipline === "doubles"
+      ? null
+      : (((entry.player_user_ids as string[] | null) ?? [])[0] ?? null);
+
   if (existing?.id) {
     const { error: updateError } = await supabase
       .from("matches")
       .update({
         player1_name: ourLabel,
         player2_name: theirLabel,
+        player1_id: playerUserId,
         score: scorePayload,
       })
       .eq("id", existing.id as string);
@@ -321,6 +349,7 @@ export async function recordResult(
     // opponent with nothing on screen looking wrong.
     player1_name: ourLabel,
     player2_name: theirLabel,
+    player1_id: playerUserId,
     program_id: auth.programId,
     event_entry_id: entry.id,
     tournament_name: event.name,
