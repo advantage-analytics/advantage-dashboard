@@ -176,8 +176,10 @@ export interface PointWinner {
  * Resolve every point in the match.
  *
  * The final rally has no successor to compare against, so it is left
- * unresolved here and settled by the reconciliation fold, which knows the true
- * final score and can therefore name the only winner consistent with it.
+ * unresolved here and settled by `reconcile`, which folds the match twice —
+ * once with each label credited that point — and keeps the fold the entered
+ * score confirms. Consumers must therefore write points from
+ * `Reconciliation.settledWinners` rather than from what this returns.
  */
 export function resolvePointWinners(
   rallies: SplitStepRally[],

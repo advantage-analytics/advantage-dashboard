@@ -16,6 +16,7 @@ import {
   shotResult,
   POINT_FLAGS,
   SHOT_FLAGS,
+  type PointWinner,
   type SplitStepRally,
   type SplitStepStroke,
 } from '@/lib/services/splitstep/derivation';
@@ -429,5 +430,107 @@ test.describe('pressure points', () => {
     // With a set already won, best-of-3 makes it match point too.
     expect(mk({ A: 5, B: 4 }, { A: 1, B: 0 }).isMatchPoint).toBe(true);
     expect(mk({ A: 5, B: 4 }, { A: 0, B: 0 }).isMatchPoint).toBe(false);
+  });
+});
+
+/**
+ * The trailing point, on a hand-written fold.
+ *
+ * The fixture tests above cannot catch this: they feed the fold its own output
+ * back as the entered score, so a mis-credited final game reconciles against
+ * its own mistake. `clean-match.json` also happens to end 40-0, which is the
+ * one shape where carrying the previous winner forward gives the right answer.
+ *
+ * So this builds the winners array directly. Nine points, two games, and a
+ * final game that runs 40-0 → 40-15 → game: the last two points go to
+ * DIFFERENT players, which is exactly what the old fold got wrong.
+ */
+test.describe('reconcile: the final point', () => {
+  const LABELS = ['A', 'B'];
+
+  // Game 1: A holds to love. Game 2: A leads 40-0, B takes one, A closes it —
+  // and that closing point is the one `resolveWinner` cannot see, because it
+  // has no successor rally to compare against.
+  const WINNERS: PointWinner[] = [
+    { rallyId: 1, server: 'A', winner: 'A', via: 'ladder' },
+    { rallyId: 2, server: 'A', winner: 'A', via: 'ladder' },
+    { rallyId: 3, server: 'A', winner: 'A', via: 'ladder' },
+    { rallyId: 4, server: 'A', winner: 'A', via: 'game' },
+    { rallyId: 5, server: 'B', winner: 'A', via: 'ladder' },
+    { rallyId: 6, server: 'B', winner: 'A', via: 'ladder' },
+    { rallyId: 7, server: 'B', winner: 'A', via: 'ladder' },
+    { rallyId: 8, server: 'B', winner: 'B', via: 'ladder' },
+    { rallyId: 9, server: 'B', winner: null, via: null },
+  ];
+
+  const gameKeyOf = (id: number) => (id <= 4 ? 'g1' : 'g2');
+  const setKeyOf = () => 's1';
+
+  const run = (score: { player1: number[]; player2: number[] }) =>
+    reconcile({ winners: WINNERS, labels: LABELS, score, gameKeyOf, setKeyOf });
+
+  test('is settled from the entered score, not carried over from the previous point', () => {
+    // A won both games. Carrying `lastWinnerInGame` forward across the
+    // unresolved point credited game 2 to B, folded 1-1, and refused a match
+    // that was entirely correct.
+    const rec = run({ player1: [2], player2: [0] });
+
+    expect(rec.reason).toBe(null);
+    expect(rec.ok).toBe(true);
+    expect(rec.player1Label).toBe('A');
+    expect(rec.foldedSets).toEqual([{ A: 2 }]);
+    expect(rec.games.map((g) => g.winner)).toEqual(['A', 'A']);
+  });
+
+  test('settledWinners names the final point, so it is not written as player2', () => {
+    const rec = run({ player1: [2], player2: [0] });
+
+    // `won_by_player1: winner === player1` reads false for null, so an
+    // unsettled final point was recorded as won by player2 in every match.
+    expect(rec.settledWinners).toHaveLength(WINNERS.length);
+    expect(rec.settledWinners[8].winner).toBe('A');
+    // The raw diagnostic still says the vendor stream could not resolve it.
+    expect(rec.unresolvedPoints).toEqual([9]);
+  });
+
+  test('settling tries both labels but still refuses a score neither reproduces', () => {
+    // The point is that this reads the answer off the entered score, not that
+    // it accepts whatever it is given. There are two games here, so no
+    // assignment of one point can fold them into three.
+    const rec = run({ player1: [2], player2: [1] });
+
+    expect(rec.ok).toBe(false);
+    expect(rec.reason).toContain('does not match the entered score');
+  });
+
+  test('1-1 is reachable, and still refused — as a mirror, not as a mismatch', () => {
+    // 1-1 is what the OLD fold produced for these nine points, and it IS
+    // reproducible: credit the trailing point to B. That is precisely why
+    // settling cannot be allowed to stop at "some assignment matches" — a
+    // score equal to its own mirror satisfies both label mappings and so
+    // identifies nobody. The refusal has to come from the mirror check, and
+    // the reason has to say so, or a coach reads "we disagree with your score"
+    // for a score nobody disagrees with.
+    const rec = run({ player1: [1], player2: [1] });
+
+    expect(rec.ok).toBe(false);
+    expect(rec.reason).toContain('its own mirror');
+  });
+
+  test('a fully resolved match is unaffected', () => {
+    const resolved = WINNERS.map((w, i) =>
+      i === WINNERS.length - 1 ? { ...w, winner: 'A', via: 'game' as const } : w
+    );
+    const rec = reconcile({
+      winners: resolved,
+      labels: LABELS,
+      score: { player1: [2], player2: [0] },
+      gameKeyOf,
+      setKeyOf,
+    });
+
+    expect(rec.ok).toBe(true);
+    expect(rec.unresolvedPoints).toEqual([]);
+    expect(rec.settledWinners).toEqual(resolved);
   });
 });

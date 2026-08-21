@@ -38,7 +38,21 @@ export interface Reconciliation {
   games: FoldedGame[];
   /** Populated only when ok is false. */
   reason: string | null;
+  /**
+   * Points the vendor stream could not resolve on its own. The final rally is
+   * listed here when it was one of them even after the fold settled it — this
+   * is the raw diagnostic, not a list of rows that were written wrong.
+   */
   unresolvedPoints: number[];
+  /**
+   * `winners` with the trailing point settled, when it needed settling.
+   *
+   * Consumers MUST write points from this rather than from the array they
+   * passed in. `resolveWinner` cannot resolve the last rally — it has no
+   * successor to compare against — and the fold is the only thing that knows
+   * which assignment reproduces the entered score.
+   */
+  settledWinners: PointWinner[];
 }
 
 /** True when a score cannot distinguish a mapping from its mirror. */
@@ -156,20 +170,21 @@ export function reconcile(params: {
     games: [],
     reason: null,
     unresolvedPoints,
+    settledWinners: winners,
   };
 
   if (labels.length !== 2) {
     return { ...empty, reason: 'expected exactly two player labels' };
   }
 
-  const { games, sets } = foldGames(winners, gameKeyOf, setKeyOf);
-
   // Every point must resolve. The final rally is the one legitimate exception:
   // it has no successor, so it is allowed to be unresolved provided the fold
   // still lands on the entered score.
-  const lastRallyId = winners[winners.length - 1]?.rallyId;
+  const lastIndex = winners.length - 1;
+  const lastRallyId = winners[lastIndex]?.rallyId;
   const fatalUnresolved = unresolvedPoints.filter((id) => id !== lastRallyId);
   if (fatalUnresolved.length > 0) {
+    const { games, sets } = foldGames(winners, gameKeyOf, setKeyOf);
     return {
       ...empty,
       foldedSets: sets,
@@ -179,13 +194,56 @@ export function reconcile(params: {
   }
 
   const [a, b] = labels;
-  const aCounts = setCounts(sets, a);
-  const bCounts = setCounts(sets, b);
 
-  const aIsPlayer1 =
-    sameCounts(aCounts, score.player1) && sameCounts(bCounts, score.player2);
-  const bIsPlayer1 =
-    sameCounts(bCounts, score.player1) && sameCounts(aCounts, score.player2);
+  const attempt = (candidate: PointWinner[]) => {
+    const { games, sets } = foldGames(candidate, gameKeyOf, setKeyOf);
+    const aCounts = setCounts(sets, a);
+    const bCounts = setCounts(sets, b);
+    return {
+      candidate,
+      games,
+      sets,
+      aCounts,
+      bCounts,
+      aIsPlayer1:
+        sameCounts(aCounts, score.player1) && sameCounts(bCounts, score.player2),
+      bIsPlayer1:
+        sameCounts(bCounts, score.player1) && sameCounts(aCounts, score.player2),
+    };
+  };
+
+  /**
+   * SETTLE THE TRAILING POINT.
+   *
+   * `foldGames` carries `lastWinnerInGame` forward across an unresolved point,
+   * so an unsettled final rally credited the match's LAST GAME to whoever won
+   * the previous resolved point in it. That is only correct when the winner
+   * took the final two points in a row; a game closed at 40-30, or running
+   * 40-0 → 40-15 → game, was credited to the loser. The fold then came up one
+   * game short for the winner and one long for the loser, `reconcile` reported
+   * "does not match the entered score", and `deriveAndPublish` wrote
+   * `derivation_failed` — refusing a match that was entirely correct.
+   *
+   * There is exactly one point in question and two possible winners, so the
+   * honest resolution is to try both and keep the one the entered score
+   * confirms. `matches.score` is ground truth here (see the module header), so
+   * this is reading the answer off the evidence, not guessing at it: an
+   * assignment that does not reproduce the entered score is still refused.
+   */
+  const trailingUnresolved = lastIndex >= 0 && !winners[lastIndex]?.winner;
+  const attempts = (
+    trailingUnresolved
+      ? labels.map((label) =>
+          winners.map((w, i) => (i === lastIndex ? { ...w, winner: label } : w))
+        )
+      : [winners]
+  ).map(attempt);
+
+  const settled =
+    attempts.find((r) => r.aIsPlayer1 || r.bIsPlayer1) ?? attempts[0];
+
+  const { candidate: settledWinners, games, sets, aCounts, bCounts } = settled;
+  const { aIsPlayer1, bIsPlayer1 } = settled;
 
   if (!aIsPlayer1 && !bIsPlayer1) {
     return {
@@ -213,7 +271,15 @@ export function reconcile(params: {
     const player1Label = initialTopIsPlayer1
       ? geometryTopLabel
       : (otherOf(geometryTopLabel, labels) as string);
-    return { ok: true, player1Label, foldedSets: sets, games, reason: null, unresolvedPoints };
+    return {
+      ok: true,
+      player1Label,
+      foldedSets: sets,
+      games,
+      reason: null,
+      unresolvedPoints,
+      settledWinners,
+    };
   }
 
   return {
@@ -223,6 +289,7 @@ export function reconcile(params: {
     games,
     reason: null,
     unresolvedPoints,
+    settledWinners,
   };
 }
 

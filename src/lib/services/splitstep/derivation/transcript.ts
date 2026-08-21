@@ -186,6 +186,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
       games: [],
       reason: null,
       unresolvedPoints: [],
+      settledWinners: [],
     },
     points: [],
     winnerShare: 0,
@@ -281,7 +282,11 @@ export function buildTranscript(options: BuildOptions): Transcript {
       previousRally = null;
     }
 
-    const winner = winners[i]?.winner ?? null;
+    // `rec.settledWinners`, NOT `winners`. The final rally has no successor
+    // for `resolveWinner` to compare against, so only the fold can name its
+    // winner — reading the raw array here recorded every match's last point as
+    // won by player2, because `winner === player1` is false for null.
+    const winner = rec.settledWinners[i]?.winner ?? null;
     const serveIndex = lastServeIndex(rally);
     const pressure = pressureFor({
       rally,
