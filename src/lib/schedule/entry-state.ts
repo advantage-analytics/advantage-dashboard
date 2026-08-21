@@ -99,22 +99,43 @@ function entryWon(entry: EventEntry): boolean {
 }
 
 /**
+ * What ONE match is waiting for.
+ *
+ * A tournament entry is a whole run and renders one row per round, so a row
+ * asking `entryState` about its entry gets an answer about a different match:
+ * one failed round stamped "Analysis failed" on every other round, and one
+ * ready round gave videoless rounds a "Report" link into an empty stats page
+ * while suppressing their "Add video" action. A dual is unaffected — one match
+ * per entry — which is why it survived review.
+ *
  * Defers to `isWorking` / `isAnalysisReady` rather than testing status strings
  * itself, so a state that pulses here is a state that animates on the match
  * page. `uploaded` is the one that catches people out: in flight, but with
  * nothing moving, so it reads as `no-video`'s neighbour rather than `working`.
  */
+export function matchState(match: EntryMatch): EntryState {
+  if (isAnalysisFailed(match.status)) return "failed";
+  if (isWorking(match.status)) return "working";
+  if (isAnalysisReady(match.status) && match.hasVideo) return "ready";
+  if (match.hasVideo && isInFlight(match.status)) return "waiting";
+  return "no-video";
+}
+
+/**
+ * What a whole line is waiting for — the loudest thing any of its matches is.
+ *
+ * Written over `matchState` so the rules exist once. The precedence order is
+ * the same one this used to spell out inline: failed, then working, then
+ * ready, then waiting, and no-video when none of them apply. It is the right
+ * answer for a summary (the schedule list, the upload queue) and the wrong one
+ * for a single row — use `matchState` there.
+ */
+const STATE_PRECEDENCE = ["failed", "working", "ready", "waiting"] as const;
+
 export function entryState(entry: EventEntry): EntryState {
   if (entry.matches.length === 0) return "empty";
-  if (entry.matches.some((match) => isAnalysisFailed(match.status))) return "failed";
-  if (entry.matches.some((match) => isWorking(match.status))) return "working";
-  if (entry.matches.some((match) => isAnalysisReady(match.status) && match.hasVideo)) {
-    return "ready";
-  }
-  if (entry.matches.some((match) => match.hasVideo && isInFlight(match.status))) {
-    return "waiting";
-  }
-  return "no-video";
+  const states = entry.matches.map(matchState);
+  return STATE_PRECEDENCE.find((s) => states.includes(s)) ?? "no-video";
 }
 
 /**

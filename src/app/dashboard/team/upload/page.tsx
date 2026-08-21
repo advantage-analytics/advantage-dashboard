@@ -40,7 +40,10 @@ export default async function TeamUploadPage({
   if (active.kind !== "team") redirect("/dashboard/matches/new");
   if (!isProgramStaff(active)) redirect("/dashboard/team/schedule");
 
-  const groups = await getUploadQueue(active.id);
+  // NOT hoisted above the `?match=` branch below. That branch never reads the
+  // queue, and `getUploadQueue` is four serialized round trips over the whole
+  // season — paid, then discarded, on every single-match upload.
+  // `async-defer-await`: await it where it is used.
 
   // `?match=` with no `?entry=` is a single match — it exists, it belongs to no
   // event, and the destination is already settled. Same pinned step 1, minus
@@ -75,6 +78,7 @@ export default async function TeamUploadPage({
   }
 
   if (entryId) {
+    const groups = await getUploadQueue(active.id);
     for (const group of groups) {
       const entry = group.entries.find((candidate) => candidate.id === entryId);
       if (!entry) continue;
@@ -82,12 +86,19 @@ export default async function TeamUploadPage({
       // The row that was clicked, not just the entry's first match. A
       // tournament entry is a whole run, so `?match=` is what says which round
       // this video belongs to.
-      const match =
-        (matchId
-          ? entry.matches.find((candidate) => candidate.id === matchId)
-          : undefined) ??
-        entry.matches[0] ??
-        null;
+      const requested = matchId
+        ? entry.matches.find((candidate) => candidate.id === matchId)
+        : undefined;
+
+      // A `?match=` the queue does not hold is NOT a reason to fall back to
+      // `entry.matches[0]`. That attached the video and the camera answers to
+      // a DIFFERENT ROUND of the same tournament run — the coach clicked R32
+      // and the file landed on Q1, with nothing on screen to show for it. The
+      // entry-not-found case two lines below already redirects; this is the
+      // same mistake one level down.
+      if (matchId && !requested) redirect("/dashboard/team/upload");
+
+      const match = requested ?? entry.matches[0] ?? null;
       const preset: EventPreset = {
         kind: "line",
         entryId: entry.id,
@@ -120,7 +131,7 @@ export default async function TeamUploadPage({
     redirect("/dashboard/team/upload");
   }
 
-  return <LinePicker groups={groups} />;
+  return <LinePicker groups={await getUploadQueue(active.id)} />;
 }
 
 /**

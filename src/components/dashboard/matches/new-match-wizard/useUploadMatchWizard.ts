@@ -72,6 +72,27 @@ const DEFAULT_PROVIDER_ID: ProviderId | null =
     (p) => p.available !== false && providerKindOrNull(p.id) === "processing"
   )?.id ?? null;
 
+/**
+ * Where a line that CANNOT take video starts instead.
+ *
+ * A doubles line was handed the processing provider like every other preset,
+ * and `PinnedMatchContent` replaces the provider step, so there was no way to
+ * choose anything else. The coach picked a multi-gigabyte file and met
+ * "Video analysis supports singles matches only" from `job-request.ts` after
+ * the upload — a 422 at the end of the most expensive step, with an orphaned
+ * blob and a job stuck at `uploaded`.
+ *
+ * `supportsVideo()` already knows this at page-build time, and the import
+ * provider is a real path for a doubles line: it parses numbers and never goes
+ * near the vision pipeline. Its step order also skips the video step, so the
+ * wizard asks for a file instead of a video and the "Add file" label the
+ * schedule row already shows becomes true.
+ */
+const DEFAULT_IMPORT_PROVIDER_ID: ProviderId | null =
+  providers.find(
+    (p) => p.available !== false && providerKindOrNull(p.id) === "import"
+  )?.id ?? null;
+
 export interface UseUploadMatchWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -366,7 +387,9 @@ export function useUploadMatchWizard({
       // The line already knows whose match it is; a single match learns it when
       // somebody picks from the roster. Both land in the same piece of state.
       setPickedPlayerUserId(preset.playerUserId);
-      setSelectedProvider(DEFAULT_PROVIDER_ID);
+      setSelectedProvider(
+        preset.supportsVideo ? DEFAULT_PROVIDER_ID : DEFAULT_IMPORT_PROVIDER_ID
+      );
       setFormData((prev) => ({
         ...prev,
         eventName: preset.eventName ?? "",
@@ -471,6 +494,11 @@ export function useUploadMatchWizard({
 
   const handleProviderContinue = useCallback(() => {
     if (!selectedProvider) return;
+    // Belt as well as braces. The preset above already opens a doubles line on
+    // the import provider, but nothing else stops a processing provider being
+    // selected for one, and the cost of getting it wrong is paid entirely by
+    // the coach — a full video upload, then a 422.
+    if (preset && !preset.supportsVideo && isProcessingProvider) return;
     // A single match in a team workspace cannot move on without a player: it is
     // the one thing the workspace does not already know, and a match created
     // without it belongs to nobody's season.
@@ -478,7 +506,7 @@ export function useUploadMatchWizard({
     // Processing providers get a video step before the form; import providers
     // go straight to the merged file+details step.
     setStep(stepOrder[1]);
-  }, [selectedProvider, stepOrder, preset, formData.playerName]);
+  }, [selectedProvider, stepOrder, preset, formData.playerName, isProcessingProvider]);
 
   const handleVideoContinue = useCallback(() => {
     setStep("match");
@@ -933,7 +961,7 @@ export function useUploadMatchWizard({
       // Fill vs create. A preset line whose match exists gets its score and the
       // camera answers written onto the row it already has; everything else
       // inserts. `event_entry_id` is what ties a new one back to its line.
-      const { error: matchError } = reusingMatch
+      const { data: written, error: matchError } = reusingMatch
         ? await supabase
             .from("matches")
             .update({
@@ -949,14 +977,36 @@ export function useUploadMatchWizard({
                 : {}),
             })
             .eq("id", matchId)
+            // `.select()` so an update that matched NO ROW is visible. This is
+            // a browser-client write against a policy of `auth.uid() =
+            // created_by`, and a coach filling a line somebody else recorded
+            // is not the creator — so RLS silently filtered the row out and
+            // PostgREST returned success with `error: null`. The score
+            // correction was discarded, and `fixed_camera` /
+            // `initial_top_player_is_player1` never persisted, which is
+            // exactly the fallback `/api/splitstep/jobs` reads when the wizard
+            // could not answer the camera questions. The submission then 400s
+            // permanently with nothing explaining why.
+            .select("id")
         : await supabase
             .from("matches")
-            .insert({ ...matchRow, event_entry_id: preset?.entryId ?? null });
+            .insert({ ...matchRow, event_entry_id: preset?.entryId ?? null })
+            .select("id");
 
       if (matchError) {
         console.error("Supabase insert error:", matchError);
         throw new Error(
           `Database error: ${matchError.message || matchError.details || JSON.stringify(matchError)}`
+        );
+      }
+
+      if (!written || written.length === 0) {
+        throw new Error(
+          reusingMatch
+            ? "This match belongs to someone else on the program, so we could not " +
+              "save the changes. Ask whoever recorded it to make them, or record " +
+              "a new result for this line."
+            : "The match could not be saved. Nothing was uploaded — try again."
         );
       }
 

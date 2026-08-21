@@ -6,7 +6,12 @@ import { Badge } from "@/components/ui/badge";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ScoreEntry } from "@/components/dashboard/schedule/score-entry";
 import { RowAction } from "@/components/dashboard/schedule/row-action";
-import { entryState, matchWon, supportsVideo } from "@/lib/schedule/entry-state";
+import {
+  entryState,
+  matchState,
+  matchWon,
+  supportsVideo,
+} from "@/lib/schedule/entry-state";
 import { formatScore } from "@/lib/schedule/format";
 import type { EntryMatch, EventEntry } from "@/lib/schedule/types";
 
@@ -44,7 +49,11 @@ export function LineRow({
   const theirLabel =
     match?.opponentLabels.join(" / ") || entry.opponentLabels.join(" / ");
   const won = match ? matchWon(match) : null;
-  const state = entryState(entry);
+  // This row's own match, not the entry's. A tournament entry renders one row
+  // per round, and asking the entry gives every round the loudest round's
+  // answer. `entryState` is still right for the matchless row, where there is
+  // no match to ask.
+  const state = match ? matchState(match) : entryState(entry);
 
   if (scoring) {
     return (
