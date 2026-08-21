@@ -9,9 +9,12 @@ import { shortName } from "@/lib/data/match-utils";
 import {
   isAnalysisFailed,
   isInFlight,
+  withStatsPublished,
 } from "@/lib/data/match-analysis";
 import { analysisFor, loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import { MatchAnalysisProgress } from "@/components/dashboard/matches/match-detail/match-analysis-progress";
+import { UnpublishedStatsNotice } from "@/components/dashboard/matches/match-detail/unpublished-stats-notice";
+import { DerivedStatsNotice } from "@/components/dashboard/matches/match-detail/derived-stats-notice";
 
 import { MatchSummaryRow } from "@/components/dashboard/matches/match-detail/match-summary-row";
 import { MatchKpiRow } from "@/components/dashboard/matches/match-detail/match-kpi-row";
@@ -82,21 +85,31 @@ const OTHER_STATS: StatConfig[] = [
   { key: "totalPointsWon", label: "Total Points Won", isPercentage: false },
 ];
 
+/** "" is what MatchStatisticsCard treats as missing; 0 is a measurement. */
+function statDisplay(value: number | null, isPercentage?: boolean): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "";
+  return isPercentage ? `${Math.round(value)}%` : String(Math.round(value));
+}
+
 function buildStatRows(
   configs: StatConfig[],
   p1: PlayerStatistics,
   p2: PlayerStatistics,
 ): StatRow[] {
   return configs.map((c) => {
-    const p1Val = p1[c.key] as number;
-    const p2Val = p2[c.key] as number;
+    const p1Val = p1[c.key] as number | null;
+    const p2Val = p2[c.key] as number | null;
     const p1Frac = c.fractionKey ? p1.fractions[c.fractionKey] : undefined;
     const p2Frac = c.fractionKey ? p2.fractions[c.fractionKey] : undefined;
 
     return {
       label: c.label,
-      p1Display: c.isPercentage ? `${Math.round(p1Val)}%` : String(Math.round(p1Val)),
-      p2Display: c.isPercentage ? `${Math.round(p2Val)}%` : String(Math.round(p2Val)),
+      // An empty display is the card's existing contract for "no data", which
+      // it renders as an italic em dash with an explanatory tooltip. Absent must
+      // reach here as null rather than 0 — see the mapping in
+      // match-stats-server.ts.
+      p1Display: statDisplay(p1Val, c.isPercentage),
+      p2Display: statDisplay(p2Val, c.isPercentage),
       p1Fraction: p1Frac ? `${p1Frac.made}/${p1Frac.attempts}` : undefined,
       p2Fraction: p2Frac ? `${p2Frac.made}/${p2Frac.attempts}` : undefined,
     };
@@ -183,11 +196,31 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // hit no serves" rather than "we're still working" — so the page stops at the
   // identity the player entered plus the pipeline state. Failures take the same
   // path: the reason it stopped is more use than a page of zeroes.
-  const analysis = analysisFor(jobs, {
+  const jobAnalysis = analysisFor(jobs, {
     id: matchId,
     sourceProvider: match.sourceProvider,
     verificationStatus: match.verificationStatus,
   });
+
+  // Derivation produces two things of very different trustworthiness, and the
+  // page has to be able to say so. The point timeline is folded from the
+  // vendor's score stream and refused unless it reproduces the score the player
+  // entered, so every point on it is checkable. The aggregates are not — several
+  // families are contaminated by the vendor recording points that ended on the
+  // serve as rallies, and aces cannot be told from service winners at all. When
+  // the derivation ran but no statistics were published, this resolves to
+  // `timeline` and the sections below split accordingly.
+  const statsPublished = Boolean(p1 && p2);
+  // A video-derived match publishes what it can measure and withholds what it
+  // cannot, per statistic rather than per card. Winners and errors are marked
+  // approximate because identifying the stroke that ended a point is a model
+  // output; aces are absent entirely because an ace cannot be told from a
+  // service winner. See suppress_derived_match_stats().
+  const isDerived = match.sourceProvider === "splitstep";
+  const analysis = {
+    ...jobAnalysis,
+    status: withStatsPublished(jobAnalysis.status, statsPublished),
+  };
   const isAwaitingAnalysis =
     isInFlight(analysis.status) || isAnalysisFailed(analysis.status);
 
@@ -259,8 +292,10 @@ export default async function MatchDetailPage({ params }: PageProps) {
           />
         </div>
 
+        {statsPublished && (
         <div className="mt-8">
           <MatchKpiRow
+            approximate={isDerived}
             duration={match.duration}
             matchDurationSec={matchDurationSec}
             playingTimeSec={points.reduce((sum, p) => sum + (p.duration ?? 0), 0)}
@@ -270,6 +305,19 @@ export default async function MatchDetailPage({ params }: PageProps) {
             p2Name={p2Short}
           />
         </div>
+        )}
+
+        {!statsPublished && (
+          <div className="mt-8">
+            <UnpublishedStatsNotice />
+          </div>
+        )}
+
+        {statsPublished && isDerived && (
+          <div className="mt-8">
+            <DerivedStatsNotice />
+          </div>
+        )}
 
         <div className="mt-8 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-8">
           <main
@@ -345,11 +393,13 @@ export default async function MatchDetailPage({ params }: PageProps) {
                 )}
               </div>
             </AiInsightCard>
-            <PerformanceProfileCard
-              data={radarData}
-              p1Name={p1Short}
-              p2Name={p2Short}
-            />
+            {radarData.length > 0 && (
+              <PerformanceProfileCard
+                data={radarData}
+                p1Name={p1Short}
+                p2Name={p2Short}
+              />
+            )}
             <KeyMomentsCard
               points={points}
               narrativeMoments={keyMoments}

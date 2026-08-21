@@ -37,7 +37,12 @@ export function determineWinner(
   playerScores: (number | null)[],
   opponentScores: (number | null)[],
   _bestOf: number, // Used for future validation of sets to win
-  userId: string,
+  /**
+   * The account behind `playerName` — NOT the signed-in uploader. Null when
+   * the player has no account, which is an ordinary case in a team workspace
+   * and must never be filled in with the uploader's id.
+   */
+  playerUserId: string | null,
   playerName: string,
   opponentName: string
 ): WinnerLoserResult {
@@ -60,11 +65,11 @@ export function determineWinner(
 
   return {
     winner: playerWon
-      ? { id: userId, name: playerName, scores: playerScoresNum }
+      ? { id: playerUserId, name: playerName, scores: playerScoresNum }
       : { id: null, name: opponentName, scores: opponentScoresNum },
     loser: playerWon
       ? { id: null, name: opponentName, scores: opponentScoresNum }
-      : { id: userId, name: playerName, scores: playerScoresNum }
+      : { id: playerUserId, name: playerName, scores: playerScoresNum }
   };
 }
 

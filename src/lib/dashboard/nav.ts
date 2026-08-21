@@ -37,23 +37,26 @@ export const PERSONAL_NAV: readonly NavLink[] = [
 ];
 
 /**
- * "Matches" is back, because the page it points at now scopes itself.
+ * A program plays a schedule and then owns the matches that come out of it.
+ * Both entries are here because they answer different questions, and the two
+ * branches that added them each arrived with only half the answer.
  *
- * It was absent for a real reason: `/dashboard/matches` filtered on
- * `created_by = auth.uid()` and nothing else, so a team menu pointing at it
- * would have shown a coach their own uploads presented as the program's —
- * the wrong-attribution failure `docs/ui-revamp-guardrails.md` warns about,
- * where nothing looks broken on screen. That note said the entry returns the
- * moment the page resolves its own workspace scope. It does now: personal
- * reads `created_by = me AND program_id IS NULL`, team reads
- * `program_id = <program>` and lets `visible_match_ids()` decide who sees
- * which rows.
+ * `/dashboard/team/schedule` reads `program_events` — "what is this program
+ * playing", including fixtures with no match row yet.
  *
- * The cost of leaving it out had grown past the risk of putting it back —
- * inside a program NOBODY had a route to a match list, players included.
+ * `/dashboard/matches` reads matches — "what has this program played". It was
+ * deliberately absent for a while, because the page filtered on
+ * `created_by = auth.uid()` and would have shown a coach their own uploads
+ * presented as the program's: the wrong-attribution failure
+ * `docs/ui-revamp-guardrails.md` warns about, where nothing looks broken on
+ * screen. The page resolves its own workspace scope now — personal reads
+ * `created_by = me AND program_id IS NULL`, team reads `program_id = <program>`
+ * and lets `visible_match_ids()` decide who sees which rows — so the entry is
+ * back, and inside a program players have a route to a match list again.
  */
 export const TEAM_NAV: readonly NavLink[] = [
   { name: "Team Home", href: "/dashboard/team", icon: Home },
+  { name: "Schedule", href: "/dashboard/team/schedule", icon: Calendar },
   { name: "Matches", href: "/dashboard/matches", icon: Calendar },
   { name: "Roster", href: "/dashboard/team/roster", icon: Users },
   { name: "Compare", href: "/dashboard/team/compare", icon: Swords },
@@ -78,7 +81,19 @@ export const TEAM_BOTTOM: readonly NavLink[] = [
   { name: "Help Center", href: "/dashboard/help", icon: HelpCircle },
 ];
 
+/**
+ * Destinations that are NOT rail items but still need naming.
+ *
+ * The header reads `navLabel(pathname)` for its crumb, and longest-match over
+ * the rail alone put "Team Home" above the upload wizard — a crumb naming a
+ * page you are not on. These carry a name without claiming a place in the rail.
+ */
+const UNLISTED: readonly NavLink[] = [
+  { name: "Upload video", href: "/dashboard/team/upload", icon: Calendar },
+];
+
 const ALL_LINKS: readonly NavLink[] = [
+  ...UNLISTED,
   ...PERSONAL_NAV,
   ...TEAM_NAV,
   ...PERSONAL_BOTTOM,

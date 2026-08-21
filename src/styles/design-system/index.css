@@ -28,3 +28,7 @@
 @import "./typography.css";
 @import "./spacing.css";
 @import "./effects.css";
+/* Not from the design project — added here because the audit found the reset
+   leaves focused controls with no visible indicator at all. Last, so it sees
+   --focus-ring. */
+@import "./focus.css";

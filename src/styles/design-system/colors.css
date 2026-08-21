@@ -55,6 +55,13 @@
   /* Signal Blue — the single accent. Two washes + rings; nothing in between. */
   --blue:#3B82F6;
   --blue-hover:#2563EB;
+  /* Signal Blue AS TEXT on a white surface. Same hex as --blue-hover, named
+     separately because here it is a resting colour, not a hover state.
+     --blue itself measures 3.68:1 on #FFFFFF, which fails WCAG 1.4.3 AA for
+     anything under 24px — and every inline action in this app ("Add score",
+     "Report", "Change") is 11px. This measures 5.17:1. Use --blue for fills,
+     borders and icons; use this the moment blue becomes a word. */
+  --blue-text:#2563EB;
   --blue-tint-08:rgba(59,130,246,0.08); /* wash — nav active, tinted footnotes */
   --blue-tint-12:rgba(59,130,246,0.12); /* selection — ::selection, active chips */
   --blue-tint-04:var(--blue-tint-08); /* deprecated alias — 4% was indistinguishable from 8% */

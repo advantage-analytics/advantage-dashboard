@@ -96,7 +96,7 @@ export interface SplitStepStroke {
 
   rallyId: number;
   strokeNumber: number;
-  /** Vendor's free-text player label, e.g. "Quan". Not player1/player2. */
+  /** Vendor's free-text player label, echoed from the job. Not player1/player2. */
   playerLabel: string;
 
   /** Raw prediction strings. Unreliable — see quality.ts. Kept verbatim. */
