@@ -7,6 +7,8 @@ import {
 } from "@/components/dashboard/activity/activity-tray-loader";
 import { WorkspaceProvider } from "@/components/dashboard/workspace-provider";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { ToastProvider } from "@/components/dashboard/toast/toast-provider";
+import { UploadFailureListener } from "@/components/dashboard/toast/upload-failure-listener";
 
 /**
  * Dashboard layout.
@@ -34,15 +36,22 @@ export default async function Layout({
 
   return (
     <WorkspaceProvider value={workspace}>
-      <DashboardShell
-        activitySlot={
-          <Suspense fallback={<ActivityTrayFallback />}>
-            <ActivityTrayLoader />
-          </Suspense>
-        }
-      >
-        {children}
-      </DashboardShell>
+      {/* Wraps the shell rather than sitting inside a page, because the thing
+          it most needs to report — a background upload dying — happens after
+          the wizard has unmounted and the person has navigated away. A toast
+          host scoped to any one page would miss every one of those. */}
+      <ToastProvider>
+        <UploadFailureListener />
+        <DashboardShell
+          activitySlot={
+            <Suspense fallback={<ActivityTrayFallback />}>
+              <ActivityTrayLoader />
+            </Suspense>
+          }
+        >
+          {children}
+        </DashboardShell>
+      </ToastProvider>
     </WorkspaceProvider>
   );
 }

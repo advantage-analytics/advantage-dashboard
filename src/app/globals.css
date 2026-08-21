@@ -433,6 +433,37 @@
   100% { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0); }
 }
 
+/* Toasts enter from below their resting place, on the design system's primary
+   curve. Opacity alone reads as a flash; 6px of rise reads as arrival.
+
+   A CLASS, not `animate-[toast-in_200ms_cubic-bezier(0.25,0.46,0.45,0.94)]`.
+   Tailwind's arbitrary animation utility cannot carry a `cubic-bezier(...)`:
+   the commas inside the parens end the arbitrary value, and the utility is
+   dropped ENTIRELY — no error, no class, no animation, and a build that passes.
+   `animate-[highlight-new-match_1.5s_ease-out_0.4s_both]` works only because
+   its easing is a bare keyword. Downgrading to `ease-out` would have compiled
+   and quietly abandoned the one curve the design system specifies, so the
+   animation moves here instead, beside `settings-shimmer` which is a class for
+   the same reason.
+
+   Reduced motion keeps the toast and drops the travel. A failure notice is the
+   only warning a person gets that a background upload died, and a motion
+   preference must never suppress it. */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.toast-enter {
+  animation: toast-in 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast-enter {
+    animation: none;
+  }
+}
+
 /* Settings skeleton — directional shimmer for hairline form fields.
    Stagger via inline --shimmer-delay so a wave scans down the form. */
 @keyframes settings-shimmer {
