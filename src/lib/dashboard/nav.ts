@@ -37,17 +37,22 @@ export const PERSONAL_NAV: readonly NavLink[] = [
 ];
 
 /**
- * No "Matches" entry, deliberately.
+ * Still no "Matches" entry, and Schedule is not a rename of one.
  *
  * `/dashboard/matches` filters on `created_by = auth.uid()` — a personal-
  * workspace predicate written into the page. Pointing a team menu at it would
  * show a coach their own uploads presented as the program's, which is the
  * wrong-attribution failure `docs/ui-revamp-guardrails.md` warns about: nothing
- * looks broken on screen. It comes back the moment that page resolves its own
- * workspace scope rather than assuming one.
+ * looks broken on screen.
+ *
+ * `/dashboard/team/schedule` is the workspace-scoped destination that note
+ * predicted. It reads `program_events` rather than `matches`, so it answers
+ * "what is this program playing" instead of "what did I personally upload" —
+ * a different question, which is why it is a different page and not a filter.
  */
 export const TEAM_NAV: readonly NavLink[] = [
   { name: "Team Home", href: "/dashboard/team", icon: Home },
+  { name: "Schedule", href: "/dashboard/team/schedule", icon: Calendar },
   { name: "Roster", href: "/dashboard/team/roster", icon: Users },
   { name: "Compare", href: "/dashboard/team/compare", icon: Swords },
 ];
@@ -71,7 +76,19 @@ export const TEAM_BOTTOM: readonly NavLink[] = [
   { name: "Help Center", href: "/dashboard/help", icon: HelpCircle },
 ];
 
+/**
+ * Destinations that are NOT rail items but still need naming.
+ *
+ * The header reads `navLabel(pathname)` for its crumb, and longest-match over
+ * the rail alone put "Team Home" above the upload wizard — a crumb naming a
+ * page you are not on. These carry a name without claiming a place in the rail.
+ */
+const UNLISTED: readonly NavLink[] = [
+  { name: "Upload video", href: "/dashboard/team/upload", icon: Calendar },
+];
+
 const ALL_LINKS: readonly NavLink[] = [
+  ...UNLISTED,
   ...PERSONAL_NAV,
   ...TEAM_NAV,
   ...PERSONAL_BOTTOM,
