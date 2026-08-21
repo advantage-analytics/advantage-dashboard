@@ -62,7 +62,9 @@ export function SingleDetail({
             {won !== null ? " · final" : ""}
           </span>
 
-          <div className="mt-2 flex items-baseline gap-3">
+          {/* The page's h1 — the matchup, including the d./f./vs verb, because
+              that is what names this page. */}
+          <h1 className="mt-2 flex items-baseline gap-3">
             <span
               className="text-[30px] font-light leading-[34px] tracking-[-0.6px]"
               style={{ color: "var(--ink-900)" }}
@@ -76,7 +78,7 @@ export function SingleDetail({
             {won !== null ? (
               <Badge variant={won ? "win" : "loss"}>{won ? "Won" : "Lost"}</Badge>
             ) : null}
-          </div>
+          </h1>
 
           {facts.length > 0 ? (
             <div className="mt-3 flex items-center gap-2.5">
@@ -162,7 +164,7 @@ export function SingleDetail({
                 <button
                   type="button"
                   onClick={() => setScoring(true)}
-                  className="cursor-pointer text-[11px] font-medium text-[var(--blue)]"
+                  className="cursor-pointer text-[11px] font-medium text-[var(--blue-text)]"
                 >
                   Add score
                 </button>
@@ -178,7 +180,7 @@ export function SingleDetail({
             ) : canEdit ? (
               <Link
                 href={`/dashboard/team/upload?match=${match.id}`}
-                className="text-[11px] font-medium text-[var(--blue)]"
+                className="text-[11px] font-medium text-[var(--blue-text)]"
               >
                 Upload video
               </Link>
@@ -198,7 +200,7 @@ export function SingleDetail({
           <Row label="Video">
             <Link
               href={`/dashboard/team/upload?match=${match.id}`}
-              className="text-[11px] font-medium text-[var(--blue)]"
+              className="text-[11px] font-medium text-[var(--blue-text)]"
             >
               Upload video
             </Link>

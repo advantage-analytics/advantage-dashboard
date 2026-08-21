@@ -61,7 +61,11 @@ export function DualDetail({
             Dual match · {formatEventDay(event.startsOn)} ·{" "}
             {siteTitle(event.site)} · {score.decided ? "final" : event.surface ?? "—"}
           </span>
-          <div className="mt-2 flex items-baseline gap-3">
+          {/* A real h1. The page carried no heading of any level, so a screen
+              reader got no structure for the thing the page is about. "vs"
+              stays inside it: the accessible name is the fixture, not the
+              opponent standing on their own. */}
+          <h1 className="mt-2 flex items-baseline gap-3">
             <span
               className="text-[30px] font-light leading-[34px] tracking-[-0.6px]"
               style={{ color: "var(--ink-600)" }}
@@ -79,7 +83,7 @@ export function DualDetail({
                 {score.us > score.them ? "Won" : "Lost"}
               </Badge>
             ) : null}
-          </div>
+          </h1>
         </div>
 
         <div className="flex shrink-0 flex-col items-end gap-2">
@@ -127,7 +131,7 @@ export function DualDetail({
           canEdit ? (
             <Link
               href="/dashboard/team/upload"
-              className="text-[11px] font-medium text-[var(--blue)]"
+              className="text-[11px] font-medium text-[var(--blue-text)]"
             >
               Upload match video
             </Link>
@@ -193,7 +197,10 @@ function Section({
         first ? "mt-7" : "mt-6"
       }`}
     >
-      <span className="eyebrow">{title}</span>
+      {/* h2, not a span. Singles and Doubles are the page's two sections, and
+          a screen reader needs them in the outline to jump between. `.eyebrow`
+          carries the look either way. */}
+      <h2 className="eyebrow">{title}</h2>
       <div className="flex-1" />
       {action}
     </div>

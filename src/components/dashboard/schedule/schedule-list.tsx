@@ -140,7 +140,7 @@ function StateCell({ row }: { row: ScheduleRow }) {
     // A tournament with no results has nothing to show yet and everything to
     // add, so its cell is the invitation. A dual already has its nine names.
     return row.kind === "tournament" ? (
-      <span className="text-[11px] font-medium text-[var(--blue)]">
+      <span className="text-[11px] font-medium text-[var(--blue-text)]">
         Add entries
       </span>
     ) : (

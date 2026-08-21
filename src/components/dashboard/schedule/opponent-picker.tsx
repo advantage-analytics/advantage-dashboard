@@ -71,7 +71,7 @@ export function OpponentPicker({
             setEditing(true);
             queueMicrotask(() => inputRef.current?.focus());
           }}
-          className="cursor-pointer text-[11px] font-medium text-[var(--blue)]"
+          className="cursor-pointer text-[11px] font-medium text-[var(--blue-text)]"
         >
           Change
         </button>

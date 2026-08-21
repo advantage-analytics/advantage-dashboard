@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ScoreEntry } from "@/components/dashboard/schedule/score-entry";
+import { RowAction } from "@/components/dashboard/schedule/row-action";
 import { entryState, matchWon, supportsVideo } from "@/lib/schedule/entry-state";
 import { formatScore } from "@/lib/schedule/format";
 import type { EntryMatch, EventEntry } from "@/lib/schedule/types";
@@ -127,13 +128,7 @@ function Action({
   if (state === "empty") {
     if (!canEdit) return null;
     return (
-      <button
-        type="button"
-        onClick={onScore}
-        className="cursor-pointer text-[11px] font-medium text-[var(--blue)]"
-      >
-        Add score
-      </button>
+      <RowAction onClick={onScore}>Add score</RowAction>
     );
   }
 
@@ -157,12 +152,7 @@ function Action({
 
   if (state === "ready" && match) {
     return (
-      <Link
-        href={`/dashboard/matches/${match.id}`}
-        className="text-[11px] font-medium text-[var(--blue)]"
-      >
-        Report
-      </Link>
+      <RowAction href={`/dashboard/matches/${match.id}`}>Report</RowAction>
     );
   }
 
@@ -179,15 +169,14 @@ function Action({
   // match came back first — attaching a video to Q1 when the coach clicked R32,
   // with nothing on screen to show for it.
   return (
-    <Link
+    <RowAction
       href={
         matchId
           ? `/dashboard/team/upload?entry=${entryId}&match=${matchId}`
           : `/dashboard/team/upload?entry=${entryId}`
       }
-      className="text-[11px] font-medium text-[var(--blue)]"
     >
       {videoAllowed ? "Add video" : "Add file"}
-    </Link>
+    </RowAction>
   );
 }

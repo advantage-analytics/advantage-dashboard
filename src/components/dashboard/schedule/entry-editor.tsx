@@ -70,7 +70,7 @@ export function EntryEditor({
         <button
           type="button"
           onClick={add}
-          className="inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-[var(--blue)]"
+          className="inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-[var(--blue-text)]"
         >
           <Plus strokeWidth={2} className="size-3" />
           {addLabel}

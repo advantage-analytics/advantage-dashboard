@@ -68,12 +68,13 @@ export function TournamentDetail({
                 result played is not a finished weekend, and printing "final"
                 after the first one says the opposite of what is true. */}
           </span>
-          <div
+          {/* The page's h1. It had no heading at any level before. */}
+          <h1
             className="mt-2.5 text-[30px] font-light leading-[34px] tracking-[-0.6px]"
             style={{ color: "var(--ink-900)" }}
           >
             {event.name}
-          </div>
+          </h1>
           <div className="mt-3 flex items-center gap-2.5">
             <span className="text-[13px] text-[var(--ink-900)]">
               {siteTitle(event.site)}
@@ -159,9 +160,11 @@ function EntryRun({ entry, canEdit }: { entry: EventEntry; canEdit: boolean }) {
     <div className="mt-6 border-t border-[var(--border-hairline)] pt-6 first:border-t-0">
       <div className="flex items-center gap-3 pb-2.5">
         <span className="h-3 w-0.5 shrink-0 bg-[var(--blue)]" />
-        <span className="text-[16px] text-[var(--ink-900)]">
+        {/* Each entry is a section of this page — one player's run — so it is
+            an h2. Without these the outline was one heading and 30 rows. */}
+        <h2 className="text-[16px] font-normal text-[var(--ink-900)]">
           {entry.playerLabels.join(" / ") || "Unnamed entry"}
-        </span>
+        </h2>
         <span className="text-micro" style={{ color: "var(--ink-600)" }}>
           {entry.draw ? entry.draw.toLowerCase() : "entered"}
           {entry.seed ? (
