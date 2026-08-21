@@ -27,7 +27,13 @@ import { RESULTS_BUCKET } from './config';
 const LOG = '[splitstep:persist]';
 
 export type PersistOutcome =
-  | { ok: true; transcript: Transcript; pointsWritten: number; shotsWritten: number }
+  | {
+      ok: true;
+      matchId: string;
+      transcript: Transcript;
+      pointsWritten: number;
+      shotsWritten: number;
+    }
   | { ok: false; reason: string; transcript: Transcript | null };
 
 interface JobRow {
@@ -141,6 +147,7 @@ export async function persistTranscript(params: {
     if (dryRun) {
       return {
         ok: true,
+        matchId: job.match_id,
         transcript,
         pointsWritten: 0,
         shotsWritten: 0,
@@ -268,6 +275,7 @@ export async function persistTranscript(params: {
 
     return {
       ok: true,
+      matchId: job.match_id,
       transcript,
       pointsWritten: pointRows.length,
       shotsWritten: shotRows.length,

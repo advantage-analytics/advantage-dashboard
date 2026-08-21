@@ -15,6 +15,7 @@
 import { readFileSync } from 'node:fs';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { persistTranscript } from '@/lib/services/splitstep/persist-transcript';
+import { deriveAndPublish } from '@/lib/services/splitstep/derive-and-publish';
 
 try {
   for (const line of readFileSync('.env.local', 'utf8').split('\n')) {
@@ -40,7 +41,25 @@ async function main() {
   }
 
   const supabase = createAdminClient();
-  const out = await persistTranscript({ supabase, jobId, dryRun: !write });
+
+  // --write goes through deriveAndPublish so the CLI exercises exactly what the
+  // webhook runs, statistics and suppression included. A dry run stops at the
+  // transcript, which is the whole point of it.
+  const supabaseClient = supabase;
+  if (write) {
+    const published = await deriveAndPublish({ supabase: supabaseClient, jobId });
+    if (!published.ok) {
+      console.error(`REFUSED: ${published.reason}`);
+      process.exit(1);
+    }
+    console.log('=== PUBLISHED ===');
+    console.log(`match ${published.matchId}`);
+    console.log(`wrote ${published.pointsWritten} points and ${published.shotsWritten} shots`);
+    console.log('calculate_match_stats, backfill and suppression all ran.');
+    return;
+  }
+
+  const out = await persistTranscript({ supabase, jobId, dryRun: true });
 
   if (!out.ok) {
     console.error(`REFUSED: ${out.reason}`);
