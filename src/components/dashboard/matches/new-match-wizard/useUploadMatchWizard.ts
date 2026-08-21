@@ -739,18 +739,67 @@ export function useUploadMatchWizard({
           const parseResult = await parser.parse(file);
 
           if (parseResult.success && parseResult.data) {
-            // Merge parsed data with existing form data
+            /**
+             * THE EVENT OUTRANKS THE FILE.
+             *
+             * With a preset, these answers came from the event and
+             * `PinnedMatchContent` tells the coach in as many words that they
+             * are not re-asked here. A parsed file may FILL BLANKS; it may not
+             * overwrite.
+             *
+             * This only became reachable when doubles lines started opening on
+             * the import provider: every preset used to get the processing
+             * provider, which has no parser, so this block never ran for one.
+             * Now it does, and a SwingVision export names one account holder
+             * and one opponent — so an unguarded merge replaced a doubles
+             * line's "Chen / Alvarez" with a single name and its courtside
+             * score with the file's. The line still carries `event_entry_id`,
+             * so the schedule would render that court under the wrong names,
+             * and `reusingMatch` would write it over the recorded result.
+             *
+             * Scores are held only when the event actually supplied one — a
+             * line that has been played but not yet scored is a genuine blank
+             * the file should fill. Tiebreaks travel with the score they
+             * belong to, or they end up describing a different match's sets.
+             */
+            const eventOwns = Boolean(preset);
+            const eventScored = Boolean(preset?.score);
+
             setFormData((prev) => ({
               ...prev,
-              playerName: parseResult.data?.playerName || prev.playerName,
-              opponentName: parseResult.data?.opponentName || prev.opponentName,
-              playerScores: parseResult.data?.playerScores || prev.playerScores,
-              opponentScores: parseResult.data?.opponentScores || prev.opponentScores,
-              playerTiebreaks: parseResult.data?.playerTiebreaks || prev.playerTiebreaks,
-              opponentTiebreaks: parseResult.data?.opponentTiebreaks || prev.opponentTiebreaks,
-              bestOf: parseResult.data?.bestOf || prev.bestOf,
-              numberOfSets: parseResult.data?.numberOfSets ?? prev.numberOfSets,
-              adScoring: parseResult.data?.adScoring !== undefined ? parseResult.data.adScoring : prev.adScoring,
+              playerName:
+                eventOwns && prev.playerName.trim()
+                  ? prev.playerName
+                  : parseResult.data?.playerName || prev.playerName,
+              opponentName:
+                eventOwns && prev.opponentName.trim()
+                  ? prev.opponentName
+                  : parseResult.data?.opponentName || prev.opponentName,
+              playerScores: eventScored
+                ? prev.playerScores
+                : parseResult.data?.playerScores || prev.playerScores,
+              opponentScores: eventScored
+                ? prev.opponentScores
+                : parseResult.data?.opponentScores || prev.opponentScores,
+              playerTiebreaks: eventScored
+                ? prev.playerTiebreaks
+                : parseResult.data?.playerTiebreaks || prev.playerTiebreaks,
+              opponentTiebreaks: eventScored
+                ? prev.opponentTiebreaks
+                : parseResult.data?.opponentTiebreaks || prev.opponentTiebreaks,
+              // Format comes off the event, which declared it once for every
+              // line, rather than off one player's export of one match.
+              bestOf: eventOwns ? prev.bestOf : parseResult.data?.bestOf || prev.bestOf,
+              numberOfSets: eventScored
+                ? prev.numberOfSets
+                : parseResult.data?.numberOfSets ?? prev.numberOfSets,
+              adScoring:
+                eventOwns && preset?.adScoring !== null
+                  ? prev.adScoring
+                  : parseResult.data?.adScoring !== undefined
+                    ? parseResult.data.adScoring
+                    : prev.adScoring,
+              // Not seeded by a preset, so the file is the only source.
               result: parseResult.data?.result || prev.result,
               duration: parseResult.data?.duration || prev.duration,
               // Preserve existing date/time if parser didn't provide them
@@ -784,7 +833,9 @@ export function useUploadMatchWizard({
         });
       }
     }
-  }, [selectedProvider]);
+    // `preset` is read inside: with a preset the event's answers win over the
+    // parsed file, so a stale closure here would silently restore the overwrite.
+  }, [selectedProvider, preset]);
 
   const handleDrop: React.DragEventHandler<HTMLDivElement> = useCallback(
     (e) => {
