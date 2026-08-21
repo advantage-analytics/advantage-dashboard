@@ -151,8 +151,10 @@ copy, navigation, empty states, the progress track's appearance
 (`analysis-progress-track.tsx`), and the wizard's step *presentation* — as long
 as §3.1's five fields still get collected.
 
-`match-video-panel.tsx` and `use-video-upload.ts` are **dead** (nothing imports
-the first; only it imports the second). Safe to delete.
+~~`match-video-panel.tsx` and `use-video-upload.ts` are **dead**.~~ **Deleted**
+on `claude/pilot-program-roadmap-724bdb`, once real playback existed to replace
+them — a dead near-duplicate beside working code is how the wrong one gets
+edited later.
 
 ---
 
@@ -242,9 +244,12 @@ the start of the match and the ambiguity disappears.
 - **Phase 2 derivation** — blocked on vendor questions Q8/Q9/Q13. This is what
   makes "Stats pending" resolve into real numbers. A real 596-stroke / 114-rally
   payload now exists as an input.
-- **Playback.** The trimmed video is stored but nothing renders it. Needs a
-  read-SAS endpoint and a player. If playback ships, revisit R2 — egress is $0
-  there against Azure's ~$0.087/GB.
+- ~~**Playback.**~~ **Shipped** on `claude/pilot-program-roadmap-724bdb` —
+  `mintPlaybackSas()` (read-only, 30 minutes) plus `MatchVideoCard` on the match
+  page, streamed direct from Azure because proxying breaks range requests. The
+  R2 question it raised is now live rather than hypothetical: egress is $0 there
+  against Azure's ~$0.087/GB, and video is being served. See
+  [`pilot-branch-handoff.md`](pilot-branch-handoff.md).
 
 ---
 

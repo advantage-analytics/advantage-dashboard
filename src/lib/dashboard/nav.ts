@@ -37,22 +37,27 @@ export const PERSONAL_NAV: readonly NavLink[] = [
 ];
 
 /**
- * Still no "Matches" entry, and Schedule is not a rename of one.
+ * A program plays a schedule and then owns the matches that come out of it.
+ * Both entries are here because they answer different questions, and the two
+ * branches that added them each arrived with only half the answer.
  *
- * `/dashboard/matches` filters on `created_by = auth.uid()` — a personal-
- * workspace predicate written into the page. Pointing a team menu at it would
- * show a coach their own uploads presented as the program's, which is the
- * wrong-attribution failure `docs/ui-revamp-guardrails.md` warns about: nothing
- * looks broken on screen.
+ * `/dashboard/team/schedule` reads `program_events` — "what is this program
+ * playing", including fixtures with no match row yet.
  *
- * `/dashboard/team/schedule` is the workspace-scoped destination that note
- * predicted. It reads `program_events` rather than `matches`, so it answers
- * "what is this program playing" instead of "what did I personally upload" —
- * a different question, which is why it is a different page and not a filter.
+ * `/dashboard/matches` reads matches — "what has this program played". It was
+ * deliberately absent for a while, because the page filtered on
+ * `created_by = auth.uid()` and would have shown a coach their own uploads
+ * presented as the program's: the wrong-attribution failure
+ * `docs/ui-revamp-guardrails.md` warns about, where nothing looks broken on
+ * screen. The page resolves its own workspace scope now — personal reads
+ * `created_by = me AND program_id IS NULL`, team reads `program_id = <program>`
+ * and lets `visible_match_ids()` decide who sees which rows — so the entry is
+ * back, and inside a program players have a route to a match list again.
  */
 export const TEAM_NAV: readonly NavLink[] = [
   { name: "Team Home", href: "/dashboard/team", icon: Home },
   { name: "Schedule", href: "/dashboard/team/schedule", icon: Calendar },
+  { name: "Matches", href: "/dashboard/matches", icon: Calendar },
   { name: "Roster", href: "/dashboard/team/roster", icon: Users },
   { name: "Compare", href: "/dashboard/team/compare", icon: Swords },
 ];

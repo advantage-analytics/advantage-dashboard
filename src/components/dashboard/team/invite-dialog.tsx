@@ -66,7 +66,20 @@ export function InviteDialog({
   const [draft, setDraft] = useState("");
   const [canUpload, setCanUpload] = useState(playersCanUpload);
   const [error, setError] = useState<string | null>(null);
-  const [sent, setSent] = useState<number | null>(null);
+  /**
+   * The outcome, once there is one. Two numbers, not one.
+   *
+   * `setSent(all.length)` used to report every SAVED invite as a SENT one, and
+   * the warning for a suppressed or refused recipient was pushed into `error`
+   * — which renders only in the `sent === null` branch below. So a coach whose
+   * invite bounced read a clean "3 invites sent" and waited for a reply that
+   * could not come. `team-actions.ts` returns `{ok: true, warning}` on exactly
+   * this case precisely so the caller can say so.
+   */
+  const [sent, setSent] = useState<{
+    delivered: number;
+    unsent: string[];
+  } | null>(null);
   const [pending, startTransition] = useTransition();
 
   const copy = kind ? COPY[kind] : null;
@@ -123,17 +136,26 @@ export function InviteDialog({
       // Sequential, not parallel: `create_program_invite` upserts on the
       // one-open-invite index, and a pasted list with the same address twice
       // would otherwise race itself for that row.
+      // A send that fails does NOT stop the run. Every invite before it is
+      // already written, and abandoning the rest would leave a pasted roster
+      // half-invited with no way to tell which half — so the addresses that
+      // did not get mail are collected and named at the end instead.
+      const unsent: string[] = [];
+
       for (const email of all) {
         const result = await inviteMember({ email, role: copy.role });
         if (!result.ok) {
           setError(result.error);
           return;
         }
+        if (result.warning) unsent.push(email);
       }
 
       setEmails([]);
       setDraft("");
-      setSent(all.length);
+      // Delivered, not attempted. Every address in `all` has an invitation row
+      // either way — the difference is whether anyone was told about it.
+      setSent({ delivered: all.length - unsent.length, unsent });
     });
   }
 
@@ -162,10 +184,26 @@ export function InviteDialog({
         </div>
 
         {sent !== null ? (
-          <p className="rounded-[var(--radius-element)] border border-[var(--border-hairline)] bg-[var(--surface-subtle)] px-4 py-3.5 text-[13px] leading-[1.6] text-[var(--ink-700)]">
-            {sent === 1 ? "Invite sent" : `${sent} invites sent`}. They have 14
-            days to accept, and you can resend from Settings › Team.
-          </p>
+          <div className="flex flex-col gap-2.5">
+            {sent.delivered > 0 && (
+              <p className="rounded-[var(--radius-element)] border border-[var(--border-hairline)] bg-[var(--surface-subtle)] px-4 py-3.5 text-[13px] leading-[1.6] text-[var(--ink-700)]">
+                {sent.delivered === 1
+                  ? "Invite sent"
+                  : `${sent.delivered} invites sent`}
+                . They have 14 days to accept, and you can resend from Settings
+                › Team.
+              </p>
+            )}
+
+            {sent.unsent.length > 0 && (
+              <p className="rounded-[var(--radius-button)] bg-[rgba(229,24,55,0.08)] px-3 py-2 text-[12px] leading-[1.5] text-[#E51837]">
+                {sent.unsent.length === 1
+                  ? "The invitation was saved, but the email didn't reach "
+                  : "The invitations were saved, but the email didn't reach "}
+                {sent.unsent.join(", ")}. Resend from Settings › Team.
+              </p>
+            )}
+          </div>
         ) : (
           <>
             <label

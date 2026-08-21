@@ -36,7 +36,7 @@ export function ClaimShell({
   width = 720,
   gap = 20,
   back,
-  exitHref = "/",
+  exitHref = "/claim/exit",
   exitLabel = "Leave setup",
   children,
   aside,
@@ -50,7 +50,19 @@ export function ClaimShell({
    * behind it, and F5.1, where the claim has already been submitted.
    */
   back?: string;
-  /** Where the door leads. The endings point it into the product instead. */
+  /**
+   * Where the door leads.
+   *
+   * Defaults to `/claim/exit`, a route that resolves the destination against
+   * the session: `/dashboard` when there is one, `/` when there is not. It was
+   * a bare `/`, which dropped a signed-in coach who entered from the sidebar
+   * onto the marketing home with no way back. This component cannot await a
+   * session, so the decision moves to a route the link can point at
+   * unconditionally rather than to nine pages that each have to remember.
+   *
+   * The endings (`ready`, `review`) still pass their own, because they exit
+   * into the product on purpose rather than by session accident.
+   */
   exitHref?: string;
   exitLabel?: string;
   children: React.ReactNode;

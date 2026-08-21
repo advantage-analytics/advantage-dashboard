@@ -121,8 +121,15 @@ export function TeamSettingsForm({ data }: { data: TeamSettingsData }) {
         // someone is a role change, and roles v1 has no editor for one.
         role: "player",
       });
-      if (result.ok) setInviteEmail("");
-      else setError(result.error);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      // The row is written either way, so the field clears either way — but a
+      // send that failed still has to be said out loud. Silently clearing on a
+      // warning is the green tick over an email that never left.
+      setInviteEmail("");
+      if (result.warning) setError(result.warning);
     });
   };
 
@@ -303,6 +310,7 @@ export function TeamSettingsForm({ data }: { data: TeamSettingsData }) {
                       role: invite.role === "owner" ? "player" : invite.role,
                     });
                     if (!result.ok) setError(result.error);
+                    else if (result.warning) setError(result.warning);
                   })
                 }
                 className="ml-auto text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)] disabled:opacity-50"

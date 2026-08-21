@@ -27,6 +27,8 @@ interface MatchesPageContentProps {
   matches: DisplayMatch[];
   /** Signed-in user, for the live job subscription. Absent = no subscription. */
   userId?: string;
+  /** Which workspace this list belongs to. Only the empty state reads it. */
+  scope?: "personal" | "team";
 }
 
 type FilterKey = "result" | "matchType" | "courtType" | "source" | "analysis";
@@ -239,6 +241,7 @@ function SortDropdown({
 export function MatchesPageContent({
   matches: serverMatches,
   userId,
+  scope = "personal",
 }: MatchesPageContentProps): React.JSX.Element {
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -519,7 +522,7 @@ export function MatchesPageContent({
   );
 
   if (matches.length === 0) {
-    return <EmptyMatches />;
+    return <EmptyMatches scope={scope} />;
   }
 
   return (

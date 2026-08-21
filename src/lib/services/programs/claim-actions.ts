@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkClaimEmail } from "./domain-match";
 import { nextClaimStatus, type ClaimStatus } from "./claim-state";
+import { siteUrl } from "@/lib/site-url";
 
 export type ActionOutcome = { ok: true } | { ok: false; error: string };
 
@@ -31,10 +32,6 @@ interface PendingClaim {
   fullName: string;
   role: string;
   email: string;
-}
-
-function siteUrl(): string {
-  return process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
 }
 
 /**

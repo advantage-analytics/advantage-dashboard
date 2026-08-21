@@ -30,6 +30,8 @@ import { InsightStatChip } from "@/components/dashboard/shared/insight-stat-chip
 import { PerformanceProfileCard } from "@/components/dashboard/matches/match-detail/performance-profile-card";
 import { KeyMomentsCard } from "@/components/dashboard/matches/match-detail/key-moments-card";
 import { SectionsStagger } from "@/components/dashboard/matches/match-detail/sections-stagger";
+import { MatchVideoCard } from "@/components/dashboard/matches/match-detail/match-video-card";
+import { getMatchVideo } from "@/lib/data/match-video-server";
 import type { PlayerStatistics } from "@/lib/data/types";
 
 const RADAR_STATS: { key: keyof PlayerStatistics; label: string }[] = [
@@ -122,12 +124,18 @@ export default async function MatchDetailPage({ params }: PageProps) {
   const { matchId } = await params;
   // The job read only needs `matchId`, so it rides along with the other two
   // rather than waiting for a page's worth of stats to come back first.
-  const [data, adjacent, jobs] = await Promise.all([
+  // `video` joins the same wave rather than following it: it reads different
+  // tables and nothing above depends on it, so awaiting it separately would add
+  // a round trip in front of a page that is otherwise ready. It resolves to
+  // null for every imported match and every job that produced no trimmed copy,
+  // which is most of them.
+  const [data, adjacent, jobs, video] = await Promise.all([
     getMatchDetailData(matchId),
     getAdjacentMatchIds(matchId),
     createClient().then((supabase) =>
       loadMatchAnalysis(supabase, [matchId], { reap: true })
     ),
+    getMatchVideo(matchId),
   ]);
 
   if (!data) notFound();
@@ -316,6 +324,10 @@ export default async function MatchDetailPage({ params }: PageProps) {
             aria-label="Match details"
             className="min-w-0 flex flex-col gap-6 order-1"
           >
+            {/* Above the charts, because a coach opening this page to show a
+                player something opens it for the video. The stats keep their
+                order below it. */}
+            {video && <MatchVideoCard video={video} />}
             <PerformanceTrackerCard
               points={points}
               p1Name={p1Short}

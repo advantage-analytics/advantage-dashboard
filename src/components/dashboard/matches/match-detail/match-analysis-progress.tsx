@@ -18,6 +18,7 @@ import {
   formatEta,
   isAnalysisFailed,
   isLiveUpdating,
+  isSubmitStalled,
   isWorking,
   uploadEtaSeconds,
   stageFillPercent,
@@ -25,6 +26,7 @@ import {
   type MatchAnalysis,
 } from "@/lib/data/match-analysis";
 import { AnalysisProgressTrack } from "../analysis-progress-track";
+import { RetrySubmission } from "./retry-submission";
 import {
   useLiveMatchAnalysis,
   withLiveAnalysis,
@@ -74,6 +76,9 @@ export function MatchAnalysisProgress({
   const analysis = withLiveAnalysis(serverAnalysis, livePatches.get(matchId));
   const currentIndex = stageIndexFor(analysis.status);
   const failed = isAnalysisFailed(analysis.status);
+  // An `uploaded` job that never got submitted. Computed from the merged
+  // analysis, so a live patch moving it on clears the state without a reload.
+  const stalled = isSubmitStalled(analysis);
   // Two different numbers. The stage bars are positions on the pipeline axis;
   // the headline is what the person is actually watching, which during a
   // transfer is their own bytes rather than a quarter-weighted pipeline figure.
@@ -197,6 +202,32 @@ export function MatchAnalysisProgress({
               <p className="mt-1 text-[12px] leading-[1.5] text-[#525252]">
                 Trim to a window where the camera stays fixed, or upload a new recording.
               </p>
+            </div>
+          </div>
+        ) : stalled ? (
+          /* Ahead of STAGE_NOTE, because for this state that note says "your
+             video is stored, nothing else is needed from you" — true of the
+             bytes, false about the analysis, and the reason this state could
+             sit unnoticed indefinitely. */
+          <div
+            className="mt-6 flex items-start gap-2.5 rounded-[10px] border border-[var(--border-field)] bg-[var(--surface-page)] px-3.5 py-3"
+            role="status"
+          >
+            <Info
+              className="mt-0.5 size-[15px] shrink-0 text-[#888888]"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+            <div>
+              <p className="text-[13px] font-medium text-[#0D0D0D]">
+                This hasn&apos;t been sent for analysis yet
+              </p>
+              <p className="mt-1 text-[12px] leading-[1.5] text-[#525252]">
+                Your video is stored safely — the hand-off didn&apos;t go
+                through. Trying again costs nothing but the wait; nothing needs
+                uploading a second time.
+              </p>
+              {analysis.jobId && <RetrySubmission jobId={analysis.jobId} />}
             </div>
           </div>
         ) : (
