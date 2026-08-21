@@ -26,6 +26,10 @@ const emptyToNull = (v?: string): string | null => {
   return trimmed === "" ? null : trimmed;
 };
 
+// Personas the profile form may write to users.role (mirrors ROLE_OPTIONS on
+// the profile page). Paid entitlement lives in users.plan, never in role.
+const PERSONA_ROLES = new Set(["player", "coach", "parent", "academy"]);
+
 export async function saveProfile(input: ProfileInput): Promise<ActionResult> {
   const supabase = await createClient();
   const {
@@ -37,6 +41,11 @@ export async function saveProfile(input: ProfileInput): Promise<ActionResult> {
     return { ok: false, error: "Not signed in. Please log back in." };
   }
 
+  const role = emptyToNull(input.role);
+  if (role !== null && !PERSONA_ROLES.has(role)) {
+    return { ok: false, error: "Invalid role selection." };
+  }
+
   const { error } = await supabase
     .from("users")
     .update({
@@ -46,7 +55,7 @@ export async function saveProfile(input: ProfileInput): Promise<ActionResult> {
       phone: emptyToNull(input.phone),
       country: emptyToNull(input.country),
       state: emptyToNull(input.state),
-      role: emptyToNull(input.role),
+      role,
     })
     .eq("id", user.id);
 

@@ -108,7 +108,8 @@ Core user profile with tennis-specific attributes.
 | weight      | TEXT        | YES      | Player weight                         |
 | school_name | TEXT        | YES      | School/university name                |
 | class       | TEXT        | YES      | Academic class year                   |
-| role        | TEXT        | YES      | User role (free/premium)              |
+| role        | TEXT        | YES      | Profile persona (player/coach/parent/academy) |
+| plan        | TEXT        | NO       | Entitlement (free/pro, default free). Written only by the Stripe webhook; a trigger blocks client writes |
 | utr_id      | INTEGER     | YES      | UTR player ID                         |
 | atp_id      | UUID        | YES      | ATP player ID                         |
 | wta_id      | UUID        | YES      | WTA player ID                         |
