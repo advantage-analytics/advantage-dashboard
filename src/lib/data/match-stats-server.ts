@@ -231,11 +231,11 @@ function countTiebreaksWon(score: DbMatchScore | null): TiebreakCounts {
 }
 
 const DEFAULT_STATS: PlayerStatistics = {
-  aces: 0,
-  doubleFaults: 0,
+  aces: null,
+  doubleFaults: null,
   firstServeInPct: 0,
   firstServeWinPct: 0,
-  secondServeWinPct: 0,
+  secondServeWinPct: null,
   breakpointsWon: 0,
   tiebreaksWon: 0,
   servicePointsWon: 0,
@@ -325,12 +325,18 @@ function transformToPlayerStats(
 ): PlayerStatistics {
   if (!row) return DEFAULT_STATS;
 
+  // These five are the ones suppress_derived_match_stats() can null, so they
+  // must stay null all the way to the render. `?? 0` here is what made a
+  // video-derived match report "0 aces" — a statement about the player rather
+  // than about the analysis — even though the column was correctly suppressed.
+  const round = (v: number | null) => (v === null ? null : Math.round(v));
+
   return {
-    aces: row.aces ?? 0,
-    doubleFaults: row.double_faults ?? 0,
+    aces: num(row.aces),
+    doubleFaults: num(row.double_faults),
     firstServeInPct: Math.round(parseFloat(row.first_serve_pct ?? "0")),
     firstServeWinPct: Math.round(parseFloat(row.first_serve_won_pct ?? "0")),
-    secondServeWinPct: Math.round(parseFloat(row.second_serve_won_pct ?? "0")),
+    secondServeWinPct: round(pct(row.second_serve_won_pct)),
     breakpointsWon: row.break_points_converted ?? 0,
     tiebreaksWon,
     servicePointsWon:
@@ -342,8 +348,8 @@ function transformToPlayerStats(
     firstReturnPointsWon: row.first_return_points_won ?? 0,
     secondReturnPointsWon: row.second_return_points_won ?? 0,
     returnGamesWon: row.return_games_won ?? 0,
-    firstReturnInPct: Math.round(parseFloat(row.first_return_in_pct ?? "0")),
-    secondReturnInPct: Math.round(parseFloat(row.second_return_in_pct ?? "0")),
+    firstReturnInPct: round(pct(row.first_return_in_pct)),
+    secondReturnInPct: round(pct(row.second_return_in_pct)),
     firstReturnWonPct: Math.round(parseFloat(row.first_return_won_pct ?? "0")),
     secondReturnWonPct: Math.round(parseFloat(row.second_return_won_pct ?? "0")),
     returnGamesWonPct: Math.round(parseFloat(row.return_games_won_pct ?? "0")),

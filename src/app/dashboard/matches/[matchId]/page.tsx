@@ -83,21 +83,31 @@ const OTHER_STATS: StatConfig[] = [
   { key: "totalPointsWon", label: "Total Points Won", isPercentage: false },
 ];
 
+/** "" is what MatchStatisticsCard treats as missing; 0 is a measurement. */
+function statDisplay(value: number | null, isPercentage?: boolean): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "";
+  return isPercentage ? `${Math.round(value)}%` : String(Math.round(value));
+}
+
 function buildStatRows(
   configs: StatConfig[],
   p1: PlayerStatistics,
   p2: PlayerStatistics,
 ): StatRow[] {
   return configs.map((c) => {
-    const p1Val = p1[c.key] as number;
-    const p2Val = p2[c.key] as number;
+    const p1Val = p1[c.key] as number | null;
+    const p2Val = p2[c.key] as number | null;
     const p1Frac = c.fractionKey ? p1.fractions[c.fractionKey] : undefined;
     const p2Frac = c.fractionKey ? p2.fractions[c.fractionKey] : undefined;
 
     return {
       label: c.label,
-      p1Display: c.isPercentage ? `${Math.round(p1Val)}%` : String(Math.round(p1Val)),
-      p2Display: c.isPercentage ? `${Math.round(p2Val)}%` : String(Math.round(p2Val)),
+      // An empty display is the card's existing contract for "no data", which
+      // it renders as an italic em dash with an explanatory tooltip. Absent must
+      // reach here as null rather than 0 — see the mapping in
+      // match-stats-server.ts.
+      p1Display: statDisplay(p1Val, c.isPercentage),
+      p2Display: statDisplay(p2Val, c.isPercentage),
       p1Fraction: p1Frac ? `${p1Frac.made}/${p1Frac.attempts}` : undefined,
       p2Fraction: p2Frac ? `${p2Frac.made}/${p2Frac.attempts}` : undefined,
     };
