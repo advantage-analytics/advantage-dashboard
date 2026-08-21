@@ -2,7 +2,7 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getMatchStatisticsFromSupabase, getPlayerAverageStats } from "@/lib/data/match-stats-server";
 import { getMatchPointsFromSupabase } from "@/lib/data/match-points-server";
-import { formatDuration } from "@/components/dashboard/home/upload-match-modal/utils";
+import { formatDuration } from "@/components/dashboard/matches/new-match-wizard/utils";
 import type { Match, SetScore } from "@/lib/data/types";
 
 interface DbMatch {
@@ -25,6 +25,7 @@ interface DbMatch {
   court_type: string | null;
   verified: boolean | null;
   duration: number | null;
+  source_provider: string | null;
   player_hand: string | null;
   player_backhand: string | null;
   opponent_hand: string | null;
@@ -111,6 +112,7 @@ function transformDbMatchToMatch(
     matchType: row.match_type ?? "Match",
     courtType: row.court_type ?? undefined,
     verificationStatus: row.verified ? "Verified Result" : undefined,
+    sourceProvider: row.source_provider ?? undefined,
     round: row.round ?? undefined,
     matchContext: row.result ?? "Final Score",
     duration: formatDuration(row.duration ?? undefined),
@@ -205,7 +207,7 @@ export const getMatchDetailData = cache(async (matchId: string) => {
   const { data: row, error } = await supabase
     .from("matches")
     .select(
-      "id, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, player_hand, player_backhand, opponent_hand, opponent_backhand, key_moments, insights",
+      "id, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, source_provider, player_hand, player_backhand, opponent_hand, opponent_backhand, key_moments, insights",
     )
     .eq("id", matchId)
     .single();

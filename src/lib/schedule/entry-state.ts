@@ -1,0 +1,167 @@
+/**
+ * What a line is waiting for, and who won it.
+ *
+ * The schedule row, the event table and the upload queue all ask these
+ * questions about the same line. Three surfaces answering them three ways is
+ * the failure `lib/data/match-analysis.ts` was consolidated to prevent, so this
+ * is the one spelling of both.
+ */
+
+import {
+  isAnalysisFailed,
+  isAnalysisReady,
+  isInFlight,
+  isWorking,
+} from "@/lib/data/match-analysis";
+import type { EntryMatch, EventEntry } from "./types";
+
+export type EntryState =
+  /** Nobody has recorded anything. No match row exists yet. */
+  | "empty"
+  /** Played and scored, but no video was ever sent. */
+  | "no-video"
+  /**
+   * Sent, and nothing is moving yet.
+   *
+   * Exactly the two idle-in-flight states, `uploaded` and `processed` — the
+   * ones `isWorking` excludes because nothing is running. `queued` is NOT here:
+   * the vendor has it, so it reads as working and pulses, which is what it does
+   * on the match page too.
+   *
+   * Without this state both fell through to `no-video`, which told a coach
+   * there was no video for a line they had just uploaded one for, and hid a job
+   * whose submission had failed and needed a retry.
+   */
+  | "waiting"
+  /** Something is happening right now — this is the state that pulses. */
+  | "working"
+  /** There is a report to read. */
+  | "ready"
+  | "failed";
+
+/**
+ * Sets won by each side, from the game counts.
+ *
+ * `player1` is always our side: the wizard writes `player1_name = playerName`
+ * and `recordResult` follows it. Counting sets rather than reading a column is
+ * not a shortcut — `matches.result` holds a CONTEXT string ("Final Score",
+ * "Unfinished"), never an outcome, and `transformDbMatch` derives the winner
+ * exactly this way for the matches list.
+ */
+function setsWon(match: EntryMatch): { us: number; them: number } | null {
+  const ours = match.score?.player1 ?? [];
+  const theirs = match.score?.player2 ?? [];
+  if (ours.length === 0 || theirs.length === 0) return null;
+
+  let us = 0;
+  let them = 0;
+  for (let index = 0; index < ours.length; index++) {
+    const our = ours[index];
+    const their = theirs[index] ?? 0;
+    if (our > their) us++;
+    else if (their > our) them++;
+  }
+  return { us, them };
+}
+
+/**
+ * Can this line be sent for video analysis?
+ *
+ * No, if it is doubles. `job-request.ts` rejects a doubles match_type outright
+ * with "Video analysis supports singles matches only", so offering a doubles
+ * line an Upload button produces a 422 the coach only meets after picking a
+ * multi-gigabyte file. A doubles line can still take a SwingVision export —
+ * that path parses numbers and never goes near the vision pipeline.
+ *
+ * The frames in round 22 draw a doubles video (`doubles2.mp4 → D2`) because
+ * they were designed before the vendor's singles-only limit was known. This is
+ * the correction.
+ */
+export function supportsVideo(entry: EventEntry): boolean {
+  return entry.discipline === "singles";
+}
+
+/** Did we win this match? Null when it has no score, or the sets are level. */
+export function matchWon(match: EntryMatch): boolean | null {
+  const sets = setsWon(match);
+  if (!sets || sets.us === sets.them) return null;
+  return sets.us > sets.them;
+}
+
+/** Has this line been played at all — is there a decided match under it? */
+export function entryPlayed(entry: EventEntry): boolean {
+  return entry.matches.some((match) => matchWon(match) !== null);
+}
+
+/** Did our side take this line? A tournament entry is "won" if any match was. */
+function entryWon(entry: EventEntry): boolean {
+  return entry.matches.some((match) => matchWon(match) === true);
+}
+
+/**
+ * What ONE match is waiting for.
+ *
+ * A tournament entry is a whole run and renders one row per round, so a row
+ * asking `entryState` about its entry gets an answer about a different match:
+ * one failed round stamped "Analysis failed" on every other round, and one
+ * ready round gave videoless rounds a "Report" link into an empty stats page
+ * while suppressing their "Add video" action. A dual is unaffected — one match
+ * per entry — which is why it survived review.
+ *
+ * Defers to `isWorking` / `isAnalysisReady` rather than testing status strings
+ * itself, so a state that pulses here is a state that animates on the match
+ * page. `uploaded` is the one that catches people out: in flight, but with
+ * nothing moving, so it reads as `no-video`'s neighbour rather than `working`.
+ */
+export function matchState(match: EntryMatch): EntryState {
+  if (isAnalysisFailed(match.status)) return "failed";
+  if (isWorking(match.status)) return "working";
+  if (isAnalysisReady(match.status) && match.hasVideo) return "ready";
+  if (match.hasVideo && isInFlight(match.status)) return "waiting";
+  return "no-video";
+}
+
+/**
+ * What a whole line is waiting for — the loudest thing any of its matches is.
+ *
+ * Written over `matchState` so the rules exist once. The precedence order is
+ * the same one this used to spell out inline: failed, then working, then
+ * ready, then waiting, and no-video when none of them apply. It is the right
+ * answer for a summary (the schedule list, the upload queue) and the wrong one
+ * for a single row — use `matchState` there.
+ */
+const STATE_PRECEDENCE = ["failed", "working", "ready", "waiting"] as const;
+
+export function entryState(entry: EventEntry): EntryState {
+  if (entry.matches.length === 0) return "empty";
+  const states = entry.matches.map(matchState);
+  return STATE_PRECEDENCE.find((s) => states.includes(s)) ?? "no-video";
+}
+
+/**
+ * A dual's team score, computed from the lines.
+ *
+ * ITA rules: six singles points, and ONE doubles point to whoever takes two of
+ * the three doubles. Never stored — a stored team score is a number that stops
+ * agreeing with the rows above it the first time a result is corrected.
+ */
+export function dualScore(entries: EventEntry[]): {
+  us: number;
+  them: number;
+  decided: boolean;
+} {
+  const singles = entries.filter((entry) => entry.discipline === "singles");
+  const doubles = entries.filter((entry) => entry.discipline === "doubles");
+
+  let us = singles.filter(entryWon).length;
+  let them = singles.filter((entry) => entryPlayed(entry) && !entryWon(entry)).length;
+
+  const doublesWon = doubles.filter(entryWon).length;
+  const doublesLost = doubles.filter(
+    (entry) => entryPlayed(entry) && !entryWon(entry)
+  ).length;
+  if (doublesWon >= 2) us += 1;
+  else if (doublesLost >= 2) them += 1;
+
+  return { us, them, decided: entries.length > 0 && entries.every(entryPlayed) };
+}

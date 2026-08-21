@@ -1,0 +1,54 @@
+/* Advantage DS v2 — elevation, motion, focus. Flat by default: hairlines carry
+   hierarchy; shadow is earned, never decoration. Four elevation roles (review
+   S2): rest → lift → float → top, plus two detail effects (keycap, cta-glow).
+
+   ── ADAPTED ON IMPORT, not verbatim. Three deliberate omissions ─────────────
+   1. `--shadow-card` is NOT redefined here. globals.css already declares it
+      with the identical value in both light and dark, so a second declaration
+      would be pure duplication.
+   2. `--shadow-card-elevated` and `--shadow-tooltip` are NOT imported. v2 ships
+      them as aliases pointing at DIFFERENT values than the ones this app is
+      built on:
+           repo  --shadow-card-elevated: 0 6px 20px rgba(0,0,0,.12)
+           v2                          → 0 4px 16px rgba(0,0,0,.10)
+           repo  --shadow-tooltip:       0 4px 12px rgba(0,0,0,.12)
+           v2                          → 0 8px 30px rgba(0,0,0,.08), 0 1px 3px …
+      Importing them would silently restyle every elevated card and tooltip in
+      the product. Use the new role names below when you deliberately want v2's
+      values; retire the old ones per-component, with eyes on the result.
+   3. Keyframes and utility classes are NOT imported. globals.css already owns
+      equivalents under project-specific names — `settings-shimmer`,
+      `chord-ring-pulse`, `.settings-skeleton-bar`, `.animate-page-enter`,
+      `.brand-mesh-gradient`. A second near-identical set is how you end up with
+      two shimmer animations and no rule about which is correct. */
+:root{
+  /* Elevation roles. `rest` is globals.css's --shadow-card. */
+  --shadow-card-emphasis:0px 4px 16px 0px rgba(0,0,0,0.10); /* lift — hover, selection */
+  --shadow-dropdown:0 8px 30px rgba(0,0,0,0.08),0 1px 3px rgba(0,0,0,0.04); /* float — menus, tooltips, modals */
+  --shadow-floating:0px 8px 32px rgba(0,0,0,0.25),0px 0px 0px 1px rgba(255,255,255,0.06) inset; /* top — dark toasts, dragged */
+  /* Detail effects — not elevation */
+  --shadow-keycap:0 1px 0 rgba(15,23,42,0.04);
+  --shadow-cta-glow:0 1px 3px rgba(57,134,243,0.25);
+  /* Motion — three curves only. No bounce, no elastic. */
+  --ease-primary:cubic-bezier(0.25,0.46,0.45,0.94);
+  --ease-out-expo:cubic-bezier(0.23,1,0.32,1);
+  --ease-chart:cubic-bezier(0.2,0,0.4,1);
+  --duration-fast:150ms;
+  --duration-hover:200ms;
+  --duration-enter:300ms;
+  --duration-reveal:400ms;
+  --focus-ring:0 0 0 2px var(--blue-ring-40);
+}
+.dark{
+  --shadow-card-emphasis:0px 4px 16px 0px rgba(0,0,0,0.5);
+  --shadow-dropdown:0 8px 30px rgba(0,0,0,0.5),0 1px 3px rgba(0,0,0,0.3);
+  --shadow-keycap:0 1px 0 rgba(0,0,0,0.45);
+}
+
+/* StatusChip's live dot — see src/components/ui/status-chip.tsx. Opacity only,
+   so it costs no layout, and it is disabled outright under reduced motion by
+   the component rather than being softened here. */
+@keyframes adv-status-pulse{
+  0%,100%{opacity:1}
+  50%{opacity:0.35}
+}

@@ -1,6 +1,5 @@
 "use client";
 
-import { useRef, useEffect } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import { HelpCircle } from "lucide-react";
@@ -24,14 +23,30 @@ const GHOST_ROWS = [
   { event: "w-36", score: "w-16", opponent: "w-28", badge: "Won" as const },
 ];
 
-export function EmptyMatches() {
-  const shouldReduceMotion = useReducedMotion();
-  const hasAnimated = useRef(false);
-  const skip = shouldReduceMotion || hasAnimated.current;
+/**
+ * `scope` decides the words, not the layout.
+ *
+ * "Your match history starts here" is true of a personal workspace and wrong
+ * inside a program, where the history belongs to the squad and the person
+ * reading it may be a player who does not upload at all. One component, two
+ * sentences — the ghost rows, the CTA and the timing are identical because the
+ * screen is doing the same job either way.
+ */
+export function EmptyMatches({
+  scope = "personal",
+}: {
+  scope?: "personal" | "team";
+}) {
+  const isTeam = scope === "team";
 
-  useEffect(() => {
-    hasAnimated.current = true;
-  }, []);
+  // `skip` feeds motion `initial` props, which React only consults when an
+  // element mounts. A previous version also OR'd in a `hasAnimated` ref, but
+  // that ref is always false at mount (its effect runs afterwards), so it never
+  // changed what rendered — it only truncated an in-flight entrance if the
+  // component happened to re-render mid-animation. Reading a ref during render
+  // is also unsafe under concurrent rendering (react-hooks/refs).
+  const shouldReduceMotion = useReducedMotion();
+  const skip = shouldReduceMotion;
 
   function anim(delay: number) {
     if (skip) return { initial: false as const, animate: { opacity: 1 }, transition: { duration: 0 } };
@@ -58,7 +73,7 @@ export function EmptyMatches() {
         className="text-[28px] font-light text-[#0D0D0D] tracking-[-0.5px] leading-[34px] mb-3"
         {...anim(T.HEADING)}
       >
-        Your match history starts here
+        {isTeam ? "No matches on the program yet" : "Your match history starts here"}
       </motion.h2>
 
       {/* Description */}
@@ -66,8 +81,9 @@ export function EmptyMatches() {
         className="text-[13px] font-normal text-[#888888] leading-[1.6] max-w-[380px]"
         {...anim(T.DESCRIPTION)}
       >
-        Upload a match from SwingVision to build your performance
-        record — scores, stats, and trends over time.
+        {isTeam
+          ? "Send a match and it lands here for the whole coaching staff — scores, stats, and trends across the season."
+          : "Upload a match from SwingVision to build your performance record — scores, stats, and trends over time."}
       </motion.p>
 
       {/* CTA + help link */}

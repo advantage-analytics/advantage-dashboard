@@ -2,6 +2,19 @@
 
 The canonical source of truth for all UI across the app. Read this before building any interface.
 
+> **v2 note.** A formalized version of this system exists as the Claude Design
+> project *Advantage Design System v2*, rebuilt from this codebase. Its tokens
+> are imported at [`src/styles/design-system/`](../../src/styles/design-system/)
+> and its full documentation is [`DESIGN.md`](../../DESIGN.md).
+>
+> This file remains accurate and is the practical reference. What v2 changed:
+> **dark mode now exists** (v1 was light-only), **Roboto Mono** joins Inter for
+> machine values, the ad-hoc grays became a numbered `--ink-900…100` ramp,
+> eyebrows lost their rules (whitespace separates instead), violet was retired
+> from player attribution in favour of cool slate, and `StatusChip` was added
+> for the Advantage Intelligence job lifecycle. Both corrections are inline
+> below. Where the two disagree on anything else, `DESIGN.md` is newer.
+
 ---
 
 ## Brand & Users
@@ -12,7 +25,7 @@ The canonical source of truth for all UI across the app. Read this before buildi
 
 **Feel**: Premium and exclusive — built for high-level players trying to improve, not a mass-market consumer app. Think pro-level training room, not "for everyone and their grandma."
 
-**Theme**: Light mode only. Cool-neutral palette (grays + blue). No warm tones, browns, or earthy colors.
+**Theme**: Light is the default and the product's primary face. Cool-neutral palette (grays + blue). No warm tones, browns, or earthy colors. **A dark scope now exists** — v2 ships a full `.dark` token ramp (WCAG-AA verified on `#0E0E10`) in `src/styles/design-system/colors.css`. It is opt-in per surface, not a mode the app ships in yet: most components still carry hardcoded light hexes.
 
 **Accessibility**: WCAG 2.1 AA — 4.5:1 contrast (normal text), 3:1 (large text).
 
@@ -30,7 +43,7 @@ The canonical source of truth for all UI across the app. Read this before buildi
 
 ## Typography
 
-**Font**: Inter only. Weights: 300 (light), 400 (normal), 500 (medium), 600 (semibold), 700 (bold — scores only).
+**Fonts**: Inter carries everything. Weights: 300 (light), 400 (normal), 500 (medium), 600 (semibold), 700 (bold — scores only). **Roboto Mono** (400–700) is the second face, for **machine values only** — timestamps, quota readouts, job ids. Never stats, never prose. Both load via `next/font`; the `font-mono` utility resolves to Roboto Mono.
 
 ### Type Scale
 

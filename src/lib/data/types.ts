@@ -26,6 +26,8 @@ export interface Match {
   matchType: string;
   courtType?: string;
   verificationStatus?: string;
+  /** `matches.source_provider` — which pipeline produced this match's data. */
+  sourceProvider?: string;
   round?: string;
   matchContext?: string;
   duration?: string;
@@ -85,11 +87,11 @@ export interface MatchSummaryStats {
 }
 
 export interface PlayerStatistics {
-  aces: number;
-  doubleFaults: number;
+  aces: number | null;
+  doubleFaults: number | null;
   firstServeInPct: number;
   firstServeWinPct: number;
-  secondServeWinPct: number;
+  secondServeWinPct: number | null;
   breakpointsWon: number;
   tiebreaksWon: number;
   servicePointsWon: number;
@@ -99,8 +101,8 @@ export interface PlayerStatistics {
   firstReturnPointsWon: number;
   secondReturnPointsWon: number;
   returnGamesWon: number;
-  firstReturnInPct: number;
-  secondReturnInPct: number;
+  firstReturnInPct: number | null;
+  secondReturnInPct: number | null;
   firstReturnWonPct: number;
   secondReturnWonPct: number;
   returnGamesWonPct: number;

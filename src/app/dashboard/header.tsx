@@ -2,38 +2,29 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
+import { useHeaderStatus } from "@/components/dashboard/header-status";
 import {
   ChevronRight,
-  PanelLeft,
+  ChevronDown,
   Search,
-  Settings,
+  SlidersHorizontal,
+  Timer,
+  CircleHelp,
   LogOut,
-  User,
-  Loader2,
 } from "lucide-react";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { useSidebar } from "@/components/ui/sidebar";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { SearchCommandPalette } from "@/components/dashboard/search/search-command-palette";
 import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "@/components/ui/tooltip";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { useUnsavedChanges } from "@/components/dashboard/settings/unsaved-changes-context";
-
-const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
+import { navLabel, settingsSection } from "@/lib/dashboard/nav";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { WorkspaceOptionList } from "@/components/dashboard/workspace-switcher";
+import { useRequestLogout } from "@/components/dashboard/logout-dialog";
 
 interface MatchCrumb {
   tournamentName: string;
@@ -41,49 +32,92 @@ interface MatchCrumb {
   player2Name: string;
 }
 
+/**
+ * Static children of /dashboard/matches. Next resolves these before the
+ * [matchId] dynamic segment, so they are never match ids — the header has to
+ * mirror that or it fires a doomed match lookup (and shows a crumb skeleton)
+ * on every one of them.
+ */
+const MATCHES_STATIC_SEGMENTS = new Set(["new"]);
+
+const MATCHES_CRUMB = { label: "Matches", href: "/dashboard/matches" };
+
+/**
+ * The crumb for any page that is simply a navigation destination.
+ *
+ * Labels come from the shared route table rather than a second list here. The
+ * ordered `if` chain this replaces had to test `/dashboard/team/settings`
+ * before `/dashboard/settings` or the wrong crumb won, and it had already
+ * drifted — the sidebar said "Help Center" where this said "Help".
+ */
 function getStaticBreadcrumbs(
   pathname: string
-): { label: string; href?: string }[] | null {
+): { label: string; href?: string }[] {
   if (pathname === "/dashboard") return [];
-  if (pathname.startsWith("/dashboard/statistics"))
-    return [{ label: "Statistics" }];
-  if (pathname.startsWith("/dashboard/help")) return [{ label: "Help" }];
-  if (pathname.startsWith("/dashboard/settings"))
-    return [{ label: "Settings" }];
-  if (pathname.startsWith("/dashboard/matches"))
-    return [{ label: "Matches" }];
-  return [];
+  // The one page that is a step within a destination rather than one itself.
+  if (pathname === "/dashboard/matches/new") {
+    return [MATCHES_CRUMB, { label: "New match" }];
+  }
+
+  // Settings is the one destination with sub-pages of its own, so the trail
+  // reaches them: "Settings › Usage" rather than six pages all called Settings.
+  const section = settingsSection(pathname);
+  if (section) {
+    return [
+      { label: "Settings", href: "/dashboard/settings" },
+      { label: section.label },
+    ];
+  }
+
+  const label = navLabel(pathname);
+  return label ? [{ label }] : [];
 }
 
-export function Header() {
-  const { toggleSidebar } = useSidebar();
+/** "coach" → "Coach". Used for both the role and plan chips. */
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+/** A quiet capsule for role and plan. Grey only — neither is an action. */
+function Chip({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="rounded-full bg-[var(--surface-subtle)] px-2 py-0.5 text-[10px] text-[var(--ink-600)]">
+      {children}
+    </span>
+  );
+}
+
+const MENU_ITEM_CLASS =
+  "flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-[7px] text-[12px] text-[var(--ink-900)] transition-colors duration-100 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none cursor-pointer";
+
+export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const shouldReduceMotion = useReducedMotion();
+  const headerStatus = useHeaderStatus();
+  const { active, viewer } = useWorkspace();
+  const requestLogout = useRequestLogout();
+
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [initials, setInitials] = useState<string | null>(null);
   const [matchCrumb, setMatchCrumb] = useState<MatchCrumb | null>(null);
   const [matchCrumbLoading, setMatchCrumbLoading] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [isMac, setIsMac] = useState<boolean | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [isLogoutOpen, setIsLogoutOpen] = useState(false);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [logoutError, setLogoutError] = useState(false);
-  const { hasUnsavedChanges } = useUnsavedChanges();
-  const profileRef = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
+
   const headerRef = useRef<HTMLElement>(null);
 
-  const isMatchDetailPage = /^\/dashboard\/matches\/[^/]+/.test(pathname);
+  const matchesChildSegment =
+    pathname.match(/^\/dashboard\/matches\/([^/]+)/)?.[1] ?? null;
 
-  const matchId = isMatchDetailPage
-    ? pathname.match(/^\/dashboard\/matches\/([^/]+)/)?.[1]
-    : null;
+  const isMatchDetailPage =
+    matchesChildSegment !== null &&
+    !MATCHES_STATIC_SEGMENTS.has(matchesChildSegment);
 
-  // Platform detection for shortcut display
+  const matchId = isMatchDetailPage ? matchesChildSegment : null;
+
   useEffect(() => {
-    const platform = (navigator as Navigator & { userAgentData?: { platform: string } }).userAgentData?.platform ?? navigator.platform;
+    const platform =
+      (navigator as Navigator & { userAgentData?: { platform: string } })
+        .userAgentData?.platform ?? navigator.platform;
     setIsMac(/mac/i.test(platform));
   }, []);
 
@@ -117,142 +151,27 @@ export function Header() {
     fetchMatchCrumb();
   }, [matchId]);
 
-  // Map match sub-route slugs to display labels
-  const matchSubRouteLabels: Record<string, string> = {
-    insights: "Insights",
-    performance: "Performance",
-    statistics: "Statistics",
-    video: "Video",
-    visuals: "Visuals",
-  };
-
-  const matchSubRoute = isMatchDetailPage && matchId
-    ? pathname.match(new RegExp(`^/dashboard/matches/${matchId}/([^/]+)$`))?.[1]
-    : null;
-
+  // A match detail page is one page. `matches/[matchId]/` has no
+  // sub-directories — only error/layout/loading/not-found/page — so the trail
+  // that used to be built here for insights/performance/statistics/video/visuals
+  // matched routes that cannot be reached.
   const breadcrumbs: { label: string; href?: string }[] =
     isMatchDetailPage && matchCrumb
       ? [
-          { label: "Matches", href: "/dashboard/matches" },
+          MATCHES_CRUMB,
           { label: matchCrumb.tournamentName },
-          {
-            label: `${matchCrumb.player1Name} vs ${matchCrumb.player2Name}`,
-            ...(matchSubRoute ? { href: `/dashboard/matches/${matchId}` } : {}),
-          },
-          ...(matchSubRoute && matchSubRouteLabels[matchSubRoute]
-            ? [{ label: matchSubRouteLabels[matchSubRoute] }]
-            : []),
+          { label: `${matchCrumb.player1Name} vs ${matchCrumb.player2Name}` },
         ]
-      : (getStaticBreadcrumbs(pathname) ?? []);
+      : getStaticBreadcrumbs(pathname);
 
-  // Fetch user initials
-  useEffect(() => {
-    async function fetchUserInitials() {
-      try {
-        const supabase = createClient();
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (!user) return;
-
-        const { data } = await supabase
-          .from("users")
-          .select("first_name, last_name")
-          .eq("id", user.id)
-          .single();
-
-        if (data) {
-          const firstInitial = data.first_name?.[0] || "";
-          const lastInitial = data.last_name?.[0] || "";
-          const computed = (firstInitial + lastInitial).toUpperCase();
-          if (computed) setInitials(computed);
-        }
-      } catch {
-        // Keep initials as null — will show fallback icon
-      }
-    }
-    fetchUserInitials();
-  }, []);
-
-  // Close dropdown on outside click or Escape
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        profileRef.current &&
-        !profileRef.current.contains(event.target as Node)
-      ) {
-        setIsProfileOpen(false);
-      }
-    }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setIsProfileOpen(false);
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, []);
-
-  // Trap focus inside profile dropdown when open
-  useEffect(() => {
-    if (!isProfileOpen || !menuRef.current) return;
-
-    const menu = menuRef.current;
-    const focusableEls = menu.querySelectorAll<HTMLElement>(
-      "a[href], button:not([disabled])"
-    );
-    if (focusableEls.length === 0) return;
-
-    const first = focusableEls[0];
-    const last = focusableEls[focusableEls.length - 1];
-
-    // Focus the first item when opened
-    first.focus();
-
-    function handleMenuKeys(event: KeyboardEvent) {
-      const items = Array.from(focusableEls);
-      const index = items.indexOf(document.activeElement as HTMLElement);
-
-      if (event.key === "Tab") {
-        if (event.shiftKey) {
-          if (document.activeElement === first) {
-            event.preventDefault();
-            last.focus();
-          }
-        } else {
-          if (document.activeElement === last) {
-            event.preventDefault();
-            first.focus();
-          }
-        }
-      } else if (event.key === "ArrowDown") {
-        event.preventDefault();
-        items[(index + 1) % items.length].focus();
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        items[(index - 1 + items.length) % items.length].focus();
-      } else if (event.key === "Home") {
-        event.preventDefault();
-        first.focus();
-      } else if (event.key === "End") {
-        event.preventDefault();
-        last.focus();
-      }
-    }
-
-    menu.addEventListener("keydown", handleMenuKeys);
-    return () => menu.removeEventListener("keydown", handleMenuKeys);
-  }, [isProfileOpen]);
-
-  // Close dropdown on route change
+  // Radix handles Escape, outside-click and focus return; a client-side
+  // navigation from a menu item is the one dismissal it cannot see.
   useEffect(() => {
     setIsProfileOpen(false);
   }, [pathname]);
 
-  // Keyboard shortcut: Cmd+K (search)
-  // Note: Cmd+B (sidebar) is handled by SidebarProvider in sidebar.tsx
+  // Keyboard shortcut: Cmd+K (search). Cmd+\ (sidebar collapse) belongs to
+  // SidebarStateProvider, which owns the toggle now that it lives in the rail.
   useEffect(() => {
     function handleShortcuts(event: KeyboardEvent) {
       if (!(event.metaKey || event.ctrlKey)) return;
@@ -265,7 +184,6 @@ export function Header() {
     return () => document.removeEventListener("keydown", handleShortcuts);
   }, []);
 
-  // Scroll detection for border
   const handleScroll = useCallback(() => {
     const parent = headerRef.current?.parentElement;
     if (parent) setScrolled(parent.scrollTop > 0);
@@ -278,293 +196,233 @@ export function Header() {
     return () => parent.removeEventListener("scroll", handleScroll);
   }, [handleScroll]);
 
-  const handleLogout = async () => {
-    setIsLoggingOut(true);
-    setLogoutError(false);
-    try {
-      const supabase = createClient();
-      await supabase.auth.signOut();
-      router.push("/login");
-    } catch {
-      setIsLoggingOut(false);
-      setLogoutError(true);
-    }
-  };
-
   return (
     <>
-    <header
-      ref={headerRef}
-      className={cn(
-        "sticky top-0 z-30 flex items-center justify-between h-11 py-4 px-4 bg-white border-b transition-colors duration-200",
-        scrolled ? "border-[#EBEBEB]" : "border-transparent"
-      )}
-    >
-      {/* Left: toggle + breadcrumbs */}
-      <div className="flex items-center flex-1 min-w-0">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={toggleSidebar}
-              className="flex items-center justify-center w-8 h-8 rounded-lg cursor-pointer transition-colors duration-150 text-[#8A8A8E] hover:text-[#3C3C43] hover:bg-[#F5F5F5] active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none"
-              aria-label="Toggle sidebar"
-            >
-              <PanelLeft className="h-[15px] w-[15px]" strokeWidth={1.5} aria-hidden="true" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={4}>
-            Toggle sidebar
-            {isMac !== null && (
-              <span className="ml-1.5 text-white/50">{isMac ? "\u2318B" : "\u2303B"}</span>
-            )}
-          </TooltipContent>
-        </Tooltip>
-
-        {/* Breadcrumb skeleton while loading match detail */}
-        {isMatchDetailPage && matchCrumbLoading && !matchCrumb && (
-          <div className="flex items-center gap-1.5 ml-1">
-            <span className="inline-block h-3 w-14 rounded animate-pulse bg-[#F0F0F0]" />
-            <ChevronRight
-              className="h-3 w-3 shrink-0 text-[#CCCCCC]"
-              strokeWidth={1.5}
-              aria-hidden="true"
-            />
-            <span className="inline-block h-3 w-24 rounded animate-pulse bg-[#F0F0F0]" />
-            <ChevronRight
-              className="h-3 w-3 shrink-0 text-[#CCCCCC]"
-              strokeWidth={1.5}
-              aria-hidden="true"
-            />
-            <span className="inline-block h-3 w-32 rounded animate-pulse bg-[#F0F0F0]" />
-          </div>
+      <header
+        ref={headerRef}
+        className={cn(
+          "sticky top-0 z-30 flex h-11 items-center justify-between border-b bg-white px-4 py-4 transition-colors duration-200",
+          scrolled ? "border-[#EBEBEB]" : "border-transparent"
         )}
+      >
+        {/* Left: breadcrumbs. The collapse toggle moved into the sidebar's
+            bottom group, where it never shifts relative to Settings and Help. */}
+        <div className="flex min-w-0 flex-1 items-center">
 
-        {breadcrumbs.length > 0 && !(isMatchDetailPage && matchCrumbLoading) && (
-          <nav
-            aria-label="Breadcrumb"
-            className="flex items-center gap-0.5 ml-1 text-[11px] font-normal min-w-0"
-          >
-            {breadcrumbs.map((crumb, i) => (
-              <span key={i} className="flex items-center gap-0.5 min-w-0">
-                {i > 0 && (
-                  <ChevronRight
-                    className="h-3 w-3 shrink-0 text-[#CCCCCC]"
-                    strokeWidth={1.5}
-                    aria-hidden="true"
-                  />
-                )}
-                {crumb.href ? (
-                  <Link
-                    href={crumb.href}
-                    className="transition-colors duration-200 shrink-0 text-[#888888] hover:text-[#525252]"
-                  >
-                    {crumb.label}
-                  </Link>
-                ) : (
-                  <span
-                    className={cn(
-                      "truncate",
-                      i === breadcrumbs.length - 1
-                        ? "text-[#0D0D0D]"
-                        : "text-[#888888]"
-                    )}
-                  >
-                    {crumb.label}
-                  </span>
-                )}
-              </span>
-            ))}
-          </nav>
-        )}
-      </div>
-
-      {/* Right: search + profile */}
-      <div className="flex items-center gap-1 shrink-0">
-        {/* Search trigger — compact pill */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={() => setIsSearchOpen(true)}
-              className="flex items-center gap-1.5 h-7 pl-2 pr-1.5 rounded-lg cursor-pointer transition-colors duration-150 text-[#8A8A8E] hover:text-[#3C3C43] hover:bg-[#F5F5F5] active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none"
-              aria-label="Search"
-            >
-              <Search className="h-[14px] w-[14px]" strokeWidth={1.5} aria-hidden="true" />
-              {isMac !== null && (
-                <kbd className="text-[10px] font-medium leading-none px-1 py-0.5 rounded text-[#AAAAAA] bg-[#F0F0F0]">
-                  {isMac ? "\u2318K" : "\u2303K"}
-                </kbd>
-              )}
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={4}>
-            Search
-          </TooltipContent>
-        </Tooltip>
-
-        {/* Profile */}
-        <div className="relative" ref={profileRef}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={() => setIsProfileOpen(!isProfileOpen)}
-                className={cn(
-                  "h-8 w-8 rounded-lg flex items-center justify-center text-[11px] font-semibold tracking-wide cursor-pointer transition-colors duration-150 text-[#8A8A8E] hover:bg-[#F5F5F5] active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none",
-                  isProfileOpen ? "bg-[#F5F5F5]" : "bg-transparent"
-                )}
-                aria-label="Profile menu"
-                aria-expanded={isProfileOpen}
-                aria-haspopup="menu"
-              >
-                {initials ?? (
-                  <User
-                    className="h-[15px] w-[15px]"
-                    strokeWidth={1.5}
-                    aria-hidden="true"
-                  />
-                )}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" sideOffset={4}>
-              Account
-            </TooltipContent>
-          </Tooltip>
-
-          <AnimatePresence>
-            {isProfileOpen && (
-              <motion.div
-                ref={menuRef}
-                initial={{
-                  opacity: 0,
-                  transform: shouldReduceMotion
-                    ? "scale(1) translateY(0px)"
-                    : "scale(0.96) translateY(-4px)",
-                }}
-                animate={{
-                  opacity: 1,
-                  transform: "scale(1) translateY(0px)",
-                }}
-                exit={{
-                  opacity: 0,
-                  transform: shouldReduceMotion
-                    ? "scale(1) translateY(0px)"
-                    : "scale(0.98) translateY(-2px)",
-                  transition: {
-                    duration: shouldReduceMotion ? 0.06 : 0.12,
-                    ease: EASE,
-                  },
-                }}
-                transition={{
-                  duration: shouldReduceMotion ? 0.08 : 0.18,
-                  ease: EASE,
-                }}
-                style={{ transformOrigin: "top right" }}
-                className="absolute right-0 top-full mt-1.5 w-44 rounded-xl overflow-hidden border border-[#E5E5EA] bg-white shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]"
-                role="menu"
-              >
-                <div className="p-1">
-                  <Link
-                    href="/dashboard/settings/profile"
-                    className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] text-[#1D1D1F] hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5] focus-visible:outline-none active:bg-[#EBEBEB] transition-colors duration-100 cursor-pointer"
-                    role="menuitem"
-                  >
-                    <User
-                      className="h-[15px] w-[15px] text-[#8A8A8E]"
-                      strokeWidth={1.5}
-                      aria-hidden="true"
-                    />
-                    Profile
-                  </Link>
-                  <Link
-                    href="/dashboard/settings/account"
-                    className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] text-[#1D1D1F] hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5] focus-visible:outline-none active:bg-[#EBEBEB] transition-colors duration-100 cursor-pointer"
-                    role="menuitem"
-                  >
-                    <Settings
-                      className="h-[15px] w-[15px] text-[#8A8A8E]"
-                      strokeWidth={1.5}
-                      aria-hidden="true"
-                    />
-                    Account
-                  </Link>
-                  <div className="h-px bg-[#E5E5EA] mx-2 my-1" />
-                  <button
-                    onClick={() => {
-                      setIsProfileOpen(false);
-                      setIsLogoutOpen(true);
-                    }}
-                    className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] text-[#E51837] hover:bg-[rgba(229,24,55,0.05)] focus-visible:bg-[rgba(229,24,55,0.05)] focus-visible:outline-none active:bg-[rgba(229,24,55,0.1)] transition-colors duration-100 w-full cursor-pointer"
-                    role="menuitem"
-                  >
-                    <LogOut
-                      className="h-[15px] w-[15px] text-[#E51837]"
-                      strokeWidth={1.5}
-                      aria-hidden="true"
-                    />
-                    Log out
-                  </button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </div>
-    </header>
-
-    <SearchCommandPalette open={isSearchOpen} onOpenChange={setIsSearchOpen} />
-
-    {/* Logout confirmation */}
-    <AlertDialog open={isLogoutOpen} onOpenChange={(open) => { setIsLogoutOpen(open); if (!open) { setLogoutError(false); setIsLoggingOut(false); } }}>
-      <AlertDialogContent className="sm:max-w-[320px] sm:rounded-2xl p-5 gap-0 border border-[#E5E5EA] shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]">
-        <AlertDialogHeader className="space-y-0 text-left mb-5">
-          <div className="flex items-center gap-2.5 mb-2">
-            <div className="h-7 w-7 rounded-full bg-[rgba(229,24,55,0.15)] flex items-center justify-center shrink-0">
-              <LogOut className="h-3 w-3 text-[#E51837]" strokeWidth={1.5} aria-hidden="true" />
-            </div>
-            <AlertDialogTitle className="text-[16px] font-medium text-[#1D1D1F] tracking-[-0.4px]">
-              Log out
-            </AlertDialogTitle>
-          </div>
-          <AlertDialogDescription className="text-[13px] text-[#888888] leading-[1.5]">
-            {hasUnsavedChanges
-              ? "You have unsaved changes that will be lost. "
-              : ""}
-            You&#39;ll need to sign in again to access your matches and statistics.
-          </AlertDialogDescription>
-          {logoutError && (
-            <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-[6px] bg-[rgba(229,24,55,0.15)]">
-              <div className="h-1 w-1 rounded-full bg-[#E51837] shrink-0" />
-              <p className="text-[12px] font-normal text-[#E51837]">
-                Could not log out. Please try again.
-              </p>
+          {isMatchDetailPage && matchCrumbLoading && !matchCrumb && (
+            <div className="flex items-center gap-1.5">
+              <span className="inline-block h-3 w-14 animate-pulse rounded bg-[#F0F0F0]" />
+              <ChevronRight
+                className="h-3 w-3 shrink-0 text-[#CCCCCC]"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+              <span className="inline-block h-3 w-24 animate-pulse rounded bg-[#F0F0F0]" />
+              <ChevronRight
+                className="h-3 w-3 shrink-0 text-[#CCCCCC]"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+              <span className="inline-block h-3 w-32 animate-pulse rounded bg-[#F0F0F0]" />
             </div>
           )}
-        </AlertDialogHeader>
-        <div className="flex items-center justify-end gap-2.5">
-          <AlertDialogCancel
-            disabled={isLoggingOut}
-            className="h-8 rounded-[6px] px-4 border border-[#EAECF0] bg-transparent text-[10px] font-medium uppercase tracking-[1.5px] text-[#525252] hover:bg-[#F5F5F5] active:scale-[0.97] transition-colors duration-200 cursor-pointer m-0 focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none"
-          >
-            Cancel
-          </AlertDialogCancel>
-          <AlertDialogAction
-            onClick={handleLogout}
-            disabled={isLoggingOut}
-            className="h-8 rounded-[6px] px-4 border-none bg-[#E51837] hover:bg-[#CC1530] text-[10px] font-medium uppercase tracking-[1.5px] text-white active:scale-[0.97] transition-colors duration-200 cursor-pointer shadow-none disabled:opacity-50 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none"
-          >
-            {isLoggingOut ? (
-              <span className="inline-flex items-center gap-1.5">
-                <Loader2 className="size-3 animate-spin" aria-hidden="true" />
-                Logging out
-              </span>
-            ) : logoutError ? (
-              "Try again"
-            ) : (
-              "Log out"
-            )}
-          </AlertDialogAction>
+
+          {breadcrumbs.length > 0 && !(isMatchDetailPage && matchCrumbLoading) && (
+            <nav
+              aria-label="Breadcrumb"
+              className="flex min-w-0 items-center gap-0.5 text-[11px] font-normal"
+            >
+              {breadcrumbs.map((crumb, i) => (
+                <span key={i} className="flex min-w-0 items-center gap-0.5">
+                  {i > 0 && (
+                    <ChevronRight
+                      className="h-3 w-3 shrink-0 text-[#CCCCCC]"
+                      strokeWidth={1.5}
+                      aria-hidden="true"
+                    />
+                  )}
+                  {crumb.href ? (
+                    <Link
+                      href={crumb.href}
+                      className="shrink-0 text-[#888888] transition-colors duration-200 hover:text-[#525252]"
+                    >
+                      {crumb.label}
+                    </Link>
+                  ) : (
+                    <span
+                      className={cn(
+                        "truncate",
+                        i === breadcrumbs.length - 1
+                          ? "text-[#0D0D0D]"
+                          : "text-[#888888]"
+                      )}
+                    >
+                      {crumb.label}
+                    </span>
+                  )}
+                </span>
+              ))}
+            </nav>
+          )}
         </div>
-      </AlertDialogContent>
-    </AlertDialog>
+
+        {/* Right: page status + search + activity + profile */}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {/* Whatever the current page wants said up here — the upload wizard's
+              "Draft saved", and nothing else so far. */}
+          {headerStatus && (
+            <span className="mr-1.5 text-[11px] text-[var(--ink-400)]">
+              {headerStatus}
+            </span>
+          )}
+          {/* Named, not just an icon — a bare magnifier does not say what it
+              searches, and the palette covers matches, players and help. */}
+          <button
+            onClick={() => setIsSearchOpen(true)}
+            className="flex h-7 cursor-pointer items-center gap-1.5 rounded-[8px] pl-2 pr-1.5 text-[var(--ink-500)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]"
+          >
+            <Search className="h-[14px] w-[14px]" strokeWidth={1.5} aria-hidden="true" />
+            <span className="text-[12px] text-[var(--ink-600)]">Search</span>
+            {isMac !== null && (
+              <kbd className="rounded bg-[#F0F0F0] px-1 py-0.5 text-[10px] font-medium leading-none text-[#AAAAAA]">
+                {isMac ? "⌘K" : "⌃K"}
+              </kbd>
+            )}
+          </button>
+
+          {activitySlot}
+
+          <span
+            aria-hidden="true"
+            className="h-3.5 w-px bg-[var(--border-medium)]"
+          />
+
+          {/* Profile.
+
+              Radix, like the two menus beside it. This was ~100 lines of
+              bespoke chrome — an outside-click listener, an Escape handler, a
+              manual Tab/Arrow/Home/End focus trap and a hand-built enter/exit
+              animation — sitting in the same flex row as two Popovers that get
+              all of it for free, plus portalling and focus return that the
+              hand-rolled version never had. Three adjacent menus, three
+              dismissal behaviours. */}
+          <Popover open={isProfileOpen} onOpenChange={setIsProfileOpen}>
+            <PopoverTrigger asChild>
+              <button
+                className={cn(
+                  "flex cursor-pointer items-center gap-1 rounded-full py-[3px] pl-[3px] pr-1.5 transition-colors duration-150 hover:bg-[var(--surface-subtle)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]",
+                  isProfileOpen && "bg-[var(--surface-subtle)]"
+                )}
+                aria-label="Account menu"
+              >
+                <span
+                  aria-hidden="true"
+                  className="flex size-[26px] items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[9px] font-medium text-[var(--ink-700)]"
+                >
+                  {viewer.initials}
+                </span>
+                <ChevronDown
+                  className={cn(
+                    "size-3 transition-transform duration-200",
+                    isProfileOpen
+                      ? "rotate-180 text-[var(--ink-600)]"
+                      : "text-[var(--ink-400)]"
+                  )}
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+              </button>
+            </PopoverTrigger>
+
+            <PopoverContent
+              align="end"
+              sideOffset={6}
+              className="w-[260px] rounded-[12px] border-[var(--border-medium)] p-1.5"
+            >
+              {/* Identity */}
+              <div className="flex items-center gap-2.5 px-2.5 pb-2 pt-2.5">
+                <span
+                  aria-hidden="true"
+                  className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[10px] font-medium text-[var(--ink-700)]"
+                >
+                  {viewer.initials}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-medium text-[var(--ink-900)]">
+                    {viewer.name}
+                  </p>
+                  <p className="truncate text-[11px] text-[var(--ink-500)]">
+                    {viewer.email}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-1.5 px-2.5 pb-2.5">
+                {/* Role is a program standing — a personal workspace has no one
+                    to have standing over, so it carries only the plan. */}
+                {active.kind === "team" && <Chip>{capitalize(active.role)}</Chip>}
+                <Chip>{capitalize(viewer.plan)}</Chip>
+              </div>
+
+              <div className="-mx-1.5 h-px bg-[var(--border-hairline)]" />
+
+              <p className="px-2.5 pb-1 pt-2.5 text-[10px] font-medium uppercase tracking-[1.5px] text-[var(--ink-500)]">
+                Workspace
+              </p>
+              <WorkspaceOptionList onSwitched={() => setIsProfileOpen(false)} />
+
+              <div className="-mx-1.5 my-1.5 h-px bg-[var(--border-hairline)]" />
+
+              <Link href="/dashboard/settings/profile" className={MENU_ITEM_CLASS}>
+                <SlidersHorizontal
+                  className="size-[13px] text-[var(--ink-600)]"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+                Preferences
+              </Link>
+              <Link
+                href="/dashboard/settings/plan"
+                className={MENU_ITEM_CLASS}
+              >
+                <Timer
+                  className="size-[13px] text-[var(--ink-600)]"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+                Usage &amp; quota
+              </Link>
+              <Link href="/dashboard/help" className={MENU_ITEM_CLASS}>
+                <CircleHelp
+                  className="size-[13px] text-[var(--ink-600)]"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+                Help
+              </Link>
+
+              <div className="-mx-1.5 my-1.5 h-px bg-[var(--border-hairline)]" />
+
+              <button
+                onClick={() => {
+                  setIsProfileOpen(false);
+                  requestLogout();
+                }}
+                className={cn(MENU_ITEM_CLASS, "text-[var(--ink-700)]")}
+              >
+                <LogOut
+                  className="size-[13px] text-[var(--ink-600)]"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+                Sign out
+              </button>
+            </PopoverContent>
+          </Popover>
+        </div>
+      </header>
+
+      <SearchCommandPalette open={isSearchOpen} onOpenChange={setIsSearchOpen} />
     </>
   );
 }

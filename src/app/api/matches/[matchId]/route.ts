@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { purgeMatchStorage } from "@/lib/services/matches/purge-match-storage";
 
 // Beta gate: every PATCH forces private = true until we surface the toggle.
 const BETA_FORCE_PRIVATE = true;
@@ -198,32 +199,10 @@ export async function DELETE(
   if (lookupError) return NextResponse.json({ error: lookupError.message }, { status: 500 });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  try {
-    const { data: files } = await supabase
-      .from("match_files")
-      .select("storage_path, storage_bucket")
-      .eq("match_id", matchId);
-
-    if (files && files.length > 0) {
-      const byBucket = new Map<string, string[]>();
-      for (const f of files) {
-        const bucket = (f.storage_bucket as string | null) ?? "match-data";
-        const path = f.storage_path as string | null;
-        if (!path) continue;
-        const arr = byBucket.get(bucket) ?? [];
-        arr.push(path);
-        byBucket.set(bucket, arr);
-      }
-      for (const [bucket, paths] of byBucket) {
-        const { error: storageError } = await supabase.storage.from(bucket).remove(paths);
-        if (storageError) {
-          console.error(`[match delete] storage cleanup failed for ${bucket}:`, storageError.message);
-        }
-      }
-    }
-  } catch (err) {
-    console.error("[match delete] storage cleanup threw:", err);
-  }
+  // Storage first, then the row. The ordering is load-bearing and the reason
+  // this is a function call rather than a foreign-key cascade — see
+  // purgeMatchStorage().
+  await purgeMatchStorage(supabase, [matchId]);
 
   const { error: deleteError } = await supabase
     .from("matches")

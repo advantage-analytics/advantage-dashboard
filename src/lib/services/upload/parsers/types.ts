@@ -2,7 +2,7 @@
  * Parser type definitions and interfaces
  */
 
-import { FormData } from '@/components/dashboard/home/upload-match-modal/types';
+import { FormData } from '@/components/dashboard/matches/new-match-wizard/types';
 
 export type { FormData };
 

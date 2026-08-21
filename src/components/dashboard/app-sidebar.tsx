@@ -1,203 +1,166 @@
 "use client";
 
-import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { Home, Calendar, BarChart3, Settings, HelpCircle } from "lucide-react";
+import Link from "next/link";
+import { PanelLeftClose, PanelLeftOpen, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { WorkspaceRow } from "@/components/dashboard/sidebar/workspace-row";
+import { RailItem } from "@/components/dashboard/sidebar/rail-item";
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-} from "@/components/ui/sidebar";
-import { useRef, useEffect, useCallback } from "react";
+  useSidebarState,
+  RAIL_WIDTH,
+  PANEL_WIDTH,
+} from "@/components/dashboard/sidebar/sidebar-state";
+import { useRequestLogout } from "@/components/dashboard/logout-dialog";
+import {
+  activeHref,
+  PERSONAL_NAV,
+  PERSONAL_BOTTOM,
+  TEAM_NAV,
+  TEAM_BOTTOM,
+} from "@/lib/dashboard/nav";
 
-const MAIN_LINKS = [
-  { name: "Home", href: "/dashboard", icon: Home },
-  { name: "Matches", href: "/dashboard/matches", icon: Calendar },
-  {
-    name: "Statistics",
-    href: "/dashboard/statistics",
-    icon: BarChart3,
-  },
-] as const;
-
-const BOTTOM_LINKS = [
-  { name: "Settings", href: "/dashboard/settings", icon: Settings },
-  { name: "Help Center", href: "/dashboard/help", icon: HelpCircle },
-] as const;
-
-const NAV_ITEM_CLASS =
-  "h-9 rounded-lg text-[#8A8A8E] font-normal hover:bg-[#F5F5F5] hover:text-[#3C3C43] transition-colors duration-200 pl-[13px] pr-3.5 py-3 gap-3 [&>svg]:size-3.5 data-[active=true]:bg-[#EBF2FD] data-[active=true]:text-[#3B82F6]";
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="grid grid-rows-[1fr] group-data-[collapsible=icon]:grid-rows-[0fr] mb-3 group-data-[collapsible=icon]:mb-0 transition-[grid-template-rows,margin] duration-300 ease-out">
-      <div className="overflow-hidden">
-        <p className="text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA] leading-[16px] pl-[13px] opacity-100 group-data-[collapsible=icon]:opacity-0 transition-opacity duration-300 ease-out">
-          {children}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function NavItem({
-  name,
-  href,
-  icon: Icon,
-  active,
-}: {
-  name: string;
-  href: string;
-  icon: React.ComponentType<React.SVGProps<SVGSVGElement> & { strokeWidth?: number }>;
-  active: boolean;
-}) {
-  return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
-        asChild
-        isActive={active}
-        tooltip={name}
-        className={cn(
-          NAV_ITEM_CLASS,
-          active && "hover:bg-[#3B82F6]/10 hover:text-[#3B82F6]"
-        )}
-      >
-        <Link href={href} aria-current={active ? "page" : undefined}>
-          <Icon
-            className={cn(
-              "w-3.5 h-3.5 shrink-0 transition-colors duration-200",
-              active && "text-[#3B82F6]"
-            )}
-            strokeWidth={1.5}
-            aria-hidden="true"
-          />
-          <span className="text-[13px] whitespace-nowrap group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:w-0 transition-opacity duration-300 ease-out">
-            {name}
-          </span>
-        </Link>
-      </SidebarMenuButton>
-    </SidebarMenuItem>
-  );
-}
-
+/**
+ * Two committed widths: a 64px icon rail and a 232px panel.
+ *
+ * The toggle is the committed control — one persistent state, no hover
+ * surprises. Content reflows with the panel, and that is the trade the button
+ * makes versus a hover peek: it only happens on a deliberate click, so a match
+ * report, a KPI strip or a chart never resizes under the cursor while you are
+ * reading it.
+ *
+ * Icons sit in a fixed 40px column pinned to the panel's left padding at BOTH
+ * widths, so nothing shifts horizontally — only the panel edge travels, and the
+ * labels fade in behind it.
+ */
 export function AppSidebar() {
   const pathname = usePathname();
-  const mainNavRef = useRef<HTMLUListElement>(null);
-  const bottomNavRef = useRef<HTMLUListElement>(null);
+  const { active } = useWorkspace();
+  const requestLogout = useRequestLogout();
+  const { expanded, toggle } = useSidebarState();
 
-  const handleArrowNav = useCallback((event: KeyboardEvent) => {
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-
-    const mainItems = mainNavRef.current
-      ? Array.from(mainNavRef.current.querySelectorAll<HTMLElement>("a[href]"))
-      : [];
-    const bottomItems = bottomNavRef.current
-      ? Array.from(bottomNavRef.current.querySelectorAll<HTMLElement>("a[href]"))
-      : [];
-    const allItems = [...mainItems, ...bottomItems];
-
-    const index = allItems.indexOf(document.activeElement as HTMLElement);
-    if (index === -1) return;
-
-    event.preventDefault();
-    if (event.key === "ArrowDown") {
-      allItems[(index + 1) % allItems.length].focus();
-    } else {
-      allItems[(index - 1 + allItems.length) % allItems.length].focus();
-    }
-  }, []);
-
-  useEffect(() => {
-    const mainEl = mainNavRef.current;
-    const bottomEl = bottomNavRef.current;
-    mainEl?.addEventListener("keydown", handleArrowNav);
-    bottomEl?.addEventListener("keydown", handleArrowNav);
-    return () => {
-      mainEl?.removeEventListener("keydown", handleArrowNav);
-      bottomEl?.removeEventListener("keydown", handleArrowNav);
-    };
-  }, [handleArrowNav]);
+  const isTeam = active.kind === "team";
+  const mainLinks = isTeam ? TEAM_NAV : PERSONAL_NAV;
+  const bottomLinks = isTeam ? TEAM_BOTTOM : PERSONAL_BOTTOM;
+  const current = activeHref(pathname, [...mainLinks, ...bottomLinks]);
 
   return (
-    <Sidebar
-      collapsible="icon"
-      className="h-screen border-r border-[#F0F0F0] bg-white"
+    <nav
+      aria-label="Main"
+      className={cn(
+        "relative z-40 flex shrink-0 flex-col overflow-hidden p-3",
+        "border-r border-[var(--border-hairline)] bg-[var(--surface-card)]",
+        "transition-[width] duration-200 ease-[var(--ease-primary)] motion-reduce:transition-none"
+      )}
+      style={{
+        width: expanded ? PANEL_WIDTH : RAIL_WIDTH,
+        // Collapsing reverses the order: the labels leave in the first 80ms and
+        // only then does the edge travel, so text never clips mid-word.
+        transitionDelay: expanded ? "0ms" : "80ms",
+      }}
     >
-      {/* Logo Section - 40px (pt-10) from top, 40px (mb-10) gap to nav */}
-      <SidebarHeader className="pt-10 pb-0 mb-10 px-4">
-        <Link href="/dashboard" className="relative flex items-center h-6">
-          {/* Expanded logo – fades out fast when collapsing, fades in slow when expanding */}
-          <Image
-            src="/logos/logo4.svg"
-            alt="Advantage"
-            width={141}
-            height={24}
-            style={{ width: 141, height: 24 }}
-            priority
-            className="absolute left-1/2 -translate-x-1/2 opacity-100 group-data-[collapsible=icon]:opacity-0 transition-opacity duration-800 delay-150 ease-in group-data-[collapsible=icon]:duration-0 group-data-[collapsible=icon]:delay-0 group-data-[collapsible=icon]:ease-out"
+      <WorkspaceRow expanded={expanded} />
+
+      <div className="h-6 shrink-0" />
+
+      <div className="flex flex-col gap-1">
+        {mainLinks.map((link) => (
+          <RailItem
+            key={link.href}
+            href={link.href}
+            label={link.name}
+            icon={link.icon}
+            active={current === link.href}
+            expanded={expanded}
           />
-          {/* Collapsed logo – fades in slow when collapsing, fades out fast when expanding */}
-          <Image
-            src="/logos/logo3.svg"
-            alt="Advantage"
-            width={30}
-            height={21}
-            style={{ width: 30, height: 21 }}
-            priority
-            className="absolute left-1/2 -translate-x-1/2 opacity-0 group-data-[collapsible=icon]:opacity-100 transition-opacity duration-0 ease-out group-data-[collapsible=icon]:duration-800 group-data-[collapsible=icon]:delay-150 group-data-[collapsible=icon]:ease-in"
+        ))}
+      </div>
+
+      <div className="flex-1" />
+
+      <div className="flex flex-col gap-1">
+        {bottomLinks.map((link) => (
+          <RailItem
+            key={link.href}
+            href={link.href}
+            label={link.name}
+            icon={link.icon}
+            active={current === link.href}
+            expanded={expanded}
           />
-        </Link>
-      </SidebarHeader>
+        ))}
 
-      {/* Navigation - spans full height with justify-between */}
-      <SidebarContent className="pb-10 justify-between px-4">
-        {/* Main Navigation */}
-        <div>
-          <SectionLabel>Menu</SectionLabel>
-          <SidebarMenu className="gap-1.5" ref={mainNavRef}>
-            {MAIN_LINKS.map(({ name, href, icon }) => {
-              const active =
-                pathname === href ||
-                (href !== "/dashboard" && pathname?.startsWith(href));
+        {/* The toggle is the last row of the bottom group at BOTH widths, so it
+            never moves relative to Settings and Help. Icon and label both flip;
+            the icons cross-fade in place, with no glyph rotation. */}
+        <RailItem
+          as="button"
+          label={expanded ? "Collapse" : "Expand sidebar"}
+          icon={expanded ? PanelLeftClose : PanelLeftOpen}
+          expanded={expanded}
+          shortcut="⌘\"
+          ariaExpanded={expanded}
+          onClick={toggle}
+        />
+      </div>
 
-              return (
-                <NavItem
-                  key={href}
-                  name={name}
-                  href={href}
-                  icon={icon}
-                  active={!!active}
-                />
-              );
-            })}
-          </SidebarMenu>
-        </div>
+      <ViewerFooter expanded={expanded} onSignOut={requestLogout} />
+    </nav>
+  );
+}
 
-        {/* Bottom Section */}
-        <div>
-          <SectionLabel>Support</SectionLabel>
-          <SidebarMenu className="gap-1.5" ref={bottomNavRef}>
-            {BOTTOM_LINKS.map(({ name, href, icon }) => {
-              const active = pathname === href || pathname?.startsWith(href);
+/**
+ * Sign-out and the workspace sub-label are the only things dropped on collapse.
+ * Nothing else disappears — the rail is the same list with its labels hidden,
+ * so muscle memory holds.
+ */
+function ViewerFooter({
+  expanded,
+  onSignOut,
+}: {
+  expanded: boolean;
+  onSignOut: () => void;
+}) {
+  const { viewer } = useWorkspace();
 
-              return (
-                <NavItem
-                  key={href}
-                  name={name}
-                  href={href}
-                  icon={icon}
-                  active={!!active}
-                />
-              );
-            })}
-          </SidebarMenu>
-        </div>
-      </SidebarContent>
-    </Sidebar>
+  return (
+    <div className="mt-2 flex items-center overflow-hidden border-t border-[var(--border-hairline)] pt-2.5">
+      <Link
+        href="/dashboard/settings/profile"
+        aria-label={viewer.name}
+        className="flex min-w-0 flex-1 items-center rounded-[8px] transition-opacity duration-150 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]"
+      >
+        <span className="flex size-10 shrink-0 items-center justify-center">
+          <span
+            aria-hidden="true"
+            className="flex size-6 items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[9px] font-medium text-[var(--ink-700)]"
+          >
+            {viewer.initials}
+          </span>
+        </span>
+        <span
+          className={cn(
+            "min-w-0 truncate text-[12px] text-[var(--ink-700)] transition-opacity ease-[var(--ease-primary)]",
+            expanded
+              ? "opacity-100 delay-[80ms] duration-[120ms]"
+              : "opacity-0 delay-0 duration-[80ms]"
+          )}
+        >
+          {viewer.name}
+        </span>
+      </Link>
+
+      {expanded && (
+        <button
+          type="button"
+          onClick={onSignOut}
+          aria-label="Sign out"
+          className="flex size-8 shrink-0 items-center justify-center rounded-[6px] text-[var(--ink-400)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)] cursor-pointer"
+        >
+          <LogOut className="size-[13px]" strokeWidth={1.5} aria-hidden="true" />
+        </button>
+      )}
+    </div>
   );
 }

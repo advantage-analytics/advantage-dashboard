@@ -1,34 +1,34 @@
 "use client";
 
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
-import type { MatchView } from "./view-toggle";
 import { MatchCardGallery } from "./match-card-gallery";
-import { MatchCardList, LIST_GRID_COLS } from "./match-card-list";
+import { MatchCardList, LIST_GRID_COLS, LIST_ROW_FRAME } from "./match-card-list";
 import { ArrowUp, ArrowDown } from "lucide-react";
 
-type SortField = "date" | "opponent" | "event" | "result";
-type SortDir = "asc" | "desc";
+export type SortField = "date" | "opponent" | "event" | "result";
+export type SortDir = "asc" | "desc";
 
 interface MatchesGridProps {
   matches: DisplayMatch[];
-  view: MatchView;
   sortField: SortField;
   sortDir: SortDir;
   onSort: (field: SortField) => void;
   newMatchId?: string | null;
 }
 
-const STAGGER_CAP = 5;
-const STAGGER_DELAY = 0.03;
-
+/**
+ * One header per row column. Score and Analysis carry no sort: there is no
+ * ordering of a set score that a player would ask for, and analysis state is a
+ * filter concern, not a sort. Date has no column but is still sortable from the
+ * toolbar's sort control, which is where the remaining fields live too.
+ */
 const COLUMNS: { label: string; field?: SortField }[] = [
   { label: "Event", field: "event" },
   { label: "Result", field: "result" },
   { label: "Score" },
   { label: "Opponent", field: "opponent" },
-  { label: "Type" },
-  { label: "Date", field: "date" },
+  { label: "Analysis" },
+  { label: "" },
 ];
 
 function SortIcon({ field, sortField, sortDir }: { field?: SortField; sortField: SortField; sortDir: SortDir }) {
@@ -39,79 +39,65 @@ function SortIcon({ field, sortField, sortDir }: { field?: SortField; sortField:
 
 export function MatchesGrid({
   matches,
-  view,
   sortField,
   sortDir,
   onSort,
   newMatchId,
 }: MatchesGridProps): React.JSX.Element {
-  const shouldReduceMotion = useReducedMotion();
+  /* Which layout shows is a width question, so Tailwind answers it rather than
+     React. Held in state it could only be read after mount, so the server — which
+     has no viewport — always emitted the six-column table and a phone painted
+     that squeezed table for a frame before an effect swapped in the cards.
+     Deciding in CSS renders the right layout the first time, and pins the
+     breakpoint to `lg` instead of a 1023px literal with nothing tying it there.
 
+     Both layouts sit in the tree. `hidden` is display:none, so the inactive one
+     costs no paint and stays out of both the accessibility tree and the tab
+     order; pagination caps the duplication at 50 rows. */
   return (
-    <AnimatePresence mode="wait">
-      {view === "gallery" ? (
-        <motion.div
-          key="gallery"
-          initial={shouldReduceMotion ? false : { opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {matches.map((match, i) => (
-              <motion.div
-                key={match.id}
-                initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.4, delay: Math.min(i, STAGGER_CAP) * STAGGER_DELAY, ease: [0.25, 0.46, 0.45, 0.94] }}
-              >
-                <MatchCardGallery match={match} isNew={match.id === newMatchId} />
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
-      ) : (
-        <motion.div
-          key="list"
-          initial={shouldReduceMotion ? false : { opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
-        >
-          {/* Column headers */}
-          <div className="grid gap-x-4 items-center px-4 py-2.5 border-b border-[#F0F0F0] mb-4" style={LIST_GRID_COLS} role="row">
-            {COLUMNS.map((col) => (
-              <div key={col.label} className="min-w-0" role="columnheader" aria-sort={col.field === sortField ? (sortDir === "asc" ? "ascending" : "descending") : undefined}>
-                {col.field ? (
-                  <button
-                    onClick={() => onSort(col.field!)}
-                    className="inline-flex items-center gap-0.5 text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] hover:text-[#525252] hover:underline underline-offset-2 cursor-pointer transition-[color] duration-200"
-                  >
-                    {col.label}
-                    <SortIcon field={col.field} sortField={sortField} sortDir={sortDir} />
-                  </button>
-                ) : (
-                  <span className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
-                    {col.label}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 lg:hidden">
+        {matches.map((match) => (
+          <MatchCardGallery key={match.id} match={match} isNew={match.id === newMatchId} />
+        ))}
+      </div>
 
-          {/* Rows */}
-          {matches.map((match, i) => (
-            <motion.div
-              key={match.id}
-              initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.4, delay: Math.min(i, STAGGER_CAP) * STAGGER_DELAY, ease: [0.25, 0.46, 0.45, 0.94] }}
+      <div className="hidden lg:block">
+        {/* Column headers — 28px tall, no underline of their own; the rows
+            below open with a single top hairline and carry the rest. */}
+        <div className={`${LIST_ROW_FRAME} h-7`} style={LIST_GRID_COLS} role="row">
+          {COLUMNS.map((col, i) => (
+            <div
+              key={col.label || `col-${i}`}
+              className="min-w-0"
+              role="columnheader"
+              aria-sort={col.field === sortField ? (sortDir === "asc" ? "ascending" : "descending") : undefined}
             >
-              <MatchCardList match={match} isNew={match.id === newMatchId} />
-            </motion.div>
+              {col.field ? (
+                <button
+                  onClick={() => onSort(col.field!)}
+                  className="inline-flex items-center gap-0.5 text-[9px] font-medium text-[#AAAAAA] uppercase tracking-[1.5px] hover:text-[#525252] hover:underline underline-offset-2 cursor-pointer transition-[color] duration-200"
+                >
+                  {col.label}
+                  <SortIcon field={col.field} sortField={sortField} sortDir={sortDir} />
+                </button>
+              ) : (
+                <span className="text-[9px] font-medium text-[#AAAAAA] uppercase tracking-[1.5px]">
+                  {col.label}
+                </span>
+              )}
+            </div>
           ))}
-        </motion.div>
-      )}
-    </AnimatePresence>
+        </div>
+        {/* Rows — no per-item entrance tween. Content must never depend on an
+            animation frame to become visible; PageTransition already carries
+            the route-level entrance. */}
+        <div className="border-t border-[#F3F3F3]">
+          {matches.map((match) => (
+            <MatchCardList key={match.id} match={match} isNew={match.id === newMatchId} />
+          ))}
+        </div>
+      </div>
+    </>
   );
 }

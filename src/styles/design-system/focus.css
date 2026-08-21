@@ -1,0 +1,28 @@
+/* Advantage DS v2 — focus visibility.
+
+   Focus visibility is a floor, not a per-component opt-in.
+
+   The reset leaves `outline: none` on everything, so any control that did not
+   explicitly add a ring back was invisible to keyboard users. Measured on the
+   schedule's action links, which reported `outlineStyle: "none"` and
+   `boxShadow: "none"` while focused — WCAG 2.4.7 (AA). It fails silently:
+   nothing looks wrong unless you navigate by keyboard, which is exactly why it
+   survived review.
+
+   `:where()` keeps specificity at 0, so this is a default any component can
+   still override, never a rule that fights one. `advButton()` already sets the
+   same ring; this simply stops every hand-rolled control from having to
+   remember. */
+:where(
+  a[href],
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea,
+  summary,
+  [tabindex]:not([tabindex="-1"])
+):focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}

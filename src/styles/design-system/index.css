@@ -1,0 +1,34 @@
+/* Advantage Design System v2 — token layer.
+ *
+ * Imported from the Claude Design project "Advantage Design System v2"
+ * (932d1406-360f-4a6e-8617-5a3c600ecb67), which was itself rebuilt from this
+ * codebase on the splitstep-integration branch. So this is not a foreign system
+ * arriving — it is the product's own visual language, formalized, plus a dark
+ * scope the app never had.
+ *
+ * ── This layer changes nothing that currently renders ───────────────────────
+ * Every token name was checked against globals.css before import. The colour
+ * and spacing files collide with nothing and are verbatim. effects.css and
+ * typography.css are adapted, each documenting exactly what was left out and
+ * why — the short version is that three shadow values and both font stacks
+ * WOULD have collided, and importing them blindly would have restyled cards,
+ * tooltips and every typeface in the product.
+ *
+ * globals.css keeps its shadcn-shaped --color-* set and its keyframes. Migrate
+ * components onto these names deliberately, one surface at a time. A bulk
+ * find-and-replace is how a redesign turns into an outage.
+ *
+ * Not imported: tokens/fonts.css (next/font already loads both families) and
+ * tokens/base.css (globals.css owns body/anchor/::selection resets).
+ *
+ * Full documentation: DESIGN.md · agent entry point:
+ * .skills/advantage-analytics-design/SKILL.md
+ */
+@import "./colors.css";
+@import "./typography.css";
+@import "./spacing.css";
+@import "./effects.css";
+/* Not from the design project — added here because the audit found the reset
+   leaves focused controls with no visible indicator at all. Last, so it sees
+   --focus-ring. */
+@import "./focus.css";

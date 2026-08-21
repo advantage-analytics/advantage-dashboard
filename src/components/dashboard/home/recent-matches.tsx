@@ -143,6 +143,20 @@ export default function RecentMatches({ event, isNewEvent = false }: RecentMatch
   const seenIdsRef = useRef<Set<string> | null>(null);
   const shouldReduceMotion = useReducedMotion();
 
+  // Which rows arrived since the last commit, so they can animate in once.
+  //
+  // This deliberately reads a ref during render (react-hooks/refs). The value
+  // needed is the set as of the PREVIOUS commit, and it must survive into the
+  // render that is actually committed. React's "adjust state during render"
+  // pattern cannot express that: calling a setter during render discards the
+  // in-progress output, so the re-render would already see the updated set and
+  // the highlight would never appear. Moving the diff into an effect instead
+  // costs an extra render and shifts when the animation starts.
+  //
+  // Safe in practice because seenIdsRef only changes when event.matches
+  // changes (see the effect below), so repeat renders in between are
+  // idempotent. Revisit if this component is ever put under Suspense or
+  // offscreen rendering.
   const newIds = new Set<string>();
   if (seenIdsRef.current === null) {
     if (isNewEvent) {
@@ -150,6 +164,7 @@ export default function RecentMatches({ event, isNewEvent = false }: RecentMatch
     }
   } else {
     for (const m of event.matches) {
+      // eslint-disable-next-line react-hooks/refs -- see note above
       if (!seenIdsRef.current.has(m.id)) newIds.add(m.id);
     }
   }

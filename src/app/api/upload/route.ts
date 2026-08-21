@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import {
   createUploadService,
-  getProviderStrategy,
+  getImportProviderStrategy,
   isProviderSupported,
   ProviderId,
 } from '@/lib/services/upload';
@@ -86,8 +86,21 @@ export async function POST(
       );
     }
 
-    // 5. Get provider strategy and validate file
-    const strategy = getProviderStrategy(providerId as ProviderId);
+    // 5. Get provider strategy and validate file. This route handles parseable
+    //    files only — a processing provider's video never comes through here,
+    //    so getImportProviderStrategy throwing is the correct outcome.
+    let strategy;
+    try {
+      strategy = getImportProviderStrategy(providerId as ProviderId);
+    } catch (err) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: err instanceof Error ? err.message : 'Unsupported provider',
+        },
+        { status: 400 }
+      );
+    }
     const validationResult = strategy.validateFile(file);
 
     if (!validationResult.success) {

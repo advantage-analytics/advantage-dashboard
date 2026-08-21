@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { stripe } from "@/lib/stripe/client";
 import { STRIPE_CONFIG } from "@/lib/stripe/config";
-import { PRO_PLAN } from "@/lib/user/plan";
+import { isProPlan } from "@/lib/user/roles";
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (userData?.plan === PRO_PLAN) {
+    if (isProPlan(userData?.plan)) {
       return NextResponse.json(
         { error: "You already have the Pro plan" },
         { status: 400 }
@@ -61,8 +61,8 @@ export async function POST(request: NextRequest) {
             "Thank you for upgrading to Pro! You'll get unlimited access to all features.",
         },
       },
-      success_url: `${baseUrl}/dashboard/settings/subscription?success=true`,
-      cancel_url: `${baseUrl}/dashboard/settings/subscription?canceled=true`,
+      success_url: `${baseUrl}/dashboard/settings/plan?success=true`,
+      cancel_url: `${baseUrl}/dashboard/settings/plan?canceled=true`,
       invoice_creation: {
         enabled: true,
       },

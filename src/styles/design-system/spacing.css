@@ -1,0 +1,35 @@
+/* Advantage DS v2 — spacing + radii. Spacing is two-tier (review P2):
+   the 4px-grid steps are LAYOUT spacing; half-steps 2/6/10 are fenced as
+   component-internal only (label→input, toggle→label) — never between
+   elements on a page.
+
+   IMPORTED VERBATIM. No name here collides with globals.css. */
+:root{
+  /* Component-internal half-steps — never layout */
+  --space-0-5:2px;
+  --space-1-5:6px;
+  --space-2-5:10px;
+  /* Layout grid */
+  --space-1:4px;
+  --space-2:8px;
+  --space-3:12px;
+  --space-4:16px;
+  --space-5:20px;
+  --space-6:24px;
+  --space-8:32px;
+  --space-10:40px;
+  /* Radii — six shapes (review R2: 10→12, 16→14), nothing else */
+  --radius-cell:4px;
+  --radius-button:6px;
+  --radius-element:8px;
+  --radius-dropdown:12px;
+  --radius-card:14px;
+  --radius-pill:9999px;
+  /* Legacy aliases */
+  --radius-score-card:var(--radius-dropdown);
+  --radius-modal:var(--radius-card);
+  /* Standard paddings */
+  --pad-card:20px;
+  --pad-page-x:32px;
+  --pad-page-y:40px;
+}

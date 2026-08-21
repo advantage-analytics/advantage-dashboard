@@ -1,31 +1,110 @@
 import Image from "next/image";
 import Link from "next/link";
+import { Check, Eye, EyeOff, Minus, UserCheck } from "lucide-react";
 import { HelpToc } from "./help-toc";
 import { Kbd } from "@/components/ui/kbd";
+import { ANALYSIS_LABEL } from "@/lib/data/match-analysis";
+import { SUPPORT_EMAIL } from "@/lib/constants";
 
-const SUPPORT_EMAIL = "team@advantage-analytics.com";
 const SWINGVISION_TROUBLESHOOTING_URL =
   "https://support.swingvision.com/hc/en-us/articles/360058475731";
 
-const eyebrowClass =
-  "text-[10px] font-medium text-[var(--color-ink-400)] uppercase tracking-[2.5px]";
+/**
+ * The help centre.
+ *
+ * Round 4 gives it the shape of the settings pages beside it — sticky rail on
+ * the left, one 660px column of content — and two topics it never had:
+ * "Getting started" (there are two ways a match gets in, and nothing said so)
+ * and "Teams" (the privacy question a player asks first).
+ *
+ * Every status name and shortcut here is read from the app's own vocabulary
+ * rather than retyped. A help page that describes a key binding the app does
+ * not have is worse than no help page — it was claiming ⌘B toggled the sidebar,
+ * which has been ⌘\ since the rail took the toggle over.
+ */
+
 const topicHeadingClass =
-  "font-light text-[28px] sm:text-[32px] text-[var(--color-ink-900)] tracking-[-0.5px] leading-[38px]";
-const stepHeadingClass =
-  "font-light text-[20px] sm:text-[22px] text-[var(--color-ink-900)] tracking-[-0.3px] leading-[28px]";
-const groupHeadingClass =
-  "text-[11px] font-medium text-[var(--color-ink-500)] uppercase tracking-[1.8px]";
-const bodyClass = "text-[14px] leading-[1.7] text-[var(--color-ink-700)]";
-const subBodyClass = "text-[13px] leading-[1.65] text-[var(--color-ink-700)]";
+  "text-[22px] font-light leading-[28px] tracking-[-0.3px] text-[var(--ink-900)]";
+const blockLabelClass = "text-[12px] font-medium text-[var(--ink-900)]";
+const proseClass = "text-[12px] leading-[1.65] text-[var(--ink-700)]";
 const linkClass =
-  "text-[var(--color-blue)] underline decoration-[var(--color-blue)]/30 underline-offset-2 transition-colors hover:decoration-[var(--color-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-blue-ring-40)] focus-visible:rounded-sm";
-const sectionDividerClass =
-  "pt-10 border-t border-[var(--color-ink-100)]";
-const topicDividerClass =
-  "pt-16 mt-4 border-t border-[var(--color-ink-200)]";
+  "text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)] focus-visible:rounded-sm";
+const blockDividerClass = "border-t border-[var(--border-hairline)] pt-[22px]";
 
 // Anchor offset accounts for the 44px sticky dashboard header and breathing room.
 const sectionScrollMt = "scroll-mt-[88px] lg:scroll-mt-[72px]";
+
+/**
+ * The statuses a video passes through, named by the app rather than retyped.
+ *
+ * Read out of `ANALYSIS_LABEL`, so renaming a status renames it here too. Not
+ * called `PIPELINE_STAGES` on purpose — `match-analysis.ts` exports a constant
+ * by that name and it is a different thing: the weighted segments of the
+ * progress bar, four of them, sized by how long each takes.
+ */
+const ANALYSIS_JOURNEY: { label: string; tone: StatusTone }[] = [
+  { label: ANALYSIS_LABEL.uploading, tone: "blue" },
+  { label: ANALYSIS_LABEL.queued, tone: "neutral" },
+  { label: ANALYSIS_LABEL.processing, tone: "blue" },
+  { label: ANALYSIS_LABEL.deriving, tone: "blue" },
+  { label: ANALYSIS_LABEL.completed, tone: "win" },
+];
+
+/** Tones from the design system's StatusChip: blue in flight, win at the end. */
+type StatusTone = "blue" | "neutral" | "win";
+
+const STATUS_TONE: Record<StatusTone, string> = {
+  blue: "text-[var(--blue)]",
+  neutral: "text-[var(--ink-500)]",
+  win: "text-[var(--success)]",
+};
+
+const INTELLIGENCE_REQUIREMENTS = [
+  "Singles only",
+  "1080p or higher",
+  "30 fps or higher",
+  "Trim covers complete games",
+];
+
+const CONFIDENCE_LEVELS: { level: string; meaning: string }[] = [
+  {
+    level: "High",
+    meaning: "Derived score matches yours — nothing to note.",
+  },
+  {
+    level: "Medium",
+    meaning: "One quiet line on the report: reconciled within one game.",
+  },
+  {
+    level: "Low",
+    meaning:
+      "Stats labeled as estimates, plus a “Review score” path to correct and re-run.",
+  },
+];
+
+const TEAM_VISIBILITY: {
+  icon: typeof Eye;
+  title: string;
+  detail: string;
+}[] = [
+  {
+    icon: Eye,
+    title: "Matches uploaded in the team workspace",
+    detail:
+      "Visible to your coach and — if the coach allows it — your teammates.",
+  },
+  {
+    icon: EyeOff,
+    title: "Matches uploaded in your personal workspace",
+    detail: "Private. You share them one at a time, and you can unshare.",
+  },
+  {
+    icon: UserCheck,
+    title: "Your profile as your coach sees it",
+    detail:
+      "A read-only mirror of your own pages — no separate coach-only scoring.",
+  },
+];
 
 type Shortcut = { keys: string[]; action: string; note?: string };
 type ShortcutGroup = { label: string; items: Shortcut[] };
@@ -36,8 +115,17 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
     items: [
       { keys: ["⌘", "K"], action: "Open the search command palette" },
       { keys: ["/"], action: "Focus search from anywhere outside an input" },
-      { keys: ["⌘", "B"], action: "Toggle the sidebar" },
-      { keys: ["⌘", "U"], action: "Open the upload-match modal" },
+      {
+        keys: ["⌘", "\\"],
+        // The rail owns the toggle now, and so does this binding. This entry
+        // said ⌘B for as long as the toggle lived in the header.
+        action: "Pin or unpin the sidebar",
+      },
+      {
+        keys: ["⌘", "U"],
+        action: "Start a new match",
+        note: "On pages that show the Create Match button.",
+      },
       { keys: ["esc"], action: "Close the active modal, dropdown, or palette" },
       {
         keys: ["←"],
@@ -69,7 +157,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
   },
   {
     label: "Settings",
-    items: [{ keys: ["⌘", "S"], action: "Save profile changes" }],
+    items: [{ keys: ["⌘", "S"], action: "Save changes on a settings page" }],
   },
 ];
 
@@ -208,66 +296,369 @@ const GLOSSARY: GlossaryGroup[] = [
 
 export default function HelpCenterPage() {
   return (
-    <div className="flex-1 w-full min-h-screen bg-[var(--color-surface-card)]">
-      <div className="pl-12 pr-8 py-10">
-        {/* Page header — full width above the two-column body */}
-        <header id="top" className="flex flex-col gap-3 max-w-[760px] scroll-mt-[88px] lg:scroll-mt-[72px]">
-          <p className={eyebrowClass}>Help</p>
-          <h1 className="font-light text-[34px] sm:text-[40px] text-[var(--color-ink-900)] tracking-[-0.6px] leading-[46px]">
-            Help &amp; reference
-          </h1>
-          <p className="text-[14px] text-[var(--color-ink-700)] leading-[1.65] max-w-xl">
-            A quick reference for moving around faster, getting your data in,
-            and understanding what the numbers mean.
+    <div className="min-h-screen w-full flex-1 bg-[var(--surface-card)]">
+      {/* Same centred container as the settings pages — see the note in
+          settings/layout.tsx. Help's rail is 200px, so the block is ~908px and
+          fits the same 960px measure. */}
+      <div className="mx-auto flex w-full max-w-[1032px] flex-col gap-9 px-6 py-8 sm:px-8 sm:py-10">
+        <header
+          id="top"
+          className={`flex flex-col gap-3 ${sectionScrollMt}`}
+        >
+          <p className="eyebrow">Help</p>
+          <h1 className="text-display">Help center</h1>
+          <p className="text-body-sm max-w-[520px]">
+            Short answers, real definitions, and a person at the end:{" "}
+            <a
+              href={`mailto:${SUPPORT_EMAIL}?subject=Help%20Center%20question`}
+              className={linkClass}
+            >
+              {SUPPORT_EMAIL}
+            </a>
+            .
           </p>
         </header>
 
-        {/* Body — article + sticky right-rail TOC on lg+. Mobile gets a sticky pill bar from HelpToc. */}
-        <div className="mt-10 flex flex-col lg:flex-row gap-12 lg:gap-16 items-start">
-          <article className="max-w-[760px] flex-1 min-w-0 flex flex-col">
-            {/* ═════════════ TOPIC 1 — Keyboard shortcuts ═════════════ */}
+        <div className="flex flex-col items-start gap-12 lg:flex-row">
+          <HelpToc />
+
+          <article className="flex min-w-0 max-w-[660px] flex-1 flex-col gap-14">
+            {/* ══════════ Getting started — two sources ══════════ */}
             <section
-              id="shortcuts"
-              className={`flex flex-col gap-12 ${sectionScrollMt}`}
+              id="getting-started"
+              className={`flex flex-col gap-[26px] ${sectionScrollMt}`}
             >
-              <div className="flex flex-col gap-3">
-                <h2 className={topicHeadingClass}>Keyboard shortcuts</h2>
-                <p className="text-[14px] text-[var(--color-ink-700)] leading-[1.65] max-w-xl">
-                  Move through Advantage without leaving the keyboard.
-                </p>
-                <p className={`${subBodyClass} mt-1`}>
-                  Use Ctrl instead of ⌘ on Windows and Linux.
+              <h2 className={topicHeadingClass}>Getting started — two sources</h2>
+              <p className={`${proseClass} max-w-[560px]`}>
+                A match gets into Advantage one of two ways. Both end in the
+                same library and the same report — pick by what you have, not by
+                which is “better”.
+              </p>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <SourceCard
+                  title="You have video"
+                  body="Advantage Intelligence tracks every shot from your own footage. Singles, 1080p+, 30fps+."
+                  cost="Costs analysis hours · takes time · richest report"
+                />
+                <SourceCard
+                  title="You have a SwingVision export"
+                  body="Drop the .xlsx. Stats appear as soon as it parses. Singles and doubles."
+                  cost="No hours used · instant · stats only, no video"
+                />
+              </div>
+
+              <div className={`${blockDividerClass} flex flex-col gap-2.5`}>
+                <span className={blockLabelClass}>What you get either way</span>
+                <div className="flex flex-col">
+                  <FeatureRow>
+                    Serve, return, rally and break-point breakdowns
+                  </FeatureRow>
+                  <FeatureRow>
+                    Trends across your season, and Ask over your own matches
+                  </FeatureRow>
+                  <FeatureRow included={false}>
+                    Shot-by-shot video review — Advantage Intelligence only
+                  </FeatureRow>
+                </div>
+              </div>
+
+              <div
+                className={`${blockDividerClass} flex flex-wrap items-center gap-4`}
+              >
+                <Link
+                  href="/dashboard/matches/new"
+                  className={`text-[12px] font-medium ${linkClass}`}
+                >
+                  Upload your first match →
+                </Link>
+                <span className="text-[11px] text-[var(--ink-500)]">
+                  or press <Kbd size="sm">⌘</Kbd> <Kbd size="sm">U</Kbd> from the
+                  matches list
+                </span>
+              </div>
+            </section>
+
+            {/* ══════════ Advantage Intelligence ══════════ */}
+            <section
+              id="advantage-intelligence"
+              className={`flex flex-col gap-[26px] ${sectionScrollMt}`}
+            >
+              <h2 className={topicHeadingClass}>Advantage Intelligence</h2>
+
+              <div className="flex flex-col gap-2.5">
+                <span className={blockLabelClass}>What it needs</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {INTELLIGENCE_REQUIREMENTS.map((requirement) => (
+                    <span
+                      key={requirement}
+                      className="rounded-full bg-[var(--surface-subtle)] px-2.5 py-[3px] text-[11px] text-[var(--ink-700)]"
+                    >
+                      {requirement}
+                    </span>
+                  ))}
+                </div>
+                <p className={proseClass}>
+                  Files are checked when you pick them — a 720p video is
+                  rejected before a single byte uploads, with the fix spelled
+                  out: Phone settings → Camera → Record at 1080p/30 or higher.
+                  Doubles matches import via SwingVision instead.
                 </p>
               </div>
 
-              {SHORTCUT_GROUPS.map((group) => (
-                <div
-                  key={group.label}
-                  className={`${sectionDividerClass} flex flex-col gap-4`}
-                >
-                  <h3 className={groupHeadingClass}>{group.label}</h3>
-                  <dl className="flex flex-col">
-                    {group.items.map((shortcut, idx) => (
-                      <div
-                        key={`${group.label}-${idx}`}
-                        className={`
-                          flex items-center justify-between gap-6 py-3.5
-                          ${idx > 0 ? "border-t border-[var(--color-ink-100)]/60" : ""}
-                        `}
+              <div className={`${blockDividerClass} flex flex-col gap-2.5`}>
+                <span className={blockLabelClass}>After you submit</span>
+                {/* Dot + label, no container — the design system's StatusChip
+                    is "quiet inline dot + sentence-case text", and a row of
+                    filled pills would read as five buttons. */}
+                <ol className="flex flex-wrap items-center gap-2.5">
+                  {ANALYSIS_JOURNEY.map((stage, index) => (
+                    <li key={stage.label} className="flex items-center gap-2.5">
+                      <span
+                        className={`inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] leading-none ${STATUS_TONE[stage.tone]}`}
                       >
-                        <dd className="flex-1 min-w-0 flex flex-col gap-0.5">
-                          <span className="text-[14px] text-[var(--color-ink-900)] leading-[1.45]">
+                        <span
+                          aria-hidden="true"
+                          className="size-[5px] shrink-0 rounded-full bg-current"
+                        />
+                        {stage.label}
+                      </span>
+                      {index < ANALYSIS_JOURNEY.length - 1 && (
+                        <span
+                          aria-hidden="true"
+                          className="text-[11px] text-[var(--ink-300)]"
+                        >
+                          →
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+                <p className={proseClass}>
+                  There is no fixed turnaround. Close the tab once the upload
+                  finishes — we email you when it is analyzed and at any
+                  failure. The video is watchable the moment it is processed,
+                  even while stats are finalizing.
+                </p>
+              </div>
+
+              <div className={`${blockDividerClass} flex flex-col gap-1`}>
+                <span className={`${blockLabelClass} pb-1.5`}>
+                  Reading confidence
+                </span>
+                {CONFIDENCE_LEVELS.map((row) => (
+                  <div
+                    key={row.level}
+                    className="flex items-start gap-3 border-b border-[var(--border-hairline)] py-2 last:border-b-0"
+                  >
+                    <span className="w-[60px] shrink-0 text-[11px] text-[var(--ink-600)]">
+                      {row.level}
+                    </span>
+                    <span className="text-[12px] leading-[1.5] text-[var(--ink-700)]">
+                      {row.meaning}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <p className={`${blockDividerClass} ${proseClass}`}>
+                Analysis time is metered per month and shown on{" "}
+                <Link href="/dashboard/settings/usage" className={linkClass}>
+                  Settings → Usage
+                </Link>
+                . Hours reserve when you submit and reconcile when the job
+                finishes; a failed job gives them back.
+              </p>
+            </section>
+
+            {/* ══════════ Importing from SwingVision ══════════ */}
+            <section
+              id="swingvision"
+              className={`flex flex-col gap-[26px] ${sectionScrollMt}`}
+            >
+              <h2 className={topicHeadingClass}>Importing from SwingVision</h2>
+              <p className={`${proseClass} max-w-[560px]`}>
+                Exporting takes about a minute and costs no analysis hours. You
+                need a SwingVision Pro account to export, and at least one
+                complete match uploaded there.
+              </p>
+
+              <div className="flex flex-col gap-5">
+                <Step number="01" title="Open the match you want">
+                  In SwingVision, go to the match and scroll to the top section
+                  of the match page.
+                </Step>
+                <Step number="02" title="Export the data">
+                  Click{" "}
+                  <strong className="font-medium text-[var(--ink-900)]">
+                    Export Data
+                  </strong>
+                  . The file should contain
+                  six sheets:
+                  <span className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1">
+                    {["Settings", "Shots", "Points", "Games", "Sets", "Stats"].map(
+                      (sheet) => (
+                        <span key={sheet} className="flex items-center gap-2">
+                          <span
+                            aria-hidden="true"
+                            className="size-1 rounded-full bg-[var(--ink-300)]"
+                          />
+                          {sheet}
+                        </span>
+                      ),
+                    )}
+                  </span>
+                </Step>
+                <Step number="03" title="Drop the .xlsx into Advantage">
+                  Start a{" "}
+                  <Link href="/dashboard/matches/new" className={linkClass}>
+                    new match
+                  </Link>
+                  , pick SwingVision, and upload the file. Stats appear as soon
+                  as it parses.
+                </Step>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <figure className="flex flex-col gap-2">
+                  <div className="overflow-hidden rounded-[8px] border border-[var(--border-card)] bg-[var(--surface-muted)]">
+                    <Image
+                      src="/swingvision1.png"
+                      alt="SwingVision match page showing the Export Data option"
+                      width={505}
+                      height={350}
+                      className="h-auto w-full"
+                    />
+                  </div>
+                  <figcaption className="text-[11px] leading-[1.5] text-[var(--ink-500)]">
+                    Open the match you want to export.
+                  </figcaption>
+                </figure>
+                <figure className="flex flex-col gap-2">
+                  <div className="overflow-hidden rounded-[8px] border border-[var(--border-card)] bg-[var(--surface-muted)]">
+                    <Image
+                      src="/swingvision2.png"
+                      alt="SwingVision export confirmation showing the included sheets"
+                      width={505}
+                      height={350}
+                      className="h-auto w-full"
+                    />
+                  </div>
+                  <figcaption className="text-[11px] leading-[1.5] text-[var(--ink-500)]">
+                    Confirm the export and save the .xlsx file.
+                  </figcaption>
+                </figure>
+              </div>
+
+              <p className={`${blockDividerClass} ${proseClass}`}>
+                Missing sheets or an incomplete file? Follow SwingVision&apos;s
+                own{" "}
+                <a
+                  href={SWINGVISION_TROUBLESHOOTING_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={linkClass}
+                >
+                  troubleshooting guide
+                </a>
+                , then try the export again.
+              </p>
+            </section>
+
+            {/* ══════════ Teams ══════════ */}
+            <section
+              id="teams"
+              className={`flex flex-col gap-[26px] ${sectionScrollMt}`}
+            >
+              <h2 className={topicHeadingClass}>Teams</h2>
+              <p className={`${proseClass} max-w-[560px]`}>
+                Joining a program adds a second workspace to your account. Your
+                personal matches stay yours — the two never merge on their own.
+              </p>
+
+              <div className="flex flex-col gap-2.5">
+                <span className={blockLabelClass}>
+                  What the program can see
+                </span>
+                <div className="flex flex-col">
+                  {TEAM_VISIBILITY.map((row) => {
+                    const Icon = row.icon;
+                    return (
+                      <div
+                        key={row.title}
+                        className="flex items-start gap-3 border-b border-[var(--border-hairline)] py-[11px] last:border-b-0"
+                      >
+                        <Icon
+                          className="mt-0.5 size-[13px] shrink-0 text-[var(--ink-600)]"
+                          strokeWidth={1.5}
+                          aria-hidden="true"
+                        />
+                        <div>
+                          <div className="text-[12px] text-[var(--ink-900)]">
+                            {row.title}
+                          </div>
+                          <div className="mt-0.5 text-[11px] leading-[1.5] text-[var(--ink-500)]">
+                            {row.detail}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className={`${blockDividerClass} flex flex-col gap-2.5`}>
+                <span className={blockLabelClass}>Uploads on your behalf</span>
+                <p className={proseClass}>
+                  Your coach — and, if they turn it on, your teammates — can add
+                  a team match for you. The match card always names who added
+                  it. Team uploads draw on the program&apos;s shared hours,
+                  never your personal allowance.
+                </p>
+              </div>
+
+              <div className={`${blockDividerClass} flex flex-col gap-2.5`}>
+                <span className={blockLabelClass}>Leaving a program</span>
+                <p className={proseClass}>
+                  Team matches stay with the program; your personal library
+                  leaves with you. Ask your coach to remove you, or contact
+                  support.
+                </p>
+              </div>
+            </section>
+
+            {/* ══════════ Keyboard shortcuts ══════════ */}
+            <section
+              id="shortcuts"
+              className={`flex flex-col gap-[26px] ${sectionScrollMt}`}
+            >
+              <h2 className={topicHeadingClass}>Keyboard shortcuts</h2>
+              <p className={`${proseClass} max-w-[560px]`}>
+                Use Ctrl instead of ⌘ on Windows and Linux.
+              </p>
+
+              {SHORTCUT_GROUPS.map((group) => (
+                <div key={group.label} className="flex flex-col gap-2.5">
+                  <span className={blockLabelClass}>{group.label}</span>
+                  <dl className="flex flex-col">
+                    {group.items.map((shortcut) => (
+                      <div
+                        key={shortcut.action}
+                        className="flex items-center justify-between gap-6 border-b border-[var(--border-hairline)] py-2.5 last:border-b-0"
+                      >
+                        <dd className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <span className="text-[12px] leading-[1.45] text-[var(--ink-900)]">
                             {shortcut.action}
                           </span>
                           {shortcut.note && (
-                            <span className="text-[12px] text-[var(--color-ink-500)] leading-[1.5]">
+                            <span className="text-[11px] leading-[1.5] text-[var(--ink-500)]">
                               {shortcut.note}
                             </span>
                           )}
                         </dd>
-                        <dt className="flex items-center gap-1 flex-shrink-0">
-                          {shortcut.keys.map((key, keyIdx) => (
-                            <Kbd key={keyIdx}>{key}</Kbd>
+                        <dt className="flex shrink-0 items-center gap-1">
+                          {shortcut.keys.map((key) => (
+                            <Kbd key={key}>{key}</Kbd>
                           ))}
                         </dt>
                       </div>
@@ -277,209 +668,42 @@ export default function HelpCenterPage() {
               ))}
             </section>
 
-            {/* ═════════════ TOPIC 2 — Upload SwingVision data ═════════════ */}
-            <section
-              id="upload"
-              className={`${topicDividerClass} flex flex-col gap-12 ${sectionScrollMt}`}
-            >
-              <div className="flex flex-col gap-3">
-                <h2 className={topicHeadingClass}>Upload your SwingVision data</h2>
-                <p className="text-[14px] text-[var(--color-ink-700)] leading-[1.65] max-w-xl">
-                  A step-by-step guide to exporting your match data from
-                  SwingVision and bringing it into Advantage.
-                </p>
-              </div>
-
-              <div id="step-1" className={`${sectionDividerClass} flex flex-col gap-3`}>
-                <p className={eyebrowClass}>Step 01</p>
-                <h3 className={stepHeadingClass}>Log in to your SwingVision account</h3>
-                <p className={bodyClass}>
-                  You must be a{" "}
-                  <strong className="font-medium text-[var(--color-ink-900)]">
-                    Pro user
-                  </strong>{" "}
-                  to export your data. Make sure your account has the necessary
-                  subscription level before proceeding.
-                </p>
-              </div>
-
-              <div id="step-2" className={`${sectionDividerClass} flex flex-col gap-3`}>
-                <p className={eyebrowClass}>Step 02</p>
-                <h3 className={stepHeadingClass}>Upload a match</h3>
-                <p className={bodyClass}>
-                  Advantage currently supports importing match-level data only.
-                  Make sure you have uploaded{" "}
-                  <strong className="font-medium text-[var(--color-ink-900)]">
-                    at least one complete match
-                  </strong>{" "}
-                  to your SwingVision account.
-                </p>
-              </div>
-
-              <div id="step-3" className={`${sectionDividerClass} flex flex-col gap-5`}>
-                <div className="flex flex-col gap-3">
-                  <p className={eyebrowClass}>Step 03</p>
-                  <h3 className={stepHeadingClass}>Export the data</h3>
-                  <ol
-                    className={`${bodyClass} list-decimal pl-5 space-y-1.5 marker:text-[var(--color-ink-400)]`}
-                  >
-                    <li>Navigate to the match you want to export.</li>
-                    <li>Go to the top section of the match page.</li>
-                    <li>
-                      Click{" "}
-                      <strong className="font-medium text-[var(--color-ink-900)]">
-                        Export Data
-                      </strong>
-                      .
-                    </li>
-                  </ol>
-                  <p className={`${bodyClass} pt-1`}>
-                    Your exported file should include these sheets:
-                  </p>
-                  <ul
-                    className={`${bodyClass} grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1 pl-1`}
-                  >
-                    {["Settings", "Shots", "Points", "Games", "Sets", "Stats"].map(
-                      (sheet) => (
-                        <li key={sheet} className="flex items-center gap-2">
-                          <span
-                            aria-hidden="true"
-                            className="size-1 rounded-full bg-[var(--color-ink-300)]"
-                          />
-                          {sheet}
-                        </li>
-                      ),
-                    )}
-                  </ul>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                  <figure className="flex flex-col gap-2">
-                    <div className="overflow-hidden rounded-[6px] border border-[var(--color-ink-100)] bg-[var(--color-surface-muted)]">
-                      <Image
-                        src="/swingvision1.png"
-                        alt="SwingVision match page showing the Export Data option"
-                        width={505}
-                        height={350}
-                        className="w-full h-auto"
-                      />
-                    </div>
-                    <figcaption className="text-[11px] text-[var(--color-ink-500)] leading-[1.5]">
-                      Open the match you want to export.
-                    </figcaption>
-                  </figure>
-                  <figure className="flex flex-col gap-2">
-                    <div className="overflow-hidden rounded-[6px] border border-[var(--color-ink-100)] bg-[var(--color-surface-muted)]">
-                      <Image
-                        src="/swingvision2.png"
-                        alt="SwingVision export confirmation showing the included sheets"
-                        width={505}
-                        height={350}
-                        className="w-full h-auto"
-                      />
-                    </div>
-                    <figcaption className="text-[11px] text-[var(--color-ink-500)] leading-[1.5]">
-                      Confirm the export and save the .xlsx file.
-                    </figcaption>
-                  </figure>
-                </div>
-              </div>
-
-              <div id="step-4" className={`${sectionDividerClass} flex flex-col gap-3`}>
-                <p className={eyebrowClass}>Step 04</p>
-                <h3 className={stepHeadingClass}>Troubleshoot any issues</h3>
-                <p className={bodyClass}>
-                  If your exported data is missing sheets or seems incomplete,
-                  follow SwingVision&apos;s official troubleshooting guide:{" "}
-                  <a
-                    href={SWINGVISION_TROUBLESHOOTING_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={linkClass}
-                  >
-                    Troubleshoot SwingVision export issues
-                  </a>
-                  .
-                </p>
-              </div>
-
-              <div id="step-5" className={`${sectionDividerClass} flex flex-col gap-3`}>
-                <p className={eyebrowClass}>Step 05</p>
-                <h3 className={stepHeadingClass}>Import your data into Advantage</h3>
-                <p className={bodyClass}>
-                  Once your data is exported and verified, head to your{" "}
-                  <Link href="/dashboard" className={linkClass}>
-                    dashboard
-                  </Link>{" "}
-                  and upload the file to start generating advanced analytics for
-                  your match.
-                </p>
-              </div>
-            </section>
-
-            {/* ═════════════ TOPIC 3 — Glossary ═════════════ */}
+            {/* ══════════ Glossary ══════════ */}
             <section
               id="glossary"
-              className={`${topicDividerClass} flex flex-col gap-12 ${sectionScrollMt}`}
+              className={`flex flex-col gap-[26px] ${sectionScrollMt}`}
             >
-              <div className="flex flex-col gap-3">
-                <h2 className={topicHeadingClass}>Glossary</h2>
-                <p className="text-[14px] text-[var(--color-ink-700)] leading-[1.65] max-w-xl">
-                  What every stat, zone, and rating means in Advantage.
-                </p>
-                <p className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-1 text-[12px] leading-[1.5] text-[var(--color-ink-700)]">
-                  <span className="text-[var(--color-ink-500)]">Jump to</span>
-                  {GLOSSARY.map((group, idx) => (
-                    <span key={group.label} className="inline-flex items-center gap-1">
-                      <a
-                        href={`#${group.id}`}
-                        className="
-                          inline-flex items-center min-h-[28px] px-1 -mx-1 rounded-sm
-                          underline decoration-[var(--color-ink-300)] underline-offset-2
-                          text-[var(--color-ink-700)]
-                          transition-colors
-                          hover:text-[var(--color-ink-900)] hover:decoration-[var(--color-ink-500)]
-                          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-blue-ring-40)]
-                        "
-                      >
-                        {group.label}
-                      </a>
-                      {idx < GLOSSARY.length - 1 && (
-                        <span
-                          aria-hidden="true"
-                          className="text-[var(--color-ink-400)]"
-                        >
-                          ·
-                        </span>
-                      )}
-                    </span>
-                  ))}
-                </p>
-              </div>
+              <h2 className={topicHeadingClass}>Glossary</h2>
+              <p className={`${proseClass} max-w-[560px]`}>
+                What every stat, zone and rating means. The same definitions
+                power the hover cards on stat labels across the app — turn those
+                off in{" "}
+                <Link
+                  href="/dashboard/settings/preferences"
+                  className={linkClass}
+                >
+                  Preferences
+                </Link>
+                .
+              </p>
 
               {GLOSSARY.map((group) => (
                 <div
                   key={group.label}
-                  className={`${sectionDividerClass} flex flex-col gap-5 ${sectionScrollMt}`}
+                  id={group.id}
+                  className={`flex flex-col gap-2.5 ${sectionScrollMt}`}
                 >
-                  <h3 id={group.id} className={groupHeadingClass}>
-                    {group.label}
-                  </h3>
+                  <span className={blockLabelClass}>{group.label}</span>
                   <dl className="flex flex-col">
-                    {group.entries.map((entry, idx) => (
+                    {group.entries.map((entry) => (
                       <div
-                        key={`${group.label}-${idx}`}
-                        className={`
-                          grid grid-cols-1 sm:grid-cols-[200px_1fr] gap-x-8 gap-y-1 py-4
-                          ${idx > 0 ? "border-t border-[var(--color-ink-100)]/60" : ""}
-                        `}
+                        key={entry.term}
+                        className="grid grid-cols-1 gap-x-6 gap-y-1 border-b border-[var(--border-hairline)] py-3 last:border-b-0 sm:grid-cols-[180px_1fr]"
                       >
-                        <dt className="text-[13px] font-medium text-[var(--color-ink-900)] leading-[1.5]">
+                        <dt className="text-[12px] font-medium leading-[1.5] text-[var(--ink-900)]">
                           {entry.term}
                         </dt>
-                        <dd className={`${bodyClass} sm:pt-px`}>
-                          {entry.definition}
-                        </dd>
+                        <dd className={proseClass}>{entry.definition}</dd>
                       </div>
                     ))}
                   </dl>
@@ -487,43 +711,110 @@ export default function HelpCenterPage() {
               ))}
             </section>
 
-            {/* Back to top — quiet editorial affordance */}
-            <div className="mt-16 flex justify-end">
-              <a
-                href="#top"
-                className="
-                  inline-flex items-center gap-1.5 min-h-[44px] px-2 -mx-2 rounded-sm
-                  text-[13px] text-[var(--color-ink-700)]
-                  transition-colors
-                  hover:text-[var(--color-ink-900)]
-                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-blue-ring-40)]
-                "
-              >
-                <span aria-hidden="true">↑</span>
-                Back to top
-              </a>
-            </div>
-
-            {/* Footer — uses the lighter section divider; not a topic */}
-            <footer className={`${sectionDividerClass} mt-6 flex flex-col gap-3`}>
-              <p className={bodyClass}>
+            {/* ══════════ Contact support ══════════ */}
+            <section
+              id="support"
+              className={`flex flex-col gap-2.5 ${sectionScrollMt}`}
+            >
+              <h2 className={topicHeadingClass}>Contact support</h2>
+              <p className={proseClass}>
                 Still stuck?{" "}
                 <a
                   href={`mailto:${SUPPORT_EMAIL}?subject=Help%20Center%20question`}
                   className={linkClass}
                 >
-                  Email {SUPPORT_EMAIL}
-                </a>
-                .
+                  {SUPPORT_EMAIL}
+                </a>{" "}
+                — a person answers. Include the match you were looking at and
+                we can go straight to the job.
               </p>
-              <p className="text-[11px] text-[var(--color-ink-500)] leading-[1.5]">
+              <p className="text-[11px] leading-[1.5] text-[var(--ink-500)]">
                 By Clajerson Gimena, Founder
               </p>
-            </footer>
+              <a
+                href="#top"
+                className="mt-4 inline-flex w-fit items-center gap-1.5 text-[12px] text-[var(--ink-700)] transition-colors hover:text-[var(--ink-900)]"
+              >
+                <span aria-hidden="true">↑</span>
+                Back to top
+              </a>
+            </section>
           </article>
-
-          <HelpToc />
         </div>
+      </div>
+    </div>
+  );
+}
+
+function SourceCard({
+  title,
+  body,
+  cost,
+}: {
+  title: string;
+  body: string;
+  cost: string;
+}) {
+  return (
+    <div className="flex flex-col gap-2.5 rounded-[14px] border border-[var(--border-card)] p-[18px]">
+      <span className="text-[13px] font-medium text-[var(--ink-900)]">
+        {title}
+      </span>
+      <span className="text-[11px] leading-[1.6] text-[var(--ink-600)]">
+        {body}
+      </span>
+      <span aria-hidden="true" className="h-px bg-[var(--border-hairline)]" />
+      <span className="text-[11px] text-[var(--ink-600)]">{cost}</span>
+    </div>
+  );
+}
+
+/** A capability line. `included={false}` is the one thing a source does not do. */
+function FeatureRow({
+  children,
+  included = true,
+}: {
+  children: React.ReactNode;
+  included?: boolean;
+}) {
+  const Icon = included ? Check : Minus;
+  return (
+    <div className="flex items-center gap-3 border-b border-[var(--border-hairline)] py-2.5 last:border-b-0">
+      <Icon
+        className={`size-[13px] shrink-0 ${
+          included ? "text-[var(--ink-600)]" : "text-[var(--ink-400)]"
+        }`}
+        strokeWidth={2}
+        aria-hidden="true"
+      />
+      <span
+        className={`text-[12px] ${
+          included ? "text-[var(--ink-700)]" : "text-[var(--ink-600)]"
+        }`}
+      >
+        {children}
+      </span>
+    </div>
+  );
+}
+
+function Step({
+  number,
+  title,
+  children,
+}: {
+  number: string;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex gap-3.5">
+      <span className="mono mt-px w-[22px] shrink-0 text-[11px] text-[var(--ink-400)]">
+        {number}
+      </span>
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[13px] text-[var(--ink-900)]">{title}</span>
+        <span className={proseClass}>{children}</span>
       </div>
     </div>
   );

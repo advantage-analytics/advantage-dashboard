@@ -56,8 +56,18 @@ export function SettingsAlert({
 }: SettingsAlertProps): React.ReactElement {
   const config = alertConfig[type];
   const Icon = config.icon;
+  // Latest-value ref so the auto-dismiss timer isn't torn down and restarted
+  // every time the parent passes a new onDismiss identity.
+  //
+  // Written in an effect, not during render: mutating a ref while rendering is
+  // unsafe under concurrent rendering, where a render can be discarded or
+  // replayed (react-hooks/refs). This effect is declared before the timer
+  // effect below so the timer always observes the committed value; on first
+  // mount useRef's initial argument already holds it.
   const onDismissRef = useRef(onDismiss);
-  onDismissRef.current = onDismiss;
+  useEffect(() => {
+    onDismissRef.current = onDismiss;
+  });
 
   useEffect(() => {
     if (!onDismissRef.current || !AUTO_DISMISS_TYPES.includes(type)) return;

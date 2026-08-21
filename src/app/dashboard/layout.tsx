@@ -1,53 +1,57 @@
-"use client";
-
-import { useEffect } from "react";
-import { usePathname } from "next/navigation";
-import { Header } from "@/app/dashboard/header";
-import { AppSidebar } from "@/components/dashboard/app-sidebar";
-import { MobileGate } from "@/components/dashboard/mobile-gate";
-import { PageTransition } from "@/components/dashboard/page-transition";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { UnsavedChangesProvider } from "@/components/dashboard/settings/unsaved-changes-context";
+import { Suspense } from "react";
+import { redirect } from "next/navigation";
+import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import {
+  ActivityTrayLoader,
+  ActivityTrayFallback,
+} from "@/components/dashboard/activity/activity-tray-loader";
+import { WorkspaceProvider } from "@/components/dashboard/workspace-provider";
+import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { ToastProvider } from "@/components/dashboard/toast/toast-provider";
+import { UploadFailureListener } from "@/components/dashboard/toast/upload-failure-listener";
 
 /**
- * Dashboard Layout Component
+ * Dashboard layout.
  *
- * MODIFICATIONS MADE IN THIS SESSION:
- * 1. Added upload data cleanup when leaving the upload flow
- * 2. Clears localStorage data (selectedProvider, uploadFormData, uploadedFile) when navigating away from upload pages
- * 3. Ensures fresh start when returning to upload flow later
+ * A Server Component so the viewer's workspaces resolve once per request,
+ * before the shell renders — the sidebar's navigation depends on which kind of
+ * workspace is active, so resolving it client-side would flash the wrong nav.
+ * The interactive shell lives in `DashboardShell`.
+ *
+ * The workspace is the ONLY thing awaited here. The activity feed streams in
+ * behind a Suspense boundary: it is chrome for a closed popover, and awaiting
+ * it held up the sidebar, the header and the page content alike.
  */
-export default function Layout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
+export default async function Layout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const workspace = await getWorkspaceContext();
 
-  /**
-   * Clear upload data when leaving the upload flow
-   * MODIFICATION: Added to prevent upload data from persisting when browsing other parts of the site
-   * This ensures a clean slate when returning to the upload flow
-   */
-  useEffect(() => {
-    // Check if we're leaving the upload flow
-    if (!pathname.startsWith('/dashboard/upload')) {
-      localStorage.removeItem("selectedProvider");
-      localStorage.removeItem("uploadFormData");
-      localStorage.removeItem("uploadedFile");
-    }
-  }, [pathname]);
+  // Middleware refreshes the session; this covers the case where it has already
+  // expired by the time the layout renders. Checked before anything else is
+  // started, so a logged-out request pays for nothing it will discard.
+  if (!workspace) redirect("/login");
 
   return (
-    <UnsavedChangesProvider>
-      <SidebarProvider defaultOpen={false} style={{ "--sidebar-width": "240px" } as React.CSSProperties}>
-        <AppSidebar />
-        <SidebarInset className="bg-white h-screen overflow-y-auto scroll-smooth motion-reduce:scroll-auto">
-          <Header />
-          <main>
-            <PageTransition>
-              {children}
-            </PageTransition>
-          </main>
-        </SidebarInset>
-        <MobileGate />
-      </SidebarProvider>
-    </UnsavedChangesProvider>
+    <WorkspaceProvider value={workspace}>
+      {/* Wraps the shell rather than sitting inside a page, because the thing
+          it most needs to report — a background upload dying — happens after
+          the wizard has unmounted and the person has navigated away. A toast
+          host scoped to any one page would miss every one of those. */}
+      <ToastProvider>
+        <UploadFailureListener />
+        <DashboardShell
+          activitySlot={
+            <Suspense fallback={<ActivityTrayFallback />}>
+              <ActivityTrayLoader />
+            </Suspense>
+          }
+        >
+          {children}
+        </DashboardShell>
+      </ToastProvider>
+    </WorkspaceProvider>
   );
 }

@@ -2,7 +2,6 @@
 
 import { BarChart3, Target, Brain, HelpCircle } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
-import { useRef, useEffect } from "react";
 import Link from "next/link";
 import { CreateMatchButton } from "@/components/dashboard/matches/create-match-button";
 
@@ -41,17 +40,14 @@ const T = {
 } as const;
 
 export default function EmptyDashboard() {
+  // `skip` feeds motion `initial` props, which React only consults when an
+  // element mounts. A previous version also OR'd in a `hasAnimated` ref, but
+  // that ref is always false at mount (its effect runs afterwards), so it never
+  // changed what rendered — it only truncated an in-flight entrance if the
+  // component happened to re-render mid-animation. Reading a ref during render
+  // is also unsafe under concurrent rendering (react-hooks/refs).
   const shouldReduceMotion = useReducedMotion();
-  const hasAnimated = useRef(false);
-
-  // On the server and during hydration, skip is always false so both
-  // render the same initial animation styles. After hydration, the
-  // effect marks the animation as played so subsequent renders skip it.
-  const skip = shouldReduceMotion || hasAnimated.current;
-
-  useEffect(() => {
-    hasAnimated.current = true;
-  }, []);
+  const skip = shouldReduceMotion;
 
   return (
     <div className="flex flex-col items-center text-center pt-10 pb-16 px-6 max-w-[600px] mx-auto">

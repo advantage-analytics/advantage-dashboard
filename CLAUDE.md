@@ -25,7 +25,7 @@ Tests use Playwright but no test files exist yet. The scripts (`npm run test`, `
 **Dashboard** (`src/app/dashboard/`): Protected area with sidebar + header layout.
 - `(home)/` — Home dashboard (KPIs, charts, activity feed, recent matches)
 - `matches/` — Match list with gallery/list views
-- `matches/[matchId]/` — Match detail page. The main `page.tsx` renders all sections inline (overview, performance, court, statistics, video) with a Table of Contents sidebar. The layout at `matches/[matchId]/layout.tsx` fetches match data and provides it via `MatchDataProvider` context. Sub-routes (`insights/`, `performance/`, `statistics/`, `video/`, `visuals/`) exist as deep-link destinations from home page widgets.
+- `matches/[matchId]/` — Match detail page. A single page with **no sub-routes** — the directory holds only `error/layout/loading/not-found/page`. Sections are scroll anchors on the one page, not routes. The layout at `matches/[matchId]/layout.tsx` wraps children in `MatchDataProvider` (see Match Detail Data Sharing below). `page.tsx` short-circuits when the match is still being analysed or has failed: it renders the hero, summary row and `MatchAnalysisProgress` instead of the stat sections, because every one of them would otherwise draw zeroes and an empty serve chart reads as "you hit no serves".
 - `statistics/` — Aggregate stats across matches with match selector filters
 - `settings/{account,profile,subscription}/` — Settings sub-pages
 - `help/` — Help page
@@ -51,7 +51,7 @@ Key tables: `matches`, `match_stats`, `points`, `shots`, `users`. The `match_sta
 
 ### Match Detail Data Sharing
 
-`MatchDataProvider` (`src/components/dashboard/matches/match-data-provider.tsx`) is a React Context that holds match metadata, statistics, and points. The match detail layout fetches everything server-side and passes it into the provider. The main page and sub-route pages consume the context — no re-fetching per route.
+`MatchDataProvider` (`src/components/dashboard/matches/match-data-provider.tsx`) is a React Context that holds match metadata, statistics, and points. The layout and `page.tsx` each call `getMatchDetailData()` from `src/lib/data/match-detail-server.ts`, which is wrapped in React `cache()` — so the two calls share one fetch per request rather than duplicating it. The page passes data to its cards as props; client components deeper in the tree (e.g. `ServePlacementCard`) read the context via `useMatchData()` instead of prop-drilling.
 
 ### Statistics Data Layer
 
@@ -69,7 +69,7 @@ SwingVision .xlsx → `SwingVisionValidator` → `SwingVisionParser` → Supabas
 
 Upload code lives in `src/lib/services/upload/` with parsers, providers, and validators subdirectories. Provider strategy pattern allows adding new data sources without touching core upload logic.
 
-The upload modal (`src/components/dashboard/home/upload-match-modal/`) is a multi-step flow: Provider → Method → Upload → Confirm. Dashboard layout cleans up upload localStorage on route changes.
+The upload wizard (`src/components/dashboard/matches/new-match-wizard/`) is a full page at `/dashboard/matches/new`, not a dialog. It is a multi-step flow whose step order branches on provider kind: import providers run Provider → Match → Confirm, processing providers insert a Video step (`STEP_ORDER_BY_KIND` in the subtree's `types.ts`). Dashboard layout cleans up upload localStorage when you navigate away from the wizard route.
 
 ### Court Visualization System
 
@@ -80,6 +80,20 @@ Filter configs: `src/components/dashboard/matches/visuals/configs/` (serve, retu
 ### LLM Integration
 
 `/api/chat` streams responses from Claude or GPT-4o. Provider abstracted in `src/lib/llm/adapter.ts` with `getLLMStream()`. Set `LLM_PROVIDER=anthropic` or `openai` in env. Falls back to mock mode if no API key configured. LLM SDKs are dynamically imported — only the configured provider is loaded.
+
+### Video analysis (Advantage Intelligence)
+
+A working pipeline carries real athlete video to a third-party vendor and back:
+browser → Azure Blob → vendor → webhook → results JSON + trimmed video. It has
+processed a real full-length match.
+
+**Before changing any dashboard UI, read [`docs/ui-revamp-guardrails.md`](docs/ui-revamp-guardrails.md).**
+It lists what must not be touched, which UI files carry invariants the pipeline
+depends on, and the three wizard inputs that — when wrong — attribute every
+statistic to the wrong player with nothing looking broken on screen.
+
+The provider is **"Advantage Intelligence"** in every user-visible string.
+`splitstep` is internal naming only.
 
 ## Design System
 
@@ -103,7 +117,7 @@ If unsure, ask the user "widgetless or card-wrapped?" before starting.
 
 When the user references a page (e.g., "the match detail page", "the home dashboard", "the video section"), **open the route file first** and follow the import chain to identify the exact rendered component. State the file path before proposing edits.
 
-Do NOT assume based on filename similarity — this project has multiple components with overlapping names that render in different routes (e.g., `serve-placement-home.tsx` vs `CourtPlacementSection`, the full video page at `matches/[matchId]/video/` vs the video widget inside the match detail page). Picking the wrong one wastes a cycle.
+Do NOT assume based on filename similarity — this project has multiple components with overlapping names that render in different routes. Serve placement exists three times: `home/serve-placement-home.tsx` on the home dashboard, `matches/match-detail/serve-placement-card.tsx` on match detail, and `statistics/serve-placement-stats.tsx` on statistics. Picking the wrong one wastes a cycle.
 
 ## Key Conventions
 
@@ -135,3 +149,13 @@ LLM_PROVIDER=anthropic|openai
 ANTHROPIC_API_KEY=<key>
 OPENAI_API_KEY=<key>
 ```
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

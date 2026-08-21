@@ -16,7 +16,7 @@ import {
   MatchFileRecord,
   ProviderId,
 } from './types';
-import { getProviderStrategy } from './providers';
+import { getProviderStrategy, getImportProviderStrategy } from './providers';
 import { createStorageService } from './storage.service';
 
 /**
@@ -44,8 +44,10 @@ export class UploadService implements IUploadService {
   async uploadMatchFile(request: UploadRequest): Promise<UploadResult> {
     const { file, userId, matchId, providerId } = request;
 
-    // 1. Get provider strategy
-    const strategy = this.getProviderStrategy(providerId);
+    // 1. Get provider strategy. Import-only: this method uploads a parseable
+    //    file to the match-data bucket, which is meaningless for a processing
+    //    provider whose video goes through the job pipeline instead.
+    const strategy = getImportProviderStrategy(providerId);
 
     // 2. Validate file
     const validationResult = strategy.validateFile(file);

@@ -48,8 +48,12 @@ export default function KpiCards({ cards, matchCount }: KpiCardsProps) {
   const skipAnimation = shouldReduceMotion || hasAnimatedOnce;
 
   const allKeys = cards.map((c) => c.key);
+  // Captured at mount only. The single consumer is the mount effect below,
+  // which restores persisted visibility against the initial key set, so
+  // useRef's initial value is exactly what it needs. The previous render-time
+  // reassignment kept it "fresh" for a reader that never existed, and mutating
+  // a ref during render is unsafe under concurrent rendering (react-hooks/refs).
   const allKeysRef = useRef(allKeys);
-  allKeysRef.current = allKeys;
 
   const [visibleKeys, setVisibleKeys] = useState<string[]>(() => defaultVisible(allKeys));
   const [hydrated, setHydrated] = useState(false);

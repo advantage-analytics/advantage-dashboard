@@ -8,6 +8,7 @@
 // Types
 export type {
   ProviderId,
+  ProviderKind,
   ValidationResult,
   UploadResult,
   ProviderConfig,
@@ -15,6 +16,8 @@ export type {
   StoragePath,
   MatchFileRecord,
   IProviderUploadStrategy,
+  IImportProviderStrategy,
+  IProcessingProviderStrategy,
   IStorageService,
   IUploadService,
 } from './types';
@@ -26,7 +29,11 @@ export { createStorageService, SupabaseStorageService } from './storage.service'
 // Providers
 export {
   getProviderStrategy,
+  getImportProviderStrategy,
+  getProviderKind,
+  providerKindOrNull,
   isProviderSupported,
   getSupportedProviders,
   swingVisionStrategy,
+  splitStepStrategy,
 } from './providers';

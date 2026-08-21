@@ -6,10 +6,18 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown, X } from "lucide-react";
 import { EmptyMatches } from "./empty-matches";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
+import {
+  isAnalysisFailed,
+  isInFlight,
+  isLiveUpdating,
+} from "@/lib/data/match-analysis";
+import {
+  useLiveMatchAnalysis,
+  withLiveAnalysis,
+} from "@/hooks/use-live-match-analysis";
 import { providers } from "@/lib/providers";
-import { MatchesGrid } from "./matches-grid";
-import { ViewToggle, type MatchView } from "./view-toggle";
-import { CreateMatchButton } from "./create-match-button";
+import { MatchesGrid, type SortField, type SortDir } from "./matches-grid";
+import { MatchesFilterPanel, type FilterGroup } from "./matches-filter-panel";
 
 function providerName(id: string): string {
   return providers.find((p) => p.id === id)?.name ?? id;
@@ -17,212 +25,77 @@ function providerName(id: string): string {
 
 interface MatchesPageContentProps {
   matches: DisplayMatch[];
+  /** Signed-in user, for the live job subscription. Absent = no subscription. */
+  userId?: string;
+  /** Which workspace this list belongs to. Only the empty state reads it. */
+  scope?: "personal" | "team";
 }
 
-type SortField = "date" | "opponent" | "event" | "result";
-type SortDir = "asc" | "desc";
-type FilterKey = "result" | "matchType" | "courtType" | "source";
+type FilterKey = "result" | "matchType" | "courtType" | "source" | "analysis";
+
+const FILTER_KEYS: FilterKey[] = ["result", "matchType", "courtType", "source", "analysis"];
+
+/**
+ * Collapses the nine job statuses into the four buckets a player actually
+ * filters by. This is the analysis queue's filter, folded into the chip row
+ * that was already here.
+ */
+function analysisGroup(match: DisplayMatch): string | null {
+  const status = match.analysis?.status;
+  if (!status) return null;
+  if (isInFlight(status)) return "In progress";
+  if (isAnalysisFailed(status)) return "Failed";
+  if (status === "manual") return "No video";
+  return "Ready";
+}
+
+const ANALYSIS_GROUP_ORDER = ["In progress", "Ready", "Failed", "No video"];
 
 interface ActiveFilter {
   key: FilterKey;
   value: string;
 }
 
-const FILTER_CHIPS: { key: FilterKey; label: string; title?: string; getValues: (matches: DisplayMatch[]) => string[]; displayValue?: (val: string) => string }[] = [
+const FILTER_GROUPS: {
+  key: FilterKey;
+  label: string;
+  getValues: (matches: DisplayMatch[]) => string[];
+  displayValue?: (val: string) => string;
+}[] = [
   {
     key: "result",
     label: "Result",
-    title: "Filter by match result",
     getValues: () => ["Won", "Loss"],
   },
   {
     key: "matchType",
-    label: "Match Type",
-    title: "Filter by match type",
+    label: "Match type",
     getValues: (matches) => [...new Set(matches.map((m) => m.matchType))].sort(),
   },
   {
     key: "courtType",
-    label: "Court Type",
-    title: "Filter by court surface",
+    label: "Court",
     getValues: (matches) => [...new Set(matches.map((m) => m.courtType).filter(Boolean) as string[])].sort(),
   },
   {
     key: "source",
     label: "Source",
-    title: "Data source provider",
     getValues: (matches) => [...new Set(matches.map((m) => m.sourceProvider).filter(Boolean) as string[])].sort(),
     displayValue: providerName,
+  },
+  {
+    key: "analysis",
+    label: "Analysis",
+    getValues: (matches) => {
+      const present = new Set(matches.map(analysisGroup).filter(Boolean) as string[]);
+      // Fixed order — these are pipeline stages, so alphabetising them would
+      // scramble the sequence a reader expects.
+      return ANALYSIS_GROUP_ORDER.filter((group) => present.has(group));
+    },
   },
 ];
 
 const PAGE_SIZES = [10, 25, 50] as const;
-
-/* ─── Individual filter chip with its own dropdown ─── */
-function FilterChip({
-  filterKey,
-  label,
-  title,
-  values,
-  activeValues,
-  onToggle,
-  displayValue,
-}: {
-  filterKey: FilterKey;
-  label: string;
-  title?: string;
-  values: string[];
-  activeValues: string[];
-  onToggle: (key: FilterKey, value: string) => void;
-  displayValue?: (val: string) => string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [focusIdx, setFocusIdx] = useState(-1);
-  const ref = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const listboxId = `filter-${filterKey}-listbox`;
-
-  // Close on outside click
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    if (open) document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [open]);
-
-  // Return focus to trigger when closing
-  const closeAndReturn = useCallback(() => {
-    setOpen(false);
-    triggerRef.current?.focus();
-  }, []);
-
-  // Scoped keyboard handler on the container
-  function handleContainerKeyDown(e: React.KeyboardEvent) {
-    if (!open) return;
-    if (e.key === "Escape") { e.preventDefault(); closeAndReturn(); return; }
-    if (e.key === "Tab") { setOpen(false); return; }
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setFocusIdx((prev) => {
-        const next = prev < values.length - 1 ? prev + 1 : 0;
-        optionRefs.current[next]?.focus();
-        return next;
-      });
-    }
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setFocusIdx((prev) => {
-        const next = prev > 0 ? prev - 1 : values.length - 1;
-        optionRefs.current[next]?.focus();
-        return next;
-      });
-    }
-    if (e.key === "Home") {
-      e.preventDefault();
-      setFocusIdx(0);
-      optionRefs.current[0]?.focus();
-    }
-    if (e.key === "End") {
-      e.preventDefault();
-      const last = values.length - 1;
-      setFocusIdx(last);
-      optionRefs.current[last]?.focus();
-    }
-  }
-
-  // Reset focus index when closing
-  useEffect(() => {
-    if (!open) setFocusIdx(-1);
-  }, [open]);
-
-  if (values.length === 0) return null;
-
-  const hasActive = activeValues.length > 0;
-
-  return (
-    <div className="relative" ref={ref} onKeyDown={handleContainerKeyDown}>
-      <button
-        ref={triggerRef}
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        aria-controls={open ? listboxId : undefined}
-        title={title}
-        className={`flex items-center gap-1.5 h-8 px-3.5 rounded-full text-xs font-medium transition-[color,background-color] duration-200 ${
-          hasActive
-            ? "ring-1 ring-inset ring-[#3B82F6] text-[#3B82F6] bg-[#EBF2FD]"
-            : "ring-1 ring-inset ring-[#EAECF0] text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#3B82F6]/30 hover:text-[#3B82F6]"
-        }`}
-      >
-        {label}
-        {hasActive && (
-          <span className="min-w-[16px] h-4 flex items-center justify-center rounded-full bg-[#3B82F6] text-white text-[10px] font-semibold px-1">
-            {activeValues.length}
-          </span>
-        )}
-        <ChevronDown
-          className={`w-3 h-3 transition-transform duration-200 ${open ? "rotate-180" : ""} ${
-            hasActive ? "text-[#3B82F6]" : "text-[#888888]"
-          }`}
-        />
-      </button>
-
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
-            id={listboxId}
-            role="listbox"
-            aria-label={`${label} options`}
-            aria-multiselectable="true"
-            className="absolute top-full left-0 mt-1.5 min-w-[160px] bg-white border border-[#E5E5EA] rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)] z-20 py-1.5 px-1.5"
-          >
-            {values.map((val, idx) => {
-              const isActive = activeValues.includes(val);
-              return (
-                <button
-                  key={val}
-                  ref={(el) => { optionRefs.current[idx] = el; }}
-                  role="option"
-                  aria-selected={isActive}
-                  tabIndex={idx === focusIdx ? 0 : -1}
-                  onClick={() => onToggle(filterKey, val)}
-                  className={`flex items-center gap-2 w-full px-2.5 py-2 text-xs rounded-lg transition-[background-color,color] duration-200 ${
-                    isActive
-                      ? "bg-[#EBF2FD] text-[#3B82F6] font-medium"
-                      : "text-[#525252] hover:bg-[#F5F5F5]"
-                  }`}
-                >
-                  <span
-                    className={`w-3.5 h-3.5 rounded-[4px] border flex items-center justify-center shrink-0 ${
-                      isActive
-                        ? "border-[#3B82F6] bg-[#3B82F6]"
-                        : "border-[#EAECF0]"
-                    }`}
-                  >
-                    {isActive && (
-                      <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
-                        <path d="M1 3L3 5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    )}
-                  </span>
-                  {displayValue ? displayValue(val) : val}
-                </button>
-              );
-            })}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
 
 /* ─── Sort dropdown ─── */
 const SORT_OPTIONS: { field: SortField; label: string }[] = [
@@ -365,36 +238,57 @@ function SortDropdown({
 }
 
 /* ─── Main content ─── */
-export function MatchesPageContent({ matches }: MatchesPageContentProps): React.JSX.Element {
+export function MatchesPageContent({
+  matches: serverMatches,
+  userId,
+  scope = "personal",
+}: MatchesPageContentProps): React.JSX.Element {
   const searchParams = useSearchParams();
   const pathname = usePathname();
 
-  const [view, setView] = useState<MatchView>(() => (searchParams.get("view") as MatchView) || "list");
-  const [userSetView, setUserSetView] = useState(false);
+  // Live job state, merged over what the server rendered. Without this the bar
+  // is a snapshot from page load — a long upload appears frozen, and a job that
+  // finishes while the tab is open never says so.
+  //
+  // Merged before everything below so filtering, sorting and grouping all see
+  // the live status: a job that fails mid-view should leave the "In progress"
+  // group without a refresh, not just change colour.
+  // Only subscribe when there is something to follow. Otherwise every visit to
+  // this page holds a WebSocket and a 25-second heartbeat for a channel that
+  // will never deliver a message, against a per-project connection cap.
+  //
+  // Trade-off: a match that enters flight from ANOTHER tab will not light up
+  // here without a refresh. Acceptable — uploads start from this app, in the
+  // tab the user is already looking at.
+  // isLiveUpdating, not isInFlight. A match parked at `processed` is in flight
+  // but nothing will move it until Phase 2 ships, so subscribing for it would
+  // hold the socket described above open forever rather than briefly.
+  const hasInFlight = serverMatches.some(
+    (m) => m.analysis && isLiveUpdating(m.analysis.status)
+  );
+  const livePatches = useLiveMatchAnalysis({
+    by: "user",
+    userId: hasInFlight ? userId : undefined,
+  });
+  const matches = useMemo(() => {
+    if (livePatches.size === 0) return serverMatches;
+    return serverMatches.map((m) => {
+      const patch = livePatches.get(m.id);
+      if (!patch || !m.analysis) return m;
+      return { ...m, analysis: withLiveAnalysis(m.analysis, patch) };
+    });
+  }, [serverMatches, livePatches]);
 
-  // Auto-switch to gallery on narrow screens (< 1024px) unless user explicitly chose a view
-  useEffect(() => {
-    const mql = window.matchMedia("(max-width: 1023px)");
-    function handleChange(e: MediaQueryListEvent | MediaQueryList) {
-      if (!userSetView) {
-        setView(e.matches ? "gallery" : "list");
-      }
-    }
-    handleChange(mql);
-    mql.addEventListener("change", handleChange);
-    return () => mql.removeEventListener("change", handleChange);
-  }, [userSetView]);
-
-  const handleViewChange = useCallback((v: MatchView) => {
-    setView(v);
-    setUserSetView(true);
-  }, []);
+  /* Layout is decided by the viewport alone — there is no view control any
+     more. Six columns need the width, so under 1024px the same matches render
+     as cards instead. That choice is made in CSS inside MatchesGrid, so it
+     needs no state, no listener, and no URL parameter here. */
   const [search, setSearch] = useState(() => searchParams.get("q") || "");
   const [sortField, setSortField] = useState<SortField>(() => (searchParams.get("sort") as SortField) || "date");
   const [sortDir, setSortDir] = useState<SortDir>(() => (searchParams.get("dir") as SortDir) || "desc");
   const [filters, setFilters] = useState<ActiveFilter[]>(() => {
     const result: ActiveFilter[] = [];
-    for (const key of ["result", "matchType", "courtType", "source"] as FilterKey[]) {
+    for (const key of FILTER_KEYS) {
       for (const value of searchParams.getAll(key)) {
         result.push({ key, value });
       }
@@ -518,6 +412,8 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
             return m.courtType === filter.value;
           case "source":
             return m.sourceProvider === filter.value;
+          case "analysis":
+            return analysisGroup(m) === filter.value;
           default:
             return true;
         }
@@ -578,7 +474,6 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
     }
     const params = new URLSearchParams();
     if (search) params.set("q", search);
-    if (view !== "list") params.set("view", view);
     if (sortField !== "date") params.set("sort", sortField);
     if (sortDir !== "desc") params.set("dir", sortDir);
     if (page > 1) params.set("page", String(page));
@@ -586,7 +481,7 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
     for (const f of filters) params.append(f.key, f.value);
     const query = params.toString();
     window.history.replaceState(null, "", `${pathname}${query ? `?${query}` : ""}`);
-  }, [search, view, sortField, sortDir, page, pageSize, filters, pathname]);
+  }, [search, sortField, sortDir, page, pageSize, filters, pathname]);
 
   function toggleSort(field: SortField) {
     if (sortField === field) {
@@ -606,38 +501,48 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
     });
   }, []);
 
-  // Get active values per filter key
-  function activeValuesFor(key: FilterKey): string[] {
-    return filters.filter((f) => f.key === key).map((f) => f.value);
-  }
+  const clearFilters = useCallback(() => setFilters([]), []);
+
+  const isFilterActive = useCallback(
+    (key: FilterKey, value: string) => filters.some((f) => f.key === key && f.value === value),
+    [filters]
+  );
+
+  // Values are read off the matches, so a category with nothing to offer drops
+  // out of the panel rather than opening onto an empty list.
+  const filterGroups: FilterGroup<FilterKey>[] = useMemo(
+    () =>
+      FILTER_GROUPS.map((group) => ({
+        key: group.key,
+        label: group.label,
+        values: group.getValues(matches),
+        displayValue: group.displayValue,
+      })),
+    [matches]
+  );
 
   if (matches.length === 0) {
-    return <EmptyMatches />;
+    return <EmptyMatches scope={scope} />;
   }
 
   return (
     <div>
-      {/* Toolbar: filters, search, sort, view toggle — wraps on medium screens */}
+      {/* Toolbar: filter, search, sort — wraps on medium screens */}
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-5">
-        {/* Left: filter chips */}
+        {/* Left: one filter button for every category */}
         <div className="flex items-center gap-2">
-          {FILTER_CHIPS.map((chip) => (
-            <FilterChip
-              key={chip.key}
-              filterKey={chip.key}
-              label={chip.label}
-              title={chip.title}
-              values={chip.getValues(matches)}
-              activeValues={activeValuesFor(chip.key)}
-              onToggle={toggleFilter}
-              displayValue={chip.displayValue}
-            />
-          ))}
+          <MatchesFilterPanel
+            groups={filterGroups}
+            activeCount={filters.length}
+            isActive={isFilterActive}
+            onToggle={toggleFilter}
+            onClear={clearFilters}
+          />
 
           {/* Clear all filters + results count */}
           {filters.length > 0 && (
             <button
-              onClick={() => setFilters([])}
+              onClick={clearFilters}
               className="text-xs text-[#888888] hover:text-[#525252] transition-[color] duration-200 ml-1"
             >
               Clear filters
@@ -650,7 +555,7 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
           )}
         </div>
 
-        {/* Right: search, sort, view toggle */}
+        {/* Right: search, sort */}
         <div className="flex items-center gap-2">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#CCCCCC]" />
@@ -663,7 +568,7 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
               title="Search by event, opponent, or round"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-8 w-48 pl-8 pr-8 rounded-full ring-1 ring-inset ring-[#EAECF0] text-xs text-[#0D0D0D] placeholder:text-[#CCCCCC] focus:outline-none focus:ring-[#3B82F6] focus:ring-2 transition-[color,background-color] duration-200 bg-white"
+              className="h-8 w-[216px] pl-8 pr-8 rounded-full ring-1 ring-inset ring-[#EAECF0] text-xs text-[#0D0D0D] placeholder:text-[#CCCCCC] focus:outline-none focus:ring-[#3B82F6] focus:ring-2 transition-[color,background-color] duration-200 bg-white"
             />
             {!search && (
               <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-medium text-[#CCCCCC] pointer-events-none">/</kbd>
@@ -671,8 +576,6 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
           </div>
 
           <SortDropdown sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
-
-          <ViewToggle view={view} onViewChange={handleViewChange} />
         </div>
       </div>
 
@@ -703,7 +606,7 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
                 ))}
               </div>
               <button
-                onClick={() => setFilters([])}
+                onClick={clearFilters}
                 className="text-xs text-[#888888] hover:text-[#3B82F6] underline underline-offset-2 transition-[color] duration-200"
               >
                 Clear all filters
@@ -714,7 +617,6 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
       ) : (
         <MatchesGrid
           matches={paginatedMatches}
-          view={view}
           sortField={sortField}
           sortDir={sortDir}
           onSort={toggleSort}
@@ -722,9 +624,11 @@ export function MatchesPageContent({ matches }: MatchesPageContentProps): React.
         />
       )}
 
-      {/* Pagination */}
+      {/* Pagination — no rule of its own. Every row already carries a bottom
+          hairline, so the last one closes the table; a second line 16px below it
+          just read as a doubled edge. Whitespace separates the two now. */}
       {sorted.length > 0 && (
-        <div className="flex items-center justify-between mt-4 pt-4 border-t border-[#F0F0F0]">
+        <div className="flex items-center justify-between mt-5">
           <div className="flex items-center gap-3 text-xs text-[#888888]">
             <span className="tabular-nums">
               {rangeStart}–{rangeEnd} of {sorted.length}

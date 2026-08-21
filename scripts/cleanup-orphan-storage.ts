@@ -1,15 +1,49 @@
 /**
- * One-off cleanup: delete orphan objects in the `match-data` bucket whose
- * `{matchId}` path segment (third segment) has no row in `public.matches`.
+ * Delete stored objects whose match no longer exists.
+ *
+ * Covers all three places a match leaves bytes:
+ *
+ *   match-data        Supabase Storage   uploaded provider files (.xlsx)
+ *   match-results     Supabase Storage   raw vendor results JSON (~1 MB)
+ *   advantage-videos  Azure Blob         source video (1–8 GB) ← the expensive one
+ *
+ * All three key layouts put the match id in the THIRD path segment
+ * (`.../{userId}/{matchId}/...`), which is what identifies an orphan. That held
+ * across the move from R2 to Azure because the blob name is still whatever
+ * videoObjectKey() produced — the store changed, the layout did not.
  *
  * Run from repo root:
  *   npx tsx scripts/cleanup-orphan-storage.ts            # dry run
  *   npx tsx scripts/cleanup-orphan-storage.ts --apply    # actually delete
  *
  * Requires NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local.
+ *
+ * The video container is skipped unless AZURE_STORAGE_ACCOUNT and
+ * AZURE_STORAGE_KEY are also present — that is where an orphan actually costs
+ * money, so copy them from Vercel when you want to sweep it.
+ *
+ * Deleting a match through the app now cleans all three itself; this exists for
+ * strays created before that, and for rows deleted straight from the database.
+ *
+ * It also runs a SECOND, different sweep — see sweepSupersededSources(). That
+ * one deletes source videos for matches that still exist, once the vendor's
+ * trimmed re-encode has been confirmed copied into our container. The webhook
+ * starts that copy but cannot wait for it, so this is where the original
+ * actually gets removed.
  */
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
+import type { ContainerClient } from "@azure/storage-blob";
+
+import { RESULTS_BUCKET } from "../src/lib/services/splitstep/config";
+import { MATCH_DATA_BUCKET } from "../src/lib/services/upload/storage.service";
+import {
+  AZURE_STORAGE_ENV_VARS,
+  deleteVideoBlob,
+  resolveAzureStorageConfig,
+  videoContainerClient,
+} from "../src/lib/services/splitstep/video-url";
+import { reclaimSupersededSources } from "../src/lib/services/splitstep/reclaim-videos";
 
 // Minimal .env.local loader (no dotenv dependency).
 try {
@@ -26,7 +60,9 @@ try {
   // ignore — env may come from shell
 }
 
-const BUCKET = "match-data";
+// From the modules that write them. A second literal here is exactly the
+// write-side/read-side drift this script exists to clean up after.
+const SUPABASE_BUCKETS = [MATCH_DATA_BUCKET, RESULTS_BUCKET] as const;
 const APPLY = process.argv.includes("--apply");
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -36,17 +72,23 @@ if (!url || !key) {
   process.exit(1);
 }
 
-const supabase = createClient(url, key, { auth: { persistSession: false } });
+const supabase: SupabaseClient = createClient(url, key, {
+  auth: { persistSession: false },
+});
 
-type ObjectRow = { name: string };
+/** Match id is the third path segment in every layout we write. */
+function matchIdOf(path: string): string | undefined {
+  return path.split("/")[2];
+}
 
-async function listAllObjects(): Promise<string[]> {
+async function listSupabaseObjects(bucket: string): Promise<string[]> {
   const paths: string[] = [];
+
   async function walk(prefix: string) {
     const pageSize = 1000;
     let offset = 0;
     while (true) {
-      const { data, error } = await supabase.storage.from(BUCKET).list(prefix, {
+      const { data, error } = await supabase.storage.from(bucket).list(prefix, {
         limit: pageSize,
         offset,
         sortBy: { column: "name", order: "asc" },
@@ -55,6 +97,7 @@ async function listAllObjects(): Promise<string[]> {
       if (!data || data.length === 0) break;
       for (const entry of data) {
         const fullPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+        // A null id means a folder, not an object.
         if (entry.id === null) {
           await walk(fullPath);
         } else {
@@ -65,54 +108,246 @@ async function listAllObjects(): Promise<string[]> {
       offset += pageSize;
     }
   }
+
   await walk("");
   return paths;
 }
 
+/**
+ * Null when Azure is not configured locally — the caller reports and skips.
+ *
+ * Goes through the app's own resolver rather than reading the three env vars
+ * here. An earlier version did read them directly and defaulted the container to
+ * the literal "advantage-videos", which meant a deployment with
+ * AZURE_STORAGE_CONTAINER unset had the app correctly refusing to mint URLs
+ * while this script happily listed and DELETED from a guessed container. One
+ * definition of "which container holds videos", or the write side and the read
+ * side drift apart again — which is the exact failure the migration away from
+ * R2 set out to remove.
+ */
+function videoContainer(): { container: ContainerClient; name: string } | null {
+  const resolved = resolveAzureStorageConfig();
+  if (!resolved.ok) return null;
+
+  return {
+    container: videoContainerClient(),
+    name: resolved.config.container,
+  };
+}
+
+async function listBlobNames(container: ContainerClient): Promise<string[]> {
+  const names: string[] = [];
+  // Paging is handled by the async iterator; `flat` means the layout's slashes
+  // are part of the name rather than virtual directories, which is what keeps
+  // matchIdOf()'s third-segment rule working unchanged.
+  for await (const blob of container.listBlobsFlat()) {
+    names.push(blob.name);
+  }
+  return names;
+}
+
+/**
+ * One place bytes live. Supabase Storage and Azure differ only in how you
+ * enumerate and how many keys a delete call takes — the orphan rule, the
+ * reporting and the batching are identical, so `sweep()` below owns them once.
+ */
+interface Store {
+  label: string;
+  /** Every object key in the store. */
+  list(): Promise<string[]>;
+  /** Keys per delete call: Supabase Storage takes 100, Azure deletes one at a time. */
+  batchSize: number;
+  /** Deletes one batch, returning how many went. Throwing aborts this store only. */
+  removeBatch(keys: string[]): Promise<number>;
+}
+
+async function sweep(
+  store: Store,
+  validIds: Set<string>
+): Promise<{ orphans: number; deleted: number }> {
+  let all: string[];
+  try {
+    all = await store.list();
+  } catch (err) {
+    console.error(`[${store.label}] could not list — skipping:`, err);
+    return { orphans: 0, deleted: 0 };
+  }
+
+  const orphans = all.filter((p) => {
+    const id = matchIdOf(p);
+    return id !== undefined && !validIds.has(id);
+  });
+
+  console.log(`[${store.label}] objects: ${all.length}, orphans: ${orphans.length}`);
+  for (const p of orphans.slice(0, 5)) console.log(`  - ${p}`);
+  if (orphans.length > 5) console.log(`  … and ${orphans.length - 5} more`);
+
+  let deleted = 0;
+  if (APPLY && orphans.length > 0) {
+    for (let i = 0; i < orphans.length; i += store.batchSize) {
+      try {
+        deleted += await store.removeBatch(orphans.slice(i, i + store.batchSize));
+      } catch (err) {
+        // A batch that throws failed at the transport or on credentials, so the
+        // next one would too — stop rather than hammer the remaining batches.
+        // Per-key failures do not land here; each store logs those and continues.
+        console.error(`[${store.label}] batch ${i} failed:`, err);
+        break;
+      }
+    }
+    console.log(`[${store.label}] deleted ${deleted}/${orphans.length}.`);
+  }
+  console.log("");
+
+  return { orphans: orphans.length, deleted };
+}
+
+/**
+ * Delete source videos that a confirmed trimmed copy has superseded.
+ *
+ * Distinct from the orphan sweep above, and worth keeping distinct: that one
+ * deletes bytes belonging to matches that no longer exist, this one deletes
+ * bytes for matches that very much do. The justification is different too —
+ * we hold a better copy of the same match, trimmed and re-encoded.
+ *
+ * The logic lives in src/lib/services/splitstep/reclaim-videos.ts because
+ * /api/cron/reclaim-videos runs the same pass daily. This wrapper is the manual
+ * handle on it: a dry run to see what would go, and a way to force a sweep
+ * without waiting for the schedule.
+ */
+async function sweepSupersededSources(): Promise<{
+  candidates: number;
+  deleted: number;
+}> {
+  const outcome = await reclaimSupersededSources({
+    supabase,
+    apply: APPLY,
+    log: (line: string) => console.log(`  · ${line}`),
+  });
+
+  console.log(
+    `[superseded] jobs with a trimmed copy: ${outcome.examined}, ` +
+      `safe to reclaim: ${outcome.eligible}` +
+      (APPLY ? `, reclaimed: ${outcome.reclaimed}` : "") +
+      `, still copying: ${outcome.pending}`
+  );
+
+  if (outcome.broken.length > 0) {
+    console.error(
+      `[superseded] ${outcome.broken.length} trimmed copy/copies FAILED — the job ` +
+        `points at a video that does not exist. Re-copy from trimmed_video_url ` +
+        `before it expires (about a week after completion):`
+    );
+    for (const b of outcome.broken) {
+      console.error(`    ${b.jobId}  ${b.status}  ${b.blobName}`);
+    }
+  }
+
+  console.log("");
+
+  return { candidates: outcome.eligible, deleted: outcome.reclaimed };
+}
+
 async function main() {
-  console.log(`[cleanup] mode=${APPLY ? "APPLY" : "DRY-RUN"} bucket=${BUCKET}`);
+  console.log(`[cleanup] mode=${APPLY ? "APPLY" : "DRY-RUN"}\n`);
 
   const { data: matches, error: mErr } = await supabase.from("matches").select("id");
   if (mErr) throw mErr;
-  const validIds = new Set((matches as ObjectRow[] | { id: string }[]).map((m: any) => m.id));
-  console.log(`[cleanup] valid match ids: ${validIds.size}`);
 
-  const allPaths = await listAllObjects();
-  console.log(`[cleanup] total storage objects: ${allPaths.length}`);
+  const validIds = new Set((matches ?? []).map((m: { id: string }) => m.id));
+  console.log(`[cleanup] valid match ids: ${validIds.size}\n`);
 
-  const orphans = allPaths.filter((p) => {
-    const segments = p.split("/");
-    const matchIdSegment = segments[2];
-    return matchIdSegment && !validIds.has(matchIdSegment);
-  });
-  console.log(`[cleanup] orphan objects: ${orphans.length}`);
-
-  if (orphans.length === 0) {
-    console.log("[cleanup] nothing to delete.");
-    return;
+  // Guard: an empty match table would mark every object an orphan and wipe the
+  // lot. Far more likely a failed query or the wrong project than a genuinely
+  // empty database.
+  if (validIds.size === 0) {
+    console.error(
+      "[cleanup] REFUSING: no matches found. Every object would look orphaned.\n" +
+        "          Check NEXT_PUBLIC_SUPABASE_URL points at the right project."
+    );
+    process.exit(1);
   }
 
-  console.log("[cleanup] sample orphans:");
-  for (const p of orphans.slice(0, 5)) console.log("  -", p);
+  const stores: Store[] = SUPABASE_BUCKETS.map((bucket) => ({
+    label: bucket,
+    batchSize: 100,
+    list: () => listSupabaseObjects(bucket),
+    removeBatch: async (keys) => {
+      const { data, error } = await supabase.storage.from(bucket).remove(keys);
+      if (error) throw error;
+      return data?.length ?? 0;
+    },
+  }));
 
-  if (!APPLY) {
-    console.log("[cleanup] dry-run; rerun with --apply to delete.");
-    return;
+  const videos = videoContainer();
+  if (videos) {
+    stores.push({
+      label: videos.name,
+      // Azure has no multi-delete verb on the blob API — BlobBatchClient exists
+      // but caps at 256 subrequests and needs its own client. One call per blob
+      // is honest and fast enough: orphaned videos are counted in dozens.
+      batchSize: 1,
+      list: () => listBlobNames(videos.container),
+      removeBatch: async (keys) => {
+        let deleted = 0;
+        for (const key of keys) {
+          try {
+            // Shares deleteVideoBlob() with the app's two delete paths, so
+            // "how we remove a video" — deleteIfExists, absence is success —
+            // has one definition rather than three.
+            //
+            // The try/catch is still needed here: sweep() breaks out of its
+            // delete loop on the first throw, so one unexpected failure would
+            // silently abort the rest of the sweep.
+            const res = await deleteVideoBlob({ blobName: key });
+            if (res.deleted) deleted++;
+          } catch (err) {
+            console.error(
+              `[${videos.name}] ${key}: ${err instanceof Error ? err.message : String(err)}`
+            );
+          }
+        }
+        return deleted;
+      },
+    });
+  } else {
+    console.log(
+      `[advantage-videos] SKIPPED — ${AZURE_STORAGE_ENV_VARS.join(" / ")} ` +
+        "not all in .env.local.\n" +
+        "                  This is the container where orphans cost real money; " +
+        "copy the credentials from Vercel to sweep it.\n"
+    );
   }
 
-  const BATCH = 100;
-  let deleted = 0;
-  for (let i = 0; i < orphans.length; i += BATCH) {
-    const batch = orphans.slice(i, i + BATCH);
-    const { data, error } = await supabase.storage.from(BUCKET).remove(batch);
-    if (error) {
-      console.error(`[cleanup] batch ${i}-${i + batch.length} failed:`, error);
-      throw error;
-    }
-    deleted += data?.length ?? 0;
-    console.log(`[cleanup] deleted ${deleted}/${orphans.length}`);
+  let totalOrphans = 0;
+  let totalDeleted = 0;
+  for (const store of stores) {
+    const { orphans, deleted } = await sweep(store, validIds);
+    totalOrphans += orphans;
+    totalDeleted += deleted;
   }
-  console.log(`[cleanup] done. removed ${deleted} objects.`);
+
+  // Only meaningful with Azure configured — it reads copy state off the
+  // destination blob, and without credentials every job would read `pending`
+  // and nothing would ever be swept.
+  let superseded = { candidates: 0, deleted: 0 };
+  if (videos) {
+    superseded = await sweepSupersededSources();
+  }
+
+  const totalCandidates = totalOrphans + superseded.candidates;
+  const totalRemoved = totalDeleted + superseded.deleted;
+
+  if (totalCandidates === 0) {
+    console.log("[cleanup] nothing orphaned or superseded. Done.");
+  } else if (!APPLY) {
+    console.log(
+      `[cleanup] ${totalOrphans} orphan(s) and ${superseded.candidates} ` +
+        `superseded source video(s) found. Rerun with --apply to delete.`
+    );
+  } else {
+    console.log(`[cleanup] done. removed ${totalRemoved}/${totalCandidates} object(s).`);
+  }
 }
 
 main().catch((err) => {

@@ -12,6 +12,12 @@ interface MatchKpiRowProps {
   p2Stats: PlayerStatistics | undefined;
   p1Name: string;
   p2Name: string;
+  /**
+   * True for a video-derived match, where winners and errors are measured but
+   * carry a known error bar: identifying which stroke ended the point is a model
+   * output, agreeing with the score fold on 85-90% of points.
+   */
+  approximate?: boolean;
 }
 
 const P1_COLOR = "var(--color-accent-blue)";
@@ -35,17 +41,22 @@ export function MatchKpiRow({
   p2Stats,
   p1Name,
   p2Name,
+  approximate = false,
 }: MatchKpiRowProps) {
   const durationLabel = duration && duration.trim().length > 0 ? duration : null;
 
-  const p1Pts = p1Stats?.totalPointsWon ?? 0;
-  const p2Pts = p2Stats?.totalPointsWon ?? 0;
-  const p1Aces = p1Stats?.aces ?? 0;
-  const p2Aces = p2Stats?.aces ?? 0;
-  const p1Win = p1Stats?.winners ?? 0;
-  const p2Win = p2Stats?.winners ?? 0;
-  const p1Ue = p1Stats?.unforcedErrors ?? 0;
-  const p2Ue = p2Stats?.unforcedErrors ?? 0;
+  // `?? 0` is wrong for anything that can be legitimately absent. A suppressed
+  // statistic is not zero — a video-derived match cannot measure aces at all,
+  // and printing "0" states that the player hit none. Absent stays absent all
+  // the way to the render, where it becomes an em dash.
+  const p1Pts = p1Stats?.totalPointsWon ?? null;
+  const p2Pts = p2Stats?.totalPointsWon ?? null;
+  const p1Aces = p1Stats?.aces ?? null;
+  const p2Aces = p2Stats?.aces ?? null;
+  const p1Win = p1Stats?.winners ?? null;
+  const p2Win = p2Stats?.winners ?? null;
+  const p1Ue = p1Stats?.unforcedErrors ?? null;
+  const p2Ue = p2Stats?.unforcedErrors ?? null;
 
   const activeRatio =
     matchDurationSec && matchDurationSec > 0 && playingTimeSec > 0
@@ -68,31 +79,60 @@ export function MatchKpiRow({
         />
         <KpiCell
           label="Total Points"
-          value={String(p1Pts + p2Pts)}
-          split={{ p1: p1Pts, p2: p2Pts, p1Name, p2Name }}
+          value={pairTotal(p1Pts, p2Pts)}
+          split={splitFor(p1Pts, p2Pts, p1Name, p2Name)}
           statLabel="Total Points Won"
         />
         <KpiCell
           label="Aces"
-          value={String(p1Aces + p2Aces)}
-          split={{ p1: p1Aces, p2: p2Aces, p1Name, p2Name }}
+          value={pairTotal(p1Aces, p2Aces)}
+          split={splitFor(p1Aces, p2Aces, p1Name, p2Name)}
           statLabel="Aces"
         />
         <KpiCell
           label="Winners"
-          value={String(p1Win + p2Win)}
-          split={{ p1: p1Win, p2: p2Win, p1Name, p2Name }}
+          value={pairTotal(p1Win, p2Win)}
+          split={splitFor(p1Win, p2Win, p1Name, p2Name)}
           statLabel="Winners"
+          approximate={approximate}
         />
         <KpiCell
-          label="Unforced Errors"
-          value={String(p1Ue + p2Ue)}
-          split={{ p1: p1Ue, p2: p2Ue, p1Name, p2Name }}
+          label={approximate ? "Errors" : "Unforced Errors"}
+          value={pairTotal(p1Ue, p2Ue)}
+          split={splitFor(p1Ue, p2Ue, p1Name, p2Name)}
           statLabel="Unforced Errors"
+          approximate={approximate}
         />
       </div>
     </section>
   );
+}
+
+/** Em dash. Distinguishable from a zero at the 28px tile size. */
+const NO_DATA = "\u2014";
+
+/**
+ * Combined total, or an em dash when neither side was measured.
+ *
+ * One side measured and the other not cannot happen for these columns — both
+ * player rows are written by the same suppression — so a partial pair would
+ * mean something else went wrong, and showing the half we have would present
+ * it as a match total.
+ */
+function pairTotal(a: number | null, b: number | null): string {
+  if (a === null || b === null) return NO_DATA;
+  return String(a + b);
+}
+
+/** The split bar needs two real numbers; without them it would draw a false ratio. */
+function splitFor(
+  a: number | null,
+  b: number | null,
+  p1Name: string,
+  p2Name: string
+): { p1: number; p2: number; p1Name: string; p2Name: string } | undefined {
+  if (a === null || b === null) return undefined;
+  return { p1: a, p2: b, p1Name, p2Name };
 }
 
 interface KpiCellProps {
@@ -101,6 +141,12 @@ interface KpiCellProps {
   split?: { p1: number; p2: number; p1Name: string; p2Name: string };
   /** Label of the statistics row this tile links to (see match-statistics-card). */
   statLabel?: string;
+  /**
+   * Measured, but with a known error bar — currently ~10-15% of points on a
+   * video-derived match, where identifying which stroke ended the point is a
+   * model output rather than an observation.
+   */
+  approximate?: boolean;
 }
 
 /**
@@ -120,7 +166,7 @@ function scrollToStatRow(anchorId: string, reduceMotion: boolean): boolean {
   return true;
 }
 
-function KpiCell({ label, value, split, statLabel }: KpiCellProps) {
+function KpiCell({ label, value, split, statLabel, approximate }: KpiCellProps) {
   const reduceMotion = useReducedMotion();
   const inner = (
     <>
@@ -128,6 +174,14 @@ function KpiCell({ label, value, split, statLabel }: KpiCellProps) {
         {label}
       </p>
       <p className="text-[28px] font-light leading-[28px] tracking-[-0.5px] text-[var(--color-text-primary)] tabular-nums">
+        {approximate && value !== NO_DATA && (
+          <span
+            aria-hidden
+            className="text-[14px] font-light text-[var(--color-text-dim)] mr-0.5"
+          >
+            &#8776;
+          </span>
+        )}
         {value}
       </p>
       {split && <SplitBar {...split} />}
