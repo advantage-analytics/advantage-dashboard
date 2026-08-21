@@ -37,17 +37,24 @@ export const PERSONAL_NAV: readonly NavLink[] = [
 ];
 
 /**
- * No "Matches" entry, deliberately.
+ * "Matches" is back, because the page it points at now scopes itself.
  *
- * `/dashboard/matches` filters on `created_by = auth.uid()` — a personal-
- * workspace predicate written into the page. Pointing a team menu at it would
- * show a coach their own uploads presented as the program's, which is the
- * wrong-attribution failure `docs/ui-revamp-guardrails.md` warns about: nothing
- * looks broken on screen. It comes back the moment that page resolves its own
- * workspace scope rather than assuming one.
+ * It was absent for a real reason: `/dashboard/matches` filtered on
+ * `created_by = auth.uid()` and nothing else, so a team menu pointing at it
+ * would have shown a coach their own uploads presented as the program's —
+ * the wrong-attribution failure `docs/ui-revamp-guardrails.md` warns about,
+ * where nothing looks broken on screen. That note said the entry returns the
+ * moment the page resolves its own workspace scope. It does now: personal
+ * reads `created_by = me AND program_id IS NULL`, team reads
+ * `program_id = <program>` and lets `visible_match_ids()` decide who sees
+ * which rows.
+ *
+ * The cost of leaving it out had grown past the risk of putting it back —
+ * inside a program NOBODY had a route to a match list, players included.
  */
 export const TEAM_NAV: readonly NavLink[] = [
   { name: "Team Home", href: "/dashboard/team", icon: Home },
+  { name: "Matches", href: "/dashboard/matches", icon: Calendar },
   { name: "Roster", href: "/dashboard/team/roster", icon: Users },
   { name: "Compare", href: "/dashboard/team/compare", icon: Swords },
 ];
