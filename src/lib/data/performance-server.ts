@@ -192,47 +192,61 @@ function calculateAverageRating(
 ): { serve: number; return_: number; pressure: number } {
   if (stats.length === 0) return { serve: 0, return_: 0, pressure: 0 };
 
+  // THREE measures, THREE divisors. One shared `count` meant a match that
+  // measured serve but not returns still incremented the divisor for returns,
+  // after adding a hard zero to their sum — so a video-derived match (whose
+  // `serve_rating` is null because its formula needs the ace count) dragged
+  // down averages it had contributed nothing to.
+  //
+  // The `?? 0` this replaces was worse than the divisor: `(firstRet ?? 0 +
+  // secondRet ?? 0) / 2` HALVES a present value whose partner is absent.
+  // `break_points_saved_pct` is null whenever the player faced no break
+  // points, which is an ordinary thing to do, so a real converted-percentage
+  // was reported at half its value. `meanOfPresent` — already imported, and
+  // already used by `calculatePerformanceProfile` further down — is the rule
+  // this file states everywhere else: absent is not zero.
   let serveSum = 0;
+  let serveCount = 0;
   let returnSum = 0;
+  let returnCount = 0;
   let pressureSum = 0;
-  let count = 0;
+  let pressureCount = 0;
 
   for (const stat of stats) {
     const isUserPlayer1 = matchPlayerMap.get(stat.match_id);
     if (isUserPlayer1 === undefined) continue;
     if (stat.is_player1 !== isUserPlayer1) continue;
 
-    // Skip a match that measured none of these rather than adding zeroes to
-    // all three sums and incrementing the divisor.
     const serveRating = pct(stat.serve_rating);
-    const firstRet = pct(stat.first_return_won_pct);
-    const secondRet = pct(stat.second_return_won_pct);
-    const bpSaved = pct(stat.break_points_saved_pct);
-    const bpConverted = pct(stat.break_points_converted_pct);
-    if (
-      serveRating === null &&
-      firstRet === null &&
-      secondRet === null &&
-      bpSaved === null &&
-      bpConverted === null
-    ) {
-      continue;
-    }
-    const returnWonPct = ((firstRet ?? 0) + (secondRet ?? 0)) / 2;
-    const pressurePct = ((bpSaved ?? 0) + (bpConverted ?? 0)) / 2;
+    const returnWonPct = meanOfPresent([
+      pct(stat.first_return_won_pct),
+      pct(stat.second_return_won_pct),
+    ]);
+    const pressurePct = meanOfPresent([
+      pct(stat.break_points_saved_pct),
+      pct(stat.break_points_converted_pct),
+    ]);
 
-    serveSum += serveRating ?? 0;
-    returnSum += returnWonPct * 3; // Scale to ~150-200 range
-    pressureSum += pressurePct * 3;
-    count++;
+    // No all-null guard needed any more: a match that measured nothing now
+    // increments no divisor, which is what that guard was standing in for.
+    if (serveRating !== null) {
+      serveSum += serveRating;
+      serveCount++;
+    }
+    if (returnWonPct !== null) {
+      returnSum += returnWonPct * 3; // Scale to ~150-200 range
+      returnCount++;
+    }
+    if (pressurePct !== null) {
+      pressureSum += pressurePct * 3;
+      pressureCount++;
+    }
   }
 
-  if (count === 0) return { serve: 0, return_: 0, pressure: 0 };
-
   return {
-    serve: Math.round(serveSum / count),
-    return_: Math.round(returnSum / count),
-    pressure: Math.round(pressureSum / count),
+    serve: serveCount === 0 ? 0 : Math.round(serveSum / serveCount),
+    return_: returnCount === 0 ? 0 : Math.round(returnSum / returnCount),
+    pressure: pressureCount === 0 ? 0 : Math.round(pressureSum / pressureCount),
   };
 }
 
@@ -737,12 +751,16 @@ function calculatePerformanceProfile(
     const rating = pct(s.serve_rating);
     return rating === null ? null : Math.min(100, rating / 2.5);
   };
-  const pairMean = (a: number | null, b: number | null) =>
-    a === null && b === null ? null : ((a ?? b ?? 0) + (b ?? a ?? 0)) / 2;
+  // `meanOfPresent`, not a local pair helper. The one that lived here spelled
+  // the identical rule -- `(a ?? b) + (b ?? a) / 2` collapses to the present
+  // value when one side is null -- in a second place where it could drift.
   const returnScore = (s: DbMatchStats) =>
-    pairMean(pct(s.first_return_won_pct), pct(s.second_return_won_pct));
+    meanOfPresent([pct(s.first_return_won_pct), pct(s.second_return_won_pct)]);
   const clutchScore = (s: DbMatchStats) =>
-    pairMean(pct(s.break_points_saved_pct), pct(s.break_points_converted_pct));
+    meanOfPresent([
+      pct(s.break_points_saved_pct),
+      pct(s.break_points_converted_pct),
+    ]);
 
   const currentServe = Math.round(avg(recentStats, serveScore));
   const previousServe = olderStats.length > 0 ? Math.round(avg(olderStats, serveScore)) : currentServe;

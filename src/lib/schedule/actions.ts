@@ -322,7 +322,7 @@ export async function recordResult(
       : (((entry.player_user_ids as string[] | null) ?? [])[0] ?? null);
 
   if (existing?.id) {
-    const { error: updateError } = await supabase
+    const { data: updated, error: updateError } = await supabase
       .from("matches")
       .update({
         player1_name: ourLabel,
@@ -330,9 +330,26 @@ export async function recordResult(
         player1_id: playerUserId,
         score: scorePayload,
       })
-      .eq("id", existing.id as string);
+      .eq("id", existing.id as string)
+      // `.select("id")` because this file's own header says a policy failure
+      // arrives as a zero-row write with no message, and then this write did
+      // not check. The matches UPDATE policy is `auth.uid() = created_by`,
+      // but `canEdit` on the event page is `isProgramStaff`, so ANY staff
+      // member reaches the score form. A coach correcting a score another
+      // coach recorded got `updateError === null`, a revalidate, and a
+      // returned matchId -- while the old score stayed on screen with nothing
+      // to explain it.
+      .select("id");
 
     if (updateError) return { error: updateError.message };
+
+    if (!updated || updated.length === 0) {
+      return {
+        error:
+          "That result was recorded by someone else on the staff, and only " +
+          "they can change it. Ask them to correct it.",
+      };
+    }
 
     revalidatePath("/dashboard/team/schedule");
     revalidatePath(`/dashboard/team/schedule/${entry.event_id}`);
