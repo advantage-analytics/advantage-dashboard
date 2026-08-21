@@ -13,6 +13,7 @@ import {
   signInAndAccept,
   signOutForInvite,
 } from "@/lib/services/programs/join-actions";
+import { PASSWORD_RULE } from "@/lib/auth/error-messages";
 import type { JoinRole } from "@/lib/services/programs/invite-acceptance";
 
 /**
@@ -233,10 +234,21 @@ export function JoinSignUp({
           id="join-new-password"
           type="password"
           autoComplete="new-password"
+          aria-describedby="join-password-rule"
           className={CLAIM_FIELD}
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
+        {/* Stated before it can be failed, matching the auth sign-up form.
+            The server enforces the same rule either way; showing it only in
+            the error means the first submit fails for a reason the person
+            could have satisfied had anyone told them. */}
+        <p
+          id="join-password-rule"
+          className="mt-1.5 text-[11px] leading-[16px] text-[var(--ink-500)]"
+        >
+          {PASSWORD_RULE}
+        </p>
       </div>
 
       <Problem message={error} />
