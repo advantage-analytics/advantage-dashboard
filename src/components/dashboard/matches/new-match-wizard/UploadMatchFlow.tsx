@@ -149,7 +149,11 @@ export function UploadMatchFlow({ preset }: { preset?: EventPreset | null } = {}
     return (
       <UploadMatchSuccess
         uploads={active}
-        exitHref={EXIT_HREF}
+        exitHref={
+          preset?.kind === "single"
+            ? `/dashboard/team/schedule/single/${createdMatchId}`
+            : EXIT_HREF
+        }
         preset={preset ?? null}
         onUploadAnother={() => {
           setCreatedMatchId(null);
@@ -299,7 +303,11 @@ function UploadMatchSuccess({
           </Button>
           <Button asChild className={primaryBtnCls}>
             <Link href={exitHref}>
-              {preset ? "Back to the event" : "Back to matches"}
+              {preset?.kind === "single"
+                ? "Open the match"
+                : preset
+                  ? "Back to the event"
+                  : "Back to matches"}
             </Link>
           </Button>
         </div>

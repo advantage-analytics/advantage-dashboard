@@ -4,6 +4,7 @@ import { ChevronRight } from "lucide-react";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { isProgramStaff } from "@/lib/workspace/types";
 import { getUploadQueue } from "@/lib/data/schedule-server";
+import { getTeamSingleMatch } from "@/lib/data/single-match-server";
 import { supportsVideo } from "@/lib/schedule/entry-state";
 import { formatEventSpan, siteLabel } from "@/lib/schedule/format";
 import { UploadMatchFlow } from "@/components/dashboard/matches/new-match-wizard";
@@ -40,6 +41,37 @@ export default async function TeamUploadPage({
   if (!isProgramStaff(active)) redirect("/dashboard/team/schedule");
 
   const groups = await getUploadQueue(active.id);
+
+  // `?match=` with no `?entry=` is a single match — it exists, it belongs to no
+  // event, and the destination is already settled. Same pinned step 1, minus
+  // the event facts there are none of.
+  if (!entryId && matchId) {
+    const single = await getTeamSingleMatch(active.id, matchId);
+    if (!single) redirect("/dashboard/team/upload");
+
+    const preset: EventPreset = {
+      kind: "line",
+      entryId: null,
+      eventId: null,
+      eventName: single.context,
+      matchId: single.id,
+      round: single.round,
+      playerName: single.playerName,
+      opponentName: single.opponentName,
+      date: single.date.slice(0, 10),
+      surface: single.surface,
+      bestOf: single.score?.player1.length === 1 ? 1 : 3,
+      // Nothing declared a format for a challenge match, so the details step
+      // asks. Never `false` by default — the pipeline refuses a job without a
+      // real answer, and a wrong one that looks real is worse than none.
+      adScoring: null,
+      score: single.score,
+      supportsVideo: true,
+      eventHref: `/dashboard/team/schedule/single/${single.id}`,
+    };
+
+    return <UploadMatchFlow preset={preset} />;
+  }
 
   if (entryId) {
     for (const group of groups) {
