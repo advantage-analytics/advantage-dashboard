@@ -22,7 +22,9 @@ import {
 import { formatClock } from '@/components/dashboard/matches/new-match-wizard/utils';
 
 interface JobRow {
+  id: string;
   match_id: string;
+  updated_at: string;
   status: string;
   upload_progress_percent: number | null;
   error_message: string | null;
@@ -78,7 +80,7 @@ export async function loadMatchAnalysis(
   const { data, error } = await supabase
     .from('processing_jobs')
     .select(
-      'match_id, status, upload_progress_percent, error_message, billable_seconds, external_job_id, created_at, derivation_version'
+      'id, match_id, status, upload_progress_percent, error_message, billable_seconds, external_job_id, created_at, updated_at, derivation_version'
     )
     .in('match_id', matchIds)
     // Newest first, so the reduce below keeps the latest attempt per match.
@@ -120,6 +122,13 @@ export async function loadMatchAnalysis(
       // would be invented — better a bare status word than a fake bar.
       uploadPercent,
       startedAt: row.created_at,
+      // Both only exist so a stalled submission can be retried — see
+      // `isSubmitStalled`. `updatedAt` and not `createdAt`, because a job sits
+      // at `uploaded` from the moment the transfer finishes, and created_at is
+      // when it STARTED: on a 4 GB upload those are an hour apart, which would
+      // make a healthy job look stalled the second it landed.
+      jobId: row.id,
+      updatedAt: row.updated_at,
       providerId: 'splitstep',
       jobReference: row.external_job_id ?? undefined,
       window: formatWindow(row.billable_seconds),
