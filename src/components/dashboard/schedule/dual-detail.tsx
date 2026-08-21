@@ -70,7 +70,12 @@ export function DualDetail({
               className="text-[30px] font-light leading-[34px] tracking-[-0.6px]"
               style={{ color: "var(--ink-600)" }}
             >
-              vs
+              {/* The trailing space is load-bearing. These are flex children
+                  separated by a gap, so the visual space is layout, not text —
+                  and the h1's accessible name came out "vsState College of
+                  Ash". The space collapses visually and separates the words for
+                  a screen reader. */}
+              {"vs "}
             </span>
             <span
               className="text-[30px] font-light leading-[34px] tracking-[-0.6px]"
