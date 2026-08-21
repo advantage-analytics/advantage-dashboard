@@ -246,9 +246,16 @@ function calculateRecentPerformance(
   }
 
   // Build a map of matchId → user's stats
+  // `number | null` per field: a match can measure the first serve and not the
+  // second, and flattening that null to 0 is the difference between "we did
+  // not measure it" and "you won none of them".
   const matchStatsMap = new Map<
     string,
-    { firstServeIn: number; firstServeWon: number; secondServeWon: number }
+    {
+      firstServeIn: number | null;
+      firstServeWon: number | null;
+      secondServeWon: number | null;
+    }
   >();
   for (const stat of stats) {
     const isUserPlayer1 = matchPlayerMap.get(stat.match_id);
@@ -266,10 +273,18 @@ function calculateRecentPerformance(
       continue;
     }
 
+    // Nulls are CARRIED, not flattened to 0. The guard above only skips a
+    // match that measured none of the three, so `?? 0` here published a hard
+    // zero for whichever one was individually missing — and that combination
+    // is real, not hypothetical: `suppress_derived_match_stats` nulls
+    // `second_serves_in` for every derived match while leaving
+    // `first_serve_pct` populated. The only consumer is the home-insight
+    // prompt, so it surfaced as the model writing prose about a 0% second
+    // serve and a 55-point collapse that never happened.
     matchStatsMap.set(stat.match_id, {
-      firstServeIn: firstServeIn ?? 0,
-      firstServeWon: firstServeWon ?? 0,
-      secondServeWon: secondServeWon ?? 0,
+      firstServeIn,
+      firstServeWon,
+      secondServeWon,
     });
   }
 
@@ -289,33 +304,28 @@ function calculateRecentPerformance(
 
   if (!latestStats) return DEFAULT_PERFORMANCE.recentPerformance;
 
-  const firstServeInChange = previousStats
-    ? latestStats.firstServeIn - previousStats.firstServeIn
-    : 0;
-  const firstServeWonChange = previousStats
-    ? latestStats.firstServeWon - previousStats.firstServeWon
-    : 0;
-  const secondServeWonChange = previousStats
-    ? latestStats.secondServeWon - previousStats.secondServeWon
-    : 0;
+  // Per field, not per match. A measure the latest match did not record is
+  // omitted; a change is reported only when BOTH matches recorded it, because
+  // subtracting from an absent baseline invents a swing.
+  const measures = [
+    { label: "First Serve In Percentage", key: "firstServeIn" },
+    { label: "First Serve Won Percentage", key: "firstServeWon" },
+    { label: "Second Serve Won Percentage", key: "secondServeWon" },
+  ] as const;
 
-  return [
-    {
-      label: "First Serve In Percentage",
-      value: Math.round(latestStats.firstServeIn),
-      change: Math.round(firstServeInChange * 10) / 10,
-    },
-    {
-      label: "First Serve Won Percentage",
-      value: Math.round(latestStats.firstServeWon),
-      change: Math.round(firstServeWonChange * 10) / 10,
-    },
-    {
-      label: "Second Serve Won Percentage",
-      value: Math.round(latestStats.secondServeWon),
-      change: Math.round(secondServeWonChange * 10) / 10,
-    },
-  ];
+  const out: RecentPerformanceStat[] = [];
+  for (const { label, key } of measures) {
+    const latest = latestStats[key];
+    if (latest === null) continue;
+    const previous = previousStats?.[key] ?? null;
+    out.push({
+      label,
+      value: Math.round(latest),
+      change: previous === null ? 0 : Math.round((latest - previous) * 10) / 10,
+    });
+  }
+
+  return out;
 }
 
 function calculateForm(
