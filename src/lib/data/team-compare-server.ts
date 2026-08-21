@@ -97,6 +97,42 @@ function mean(values: number[]): number | null {
 }
 
 /**
+ * user id → display name, for members of one program.
+ *
+ * Goes through the `program_roster` RPC, NOT a select on `users`. The `users`
+ * SELECT policy is a blanket `auth.uid() = id` — one row, your own — so
+ * `.from("users").in("id", [...])` returns at most the caller and this page
+ * rendered its empty state over a program with a full season of matches. It
+ * failed as a plausible "no matches yet" rather than as an error, which is why
+ * it survived to here.
+ *
+ * `program_roster` is SECURITY DEFINER and exists for exactly this: it is what
+ * Settings › Team, the Roster page and the usage page already read. Name
+ * fallback stays the email's local part, matching `team-roster-server.ts`.
+ */
+async function namesByUserId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  programId: string
+): Promise<Map<string, string>> {
+  const { data } = await supabase.rpc("program_roster", {
+    p_program_id: programId,
+  });
+
+  const names = new Map<string, string>();
+  for (const row of (data ?? []) as {
+    user_id: string;
+    display_name: string | null;
+    email: string | null;
+  }[]) {
+    names.set(
+      row.user_id,
+      (row.display_name ?? "").trim() || String(row.email ?? "").split("@")[0]
+    );
+  }
+  return names;
+}
+
+/**
  * Everyone on the program who has actually played, with how much.
  *
  * Built from matches rather than from the roster: a member with no match has
@@ -121,22 +157,17 @@ export const getComparablePlayers = cache(async function getComparablePlayers(
   }
   if (counts.size === 0) return [];
 
-  const { data: users } = await supabase
-    .from("users")
-    .select("id, first_name, last_name, email")
-    .in("id", [...counts.keys()]);
+  const names = await namesByUserId(supabase, programId);
 
-  return (users ?? [])
-    .map((u) => {
-      const name =
-        [u.first_name, u.last_name].filter(Boolean).join(" ").trim() ||
-        String(u.email).split("@")[0];
-      return {
-        userId: u.id as string,
-        name,
-        matchCount: counts.get(u.id as string) ?? 0,
-      };
-    })
+  // Driven by who played, not by who the roster returns — a former member with
+  // matches on the program still belongs in the picker. An id the roster does
+  // not name falls back to nothing rather than being dropped silently.
+  return [...counts.entries()]
+    .map(([userId, matchCount]) => ({
+      userId,
+      name: names.get(userId) ?? "Unknown player",
+      matchCount,
+    }))
     .sort((a, b) => b.matchCount - a.matchCount || a.name.localeCompare(b.name));
 });
 
@@ -182,19 +213,7 @@ export const getPlayerComparison = cache(async function getPlayerComparison(
     stats.set(`${row.match_id}:${row.is_player1 ? 1 : 0}`, row);
   }
 
-  const { data: users } = await supabase
-    .from("users")
-    .select("id, first_name, last_name, email")
-    .in("id", userIds);
-
-  const nameById = new Map<string, string>();
-  for (const u of users ?? []) {
-    nameById.set(
-      u.id as string,
-      [u.first_name, u.last_name].filter(Boolean).join(" ").trim() ||
-        String(u.email).split("@")[0]
-    );
-  }
+  const nameById = await namesByUserId(supabase, programId);
 
   return userIds.map((userId) => {
     const collected: Record<string, number[]> = {};

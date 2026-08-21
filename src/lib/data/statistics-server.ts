@@ -89,6 +89,7 @@ const MONTH_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct
 interface DbMatch {
   id: string;
   player1_id: string | null;
+  player2_id: string | null;
   date: string;
   court_type: string | null;
   duration: number | null;
@@ -122,12 +123,27 @@ interface DbStat {
   long_rally_won_pct: string | null;
 }
 
+/**
+ * Did the viewer win this match?
+ *
+ * The orientation test used to be `player1_id === userId ? won : !won`, which
+ * treats an UNKNOWN player1 as proof the viewer was player 2 — so a row with a
+ * null `player1_id` inverted, and a match our side won was counted as the
+ * viewer's loss. Both sides are named explicitly now, and a row that names
+ * neither is not a win.
+ *
+ * The `program_id` guard on the queries above is what actually keeps such rows
+ * off this page. This is the second line: an unorientable row that arrives by
+ * some other route reads as "not a win" rather than as its own opposite.
+ */
 function didUserWin(match: DbMatch, userId: string): boolean {
   if (!match.score?.player1 || !match.score?.player2) return false;
   const p1Sets = match.score.player1.filter((s, i) => s > (match.score!.player2[i] ?? 0)).length;
   const p2Sets = match.score.player2.filter((s, i) => s > (match.score!.player1[i] ?? 0)).length;
   const player1Won = p1Sets > p2Sets;
-  return match.player1_id === userId ? player1Won : !player1Won;
+  if (match.player1_id === userId) return player1Won;
+  if (match.player2_id === userId) return !player1Won;
+  return false;
 }
 
 function computeStreak(matches: DbMatch[], userId: string): string {
@@ -258,9 +274,19 @@ export async function getSelectableMatches(): Promise<SelectableMatch[]> {
   const { data: matchRows } = await supabase
     .from("matches")
     .select(
-      "id, player1_id, player1_name, player2_name, tournament_name, date, court_type, duration, score"
+      "id, player1_id, player2_id, player1_name, player2_name, tournament_name, date, court_type, duration, score"
     )
     .eq("created_by", user.id)
+    // AND no program. Statistics is the PERSONAL season — the page says so —
+    // and `created_by` alone does not mean that: a coach who records a dual
+    // line or uploads for a roster athlete is `created_by` on a match they did
+    // not play. Without this the program's matches are folded into the coach's
+    // own averages, and `didUserWin` below reads a row it cannot orient.
+    //
+    // Same predicate the matches list uses (`matches/page.tsx`), for the same
+    // reason: `matches.program_id` is nullable precisely so "no program" is
+    // the personal workspace.
+    .is("program_id", null)
     .order("date", { ascending: false });
 
   const matches = (matchRows ?? []) as DbMatchFull[];
@@ -346,8 +372,18 @@ export async function getStatisticsPageData(): Promise<StatisticsPageData> {
   // Fetch matches
   const { data: matchRows } = await supabase
     .from("matches")
-    .select("id, player1_id, date, court_type, duration, score")
+    .select("id, player1_id, player2_id, date, court_type, duration, score")
     .eq("created_by", user.id)
+    // AND no program. Statistics is the PERSONAL season — the page says so —
+    // and `created_by` alone does not mean that: a coach who records a dual
+    // line or uploads for a roster athlete is `created_by` on a match they did
+    // not play. Without this the program's matches are folded into the coach's
+    // own averages, and `didUserWin` below reads a row it cannot orient.
+    //
+    // Same predicate the matches list uses (`matches/page.tsx`), for the same
+    // reason: `matches.program_id` is nullable precisely so "no program" is
+    // the personal workspace.
+    .is("program_id", null)
     .order("date", { ascending: false });
 
   const matches = (matchRows ?? []) as DbMatch[];
