@@ -13,7 +13,8 @@ Also relevant, on the **`splitstep-derivation`** branch:
 
 | File | What it is |
 |---|---|
-| `docs/splitstep-vendor-questions.md` | The thirteen open vendor questions, each backed by measurements from two real committed payloads. Supersedes §5 of the spec, with question numbers preserved so `TODO(splitstep-qN)` markers stay valid |
+| [`splitstep-derivation.md`](splitstep-derivation.md) | **Current state** of the derivation engine: what runs in what order, the contracts that break silently when violated (coordinate frame, shot numbering, server-relative scores), the trust tiers, and the gates. Read before touching `derivation/`, the results webhook, or anything that averages `match_stats` |
+| [`splitstep-vendor-questions.md`](splitstep-vendor-questions.md) | The open vendor questions, each backed by measurements from three real payloads. Supersedes §5 of the spec, with question numbers preserved so `TODO(splitstep-qN)` markers stay valid |
 
 ## Conventions
 
