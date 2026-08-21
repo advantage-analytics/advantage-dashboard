@@ -1,3 +1,4 @@
+import { meanOfPresent, num, pct, presentPairs } from "./aggregate";
 import { createClient } from "@/lib/supabase/server";
 
 interface WinLossView {
@@ -201,17 +202,26 @@ function calculateAverageRating(
     if (isUserPlayer1 === undefined) continue;
     if (stat.is_player1 !== isUserPlayer1) continue;
 
-    const serveRating = parseFloat(stat.serve_rating ?? "0");
-    const returnWonPct =
-      (parseFloat(stat.first_return_won_pct ?? "0") +
-        parseFloat(stat.second_return_won_pct ?? "0")) /
-      2;
-    const pressurePct =
-      (parseFloat(stat.break_points_saved_pct ?? "0") +
-        parseFloat(stat.break_points_converted_pct ?? "0")) /
-      2;
+    // Skip a match that measured none of these rather than adding zeroes to
+    // all three sums and incrementing the divisor.
+    const serveRating = pct(stat.serve_rating);
+    const firstRet = pct(stat.first_return_won_pct);
+    const secondRet = pct(stat.second_return_won_pct);
+    const bpSaved = pct(stat.break_points_saved_pct);
+    const bpConverted = pct(stat.break_points_converted_pct);
+    if (
+      serveRating === null &&
+      firstRet === null &&
+      secondRet === null &&
+      bpSaved === null &&
+      bpConverted === null
+    ) {
+      continue;
+    }
+    const returnWonPct = ((firstRet ?? 0) + (secondRet ?? 0)) / 2;
+    const pressurePct = ((bpSaved ?? 0) + (bpConverted ?? 0)) / 2;
 
-    serveSum += serveRating;
+    serveSum += serveRating ?? 0;
     returnSum += returnWonPct * 3; // Scale to ~150-200 range
     pressureSum += pressurePct * 3;
     count++;
@@ -245,10 +255,21 @@ function calculateRecentPerformance(
     if (isUserPlayer1 === undefined) continue;
     if (stat.is_player1 !== isUserPlayer1) continue;
 
+    // A match that measured none of these is not a match with three zeroes —
+    // it is a match with no serve data, and the loop below looks for "the two
+    // most recent matches that have stats". Recording it would make an
+    // unmeasured match satisfy that search and compare against nothing.
+    const firstServeIn = pct(stat.first_serve_pct);
+    const firstServeWon = pct(stat.first_serve_won_pct);
+    const secondServeWon = pct(stat.second_serve_won_pct);
+    if (firstServeIn === null && firstServeWon === null && secondServeWon === null) {
+      continue;
+    }
+
     matchStatsMap.set(stat.match_id, {
-      firstServeIn: parseFloat(stat.first_serve_pct ?? "0"),
-      firstServeWon: parseFloat(stat.first_serve_won_pct ?? "0"),
-      secondServeWon: parseFloat(stat.second_serve_won_pct ?? "0"),
+      firstServeIn: firstServeIn ?? 0,
+      firstServeWon: firstServeWon ?? 0,
+      secondServeWon: secondServeWon ?? 0,
     });
   }
 
@@ -376,7 +397,12 @@ interface KpiSpec {
   category: KpiCategory;
   format: KpiFormat;
   description: string;
-  pick: (s: DbMatchStats) => number;
+  /**
+   * Null when the statistic was not measured for that match. NOT zero — a
+   * withheld ace count is not a match in which the player hit no aces, and
+   * averaging it as zero corrupts the headline, the sparkline and the delta.
+   */
+  pick: (s: DbMatchStats) => number | null;
   lowerIsBetter?: boolean;
 }
 
@@ -388,7 +414,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Serve",
     format: "percent",
     description: "Percentage of first serves that landed in the service box",
-    pick: (s) => parseFloat(s.first_serve_pct ?? "0"),
+    pick: (s) => pct(s.first_serve_pct),
   },
   {
     key: "first-serve-won",
@@ -396,7 +422,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Serve",
     format: "percent",
     description: "Percentage of points won on your first serve",
-    pick: (s) => parseFloat(s.first_serve_won_pct ?? "0"),
+    pick: (s) => pct(s.first_serve_won_pct),
   },
   {
     key: "second-serve-won",
@@ -404,7 +430,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Serve",
     format: "percent",
     description: "Percentage of points won on your second serve",
-    pick: (s) => parseFloat(s.second_serve_won_pct ?? "0"),
+    pick: (s) => pct(s.second_serve_won_pct),
   },
   {
     key: "service-games-won",
@@ -412,7 +438,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Serve",
     format: "percent",
     description: "Percentage of service games held",
-    pick: (s) => parseFloat(s.service_games_won_pct ?? s.serve_rating ?? "0"),
+    pick: (s) => pct(s.service_games_won_pct) ?? pct(s.serve_rating),
   },
   {
     key: "breakpoints-saved",
@@ -420,7 +446,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Serve",
     format: "percent",
     description: "Percentage of break points defended on serve",
-    pick: (s) => parseFloat(s.break_points_saved_pct ?? "0"),
+    pick: (s) => pct(s.break_points_saved_pct),
   },
   {
     key: "aces",
@@ -428,7 +454,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Serve",
     format: "count",
     description: "Serves the returner doesn't touch",
-    pick: (s) => s.aces ?? 0,
+    pick: (s) => num(s.aces),
   },
   {
     key: "double-faults",
@@ -436,7 +462,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Serve",
     format: "count",
     description: "Missed second serves; point lost",
-    pick: (s) => s.double_faults ?? 0,
+    pick: (s) => num(s.double_faults),
     lowerIsBetter: true,
   },
   // Return
@@ -446,7 +472,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Return",
     format: "percent",
     description: "Percentage of points won returning first serves",
-    pick: (s) => parseFloat(s.first_return_won_pct ?? "0"),
+    pick: (s) => pct(s.first_return_won_pct),
   },
   {
     key: "second-return-won",
@@ -454,7 +480,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Return",
     format: "percent",
     description: "Percentage of points won returning second serves",
-    pick: (s) => parseFloat(s.second_return_won_pct ?? "0"),
+    pick: (s) => pct(s.second_return_won_pct),
   },
   {
     key: "return-games-won",
@@ -462,7 +488,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Return",
     format: "percent",
     description: "Percentage of opponent service games broken",
-    pick: (s) => parseFloat(s.return_games_won_pct ?? "0"),
+    pick: (s) => pct(s.return_games_won_pct),
   },
   {
     key: "breakpoints-converted",
@@ -470,7 +496,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Return",
     format: "percent",
     description: "Percentage of break point opportunities converted",
-    pick: (s) => parseFloat(s.break_points_converted_pct ?? "0"),
+    pick: (s) => pct(s.break_points_converted_pct),
   },
   // Other
   {
@@ -479,7 +505,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Other",
     format: "percent",
     description: "Percentage of all points won",
-    pick: (s) => parseFloat(s.total_points_won_pct ?? "0"),
+    pick: (s) => pct(s.total_points_won_pct),
   },
   {
     key: "winners",
@@ -487,7 +513,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Other",
     format: "count",
     description: "Point-ending shots not touched",
-    pick: (s) => s.winners ?? 0,
+    pick: (s) => num(s.winners),
   },
   {
     key: "unforced-errors",
@@ -495,7 +521,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Other",
     format: "count",
     description: "Shots into the net or out of bounds",
-    pick: (s) => s.unforced_errors ?? 0,
+    pick: (s) => num(s.unforced_errors),
     lowerIsBetter: true,
   },
   {
@@ -504,7 +530,7 @@ const KPI_SPECS: KpiSpec[] = [
     category: "Other",
     format: "decimal",
     description: "Average shots per point",
-    pick: (s) => s.avg_rally_length ?? 0,
+    pick: (s) => num(s.avg_rally_length),
   },
 ];
 
@@ -543,14 +569,18 @@ function calculateKpiCards(
   // (e.g. first match still processing in the edge function). The placeholder
   // keeps the KPI strip populated so the customizer's 5-tile default stays intact.
   return KPI_SPECS.map((spec) => {
-    const values = orderedStats.map(spec.pick);
-    const hasData = values.length > 0;
-    const sparkline = values.slice(0, 8).reverse();
+    // Matches that did not measure this statistic are dropped rather than
+    // counted as zero. Paired with their ids so the sparkline tooltip cannot
+    // shift onto the wrong match — filtering the values alone would offset the
+    // metadata by one for every gap.
+    const measured = presentPairs(orderedStats.map(spec.pick), orderedIds);
+    const hasData = measured.length > 0;
+    const window = measured.slice(0, 8);
+    const sparkline = window.map((m) => m.value).reverse();
     // Same slice+reverse window as `sparkline` so points[k].value === sparkline[k].
-    const points = values
-      .slice(0, 8)
-      .map((value, i) => {
-        const meta = matchMetaMap.get(orderedIds[i]);
+    const points = window
+      .map(({ value, meta: id }) => {
+        const meta = matchMetaMap.get(id);
         return {
           value,
           date: meta?.date ?? "",
@@ -559,13 +589,13 @@ function calculateKpiCards(
       })
       .reverse();
     const change =
-      values.length >= 2
-        ? Math.round((values[0] - values[1]) * 10) / 10
+      measured.length >= 2
+        ? Math.round((measured[0].value - measured[1].value) * 10) / 10
         : 0;
     return {
       key: spec.key,
       label: spec.label,
-      value: hasData ? formatKpiValue(values[0], spec.format) : "—",
+      value: hasData ? formatKpiValue(measured[0].value, spec.format) : "—",
       change,
       changeLabel: "last 30 days",
       sparkline,
@@ -687,21 +717,22 @@ function calculatePerformanceProfile(
   const recentStats = userStats.slice(0, Math.min(3, userStats.length));
   const olderStats = userStats.slice(3, Math.min(6, userStats.length));
 
-  const avg = (arr: DbMatchStats[], fn: (s: DbMatchStats) => number) => {
-    if (arr.length === 0) return 0;
-    return arr.reduce((sum, s) => sum + fn(s), 0) / arr.length;
-  };
+  // A match missing the inputs is excluded from the mean rather than scored 0.
+  // serve_rating in particular goes NULL for every video-derived match, because
+  // its formula contains the ace count.
+  const avg = (arr: DbMatchStats[], fn: (s: DbMatchStats) => number | null) =>
+    meanOfPresent(arr.map(fn)) ?? 0;
 
-  const serveScore = (s: DbMatchStats) =>
-    Math.min(100, parseFloat(s.serve_rating ?? "0") / 2.5);
+  const serveScore = (s: DbMatchStats) => {
+    const rating = pct(s.serve_rating);
+    return rating === null ? null : Math.min(100, rating / 2.5);
+  };
+  const pairMean = (a: number | null, b: number | null) =>
+    a === null && b === null ? null : ((a ?? b ?? 0) + (b ?? a ?? 0)) / 2;
   const returnScore = (s: DbMatchStats) =>
-    (parseFloat(s.first_return_won_pct ?? "0") +
-      parseFloat(s.second_return_won_pct ?? "0")) /
-    2;
+    pairMean(pct(s.first_return_won_pct), pct(s.second_return_won_pct));
   const clutchScore = (s: DbMatchStats) =>
-    (parseFloat(s.break_points_saved_pct ?? "0") +
-      parseFloat(s.break_points_converted_pct ?? "0")) /
-    2;
+    pairMean(pct(s.break_points_saved_pct), pct(s.break_points_converted_pct));
 
   const currentServe = Math.round(avg(recentStats, serveScore));
   const previousServe = olderStats.length > 0 ? Math.round(avg(olderStats, serveScore)) : currentServe;
