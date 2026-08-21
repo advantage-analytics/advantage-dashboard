@@ -45,9 +45,13 @@ function personalWorkspace(viewer: Viewer): Workspace {
 /**
  * Team workspaces the viewer belongs to.
  *
- * `program_members` is RLS-scoped to the caller — a member sees their own row,
- * staff see the roster — so this needs no explicit user filter and cannot
- * return somebody else's membership.
+ * Filtered to `userId` explicitly. RLS alone is NOT enough here: the select
+ * policy is `user_id = auth.uid() OR is_program_staff(program_id)`, so a coach
+ * reading this table gets the whole roster back. Every one of those rows maps
+ * to the same program id, and the cookie lookup downstream takes the first
+ * match by `joined_at` — so a coach who joined after one of their players
+ * resolved as `role: 'player'` and lost every staff control on their own team,
+ * with the workspace name still correct on screen.
  *
  * `canSubmitVideo` comes from the program's claim state, not from the
  * membership: a program still in review can invite people and build a roster
@@ -56,11 +60,13 @@ function personalWorkspace(viewer: Viewer): Workspace {
  * the state that withholds it.
  */
 async function listProgramWorkspaces(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  userId: string
 ): Promise<Workspace[]> {
   const { data, error } = await supabase
     .from('program_members')
     .select('role, programs!inner(id, school_name, team, status)')
+    .eq('user_id', userId)
     .order('joined_at');
 
   if (error) {
@@ -158,7 +164,7 @@ export const getWorkspaceContext = cache(
 
     const available = [
       personalWorkspace(viewer),
-      ...(await listProgramWorkspaces(supabase)),
+      ...(await listProgramWorkspaces(supabase, user.id)),
     ];
 
     const cookieStore = await cookies();
