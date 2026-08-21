@@ -325,7 +325,11 @@ export async function recordResult(
     event_entry_id: entry.id,
     tournament_name: event.name,
     round,
-    date: event.starts_on,
+    // Midday, not bare midnight. `matches.date` is timestamptz, so a plain
+    // "2026-08-20" lands at 00:00Z and renders as the 19th for every reader
+    // west of Greenwich — which is all of them. Noon puts the whole Americas
+    // safely inside the right day.
+    date: `${event.starts_on}T12:00:00`,
     format: {
       best_of: format.best_of ?? 3,
       ad_scoring: format.ad_scoring ?? null,
@@ -336,7 +340,13 @@ export async function recordResult(
     result: "Final Score",
     match_type: entry.discipline === "doubles" ? "Doubles" : "Singles",
     court_type: event.surface ?? undefined,
-    source_provider: "manual",
+    // NULL, not "manual". `analysisFor()` reads a non-null source_provider as
+    // an IMPORT and resolves it to `imported`, which is in READY — so a line
+    // scored by hand would report as analysed, and the match page would skip
+    // its short-circuit and render a page of zeroes (guardrails 3.3). Null is
+    // what "nobody produced this, somebody typed it" actually means, and it is
+    // the branch manualAnalysis() is waiting for.
+    source_provider: null,
     analysis_method: "manual",
     created_by: auth.userId,
     private: false,

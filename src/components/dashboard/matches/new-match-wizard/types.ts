@@ -250,10 +250,22 @@ export interface ParsingState {
  * never re-typed in the wizard, or the two disagree and the event loses.
  */
 export interface EventPreset {
-  entryId: string;
-  eventId: string;
+  /**
+   * Which shape this is.
+   *
+   * `line` — a dual court or a tournament round. The event knows everything.
+   * `single` — a challenge, practice set or outside event. The workspace knows
+   *   only WHOSE match it is, which is the one question the personal wizard
+   *   cannot answer here; the rest is the personal details step, unchanged.
+   */
+  kind: "line" | "single";
+  /** Null on a single match — there is no event and no line. */
+  entryId: string | null;
+  eventId: string | null;
   /** Opponent school for a dual, tournament name for a tournament. */
-  eventName: string;
+  eventName: string | null;
+  /** Single only: the program's players, to pick from. */
+  roster?: { userId: string; name: string; ladderPosition: number | null }[];
   /** The match this line already produced, when somebody has scored it. */
   matchId: string | null;
   /** 'S1' for a dual line, 'R16' for a tournament round. */

@@ -12,8 +12,8 @@ import { Kbd } from "@/components/ui/kbd";
  * Three destinations and a hairline. The rule separating them is what a match
  * belongs to: a dual and a tournament are events the program shows up to, and a
  * single match — a challenge, a practice set, an outside tournament — belongs
- * to the player's season and nothing else. That is why it sits below the rule
- * and runs the personal wizard rather than creating anything here.
+ * to the player's season and nothing else. That is why it sits below the rule:
+ * it mints no event and no lineup, and it never touches a team score.
  */
 const ITEMS = [
   {
@@ -35,7 +35,10 @@ const ITEMS = [
     icon: User,
     label: "Single match",
     note: "Challenge, practice or an outside event",
-    href: "/dashboard/matches/new",
+    // The team route, not the personal wizard. It is the same wizard either
+    // way — this one just asks whose match it is first, which is the question
+    // /dashboard/matches/new has no roster to answer.
+    href: "/dashboard/team/schedule/new/single",
   },
 ] as const;
 

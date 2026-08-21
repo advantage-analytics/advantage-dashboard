@@ -56,6 +56,7 @@ export default async function TeamUploadPage({
         entry.matches[0] ??
         null;
       const preset: EventPreset = {
+        kind: "line",
         entryId: entry.id,
         eventId: group.event.id,
         eventName: group.event.name,

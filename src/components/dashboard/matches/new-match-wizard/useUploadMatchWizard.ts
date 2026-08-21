@@ -351,7 +351,7 @@ export function useUploadMatchWizard({
       setSelectedProvider(DEFAULT_PROVIDER_ID);
       setFormData((prev) => ({
         ...prev,
-        eventName: preset.eventName,
+        eventName: preset.eventName ?? "",
         round: preset.round ?? "",
         playerName: preset.playerName,
         opponentName: preset.opponentName,
@@ -452,12 +452,15 @@ export function useUploadMatchWizard({
   }, []);
 
   const handleProviderContinue = useCallback(() => {
-    if (selectedProvider) {
-      // Processing providers get a video step before the form; import providers
-      // go straight to the merged file+details step.
-      setStep(stepOrder[1]);
-    }
-  }, [selectedProvider, stepOrder]);
+    if (!selectedProvider) return;
+    // A single match in a team workspace cannot move on without a player: it is
+    // the one thing the workspace does not already know, and a match created
+    // without it belongs to nobody's season.
+    if (preset?.kind === "single" && !formData.playerName.trim()) return;
+    // Processing providers get a video step before the form; import providers
+    // go straight to the merged file+details step.
+    setStep(stepOrder[1]);
+  }, [selectedProvider, stepOrder, preset, formData.playerName]);
 
   const handleVideoContinue = useCallback(() => {
     setStep("match");

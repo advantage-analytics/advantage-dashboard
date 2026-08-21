@@ -540,11 +540,17 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     // is called. "Choose your data source" above a match that is already chosen
     // is the heading contradicting the panel underneath it.
     ...(preset && step === "provider"
-      ? {
-          title: "Which match is this?",
-          description:
-            "The event answered everything but the video. Check it, then add the file.",
-        }
+      ? preset.kind === "single"
+        ? {
+            title: "Whose match is this?",
+            description:
+              "The one question the personal wizard can't answer in a team workspace. Everything else — opponent, date, surface, score — is the details step, unchanged.",
+          }
+        : {
+            title: "Which match is this?",
+            description:
+              "The event answered everything but the video. Check it, then add the file.",
+          }
       : undefined),
   };
 
@@ -624,7 +630,13 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
   // Both of the last two steps can see the same answers, so both wait on them.
   const gatedByMissing =
     (step === "match" || step === "confirm") && missing.labels.length > 0;
-  const continueDisabled = stepBusy !== null || gatedByMissing;
+  // Step 1 on the single rail waits for a player. It is the one fact the
+  // workspace cannot supply, and a match created without it belongs to nobody.
+  const awaitingPlayer =
+    preset?.kind === "single" &&
+    step === "provider" &&
+    !formData.playerName.trim();
+  const continueDisabled = stepBusy !== null || gatedByMissing || awaitingPlayer;
 
   // Platform detection for the right modifier glyph in the footer hint. Gated
   // behind null until mounted so SSR doesn't render a Mac chord on a Linux box.
@@ -781,7 +793,11 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
               // Same step, different question. In a team workspace "where do
               // the numbers come from?" has one answer, so this slot confirms
               // the destination instead of asking for a source.
-              <PinnedMatchContent preset={preset} />
+              <PinnedMatchContent
+                preset={preset}
+                playerName={formData.playerName}
+                onPickPlayer={(name) => handleInputChange("playerName", name)}
+              />
             ) : (
               <ProviderContent
                 selectedProvider={selectedProvider}
