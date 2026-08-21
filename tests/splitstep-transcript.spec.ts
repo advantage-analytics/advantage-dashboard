@@ -9,6 +9,7 @@ import {
   classifyPoint,
   lastServeIndex,
   reconcile,
+  pressureFor,
   resolvePointWinners,
   scoreIsSelfMirroring,
   shotNumber,
@@ -365,5 +366,68 @@ test.describe('transcript', () => {
     expect(shotFlags).toContain(SHOT_FLAGS.GEOMETRY_DISCARDED);
     expect(pointFlags).toContain(POINT_FLAGS.SAME_PLAYER_CONSECUTIVE);
     expect(pointFlags).toContain(POINT_FLAGS.WINNER_DISPUTED);
+  });
+});
+
+test.describe('pressure points', () => {
+  test('a break point is the returner one point from the game', () => {
+    // Was previously never set, so every derived row defaulted to false and a
+    // 6-4 6-4 match — which contains at least two breaks of serve — reported
+    // zero break points. That is a fabricated statistic, not a missing one.
+    const serve = stroke({ strokeType: 'serve', strokeSide: 'overhead' });
+    const at = (score: string) =>
+      rally([{ ...serve, predPointScore: score }, stroke({ playerLabel: 'B' })]);
+    const base = {
+      labels: ['A', 'B'],
+      gamesThisSet: { A: 0, B: 0 },
+      setsWon: { A: 0, B: 0 },
+      adScoring: true,
+      bestOf: 3,
+    };
+
+    // Server-relative: "30-40" is server 30, returner 40.
+    expect(pressureFor({ rally: at('30-40'), ...base }).isBreakPoint).toBe(true);
+    // 40-30 is the server's game point, not a break point.
+    expect(pressureFor({ rally: at('40-30'), ...base }).isBreakPoint).toBe(false);
+    // Under ad scoring 40-40 is deuce — neither side wins on this point.
+    expect(pressureFor({ rally: at('40-40'), ...base }).isBreakPoint).toBe(false);
+  });
+
+  test('under no-ad, 40-40 IS a break point', () => {
+    // The deciding point is the most pressured point in tennis. Defaulting to
+    // ad scoring would silently drop it, which is the same class of error as
+    // the fabricated zero, one level subtler.
+    const r = rally([
+      stroke({ strokeType: 'serve', strokeSide: 'overhead', predPointScore: '40-40' }),
+      stroke({ playerLabel: 'B' }),
+    ]);
+    const base = {
+      rally: r,
+      labels: ['A', 'B'],
+      gamesThisSet: { A: 0, B: 0 },
+      setsWon: { A: 0, B: 0 },
+      bestOf: 3,
+    };
+    expect(pressureFor({ ...base, adScoring: false }).isBreakPoint).toBe(true);
+    expect(pressureFor({ ...base, adScoring: true }).isBreakPoint).toBe(false);
+  });
+
+  test('set point needs the game to close the set, match point the match', () => {
+    const r = rally([
+      stroke({ strokeType: 'serve', strokeSide: 'overhead', predPointScore: '40-30' }),
+      stroke({ playerLabel: 'B' }),
+    ]);
+    const mk = (games: Record<string, number>, sets: Record<string, number>) =>
+      pressureFor({ rally: r, labels: ['A', 'B'], gamesThisSet: games, setsWon: sets, adScoring: true, bestOf: 3 });
+
+    // Serving at 5-4, 40-30 — one point from the set.
+    expect(mk({ A: 5, B: 4 }, { A: 0, B: 0 }).isSetPoint).toBe(true);
+    // Same point at 3-4 wins the game, not the set.
+    expect(mk({ A: 3, B: 4 }, { A: 0, B: 0 }).isSetPoint).toBe(false);
+    // 5-5 would only reach 6-5, which does not close a set.
+    expect(mk({ A: 5, B: 5 }, { A: 0, B: 0 }).isSetPoint).toBe(false);
+    // With a set already won, best-of-3 makes it match point too.
+    expect(mk({ A: 5, B: 4 }, { A: 1, B: 0 }).isMatchPoint).toBe(true);
+    expect(mk({ A: 5, B: 4 }, { A: 0, B: 0 }).isMatchPoint).toBe(false);
   });
 });

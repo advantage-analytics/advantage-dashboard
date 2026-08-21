@@ -42,6 +42,7 @@ interface MatchRow {
   id: string;
   score: MatchScore | null;
   initial_top_player_is_player1: boolean | null;
+  format: { ad_scoring?: boolean; best_of?: number } | null;
 }
 
 /**
@@ -71,7 +72,7 @@ export async function buildTranscriptForJob(params: {
 
   const { data: match, error: matchError } = await supabase
     .from('matches')
-    .select('id, score, initial_top_player_is_player1')
+    .select('id, score, initial_top_player_is_player1, format')
     .eq('id', job.match_id)
     .single<MatchRow>();
 
@@ -105,6 +106,11 @@ export async function buildTranscriptForJob(params: {
     score: match.score,
     initialTopIsPlayer1:
       job.initial_top_player_is_player1 ?? match.initial_top_player_is_player1,
+    // Threaded from the match record rather than assumed: under no-ad, 40-40 is
+    // a deciding point and BOTH players hold game point, so defaulting to ad
+    // scoring would drop the most pressured point in the match.
+    adScoring: match.format?.ad_scoring ?? true,
+    bestOf: match.format?.best_of ?? 3,
   });
 
   return { transcript, reason: transcript.reason, job };
@@ -184,6 +190,9 @@ export async function persistTranscript(params: {
       won_by_player1: p.won_by_player1,
       rally_length: p.rally_length,
       result_type: p.result_type,
+      is_break_point: p.is_break_point,
+      is_set_point: p.is_set_point,
+      is_match_point: p.is_match_point,
       video_time: p.video_time,
       duration: p.duration,
       flags: p.flags,

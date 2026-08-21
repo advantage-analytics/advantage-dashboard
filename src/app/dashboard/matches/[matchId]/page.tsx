@@ -14,6 +14,7 @@ import {
 import { analysisFor, loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import { MatchAnalysisProgress } from "@/components/dashboard/matches/match-detail/match-analysis-progress";
 import { UnpublishedStatsNotice } from "@/components/dashboard/matches/match-detail/unpublished-stats-notice";
+import { DerivedStatsNotice } from "@/components/dashboard/matches/match-detail/derived-stats-notice";
 
 import { MatchSummaryRow } from "@/components/dashboard/matches/match-detail/match-summary-row";
 import { MatchKpiRow } from "@/components/dashboard/matches/match-detail/match-kpi-row";
@@ -190,6 +191,12 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // the derivation ran but no statistics were published, this resolves to
   // `timeline` and the sections below split accordingly.
   const statsPublished = Boolean(p1 && p2);
+  // A video-derived match publishes what it can measure and withholds what it
+  // cannot, per statistic rather than per card. Winners and errors are marked
+  // approximate because identifying the stroke that ended a point is a model
+  // output; aces are absent entirely because an ace cannot be told from a
+  // service winner. See suppress_derived_match_stats().
+  const isDerived = match.sourceProvider === "splitstep";
   const analysis = {
     ...jobAnalysis,
     status: withStatsPublished(jobAnalysis.status, statsPublished),
@@ -268,6 +275,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
         {statsPublished && (
         <div className="mt-8">
           <MatchKpiRow
+            approximate={isDerived}
             duration={match.duration}
             matchDurationSec={matchDurationSec}
             playingTimeSec={points.reduce((sum, p) => sum + (p.duration ?? 0), 0)}
@@ -282,6 +290,12 @@ export default async function MatchDetailPage({ params }: PageProps) {
         {!statsPublished && (
           <div className="mt-8">
             <UnpublishedStatsNotice />
+          </div>
+        )}
+
+        {statsPublished && isDerived && (
+          <div className="mt-8">
+            <DerivedStatsNotice />
           </div>
         )}
 

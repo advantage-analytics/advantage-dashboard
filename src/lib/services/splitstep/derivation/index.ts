@@ -131,6 +131,8 @@ export {
 
 export { flagPoint, flagStroke, POINT_FLAGS, SHOT_FLAGS } from './flags';
 
+export { pressureFor, type PressureFlags } from './pressure';
+
 export {
   buildTranscript,
   type Transcript,

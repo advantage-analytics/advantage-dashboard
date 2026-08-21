@@ -15,6 +15,7 @@ import { flagPoint, flagStroke } from './flags';
 import { reconcile, scoreIsSelfMirroring, type MatchScore, type Reconciliation } from './reconcile';
 import { classifyPoint, lastServeIndex, shotNumber, shotResult, type ResultType } from './result-type';
 import { resolvePointWinners } from './winners';
+import { pressureFor } from './pressure';
 import type { SplitStepRally, SplitStepStroke } from './types';
 
 export interface DerivedShot {
@@ -42,6 +43,9 @@ export interface DerivedPoint {
   won_by_player1: boolean;
   rally_length: number;
   result_type: ResultType | null;
+  is_break_point: boolean;
+  is_set_point: boolean;
+  is_match_point: boolean;
   video_time: number | null;
   duration: number | null;
   flags: string[];
@@ -139,10 +143,21 @@ export interface BuildOptions {
   labels: string[];
   score: MatchScore | null;
   initialTopIsPlayer1: boolean | null;
+  /** matches.format.ad_scoring. Decides whether 40-40 is a deciding point. */
+  adScoring?: boolean;
+  /** matches.format.best_of. Decides when a set point is also a match point. */
+  bestOf?: number;
 }
 
 export function buildTranscript(options: BuildOptions): Transcript {
-  const { rallies, labels, score, initialTopIsPlayer1 } = options;
+  const {
+    rallies,
+    labels,
+    score,
+    initialTopIsPlayer1,
+    adScoring = true,
+    bestOf = 3,
+  } = options;
 
   const gameKeyOf = new Map<number, string>();
   const setKeyOf = new Map<number, string>();
@@ -227,6 +242,17 @@ export function buildTranscript(options: BuildOptions): Transcript {
   let previousGameKey: string | null = null;
   let previousRally: SplitStepRally | null = null;
 
+  // Running tallies, advanced as each game closes. Break/set/match points are
+  // arithmetic on the score BEFORE a point, so these must reflect what was true
+  // when the point started, not after it.
+  const gamesThisSet: Record<string, number> = {};
+  const setsWon: Record<string, number> = {};
+  for (const label of labels) {
+    gamesThisSet[label] = 0;
+    setsWon[label] = 0;
+  }
+  let currentSetIndex = 0;
+
   let winnerStruckLast = 0;
   let rallyEnders = 0;
   let servesSeen = 0;
@@ -236,6 +262,20 @@ export function buildTranscript(options: BuildOptions): Transcript {
   rallies.forEach((rally, i) => {
     const key = gameKeyOf.get(rally.rallyId) ?? '';
     if (key !== previousGameKey) {
+      // Close the game that just ended and credit it before this point is
+      // measured, so the tallies describe the state this point begins from.
+      const closed = gameIndex >= 0 ? rec.games[gameIndex] : undefined;
+      if (closed) {
+        if (closed.setIndex !== currentSetIndex) {
+          const setWinner = Object.entries(gamesThisSet).sort(
+            (a, b) => b[1] - a[1]
+          )[0]?.[0];
+          if (setWinner) setsWon[setWinner] = (setsWon[setWinner] ?? 0) + 1;
+          for (const label of labels) gamesThisSet[label] = 0;
+          currentSetIndex = closed.setIndex;
+        }
+        gamesThisSet[closed.winner] = (gamesThisSet[closed.winner] ?? 0) + 1;
+      }
       gameIndex += 1;
       previousGameKey = key;
       previousRally = null;
@@ -243,6 +283,14 @@ export function buildTranscript(options: BuildOptions): Transcript {
 
     const winner = winners[i]?.winner ?? null;
     const serveIndex = lastServeIndex(rally);
+    const pressure = pressureFor({
+      rally,
+      labels,
+      gamesThisSet,
+      setsWon,
+      adScoring,
+      bestOf,
+    });
     const resultType = winner ? classifyPoint(rally, winner) : null;
     const numbering = gameNumberOf.get(`${gameIndex}`) ?? { set: 1, game: gameIndex + 1 };
 
@@ -314,6 +362,9 @@ export function buildTranscript(options: BuildOptions): Transcript {
       won_by_player1: winner === player1,
       rally_length: rally.strokes.length - serveIndex,
       result_type: resultType,
+      is_break_point: pressure.isBreakPoint,
+      is_set_point: pressure.isSetPoint,
+      is_match_point: pressure.isMatchPoint,
       video_time: first?.videoTime ?? null,
       duration,
       flags: flagPoint({
