@@ -4,20 +4,21 @@ import { getRosterData } from "@/lib/data/team-roster-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { formatResetDate } from "@/lib/data/usage-format";
 import { RosterTable } from "@/components/dashboard/team/roster-table";
-import { InviteButtons } from "@/components/dashboard/team/invite-buttons";
+import { RosterHeaderButtons } from "@/components/dashboard/team/roster-header-buttons";
 
 export const metadata = { title: "Roster" };
 
 /**
- * Everyone on the program, and how much of its budget each has spent.
+ * Everyone on the program, and how each of them is playing.
  *
- * Replaces a `ComingSoonPage` that had been one of the coach's three rail items
- * since the team navigation shipped. It was a placeholder for a real reason —
- * before invitations worked there was nobody to list but the person who claimed
- * the program, and a roster of one is a page that only says "you are here".
+ * Design 6a: a title, one line of standing, and a single table carrying form,
+ * last match and first serve — with the people a coach has emailed but who have
+ * not joined yet living in that same list rather than in a second one below it.
  *
- * The invite control sits on this page rather than only in Settings › Team
- * because this is where a coach notices someone is missing.
+ * Both ways of growing a squad sit here rather than only in Settings › Team,
+ * because this is where a coach notices somebody is missing. They are different
+ * actions and the page says so: Add player creates the row now and needs no
+ * account; Invite sends email and spends a seat when it is accepted.
  */
 export default async function RosterPage() {
   const workspace = await getWorkspaceContext();
@@ -29,44 +30,64 @@ export default async function RosterPage() {
   // empty roster belonging to nobody.
   if (active.kind !== "team") redirect("/dashboard");
 
-  const billingMonth = currentBillingMonth();
-  const roster = await getRosterData(active.id, billingMonth);
+  const roster = await getRosterData(active.id);
 
   // A hidden control is not authorization — every write behind these re-checks
   // `is_program_staff` in SQL. This only decides what is worth rendering.
   const canManage = active.role !== "player";
 
   const playerCount = roster.members.filter((m) => m.role === "player").length;
-  const staffCount = roster.members.length - playerCount;
+  const visibility = roster.rosterVisible
+    ? "visible to everyone on the team"
+    : "visible to coaches only";
+
+  // Assembled as text rather than as nested JSX: it is one sentence, and the
+  // separators only read right when the empty clauses are gone before the join.
+  // The rows an invitation can target: on the roster, no login yet. Derived
+  // here rather than fetched again — `getRosterData` already has every field
+  // the picker draws.
+  const managedPlayers = roster.members
+    .filter((m) => m.role === "player" && m.managedBy === "coach" && m.profileId)
+    .map((m) => ({
+      profileId: m.profileId as string,
+      name: m.name,
+      email: m.email,
+      matchesPlayed: m.matchesPlayed,
+      addedOn: m.addedOn,
+    }));
+
+  const unclaimed = managedPlayers.length;
+
+  const standing = [
+    `${playerCount} ${playerCount === 1 ? "player" : "players"}`,
+    unclaimed > 0 && `${unclaimed} without an account`,
+    roster.invites.length > 0 &&
+      `${roster.invites.length} ${roster.invites.length === 1 ? "invite" : "invites"} pending`,
+    visibility,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div className="w-full flex-1 bg-[var(--surface-card)]">
-      <div className="mx-auto flex max-w-screen-2xl flex-col gap-6 px-6 py-8 sm:px-10 sm:py-8">
-        <div className="flex flex-col items-start justify-between gap-6 lg:flex-row lg:gap-10">
-          <div className="flex flex-col gap-1.5">
-            <h1 className="text-[24px] font-light leading-[1.2] tracking-[-0.4px] text-[var(--ink-900)]">
-              {canManage ? "Roster" : "Your place on the roster"}
+      <div className="mx-auto flex max-w-screen-2xl flex-col gap-5 px-6 py-8 sm:px-10">
+        <div className="flex flex-col items-start justify-between gap-4 lg:flex-row lg:items-start lg:gap-10">
+          <div>
+            <h1 className="text-[30px] leading-9 font-light tracking-[-0.6px] text-[var(--ink-900)]">
+              Roster
             </h1>
-            <p className="max-w-[56ch] text-[13px] leading-[1.6] text-[var(--ink-700)]">
-              {canManage ? (
-                <>
-                  {staffCount} on staff and {playerCount}{" "}
-                  {playerCount === 1 ? "player" : "players"}. Anyone marked
-                  &ldquo;can send&rdquo; may spend the program&apos;s analysis
-                  time, which resets {formatResetDate(roster.billingMonth)}.
-                </>
-              ) : (
-                <>
-                  Your coaching staff manage who is on the program and who can
-                  send video. Analysis time resets{" "}
-                  {formatResetDate(roster.billingMonth)}.
-                </>
-              )}
+            <p className="mt-1 text-[12px] leading-[1.5] tabular-nums text-[var(--ink-700)]">
+              {canManage
+                ? standing
+                : `Your coaching staff manage who is on the program and who can send video. Match results are ${visibility}.`}
             </p>
           </div>
 
           {canManage && (
-            <InviteButtons playersCanUpload={roster.playersCanUpload} />
+            <RosterHeaderButtons
+              managedPlayers={managedPlayers}
+              seats={roster.seats}
+            />
           )}
         </div>
 
@@ -76,6 +97,20 @@ export default async function RosterPage() {
           canManage={canManage}
           viewerId={viewer.id}
         />
+
+        {/* The two facts a row cannot state for itself: who may send video for
+            somebody else, and when the program's analysis time comes back.
+            When somebody has just claimed a profile, it also answers the
+            question that raises — a coach's uploads keep their credit. */}
+        <p className="text-[11px] leading-[1.6] text-[var(--ink-500)]">
+          {roster.playersCanUpload
+            ? "Anyone on the team can upload for a teammate"
+            : "Coaches can upload for any player"}
+          {" — analysis time resets "}
+          {formatResetDate(currentBillingMonth())}.
+          {roster.members.some((m) => m.claimedToday) &&
+            " Matches uploaded before a player claimed their profile still credit whoever added them."}
+        </p>
       </div>
     </div>
   );

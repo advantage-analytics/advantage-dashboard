@@ -8,6 +8,7 @@ import {
   manualAnalysis,
   type AnalysisStatus,
 } from "@/lib/data/match-analysis";
+import { shortDate } from "@/lib/data/match-utils";
 import { INVITE_TTL_HOURS } from "@/lib/services/programs/tokens";
 
 /**
@@ -65,14 +66,6 @@ export interface TeamHomeData {
    * Team writes — never a second copy of the setting.
    */
   playersCanUpload: boolean;
-}
-
-/** "2026-08-08T…" → "Aug 8". */
-function shortDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
 }
 
 /**

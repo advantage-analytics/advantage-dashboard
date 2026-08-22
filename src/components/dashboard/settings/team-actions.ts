@@ -34,6 +34,7 @@ import type { Workspace } from "@/lib/workspace/types";
 
 const SETTINGS_PATH = "/dashboard/settings/team";
 const TEAM_HOME_PATH = "/dashboard/team";
+const ROSTER_PATH = "/dashboard/team/roster";
 
 /** The program the caller is currently in, or null if they are not in one. */
 async function activeProgramId(): Promise<string | null> {
@@ -135,11 +136,27 @@ export async function saveTeamSettings(
  */
 export type InviteResult =
   | { ok: true; warning?: string }
-  | { ok: false; error: string };
+  | {
+      ok: false;
+      error: string;
+      /**
+       * The duplicate tripwire fired: this address already belongs to a
+       * coach-managed roster row, and `create_program_invite` refused rather
+       * than minting a second profile for the same athlete. Carrying the id
+       * back lets the dialog reopen with that row selected instead of asking
+       * the coach to find it — the refusal becomes the next step.
+       */
+      linkTo?: { profileId: string };
+    };
 
 export async function inviteMember(input: {
   email: string;
   role: InvitableRole;
+  /**
+   * The roster row this invitation binds a login to. Undefined or null is
+   * "someone new" — acceptance mints a profile instead of claiming one.
+   */
+  playerId?: string | null;
 }): Promise<InviteResult> {
   const workspace = await getWorkspaceContext();
   if (!workspace || workspace.active.kind !== "team") {
@@ -158,16 +175,31 @@ export async function inviteMember(input: {
   // there was no acceptance path, because there was nothing to accept with.
   const token = generateToken();
 
+  // Six keys, always — including an explicit null. PostgREST resolves an
+  // overload by the set of parameter NAMES in the body, so this reaches the
+  // targeting form every time and the five-argument wrapper exists only for a
+  // deployed build that has not caught up yet.
   const { error } = await supabase.rpc("create_program_invite", {
     p_program_id: active.id,
     p_email: input.email,
     p_role: input.role,
     p_token_hash: hashToken(token),
     p_expires_at: expiresAt.toISOString(),
+    p_player_id: input.playerId ?? null,
   });
 
   if (error) {
-    return { ok: false, error: toMessage(error, "Couldn't send that invite.") };
+    // The tripwire refusal is not a dead end — it names the row this invitation
+    // should have been attached to. `hint` and `detail` both survive PostgREST.
+    const linkTo =
+      error.hint === "link_player" && error.details
+        ? { profileId: String(error.details) }
+        : undefined;
+    return {
+      ok: false,
+      error: toMessage(error, "Couldn't send that invite."),
+      ...(linkTo ? { linkTo } : {}),
+    };
   }
 
   // Normalised the same way the RPC normalises it, so the address printed in
@@ -185,6 +217,7 @@ export async function inviteMember(input: {
 
   revalidatePath(SETTINGS_PATH);
   revalidatePath(TEAM_HOME_PATH);
+  revalidatePath(ROSTER_PATH);
 
   if (!sent.ok) {
     return {

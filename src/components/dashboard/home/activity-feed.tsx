@@ -61,8 +61,13 @@ interface StatLite {
 }
 
 /** Most recent match → "Won vs. {opp}" + score detail / "Lost to {opp}". */
-function buildResultItem(m: DbMatchLite, userId: string): ActivityItem {
-  const isUserP1 = m.player1_id === userId;
+/** Every id that names the viewer as a player — login plus claimed profiles. */
+function mine(playerId: string | null, playerIds: readonly string[]): boolean {
+  return Boolean(playerId && playerIds.includes(playerId));
+}
+
+function buildResultItem(m: DbMatchLite, playerIds: readonly string[]): ActivityItem {
+  const isUserP1 = mine(m.player1_id, playerIds);
   const opponent = shortName(isUserP1 ? m.player2_name : m.player1_name);
   const won = didUserWin(m.score, isUserP1);
   const scoreStr = buildScoreString(m.score, isUserP1);
@@ -77,12 +82,15 @@ function buildResultItem(m: DbMatchLite, userId: string): ActivityItem {
 }
 
 /** Current win/loss streak from the leading run of same-result matches. */
-function buildStreakItem(scored: DbMatchLite[], userId: string): ActivityItem | null {
+function buildStreakItem(
+  scored: DbMatchLite[],
+  playerIds: readonly string[]
+): ActivityItem | null {
   if (scored.length < 2) return null;
-  const firstWon = didUserWin(scored[0].score, scored[0].player1_id === userId);
+  const firstWon = didUserWin(scored[0].score, mine(scored[0].player1_id, playerIds));
   let count = 0;
   for (const m of scored) {
-    if (didUserWin(m.score, m.player1_id === userId) === firstWon) count++;
+    if (didUserWin(m.score, mine(m.player1_id, playerIds)) === firstWon) count++;
     else break;
   }
   if (count < 2) return null;
@@ -165,7 +173,19 @@ function selectItems(
   return selected;
 }
 
-export default function ActivityFeed({ userId }: { userId: string }) {
+export default function ActivityFeed({
+  userId,
+  playerIds,
+}: {
+  /** Whose uploads this feed is scoped to. */
+  userId: string;
+  /**
+   * Which ids mean "me" when a match names a player — the login plus every
+   * roster profile the viewer has claimed. Separate from `userId` because a
+   * team-flow upload writes the PROFILE id, so one id orients the score wrong.
+   */
+  playerIds: string[];
+}) {
   const [items, setItems] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -203,14 +223,14 @@ export default function ActivityFeed({ userId }: { userId: string }) {
         for (const stat of stats as StatLite[]) {
           const match = list.find((m) => m.id === stat.match_id);
           if (!match) continue;
-          if (stat.is_player1 === (match.player1_id === userId)) {
+          if (stat.is_player1 === mine(match.player1_id, playerIds)) {
             userStat.set(stat.match_id, stat);
           }
         }
       }
 
-      const results = scored.map((m) => buildResultItem(m, userId));
-      const streak = buildStreakItem(scored, userId);
+      const results = scored.map((m) => buildResultItem(m, playerIds));
+      const streak = buildStreakItem(scored, playerIds);
       const milestone = buildMilestoneItem(scored, userStat);
 
       setItems(selectItems(results, streak, milestone));
@@ -220,7 +240,7 @@ export default function ActivityFeed({ userId }: { userId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, playerIds]);
 
   useEffect(() => {
     load();

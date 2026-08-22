@@ -1,5 +1,29 @@
 # Advantage Design System v2
 
+> **v3 exists and is the current authority on component behaviour.** Claude
+> Design project `abcb65f6-4e66-44bc-b9de-b3b47f4313c1` — *Advantage Design
+> System v3*. It ships a larger library than v2 (adds `IconButton`, `DataTable`,
+> `Delta`, `Avatar`, `Notice`, `Radio`, `EntitySelect`, `ActivityTray`) plus
+> `guidelines/*.card.html` and its own `SKILL.md`. This document still describes
+> the v2 import, which is what the repo's tokens came from; where v3 and v2
+> disagree about a component, **v3 wins**.
+>
+> Corrections already taken from v3:
+>
+> - **Secondary buttons hover to a surface wash, never to blue.** `outline` and
+>   `ghost` were turning their border and label blue, which reads as a second
+>   primary. v3's `.adv-btn-outline:hover` is `background: var(--surface-subtle)`
+>   and nothing else. Fixed in `src/lib/ui/adv-button.ts`,
+>   `settings-button.tsx` and `retry-submission.tsx`.
+> - **`danger` and `danger-solid` are real variants**, now transcribed into
+>   `advButton()`. `danger-solid` is for confirmed destruction only — an action
+>   whose cost the person has already read.
+>
+> v3's own non-negotiables worth repeating here: Signal Blue is the single
+> accent and should stay under ~10% of any screen; nav active state is a neutral
+> wash, not blue; people-state chips are grey, never blue; a dialog carries one
+> primary, never two.
+>
 > **Provenance.** Imported from the Claude Design project *Advantage Design
 > System v2* (`932d1406-360f-4a6e-8617-5a3c600ecb67`), which was rebuilt from
 > this codebase on the `splitstep-integration` branch. It replaces the previous

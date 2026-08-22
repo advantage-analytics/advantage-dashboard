@@ -47,8 +47,20 @@ function describe(outcome: Extract<AcceptOutcome, { ok: false }>): string {
       return "That invitation has already been used.";
     case "wrong_address":
       return "That invitation was sent to a different address.";
-    default:
+    case "no_seats":
+      // The one refusal the person reading it cannot act on themselves, so it
+      // names who can.
+      return "This program has no seats free. Ask your coach to free one, then open this link again.";
+    case "already_claimed":
+      return "Somebody has already taken over that roster profile. Ask your coach to check the roster.";
+    case "player_gone":
+      return "That roster profile is no longer on the program. Ask your coach for a new invitation.";
+    case "error":
       return outcome.message;
+    default:
+      // Exhaustive above. A status the database grows and this file has not
+      // learned yet should say something true rather than nothing.
+      return "That invitation could not be accepted.";
   }
 }
 

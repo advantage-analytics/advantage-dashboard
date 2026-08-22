@@ -53,6 +53,29 @@ be. Doubles teams and existing users depend on it.
 
 **Existing match data.** No backfills, no mutations.
 
+> **One reviewed exception, added 2026-08-22: `merge_program_players`.**
+>
+> The roster's duplicate-repair tool re-points `matches.player1_id` /
+> `player2_id` from an absorbed profile to the one that survives. It was
+> weighed against this rule and allowed, because it is the opposite of what the
+> rule is aimed at — a silent bulk rewrite during a redesign. It is: a single
+> explicit action by program staff, requiring both rows to already carry the
+> same name AND the operator to type that name; scoped to one program's rows
+> carrying one id; touching **only** the attribution columns — never `score`,
+> `format`, `program_id` or `event_entry_id`, and nothing under `match_stats`,
+> `points` or `shots`; and audit-logged to `program_audit_log` with every match
+> id it moved, so a mistake can be reversed by hand.
+>
+> Nothing else in the coach-managed-profile feature writes to an existing match.
+> Claiming a profile deliberately does not: the profile id stays in
+> `player1_id`, and `my_player_ids()` in the read predicate is what lets the
+> claimant see their own history. That is the whole reason the claim was built
+> as a binding rather than a re-attribution.
+>
+> `calculate_match_stats` is untouched and does not re-run — every player-level
+> aggregate is computed at read time, and `match_stats` is keyed on
+> `match_id` + `is_player1`, never on a player id.
+
 **These files are the integration, not UI.** Changing them to suit a layout is
 almost always the wrong fix:
 

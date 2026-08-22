@@ -315,6 +315,35 @@ text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]
 text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]
 ```
 
+### Action button — the variant set
+
+`advButton()` in [`src/lib/ui/adv-button.ts`](../../src/lib/ui/adv-button.ts) is
+the transcription. Use it; do not hand-roll a near-miss.
+
+| Variant | Rest | Hover |
+|---|---|---|
+| `primary` | Signal Blue fill, white label, CTA glow | `--blue-hover` |
+| `outline` | card surface, `--border-field`, `--ink-700` | **surface wash only** |
+| `ghost` | transparent, `--border-field`, `--ink-700` | **surface wash only** |
+| `danger` | transparent, danger-tinted border and label | danger tint fill |
+| `danger-solid` | danger fill, white label | `--danger-hover` |
+
+Sizes sm/md/lg = 32/36/44px. Press is `scale(0.97)`, suppressed under reduced
+motion. Focus is `--focus-ring`. One primary per surface — a dialog carries one,
+never two.
+
+> **Hover on a secondary button is a wash, never blue.** `outline` and `ghost`
+> both shipped turning their border and label blue on hover, which made every
+> secondary control read as a second primary sitting beside the real one. Blue
+> is the single accent and should stay under ~10% of a screen; spending it on a
+> hover state is exactly the leak that rule exists to prevent. The same
+> correction applies to `SettingsButton`'s outline variant and to any
+> hand-rolled bordered button — grep for `hover:border-[var(--blue` before
+> adding one.
+>
+> The same principle governs elsewhere: nav active state is a neutral wash, not
+> blue; people-state chips are grey, never blue.
+
 ### Button (Primary, CTA)
 
 ```
@@ -334,13 +363,25 @@ bg-[#3B82F6] hover:bg-[#2563EB] text-white
 transition-colors duration-200 shadow-none
 ```
 
-### Button (Ghost)
+### Button (Ghost, pill)
+
+The uppercase pill form, for filters and tags — not a standard CTA.
 
 ```
 text-[10px] font-medium uppercase tracking-[1.5px]
 rounded-full px-3 py-1.5
 border border-[#EAECF0] text-[#525252]
 hover:bg-[#F5F5F5] transition-colors duration-200
+```
+
+### Button (Secondary / outline)
+
+```
+text-[13px] font-medium
+rounded-[6px] h-9 px-4
+bg-[var(--surface-card)] border border-[var(--border-field)] text-[var(--ink-700)]
+hover:bg-[var(--surface-subtle)]
+transition-colors duration-200
 ```
 
 ### Chrome Icon Button

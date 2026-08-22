@@ -65,7 +65,7 @@ export function RetrySubmission({ jobId }: { jobId: string }) {
             }
           })
         }
-        className="inline-flex w-fit cursor-pointer items-center gap-2 rounded-[var(--radius-element)] border border-[var(--border-field)] bg-[var(--surface-card)] px-3 py-1.5 text-[12px] text-[var(--ink-900)] transition-colors hover:border-[var(--blue)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:opacity-50"
+        className="inline-flex w-fit cursor-pointer items-center gap-2 rounded-[var(--radius-element)] border border-[var(--border-field)] bg-[var(--surface-card)] px-3 py-1.5 text-[12px] text-[var(--ink-900)] transition-colors hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:opacity-50"
       >
         <RotateCw
           className={`size-3.5 ${pending ? "animate-spin" : ""}`}

@@ -7,6 +7,7 @@ import HomeAiInsight from "@/components/dashboard/home/home-ai-insight";
 import MatchHeatmap from "@/components/dashboard/home/match-heatmap";
 import ActivityFeed from "@/components/dashboard/home/activity-feed";
 import { createClient } from "@/lib/supabase/server";
+import { getMyPlayerIds } from "@/lib/data/player-identity-server";
 import {
   getOverallPerformance,
   getTopKpiMovers,
@@ -23,13 +24,16 @@ export default async function Home() {
 
   // Fetch user profile and performance data in parallel
   const userId = data.claims.sub;
-  const [{ data: user }, performanceData] = await Promise.all([
+  const [{ data: user }, performanceData, myPlayerIds] = await Promise.all([
     supabase
       .from("users")
       .select("first_name, last_name")
       .eq("id", userId)
       .single(),
     getOverallPerformance(),
+    // Which ids mean "me" on a match row. `cache()`d, so the several readers on
+    // this page share one round trip.
+    getMyPlayerIds(),
   ]);
 
   // Real name only — when absent, the greeting drops the name rather than
@@ -79,6 +83,7 @@ export default async function Home() {
           greeting={greeting}
           hasMatches={hasMatches}
           userId={userId}
+          playerIds={myPlayerIds}
           kpiStrip={allKpiCards.length > 0 ? <KpiCards cards={allKpiCards} matchCount={matchCount} /> : undefined}
           sidebar={hasMatches ? (
             <>
@@ -95,7 +100,7 @@ export default async function Home() {
                 losses={overallView.losses}
                 form={form}
               />
-              <ActivityFeed userId={userId} />
+              <ActivityFeed userId={userId} playerIds={myPlayerIds} />
             </>
           ) : undefined}
         />

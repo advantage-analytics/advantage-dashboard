@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getMatchStatisticsFromSupabase, getPlayerAverageStats } from "@/lib/data/match-stats-server";
+import { getMyPlayerIds } from "@/lib/data/player-identity-server";
 import { getMatchPointsFromSupabase } from "@/lib/data/match-points-server";
 import { formatDuration } from "@/components/dashboard/matches/new-match-wizard/utils";
 import type { Match, SetScore } from "@/lib/data/types";
@@ -80,13 +81,24 @@ type PlayerProfile = { hand: string | null; backhand: string | null };
 
 function transformDbMatchToMatch(
   row: DbMatch,
-  userId: string,
+  /**
+   * Every id that names the viewer as a player — their login, plus any roster
+   * profile they have claimed. One id is not enough: a match a coach recorded
+   * for this athlete before they had an account carries the PROFILE's id.
+   */
+  playerIds: readonly string[],
   profiles: Map<string, PlayerProfile>,
 ): Match {
   const sets = buildSets(row);
   const winner = determineWinner(sets);
   const finalScore = sets.map((s) => `${s.player1}-${s.player2}`).join(", ");
-  const isUserPlayer1 = row.player1_id === userId;
+  // Player two is tested explicitly rather than inferred from "not player one".
+  // Treating an unknown `player1_id` as proof the viewer was player two is the
+  // bug `statistics-server.ts` documents: it inverted every such row, and a
+  // match our side won was counted as a loss.
+  const isUserPlayer1 = Boolean(
+    row.player1_id && playerIds.includes(row.player1_id)
+  );
   const userWon = isUserPlayer1 ? winner === "player1" : winner === "player2";
 
   const p1Profile = row.player1_id ? profiles.get(row.player1_id) : undefined;
@@ -241,11 +253,13 @@ export const getMatchDetailData = cache(async (matchId: string) => {
     }
   }
 
-  const match = transformDbMatchToMatch(dbRow, user?.id ?? "", profiles);
+  const myPlayerIds = user?.id ? await getMyPlayerIds() : [];
+
+  const match = transformDbMatchToMatch(dbRow, myPlayerIds, profiles);
   const [statsResult, points, playerAverages] = await Promise.all([
     getMatchStatisticsFromSupabase(matchId),
     getMatchPointsFromSupabase(matchId),
-    user?.id ? getPlayerAverageStats(user.id, matchId) : Promise.resolve(null),
+    getPlayerAverageStats(myPlayerIds, matchId),
   ]);
 
   return {
