@@ -1,6 +1,7 @@
 import {
   Home,
   Calendar,
+  ClipboardList,
   BarChart3,
   MessageSquare,
   Users,
@@ -53,10 +54,18 @@ export const PERSONAL_NAV: readonly NavLink[] = [
  * `created_by = me AND program_id IS NULL`, team reads `program_id = <program>`
  * and lets `visible_match_ids()` decide who sees which rows — so the entry is
  * back, and inside a program players have a route to a match list again.
+ *
+ * The two carry different icons because they are adjacent rows answering
+ * different questions. Both shipped with `Calendar` — the design spec named the
+ * collision and shipped it anyway — which left the rail with two identical
+ * glyphs side by side and made the label the only thing telling them apart.
+ * Schedule takes `ClipboardList`: what a coach fills in before anyone plays.
+ * Matches keeps `Calendar`, the glyph `PERSONAL_NAV` already gives it, so one
+ * destination does not change shape when the workspace switcher moves.
  */
 export const TEAM_NAV: readonly NavLink[] = [
   { name: "Team Home", href: "/dashboard/team", icon: Home },
-  { name: "Schedule", href: "/dashboard/team/schedule", icon: Calendar },
+  { name: "Schedule", href: "/dashboard/team/schedule", icon: ClipboardList },
   { name: "Matches", href: "/dashboard/matches", icon: Calendar },
   { name: "Roster", href: "/dashboard/team/roster", icon: Users },
   { name: "Compare", href: "/dashboard/team/compare", icon: Swords },

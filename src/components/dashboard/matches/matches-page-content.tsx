@@ -31,9 +31,23 @@ interface MatchesPageContentProps {
   scope?: "personal" | "team";
 }
 
-type FilterKey = "result" | "matchType" | "courtType" | "source" | "analysis";
+type FilterKey =
+  | "result"
+  | "matchType"
+  | "courtType"
+  | "source"
+  | "analysis"
+  /** Team scope only — see `FILTER_GROUPS`. */
+  | "player";
 
-const FILTER_KEYS: FilterKey[] = ["result", "matchType", "courtType", "source", "analysis"];
+const FILTER_KEYS: FilterKey[] = [
+  "result",
+  "matchType",
+  "courtType",
+  "source",
+  "analysis",
+  "player",
+];
 
 /**
  * Collapses the nine job statuses into the four buckets a player actually
@@ -61,7 +75,22 @@ const FILTER_GROUPS: {
   label: string;
   getValues: (matches: DisplayMatch[]) => string[];
   displayValue?: (val: string) => string;
+  /** Omitted outside a team workspace — a personal list is one player already. */
+  teamOnly?: boolean;
 }[] = [
+  {
+    // First, because inside a program "who" is the question asked before any
+    // other. The list shows the whole squad — staff see every match, and a
+    // player sees the roster's too wherever `programs.roster_visible` is on —
+    // and until now the only way to read one person's season was to scroll.
+    // It reads `player1` because that is always the program's side of the row:
+    // `recordResult` and the upload wizard both put the opponent in `player2`.
+    key: "player",
+    label: "Player",
+    teamOnly: true,
+    getValues: (matches) =>
+      [...new Set(matches.map((m) => m.player1.name).filter(Boolean))].sort(),
+  },
   {
     key: "result",
     label: "Result",
@@ -414,6 +443,8 @@ export function MatchesPageContent({
             return m.sourceProvider === filter.value;
           case "analysis":
             return analysisGroup(m) === filter.value;
+          case "player":
+            return m.player1.name === filter.value;
           default:
             return true;
         }
@@ -512,13 +543,15 @@ export function MatchesPageContent({
   // out of the panel rather than opening onto an empty list.
   const filterGroups: FilterGroup<FilterKey>[] = useMemo(
     () =>
-      FILTER_GROUPS.map((group) => ({
-        key: group.key,
-        label: group.label,
-        values: group.getValues(matches),
-        displayValue: group.displayValue,
-      })),
-    [matches]
+      FILTER_GROUPS.filter((group) => !group.teamOnly || scope === "team").map(
+        (group) => ({
+          key: group.key,
+          label: group.label,
+          values: group.getValues(matches),
+          displayValue: group.displayValue,
+        })
+      ),
+    [matches, scope]
   );
 
   if (matches.length === 0) {
