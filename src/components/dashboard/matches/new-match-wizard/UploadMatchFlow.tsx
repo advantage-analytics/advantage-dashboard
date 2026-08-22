@@ -487,6 +487,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     goEditDetail,
     consumePendingDetailFocus,
     stepOrder,
+    progressTotalSteps,
     isProcessingProvider,
     videoProbe,
     videoWarnings,
@@ -776,7 +777,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
       {/* Full-bleed under the app header. Inside the content column it read as
           a rule belonging to the title; spanning the pane it reads as chrome
           measuring the whole flow. */}
-      <StepIndicator currentStep={currentStepIndex} totalSteps={stepOrder.length} />
+      <StepIndicator currentStep={currentStepIndex} totalSteps={progressTotalSteps} />
 
       <div className={`${CONTENT_CLS} pb-10 pt-[26px]`}>
         {/* Confirm opens on the match's own hero — a heading above it would

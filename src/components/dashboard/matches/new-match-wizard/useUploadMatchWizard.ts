@@ -93,6 +93,16 @@ const DEFAULT_IMPORT_PROVIDER_ID: ProviderId | null =
     (p) => p.available !== false && providerKindOrNull(p.id) === "import"
   )?.id ?? null;
 
+/**
+ * The flow the progress bar starts on, before anyone has chosen anything.
+ *
+ * Read off DEFAULT_PROVIDER_ID's kind so the first paint draws the same number
+ * of segments the mount effect is about to select. See `progressKind`.
+ */
+const DEFAULT_PROVIDER_KIND: ProviderKind = DEFAULT_PROVIDER_ID
+  ? getProviderKind(DEFAULT_PROVIDER_ID)
+  : "import";
+
 export interface UseUploadMatchWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -151,6 +161,12 @@ export interface UseUploadMatchWizardReturn {
   // Provider flow shape
   /** Step sequence for the selected provider's kind. */
   stepOrder: Step[];
+  /**
+   * Segments for the progress bar. Tracks the flow you have entered rather than
+   * the live selection, so choosing a provider never resizes the bar above the
+   * step you are choosing it on.
+   */
+  progressTotalSteps: number;
   /** True when the selected provider analyses video rather than parsing a file. */
   isProcessingProvider: boolean;
 
@@ -251,6 +267,22 @@ export function useUploadMatchWizard({
 
   // State
   const [step, setStep] = useState<Step>("provider");
+  /**
+   * The flow the progress bar measures. NOT `stepOrder`.
+   *
+   * The provider is chosen on the step the bar sits above, and a processing
+   * provider adds the Video step. A bar read off the live selection therefore
+   * resized every segment the instant a row was clicked — three flex segments
+   * became four, every boundary jumped, and the page underneath had not
+   * changed. It moved on mount too, the moment the default provider landed.
+   *
+   * So the bar measures the flow you have ENTERED: committed by the step
+   * transition that leaves the provider step, which is the only place the kind
+   * can still change.
+   */
+  const [progressKind, setProgressKind] = useState<ProviderKind>(() =>
+    preset && !preset.supportsVideo ? "import" : DEFAULT_PROVIDER_KIND
+  );
   const [selectedProvider, setSelectedProvider] = useState<ProviderId | null>(null);
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
   const [isOver, setIsOver] = useState(false);
@@ -441,9 +473,11 @@ export function useUploadMatchWizard({
     // accidental close means a wasted click on reopen. Video flows resume on the
     // Video step: the File can't be persisted, so it has to be picked again.
     if (resumedProvider && existingProvider) {
-      const resumedOrder = STEP_ORDER_BY_KIND[getProviderKind(existingProvider as ProviderId)];
-      setStep(resumedOrder[1]);
+      const resumedKind = getProviderKind(existingProvider as ProviderId);
+      setProgressKind(resumedKind);
+      setStep(STEP_ORDER_BY_KIND[resumedKind][1]);
     } else {
+      setProgressKind(DEFAULT_PROVIDER_KIND);
       setStep("provider");
     }
 
@@ -505,8 +539,16 @@ export function useUploadMatchWizard({
     if (preset?.kind === "single" && !formData.playerName.trim()) return;
     // Processing providers get a video step before the form; import providers
     // go straight to the merged file+details step.
+    setProgressKind(providerKind);
     setStep(stepOrder[1]);
-  }, [selectedProvider, stepOrder, preset, formData.playerName, isProcessingProvider]);
+  }, [
+    selectedProvider,
+    stepOrder,
+    providerKind,
+    preset,
+    formData.playerName,
+    isProcessingProvider,
+  ]);
 
   const handleVideoContinue = useCallback(() => {
     setStep("match");
@@ -1243,6 +1285,7 @@ export function useUploadMatchWizard({
 
     // Provider flow shape
     stepOrder,
+    progressTotalSteps: STEP_ORDER_BY_KIND[progressKind].length,
     isProcessingProvider,
 
     // Video analysis
