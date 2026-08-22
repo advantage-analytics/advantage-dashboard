@@ -127,6 +127,30 @@ export function buildScoreString(
 }
 
 /**
+ * Who took the match, by counting sets — or null where the score cannot say.
+ *
+ * Null and false are different answers and some callers need them apart. A
+ * scoreboard has already decided to show a result, so "no score" and "lost"
+ * both render as a loss and `didUserWin` below is the right shape for it. A
+ * strip of form ticks has not decided anything, and collapsing the two would
+ * draw a red tick for a match nobody scored.
+ */
+export function matchOutcome(
+  score: MatchScore | null,
+  isUserPlayer1: boolean,
+): boolean | null {
+  if (!score?.player1?.length || !score?.player2?.length) return null;
+  let p1Sets = 0;
+  let p2Sets = 0;
+  score.player1.forEach((s, i) => {
+    if (s > (score.player2[i] ?? 0)) p1Sets++;
+    else if ((score.player2[i] ?? 0) > s) p2Sets++;
+  });
+  if (p1Sets === p2Sets) return null;
+  return isUserPlayer1 ? p1Sets > p2Sets : p2Sets > p1Sets;
+}
+
+/**
  * Determine whether the user won, by counting sets taken on each side.
  * Returns false for missing/malformed scores or ties.
  */
@@ -134,14 +158,35 @@ export function didUserWin(
   score: MatchScore | null,
   isUserPlayer1: boolean,
 ): boolean {
-  if (!score?.player1?.length || !score?.player2?.length) return false;
-  let p1Sets = 0;
-  let p2Sets = 0;
-  score.player1.forEach((s, i) => {
-    if (s > (score.player2[i] ?? 0)) p1Sets++;
-    else if ((score.player2[i] ?? 0) > s) p2Sets++;
+  return matchOutcome(score, isUserPlayer1) === true;
+}
+
+/**
+ * A signed change, as the product draws it: an arrow, a magnitude and a colour.
+ *
+ * Colour is not decoration here. A bare "↓ 5" beside a percentage is a fact
+ * whose direction a reader has to parse from a glyph; green and red say it
+ * before they read anything. Green/red is reserved for outcome elsewhere in
+ * this app, and a trend IS an outcome — the rate got better or it got worse.
+ *
+ * Zero is neither, and gets the neutral ink rather than a colour it has not
+ * earned.
+ */
+export function formatDelta(delta: number): { label: string; color: string } {
+  const rounded = Math.round(delta);
+  if (rounded > 0) return { label: `↑ ${rounded}`, color: "var(--viz-good)" };
+  if (rounded < 0) {
+    return { label: `↓ ${Math.abs(rounded)}`, color: "var(--viz-bad)" };
+  }
+  return { label: "→ 0", color: "var(--ink-500)" };
+}
+
+/** "2026-08-08T…" → "Aug 8". */
+export function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
   });
-  return isUserPlayer1 ? p1Sets > p2Sets : p2Sets > p1Sets;
 }
 
 /**

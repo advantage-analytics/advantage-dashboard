@@ -149,7 +149,7 @@ function didUserWin(
 
 function groupMatchesIntoEvents(
   rows: DbMatch[],
-  createdBy: string,
+  playerIds: readonly string[],
   statsMap: Map<string, MatchStats>
 ): EventGroup[] {
   const byKey = new Map<string, DbMatch[]>();
@@ -173,7 +173,12 @@ function groupMatchesIntoEvents(
 
     for (const m of matches) {
       if (!m.score?.player1?.length) continue;
-      const isUserPlayer1 = m.player1_id === createdBy;
+      // The id set, not one id: a match a coach recorded for this athlete
+      // before they had an account carries their roster PROFILE's id, and this
+      // is what picks the opponent and orients the score.
+      const isUserPlayer1 = Boolean(
+        m.player1_id && playerIds.includes(m.player1_id)
+      );
       const opponent = isUserPlayer1 ? m.player2_name : m.player1_name;
       const stat = statsMap.get(m.id);
 
@@ -256,7 +261,19 @@ function EventsList({
   );
 }
 
-export default function RecentActivity({ userId }: { userId: string }) {
+export default function RecentActivity({
+  userId,
+  playerIds,
+}: {
+  /** Whose uploads this list is scoped to. */
+  userId: string;
+  /**
+   * Which ids mean "me" when a match names a player — the login plus every
+   * roster profile the viewer has claimed.
+   */
+  playerIds: string[];
+}) {
+
   const [events, setEvents] = useState<EventGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -312,14 +329,16 @@ export default function RecentActivity({ userId }: { userId: string }) {
         for (const stat of stats as MatchStats[]) {
           const match = matchById.get(stat.match_id);
           if (!match) continue;
-          const isUserPlayer1 = match.player1_id === userId;
+          const isUserPlayer1 = Boolean(
+            match.player1_id && playerIds.includes(match.player1_id)
+          );
           if (stat.is_player1 === isUserPlayer1) {
             statsMap.set(stat.match_id, stat);
           }
         }
       }
 
-      setEvents(groupMatchesIntoEvents(list, userId, statsMap));
+      setEvents(groupMatchesIntoEvents(list, playerIds, statsMap));
       hasLoadedRef.current = true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load matches");
@@ -327,7 +346,7 @@ export default function RecentActivity({ userId }: { userId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, playerIds]);
 
   useEffect(() => {
     load();

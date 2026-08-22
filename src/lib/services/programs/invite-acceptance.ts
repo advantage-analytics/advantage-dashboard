@@ -185,7 +185,28 @@ export async function resolveJoinState(token: string): Promise<JoinState> {
  */
 export type AcceptOutcome =
   | { ok: true; programId: string }
-  | { ok: false; status: "not_found" | "expired" | "already_used" | "wrong_address" }
+  | {
+      ok: false;
+      /**
+       * Ordinary human outcomes, not errors. Three joined the original four
+       * when invitations learned to target a roster row:
+       *
+       *   no_seats         the program filled up between send and click
+       *   already_claimed  somebody else bound to that profile first
+       *   player_gone      the row was archived or merged away
+       *
+       * Each has its own sentence and its own way forward, which is why they
+       * come back as a status rather than as a raised exception.
+       */
+      status:
+        | "not_found"
+        | "expired"
+        | "already_used"
+        | "wrong_address"
+        | "no_seats"
+        | "already_claimed"
+        | "player_gone";
+    }
   | { ok: false; status: "error"; message: string };
 
 /**
@@ -226,6 +247,9 @@ export async function acceptWithSession(
 
   return {
     ok: false,
-    status: row.status as "not_found" | "expired" | "already_used" | "wrong_address",
+    status: row.status as Exclude<
+      Extract<AcceptOutcome, { ok: false }>["status"],
+      "error"
+    >,
   };
 }

@@ -85,16 +85,29 @@ interface TiebreakCounts {
 /* ── Cross-match averages for player1 ──────────────────── */
 
 export async function getPlayerAverageStats(
-  userId: string,
+  /**
+   * Every id that names this person as a player — their login, plus any roster
+   * profile they have claimed. A single id is not enough any more: a coach can
+   * create a roster row before an athlete has an account, and the matches
+   * recorded against it carry the PROFILE's id, including the ones from before
+   * the athlete claimed it. Passing only `auth.uid()` here left a claimed player
+   * with no baseline at all, so every delta on their match page rendered null.
+   */
+  playerIds: readonly string[],
   excludeMatchId?: string,
 ): Promise<Partial<PlayerStatistics> | null> {
+  if (playerIds.length === 0) return null;
+
   const supabase = await createClient();
 
   // Average over the player's OTHER matches. On a match-detail page we exclude the
   // current match so the baseline is the player's typical level elsewhere — otherwise
   // a 1-match player compares against themselves (every delta = 0) and a few-match
   // player sees diluted deltas (the current match drags the average toward itself).
-  let query = supabase.from("matches").select("id").eq("player1_id", userId);
+  let query = supabase
+    .from("matches")
+    .select("id")
+    .in("player1_id", playerIds as string[]);
   if (excludeMatchId) query = query.neq("id", excludeMatchId);
   const { data: matches } = await query;
 

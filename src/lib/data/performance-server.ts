@@ -1,5 +1,6 @@
 import { meanOfPresent, num, pct, presentPairs } from "./aggregate";
 import { createClient } from "@/lib/supabase/server";
+import { getMyPlayerIds } from "@/lib/data/player-identity-server";
 
 interface WinLossView {
   wins: number;
@@ -89,6 +90,8 @@ interface DbMatch {
   id: string;
   date: string;
   player1_id: string | null;
+  /** Needed to tell "I was player two" from "not my match at all". */
+  player2_id: string | null;
   player1_name: string | null;
   player2_name: string | null;
   score: {
@@ -151,9 +154,42 @@ const DEFAULT_PERFORMANCE: OverallPerformanceData = {
   ],
 };
 
+/**
+ * Which side of a match the viewer played, or null when it is not theirs.
+ *
+ * `player1_id` used to be compared to a single user id, and everything else
+ * inferred: `isUserPlayer1 ? player1Won : !player1Won`. That treats an UNKNOWN
+ * player one as proof the viewer was player two, so a row with a null or
+ * foreign `player1_id` inverted — a match our side won counted as a loss. It is
+ * the bug `statistics-server.ts` fixed for Statistics and this file inherited.
+ *
+ * It matters more now. A coach uploading for a roster athlete writes that
+ * athlete's PROFILE id here, so these rows are reliably somebody else's — this
+ * page is the personal workspace and they do not belong in it at all. Returning
+ * null lets the callers skip them instead of counting them upside down.
+ *
+ * The last clause covers legacy personal matches, uploaded before player ids
+ * were populated: the uploader is the only evidence of whose match it is. It is
+ * deliberately last, so an id always wins when there is one.
+ */
+function viewerSide(
+  match: { player1_id: string | null; player2_id?: string | null },
+  playerIds: readonly string[],
+  viewerId: string,
+  createdBy?: string | null
+): "player1" | "player2" | null {
+  if (match.player1_id && playerIds.includes(match.player1_id)) return "player1";
+  if (match.player2_id && playerIds.includes(match.player2_id)) return "player2";
+  if (!match.player1_id && !match.player2_id && (createdBy ?? viewerId) === viewerId) {
+    return "player1";
+  }
+  return null;
+}
+
 function calculateWinLoss(
   matches: DbMatch[],
-  userId: string,
+  playerIds: readonly string[],
+  viewerId: string,
   daysAgo?: number
 ): { wins: number; losses: number } {
   const cutoffDate = daysAgo
@@ -174,9 +210,11 @@ function calculateWinLoss(
       (s, i) => s > (match.score?.player1[i] ?? 0)
     ).length;
 
+    const side = viewerSide(match, playerIds, viewerId);
+    if (side === null) continue;
+
     const player1Won = p1Sets > p2Sets;
-    const isUserPlayer1 = match.player1_id === userId;
-    const userWon = isUserPlayer1 ? player1Won : !player1Won;
+    const userWon = side === "player1" ? player1Won : !player1Won;
 
     if (userWon) wins++;
     else losses++;
@@ -344,7 +382,8 @@ function calculateRecentPerformance(
 
 function calculateForm(
   matches: DbMatch[],
-  userId: string,
+  playerIds: readonly string[],
+  viewerId: string,
   count: number
 ): ("W" | "L")[] {
   const form: ("W" | "L")[] = [];
@@ -359,15 +398,21 @@ function calculateForm(
       (s, i) => s > (match.score?.player1[i] ?? 0)
     ).length;
 
+    const side = viewerSide(match, playerIds, viewerId);
+    if (side === null) continue;
+
     const player1Won = p1Sets > p2Sets;
-    const isUserPlayer1 = match.player1_id === userId;
-    form.push((isUserPlayer1 ? player1Won : !player1Won) ? "W" : "L");
+    form.push((side === "player1" ? player1Won : !player1Won) ? "W" : "L");
   }
   // Reverse so oldest is first (left) and newest is last (right)
   return form.reverse();
 }
 
-function calculateHeatmap(matches: DbMatch[], userId: string): HeatmapDay[] {
+function calculateHeatmap(
+  matches: DbMatch[],
+  playerIds: readonly string[],
+  viewerId: string
+): HeatmapDay[] {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth();
@@ -393,7 +438,7 @@ function calculateHeatmap(matches: DbMatch[], userId: string): HeatmapDay[] {
     const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const dayMatches = dayMap.get(dateStr) ?? [];
     const summaries: HeatmapMatchSummary[] = dayMatches.map((m) => {
-      const isP1 = m.player1_id === userId;
+      const isP1 = viewerSide(m, playerIds, viewerId) !== "player2";
       const opponent = isP1 ? (m.player2_name ?? "Opponent") : (m.player1_name ?? "Opponent");
       const p1Sets = m.score?.player1 ?? [];
       const p2Sets = m.score?.player2 ?? [];
@@ -634,7 +679,8 @@ function calculateKpiCards(
 
 function calculateWinRateSparkline(
   matches: DbMatch[],
-  userId: string
+  playerIds: readonly string[],
+  viewerId: string
 ): { value: number; change: number; sparkline: number[] } {
   if (matches.length === 0) return { value: 0, change: 0, sparkline: [] };
 
@@ -648,9 +694,10 @@ function calculateWinRateSparkline(
     const p2Sets = match.score.player2.filter(
       (s, i) => s > (match.score?.player1[i] ?? 0)
     ).length;
+    const side = viewerSide(match, playerIds, viewerId);
+    if (side === null) continue;
     const player1Won = p1Sets > p2Sets;
-    const isUserPlayer1 = match.player1_id === userId;
-    results.push(isUserPlayer1 ? player1Won : !player1Won);
+    results.push(side === "player1" ? player1Won : !player1Won);
   }
 
   if (results.length === 0) return { value: 0, change: 0, sparkline: [] };
@@ -671,6 +718,8 @@ function calculateWinRateSparkline(
   let recentTotal = 0;
   for (const match of recentMatches) {
     if (!match.score?.player1 || !match.score?.player2) continue;
+    const side = viewerSide(match, playerIds, viewerId);
+    if (side === null) continue;
     recentTotal++;
     const p1Sets = match.score.player1.filter(
       (s, i) => s > (match.score?.player2[i] ?? 0)
@@ -679,14 +728,15 @@ function calculateWinRateSparkline(
       (s, i) => s > (match.score?.player1[i] ?? 0)
     ).length;
     const player1Won = p1Sets > p2Sets;
-    const isUserPlayer1 = match.player1_id === userId;
-    if (isUserPlayer1 ? player1Won : !player1Won) recentWins++;
+    if (side === "player1" ? player1Won : !player1Won) recentWins++;
   }
   const olderMatches = matches.filter((m) => new Date(m.date) < cutoff);
   let olderWins = 0;
   let olderTotal = 0;
   for (const match of olderMatches) {
     if (!match.score?.player1 || !match.score?.player2) continue;
+    const side = viewerSide(match, playerIds, viewerId);
+    if (side === null) continue;
     olderTotal++;
     const p1Sets = match.score.player1.filter(
       (s, i) => s > (match.score?.player2[i] ?? 0)
@@ -695,8 +745,7 @@ function calculateWinRateSparkline(
       (s, i) => s > (match.score?.player1[i] ?? 0)
     ).length;
     const player1Won = p1Sets > p2Sets;
-    const isUserPlayer1 = match.player1_id === userId;
-    if (isUserPlayer1 ? player1Won : !player1Won) olderWins++;
+    if (side === "player1" ? player1Won : !player1Won) olderWins++;
   }
 
   const recentRate = recentTotal > 0 ? (recentWins / recentTotal) * 100 : 0;
@@ -789,24 +838,33 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
 
   if (!user) return DEFAULT_PERFORMANCE;
 
-  const { data: matches } = await supabase
-    .from("matches")
-    .select("id, date, player1_id, player1_name, player2_name, score")
-    .eq("created_by", user.id)
-    .order("date", { ascending: false });
+  // `player2_id` joins the projection because `viewerSide` needs both halves to
+  // tell "I was player two" from "this is not my match at all".
+  const [{ data: matches }, myPlayerIds] = await Promise.all([
+    supabase
+      .from("matches")
+      .select("id, date, player1_id, player2_id, player1_name, player2_name, score")
+      .eq("created_by", user.id)
+      .order("date", { ascending: false }),
+    getMyPlayerIds(),
+  ]);
 
   if (!matches || matches.length === 0) return DEFAULT_PERFORMANCE;
 
   const typedMatches = matches as DbMatch[];
-  const overall = calculateWinLoss(typedMatches, user.id);
-  const last30 = calculateWinLoss(typedMatches, user.id, 30);
-  const last7 = calculateWinLoss(typedMatches, user.id, 7);
+  const overall = calculateWinLoss(typedMatches, myPlayerIds, user.id);
+  const last30 = calculateWinLoss(typedMatches, myPlayerIds, user.id, 30);
+  const last7 = calculateWinLoss(typedMatches, myPlayerIds, user.id, 7);
 
   const matchIds = matches.map((m) => m.id);
   const matchPlayerMap = new Map<string, boolean>();
   const matchMetaMap = new Map<string, { date: string; opponent: string }>();
   for (const m of matches) {
-    const isP1 = m.player1_id === user.id;
+    // A match that is not the viewer's at all stays out of the map entirely, so
+    // the stat loops below skip it rather than reading the wrong side's row.
+    const side = viewerSide(m, myPlayerIds, user.id);
+    if (side === null) continue;
+    const isP1 = side === "player1";
     matchPlayerMap.set(m.id, isP1);
     matchMetaMap.set(m.id, {
       date: m.date,
@@ -849,10 +907,10 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
       orderedMatchIds,
       matchMetaMap
     ),
-    winRate: calculateWinRateSparkline(typedMatches, user.id),
-    form: calculateForm(typedMatches, user.id, 5),
+    winRate: calculateWinRateSparkline(typedMatches, myPlayerIds, user.id),
+    form: calculateForm(typedMatches, myPlayerIds, user.id, 5),
     matchCount: typedMatches.length,
-    heatmap: calculateHeatmap(typedMatches, user.id),
+    heatmap: calculateHeatmap(typedMatches, myPlayerIds, user.id),
     performanceProfile: calculatePerformanceProfile(
       typedStats,
       matchPlayerMap,

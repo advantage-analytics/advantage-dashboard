@@ -198,10 +198,23 @@ export function SearchCommandPalette({
         return;
       }
 
-      const userId = user.id;
+      // Not just `user.id`. A match a coach recorded for this athlete before
+      // they had an account carries their roster PROFILE's id, and `player1_id`
+      // is what orients the score and picks the opponent's name. Comparing
+      // against one id showed those the wrong way round.
+      const { data: idRows } = await supabase.rpc("my_player_ids");
+      const mine = new Set<string>(
+        [
+          user.id,
+          ...((idRows ?? []) as (string | { my_player_ids?: string })[]).map(
+            (row) => (typeof row === "string" ? row : (row?.my_player_ids ?? ""))
+          ),
+        ].filter(Boolean)
+      );
+      const isMine = (id: string | null) => Boolean(id && mine.has(id));
 
       const matches: MatchResult[] = data.slice(0, MAX_PER_CATEGORY).map((m) => {
-        const isP1 = m.player1_id === userId;
+        const isP1 = isMine(m.player1_id);
         return {
           id: m.id,
           opponentName: isP1 ? m.player2_name : m.player1_name,
@@ -214,7 +227,7 @@ export function SearchCommandPalette({
 
       const oppCounts = new Map<string, number>();
       for (const m of data) {
-        const opp = m.player1_id === userId ? m.player2_name : m.player1_name;
+        const opp = isMine(m.player1_id) ? m.player2_name : m.player1_name;
         oppCounts.set(opp, (oppCounts.get(opp) ?? 0) + 1);
       }
       const opponents: GroupedResult[] = Array.from(oppCounts.entries())

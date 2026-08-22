@@ -19,6 +19,8 @@ interface HomeContentProps {
   greeting: string;
   hasMatches: boolean;
   userId: string;
+  /** Which ids mean "me" on a match row — login plus claimed roster profiles. */
+  playerIds: string[];
   kpiStrip?: ReactNode;
   sidebar?: ReactNode;
 }
@@ -28,6 +30,7 @@ export default function HomeContent({
   greeting,
   hasMatches,
   userId,
+  playerIds,
   kpiStrip,
   sidebar,
 }: HomeContentProps) {
@@ -67,7 +70,7 @@ export default function HomeContent({
               transition={{ duration: 0.3, ease: EASE_CURVE, delay: 0.15 }}
               className="flex flex-col gap-6 min-w-0"
             >
-              <RecentActivity userId={userId} />
+              <RecentActivity userId={userId} playerIds={playerIds} />
               <ServePlacementHome userId={userId} />
             </motion.div>
 

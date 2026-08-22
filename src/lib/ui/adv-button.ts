@@ -13,7 +13,10 @@
  *   :disabled         opacity 0.5, pointer-events none
  *   sm / md / lg      32 / 36 / 44px
  *   primary           Signal Blue, white label, the CTA glow, blue-hover
- *   outline           card surface, field border, ink-700 → blue on hover
+ *   outline           card surface, field border, ink-700, wash on hover
+ *   ghost             transparent, field border, wash on hover
+ *   danger            transparent, danger-tinted border and label
+ *   danger-solid      filled danger, white label — confirmed destruction
  *
  * Primary is blue. It was worth writing down: the claim flow shipped with a
  * near-black primary, which reads as a system button rather than as the
@@ -23,7 +26,12 @@
  * The `lg` size drops the DS's 1px tracked label, matching the decision already
  * recorded in `auth-button.tsx`.
  */
-export type AdvButtonVariant = "primary" | "outline" | "ghost";
+export type AdvButtonVariant =
+  | "primary"
+  | "outline"
+  | "ghost"
+  | "danger"
+  | "danger-solid";
 export type AdvButtonSize = "sm" | "md" | "lg";
 
 const BASE = [
@@ -55,10 +63,22 @@ const SIZES: Record<AdvButtonSize, string> = {
 const VARIANTS: Record<AdvButtonVariant, string> = {
   primary:
     "border-transparent bg-[var(--blue)] text-white shadow-[var(--shadow-cta-glow)] hover:bg-[var(--blue-hover)]",
+  // Hover is a surface wash and nothing else. It used to also turn the border
+  // and the label blue, which is not what the design system says and read as a
+  // second primary sitting next to the real one — the whole point of "one
+  // accent, one purpose" is that blue means THE action on a surface. v3's
+  // `.adv-btn-outline:hover` is `background: var(--surface-subtle)`, full stop.
   outline:
-    "border-[var(--border-field)] bg-[var(--surface-card)] text-[var(--ink-700)] hover:border-[var(--blue-ring-30)] hover:bg-[var(--surface-subtle)] hover:text-[var(--blue)]",
+    "border-[var(--border-field)] bg-[var(--surface-card)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]",
   ghost:
     "border-[var(--border-field)] bg-transparent text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]",
+  // Destructive, in two weights. `danger` proposes; `danger-solid` is the
+  // confirmed one, and belongs only where the person has already been told what
+  // they are about to lose.
+  danger:
+    "border-[var(--danger-tint-15)] bg-transparent text-[var(--danger)] hover:bg-[var(--danger-tint-15)]",
+  "danger-solid":
+    "border-transparent bg-[var(--danger)] text-white hover:bg-[var(--danger-hover)]",
 };
 
 export function advButton(

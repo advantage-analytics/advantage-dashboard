@@ -28,7 +28,11 @@ const VARIANTS: Record<Variant, string> = {
   primary:
     "bg-[var(--blue)] text-white shadow-[var(--shadow-cta-glow)] hover:bg-[var(--blue-hover)]",
   outline:
-    "bg-[var(--surface-card)] border-[var(--border-field)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)] hover:text-[var(--blue)] hover:border-[var(--blue-ring-30)]",
+    // Hover is the surface wash only. Turning the border and label blue made
+    // every secondary button look like a second primary — see the same fix in
+    // `adv-button.ts`, and `.adv-btn-outline:hover` in the design system, which
+    // is `background: var(--surface-subtle)` and nothing more.
+    "bg-[var(--surface-card)] border-[var(--border-field)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]",
   ghost:
     "bg-transparent border-[var(--border-field)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]",
   // Destructive chrome uses `--danger`, never `--viz-bad`: colors.css fences
