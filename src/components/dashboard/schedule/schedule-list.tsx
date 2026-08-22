@@ -51,14 +51,30 @@ export function ScheduleList({
         {canCreate ? <NewEventMenu /> : null}
       </div>
 
-      <div className="mt-5 flex items-center gap-2">
+      <div
+        role="group"
+        aria-label="Filter the schedule by event kind"
+        className="mt-5 flex items-center gap-2"
+      >
         {FILTERS.map((entry) => (
           <button
             key={entry.id}
             type="button"
+            // Which pill is on was carried by colour alone, so a screen reader
+            // read three identical buttons and never said which one was doing
+            // anything. `aria-pressed` is the toggle's state in the accessibility
+            // tree; the blue fill is now the sighted half of the same fact.
+            aria-pressed={filter === entry.id}
             onClick={() => setFilter(entry.id)}
             className={cn(
-              "cursor-pointer rounded-full px-[13px] py-[5px] text-[11px] transition-colors duration-[var(--duration-hover)]",
+              // The pill keeps its 11px type and ~26px box — that size is the
+              // design system's, and it clears WCAG 2.2 AA's 24px floor. The
+              // `before` block is pointer surface only: 44px tall, invisible,
+              // centred on the pill, so a thumb gets the target Apple and Google
+              // both ask for without the row growing to meet it.
+              "relative cursor-pointer rounded-full px-[13px] py-[5px] text-[11px] transition-colors duration-[var(--duration-hover)]",
+              "before:absolute before:inset-x-0 before:top-1/2 before:h-11 before:-translate-y-1/2 before:content-['']",
+              "outline-none focus-visible:shadow-[var(--focus-ring)]",
               filter === entry.id
                 ? "bg-[var(--blue-soft)] font-medium text-[var(--blue)]"
                 : "border border-[var(--border-hairline)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]"

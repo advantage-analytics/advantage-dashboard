@@ -32,6 +32,16 @@ export interface Match {
   matchContext?: string;
   duration?: string;
   durationSec?: number | null;
+  /**
+   * The schedule event this match was played in, when it came from one.
+   *
+   * Only the id: the event's NAME is already `tournamentName`, because
+   * `recordResult` copies it there when it mints the row. Carrying it twice
+   * would give the page two spellings of one fact and no rule for which wins.
+   * Null for every personal match and for a program's challenge or practice
+   * matches, which are deliberately minted with no `event_entry_id`.
+   */
+  eventId?: string | null;
   player1: Player;
   player2: Player;
   score: MatchScore;

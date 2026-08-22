@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { getMatchStatisticsFromSupabase, getPlayerAverageStats } from "@/lib/data/match-stats-server";
 import { getMatchPointsFromSupabase } from "@/lib/data/match-points-server";
 import { formatDuration } from "@/components/dashboard/matches/new-match-wizard/utils";
@@ -23,6 +24,7 @@ interface DbMatch {
   result: string | null;
   match_type: string | null;
   court_type: string | null;
+  event_entry_id: string | null;
   verified: boolean | null;
   duration: number | null;
   source_provider: string | null;
@@ -162,23 +164,37 @@ const FILLER_KEY_MOMENTS = [
 ];
 
 /**
- * Returns the user's previous/next match ids in chronological order:
+ * Returns the previous/next match ids in chronological order:
  * `previousId` = older match (earlier date), `nextId` = newer match (later date).
  * Used for arrow-key navigation between adjacent matches.
  * Returns null on either side at the list bounds.
+ *
+ * Scoped to the active workspace, and it has to be: this walks the list the
+ * reader arrived from, so it must ask the question `/dashboard/matches` asked.
+ * It filtered on `created_by` alone, which inside a program meant the arrows
+ * silently skipped every match the viewer had not uploaded themselves — a coach
+ * paging through the squad's matches would step from their own upload straight
+ * past a player's, with nothing on screen saying a row had been left out. The
+ * two predicates are deliberately the same shape as the list page's.
  */
 export const getAdjacentMatchIds = cache(async (currentMatchId: string) => {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const [
+    {
+      data: { user },
+    },
+    workspace,
+  ] = await Promise.all([supabase.auth.getUser(), getWorkspaceContext()]);
   if (!user) return { previousId: null, nextId: null };
 
-  const { data } = await supabase
+  const scoped = supabase
     .from("matches")
     .select("id")
-    .eq("created_by", user.id)
     .order("date", { ascending: false });
+
+  const { data } = await (workspace?.active.kind === "team"
+    ? scoped.eq("program_id", workspace.active.id)
+    : scoped.eq("created_by", user.id).is("program_id", null));
 
   if (!data) return { previousId: null, nextId: null };
 
@@ -191,6 +207,27 @@ export const getAdjacentMatchIds = cache(async (currentMatchId: string) => {
     nextId: idx > 0 ? data[idx - 1].id : null,
   };
 });
+
+/**
+ * Which event a match's line belongs to, or null if it has no line.
+ *
+ * One hop, not two: the event's name is already on the match row, so the page
+ * needs the id and nothing else to build a link back to the lineup it came
+ * from. RLS answers this the same way it answers the schedule — a viewer
+ * outside the program gets no row, and the link simply does not render.
+ */
+async function getEventIdForEntry(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  entryId: string | null,
+): Promise<string | null> {
+  if (!entryId) return null;
+  const { data } = await supabase
+    .from("program_event_entries")
+    .select("event_id")
+    .eq("id", entryId)
+    .maybeSingle();
+  return data?.event_id ?? null;
+}
 
 /**
  * Cached data fetcher for match detail pages.
@@ -207,7 +244,7 @@ export const getMatchDetailData = cache(async (matchId: string) => {
   const { data: row, error } = await supabase
     .from("matches")
     .select(
-      "id, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, source_provider, player_hand, player_backhand, opponent_hand, opponent_backhand, key_moments, insights",
+      "id, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, event_entry_id, verified, duration, source_provider, player_hand, player_backhand, opponent_hand, opponent_backhand, key_moments, insights",
     )
     .eq("id", matchId)
     .single();
@@ -242,11 +279,17 @@ export const getMatchDetailData = cache(async (matchId: string) => {
   }
 
   const match = transformDbMatchToMatch(dbRow, user?.id ?? "", profiles);
-  const [statsResult, points, playerAverages] = await Promise.all([
+  // The entry lookup rides this wave rather than following it: it needs only
+  // `dbRow`, which is already in hand, and nothing else here reads its answer.
+  // It resolves to null for every match with no line behind it, which is every
+  // personal match and every challenge or practice a program records.
+  const [statsResult, points, playerAverages, eventId] = await Promise.all([
     getMatchStatisticsFromSupabase(matchId),
     getMatchPointsFromSupabase(matchId),
     user?.id ? getPlayerAverageStats(user.id, matchId) : Promise.resolve(null),
+    getEventIdForEntry(supabase, dbRow.event_entry_id),
   ]);
+  match.eventId = eventId;
 
   return {
     match,

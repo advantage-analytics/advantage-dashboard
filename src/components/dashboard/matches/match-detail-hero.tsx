@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Calendar } from "lucide-react";
 import { MatchMetadataRow } from "@/components/dashboard/matches/match-metadata-row";
@@ -49,9 +50,29 @@ export function MatchDetailHero({ match }: MatchDetailHeroProps) {
     <div className="flex items-end justify-between gap-4 min-w-0">
       <div className="flex flex-col gap-4 min-w-0">
         <div className="flex flex-col gap-3 min-w-0">
-          <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
-            Match
-          </p>
+          {/* A match played on a lineup had no way back to it. The report is
+              reached from the event, from the matches list, and from a shared
+              link, and only the first of those left the reader anywhere to
+              return to — so a coach checking one court had to use the browser's
+              back button to see the other eight. The crumb renders only when a
+              line is actually behind this match; a challenge or an imported
+              match has nowhere to point and shows the label alone. */}
+          <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-[2.5px]">
+            <span className="text-[#AAAAAA]">Match</span>
+            {match.eventId && (
+              <>
+                <span aria-hidden="true" className="text-[#DDDDDD]">
+                  /
+                </span>
+                <Link
+                  href={`/dashboard/team/schedule/${match.eventId}`}
+                  className="rounded-[3px] text-[var(--blue-text)] outline-none transition-colors duration-200 hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)]"
+                >
+                  Back to event
+                </Link>
+              </>
+            )}
+          </div>
           <h1
             title={heroTitle}
             className="font-light text-[30px] text-[#0D0D0D] tracking-[-0.6px] leading-[36px] truncate"
