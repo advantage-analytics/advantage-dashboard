@@ -9,7 +9,7 @@ iteration, and the runner only ever rewrites a task's `status:` line.
 Mark a task `next` to jump the queue.
 
 ## T1 · Replace the boilerplate README
-- **status:** doing
+- **status:** done
 - **files:** README.md
 - **done when:**
   - [ ] No `create-next-app` boilerplate text remains
