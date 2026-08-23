@@ -50,14 +50,14 @@ next-env.d.ts
 
 # claude code
 #
-# Shared team config is tracked — the hooks, the review agents, and the three
+# Shared team config is tracked — the hooks, the review agents, and the four
 # skills written for this repo. Personal state is not: settings.local.json
 # holds one person's permission allowlist, launch.json points at their own
 # worktree paths, and worktrees/ is a working directory.
 #
 # .claude/skills/ is mostly THIRD-PARTY skills installed from the committed
 # skills-lock.json (pbakaus/impeccable). Those are reinstallable dependencies,
-# so only the project-authored three are tracked here. Add a new one to this
+# so only the project-authored ones are tracked here. Add a new one to this
 # list when you write it — the default is ignored.
 .claude/*
 !.claude/settings.json
@@ -69,6 +69,7 @@ next-env.d.ts
 !.claude/skills/create-migration/
 !.claude/skills/pr-check/
 !.claude/skills/trace-route/
+!.claude/skills/task-next/
 .mcp.json
 
 # lock files
