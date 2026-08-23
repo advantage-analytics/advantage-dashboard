@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { PLAYER_MEASURES } from "@/lib/data/player-measures";
 import { meanOfPresent, pct } from "@/lib/data/aggregate";
 import { buildScoreString, matchOutcome, shortDate, type MatchScore } from "@/lib/data/match-utils";
+import { programDisplayName, teamLabel } from "@/lib/data/programs-server";
 
 /**
  * Who a program is about to play, and what is known about them.
@@ -120,7 +121,11 @@ function toProgram(row: DbProgramRow, selfId: string): ConferenceProgram {
   return {
     id: row.id,
     schoolName: row.school_name,
-    team: row.team,
+    // Normalized HERE, at the one boundary that reads the column, rather than
+    // at each of the three places it renders. `programs.team` stores the
+    // dataset key — `mens` — and `teamLabel`'s own comment is the rule: the UI
+    // never shows it raw.
+    team: teamLabel(row.team),
     division: row.division,
     state: row.state,
     isSelf: row.id === selfId,
@@ -476,7 +481,10 @@ export const getOpponentPlayerProfile = cache(async function getOpponentPlayerPr
     classYear: player.class_year,
     lineupSpot: player.lineup_spot,
     programName: programRow
-      ? `${(programRow as { school_name: string }).school_name} ${(programRow as { team: string }).team}`.trim()
+      ? programDisplayName(
+          (programRow as { school_name: string }).school_name,
+          (programRow as { team: string }).team
+        )
       : "",
     matchesAgainst: matches.length,
     hand: mostRecent?.opponent_hand ?? null,
