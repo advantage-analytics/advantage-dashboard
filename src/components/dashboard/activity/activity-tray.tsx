@@ -8,7 +8,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { AnalysisProgressTrack } from "@/components/dashboard/matches/analysis-progress-track";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import {
@@ -166,6 +166,11 @@ export function ActivityTray({ feed }: { feed: ActivityFeed }) {
 
   const unread = inFlight.length;
 
+  // The trigger carries a dot, not a number: the chrome has no numeric badges,
+  // so the count lives here — in the tooltip and, word for word, in the
+  // aria-label — and in the tray itself.
+  const detail = unread > 0 ? `${unread} in flight` : "Nothing in flight";
+
   // Only tick while something can actually produce a new estimate.
   const hasUploading = inFlight.some(
     (item) => item.analysis.status === "uploading"
@@ -178,42 +183,36 @@ export function ActivityTray({ feed }: { feed: ActivityFeed }) {
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              aria-label={
-                unread > 0 ? `Activity, ${unread} in progress` : "Activity"
-              }
+      <ChromeTooltip label="Activity" detail={detail} hidden={isOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-label={`Activity, ${detail}`}
+            className={cn(
+              "group relative flex size-7 items-center justify-center rounded-[8px] transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)] cursor-pointer",
+              isOpen && "bg-[var(--surface-subtle)]"
+            )}
+          >
+            <Activity
               className={cn(
-                "relative flex size-7 items-center justify-center rounded-[8px] transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)] cursor-pointer",
-                isOpen && "bg-[var(--surface-subtle)]"
+                "size-[15px] transition-colors duration-150 group-hover:text-[var(--ink-900)]",
+                isOpen ? "text-[var(--ink-900)]" : "text-[var(--ink-700)]"
               )}
-            >
-              <Activity
-                className={cn(
-                  "size-[15px]",
-                  isOpen ? "text-[var(--ink-900)]" : "text-[var(--ink-700)]"
-                )}
-                strokeWidth={1.5}
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+            {/* The header's one resting blue. It says something is moving —
+                how much is a hover away — and it clears itself when the last
+                job settles, which is why there is no "mark all read". */}
+            {unread > 0 && (
+              <span
                 aria-hidden="true"
+                className="absolute right-[3px] top-[3px] size-1.5 rounded-full bg-[var(--blue)]"
               />
-              {unread > 0 && (
-                <span
-                  aria-hidden="true"
-                  className="absolute right-0 top-0 min-w-[13px] rounded-full bg-[var(--blue)] px-[3px] text-center text-[8px] font-medium leading-[13px] text-white"
-                >
-                  {unread}
-                </span>
-              )}
-            </button>
-          </PopoverTrigger>
-        </TooltipTrigger>
-        <TooltipContent side="bottom" sideOffset={4}>
-          Activity
-        </TooltipContent>
-      </Tooltip>
+            )}
+          </button>
+        </PopoverTrigger>
+      </ChromeTooltip>
 
       <PopoverContent
         align="end"
@@ -242,9 +241,9 @@ export function ActivityTray({ feed }: { feed: ActivityFeed }) {
         )}
 
         {/* No "Mark all read": nothing here has a read state to persist. The
-            badge counts work still moving, so it clears itself when that
-            resolves. A control that only hides a self-clearing badge teaches
-            people to ignore the badge. */}
+            trigger's dot marks work still moving, so it clears itself when that
+            resolves. A control that only hides a self-clearing mark teaches
+            people to ignore the mark. */}
       </PopoverContent>
     </Popover>
   );

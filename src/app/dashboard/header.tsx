@@ -19,6 +19,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  ChromeTooltip,
+  CHROME_TOOLTIP_DELAY_MS,
+} from "@/components/dashboard/shared/chrome-tooltip";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { navLabel, settingsSection } from "@/lib/dashboard/nav";
@@ -200,8 +205,14 @@ export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
     <>
       <header
         ref={headerRef}
+        /* `shrink-0` is load-bearing: the bar is a flex item in the shell's
+           scrolling column, so without it the 44px height is only a starting
+           size and the row squeezes down to whatever its tallest control needs
+           (33px — the avatar). The old `py-4` hid this by accident, by pushing
+           the content-size suggestion past 44 so the automatic minimum pinned
+           there. Spec reads "44px sticky · padding 0 16px", so say it outright. */
         className={cn(
-          "sticky top-0 z-30 flex h-11 items-center justify-between border-b bg-white px-4 py-4 transition-colors duration-200",
+          "sticky top-0 z-30 flex h-11 shrink-0 items-center justify-between border-b bg-white px-4 transition-colors duration-200",
           scrolled ? "border-[#EBEBEB]" : "border-transparent"
         )}
       >
@@ -266,160 +277,173 @@ export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
           )}
         </div>
 
-        {/* Right: page status + search + activity + profile */}
-        <div className="flex shrink-0 items-center gap-1.5">
-          {/* Whatever the current page wants said up here — the upload wizard's
-              "Draft saved", and nothing else so far. */}
-          {headerStatus && (
-            <span className="mr-1.5 text-[11px] text-[var(--ink-400)]">
-              {headerStatus}
-            </span>
-          )}
-          {/* Named, not just an icon — a bare magnifier does not say what it
-              searches, and the palette covers matches, players and help. */}
-          <button
-            onClick={() => setIsSearchOpen(true)}
-            className="flex h-7 cursor-pointer items-center gap-1.5 rounded-[8px] pl-2 pr-1.5 text-[var(--ink-500)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]"
-          >
-            <Search className="h-[14px] w-[14px]" strokeWidth={1.5} aria-hidden="true" />
-            <span className="text-[12px] text-[var(--ink-600)]">Search</span>
-            {isMac !== null && (
-              <kbd className="rounded bg-[#F0F0F0] px-1 py-0.5 text-[10px] font-medium leading-none text-[#AAAAAA]">
-                {isMac ? "⌘K" : "⌃K"}
-              </kbd>
+        {/* Right: page status + search + activity + profile.
+
+            One TooltipProvider around the cluster rather than one per control:
+            it owns the skip-delay timer, so moving from Search to Activity
+            answers instantly instead of serving the 400ms reveal twice. */}
+        <TooltipProvider delayDuration={CHROME_TOOLTIP_DELAY_MS}>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {/* Whatever the current page wants said up here — the upload wizard's
+                "Draft saved", and nothing else so far. */}
+            {headerStatus && (
+              <span className="mr-1.5 text-[11px] text-[var(--ink-400)]">
+                {headerStatus}
+              </span>
             )}
-          </button>
+            {/* Named, not just an icon — a bare magnifier does not say what it
+                searches, and the palette covers matches, players and help.
 
-          {activitySlot}
-
-          <span
-            aria-hidden="true"
-            className="h-3.5 w-px bg-[var(--border-medium)]"
-          />
-
-          {/* Profile.
-
-              Radix, like the two menus beside it. This was ~100 lines of
-              bespoke chrome — an outside-click listener, an Escape handler, a
-              manual Tab/Arrow/Home/End focus trap and a hand-built enter/exit
-              animation — sitting in the same flex row as two Popovers that get
-              all of it for free, plus portalling and focus return that the
-              hand-rolled version never had. Three adjacent menus, three
-              dismissal behaviours. */}
-          <Popover open={isProfileOpen} onOpenChange={setIsProfileOpen}>
-            <PopoverTrigger asChild>
-              <button
-                className={cn(
-                  "flex cursor-pointer items-center gap-1 rounded-full py-[3px] pl-[3px] pr-1.5 transition-colors duration-150 hover:bg-[var(--surface-subtle)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]",
-                  isProfileOpen && "bg-[var(--surface-subtle)]"
-                )}
-                aria-label="Account menu"
-              >
-                <span
-                  aria-hidden="true"
-                  className="flex size-[26px] items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[9px] font-medium text-[var(--ink-700)]"
-                >
-                  {viewer.initials}
-                </span>
-                <ChevronDown
-                  className={cn(
-                    "size-3 transition-transform duration-200",
-                    isProfileOpen
-                      ? "rotate-180 text-[var(--ink-600)]"
-                      : "text-[var(--ink-400)]"
-                  )}
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-              </button>
-            </PopoverTrigger>
-
-            <PopoverContent
-              align="end"
-              sideOffset={6}
-              className="w-[260px] rounded-[12px] border-[var(--border-medium)] p-1.5"
+                The shortcut is in the tooltip rather than a keycap in the bar:
+                it is worth knowing once, not worth a permanent grey chip in the
+                chrome. `isMac` still decides which one it names. */}
+            <ChromeTooltip
+              label="Search"
+              detail="Matches, players, help"
+              shortcut={isMac === null ? undefined : isMac ? "⌘K" : "⌃K"}
             >
-              {/* Identity */}
-              <div className="flex items-center gap-2.5 px-2.5 pb-2 pt-2.5">
-                <span
-                  aria-hidden="true"
-                  className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[10px] font-medium text-[var(--ink-700)]"
-                >
-                  {viewer.initials}
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate text-[13px] font-medium text-[var(--ink-900)]">
-                    {viewer.name}
-                  </p>
-                  <p className="truncate text-[11px] text-[var(--ink-500)]">
-                    {viewer.email}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex gap-1.5 px-2.5 pb-2.5">
-                {/* Role is a program standing — a personal workspace has no one
-                    to have standing over, so it carries only the plan. */}
-                {active.kind === "team" && <Chip>{capitalize(active.role)}</Chip>}
-                <Chip>{capitalize(viewer.plan)}</Chip>
-              </div>
-
-              <div className="-mx-1.5 h-px bg-[var(--border-hairline)]" />
-
-              <p className="px-2.5 pb-1 pt-2.5 text-[10px] font-medium uppercase tracking-[1.5px] text-[var(--ink-500)]">
-                Workspace
-              </p>
-              <WorkspaceOptionList onSwitched={() => setIsProfileOpen(false)} />
-
-              <div className="-mx-1.5 my-1.5 h-px bg-[var(--border-hairline)]" />
-
-              <Link href="/dashboard/settings/profile" className={MENU_ITEM_CLASS}>
-                <SlidersHorizontal
-                  className="size-[13px] text-[var(--ink-600)]"
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-                Preferences
-              </Link>
-              <Link
-                href="/dashboard/settings/plan"
-                className={MENU_ITEM_CLASS}
-              >
-                <Timer
-                  className="size-[13px] text-[var(--ink-600)]"
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-                Usage &amp; quota
-              </Link>
-              <Link href="/dashboard/help" className={MENU_ITEM_CLASS}>
-                <CircleHelp
-                  className="size-[13px] text-[var(--ink-600)]"
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-                Help
-              </Link>
-
-              <div className="-mx-1.5 my-1.5 h-px bg-[var(--border-hairline)]" />
-
               <button
-                onClick={() => {
-                  setIsProfileOpen(false);
-                  requestLogout();
-                }}
-                className={cn(MENU_ITEM_CLASS, "text-[var(--ink-700)]")}
+                onClick={() => setIsSearchOpen(true)}
+                className="group flex h-7 cursor-pointer items-center gap-1.5 rounded-[8px] px-2 text-[var(--ink-500)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]"
               >
-                <LogOut
-                  className="size-[13px] text-[var(--ink-600)]"
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-                Sign out
+                <Search className="h-[14px] w-[14px]" strokeWidth={1.5} aria-hidden="true" />
+                <span className="text-[12px] text-[var(--ink-600)] transition-colors duration-150 group-hover:text-[var(--ink-700)]">
+                  Search
+                </span>
               </button>
-            </PopoverContent>
-          </Popover>
-        </div>
+            </ChromeTooltip>
+
+            {activitySlot}
+
+            <span
+              aria-hidden="true"
+              className="h-3.5 w-px bg-[var(--border-medium)]"
+            />
+
+            {/* Profile.
+
+                Radix, like the two menus beside it. This was ~100 lines of
+                bespoke chrome — an outside-click listener, an Escape handler, a
+                manual Tab/Arrow/Home/End focus trap and a hand-built enter/exit
+                animation — sitting in the same flex row as two Popovers that get
+                all of it for free, plus portalling and focus return that the
+                hand-rolled version never had. Three adjacent menus, three
+                dismissal behaviours. */}
+            <Popover open={isProfileOpen} onOpenChange={setIsProfileOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  className={cn(
+                    "flex cursor-pointer items-center gap-1 rounded-full py-[3px] pl-[3px] pr-1.5 transition-colors duration-150 hover:bg-[var(--surface-subtle)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]",
+                    isProfileOpen && "bg-[var(--surface-subtle)]"
+                  )}
+                  aria-label="Account menu"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="flex size-[26px] items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[9px] font-medium text-[var(--ink-700)]"
+                  >
+                    {viewer.initials}
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "size-3 transition-transform duration-200",
+                      isProfileOpen
+                        ? "rotate-180 text-[var(--ink-600)]"
+                        : "text-[var(--ink-400)]"
+                    )}
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                </button>
+              </PopoverTrigger>
+
+              <PopoverContent
+                align="end"
+                sideOffset={6}
+                className="w-[260px] rounded-[12px] border-[var(--border-medium)] p-1.5"
+              >
+                {/* Identity */}
+                <div className="flex items-center gap-2.5 px-2.5 pb-2 pt-2.5">
+                  <span
+                    aria-hidden="true"
+                    className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[10px] font-medium text-[var(--ink-700)]"
+                  >
+                    {viewer.initials}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-medium text-[var(--ink-900)]">
+                      {viewer.name}
+                    </p>
+                    <p className="truncate text-[11px] text-[var(--ink-500)]">
+                      {viewer.email}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-1.5 px-2.5 pb-2.5">
+                  {/* Role is a program standing — a personal workspace has no one
+                      to have standing over, so it carries only the plan. */}
+                  {active.kind === "team" && <Chip>{capitalize(active.role)}</Chip>}
+                  <Chip>{capitalize(viewer.plan)}</Chip>
+                </div>
+
+                <div className="-mx-1.5 h-px bg-[var(--border-hairline)]" />
+
+                <p className="px-2.5 pb-1 pt-2.5 text-[10px] font-medium uppercase tracking-[1.5px] text-[var(--ink-500)]">
+                  Workspace
+                </p>
+                <WorkspaceOptionList onSwitched={() => setIsProfileOpen(false)} />
+
+                <div className="-mx-1.5 my-1.5 h-px bg-[var(--border-hairline)]" />
+
+                <Link href="/dashboard/settings/profile" className={MENU_ITEM_CLASS}>
+                  <SlidersHorizontal
+                    className="size-[13px] text-[var(--ink-600)]"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                  Preferences
+                </Link>
+                <Link
+                  href="/dashboard/settings/plan"
+                  className={MENU_ITEM_CLASS}
+                >
+                  <Timer
+                    className="size-[13px] text-[var(--ink-600)]"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                  Usage &amp; quota
+                </Link>
+                <Link href="/dashboard/help" className={MENU_ITEM_CLASS}>
+                  <CircleHelp
+                    className="size-[13px] text-[var(--ink-600)]"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                  Help
+                </Link>
+
+                <div className="-mx-1.5 my-1.5 h-px bg-[var(--border-hairline)]" />
+
+                <button
+                  onClick={() => {
+                    setIsProfileOpen(false);
+                    requestLogout();
+                  }}
+                  className={cn(MENU_ITEM_CLASS, "text-[var(--ink-700)]")}
+                >
+                  <LogOut
+                    className="size-[13px] text-[var(--ink-600)]"
+                    strokeWidth={1.5}
+                    aria-hidden="true"
+                  />
+                  Sign out
+                </button>
+              </PopoverContent>
+            </Popover>
+          </div>
+        </TooltipProvider>
       </header>
 
       <SearchCommandPalette open={isSearchOpen} onOpenChange={setIsSearchOpen} />
