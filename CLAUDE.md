@@ -175,6 +175,10 @@ on task files are structurally impossible.
 - The queue file is yours; append to it any time, including while the loop
   runs. The runner only ever rewrites a task's `status:` line.
 - `.claude/tasks/<slug>.log.md` is the runner's. Do not hand-edit it.
+- Status values: `todo`, `next`, `doing`, `done` and `blocked` are the
+  runner-driven ones. `later` is a deferred task — `/task-next`'s picker never
+  selects it automatically, so a `/loop /task-next` drain skips straight past
+  it. Promote it to `todo` by hand when it's actually ready to run.
 
 Every task needs a `done when:` list. It is the contract
 `task-completion-reviewer` gates against, and a task without one is skipped.

@@ -24,10 +24,20 @@ soften one that is.
 ```bash
 git diff HEAD
 git diff HEAD --stat
+git ls-files --others --exclude-standard
 ```
 
-The work is uncommitted at this point — that is expected. If `git diff HEAD` is
-empty, the task subagent changed nothing: that is `needs-work`, not `pass`.
+The third command is required, not optional: `git diff HEAD` never shows
+untracked files, so a task whose deliverable is entirely new files produces an
+empty diff from the first two commands alone. Read every file the third
+command lists — they are part of the change even though the diff omits them,
+and Question 2's scope check depends on seeing them.
+
+The work is uncommitted at this point — that is expected. `git diff HEAD`
+empty **and** `git ls-files --others --exclude-standard` empty together mean
+the task subagent changed nothing: that is `needs-work`, not `pass`. An empty
+diff with untracked files present is not evidence of no change — go read
+those files before judging.
 
 ## Question 1 — criteria
 
@@ -49,13 +59,24 @@ Not all of these are wrong — `files:` is a best guess and the subagent may hav
 had to correct it. Judge each: a rename that pulled in three call sites is
 expected; a redesign of an unrelated component is scope creep and fails.
 
+`.claude/tasks/<slug>.md` and `.claude/tasks/<slug>.log.md` are the runner's
+own bookkeeping — the `status: doing` line and the log entry `/task-next`
+writes around every dispatch — and are never scope creep, regardless of
+whether the task's `files:` field names them.
+
 ## Output
 
-Exactly this shape, starting with the verdict line so the runner can parse it:
+Exactly this shape, starting with the verdict line so the runner can parse it.
+That first line is **one of** these two literals, never both — the word "or"
+below is prose describing the choice, not part of either output:
 
     VERDICT: pass
-    or
+
+—or—
+
     VERDICT: needs-work
+
+Followed, in both cases, by:
 
     ## Criteria
     - [met] <criterion> — <file:line evidence>

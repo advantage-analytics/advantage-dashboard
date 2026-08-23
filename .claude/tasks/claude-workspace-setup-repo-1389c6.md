@@ -8,6 +8,12 @@ Append freely while it runs: the queue is re-read at the start of every
 iteration, and the runner only ever rewrites a task's `status:` line.
 Mark a task `next` to jump the queue.
 
+Status values: `todo` (eligible to run), `next` (jump the queue), `doing` /
+`done` / `blocked` (written by the runner around a dispatch), and `later`
+(deferred — `/task-next`'s picker never selects it, so `/loop /task-next`
+drains straight past it; promote a task to `todo` by hand once it's actually
+ready).
+
 ## T1 · Replace the boilerplate README
 - **status:** done
 - **files:** README.md
@@ -34,7 +40,7 @@ Mark a task `next` to jump the queue.
   cites this file as "Schema reference" — Task 7 of the plan qualifies that.
 
 ## T3 · Add a docs-freshness reviewer
-- **status:** todo
+- **status:** later
 - **files:** .claude/agents/docs-freshness-reviewer.md
 - **done when:**
   - [ ] Reads docs/README.md first and honours its current-vs-point-in-time marks
@@ -45,7 +51,7 @@ Mark a task `next` to jump the queue.
   drifting silently is worse than no doc; this enforces it.
 
 ## T4 · Vitest over the pure logic layer
-- **status:** todo
+- **status:** later
 - **files:** package.json, vitest.config.ts, src/lib/services/upload/, src/lib/data/
 - **done when:**
   - [ ] Vitest runs alongside Playwright without either claiming the other's files
@@ -58,7 +64,7 @@ Mark a task `next` to jump the queue.
   and the cost/benefit does not hold. Target the logic that fails silently.
 
 ## T5 · Notion task ingestion
-- **status:** todo
+- **status:** later
 - **files:** .claude/skills/task-import/
 - **done when:**
   - [ ] Pulls open items from Notion via MCP

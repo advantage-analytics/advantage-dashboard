@@ -21,12 +21,24 @@ worst failure a gate can have.
 
 Pick the target before you start, and say which you picked:
 
-- **Working tree dirty** — review `git diff HEAD`. Uncommitted work in progress.
+- **Working tree dirty** — review `git diff HEAD` **and**
+  `git ls-files --others --exclude-standard`. The second command is required:
+  `git diff HEAD` never shows untracked files, so uncommitted work that is
+  entirely new files would otherwise review as nothing.
 - **Working tree clean** — review the branch range:
 
 ```bash
-git diff $(git merge-base HEAD splitstep-integration)...HEAD --stat
+base=$(git merge-base HEAD splitstep-integration) || { echo "no merge base — stop"; exit 1; }
+git diff "$base"...HEAD --stat
 ```
+
+  Do not use the unguarded one-liner form
+  (`` git diff $(git merge-base ...)...HEAD ``) — if `merge-base` fails (branch
+  not fetched, renamed, or a shallow clone), the empty substitution collapses
+  it to `git diff ...HEAD --stat`, which succeeds with empty output and exit
+  0. That is this section reporting green over the exact unreviewed branch it
+  exists to catch. Fail loud instead: if `merge-base` fails, stop and say so
+  rather than reviewing anything.
 
   Pass that same range to `code-review`, which accepts a branch target, and
   scope `simplify` to the files it lists.
@@ -87,14 +99,20 @@ surfaces the diff touches:
 - **`rls-boundary-reviewer`** — if anything under `src/lib/supabase/`,
   `src/lib/data/`, `src/app/api/`, or `supabase/migrations/` changed, or if
   any new table, view or query appeared.
-- **`supabase-postgres-best-practices` skill** — if anything under
+- **`supabase:supabase-postgres-best-practices` skill** — if anything under
   `supabase/migrations/` changed, or the diff adds or alters SQL, a table, a
   column type, an index, an RLS policy, or a database function. This is the
   schema-and-query counterpart to the React skill in stage 2; `rls-boundary-reviewer`
-  asks who may read a row, this asks whether the table is built right.
+  asks who may read a row, this asks whether the table is built right. It is
+  registered plugin-qualified, so it must be invoked as `supabase:supabase-postgres-best-practices`,
+  not the bare name, and it requires the `supabase` plugin to be enabled. If
+  the trigger applies but the skill is not available, do not skip it silently
+  — report Stage 3's output as an explicit skip for this reviewer, naming the
+  reason ("supabase plugin not enabled"), the same way Stage 4 reports any
+  other skipped reviewer.
 
 Send the two reviewer subagents in one message so they run concurrently.
-Invoke the `supabase-postgres-best-practices` skill separately if its
+Invoke the `supabase:supabase-postgres-best-practices` skill separately if its
 trigger applies.
 
 ## Stage 4 — report

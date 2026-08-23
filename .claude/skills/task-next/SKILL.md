@@ -36,6 +36,10 @@ If the user passed a task id, use that one. Otherwise:
 1. The first task with `status: next`, in file order — the queue-jump.
 2. Otherwise the first with `status: todo`.
 
+`status: later` is never picked by either rule above — it marks a task
+deferred until someone promotes it to `todo` by hand. It is not malformed and
+is not skipped-and-logged; it is simply invisible to the picker.
+
 Skip and log any task whose `done when:` list is missing or empty, then
 **keep scanning past it** to the next candidate in file order — a skip never
 ends the search. Log target is `.claude/tasks/<slug>.log.md`, the same file
@@ -43,7 +47,19 @@ steps 6a/6b append to. **Do not invent criteria for it** — a task without
 criteria cannot be gated, and gating is the entire point.
 
 Nothing eligible → report `queue drained` and stop cleanly. This is a success,
-not an error; it is what lets `/loop` idle instead of spinning.
+not an error; it is what lets `/loop` idle instead of spinning. If this scan
+wrote a skip-log entry along the way, commit it before stopping:
+
+```bash
+git add .claude/tasks/<slug>.log.md
+git commit -m "skip: <task id>"
+```
+
+Otherwise a drained run that skipped a malformed task leaves that entry
+uncommitted in the tree. `/loop` re-enters, finds the same malformed task,
+skips and logs it again, and stops dirty again — a permanent dirty tree that
+never surfaces as a failure, just a queue that quietly never drains and sends
+`/pr-check` down its "working tree dirty" branch forever.
 
 ## 3. Pre-flight
 
@@ -81,6 +97,11 @@ Give the subagent:
 
 Tell it: satisfy every `done when:` line, stay inside `files:` unless the work
 genuinely requires more, and **do not commit** — this skill owns committing.
+If the task creates a new skill under `.claude/skills/`, also tell it to add a
+matching `!.claude/skills/<name>/` line to `.gitignore` — that directory is
+deny-by-default (see the comment block above the existing entries), so a new
+skill nobody re-includes there cannot be staged, cannot appear in a diff, and
+cannot be committed no matter how correct the skill itself is.
 
 ## 5. Gate, in cost order, stopping at the first failure
 
@@ -106,17 +127,37 @@ so they run concurrently:
 - `rls-boundary-reviewer` — `src/lib/supabase/`, `src/lib/data/`,
   `src/app/api/`, `supabase/migrations/`, or any new table, view or query.
 
-All three must clear. `simplify` and `code-review` are **not** run here — they
-belong to `/pr-check` at branch end, over the whole branch diff, where reuse
-and altitude findings can actually be made.
+Determine which surfaces the diff touches from both `git diff --stat` **and**
+`git ls-files --others --exclude-standard` — a task whose new files land
+entirely under one of the surfaces above must not skip that surface's
+reviewer just because those files are untracked and so absent from
+`git diff --stat` alone.
+
+**Fail-closed:** a stage that does not return something explicitly parseable
+as clear is a **failure**, not a pass — go to 6b. A crashed subagent,
+truncated output, or a report with prose but no verdict all count. For 5b that
+means anything other than a literal `VERDICT: pass` — including
+`VERDICT: needs-work` or no verdict line at all. Neither guardrail agent in 5c
+emits a verdict literal; they return prose findings only, so their "clear" is
+an explicit statement that they found nothing. Any finding at all from either
+one blocks — there is no severity triage at this gate, and don't invent one.
+(That triage is `code-review`'s job, at `/pr-check`, over the whole branch.)
+
+All three must clear under that standard. `simplify` and `code-review` are
+**not** run here — they belong to `/pr-check` at branch end, over the whole
+branch diff, where reuse and altitude findings can actually be made.
 
 ## 6a. All clear — commit
 
 Set the task's `status:` to `done`. Append to `.claude/tasks/<slug>.log.md`:
-the task id and one line on what changed. Do both **before** committing — a
-commit can't record its own SHA inside its own content, so the log entry
-carries no SHA; `git rev-parse HEAD` after the commit is where that comes
-from, for step 7's report.
+a heading naming the task id, title and status (`## T<n> · <title> — done`),
+then two fields — `**gate:**` (the verdict per stage, and which guardrails ran
+versus were skipped and why, matching step 7) and `**changed:**` (what
+changed, a line or short paragraph). Do **not** add a `**commit:**` field:
+write both **before** committing, because a commit can't record its own SHA
+inside its own content, so the log entry is never in a position to carry one —
+`git rev-parse HEAD` after the commit is where that comes from, for step 7's
+report.
 
 ```bash
 git add -A
@@ -130,14 +171,20 @@ immediately after — if it isn't, the bookkeeping got left behind again.
 ## 6b. Anything failed — stash
 
 ```bash
-git stash push -u -m "blocked: T<n>"
+git stash push -u -m "blocked: T<n>" -- ':(exclude).claude/tasks/'
 ```
 
-Stash before touching the queue or log files, not after: `git stash push -u`
-sweeps up every tracked and untracked change in the tree, bookkeeping
-included, so writing `status: blocked` or the log entry first would just get
-carried into the stash instead of landing anywhere durable. Once the stash
-exists, note its ref (`git rev-parse stash@{0}`), then set `status:` to
+The `-- ':(exclude).claude/tasks/'` pathspec is load-bearing — do not drop it.
+Without it, `git stash push -u` sweeps up *everything* in the tree, bookkeeping
+included: step 3 already wrote `status: doing` into the queue file before
+dispatch, so an unscoped stash captures that `todo → doing` hunk, and after
+this section rewrites the line to `blocked` the mismatch makes `git stash pop`
+conflict on the queue file later — on the one path where the user is already
+dealing with a failure. Excluding `.claude/tasks/` keeps the stash to the
+task's actual (failed) code changes and leaves the queue and log files sitting
+modified in the tree, ready for this section to edit and commit normally.
+
+Note the stash ref (`git rev-parse stash@{0}`), then set `status:` to
 `blocked` and append to the log: which stage failed, the specific reason, and
 the stash ref.
 
@@ -156,9 +203,10 @@ the tree is clean for the next task while the work stays recoverable.
 
 ## 7. Report and stop
 
-Say which task ran, the verdict per gate stage, and what landed — a commit SHA
-or a stash ref. Then stop, even if more tasks are eligible. The loop re-enters
-for the next one.
+Say which task ran, the verdict per gate stage — including which guardrails
+ran and which were skipped, and why, the same detail `/pr-check` Stage 4.3
+reports — and what landed: a commit SHA or a stash ref. Then stop, even if
+more tasks are eligible. The loop re-enters for the next one.
 
 ## Do not
 
@@ -170,3 +218,8 @@ for the next one.
   small the failure looks — stash them in 6b instead. 6b's bookkeeping commit
   is a separate, deliberate exception: it carries only the `status:` line and
   the log entry, never the stashed work.
+- Do not run `git add -A` (in 6a or 6b) without checking `git status` first —
+  it stages every unrelated change sitting in the tree, not just this task's,
+  including anything the user has in progress alongside the loop. If
+  unrelated changes are present, stop and ask the user how to handle them
+  rather than folding them into this task's commit or stash.
