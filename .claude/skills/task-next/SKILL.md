@@ -127,11 +127,18 @@ so they run concurrently:
 - `rls-boundary-reviewer` — `src/lib/supabase/`, `src/lib/data/`,
   `src/app/api/`, `supabase/migrations/`, or any new table, view or query.
 
-Determine which surfaces the diff touches from both `git diff --stat` **and**
-`git ls-files --others --exclude-standard` — a task whose new files land
-entirely under one of the surfaces above must not skip that surface's
+Determine which surfaces the diff touches from both `git diff HEAD --stat`
+**and** `git ls-files --others --exclude-standard` — a task whose new files
+land entirely under one of the surfaces above must not skip that surface's
 reviewer just because those files are untracked and so absent from
-`git diff --stat` alone.
+`git diff HEAD --stat` alone.
+
+`HEAD` is not optional there. Bare `git diff` shows unstaged changes only, and
+`git ls-files --others` stops listing a file the moment it is staged — so a
+subagent that ran `git add` without committing (it is told not to commit, not
+told not to stage) would fall through *both* halves of that check, and a
+dashboard or migration change would silently skip its reviewer while step 7
+reports the skip as legitimate.
 
 **Fail-closed:** a stage that does not return something explicitly parseable
 as clear is a **failure**, not a pass — go to 6b. A crashed subagent,
@@ -184,9 +191,28 @@ dealing with a failure. Excluding `.claude/tasks/` keeps the stash to the
 task's actual (failed) code changes and leaves the queue and log files sitting
 modified in the tree, ready for this section to edit and commit normally.
 
-Note the stash ref (`git rev-parse stash@{0}`), then set `status:` to
-`blocked` and append to the log: which stage failed, the specific reason, and
-the stash ref.
+**Check whether a stash was actually created before recording one.** Because
+the pathspec excludes `.claude/tasks/`, a task that failed without leaving
+anything dirty outside it — a crashed subagent, truncated output, a run that
+died before writing a file, all of which the fail-closed rule in step 5 routes
+straight here — gives `git stash push` nothing to save. It prints `No local
+changes to save`, exits 0, and creates no entry.
+
+`git rev-parse stash@{0}` does **not** fail helpfully in that case: if any
+earlier stash exists it returns *that* one's SHA with exit 0, and the log then
+durably records another task's stashed work as this task's recoverable work.
+False provenance in the run log is worse than no provenance, because the log
+is the only durable record of what the loop did.
+
+So: if the stash command reported `No local changes to save`, there is no
+stash. Log `no stash — the task produced no changes` in place of a ref. Only
+when a stash was really created, resolve it to a SHA with
+`git rev-parse stash@{0}` and record that — a SHA, not `stash@{0}`, because
+`refs/stash` is shared across worktrees and the index shifts the moment
+anything else stashes.
+
+Then set `status:` to `blocked` and append to the log: which stage failed, the
+specific reason, and the stash SHA or the no-stash note.
 
 ```bash
 git add -A
