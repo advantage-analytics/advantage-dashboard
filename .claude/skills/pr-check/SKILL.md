@@ -93,7 +93,9 @@ surfaces the diff touches:
   schema-and-query counterpart to the React skill in stage 2; `rls-boundary-reviewer`
   asks who may read a row, this asks whether the table is built right.
 
-Send both in one message so they run concurrently.
+Send the two reviewer subagents in one message so they run concurrently.
+Invoke the `supabase-postgres-best-practices` skill separately if its
+trigger applies.
 
 ## Stage 4 — report
 
