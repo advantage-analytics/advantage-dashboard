@@ -11,6 +11,29 @@ argument-hint: "[optional: scope, e.g. 'ui only']"
 on a PR. Every check is this one. Do not skip a stage because the diff "looks
 small" — the failure modes this catches are the silent kind.
 
+## What to review — read this before stage 1
+
+**A clean working tree means the work is committed, not that there is nothing
+to review.** `/task-next` commits every task it completes, so by the time you
+run this the tree is usually clean. Reviewing "the current diff" would then
+find nothing and report green over a whole branch of unreviewed work — the
+worst failure a gate can have.
+
+Pick the target before you start, and say which you picked:
+
+- **Working tree dirty** — review `git diff HEAD`. Uncommitted work in progress.
+- **Working tree clean** — review the branch range:
+
+```bash
+git diff $(git merge-base HEAD splitstep-integration)...HEAD --stat
+```
+
+  Pass that same range to `code-review`, which accepts a branch target, and
+  scope `simplify` to the files it lists.
+
+`splitstep-integration` is the integration branch and the correct base. `main`
+is deployed and is not the merge target until the whole branch lands.
+
 ## Stage 1 — mechanical gates
 
 Run all three. Report actual output, not a summary of it.
@@ -64,6 +87,11 @@ surfaces the diff touches:
 - **`rls-boundary-reviewer`** — if anything under `src/lib/supabase/`,
   `src/lib/data/`, `src/app/api/`, or `supabase/migrations/` changed, or if
   any new table, view or query appeared.
+- **`supabase-postgres-best-practices` skill** — if anything under
+  `supabase/migrations/` changed, or the diff adds or alters SQL, a table, a
+  column type, an index, an RLS policy, or a database function. This is the
+  schema-and-query counterpart to the React skill in stage 2; `rls-boundary-reviewer`
+  asks who may read a row, this asks whether the table is built right.
 
 Send both in one message so they run concurrently.
 
