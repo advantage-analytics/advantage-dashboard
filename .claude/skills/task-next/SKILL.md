@@ -112,13 +112,20 @@ and altitude findings can actually be made.
 
 ## 6a. All clear — commit
 
+Set the task's `status:` to `done`. Append to `.claude/tasks/<slug>.log.md`:
+the task id and one line on what changed. Do both **before** committing — a
+commit can't record its own SHA inside its own content, so the log entry
+carries no SHA; `git rev-parse HEAD` after the commit is where that comes
+from, for step 7's report.
+
 ```bash
 git add -A
 git commit -m "T<n>: <title>"
 ```
 
-Set `status:` to `done`. Append to `.claude/tasks/<slug>.log.md`: the task id,
-the commit SHA, and one line on what changed.
+One commit now carries all three together: the task's code changes, `status:
+done`, and the log entry. `git status --short` must come back empty
+immediately after — if it isn't, the bookkeeping got left behind again.
 
 ## 6b. Anything failed — stash
 
@@ -126,8 +133,23 @@ the commit SHA, and one line on what changed.
 git stash push -u -m "blocked: T<n>"
 ```
 
-Set `status:` to `blocked`. Append to the log: which stage failed, the specific
-reason, and the stash ref.
+Stash before touching the queue or log files, not after: `git stash push -u`
+sweeps up every tracked and untracked change in the tree, bookkeeping
+included, so writing `status: blocked` or the log entry first would just get
+carried into the stash instead of landing anywhere durable. Once the stash
+exists, note its ref (`git rev-parse stash@{0}`), then set `status:` to
+`blocked` and append to the log: which stage failed, the specific reason, and
+the stash ref.
+
+```bash
+git add -A
+git commit -m "T<n>: blocked"
+```
+
+The failed work stays out of history on purpose — that's what the stash is
+for — but the bookkeeping still needs to land somewhere durable, and this
+commit is the only vehicle for that. `git status --short` must come back
+empty immediately after.
 
 **Never revert, never `git checkout --`, never discard.** The stash exists so
 the tree is clean for the next task while the work stays recoverable.
@@ -144,4 +166,7 @@ for the next one.
 - Do not write anywhere in the queue file except a `status:` line. The user is
   typing in that file while you run.
 - Do not hand-edit the log's history; append only.
-- Do not commit when any gate stage failed, however small the failure looks.
+- Do not commit the task's code changes when any gate stage failed, however
+  small the failure looks — stash them in 6b instead. 6b's bookkeeping commit
+  is a separate, deliberate exception: it carries only the `status:` line and
+  the log entry, never the stashed work.
