@@ -21,7 +21,7 @@ not replace any of it.
 | `pipeline-guardrails-reviewer` | `.claude/agents/` | Invoked by the per-task gate when UI surfaces change |
 | `rls-boundary-reviewer` | `.claude/agents/` | Invoked by the per-task gate when data surfaces change |
 | `trace-route` skill | `.claude/skills/trace-route/` | Handed to task subagents editing dashboard UI |
-| 5 hooks | `.claude/hooks/` | Fire during task execution unchanged |
+| 5 hooks | `.claude/hooks/` | Fire during task execution unchanged. A sixth is added (§7) |
 | `docs/README.md` | `docs/` | The docs index. `MAP.md` is its code counterpart, not a duplicate |
 
 **Branch policy:** all of this lands on `splitstep-integration`. `main` is
@@ -161,8 +161,9 @@ commits, so it runs only when explicitly typed.
 tree is clean for the next task and the work stays recoverable.
 
 **Pre-flight:** if `node_modules` is absent the gate cannot run, so `/task-next`
-reports that and stops rather than committing ungated work. Worktrees need
-their own `npm ci` and `.env.local`.
+reports that and stops rather than committing ungated work. The bootstrap
+hook (§7) supplies `.env.local` automatically and flags a missing
+`node_modules`, but `npm ci` remains a manual step.
 
 ---
 
@@ -215,6 +216,30 @@ present.
 
 `pr-check` keeps its "do not commit" rule. `/task-next` owns committing.
 
+### What each gate diffs against
+
+These differ, and getting it wrong produces a silent false pass — the worst
+possible failure for a gate.
+
+**Per-task:** the subagent's work is still uncommitted when it is reviewed, so
+the target is the working tree — `git diff HEAD`. This is the normal case and
+needs no special handling.
+
+**Branch-end:** because `/task-next` commits every task, the working tree is
+**clean** by the time you run `/pr-check`. A review of "the current diff" would
+find nothing and report green over an entire branch of unreviewed work.
+
+The branch-end gate must therefore target the merge base explicitly:
+
+```bash
+git diff $(git merge-base HEAD splitstep-integration)...HEAD
+```
+
+`code-review` already accepts a branch target, so it can be pointed at the same
+range. `pr-check` gains an explicit instruction: **when the working tree is
+clean, review the branch range, never the working tree.** A clean tree means
+the work is committed, not that there is nothing to review.
+
 ---
 
 ## 5. `MAP.md`
@@ -253,13 +278,50 @@ so the loop pays its cost on every task. Scope of the pass:
   insertions / 106 deletions; the `main` version is stale).
 - Add a `MAP.md` pointer and a `.claude/tasks/` pointer.
 - Correct the `DATABASE_PRD.md` reference: it is currently cited as "Schema
-  reference" without qualification, and it is stale (§7).
+  reference" without qualification, and it is stale (§8).
 
 Not a rewrite. Accuracy and the two new pointers.
 
 ---
 
-## 7. Seeded tasks
+## 7. Worktree bootstrap hook
+
+A worktree is a fresh checkout: `.env.local` is gitignored so it does not come
+along, and without it the dev server and every gate that needs env vars fail
+with errors that do not name the cause.
+
+**This has to be a hook, not something `/task-next` does.**
+`guard-secrets.sh` lists `cp`, `scp` and `rsync` among its content-reading
+verbs, so `cp .env.local <dest>` issued by the agent is denied — correctly.
+Hooks run outside the tool layer, so the hook can do what the agent must not.
+
+**Trigger:** `SessionStart`. There is no worktree-creation event, and matching
+`git worktree add` in a `PostToolUse` Bash hook would miss worktrees made by
+the `EnterWorktree` tool. Every worktree session starts, so `SessionStart` is
+both the reliable trigger and self-healing for worktrees that already exist.
+
+**File:** `.claude/hooks/bootstrap-worktree.sh`, wired in `settings.json`.
+
+**Behaviour:**
+
+1. Resolve the main checkout: `dirname "$(git rev-parse --git-common-dir)"`.
+   If that equals the current toplevel, this is not a worktree — exit silently.
+2. If `.env.local` is absent here and present there, **symlink** it.
+   `.env.local` is gitignored, so it is not per-branch: exactly one exists, in
+   the main checkout, and the symlink keeps it that way. Rotating a key
+   propagates to every worktree at once; there is never a second copy of the
+   service-role key on disk to drift or leak.
+3. Report `node_modules` if absent — **do not** run `npm ci`. It takes minutes
+   and `SessionStart` hooks block the session.
+4. Print only what it did. Never read, echo, or interpolate file contents.
+
+**Constraints:** exit 0 on every path, including missing source — a bootstrap
+convenience must never be able to stop a session from starting. Never `rm` an
+existing `.env.local`; if one is already present, leave it and say so.
+
+---
+
+## 8. Seeded tasks
 
 These are queued in the task file rather than done during implementation — the
 docs cleanup dogfoods the loop on low-risk work and surfaces where `/task-next`
@@ -295,6 +357,7 @@ not hold.
 | Reviewer `needs-work` | Same as gate red |
 | `node_modules` absent | Stop before dispatch; ungated commits are worse than no progress |
 | Queue drained | Report and stop cleanly so `/loop` idles instead of spinning |
+| Clean tree at branch end | Review the merge-base range, never the working tree — a clean tree is committed work, not an empty diff |
 | You edit mid-task | Picked up at the next iteration; agent only ever writes the `status:` line |
 
 ## Verification
@@ -305,3 +368,7 @@ not hold.
    named stash, a log entry, and **no commit**.
 4. A seeded task that passes produces exactly one commit and `status: done`.
 5. `/loop /task-next` on a drained queue idles rather than spinning.
+6. A worktree without `.env.local` gets a symlink on session start; one that
+   already has a real file keeps it untouched.
+7. The bootstrap hook exits 0 in the main checkout, in a worktree, and when the
+   source `.env.local` is missing — no path blocks a session from starting.
