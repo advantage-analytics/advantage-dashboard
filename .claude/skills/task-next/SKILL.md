@@ -36,9 +36,11 @@ If the user passed a task id, use that one. Otherwise:
 1. The first task with `status: next`, in file order — the queue-jump.
 2. Otherwise the first with `status: todo`.
 
-Skip and log any task whose `done when:` list is missing or empty. **Do not
-invent criteria for it** — a task without criteria cannot be gated, and gating
-is the entire point.
+Skip and log any task whose `done when:` list is missing or empty, then
+**keep scanning past it** to the next candidate in file order — a skip never
+ends the search. Log target is `.claude/tasks/<slug>.log.md`, the same file
+steps 6a/6b append to. **Do not invent criteria for it** — a task without
+criteria cannot be gated, and gating is the entire point.
 
 Nothing eligible → report `queue drained` and stop cleanly. This is a success,
 not an error; it is what lets `/loop` idle instead of spinning.
@@ -54,6 +56,13 @@ progress. Tell the user to run `npm ci`. The bootstrap hook supplies
 `.env.local` automatically but deliberately does not install.
 
 Then set the task's `status:` to `doing`. Change that line only.
+
+If this run is interrupted before step 6 (crash, cancel, context loss), the
+task is left stuck at `doing` — step 2's pick logic only matches `next` and
+`todo`, so no future invocation will pick it back up. The user will notice it
+as a task sitting at `doing` in `.claude/tasks/<slug>.md` with no matching
+commit or log entry; reset the line to `todo` by hand to make it eligible
+again.
 
 ## 4. Dispatch exactly one subagent
 
