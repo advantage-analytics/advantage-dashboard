@@ -64,6 +64,7 @@ next-env.d.ts
 !.claude/agents/
 !.claude/hooks/
 !.claude/skills/
+!.claude/tasks/
 .claude/skills/*
 !.claude/skills/create-migration/
 !.claude/skills/pr-check/
