@@ -81,7 +81,7 @@ which exists four separate times.
 |---|---|
 | `src/app/(auth)/` | Auth route group — dual-panel layout, login/sign-up/password flows |
 | `src/app/dashboard/` | Protected area: sidebar + header shell |
-| `src/app/api/` | Route handlers — upload, file validation, chat streaming |
+| `src/app/api/` | Route handlers, one directory per group: `chat` (LLM streaming), `upload`, `validate-file`, `matches/[matchId]`, `home-insight`, `programs/search` — plus money and webhook infra: `create-checkout-session` + `webhooks/stripe` (Stripe payments), `webhooks/splitstep` + `splitstep/jobs` + `splitstep/upload-url` (Advantage Intelligence pipeline), `cron/reclaim-videos` (scheduled job) |
 | `src/components/ui/` | shadcn/ui primitives |
 | `src/components/dashboard/` | Feature components, mirroring the dashboard routes |
 | `src/lib/supabase/` | Three client factories: `server`, `client`, `admin` (service role) |
