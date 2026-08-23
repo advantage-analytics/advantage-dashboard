@@ -29,6 +29,19 @@ export interface FormData {
   time: string;
   playerName: string;
   opponentName: string;
+  /**
+   * The opponent's program, when the uploader named one. Optional everywhere —
+   * a hitting partner has no program, and the name alone stays the only
+   * requirement.
+   *
+   * The KEY, not the uuid: `search_programs` returns `program_key` and widening
+   * a shipped SECURITY DEFINER function's return shape to carry an id is the
+   * change 20260822090500 warns lands two things broken at once. Resolved when
+   * the match is written.
+   */
+  opponentProgramKey?: string;
+  /** Display name for the above, so the field can render without a re-fetch. */
+  opponentSchool?: string;
   playerScores: (number | null)[];
   opponentScores: (number | null)[];
   playerTiebreaks: (number | null)[];
@@ -104,6 +117,12 @@ export interface MatchData {
   player1_name: string;
   player2_id: string | null;
   player2_name: string;
+  /**
+   * The opponent's pooled identity, for aggregating an opponent profile across
+   * every match against them. Read by nothing else, and in NO policy — unlike
+   * `player2_id` directly above, which grants read access to this match.
+   */
+  opponent_player_id: string | null;
   /** Workspace the match belongs to. NULL = personal workspace. */
   program_id: string | null;
   tournament_name: string | null;

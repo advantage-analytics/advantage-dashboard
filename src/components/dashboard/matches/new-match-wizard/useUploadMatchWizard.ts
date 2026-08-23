@@ -1026,6 +1026,44 @@ export function useUploadMatchWizard({
 
       const eventName = formData.eventName || `${formData.playerName} vs ${formData.opponentName}`;
 
+      // Give the opponent an identity, when the uploader named their program.
+      //
+      // Best-effort and never blocking: `contribute_opponent_player` refuses
+      // when that program manages its own roster — correctly, since an outsider
+      // must not write to a live roster — and a refusal costs an opponent
+      // profile a data point, not the upload. The match is the record.
+      let opponentPlayerId: string | null = null;
+      if (activeWorkspace.kind === "team" && formData.opponentProgramKey) {
+        try {
+          const { data: program } = await supabase
+            .from("programs")
+            .select("id")
+            .eq("program_key", formData.opponentProgramKey)
+            .maybeSingle();
+
+          const opponentProgramId = (program as { id: string } | null)?.id ?? null;
+          const parts = formData.opponentName.trim().split(/\s+/);
+
+          // Both names or nothing. `contribute_opponent_player` requires them,
+          // and a single-token name ("Kim") is not an identity anyone else
+          // would converge on.
+          if (opponentProgramId && opponentProgramId !== activeWorkspace.id && parts.length >= 2) {
+            const { data: contributed } = await supabase.rpc(
+              "contribute_opponent_player",
+              {
+                p_program_id: activeWorkspace.id,
+                p_opponent_program_id: opponentProgramId,
+                p_first_name: parts.slice(0, -1).join(" "),
+                p_last_name: parts[parts.length - 1],
+              }
+            );
+            opponentPlayerId = (contributed as string | null) ?? null;
+          }
+        } catch {
+          // See above — an identity is an enrichment, never a precondition.
+        }
+      }
+
       const metadata: MatchMetadata = {
         userId,
         sourceProvider: selectedProvider,
@@ -1038,6 +1076,7 @@ export function useUploadMatchWizard({
         // jobs route reads this back to pick the ledger, so a team upload has
         // to carry the program or it silently bills the uploader.
         programId: activeWorkspace.kind === "team" ? activeWorkspace.id : null,
+        opponentPlayerId,
       };
 
       const matchData = buildMatchData(matchId, { ...formData, eventName }, winner, loser, isPrivateMatch, metadata);
@@ -1061,6 +1100,11 @@ export function useUploadMatchWizard({
               score: matchRow.score,
               player1_name: matchRow.player1_name,
               player2_name: matchRow.player2_name,
+              // Only when one was resolved. Spreading it unconditionally would
+              // write null over an identity a previous pass established, which
+              // is worse than never having set it — the opponent's profile
+              // would lose the match rather than never gain it.
+              ...(opponentPlayerId ? { opponent_player_id: opponentPlayerId } : {}),
               ...(isProcessingProvider
                 ? {
                     fixed_camera: formData.fixedCamera ?? null,

@@ -18,11 +18,11 @@ export const metadata = { title: "Player" };
  * coach clicking a name wants this person: how they are playing, what they last
  * did, and where the season is trending.
  *
- * ── Why the numbers match Compare's ─────────────────────────────────────────
- * Both read `COMPARE_MEASURES` through the same loader shape. A player's own
- * page and their comparison disagreeing about their first-serve percentage
- * would make both of them untrustworthy, and there is no way for a reader to
- * tell which one lied.
+ * ── Why the numbers match an opponent's ─────────────────────────────────────
+ * Both read `PLAYER_MEASURES` through the same loader shape. This page and an
+ * opponent's profile disagreeing about what a first-serve percentage is would
+ * make both untrustworthy, and there is no way for a reader to tell which one
+ * lied.
  */
 export default async function PlayerProfilePage({
   params,

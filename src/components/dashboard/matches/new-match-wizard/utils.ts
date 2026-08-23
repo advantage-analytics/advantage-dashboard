@@ -88,6 +88,17 @@ export interface MatchMetadata {
    * program's 75.
    */
   programId?: string | null;
+  /**
+   * The opposing player's pooled identity, when the uploader named their
+   * program. Resolved before the row is written.
+   *
+   * Lands in `matches.opponent_player_id` and NOT in `player2_id`: that column
+   * is one arm of the `matches` SELECT policy, so putting an opponent's id
+   * there would hand them this match — and, through `visible_match_ids()`, both
+   * players' `match_stats` — the day they claim the profile. Migration
+   * 20260823090000 carries the long version.
+   */
+  opponentPlayerId?: string | null;
 }
 
 /**
@@ -125,6 +136,7 @@ export function buildMatchData(
     player1_name: formData.playerName,
     player2_id: playerWon ? loser.id : winner.id,
     player2_name: formData.opponentName,
+    opponent_player_id: metadata.opponentPlayerId ?? null,
     program_id: metadata.programId ?? null,
     tournament_name: formData.eventName || null,
     round: formData.round || null,

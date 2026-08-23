@@ -50,6 +50,7 @@ import {
   SelectCell,
   TextCell,
 } from "./FieldCell";
+import { OpponentProgramField } from "./OpponentProgramField";
 
 const MS_PER_HOUR = 3_600_000;
 const MS_PER_MINUTE = 60_000;
@@ -57,6 +58,8 @@ const onlyDigits = (s: string) => s.replace(/[^0-9]/g, "");
 
 export interface DetailsContentProps {
   formData: FormData;
+  /** Team workspace — offer the opponent-program field. */
+  showOpponentProgram?: boolean;
   onInputChange: (field: keyof FormData, value: string | number | boolean | undefined) => void;
   onScoreChange: (player: "player" | "opponent", index: number, value: string) => void;
   onTiebreakChange?: (player: "player" | "opponent", index: number, value: string) => void;
@@ -234,6 +237,7 @@ function DurationEditorCell({
 
 export function DetailsContent({
   formData,
+  showOpponentProgram = false,
   onInputChange,
   onScoreChange,
   onTiebreakChange,
@@ -669,6 +673,21 @@ export function DetailsContent({
                     </span>
                   )}
                 </div>
+
+                {/* Team workspaces only. In a personal workspace there is no
+                    program to scout for, and the field would be one more thing
+                    to skip on every upload. */}
+                {showOpponentProgram && (
+                  <div className="mb-1.5">
+                    <OpponentProgramField
+                      schoolName={formData.opponentSchool}
+                      onChange={(school, programKey) => {
+                        onInputChange("opponentSchool", school ?? undefined);
+                        onInputChange("opponentProgramKey", programKey ?? undefined);
+                      }}
+                    />
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   <InlineSelect
                     ariaLabel="Opponent dominant hand"

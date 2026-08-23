@@ -29,6 +29,14 @@ export interface LineupLineInput {
 
 export interface CreateDualInput {
   opponent: string;
+  /**
+   * `programs.program_key` when the coach picked the opponent out of the
+   * directory, null when they typed a name. Not the uuid: `search_programs`
+   * returns the key and nothing else, and widening a shipped SECURITY DEFINER
+   * function's return shape to carry an id is the change 20260822090500 warns
+   * lands two things broken at once. Resolved server-side instead.
+   */
+  opponentProgramKey: string | null;
   date: string;
   site: EventSite;
   surface: string;
@@ -103,6 +111,24 @@ export async function createDual(
 
   const supabase = await createClient();
 
+  // The directory row behind the typed name, where there is one. `programs` is
+  // world-readable and `program_key` is unique across all 1,940 rows, so this is
+  // a lookup rather than a search. A key that resolves to nothing leaves the
+  // dual pointing at free text, which is the same state every dual was in
+  // before this column existed — degraded, never blocked.
+  let opponentProgramId: string | null = null;
+  if (input.opponentProgramKey) {
+    const { data: program } = await supabase
+      .from("programs")
+      .select("id")
+      .eq("program_key", input.opponentProgramKey)
+      .maybeSingle();
+    const id = (program as { id: string } | null)?.id ?? null;
+    // A program does not play itself. The directory contains the caller's own
+    // row, so the picker can offer it.
+    opponentProgramId = id === auth.programId ? null : id;
+  }
+
   const { data: event, error: eventError } = await supabase
     .from("program_events")
     .insert({
@@ -136,6 +162,7 @@ export async function createDual(
       player_user_ids: line.playerUserIds,
       player_labels: line.playerLabels,
       opponent_labels: line.opponentLabels,
+      opponent_program_id: opponentProgramId,
     }))
   );
 
@@ -144,6 +171,36 @@ export async function createDual(
     // on the schedule as an event somebody forgot to finish.
     await supabase.from("program_events").delete().eq("id", event.id);
     return { error: entryError.message };
+  }
+
+  // Give the opposing names an identity, so the next program to play them finds
+  // the same people rather than typing a second copy.
+  //
+  // Best-effort ON PURPOSE, after the entries are safely written. Every arm of
+  // `contribute_opponent_player` can legitimately refuse — most often because
+  // that program now manages its own roster, which is exactly when an outsider
+  // must not write to it — and a refused contribution is not a reason to lose a
+  // dual the coach just spent five minutes entering. The lineup is the record;
+  // the identities are an enrichment on top of it.
+  if (opponentProgramId) {
+    await Promise.all(
+      [...new Set(input.lines.flatMap((line) => line.opponentLabels))].map(
+        async (label) => {
+          const parts = label.trim().split(/\s+/);
+          if (parts.length < 2) return;
+          try {
+            await supabase.rpc("contribute_opponent_player", {
+              p_program_id: auth.programId,
+              p_opponent_program_id: opponentProgramId,
+              p_first_name: parts.slice(0, -1).join(" "),
+              p_last_name: parts[parts.length - 1],
+            });
+          } catch {
+            // See above: a refusal here costs an identity, never the fixture.
+          }
+        }
+      )
+    );
   }
 
   revalidatePath("/dashboard/team/schedule");

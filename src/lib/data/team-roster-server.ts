@@ -270,8 +270,8 @@ export const getRosterData = cache(async function getRosterData(
 
   const { matches, stats } = matchesResult;
 
-  // Keyed on the view's natural key, the way `team-compare-server` reads the
-  // same table — one `set` per row rather than a read-modify-write of a pair.
+  // Keyed on the view's natural key, the way every other reader of this table
+  // does — one `set` per row rather than a read-modify-write of a pair.
   const serveByPlayer = new Map<string, number | null>();
   for (const row of stats) {
     serveByPlayer.set(statKey(row.match_id, row.is_player1), pct(row.first_serve_pct));

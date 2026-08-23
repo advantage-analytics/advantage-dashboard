@@ -863,6 +863,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
               {uploadedFile && !parsingState.isParsing && (
                 <DetailsContent
                   formData={formData}
+                  showOpponentProgram={workspaces.active.kind === "team"}
                   onInputChange={handleInputChange}
                   onScoreChange={handleScoreChange}
                   onTiebreakChange={handleTiebreakChange}

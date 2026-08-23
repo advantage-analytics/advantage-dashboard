@@ -63,6 +63,11 @@ export function DualForm({
   const [error, setError] = useState<string | null>(null);
 
   const [opponent, setOpponent] = useState("");
+  // The directory row behind the name, when the coach picked one rather than
+  // typing. Null is a real answer — a club side or a school the ITA scrape
+  // missed has no row — and the line is still recorded, just without a rival
+  // to aggregate it under.
+  const [opponentProgramKey, setOpponentProgramKey] = useState<string | null>(null);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [site, setSite] = useState<EventSite>("home");
   const [surface, setSurface] = useState(defaultSurface || "Hard");
@@ -98,6 +103,7 @@ export function DualForm({
     startTransition(async () => {
       const result = await createDual({
         opponent,
+        opponentProgramKey,
         date,
         site,
         surface,
@@ -159,7 +165,13 @@ export function DualForm({
       <div className="flex flex-col gap-5">
         <div>
           <span className="eyebrow">New dual · opponent</span>
-          <OpponentPicker value={opponent} onChange={setOpponent} />
+          <OpponentPicker
+            value={opponent}
+            onChange={(name, programKey) => {
+              setOpponent(name);
+              setOpponentProgramKey(programKey);
+            }}
+          />
           <FieldRow>
             <FieldCellText label="Date" value={date} onChange={setDate} type="date" mono />
             <FieldCellSelect
