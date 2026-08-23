@@ -5,27 +5,40 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Whether an explicit `TooltipProvider` is already above us.
+ *
+ * Radix requires a provider per tooltip, and `Tooltip` supplies its own so a
+ * tooltip works anywhere. But a provider is also what makes a *group*: it owns
+ * the skip-delay timer that lets the second tooltip in a cluster appear
+ * instantly instead of serving another full delay. Self-providing puts every
+ * tooltip in a group of one, so neighbours never share that timer. This marker
+ * lets `Tooltip` stand down when a caller has wrapped a cluster deliberately.
+ */
+const HasTooltipProvider = React.createContext(false)
+
 function TooltipProvider({
   delayDuration = 0,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
   return (
-    <TooltipPrimitive.Provider
-      data-slot="tooltip-provider"
-      delayDuration={delayDuration}
-      {...props}
-    />
+    <HasTooltipProvider.Provider value={true}>
+      <TooltipPrimitive.Provider
+        data-slot="tooltip-provider"
+        delayDuration={delayDuration}
+        {...props}
+      />
+    </HasTooltipProvider.Provider>
   )
 }
 
 function Tooltip({
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Root>) {
-  return (
-    <TooltipProvider>
-      <TooltipPrimitive.Root data-slot="tooltip" {...props} />
-    </TooltipProvider>
-  )
+  const grouped = React.useContext(HasTooltipProvider)
+  const root = <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+
+  return grouped ? root : <TooltipProvider>{root}</TooltipProvider>
 }
 
 function TooltipTrigger({

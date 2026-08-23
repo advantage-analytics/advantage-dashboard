@@ -1,28 +1,18 @@
 "use client";
 
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 
 /**
- * The dark label that answers a collapsed row.
+ * The chrome tooltip, placed for the rail.
  *
- * Float role, so it carries the same shadow as menus and modals. It is a
- * deliberate reveal rather than an instant one — 400ms, the system's reveal
- * duration — because at 64px the icons are the interface, not a puzzle waiting
- * to be solved by hovering each one.
+ * Surface, timing and content live in `ChromeTooltip`, shared with the header
+ * cluster. All the rail adds is where it lands: to the right of the row, clear
+ * of the collapsed rail's edge.
  */
 
 /** The row ends at x=52 (12px padding + a 40px column). 22 more puts the
  *  tooltip 10px clear of the 64px rail. */
 const OFFSET = 22;
-const DELAY_MS = 400;
-
-const SURFACE =
-  "flex items-center gap-2 rounded-[12px] border-0 bg-[var(--ink-900)] px-2.5 py-[7px] " +
-  "text-[12px] font-medium text-white shadow-[var(--shadow-dropdown)]";
 
 export function RailTooltip({
   label,
@@ -40,28 +30,16 @@ export function RailTooltip({
   children: React.ReactNode;
 }) {
   return (
-    <Tooltip delayDuration={DELAY_MS}>
-      <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent
-        side="right"
-        align={detail ? "start" : "center"}
-        sideOffset={OFFSET}
-        showArrow={false}
-        hidden={hidden}
-        className={detail ? `${SURFACE} flex-col items-start gap-0.5` : SURFACE}
-      >
-        <span className="whitespace-nowrap">{label}</span>
-        {detail && (
-          <span className="whitespace-nowrap text-[11px] font-normal text-white/[0.64]">
-            {detail}
-          </span>
-        )}
-        {shortcut && (
-          <span className="font-mono text-[10px] font-normal text-white/[0.64]">
-            {shortcut}
-          </span>
-        )}
-      </TooltipContent>
-    </Tooltip>
+    <ChromeTooltip
+      label={label}
+      detail={detail}
+      shortcut={shortcut}
+      side="right"
+      align={detail ? "start" : "center"}
+      sideOffset={OFFSET}
+      hidden={hidden}
+    >
+      {children}
+    </ChromeTooltip>
   );
 }
