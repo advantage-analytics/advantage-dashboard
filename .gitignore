@@ -72,6 +72,11 @@ next-env.d.ts
 !.claude/skills/task-next/
 .mcp.json
 
+# Agent scratch: SDD ledgers, review packages, task briefs and reports. Never
+# committed — but /task-next commits with `git add -A`, so an un-ignored
+# .superpowers/ would ride into a task's commit.
+.superpowers/
+
 # lock files
 package-lock.json
 yarn.lock
