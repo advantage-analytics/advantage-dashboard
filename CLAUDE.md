@@ -35,6 +35,10 @@ A user may hold several, so this is a switcher, never a flag on the user row. Me
 lives in `program_members`, *not* `users.role` (nullable free text, nothing validates it).
 See `src/lib/workspace/types.ts` — the doc comments there are the spec.
 
+**[`MAP.md`](MAP.md) is the code directory** — routes, source layout, and the
+data layer, in one place. Read it before searching for a file. Its route table
+is generated: run `npm run map` after adding a route, or `npm test` fails.
+
 ### Routes
 
 - `src/app/(auth)/` — `login`, `sign-up`, `forgot-password`, `update-password`,
@@ -67,7 +71,10 @@ Server-side loaders live in `src/lib/data/*-server.ts`; their client-side counte
 `*-client.ts`. Key tables: `matches`, `match_stats`, `points`, `shots`, `users`,
 `programs`, `program_members`, `program_claims`, `program_events`, `processing_jobs`,
 `processing_usage`. The `match_stats_with_percentages` view adds computed percentages.
-Schema reference: `DATABASE_PRD.md`.
+Schema reference: [`DATABASE_PRD.md`](DATABASE_PRD.md) — **point-in-time, stamped
+February 2026.** `supabase/migrations/` runs roughly 100 migrations behind the
+live database, so neither is a source of truth. Verify schema against the live
+database via the Supabase MCP before relying on either.
 
 Edge functions in `supabase/functions/`: `process-match` (parses uploaded .xlsx
 asynchronously — upload returns immediately), `generate-insights`, `upload-video-r2`,
@@ -156,6 +163,21 @@ before proposing edits. Overlapping names are everywhere: serve placement exists
 times — `home/serve-placement-home.tsx`, `matches/match-detail/serve-placement-card.tsx`,
 `matches/serve-placement/serve-placement-widget.tsx`, and
 `statistics/serve-placement-stats.tsx`.
+
+### Branch task queues
+
+Each branch has its own queue at `.claude/tasks/<branch-slug>.md` (the branch
+with `/` replaced by `-`). Distinct filenames per branch mean merge conflicts
+on task files are structurally impossible.
+
+- `/task-next` runs one task: a fresh subagent, gated, then committed.
+- `/loop /task-next` — no interval — drains the queue, self-paced.
+- The queue file is yours; append to it any time, including while the loop
+  runs. The runner only ever rewrites a task's `status:` line.
+- `.claude/tasks/<slug>.log.md` is the runner's. Do not hand-edit it.
+
+Every task needs a `done when:` list. It is the contract
+`task-completion-reviewer` gates against, and a task without one is skipped.
 
 ## Conventions
 
