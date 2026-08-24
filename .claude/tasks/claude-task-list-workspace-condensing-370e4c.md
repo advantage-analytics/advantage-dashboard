@@ -146,7 +146,7 @@ ready).
   one deliberately.
 
 ## T7 · Bound match attribution to the program's own roster
-- **status:** todo
+- **status:** done
 - **files:** a new supabase/migrations/ file,
   src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts,
   src/lib/data/match-detail-server.ts and the match-detail hero (guess)

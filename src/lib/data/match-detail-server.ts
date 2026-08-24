@@ -9,6 +9,8 @@ import type { Match, SetScore } from "@/lib/data/types";
 
 interface DbMatch {
   id: string;
+  program_id: string | null;
+  created_by: string | null;
   player1_id: string | null;
   player2_id: string | null;
   player1_name: string;
@@ -241,6 +243,70 @@ async function getEventIdForEntry(
   return data?.event_id ?? null;
 }
 
+/** One row of `program_roster_full`, narrowed to what the uploader lookup uses. */
+interface DbRosterMember {
+  /** The id this person's matches carry — a `program_players.id`, or a staff seat's user id. */
+  player_id: string;
+  /** Their login, or null for a coach-managed player who has never claimed one. */
+  user_id: string | null;
+  display_name: string | null;
+  email: string | null;
+}
+
+/**
+ * Who filed this match, when that is not the player it belongs to.
+ *
+ * `created_by` has always been on the row and has never been rendered: it was
+ * a query filter and nothing else. Inside a program that leaves a real gap —
+ * a coach files for their squad, and a player may file for a teammate
+ * (`players_can_upload`, and the roster page advertises it) — so an athlete
+ * opening a match they did not upload had no way to see where it came from.
+ *
+ * **The two columns cannot be compared directly.** They hold different KINDS
+ * of id: `created_by` is always a login, while `player1_id` is normally the
+ * roster PROFILE's id (`program_players.id`), which is what survives a claim.
+ * So a player filing their own match produces two different uuids for one
+ * person, and `created_by !== player1_id` would label almost every match as
+ * filed by somebody else. `program_roster_full` is the mapping between the two
+ * — it returns `player_id` beside the `user_id` that claimed it — so the
+ * comparison happens in login space.
+ *
+ * That RPC is SECURITY DEFINER and gated on the caller being a member of the
+ * program, which is what makes this safe to ask for: a viewer outside the
+ * program gets an empty set and the line simply does not render. Personal
+ * matches never ask at all — with no program there is no roster, and the
+ * uploader is the player.
+ */
+async function resolveUploadedBy(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  row: Pick<DbMatch, "program_id" | "created_by" | "player1_id">,
+): Promise<string | null> {
+  if (!row.program_id || !row.created_by) return null;
+
+  const { data } = await supabase.rpc("program_roster_full", {
+    p_program_id: row.program_id,
+  });
+  const roster = (data ?? []) as DbRosterMember[];
+
+  // The login behind whoever this match is attributed to. An id the roster
+  // does not know — an archived or merged profile, or a member id written by
+  // the ordinary wizard — stands for itself rather than resolving to nobody.
+  const attributed = roster.find((member) => member.player_id === row.player1_id);
+  if ((attributed?.user_id ?? row.player1_id) === row.created_by) return null;
+
+  const uploader = roster.find((member) => member.user_id === row.created_by);
+  if (!uploader) return null;
+
+  // Same fallback the ladder uses: `program_players` requires both names, so a
+  // player row always has one, and only a staff seat with an unfilled profile
+  // reaches the address.
+  return (
+    uploader.display_name?.trim() ||
+    (uploader.email ?? "").split("@")[0] ||
+    null
+  );
+}
+
 /**
  * Cached data fetcher for match detail pages.
  * React.cache deduplicates calls within the same request,
@@ -256,7 +322,7 @@ export const getMatchDetailData = cache(async (matchId: string) => {
   const { data: row, error } = await supabase
     .from("matches")
     .select(
-      "id, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, event_entry_id, verified, duration, source_provider, player_hand, player_backhand, opponent_hand, opponent_backhand, key_moments, insights",
+      "id, program_id, created_by, player1_id, player2_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, event_entry_id, verified, duration, source_provider, player_hand, player_backhand, opponent_hand, opponent_backhand, key_moments, insights",
     )
     .eq("id", matchId)
     .single();
@@ -290,7 +356,7 @@ export const getMatchDetailData = cache(async (matchId: string) => {
     }
   }
 
-  const [statsResult, points, playerAverages, eventId] = await Promise.all([
+  const [statsResult, points, playerAverages, eventId, uploadedBy] = await Promise.all([
     getMatchStatisticsFromSupabase(matchId),
     getMatchPointsFromSupabase(matchId),
     // The averages need to know which ids mean "me" — a coach may have recorded
@@ -304,6 +370,9 @@ export const getMatchDetailData = cache(async (matchId: string) => {
     // It resolves to null for every match with no line behind it, which is every
     // personal match and every challenge or practice a program records.
     getEventIdForEntry(supabase, dbRow.event_entry_id),
+    // Same wave, same reason: it needs only `dbRow`, and it resolves to null
+    // without a round trip for every personal match.
+    resolveUploadedBy(supabase, dbRow),
   ]);
 
   // `getMyPlayerIds` is `cache()`d and already resolved inside the batch above,
@@ -311,6 +380,7 @@ export const getMatchDetailData = cache(async (matchId: string) => {
   const myPlayerIds = user?.id ? await getMyPlayerIds() : [];
   const match = transformDbMatchToMatch(dbRow, myPlayerIds, profiles);
   match.eventId = eventId;
+  match.uploadedBy = uploadedBy;
 
   return {
     match,
