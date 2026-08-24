@@ -16,6 +16,7 @@ import {
 } from "@/components/dashboard/schedule/field-row";
 import { createDual } from "@/lib/schedule/actions";
 import { splitNames } from "@/lib/schedule/format";
+import { normalizedPersonName } from "@/lib/data/person-name";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 import type { EventSite } from "@/lib/schedule/types";
 
@@ -78,14 +79,7 @@ export function DualForm({
   // Whoever the ladder offered but the lineup does not currently name. Recomputed
   // from the lines rather than tracked separately, so a player dragged out of S4
   // is back on the bench without a second piece of state to keep in step.
-  const bench = useMemo(() => {
-    const named = new Set(
-      lines.flatMap((line) =>
-        splitNames(line.ourLabels.join(" / ")).map((label) => label.toLowerCase())
-      )
-    );
-    return ladder.filter((player) => !named.has(player.name.toLowerCase()));
-  }, [lines, ladder]);
+  const bench = useMemo(() => benchFromLines(lines, ladder), [lines, ladder]);
 
   // A line counts once BOTH sides are named. Half a line has nobody to play.
   const filled = lines
@@ -219,6 +213,35 @@ export function DualForm({
       </div>
     </EventShell>
   );
+}
+
+/**
+ * Whoever the ladder offered that the lineup does not name.
+ *
+ * The lineup field clears its roster ids the moment a coach types in it
+ * (`lineup-editor.tsx`), so the only thing left to compare is the label — which
+ * is why both sides go through `normalizedPersonName`. Each end trims and
+ * neither collapses: `program_roster_full` builds `display_name` as
+ * `btrim(first_name || ' ' || last_name)`, so one trailing space in
+ * `first_name` left a ladder row spelled "Dana  Brooks" on the bench while
+ * "Dana Brooks" stood in S1 — the same athlete, twice on one screen.
+ *
+ * Exact beyond case and whitespace, deliberately: a fuzzier rule would hide a
+ * player the coach has NOT fielded, and an absent bench name is a much quieter
+ * error than a duplicated one.
+ */
+export function benchFromLines(
+  lines: { ourLabels: string[] }[],
+  ladder: LadderPlayer[]
+): LadderPlayer[] {
+  const named = new Set(
+    lines.flatMap((line) =>
+      splitNames(line.ourLabels.join(" / ")).map((label) =>
+        normalizedPersonName(label)
+      )
+    )
+  );
+  return ladder.filter((player) => !named.has(normalizedPersonName(player.name)));
 }
 
 /**

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Check, CornerDownRight, Layers, Search } from "lucide-react";
+import { normalizedPersonName } from "@/lib/data/person-name";
 import type { EventPreset } from "./types";
 
 /**
@@ -58,10 +59,17 @@ function SinglePlayerPicker({
 }) {
   const [term, setTerm] = useState("");
 
+  // Narrowing only — the id still comes from the row that gets clicked, never
+  // from the text. Both sides go through `normalizedPersonName` so the search
+  // is asking the same question about whitespace that the rest of the app does:
+  // a roster row spelled "Dana  Brooks" was previously unreachable by typing
+  // her name.
   const shown = useMemo(() => {
-    const needle = term.trim().toLowerCase();
+    const needle = normalizedPersonName(term);
     if (!needle) return roster;
-    return roster.filter((player) => player.name.toLowerCase().includes(needle));
+    return roster.filter((player) =>
+      normalizedPersonName(player.name).includes(needle)
+    );
   }, [roster, term]);
 
   return (

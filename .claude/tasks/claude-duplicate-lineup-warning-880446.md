@@ -54,7 +54,7 @@ ready).
   runs second should reuse it rather than add a second prop path.
 
 ## T3 · Route the remaining name comparisons through normalizedPersonName
-- **status:** todo
+- **status:** done
 - **files:** src/lib/data/opponents-server.ts,
   src/components/dashboard/schedule/entry-editor.tsx,
   src/components/dashboard/schedule/dual-form.tsx *(guess)*
