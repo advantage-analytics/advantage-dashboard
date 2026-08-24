@@ -1,7 +1,12 @@
-# Tasks — claude/workspace-setup-repo-1389c6
+# Tasks — splitstep-integration
 
-> Scope: the Claude Code workspace itself — the task loop, the code map, and
-> the docs that every dispatched subagent inherits.
+> Scope: the integration trunk. Anything landing on `splitstep-integration`
+> before it merges to `main`.
+
+Renamed from `claude-workspace-setup-repo-1389c6.md` on 2026-08-24, when that
+branch merged here. T1 ran on the old branch and is kept for its history; the
+queue file is named after the branch it serves, so the tasks moved with the
+work rather than staying with the branch that happened to create them.
 
 Run one with `/task-next`. Drain the file with `/loop /task-next`.
 Append freely while it runs: the queue is re-read at the start of every
