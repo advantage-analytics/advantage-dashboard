@@ -234,6 +234,14 @@ Match detail and video sections use additional colors for multi-player different
 | shadow-card-raised | `shadow-[0px_6px_20px_0px_rgba(0,0,0,0.12)]` | Raised cards (activity) |
 | shadow-dropdown | `shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]` | Dropdowns, popovers |
 | shadow-floating | `shadow-[0px_8px_32px_rgba(0,0,0,0.25),0px_0px_0px_1px_rgba(255,255,255,0.06)_inset]` | Dark floating UI |
+| shadow-keycap | `shadow-[0_1px_0_rgba(15,23,42,0.04)]` | Kbd chips — a **detail effect**, not elevation. `ui/kbd.tsx` still composes the identical value from globals.css's `--color-shadow-keycap` |
+| shadow-cta-glow | `shadow-[0_1px_3px_rgba(57,134,243,0.25)]` | The primary button's glow, applied by `advButton()` — detail, not elevation |
+
+Every row above except `shadow-card` and `shadow-card-raised` is a
+`--shadow-*` custom property in `src/styles/design-system/effects.css`; prefer
+`shadow-[var(--shadow-dropdown)]` over retyping the literal. `shadow-card` and
+`shadow-card-raised` are `--shadow-card` and `--shadow-card-elevated` from
+`globals.css` — effects.css deliberately does not redefine either.
 
 Tailwind utility shadows are also used in specific contexts:
 - `shadow-none` — Explicit shadow removal (buttons, flat elements)
@@ -246,15 +254,30 @@ Tailwind utility shadows are also used in specific contexts:
 
 ### Easing Curves
 
-| Name | Value | Use |
-|------|-------|-----|
-| EASE_CURVE | `[0.25, 0.46, 0.45, 0.94]` | Primary custom easing |
-| EASE (spring-like) | `[0.23, 1, 0.32, 1]` | Header, layout transitions |
-| EASE_CHART | `[0.2, 0, 0.4, 1]` | Chart/data transitions |
+| Name | CSS token | Value | Use |
+|------|-----------|-------|-----|
+| EASE_CURVE | `--ease-primary` | `[0.25, 0.46, 0.45, 0.94]` | Primary custom easing |
+| EASE (spring-like) | `--ease-out-expo` | `[0.23, 1, 0.32, 1]` | Header, layout transitions |
+| EASE_CHART | `--ease-chart` | `[0.2, 0, 0.4, 1]` | Chart/data transitions |
+
+Three curves, one set: the Framer array and the CSS token on each row are the
+same curve, so a component that animates in both places stays in step.
 
 **Forbidden**: bounce, elastic, glassmorphism effects.
 
 ### Duration Scale
+
+Four named tokens in `effects.css` cover the CSS side; use them by name rather
+than hard-coding a `duration-*` utility beside them.
+
+| Token | Value | Use |
+|---|---|---|
+| `--duration-fast` | 150ms | Micro-feedback, colour swaps |
+| `--duration-hover` | 200ms | Hover and press transitions (`advButton()` uses this) |
+| `--duration-enter` | 300ms | Page and section enter |
+| `--duration-reveal` | 400ms | Larger reveals |
+
+The wider scale below is the Framer Motion side, where durations are numbers:
 
 | Duration | Use |
 |----------|-----|
@@ -399,7 +422,6 @@ Square icon-only buttons used for header, modal, and popover chrome — sidebar 
 h-7 w-7 rounded-lg flex items-center justify-center
 text-[#888888] hover:text-[#0D0D0D] hover:bg-[#F5F5F5]
 transition-colors duration-200
-focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none
 ```
 
 **Pattern (dashboard header chrome — slightly cooler greys + press feedback)**
@@ -409,8 +431,11 @@ h-8 w-8 rounded-lg flex items-center justify-center
 text-[#8A8A8E] hover:text-[#3C3C43] hover:bg-[#F5F5F5]
 active:scale-[0.97]
 transition-colors duration-150
-focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none
 ```
+
+Neither pattern carries a focus class, deliberately. `focus.css` already rings a
+`<button>` in blue, and a `focus-visible:ring-*` utility here would be silently
+discarded rather than applied — see [Focus](#focus).
 
 **Icon**: `size-3.5` (14px) at `strokeWidth={1.5}` for h-7 buttons; `h-[15px] w-[15px]` for h-8 buttons. Always Lucide.
 
@@ -654,35 +679,67 @@ flex items-center gap-2.5
 
 ### Focus
 
-Buttons, links, tabs, pills — every control that is not a text field:
+**Write nothing.** `src/styles/design-system/focus.css` is the entire focus
+treatment. It gives `<input>`, `<textarea>` and native `<select>` the neutral
+`--focus-ring-field`, and gives every other tabbable control — `a[href]`,
+`button`, `[role="button"]`, `summary`, any non-negative `tabindex` — the blue
+`--focus-ring`. Text fields are the carve-out because a six-field form would
+otherwise spend the accent six times over. You add a focus class to nothing, and
+a hand-rolled `<input>` is covered as-is.
 
-```
-focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none
-```
+The two shipped rings, defined in `effects.css`:
 
-Text fields are the carve-out: `<input>`, `<textarea>` and native `<select>`
-take a neutral ring, because a six-field form would otherwise spend the accent
-six times over.
+| Token | Value | Applies to |
+|---|---|---|
+| `--focus-ring` | `0 0 0 2px var(--blue-ring-40)` | links, buttons, tabs, pills — everything actionable |
+| `--focus-ring-field` | `0 0 0 1px var(--field-ring), 0 0 0 2px var(--field-ring-30)` | `input` · `textarea` · native `select` |
 
-**Write nothing.** `src/styles/design-system/focus.css` already gives those
-three tags `--focus-ring-field` and gives everything else `--focus-ring`. You
-do not add a focus class to a text field, and a hand-rolled `<input>` is
-covered as-is.
+The field ring is two layers on purpose. The 30% band alone composites to
+#F7F7F7 on white — present in devtools, invisible to a keyboard user. The opaque
+1px layer is what you actually see; the band only softens its outer edge.
+`--field-ring` resolves to `--ink-500`, which now carries a **3:1 floor**
+(WCAG 1.4.11) against both the white card and the #F7F7F7 field fill — it
+measures 3.55:1 / 3.31:1. Do not lighten `--ink-500`: it is no longer only a
+text colour. Raise contrast on `--field-ring`, never on the `-30` band, which
+tops out near 1.4:1 whatever colour it carries.
 
-That file is imported outside any `@layer` while Tailwind utilities live in
-`@layer utilities`, and unlayered CSS wins regardless of specificity — so a
-`focus-visible:ring-*` utility on a text field does **not** override the
-default, it is silently discarded. Its `:where()` wrapper keeps specificity at
-0, but that only matters against other unlayered rules. To override, change the
-token or write unlayered CSS.
+`focus.css` is imported outside any `@layer` while Tailwind utilities live in
+`@layer utilities`, and unlayered CSS wins regardless of specificity — so
+`focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40` on a button, a link or a
+field does **not** override the default. It is silently discarded, and you have
+written dead classes. Its `:where()` wrapper keeps specificity at 0, but that
+only matters against other unlayered rules. To override, change the token or
+write unlayered CSS. `advButton()` agrees by value rather than by utility — it
+sets `focus-visible:shadow-[var(--focus-ring)]`, the same property the file
+uses, so nothing is competing.
 
-**Composite fields are the exception to "write nothing."** When the input sits
-inside a bordered box and the box is what reads as the field, the ring belongs
-on the box — otherwise it draws inset, floating inside the border. Put
-`focus-within:shadow-[var(--focus-ring-field)]` on the wrapper and
-`data-focus-ring="none"` on the inner control so it does not draw a second
-ring. `claim/program-search.tsx` and `team/invite-dialog.tsx` are the worked
-examples.
+**The wrapper-ring pattern is the one exception to "write nothing."** When the
+input sits inside a bordered box and the box is what reads as the field, the
+ring belongs on the box — otherwise it draws inset, floating inside the border.
+Put the ring on the wrapper and `data-focus-ring="none"` on the inner control so
+it does not draw a second one. Which selector you use depends on what else is in
+the box:
+
+| The box holds | Selector on the wrapper | Worked example |
+|---|---|---|
+| the input and nothing else focusable | `focus-within:shadow-[var(--focus-ring-field)]` | `claim/program-search.tsx` |
+| the input **and** other focusable children | `has-[input:focus-visible]:shadow-[var(--focus-ring-field)]` | `team/invite-dialog.tsx` |
+
+`focus-within` matches on any descendant, so in a box that holds more than the
+input it double-rings: in the invite dialog each email chip carries a remove
+`<button>`, and focusing one drew the wrapper's neutral ring and the button's
+own blue ring at the same time — two indicators, two colours, the larger one on
+an element that was not focused. Keying on `input:focus-visible` scopes the
+wrapper ring to the case it exists for. (`settings/settings-inline-select.tsx`
+is a third case that stays on `focus-within`: its `<select>` is `opacity-0`, so
+there is no second ring to collide with and no opt-out to set.)
+
+`data-focus-ring="none"` is the opt-out, and it lives in `focus.css` scoped to
+`:focus-visible` rather than as an inline `style={{ boxShadow: "none" }}` on the
+input. Inline would suppress the focus ring **and** any shadow the component
+ever sets for its own reasons, unconditionally and invisibly to anyone grepping
+for focus. The attribute suppresses exactly one rule in exactly one state, and
+stays inside `:where()`, so it is still specificity 0.
 
 Three gotchas, in the order you will actually hit them:
 

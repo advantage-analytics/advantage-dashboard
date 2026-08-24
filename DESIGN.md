@@ -89,10 +89,48 @@ v2 is rebuilt from the live product code on the `splitstep-integration` branch �
 - **Motion:** three ease-out curves (`--ease-primary` .25,.46,.45,.94 · `--ease-out-expo` .23,1,.32,1 · `--ease-chart` .2,0,.4,1). 200ms hovers, 300ms page-enter (+8px rise), 400–600ms reveals. Press = scale 0.97 (buttons) / 0.998 (rows). No bounce, no elastic. Reduced motion: keep opacity, drop transforms.
 - **Spacing (review P2):** two tiers — the 4px grid (4/8/12/16/20/24/32/40) is layout spacing (12 eyebrow→title, 20 card padding, 24 sections, 32/40 page x/y); half-steps 2/6/10 are component-internal only (10 toggle→label; label→input moved to grid 8 in review F2), never between elements on a page. Never invent new spacers — combine.
 - **Hover:** background washes (#F5F5F5 controls, #FAFAFA rows) and text darkening; never underlines, never color inversions. Nav active = blue-soft wash + blue label (confirmed in review); tabs/switchers are underline style — 2px blue rule, same vocabulary as Input focus.
-- **Focus:** 2px ring at blue 40% on buttons, links, tabs and pills. **Text fields are the exception** — `<input>`, `<textarea>` and native `<select>` take a neutral ring (`--focus-ring-field`), so a form does not spend the accent once per field; underline inputs keep the blue vocabulary, where the rule itself thickens to 2px blue. `design-system/focus.css` applies both automatically by tag, so a field needs no focus class of its own; Radix's `SelectTrigger` is a `<button>` and so takes the blue ring, not the neutral one.
+- **Focus:** `--focus-ring` = `0 0 0 2px var(--blue-ring-40)` on buttons, links, tabs and pills. **Text fields are the exception** — `<input>`, `<textarea>` and native `<select>` take the neutral `--focus-ring-field` = `0 0 0 1px var(--field-ring), 0 0 0 2px var(--field-ring-30)`, so a form does not spend the accent once per field; underline inputs keep the blue vocabulary, where the rule itself thickens to 2px blue. Two layers because the 30% band alone composites to #F7F7F7 on white — present in devtools, invisible to a keyboard user; the opaque 1px layer is what you see, the band softens its edge. `--field-ring` is `--ink-500`, which now holds a **3:1 floor** (WCAG 1.4.11) against both the white card and the #F7F7F7 field fill — 3.55:1 / 3.31:1, where the #E5E5E5 it replaced measured 1.26:1 / 1.18:1. That floor is load-bearing: `--ink-500` has a non-text consumer and cannot be lightened, and contrast is raised on `--field-ring`, never on the `-30` band, which tops out near 1.4:1 whatever colour it carries. `design-system/focus.css` applies both rings automatically by tag, so a field needs no focus class of its own; Radix's `SelectTrigger` is a `<button>` and so takes the blue ring, not the neutral one. The file is imported outside any `@layer`, so a Tailwind `focus-visible:ring-*` utility never overrides it — it is discarded. Override by token, not by class.
+- **The wrapper-ring pattern:** where an input sits inside a bordered box and the box is what reads as the field, the ring is drawn on the box — otherwise it lands inset, floating inside the border. `focus-within:shadow-[var(--focus-ring-field)]` when the box holds only the input (`claim/program-search.tsx`); `has-[input:focus-visible]:shadow-[var(--focus-ring-field)]` when it also holds focusable children (`team/invite-dialog.tsx`, whose email chips each carry a remove `<button>` — `focus-within` fires for those too and double-rings, drawing the box's neutral ring and the button's blue ring at once). The inner control then opts out with `data-focus-ring="none"`, a rule inside `focus.css` scoped to `:focus-visible` rather than an inline `style={{ boxShadow: "none" }}`: inline would suppress the focus ring *and* any shadow the component ever sets for its own reasons, unconditionally, and invisibly to anyone grepping for focus.
 - **Transparency/blur:** none decoratively; blur only as a rare sticky-bar legibility shield.
 - **Data-viz:** role-based palette in `src/styles/design-system/colors.css` (review M1) — You = blue steps (`--viz-you*`), Opponent/context = slate steps (`--viz-opp*`), Good/Bad = the outcome pair (`--viz-good/bad` + softs), amber `--viz-key` for key moments ONLY (break points, momentum shifts), heatmap #F2F2F2→#3B82F6, court fill #D6E4F9. Violet and surface hues retired — categories (e.g. by-surface breakdowns) are text labels + your blue, never hue-coded. Charts only, never chrome.
 - **Anti-patterns (banned):** glassmorphism, neon, gradient text, warm/earthy tones, bouncy animation, badges/streaks/confetti, colored left-border stripes, nested cards, emoji icons, weights 800+, hero-metric cards outside the KPI strip.
+
+## Effects tokens — the shipped set
+
+Every custom property `src/styles/design-system/effects.css` defines, with its
+live value and where the reasoning lives. `focus.css` defines **no** tokens: it
+only consumes the two rings and adds the `data-focus-ring="none"` opt-out
+attribute. The file headers record what was deliberately *not* imported from v2.
+
+| Token | Shipped value | Documented in |
+|---|---|---|
+| `--shadow-card-emphasis` | `0px 4px 16px 0px rgba(0,0,0,0.10)` | lift — Visual foundations · SKILL.md Shadows |
+| `--shadow-dropdown` | `0 8px 30px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04)` | float — Visual foundations · SKILL.md Shadows |
+| `--shadow-floating` | `0px 8px 32px rgba(0,0,0,0.25), 0px 0px 0px 1px rgba(255,255,255,0.06) inset` | top — Visual foundations · SKILL.md Shadows |
+| `--shadow-keycap` | `0 1px 0 rgba(15,23,42,0.04)` | detail, not elevation — v2 vs v1 §7 · SKILL.md Shadows |
+| `--shadow-cta-glow` | `0 1px 3px rgba(57,134,243,0.25)` | detail, not elevation — v2 vs v1 §8 · SKILL.md Shadows |
+| `--ease-primary` | `cubic-bezier(0.25,0.46,0.45,0.94)` | Motion · SKILL.md Easing Curves |
+| `--ease-out-expo` | `cubic-bezier(0.23,1,0.32,1)` | Motion · SKILL.md Easing Curves |
+| `--ease-chart` | `cubic-bezier(0.2,0,0.4,1)` | Motion · SKILL.md Easing Curves |
+| `--duration-fast` | `150ms` | SKILL.md Duration Scale |
+| `--duration-hover` | `200ms` | SKILL.md Duration Scale |
+| `--duration-enter` | `300ms` | SKILL.md Duration Scale |
+| `--duration-reveal` | `400ms` | SKILL.md Duration Scale |
+| `--focus-ring` | `0 0 0 2px var(--blue-ring-40)` | Focus, above · SKILL.md Focus |
+| `--focus-ring-field` | `0 0 0 1px var(--field-ring), 0 0 0 2px var(--field-ring-30)` | Focus, above · SKILL.md Focus |
+
+Two things in `effects.css` are **deliberately undocumented** as build guidance:
+
+- **The `.dark` block.** It re-declares three of the five shadows —
+  `--shadow-card-emphasis` and `--shadow-dropdown` at 0.5/0.3 alphas,
+  `--shadow-keycap` at 0.45 — and leaves `--shadow-floating` and
+  `--shadow-cta-glow` on their light values. None of it renders: dark mode is
+  deferred (see the header note), so these are staged values, not shipped ones,
+  and nothing in SKILL.md tells you to build against them.
+- **`@keyframes adv-status-pulse`.** Not a token, and not general vocabulary —
+  it belongs to `src/components/ui/status-chip.tsx`'s live dot. Opacity only, so
+  it costs no layout, and the component disables it outright under reduced
+  motion rather than the stylesheet softening it.
 
 ## Iconography
 

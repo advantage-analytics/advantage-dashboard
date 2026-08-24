@@ -18,7 +18,7 @@ straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Fold the shipped focus/token work into DESIGN.md and the design skill
-- **status:** todo
+- **status:** done
 - **files:** DESIGN.md, .skills/advantage-analytics-design/SKILL.md (read-only:
   src/styles/design-system/{focus,effects,colors}.css, src/lib/ui/adv-button.ts,
   src/components/dashboard/team/invite-dialog.tsx, src/components/claim/program-search.tsx)
