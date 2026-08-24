@@ -19,7 +19,7 @@ straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Make input focus rings neutral, not blue
-- **status:** todo
+- **status:** done
 - **files:** src/components/dashboard/statistics/match-selector.tsx,
   src/components/dashboard/schedule/score-entry.tsx,
   src/components/dashboard/schedule/single-score-entry.tsx

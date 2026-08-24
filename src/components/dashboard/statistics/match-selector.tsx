@@ -101,7 +101,7 @@ export function MatchSelector({
                     type="date"
                     value={fromDate}
                     onChange={(e) => setFromDate(e.target.value)}
-                    className="text-[12px] text-[#0D0D0D] bg-[#F7F7F7] border border-[#F3F3F3] rounded-lg px-2.5 py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/50 focus-visible:ring-offset-1"
+                    className="text-[12px] text-[#0D0D0D] bg-[#F7F7F7] border border-[#F3F3F3] rounded-lg px-2.5 py-1.5 focus-visible:outline-none focus-visible:border-[#E5E5E5] focus-visible:ring-[#E5E5E5]/30 focus-visible:ring-[1px]"
                     aria-label="From date"
                   />
                   <span className="text-[12px] text-[#AAAAAA]">&rarr;</span>
@@ -109,7 +109,7 @@ export function MatchSelector({
                     type="date"
                     value={toDate}
                     onChange={(e) => setToDate(e.target.value)}
-                    className="text-[12px] text-[#0D0D0D] bg-[#F7F7F7] border border-[#F3F3F3] rounded-lg px-2.5 py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/50 focus-visible:ring-offset-1"
+                    className="text-[12px] text-[#0D0D0D] bg-[#F7F7F7] border border-[#F3F3F3] rounded-lg px-2.5 py-1.5 focus-visible:outline-none focus-visible:border-[#E5E5E5] focus-visible:ring-[#E5E5E5]/30 focus-visible:ring-[1px]"
                     aria-label="To date"
                   />
                 </div>

@@ -176,7 +176,7 @@ function SetCell({
       maxLength={2}
       placeholder="–"
       onChange={(event) => onChange(event.target.value.replace(/[^0-9]/g, ""))}
-      className="tabular h-[30px] w-[26px] rounded-[6px] border border-[#EAECF0] bg-white text-center text-[13px] text-[#0D0D0D] outline-none placeholder:text-[#CCCCCC] focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]"
+      className="tabular h-[30px] w-[26px] rounded-[6px] border border-[#EAECF0] bg-white text-center text-[13px] text-[#0D0D0D] outline-none placeholder:text-[#CCCCCC] focus-visible:border-[#E5E5E5] focus-visible:ring-[#E5E5E5]/30 focus-visible:ring-[1px]"
     />
   );
 }
@@ -196,7 +196,7 @@ function TiebreakCell({
       placeholder=""
       aria-label="Tiebreak points for the side that lost it"
       onChange={(event) => onChange(event.target.value.replace(/[^0-9]/g, ""))}
-      className="tabular h-[30px] w-[26px] rounded-[6px] border border-[#EAECF0] bg-white text-center text-[11px] text-[#525252] outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]"
+      className="tabular h-[30px] w-[26px] rounded-[6px] border border-[#EAECF0] bg-white text-center text-[11px] text-[#525252] outline-none focus-visible:border-[#E5E5E5] focus-visible:ring-[#E5E5E5]/30 focus-visible:ring-[1px]"
     />
   );
 }
