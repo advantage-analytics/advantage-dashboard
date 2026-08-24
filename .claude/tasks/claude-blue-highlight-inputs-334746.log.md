@@ -115,3 +115,45 @@ is the runner's. Newest entries at the bottom.
   radios, which match `input` — is below the accessibility threshold. This
   wants its own task. Two call sites inherit it incidentally:
   `statistics/match-selector.tsx:137` and `team/add-player-dialog.tsx:257`.
+
+## T4 · Close the remaining blue focus surfaces — done
+- **gate:** mechanical — `npm run lint` 0 errors (38 pre-existing warnings),
+  `npx tsc --noEmit` clean, `npm test` 66/66. Completion review —
+  `VERDICT: pass`, verified live with real Tab focus on `/claim/program` and
+  `/claim/program/new`, and via a throwaway probe route for the auth-gated
+  `SettingsInlineSelect`. Guardrails — `pipeline-guardrails-reviewer` run
+  (diff touches `src/components/dashboard/settings/` and `/team/`), no
+  violations; it traced all four `CLAIM_FIELD` consumers and confirmed every
+  one is an input/select/textarea, and that no handler, role gate, invite path
+  or claim-state logic moved. `rls-boundary-reviewer` skipped: no data-layer,
+  API, Supabase or migration path; `git ls-files --others` empty.
+- **changed:** FIVE of the six named sites, not six. Two wrapper cases
+  (`program-search.tsx`, `invite-dialog.tsx`) moved the ring onto the wrapper
+  as `focus-within:shadow-[var(--focus-ring-field)]`, since a `<div>`/`<label>`
+  matches no `focus.css` selector and so was rendering the blue Tailwind
+  utility normally. Three tag cases (`claim-shell.tsx`'s shared `CLAIM_FIELD`,
+  `team-settings-form.tsx`, `settings-inline-select.tsx`) simply dropped their
+  blue focus classes and fall through to `focus.css`. No token value changed
+  and `src/styles/` has an empty diff, as the task required.
+- **task authoring error, corrected by the run:** `settings-card.tsx:193` was
+  listed as a boxed leak. It is not — it is `SettingsUnderlineInput`, whose
+  only border is `border-b`, so `focus:border-[var(--blue)]` renders the blue
+  UNDERLINE that criterion 2 exists to protect. My classifying grep sampled
+  only line 193 and missed the `border-b` two lines below. Criterion 1 ("none
+  of the six") and criterion 2 ("the underline vocabulary stays") therefore
+  contradicted each other at that one site; the implementer left it alone and
+  the reviewer independently read the class string and ruled criterion 2
+  governs. Verified here too. Five changes is the correct outcome.
+- **note:** Two inner `<input>`s carry an inline `style={{ boxShadow: "none" }}`.
+  With the ring moved to the wrapper, `focus.css` would still ring the inner
+  input as well — two indicators for one field, misaligned by the 38px the
+  input sits inside its box. `focus.css` is unlayered, so no utility can cancel
+  it and inline is the only local override available. Both reviewers checked
+  it: neither input had a pre-existing `style` prop, no resting-state shadow is
+  affected, and each field keeps exactly one visible indicator. It is a
+  workaround for the unlayered-import problem, not a preference — the real fix
+  is the layering, which remains unqueued.
+- **hazard worth remembering:** port 3000 is the MAIN checkout's dev server,
+  not this worktree. The implementer ran this worktree on 3101 and the reviewer
+  followed suit. Verifying a worktree change against 3000 would silently
+  measure the wrong tree and report a false pass.

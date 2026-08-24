@@ -206,8 +206,12 @@ export function InviteDialog({
           </div>
         ) : (
           <>
+            {/* The tag box is the field, so focus lands here in the neutral
+                field treatment. A `<label>` matches none of focus.css's
+                selector lists, which is why the blue it used to carry was a
+                Tailwind utility applying normally. */}
             <label
-              className="flex min-h-[64px] cursor-text flex-wrap content-start items-start gap-2 rounded-[var(--radius-element)] border border-[var(--border-field)] p-3 focus-within:border-[var(--blue)] focus-within:ring-2 focus-within:ring-[var(--blue-ring-40)]"
+              className="flex min-h-[64px] cursor-text flex-wrap content-start items-start gap-2 rounded-[var(--radius-element)] border border-[var(--border-field)] p-3 focus-within:shadow-[var(--focus-ring-field)]"
               htmlFor="invite-emails"
             >
               {emails.map((email) => (
@@ -257,6 +261,11 @@ export function InviteDialog({
                   }
                 }}
                 className="min-w-[180px] flex-1 bg-transparent py-1 font-mono text-[11px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)]"
+                /* focus.css rings every `<input>`, which here would ring the
+                   bare caret slot between the chips on top of the ring the
+                   label already draws. It is unlayered, so no utility can
+                   cancel it; inline is the only local override. */
+                style={{ boxShadow: "none" }}
               />
             </label>
 

@@ -103,7 +103,7 @@ ready).
   blue rule; do not silently flatten it.
 
 ## T4 · Close the remaining blue focus surfaces
-- **status:** todo
+- **status:** done
 - **files:** src/components/dashboard/settings/settings-inline-select.tsx:36,
   src/components/dashboard/settings/team-settings-form.tsx:231,
   src/components/dashboard/settings/settings-card.tsx:193,

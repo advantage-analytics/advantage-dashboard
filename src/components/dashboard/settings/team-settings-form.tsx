@@ -228,7 +228,12 @@ export function TeamSettingsForm({ data }: { data: TeamSettingsData }) {
                 }}
                 placeholder="email@school.edu"
                 aria-label="Invite by email"
-                className="h-[30px] w-[190px] rounded-[6px] border border-[var(--border-field)] px-3 text-[12px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)] focus:border-[var(--blue)]"
+                /* No focus class: focus.css already gives a real `<input>` the
+                   neutral `--focus-ring-field`. The `focus:border-[var(--blue)]`
+                   this used to carry was a boxed field spending the accent —
+                   `border-color` is not part of `box-shadow`, so the global
+                   rule never governed it. */
+                className="h-[30px] w-[190px] rounded-[6px] border border-[var(--border-field)] px-3 text-[12px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)]"
               />
               <SettingsButton
                 variant="outline"
