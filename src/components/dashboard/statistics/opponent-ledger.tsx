@@ -9,6 +9,14 @@ const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
 const INITIAL_ROWS = 5;
 
 interface OpponentRow {
+  /**
+   * Stable across renders, unlike `name`. The row is keyed on this because the
+   * label can change while the group does not — deselect the match that
+   * supplied the winning spelling and a different one takes over — and a
+   * changed React key inside `AnimatePresence` is an unmount plus a mount, so
+   * an untouched row would visibly collapse and re-enter.
+   */
+  key: string;
   name: string;
   wins: number;
   losses: number;
@@ -47,6 +55,11 @@ export function OpponentLedger({ matches }: Props) {
         losses: 0,
         ratings: [],
       };
+      // The lowest spelling wins the label, not the first one seen. `matches`
+      // arrives ordered by date with no tiebreaker, so same-day rows come back
+      // in whatever order the planner chose — first-seen would rename the row
+      // between reloads with nothing having changed.
+      if (m.player2Name.localeCompare(entry.name) < 0) entry.name = m.player2Name;
       if (m.isWin) entry.wins++;
       else entry.losses++;
       const r = ((m.serveRating ?? 0) + (m.returnRating ?? 0)) / 2;
@@ -59,14 +72,18 @@ export function OpponentLedger({ matches }: Props) {
     let othersL = 0;
     let othersRatings: number[] = [];
 
-    for (const data of map.values()) {
+    for (const [key, data] of map.entries()) {
       const name = data.name;
       const total = data.wins + data.losses;
-      if (total >= 2) {
+      // A blank key is whitespace the uploader typed into an opponent name.
+      // Those are not one opponent, so they go to Others rather than becoming a
+      // row with an empty cell.
+      if (total >= 2 && key !== "") {
         const avg = data.ratings.length > 0
           ? Math.round(data.ratings.reduce((a, b) => a + b, 0) / data.ratings.length)
           : 0;
         result.push({
+          key,
           name,
           wins: data.wins,
           losses: data.losses,
@@ -89,6 +106,8 @@ export function OpponentLedger({ matches }: Props) {
         ? Math.round(othersRatings.reduce((a, b) => a + b, 0) / othersRatings.length)
         : 0;
       result.push({
+        // Not a name, so it cannot collide with a normalized one.
+        key: "\u0000others",
         name: "Others",
         wins: othersW,
         losses: othersL,
@@ -134,7 +153,7 @@ export function OpponentLedger({ matches }: Props) {
             <AnimatePresence initial={false}>
               {visibleRows.map((row, i) => (
                 <motion.div
-                  key={row.name}
+                  key={row.key}
                   initial={shouldReduceMotion ? false : { opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}

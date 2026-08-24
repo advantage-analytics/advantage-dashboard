@@ -180,7 +180,9 @@ test.describe('rosterIdsForLabels', () => {
     expect(rosterIdsForLabels(BROOKS_TYPED, LADDER)).toEqual(['u-brooks']);
   });
 
-  test('a typed label with its own stray whitespace resolves to a clean row', () => {
+  // `splitNames` trims each part before this sees it, so the ends of the label
+  // assert nothing here — the doubled run in the middle is the load-bearing bit.
+  test('a typed label with a doubled internal space resolves to a clean row', () => {
     expect(rosterIdsForLabels('  ama   osei ', LADDER)).toEqual(['u-osei']);
   });
 
@@ -219,6 +221,11 @@ test.describe('benchFromLines', () => {
   test('a ladder name with a doubled internal space leaves the bench when fielded', () => {
     const bench = benchFromLines([{ ourLabels: [BROOKS_TYPED] }], LADDER);
     expect(bench.map((p) => p.userId)).toEqual(['u-reid', 'u-osei']);
+  });
+
+  test('a typed label with a doubled internal space benches the clean row', () => {
+    const bench = benchFromLines([{ ourLabels: ['Ama  Osei'] }], LADDER);
+    expect(bench.map((p) => p.userId)).toEqual(['u-brooks', 'u-reid']);
   });
 
   test('a ladder name with a doubled internal space leaves the bench too', () => {
