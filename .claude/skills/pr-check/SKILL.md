@@ -29,8 +29,29 @@ Pick the target before you start, and say which you picked:
 
 ```bash
 base=$(git merge-base HEAD splitstep-integration) || { echo "no merge base — stop"; exit 1; }
+[ "$base" != "$(git rev-parse HEAD)" ] || { echo "base == HEAD: range is empty — stop"; exit 1; }
 git diff "$base"...HEAD --stat
 ```
+
+  **`base == HEAD` means you are standing on `splitstep-integration` itself**,
+  and the range is empty — `merge-base` against your own branch is yourself.
+  That is not "nothing to review"; it is the branch-range framing not applying.
+  Stop, pick an explicit target, and say which you picked:
+
+  - `HEAD^1..HEAD` — what the most recent merge brought in. Usually the right
+    target right after merging a feature branch.
+  - Everything on this branch not yet in `main` — the whole picture before the
+    eventual merge, and large. Use the same guarded shape, never the inline
+    substitution this section forbids below:
+
+```bash
+mbase=$(git merge-base HEAD main) || { echo "no merge base with main — stop"; exit 1; }
+git diff "$mbase"...HEAD --stat
+```
+
+  Guarding only against `merge-base` **failing** is not enough. It can also
+  succeed trivially, and that path produces the identical empty diff and the
+  identical false green — reached without anything going wrong.
 
   Do not use the unguarded one-liner form
   (`` git diff $(git merge-base ...)...HEAD ``) — if `merge-base` fails (branch
