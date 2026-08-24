@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Loader2, Upload } from "lucide-react";
+import { Loader2, Upload, Users } from "lucide-react";
 import {
   SettingsField,
   SettingsUnderlineInput,
@@ -41,7 +41,32 @@ import {
  * both names, the email shape, and the two duplicate checks — and its messages
  * are written for people, so they render as-is. A second set of rules here
  * would be a second answer able to drift from the enforced one.
+ *
+ * ── The taken-lineup-spot note ─────────────────────────────────────────────
+ * A spot is deliberately not unique per program (see the `length: 9` comment
+ * below), so picking one somebody already holds is legal and often correct —
+ * a coach mid-reshuffle enters the new line before clearing the old one. What
+ * they cannot see from this dialog is *who* is already on that line, so the
+ * note answers that and nothing else: no disabled options, no gated submit.
+ *
+ * It is deliberately not `DialogProblem`. That row is red, `role="alert"`, and
+ * reserved for what `add_program_player` refused; this is a `role="status"`
+ * line in neutral ink, the same "question, not an alarm" register as the
+ * roster table's Possible duplicate chip.
  */
+
+/** One live roster member's claim on a line in the lineup. */
+export interface LineupSpotHolder {
+  spot: number;
+  name: string;
+}
+
+/** "Maya Chen" · "Maya Chen and Alex Ruiz" · "Maya Chen and 2 others". */
+function nameList(names: string[]): string {
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names[0]} and ${names.length - 1} others`;
+}
 
 /** Four years and the fifth that redshirts and grad transfers actually use. */
 const CLASS_YEARS = [
@@ -86,11 +111,14 @@ export function AddPlayerDialog({
   open,
   onOpenChange,
   seatNote,
+  lineupSpotHolders,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** What the program's allowance looks like right now, stated by the caller. */
   seatNote: string;
+  /** Who is on which line already, so a repeat pick can say whose it is. */
+  lineupSpotHolders: LineupSpotHolder[];
 }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -112,6 +140,15 @@ export function AddPlayerDialog({
   }
 
   const ready = firstName.trim() !== "" && lastName.trim() !== "";
+
+  // "Not set" is `""`, which `Number("")` would turn into 0 and match nothing —
+  // but the empty check says so outright rather than relying on that.
+  const spotTakenBy =
+    lineupSpot === ""
+      ? []
+      : lineupSpotHolders
+          .filter((holder) => holder.spot === Number(lineupSpot))
+          .map((holder) => holder.name);
 
   function submit() {
     setError(null);
@@ -240,6 +277,28 @@ export function AddPlayerDialog({
           </UnderlineSelect>
         </SettingsField>
       </div>
+
+      {/* Full width rather than in the field's hint slot: the cell is half of a
+          440px dialog, and a name wrapped over three lines would shove the
+          email field down every time a coach changed the spot. */}
+      {spotTakenBy.length > 0 && (
+        <p
+          role="status"
+          className="-mt-1 flex items-start gap-2 text-[11px] leading-[1.6] text-[var(--ink-600)]"
+        >
+          <Users
+            className="mt-[3px] size-3.5 shrink-0"
+            strokeWidth={1.5}
+            aria-hidden
+          />
+          <span>
+            {nameList(spotTakenBy)}{" "}
+            {spotTakenBy.length === 1 ? "already holds" : "already hold"} #
+            {lineupSpot}. Spots can be shared while you reshuffle — you can
+            still use this one.
+          </span>
+        </p>
+      )}
 
       <SettingsField
         label="Email · optional"

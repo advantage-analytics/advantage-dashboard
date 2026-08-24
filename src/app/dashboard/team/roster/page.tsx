@@ -58,6 +58,15 @@ export default async function RosterPage() {
 
   const unclaimed = managedPlayers.length;
 
+  // Which lines are already spoken for, so Add player can name the holder
+  // instead of letting a coach discover the collision on the table afterwards.
+  // Every live member with a spot counts — the roster is the whole squad, and a
+  // pending invite has no row and therefore no line. Nothing is deduplicated:
+  // spots are not unique, so two people can genuinely hold one.
+  const lineupSpotHolders = roster.members
+    .filter((m) => m.lineupSpot !== null)
+    .map((m) => ({ spot: m.lineupSpot as number, name: m.name }));
+
   const standing = [
     `${playerCount} ${playerCount === 1 ? "player" : "players"}`,
     unclaimed > 0 && `${unclaimed} without an account`,
@@ -87,6 +96,7 @@ export default async function RosterPage() {
             <RosterHeaderButtons
               managedPlayers={managedPlayers}
               seats={roster.seats}
+              lineupSpotHolders={lineupSpotHolders}
             />
           )}
         </div>

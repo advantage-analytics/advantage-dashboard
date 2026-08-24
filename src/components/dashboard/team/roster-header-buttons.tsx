@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { advButton } from "@/lib/ui/adv-button";
-import { AddPlayerDialog } from "./add-player-dialog";
+import { AddPlayerDialog, type LineupSpotHolder } from "./add-player-dialog";
 import { RosterInviteDialog } from "./roster-invite-dialog";
 import type { ManagedPlayer } from "./invite-target-picker";
 import type { SeatUsage } from "@/lib/data/team-roster-server";
@@ -21,10 +21,13 @@ import type { SeatUsage } from "@/lib/data/team-roster-server";
 export function RosterHeaderButtons({
   managedPlayers,
   seats,
+  lineupSpotHolders,
 }: {
   /** Coach-managed rows, so an invitation can target one instead of duplicating it. */
   managedPlayers: ManagedPlayer[];
   seats: SeatUsage;
+  /** Lines already spoken for, so Add player can name who holds the one picked. */
+  lineupSpotHolders: LineupSpotHolder[];
 }) {
   const [inviting, setInviting] = useState(false);
   const [addingPlayer, setAddingPlayer] = useState(false);
@@ -65,6 +68,7 @@ export function RosterHeaderButtons({
         open={addingPlayer}
         onOpenChange={setAddingPlayer}
         seatNote={seatNote}
+        lineupSpotHolders={lineupSpotHolders}
       />
     </>
   );

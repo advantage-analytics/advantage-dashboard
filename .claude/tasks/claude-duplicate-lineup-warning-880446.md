@@ -14,7 +14,7 @@ drains straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Warn when a lineup spot is already taken
-- **status:** todo
+- **status:** done
 - **files:** src/components/dashboard/team/add-player-dialog.tsx,
   src/components/dashboard/team/roster-header-buttons.tsx,
   src/app/dashboard/team/roster/page.tsx *(guess)*
