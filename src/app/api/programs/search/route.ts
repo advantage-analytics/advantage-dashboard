@@ -14,7 +14,7 @@ import { searchPrograms } from "@/lib/data/programs-server";
  * Not rate limited. There is no rate-limiting layer in this project yet, and
  * inventing one for a single route would be worse than saying so: the exposure
  * is a directory of 1,940 programs that anyone can also read off the ITA
- * website, and the query is index-served and capped at 20 rows.
+ * website, and the query is capped at 20 rows out of a 1.3 MB table.
  */
 export async function GET(req: NextRequest) {
   const term = req.nextUrl.searchParams.get("q") ?? "";

@@ -15,7 +15,7 @@ drains straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Match any part of a school name or acronym in program search
-- **status:** todo
+- **status:** done
 - **files:** supabase/migrations/<new>_search_programs_contains.sql (redefines
   public.search_programs), src/lib/data/programs-server.ts,
   src/app/api/programs/search/route.ts — guess
