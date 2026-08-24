@@ -80,3 +80,31 @@ ready).
   `splitNames` (`src/lib/schedule/format.ts:90`) trims parts but does not
   collapse internal whitespace; the roster side does neither.
   `person-name.ts` has zero imports, so the two client components can call it.
+
+## T4 · Collapse whitespace in process-match's is_player1 comparison
+- **status:** todo
+- **files:** supabase/functions/process-match/index.ts *(guess)*
+- **done when:**
+  - [ ] Both sides of the `is_player1` comparison collapse internal whitespace as
+        well as trimming and lowercasing, so a `Player` of "Rudy  Quan" against a
+        `Host Team` of "Rudy Quan" yields `is_player1 = true`
+  - [ ] The rule is a local copy with a comment naming the two it must stay in
+        step with — `normalizedPersonName` in src/lib/data/person-name.ts and SQL
+        `normalized_person_name` — because a standalone Deno function cannot
+        import from `src/`
+  - [ ] An empty or missing `Host Team` throws with a message naming it, the way
+        a missing Points sheet already does at index.ts:205, instead of writing
+        `is_player1 = false` for every shot
+  - [ ] Nothing else about the function changes: the same rows are written, and
+        only `is_player1` and the new failure path differ
+- **notes:** The bug: index.ts:216 and :671 both do `.toLowerCase().trim()` with
+  no collapse, and `createCombinedSheets` merges sheets across several uploaded
+  files — so `settingsRows[0]` can come from one export while shot rows come from
+  another spelled differently. Every shot from the mismatched file is written as
+  the opponent's; the match processes green and the court visualization, serve
+  placement and every shot-derived stat show the athlete's shots on the wrong
+  side. This is the silent misattribution docs/ui-revamp-guardrails.md exists for.
+  Two things to know: there is no Deno test harness in this repo (`tests/` is
+  Playwright over `src/`), so state how the change was verified rather than
+  claiming coverage; and the fix is inert until `process-match` is redeployed —
+  the task does not deploy it.
