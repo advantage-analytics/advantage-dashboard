@@ -17,9 +17,13 @@ import type { ActionResult } from "@/components/dashboard/settings/actions";
  * needs no account. Settings › Team is a list of seats and has no opinion about
  * a freshman who has never signed in.
  *
- * `set_member_upload_enabled` has existed since the membership migration and
- * has never had a caller: there was no screen with a per-person control on it,
- * because there was no roster. This is that caller.
+ * `set_member_upload_enabled` came with the membership migration
+ * (`20260818041025`) and was dropped three migrations later by
+ * `20260818043926`, which found no caller anywhere in `src/` — there was no
+ * screen with a per-person control on it, because there was no roster — and
+ * said it "comes back with the control that needs it". This is that caller;
+ * `20260824223337_enforce_member_upload_enabled.sql` is what brought the
+ * function back, and made what it writes decide something.
  */
 
 const ROSTER_PATH = "/dashboard/team/roster";

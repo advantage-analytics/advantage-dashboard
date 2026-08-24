@@ -120,7 +120,7 @@ ready).
   fix and T6 will contradict each other.
 
 ## T6 · Make the roster's "Can send video" switch real
-- **status:** todo
+- **status:** done
 - **files:** src/lib/workspace/types.ts,
   src/lib/workspace/active-workspace-server.ts,
   src/app/dashboard/team/upload/page.tsx, a new supabase/migrations/ file

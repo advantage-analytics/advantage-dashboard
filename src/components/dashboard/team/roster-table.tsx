@@ -183,10 +183,14 @@ function RowMenu({
   const [enabled, setEnabled] = useState(member.uploadEnabled);
   const [sending, startSend] = useTransition();
 
-  // The owner always may. Offering a switch that the RPC would honour but that
-  // would lock a program's only owner out of its own budget is a control with
-  // one useful position. A coach-managed player has no account to grant it to.
-  const canToggleSend = member.userId !== null && member.role !== "owner";
+  // Players only, and not merely the owner. `canUploadForProgram()` answers
+  // for owner, coach and staff before it reads `upload_enabled`, so on a staff
+  // row this switch would move, write, and change nothing anyone could
+  // observe — the position it appears to set is not a position the upload page
+  // has. Staff are exempt on purpose: a program's own coaches must not be
+  // lockable out of its budget by a switch. A coach-managed player has no
+  // account to grant it to.
+  const canToggleSend = member.userId !== null && member.role === "player";
   const canRemove = member.role !== "owner" && !isViewer;
 
   // An owner has neither control, but the slot still has to exist. Returning

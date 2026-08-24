@@ -68,31 +68,54 @@ export interface Workspace {
    * who, among the people who may, is allowed to start.
    *
    * `program_members.upload_enabled` is a THIRD, per-person answer to a
-   * similar-sounding question, and nothing here consults it. This comment used
-   * to say a player needed it too, and so does the database's own comment on
-   * `programs.players_can_upload`: "A member still needs
-   * program_members.upload_enabled." That was never true of any deployed code.
-   * The column is written — by invite acceptance, by claim completion, and by
-   * the roster's "Can send" toggle through `set_member_upload_enabled` — and
-   * read straight back by `program_roster_full` to render that same toggle. No
-   * policy, no trigger and no page has ever gated an upload on it. Enforcing it
-   * is its own piece of work; until that lands, a player's upload turns on this
-   * flag and on nothing else.
+   * similar-sounding question, and it rides here too — as
+   * `memberUploadEnabled`, below. The two compose in one direction only: this
+   * flag says whether a program's players may upload at all, that one says
+   * whether THIS player may, and a player needs both to pass. Staff need
+   * neither.
    *
-   * That sentence is corrected HERE rather than in the database because the only
-   * things carrying it are `comment on column` statements in two APPLIED
-   * migrations: `20260818040338_program_settings_and_usage.sql`, which set it,
-   * and `20260824182016_enable_players_can_upload_by_default.sql`, which
-   * restated it while making this flag default true. An applied migration is
-   * never edited in place (`.claude/skills/create-migration/SKILL.md`), and a
-   * COMMENT carries no behaviour, so a new migration written purely to restate
-   * one would be a schema write for no schema change. So a reader running
-   * `\d+ public.programs` will still meet the old sentence there — this doc
-   * comment is the correction, and whoever makes `upload_enabled` mean
-   * something is the right person to restate it in the database at the same
-   * time.
+   * That was not true of any deployed code until `canUploadForProgram()` below
+   * started reading it, alongside
+   * `20260824223337_enforce_member_upload_enabled.sql`. The column had been
+   * written since the membership migration — by invite acceptance, by claim
+   * completion — and read straight back by `program_roster_full` to render the
+   * roster's "Can send video" switch, while no policy, no trigger and no page
+   * gated an upload on it. `20260818040338`'s `comment on column` for
+   * `programs.players_can_upload` claimed otherwise ("A member still needs
+   * program_members.upload_enabled"), and this doc comment carried the
+   * correction, because an applied migration is never edited in place
+   * (`.claude/skills/create-migration/SKILL.md`).
+   *
+   * The migration that made that sentence true restated it in the database in
+   * the same breath, which is what a schema change buys that a COMMENT-only
+   * migration would not have. So `\d+ public.programs` and this file now agree,
+   * and neither is the other's correction.
    */
   playersCanUpload: boolean;
+  /**
+   * `program_members.upload_enabled` — may THIS member spend the budget?
+   *
+   * The per-person half of the question `playersCanUpload` answers for players
+   * in general. A coach handing the budget to one senior without opening it to
+   * the whole squad is the ordinary case, and a single program-wide toggle
+   * cannot express it — which is why the roster row carries a "Can send video"
+   * switch of its own, writing through `set_member_upload_enabled`.
+   *
+   * IT ONLY EVER NARROWS A PLAYER. `canUploadForProgram()` answers for staff
+   * before it reads this, so an owner or coach whose row says false is
+   * unaffected — there is no arrangement of switches that locks a program's
+   * staff out of their own budget.
+   *
+   * True for a personal workspace: there is no membership row to consult, the
+   * viewer is the only member, and "may this person send their own video" has
+   * one honest answer there. Unlike `playersCanUpload`, false would not be the
+   * conservative reading — it would be a claim that this person is barred.
+   *
+   * Resolved server-side with the rest of the workspace for the same reason
+   * `playersCanUpload` is: `landingPath()` has to predict the upload page's
+   * answer with only a `Workspace` in hand.
+   */
+  memberUploadEnabled: boolean;
 }
 
 /** Everything the dashboard shell needs to render, resolved once per request. */
@@ -137,10 +160,18 @@ export function isProgramStaff(workspace: Workspace): boolean {
 /**
  * May this viewer open the program's upload wizard?
  *
- * Staff always. A player only where the program has said so — that is the
- * whole job of `programs.players_can_upload`, which the settings form has
- * offered as "anyone" vs "coaches" since it shipped while nothing read the
- * answer.
+ * Staff always. A player needs two answers pointing the same way: the
+ * program's `players_can_upload`, which the settings form has offered as
+ * "anyone" vs "coaches" since it shipped while nothing read the answer, and
+ * their own `program_members.upload_enabled`, which the roster row's "Can send
+ * video" switch writes. Policy for players in general, then this player.
+ *
+ * Staff are answered by the early return and never reach the second half, so
+ * `upload_enabled` narrows a player and nobody else. That is deliberate: a
+ * coach's own row carries whatever an invitation happened to leave there, and
+ * letting it decide would lock a program's staff out of its budget by
+ * accident. It also means the roster's switch is only worth offering on a
+ * player's row.
  *
  * The single spelling of the rule, for the same reason `isProgramStaff` is:
  * `team/upload/page.tsx` enforces it and `landingPath()` predicts it, and a
@@ -157,7 +188,8 @@ export function isProgramStaff(workspace: Workspace): boolean {
  */
 export function canUploadForProgram(workspace: Workspace): boolean {
   if (workspace.kind !== 'team') return false;
-  return isProgramStaff(workspace) || workspace.playersCanUpload;
+  if (isProgramStaff(workspace)) return true;
+  return workspace.playersCanUpload && workspace.memberUploadEnabled;
 }
 
 /** The label under the workspace name in the switcher. */

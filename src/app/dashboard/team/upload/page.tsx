@@ -45,12 +45,21 @@ export default async function TeamUploadPage({
 
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard/matches/new");
-  // Staff always; a player only where the program set `players_can_upload`.
+  // Staff always; a player only where the program set `players_can_upload`
+  // AND their own `program_members.upload_enabled` is on — the roster row's
+  // "Can send video" switch. Two settings rather than one because a coach
+  // handing the budget to a single senior cannot say that program-wide.
+  //
   // Not `isProgramStaff` — that turned every player away no matter what the
   // program had chosen, which made the Team settings toggle a label rather
-  // than a setting. `canUploadForProgram` is the same predicate
-  // `landingPath()` reads, so a switch into this workspace lands here exactly
-  // when this line would admit the viewer.
+  // than a setting. Not `players_can_upload` alone either, which made the
+  // roster switch the same kind of label. `canUploadForProgram` is the same
+  // predicate `landingPath()` reads, so a switch into this workspace lands
+  // here exactly when this line would admit the viewer.
+  //
+  // This is where a *player* is turned away and nowhere else: staff are
+  // answered before either flag is read, so no arrangement of switches can
+  // bounce a coach off their own program's upload page.
   if (!canUploadForProgram(active)) redirect("/dashboard/team/schedule");
 
   // Who may open this page and who may attach a match to a SCHEDULED LINE are
