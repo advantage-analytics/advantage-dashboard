@@ -11,13 +11,20 @@ import type { ProgramSearchResult } from "@/lib/data/programs-server";
  * club side or a school the ITA scrape missed is a real fixture, and a picker
  * that only offers the directory would make the coach lie about who they
  * played to get past the field.
+ *
+ * `onChange` carries the directory key ALONGSIDE the name, and null when the
+ * name was typed. The name alone is what this used to return, and it is what
+ * made an opponent unaggregatable: "Stanford", "Stanford University" and "STAN"
+ * are three programs to a GROUP BY and one to a human. The key is what lets a
+ * recorded line point at a directory row, and everything on the Opponents page
+ * hangs off that.
  */
 export function OpponentPicker({
   value,
   onChange,
 }: {
   value: string;
-  onChange: (name: string) => void;
+  onChange: (name: string, programKey: string | null) => void;
 }) {
   const [term, setTerm] = useState("");
   const [results, setResults] = useState<ProgramSearchResult[]>([]);
@@ -96,7 +103,7 @@ export function OpponentPicker({
             if (event.key !== "Enter") return;
             event.preventDefault();
             if (!term.trim()) return;
-            onChange(term.trim());
+            onChange(term.trim(), null);
             setEditing(false);
           }}
           placeholder="Search programs, or type any opponent"
@@ -111,7 +118,7 @@ export function OpponentPicker({
               key={result.programKey}
               type="button"
               onClick={() => {
-                onChange(result.schoolName);
+                onChange(result.schoolName, result.programKey);
                 setEditing(false);
                 setResults([]);
               }}

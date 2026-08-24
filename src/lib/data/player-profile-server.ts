@@ -8,24 +8,21 @@ import {
   type MatchScore,
 } from "@/lib/data/match-utils";
 import { meanOfPresent, pct } from "@/lib/data/aggregate";
-import { COMPARE_MEASURES } from "@/lib/data/team-compare-server";
+import { PLAYER_MEASURES } from "@/lib/data/player-measures";
 import type { MemberRole } from "@/lib/data/team-settings-server";
 
 /**
  * One player, everything the program knows about them.
  *
- * The destination the roster row has always pointed at. It used to be
- * `/dashboard/team/compare?a=…`, which answers a different question — Compare
- * exists to put two players side by side for a lineup decision, and it needs a
- * second person before it says anything at all. A coach clicking a name wants
- * that person, not a picker.
+ * The destination the roster row points at. A coach clicking a name wants that
+ * person, not a picker.
  *
  * ── Measures ────────────────────────────────────────────────────────────────
- * Deliberately the same ten `COMPARE_MEASURES` the comparison uses. They are
+ * `PLAYER_MEASURES`, the same ten an opponent's profile is read on. They are
  * every serve/return/pressure rate that derivation can produce, so a
- * video-analysed match contributes on the same terms as an imported one — and a
- * player's own page and their comparison must not disagree about their first
- * serve percentage.
+ * video-analysed match contributes on the same terms as an imported one — and
+ * one player's page must not disagree with another's about what a first serve
+ * percentage is.
  *
  * ── Trend ───────────────────────────────────────────────────────────────────
  * Recent window against everything before it, the same shape the roster's
@@ -154,7 +151,7 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
     const columns = [
       "match_id",
       "is_player1",
-      ...COMPARE_MEASURES.map((m) => m.key),
+      ...PLAYER_MEASURES.map((m) => m.key),
     ];
     const { data: statRows } = await supabase
       .from("match_stats_with_percentages")
@@ -171,7 +168,7 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
 
   // `results` is newest first, so the first slice is "lately" and the rest is
   // the baseline it is measured against.
-  const measures: ProfileMeasure[] = COMPARE_MEASURES.map((measure) => {
+  const measures: ProfileMeasure[] = PLAYER_MEASURES.map((measure) => {
     const series = results.map((r) => {
       const stat = statsByPlayer.get(
         `${r.match.id}:${r.isPlayer1 ? 1 : 0}`

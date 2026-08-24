@@ -263,6 +263,5 @@ export async function mergeProfiles(input: {
   revalidatePath(ROSTER_PATH);
   revalidatePath(SETTINGS_PATH);
   revalidatePath(TEAM_HOME_PATH);
-  revalidatePath("/dashboard/team/compare");
   return { ok: true };
 }

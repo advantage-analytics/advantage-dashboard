@@ -62,13 +62,21 @@ export const PERSONAL_NAV: readonly NavLink[] = [
  * Schedule takes `ClipboardList`: what a coach fills in before anyone plays.
  * Matches keeps `Calendar`, the glyph `PERSONAL_NAV` already gives it, so one
  * destination does not change shape when the workspace switcher moves.
+ *
+ * Opponents took Compare's slot and its `Swords`. Compare answered "which of my
+ * two players is holding serve better" and nothing replaces it — that was
+ * weighed and decided, and the roster's player profile is now the only place a
+ * single player's rates are read. Opponents sits outside `/dashboard/team`
+ * because most of what it shows is not this program's: it reads the pooled
+ * public-record views across every program, and only the private tier is
+ * scoped to the viewer.
  */
 export const TEAM_NAV: readonly NavLink[] = [
   { name: "Team Home", href: "/dashboard/team", icon: Home },
   { name: "Schedule", href: "/dashboard/team/schedule", icon: ClipboardList },
   { name: "Matches", href: "/dashboard/matches", icon: Calendar },
   { name: "Roster", href: "/dashboard/team/roster", icon: Users },
-  { name: "Compare", href: "/dashboard/team/compare", icon: Swords },
+  { name: "Opponents", href: "/dashboard/opponents", icon: Swords },
 ];
 
 export const PERSONAL_BOTTOM: readonly NavLink[] = [
