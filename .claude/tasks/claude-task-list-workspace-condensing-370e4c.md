@@ -15,7 +15,7 @@ drains straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Even out the workspace switcher rows
-- **status:** todo
+- **status:** done
 - **files:** src/components/dashboard/sidebar/workspace-row.tsx (guess — the
   popover rows at ~L125-190, not the collapsed trigger)
 - **done when:**
