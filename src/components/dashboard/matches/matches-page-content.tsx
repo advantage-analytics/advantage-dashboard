@@ -353,6 +353,14 @@ export function MatchesPageContent({
     const result: ActiveFilter[] = [];
     for (const key of FILTER_KEYS) {
       for (const value of searchParams.getAll(key)) {
+        // Deduplicated on the way in, by the same rule the chips use. A URL
+        // written before the Player chips collapsed to one spelling per person
+        // can carry both — `?player=Dana+Brooks&player=Dana++Brooks` — and two
+        // entries for one chip make the badge out-count the checked chips and
+        // render two pills that look identical in the empty state.
+        if (result.some((f) => f.key === key && sameValue(key, f.value, value))) {
+          continue;
+        }
         result.push({ key, value });
       }
     }

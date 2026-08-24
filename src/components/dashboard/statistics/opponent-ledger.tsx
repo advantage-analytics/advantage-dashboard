@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { normalizedPersonName } from "@/lib/data/person-name";
 import type { SelectableMatch } from "@/lib/data/statistics-server";
 
 const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
@@ -25,16 +26,32 @@ export function OpponentLedger({ matches }: Props) {
   const [expanded, setExpanded] = useState(false);
 
   const rows = useMemo(() => {
-    const map = new Map<string, { wins: number; losses: number; ratings: number[] }>();
+    // Keyed by the app's name rule, not the raw string. `player2_name` is free
+    // text the uploader types per match, so one opponent drifts across a season
+    // — "Ana Garcia" and "ana garcia" are one person. Grouped raw, she becomes
+    // two rows each showing half her record, and on a 2/1 split the single
+    // match falls under the `total >= 2` line and disappears into Others
+    // entirely. The opponent pages already count her as one person, so raw
+    // grouping is also two screens disagreeing. The label keeps the first
+    // spelling seen; only the grouping is normalized.
+    const map = new Map<
+      string,
+      { name: string; wins: number; losses: number; ratings: number[] }
+    >();
 
     for (const m of matches) {
-      const name = m.player2Name;
-      const entry = map.get(name) ?? { wins: 0, losses: 0, ratings: [] };
+      const key = normalizedPersonName(m.player2Name);
+      const entry = map.get(key) ?? {
+        name: m.player2Name,
+        wins: 0,
+        losses: 0,
+        ratings: [],
+      };
       if (m.isWin) entry.wins++;
       else entry.losses++;
       const r = ((m.serveRating ?? 0) + (m.returnRating ?? 0)) / 2;
       if (r > 0) entry.ratings.push(r);
-      map.set(name, entry);
+      map.set(key, entry);
     }
 
     const result: OpponentRow[] = [];
@@ -42,7 +59,8 @@ export function OpponentLedger({ matches }: Props) {
     let othersL = 0;
     let othersRatings: number[] = [];
 
-    for (const [name, data] of map.entries()) {
+    for (const data of map.values()) {
+      const name = data.name;
       const total = data.wins + data.losses;
       if (total >= 2) {
         const avg = data.ratings.length > 0

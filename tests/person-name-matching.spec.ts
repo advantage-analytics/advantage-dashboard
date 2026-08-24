@@ -25,10 +25,19 @@ import { benchFromLines, rosterIdsForLabels } from '@/lib/schedule/roster-match'
  * broken on screen.
  */
 
-// Two people, each stored with one of the two stray-whitespace spellings, plus
-// a near-miss. Different people on purpose: two rows normalizing to one key is
-// the duplicate-profile case, not a working roster.
+// Two people, each stored with a stray-whitespace spelling, plus a near-miss.
+// Different people on purpose: two rows normalizing to one key is the
+// duplicate-profile case, not a working roster.
+//
+// Which spelling is reachable depends on the side. Roster and ladder names are
+// trimmed at construction — `btrim(first_name || ' ' || last_name)` in SQL,
+// `.trim()` again in `opponents-server` and `roster-server` — so the only
+// stray whitespace that survives into them is INTERNAL, from a trailing space
+// inside `first_name`. `matches.player2_name` gets no such treatment: it is
+// written raw from what the uploader typed, so a leading or trailing space
+// does reach it. The fixtures below are assigned accordingly.
 const BROOKS_TYPED = 'Dana Brooks';
+const BROOKS_DOUBLED = 'Dana  Brooks';
 const BROOKS_TRAILING = 'Dana Brooks ';
 const REID_TYPED = 'Sam Reid';
 const REID_DOUBLED = 'Sam  Reid';
@@ -37,6 +46,7 @@ const NEAR_MISS = 'Dana Brook';
 test.describe('normalizedPersonName', () => {
   test('case and whitespace are noise', () => {
     expect(normalizedPersonName(BROOKS_TRAILING)).toBe(normalizedPersonName(BROOKS_TYPED));
+    expect(normalizedPersonName(BROOKS_DOUBLED)).toBe(normalizedPersonName(BROOKS_TYPED));
     expect(normalizedPersonName(REID_DOUBLED)).toBe(normalizedPersonName(REID_TYPED));
     expect(normalizedPersonName('  dana\tBROOKS  ')).toBe(normalizedPersonName(BROOKS_TYPED));
   });
@@ -71,16 +81,16 @@ const row = (
 
 test.describe('headToHeadRows', () => {
   // `pooled_roster` hands back first and last name separately and the page
-  // joins them, so both spellings below are what one stray space in one column
-  // produces. `matches.player2_name` on the other side is whatever the uploader
-  // typed.
+  // joins them and trims, so the spelling that reaches this side is the
+  // doubled internal space. `matches.player2_name` on the other side is raw,
+  // so that is where a trailing space is worth testing.
   const roster = [
-    { id: 'p-brooks', name: BROOKS_TRAILING },
+    { id: 'p-brooks', name: BROOKS_DOUBLED },
     { id: 'p-reid', name: REID_DOUBLED },
   ];
 
-  test('a roster name with a trailing space matches the typed form', () => {
-    const kept = headToHeadRows([row('m1', BROOKS_TYPED)], roster);
+  test('a match name with a trailing space matches the roster spelling', () => {
+    const kept = headToHeadRows([row('m1', BROOKS_TRAILING)], roster);
     expect(kept.map((m) => m.id)).toEqual(['m1']);
   });
 
@@ -128,7 +138,7 @@ test.describe('headToHeadRows', () => {
 test.describe('opponentPlayerMatches', () => {
   test('the profile name matches the typed name through either spelling', () => {
     expect(
-      opponentPlayerMatches([row('m1', BROOKS_TYPED)], 'her-id', BROOKS_TRAILING).map(
+      opponentPlayerMatches([row('m1', BROOKS_TRAILING)], 'her-id', BROOKS_DOUBLED).map(
         (m) => m.id
       )
     ).toEqual(['m1']);
@@ -156,17 +166,22 @@ test.describe('opponentPlayerMatches', () => {
   });
 });
 
-// The ladder both schedule sites read. `LadderPlayer` in the source; the two
-// stray-whitespace spellings stand in for a roster row nobody cleaned up.
+// The ladder both schedule sites read. `LadderPlayer` in the source. Two rows
+// carry the doubled internal space a roster nobody cleaned up produces; Ama is
+// clean, so the typed side can be the messy one for a change.
 const LADDER = [
-  { userId: 'u-brooks', name: BROOKS_TRAILING, ladderPosition: 1 },
+  { userId: 'u-brooks', name: BROOKS_DOUBLED, ladderPosition: 1 },
   { userId: 'u-reid', name: REID_DOUBLED, ladderPosition: 2 },
   { userId: 'u-osei', name: 'Ama Osei', ladderPosition: 3 },
 ];
 
 test.describe('rosterIdsForLabels', () => {
-  test('a roster name with a trailing space resolves from the typed form', () => {
+  test('a ladder name with a doubled internal space resolves from the typed form', () => {
     expect(rosterIdsForLabels(BROOKS_TYPED, LADDER)).toEqual(['u-brooks']);
+  });
+
+  test('a typed label with its own stray whitespace resolves to a clean row', () => {
+    expect(rosterIdsForLabels('  ama   osei ', LADDER)).toEqual(['u-osei']);
   });
 
   test('a roster name with a doubled internal space resolves from the typed form', () => {
@@ -201,7 +216,7 @@ test.describe('rosterIdsForLabels', () => {
 });
 
 test.describe('benchFromLines', () => {
-  test('a ladder name with a trailing space leaves the bench when it is fielded', () => {
+  test('a ladder name with a doubled internal space leaves the bench when fielded', () => {
     const bench = benchFromLines([{ ourLabels: [BROOKS_TYPED] }], LADDER);
     expect(bench.map((p) => p.userId)).toEqual(['u-reid', 'u-osei']);
   });
