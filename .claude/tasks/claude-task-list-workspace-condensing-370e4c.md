@@ -52,3 +52,43 @@ ready).
   — team→personal relies on team/layout.tsx's redirect firing during that
   refresh. Verify both directions by hand against ZZ Test Program (owner) and
   Personal.
+
+## T3 · Correct the STAFF_ONLY_PAGES fallback for team upload
+- **status:** todo
+- **files:** src/lib/workspace/actions.ts (guess — STAFF_ONLY_PAGES and the
+  comment above it)
+- **done when:**
+  - [ ] The fallback for `/dashboard/team/upload` and the destination
+        `team/upload/page.tsx` actually sends a non-staff viewer to are the
+        same path
+  - [ ] The comment above `STAFF_ONLY_PAGES` states only what the map does —
+        no claim the entries do not honour
+  - [ ] The `/dashboard/settings/team` entry still resolves to
+        `/dashboard/settings/profile`, matching `settings/team/page.tsx`
+  - [ ] Nothing outside `landingPath` changes — the membership re-resolve, the
+        cookie write and the `redirect` call are untouched
+- **notes:** Flagged by both reviewers during T2 as non-blocking: the entry maps
+  to `/dashboard/team` while the page redirects to `/dashboard/team/schedule`.
+  T4 changes who may open that page, so it must revisit this entry.
+
+## T4 · Let players upload when their program allows it
+- **status:** todo
+- **files:** src/app/dashboard/team/upload/page.tsx, a new
+  supabase/migrations/ file, src/lib/workspace/actions.ts (guess)
+- **done when:**
+  - [ ] A player in a program with `players_can_upload` true can open
+        `/dashboard/team/upload` instead of being redirected away
+  - [ ] A player in a program with `players_can_upload` false is still
+        redirected
+  - [ ] `owner`, `coach` and `staff` can still open it regardless of the flag
+  - [ ] `programs.players_can_upload` defaults to true for new programs and
+        existing rows are backfilled to true, verified against the live schema
+        via the Supabase MCP rather than supabase/migrations/
+  - [ ] The `/dashboard/team/upload` entry in `STAFF_ONLY_PAGES` still matches
+        the page's gate after the change
+- **notes:** The setting exists and is surfaced ("anyone" vs "coaches") but
+  nothing enforces it — `upload/page.tsx:47` gates on `isProgramStaff` alone.
+  `staff` already passes that check, so only players are affected. The column is
+  `not null default false`, so a stored false cannot be told apart from
+  never-set — the backfill in criterion 4 will also flip any program that
+  deliberately turned it off, which the author accepted when adding this task.
