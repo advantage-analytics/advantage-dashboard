@@ -14,7 +14,7 @@ drains straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Workspace title in the header's leading slot
-- **status:** todo
+- **status:** done
 - **files:** `src/app/dashboard/header.tsx` (leading slot; likely a small
   `workspaceTitle` helper beside `teamLabel` in `src/lib/workspace/types.ts`) — a guess
 - **done when:**
