@@ -101,3 +101,71 @@ ready).
   criteria for that reason — grep cannot see this one. Watch the underline
   input pattern noted at `DESIGN.md:92`, which deliberately thickens to a 2px
   blue rule; do not silently flatten it.
+
+## T4 · Close the remaining blue focus surfaces
+- **status:** todo
+- **files:** src/components/dashboard/settings/settings-inline-select.tsx:36,
+  src/components/dashboard/settings/team-settings-form.tsx:231,
+  src/components/dashboard/settings/settings-card.tsx:193,
+  src/components/claim/program-search.tsx:88,
+  src/components/claim/claim-shell.tsx:266,
+  src/components/dashboard/team/invite-dialog.tsx:210
+  (classified by grep; a subagent should re-verify each is boxed, not underline)
+- **done when:**
+  - [ ] None of the six boxed fields above turns blue on focus — verified in a
+        browser with real keyboard focus (Tab, not `.focus()`), reading
+        `getComputedStyle` on the focused element and its wrapper: neither
+        `border-color` nor `box-shadow` contains `rgb(59, 130, 246)`
+  - [ ] The three underline fields still DO turn blue —
+        `settings/profile-form.tsx:349`, `schedule/lineup-editor.tsx:295`,
+        `team/add-player-dialog.tsx:78`. `DESIGN.md:92` documents that
+        vocabulary deliberately; flattening it is a failure, not a bonus
+  - [ ] Every field touched still shows a visible focus indicator — none is
+        left with no indicator at all
+  - [ ] Blue focus is unchanged on buttons, links, tabs and pills, confirmed
+        in the same browser pass
+- **notes:** Two of the six — `program-search.tsx:88` and
+  `invite-dialog.tsx:210` — draw the blue on a wrapper `<div>` via
+  `focus-within:ring-[var(--blue-ring-40)]`. A `<div>` matches none of
+  `focus.css`'s `:where()` selector lists, so no global rule reaches them and
+  the Tailwind utility applies normally. These are the two that render a
+  literal blue box around a field, and they are the closest thing left to the
+  bug this branch was opened for. The other four use
+  `focus:border-[var(--blue)]`; `border-color` is not part of `box-shadow`, so
+  `focus.css` cannot govern it either. Both mechanisms need a local fix — do
+  not try to solve either by widening the global rule.
+
+## T5 · Raise the field focus ring to WCAG 1.4.11's 3:1
+- **status:** todo
+- **files:** src/styles/design-system/colors.css (`--field-ring`,
+  `--field-ring-30`), possibly src/styles/design-system/effects.css
+  (`--focus-ring-field`)
+  (guess — the token is consumed only by `focus.css`)
+- **done when:**
+  - [ ] `--field-ring` reaches at least 3:1 against **both** white and
+        `#F7F7F7`. Both surfaces matter: the `statistics/match-selector.tsx`
+        date inputs sit on `#F7F7F7`. Measured today — `#E5E5E5` is 1.26:1 /
+        1.18:1; `#949494` is the lightest grey clearing white at 3.03:1 but
+        fails `#F7F7F7` at 2.83:1; the existing `--ink-500` `#888888` clears
+        both at 3.54:1 / 3.31:1
+  - [ ] The opaque 1px layer carries the contrast, not the translucent band —
+        a 30% wash of any grey on white cannot reach 3:1 (30% `#888888`
+        computes ~1.35:1), so `--field-ring-30` must not be the load-bearing
+        layer
+  - [ ] The ring is still neutral — no `rgb(59, 130, 246)` reintroduced on any
+        text field, checked with the T1-era contract grep and in the browser
+  - [ ] Verified with real keyboard focus (Tab, not `.focus()`) on a bare
+        input — `auth/form-field.tsx:79` on `/login`, which needs no
+        credentials — and on a native checkbox, `statistics/match-selector.tsx:138`,
+        which is 14px and is where a faint ring fails hardest
+  - [ ] Blue `--focus-ring` on buttons, links, tabs and pills is unchanged
+- **notes:** The pre-branch blue ring measured 1.62:1, so it failed this bar
+  too — this is not a regression the branch invented, but it did move the
+  number the wrong way and this closes it properly for the first time. Expect a
+  visibly heavier ring than today's: 3:1 on white means roughly `#949494` or
+  darker, which is a real change in how a focused field looks. That is the
+  point, but it is worth a look before merging rather than after. `--ink-500`
+  is the obvious candidate precisely because it already exists and already
+  clears both surfaces. Whatever value lands also needs a `.dark` counterpart —
+  `--field-ring` currently has none while `--focus-ring` flips via
+  `--blue-ring-40` (`colors.css:183`).
