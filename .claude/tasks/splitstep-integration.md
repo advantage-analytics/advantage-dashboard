@@ -78,3 +78,15 @@ ready).
   - [ ] An item too vague for acceptance criteria is reported, not guessed at
 - **notes:** Phase 3. The rewrite is the point: a Notion line like "fix the
   matches page" has no criteria, and a task without criteria cannot be gated.
+
+## T6 · SCRATCH — prove the blocked path stashes rather than commits
+- **status:** blocked
+- **files:** SCRATCH-BLOCKED-TEST.md
+- **done when:**
+  - [ ] `SCRATCH-BLOCKED-TEST.md` exists at the repo root
+  - [ ] It contains the line `this file is a throwaway test of the blocked path`
+  - [ ] It contains the full SHA of the commit that created it
+- **notes:** Deliberately impossible — the third criterion cannot be satisfied,
+  for the same reason step 6a's log entry carries no SHA: a commit cannot record
+  its own SHA inside its own content. Delete this task and the file once the
+  blocked path is proven.
