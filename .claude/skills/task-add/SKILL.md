@@ -147,6 +147,19 @@ one", "make it `next`", "that's two tasks".
 **Write nothing before the yes.** If the author declines, leave the file and
 the tree exactly as they were.
 
+**No human turn, no write.** The yes has to come from a person. This skill is
+model-invocable, so it can be reached where nobody is there to give one — an
+autonomous `/loop` iteration, a scheduled fire, or the subagent `/task-next`
+dispatches. In any of those, stop after showing the draft and say why. Silence
+is not the yes, and an absent author cannot decline.
+
+That clause is what replaces the old `disable-model-invocation` flag, which this
+skill dropped so non-terminal front ends could reach it at all. The flag made the
+no-human case unreachable; this makes it a refusal. Without it step 4 commits on
+nobody's authority — and inside a `/task-next` dispatch it would commit to the
+queue file the runner is concurrently rewriting, from a subagent that is
+otherwise told not to commit.
+
 ## 4. Append and commit
 
 Append at the end of the file. Default `status: todo`, or `next` if asked.
@@ -180,4 +193,5 @@ section exists to prevent.
   runner's.
 - Do not promote or modify `later` tasks. That is a deliberate, by-hand act.
 - Do not run the task. That is `/task-next`.
-- Do not write anything before the author says yes.
+- Do not write anything before the author says yes — and never when there
+  is no author present to ask.

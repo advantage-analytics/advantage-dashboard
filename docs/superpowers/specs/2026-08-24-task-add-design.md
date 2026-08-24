@@ -124,9 +124,15 @@ as literal characters matching nothing — the same failure `task-next` document
 for `/loop /task-next`.
 
 Step 3 is what keeps this skill safe without the flag, not the frontmatter: it
-drafts, shows the block, and writes nothing before a yes. `task-next` keeps its
-flag, because `git add -A`, subagent dispatch and stashing have no equivalent
-gate — it is driven from non-terminal front ends by plain text instead.
+drafts, shows the block, and writes nothing before a yes — and refuses outright
+when there is no human turn to supply one, which is precisely the case the flag
+used to make unreachable.
+
+Both halves are load-bearing. A confirm gate on its own still commits on
+nobody's authority in an autonomous loop, a scheduled fire, or the subagent
+`/task-next` dispatches. `task-next` keeps its flag, because `git add -A`,
+subagent dispatch and stashing have no equivalent gate — it is driven from
+non-terminal front ends by plain text instead.
 
 ## Out of scope
 
