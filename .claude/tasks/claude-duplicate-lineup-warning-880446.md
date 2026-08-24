@@ -52,3 +52,31 @@ ready).
   the tone of roster-table's chip: "a question and not an alarm". Shares the
   members → RosterHeaderButtons → AddPlayerDialog plumbing with T1, so whichever
   runs second should reuse it rather than add a second prop path.
+
+## T3 · Route the remaining name comparisons through normalizedPersonName
+- **status:** todo
+- **files:** src/lib/data/opponents-server.ts,
+  src/components/dashboard/schedule/entry-editor.tsx,
+  src/components/dashboard/schedule/dual-form.tsx *(guess)*
+- **done when:**
+  - [ ] All four comparisons pass **both** sides through `normalizedPersonName`:
+        the head-to-head `rosterNames` set and its probe, the `player2_name`
+        fallback in the opponent profile, the label→`userId` lookup in
+        entry-editor, and the bench exclusion in dual-form
+  - [ ] No person-name comparison left in `src/` has a bare `.toLowerCase()` on
+        one side and a trimmed or normalized form on the other; email
+        comparisons are untouched
+  - [ ] A spec under `tests/` covers a roster name with a trailing space and one
+        with a doubled internal space resolving to the same person as its typed
+        form — and fails against the current code
+  - [ ] entry-editor still drops the `userId` when a label matches nobody: a
+        looser rule must never attach a match to the wrong athlete
+  - [ ] `npm run lint`, `npx tsc --noEmit` and `npm test` all pass
+- **notes:** This deliberately changes behaviour — head-to-head rows and lineup
+  entries that silently failed to match will now match. That is the fix. But it
+  is attribution-adjacent: entry-editor resolves a typed label to the `userId` a
+  match gets recorded against, and the head-to-head comment cites
+  `docs/ui-revamp-guardrails.md` §2, so `pipeline-guardrails-reviewer` must run.
+  `splitNames` (`src/lib/schedule/format.ts:90`) trims parts but does not
+  collapse internal whitespace; the roster side does neither.
+  `person-name.ts` has zero imports, so the two client components can call it.
