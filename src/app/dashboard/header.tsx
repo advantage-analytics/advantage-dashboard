@@ -53,10 +53,12 @@ const MATCHES_CRUMB = { label: "Matches", href: "/dashboard/matches" };
  * within a flow (design 9g).
  *
  * Team Home is about the program, so naming it "Team Home" spent the slot
- * restating the rail's highlighted row; the workspace name is the one thing up
- * here that the rest of the chrome does not already say. The two treatments are
- * alternatives, never both — a trail *and* a title in the same slot reads as
- * two competing answers to "where am I".
+ * restating the rail's highlighted row. The workspace name is the better thing
+ * to spend it on — not the only thing that says it, though: the rail shows the
+ * name whenever it is expanded and its trigger carries
+ * `aria-label="Workspace: <name>. Switch workspace"` in every state. The two
+ * treatments are alternatives, never both — a trail *and* a title in the same
+ * slot reads as two competing answers to "where am I".
  *
  * `/dashboard` is deliberately absent: its crumb list is empty today and stays
  * that way.
@@ -172,14 +174,14 @@ export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
     fetchMatchCrumb();
   }, [matchId]);
 
-  // A match detail page is one page. `matches/[matchId]/` has no
-  // sub-directories — only error/layout/loading/not-found/page — so the trail
-  // that used to be built here for insights/performance/statistics/video/visuals
-  // matched routes that cannot be reached.
   const title = WORKSPACE_TITLE_PATHS.has(pathname)
     ? workspaceTitle(active)
     : null;
 
+  // A match detail page is one page. `matches/[matchId]/` has no
+  // sub-directories — only error/layout/loading/not-found/page — so the trail
+  // that used to be built here for insights/performance/statistics/video/visuals
+  // matched routes that cannot be reached.
   const breadcrumbs: { label: string; href?: string }[] = title
     ? []
     : isMatchDetailPage && matchCrumb
@@ -247,11 +249,25 @@ export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
               where there is no squad, so `gap-2` has nothing to space. */}
           {title && (
             <span className="inline-flex items-baseline gap-2">
+              {/* No screen-reader separator between the two spans, and none
+                  needed: both are flex items, so both blockify and already
+                  announce as separate nodes. `element.textContent` runs them
+                  together, but nothing reads that — check the accessibility
+                  tree before "fixing" it. Naming the pair is the rail's job;
+                  its trigger already announces the workspace by name. */}
               <span className="text-[12px] font-medium text-[var(--ink-900)]">
                 {title.name}
               </span>
               {title.qualifier && (
-                <span className="text-micro">{title.qualifier}</span>
+                /* `text-micro` bakes in --ink-500, which colors.css reserves
+                   for decoration at 3.54:1 — and this qualifier is the only
+                   thing telling a school's men's and women's workspaces apart,
+                   so it has to be read. --ink-600 is the documented AA-gap
+                   token, 4.83:1. Inline because the DS class is unlayered and
+                   beats a Tailwind colour utility. */
+                <span className="text-micro" style={{ color: "var(--ink-600)" }}>
+                  {title.qualifier}
+                </span>
               )}
             </span>
           )}
