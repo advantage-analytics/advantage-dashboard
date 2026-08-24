@@ -25,6 +25,7 @@ export default async function NewDualPage() {
   return (
     <DualForm
       ourName={active.name}
+      ourTeam={active.team}
       ladder={ladder}
       defaultSurface={settings?.program.defaultSurface ?? null}
     />

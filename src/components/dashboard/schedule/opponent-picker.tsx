@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
+import { programDisplayName, teamLabel } from "@/lib/data/programs-server";
 
 /**
  * 25b's opponent field.
@@ -18,15 +19,25 @@ import type { ProgramSearchResult } from "@/lib/data/programs-server";
  * are three programs to a GROUP BY and one to a human. The key is what lets a
  * recorded line point at a directory row, and everything on the Opponents page
  * hangs off that.
+ *
+ * It hands back the whole directory row beside the name, rather than a key
+ * and a squad and whatever the next screen needs after that. The caller has
+ * the row in hand here, and three arguments that are only ever null together
+ * put an invariant in prose that the type can hold instead. Null is typed
+ * text — there is no row behind it.
  */
 export function OpponentPicker({
   value,
   onChange,
 }: {
   value: string;
-  onChange: (name: string, programKey: string | null) => void;
+  onChange: (name: string, program: ProgramSearchResult | null) => void;
 }) {
-  const [term, setTerm] = useState("");
+  // Holds the bare school name once a row is picked, so "Change" reopens on a
+  // term the directory can answer. `value` carries the squad by then —
+  // "Louisiana State University Men's Tennis" — and searching for that finds
+  // nothing, which is why the box is never seeded from it.
+  const [term, setTerm] = useState(value);
   const [results, setResults] = useState<ProgramSearchResult[]>([]);
   const [editing, setEditing] = useState(value === "");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -74,7 +85,6 @@ export function OpponentPicker({
         <button
           type="button"
           onClick={() => {
-            setTerm(value);
             setEditing(true);
             queueMicrotask(() => inputRef.current?.focus());
           }}
@@ -103,6 +113,9 @@ export function OpponentPicker({
             if (event.key !== "Enter") return;
             event.preventDefault();
             if (!term.trim()) return;
+            // Exactly what was typed. A coach naming a club side, or typing a
+            // school the directory happens to hold, gets their own words back
+            // with no squad appended and no key attached.
             onChange(term.trim(), null);
             setEditing(false);
           }}
@@ -118,16 +131,38 @@ export function OpponentPicker({
               key={result.programKey}
               type="button"
               onClick={() => {
-                onChange(result.schoolName, result.programKey);
+                // The squad, not the school. Two rows come back for a program
+                // that fields both, and "Louisiana State University" alone is
+                // the same string on either — on the schedule, in the lineup
+                // header, and in the event this dual becomes.
+                onChange(
+                  programDisplayName(result.schoolName, result.team),
+                  result
+                );
+                // The school name, not what was just stored — see `term`.
+                setTerm(result.schoolName);
                 setEditing(false);
                 setResults([]);
               }}
               className="flex w-full cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] px-[11px] py-2.5 text-left transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)]"
             >
-              <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--ink-900)]">
-                {result.schoolName}
+              <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+                <span className="truncate text-[13px] text-[var(--ink-900)]">
+                  {result.schoolName}
+                </span>
+                {/* Beside the name, not out at the meta edge: it is what tells
+                    one identical-looking row from the other. */}
+                <span
+                  className="text-micro shrink-0"
+                  style={{ color: "var(--ink-600)" }}
+                >
+                  {teamLabel(result.team)}
+                </span>
               </span>
-              <span className="text-micro" style={{ color: "var(--ink-600)" }}>
+              <span
+                className="text-micro shrink-0"
+                style={{ color: "var(--ink-600)" }}
+              >
                 {result.division ?? result.state ?? ""}
               </span>
             </button>

@@ -171,17 +171,23 @@ with `/` replaced by `-`). Distinct filenames per branch mean merge conflicts
 on task files are structurally impossible.
 
 - `/task-next` runs one task: a fresh subagent, gated, then committed.
-- `/loop /task-next` — no interval — drains the queue, self-paced.
+- To drain the queue, loop a plain-text instruction — **not** `/loop /task-next`,
+  which a scheduled fire cannot invoke:
+  > `/loop Read .claude/skills/task-next/SKILL.md and follow it exactly — run one task from this branch's queue, then stop.`
 - The queue file is yours; append to it any time, including while the loop
   runs. The runner only ever rewrites a task's `status:` line.
 - `.claude/tasks/<slug>.log.md` is the runner's. Do not hand-edit it.
 - Status values: `todo`, `next`, `doing`, `done` and `blocked` are the
   runner-driven ones. `later` is a deferred task — `/task-next`'s picker never
-  selects it automatically, so a `/loop /task-next` drain skips straight past
+  selects it automatically, so a loop drain skips straight past
   it. Promote it to `todo` by hand when it's actually ready to run.
 
 Every task needs a `done when:` list. It is the contract
 `task-completion-reviewer` gates against, and a task without one is skipped.
+
+`/task-next`, `/task-add` and `/pr-check` are typed to Claude, not to a shell.
+Never present them inside a ```bash fence — the app renders a fenced shell
+block as a Run button, and running one there fails with `command not found`.
 
 ## Conventions
 
