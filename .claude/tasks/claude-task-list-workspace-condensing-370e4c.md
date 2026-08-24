@@ -144,3 +144,30 @@ ready).
   TASK WRITES TO THE LIVE DATABASE. T4's lesson is that the migration is
   applied before the gate runs, and a gate failure cannot undo it — run this
   one deliberately.
+
+## T7 · Bound match attribution to the program's own roster
+- **status:** todo
+- **files:** a new supabase/migrations/ file,
+  src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts,
+  src/lib/data/match-detail-server.ts and the match-detail hero (guess)
+- **done when:**
+  - [ ] A match inserted with `program_id` set is refused unless `player1_id`
+        names someone on that program — a `program_players` row of it or a
+        `program_members` user of it — enforced in the database, not only by
+        the wizard's roster picker
+  - [ ] A player can still file a match for a teammate on their own program,
+        and staff still can — the intended behaviour is preserved
+  - [ ] An attempt to attribute a match to a uuid belonging to nobody on the
+        program surfaces a written message, not a raw `42501` rendered as
+        "Database error: …"
+  - [ ] Match detail shows who uploaded a match when `created_by` differs from
+        the player it is attributed to, so a teammate can see where it came from
+  - [ ] Personal matches are unaffected — an insert with `program_id is null`
+        behaves exactly as it does today
+- **notes:** From T5's blocked run. Uploading for a teammate is intended (the
+  roster page already says so), so this bounds attribution rather than closing
+  the `?player=` branch — T5's criterion 3 stands as written. Today nothing
+  below the picker constrains `player1_id`, so a crafted insert can name any
+  uuid at all. THIS TASK WRITES TO THE LIVE DATABASE. Land it before re-queuing
+  T5: with the constraint in place, the `rls-boundary-reviewer` finding that
+  blocked T5 is answered at the layer it asked for.
