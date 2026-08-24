@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { advButton } from "@/lib/ui/adv-button";
-import { AddPlayerDialog, type RosterPerson } from "./add-player-dialog";
+import { AddPlayerDialog } from "./add-player-dialog";
 import { RosterInviteDialog } from "./roster-invite-dialog";
 import type { ManagedPlayer } from "./invite-target-picker";
-import type { SeatUsage } from "@/lib/data/team-roster-server";
+import type { RosterMember, SeatUsage } from "@/lib/data/team-roster-server";
 
 /**
  * The Roster page's two ways of growing a squad.
@@ -30,7 +30,7 @@ export function RosterHeaderButtons({
    * Everyone already on the roster, so Add player can name who holds the line
    * that was picked and who already answers to the name that was typed.
    */
-  roster: RosterPerson[];
+  roster: RosterMember[];
 }) {
   const [inviting, setInviting] = useState(false);
   const [addingPlayer, setAddingPlayer] = useState(false);

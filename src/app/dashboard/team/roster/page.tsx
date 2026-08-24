@@ -58,20 +58,6 @@ export default async function RosterPage() {
 
   const unclaimed = managedPlayers.length;
 
-  // What Add player needs to say "you may already have this" before the coach
-  // submits, rather than letting them discover it on the table afterwards: who
-  // holds which line, and who already answers to a given name. Every live
-  // member is here — the roster is the whole squad, and a pending invite has no
-  // row, so it holds neither a line nor a name. Nothing is deduplicated and
-  // nothing is filtered: spots are shareable and names are repeatable, which is
-  // the thing the two notes are about.
-  const rosterPeople = roster.members.map((m) => ({
-    name: m.name,
-    email: m.email,
-    lineupSpot: m.lineupSpot,
-    isPlayer: m.role === "player",
-  }));
-
   const standing = [
     `${playerCount} ${playerCount === 1 ? "player" : "players"}`,
     unclaimed > 0 && `${unclaimed} without an account`,
@@ -98,10 +84,15 @@ export default async function RosterPage() {
           </div>
 
           {canManage && (
+            /* `roster` is the same array the table below already receives,
+               not a projection of it — one copy in the payload, and one place
+               to change when a note wants another field. Nothing is filtered:
+               spots are shareable and names repeatable, which is the thing the
+               two notes are about. */
             <RosterHeaderButtons
               managedPlayers={managedPlayers}
               seats={roster.seats}
-              roster={rosterPeople}
+              roster={roster.members}
             />
           )}
         </div>

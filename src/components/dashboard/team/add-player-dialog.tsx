@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { GitMerge, Loader2, Upload, Users } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import type { RosterMember } from "@/lib/data/team-roster-server";
 import {
   SettingsField,
   SettingsUnderlineInput,
@@ -70,30 +72,40 @@ import {
  * `DialogProblem`.
  */
 
-/**
- * One live roster row, as much of it as this dialog needs.
- *
- * One list rather than a list per note: both notes ask about the same roster,
- * and two props would be two chances for the page to pass one and forget the
- * other.
- */
-export interface RosterPerson {
-  name: string;
-  /** A coach-managed profile may genuinely have no address on file. */
-  email: string | null;
-  /** Their line, or null where the program has never set one. */
-  lineupSpot: number | null;
-  /**
-   * Staff hold lines too, so everyone stays in this list — but only players
-   * can be the duplicate the name note is about, which is the same rule the
-   * roster's own duplicate pass applies in `team-roster-server.ts`.
-   */
-  isPlayer: boolean;
+/** The field that tells two same-named rows apart, or the absence of it. */
+function emailNote(person: RosterMember): string {
+  return person.email?.trim() || "no email on file";
 }
 
-/** The field that tells two same-named rows apart, or the absence of it. */
-function emailNote(person: RosterPerson): string {
-  return person.email?.trim() ? person.email.trim() : "no email on file";
+/**
+ * The quiet line under a field: an icon and a sentence, no fill, neutral ink.
+ *
+ * Deliberately not `DialogProblem`. That row is red and `role="alert"`, and it
+ * is reserved for what `add_program_player` refused; these are observations a
+ * coach is free to ignore — the register the roster table's "Possible
+ * duplicate" chip already uses for the same kind of question. One component
+ * rather than two copies, so the spacing the two share cannot drift.
+ *
+ * Visual only, deliberately: it carries no live-region role. Both notes are
+ * mounted with their text rather than filled in later, and a live region that
+ * arrives already populated is one assistive tech never announces — it reports
+ * *changes* to a region it was already watching. The announcing is done by the
+ * always-mounted `sr-only` region below, the same split `performance-tracker`
+ * uses.
+ */
+function RosterNote({
+  icon: Icon,
+  children,
+}: {
+  icon: LucideIcon;
+  children: React.ReactNode;
+}) {
+  return (
+    <p className="-mt-1 flex items-start gap-2 text-[11px] leading-[1.6] text-[var(--ink-600)]">
+      <Icon className="mt-[3px] size-3.5 shrink-0" strokeWidth={1.5} aria-hidden />
+      <span>{children}</span>
+    </p>
+  );
 }
 
 /** "Maya Chen" · "Maya Chen and Alex Ruiz" · "Maya Chen and 2 others". */
@@ -153,7 +165,7 @@ export function AddPlayerDialog({
   /** What the program's allowance looks like right now, stated by the caller. */
   seatNote: string;
   /** Who is on the roster already, so a repeat can say who it would repeat. */
-  roster: RosterPerson[];
+  roster: RosterMember[];
 }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -163,6 +175,19 @@ export function AddPlayerDialog({
   const [alsoInvite, setAlsoInvite] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  /**
+   * The profile this dialog just created, while it is still open.
+   *
+   * `add_program_player` revalidates the roster before returning, so on the
+   * invite-failure path — the one path that succeeds at the write and stays
+   * open — the refreshed `roster` prop already contains the row we just
+   * wrote, with the fields that produced it still on screen. Both notes would
+   * then warn the coach off their own successful write, directly above the red
+   * error about it. Excluding that one row is narrower than suppressing the
+   * notes: a genuine second holder of the same line, or a same-named teammate
+   * who was already there, is still named.
+   */
+  const [createdProfileId, setCreatedProfileId] = useState<string | null>(null);
 
   function reset() {
     setFirstName("");
@@ -172,9 +197,15 @@ export function AddPlayerDialog({
     setEmail("");
     setAlsoInvite(false);
     setError(null);
+    setCreatedProfileId(null);
   }
 
   const ready = firstName.trim() !== "" && lastName.trim() !== "";
+
+  const others =
+    createdProfileId === null
+      ? roster
+      : roster.filter((person) => person.profileId !== createdProfileId);
 
   // "Not set" is `""`, which `Number("")` would turn into 0 and match nothing —
   // but the empty check says so outright rather than relying on that. A member
@@ -183,7 +214,7 @@ export function AddPlayerDialog({
   const spotTakenBy =
     lineupSpot === ""
       ? []
-      : roster
+      : others
           .filter((person) => person.lineupSpot === Number(lineupSpot))
           .map((person) => person.name);
 
@@ -198,10 +229,31 @@ export function AddPlayerDialog({
   const sameName =
     typedName === ""
       ? []
-      : roster.filter(
+      : others.filter(
           (person) =>
-            person.isPlayer && normalizedPersonName(person.name) === typedName
+            person.role === "player" &&
+            normalizedPersonName(person.name) === typedName
         );
+
+  // Built as strings rather than inline JSX so the visible note and the live
+  // region below cannot drift into saying two different things.
+  const nameNote =
+    sameName.length === 0
+      ? null
+      : `${
+          sameName.length === 1
+            ? `${sameName[0].name} is already on this roster`
+            : `${sameName.length} people on this roster are already called ${sameName[0].name}`
+        } — ${sameName
+          .map(emailNote)
+          .join(", ")}. If this is somebody else, you can still add them.`;
+
+  const spotNote =
+    spotTakenBy.length === 0
+      ? null
+      : `${nameList(spotTakenBy)} ${
+          spotTakenBy.length === 1 ? "already holds" : "already hold"
+        } #${lineupSpot}. Spots can be shared while you reshuffle — you can still use this one.`;
 
   function submit() {
     setError(null);
@@ -218,6 +270,8 @@ export function AddPlayerDialog({
         setError(result.error);
         return;
       }
+
+      setCreatedProfileId(result.profileId);
 
       // The row exists now whatever happens next. If the invitation fails, say
       // so and leave the dialog open — closing on a half-done action would
@@ -281,6 +335,14 @@ export function AddPlayerDialog({
         </>
       }
     >
+      {/* Mounted for as long as the dialog is, so a note arriving later is a
+          change to a region assistive tech is already watching — which is the
+          only kind it announces. `sr-only` is absolutely positioned, so it
+          takes no room in the dialog's 18px flex rhythm. */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {[nameNote, spotNote].filter(Boolean).join(" ")}
+      </div>
+
       <div className="grid grid-cols-2 gap-4">
         <SettingsField label="First name">
           <SettingsUnderlineInput
@@ -302,26 +364,7 @@ export function AddPlayerDialog({
           to three lines and shoves everything under it around as the coach
           types. GitMerge rather than a person glyph — it is the mark the
           roster row already carries for this exact question. */}
-      {sameName.length > 0 && (
-        <p
-          role="status"
-          className="-mt-1 flex items-start gap-2 text-[11px] leading-[1.6] text-[var(--ink-600)]"
-        >
-          <GitMerge
-            className="mt-[3px] size-3.5 shrink-0"
-            strokeWidth={1.5}
-            aria-hidden
-          />
-          <span>
-            {sameName.length === 1
-              ? `${sameName[0].name} is already on this roster`
-              : `${sameName.length} people on this roster are already called ${sameName[0].name}`}
-            {" — "}
-            {sameName.map(emailNote).join(", ")}. If this is somebody else, you
-            can still add them.
-          </span>
-        </p>
-      )}
+      {nameNote && <RosterNote icon={GitMerge}>{nameNote}</RosterNote>}
 
       <div className="grid grid-cols-2 gap-4">
         <SettingsField label="Class year">
@@ -360,24 +403,7 @@ export function AddPlayerDialog({
       {/* Full width rather than in the field's hint slot: the cell is half of a
           440px dialog, and a name wrapped over three lines would shove the
           email field down every time a coach changed the spot. */}
-      {spotTakenBy.length > 0 && (
-        <p
-          role="status"
-          className="-mt-1 flex items-start gap-2 text-[11px] leading-[1.6] text-[var(--ink-600)]"
-        >
-          <Users
-            className="mt-[3px] size-3.5 shrink-0"
-            strokeWidth={1.5}
-            aria-hidden
-          />
-          <span>
-            {nameList(spotTakenBy)}{" "}
-            {spotTakenBy.length === 1 ? "already holds" : "already hold"} #
-            {lineupSpot}. Spots can be shared while you reshuffle — you can
-            still use this one.
-          </span>
-        </p>
-      )}
+      {spotNote && <RosterNote icon={Users}>{spotNote}</RosterNote>}
 
       <SettingsField
         label="Email · optional"

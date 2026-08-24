@@ -25,6 +25,7 @@ import {
   DialogProblem,
   RosterDialog,
 } from "@/components/dashboard/team/dialog-shell";
+import { normalizedPersonName } from "@/lib/data/person-name";
 import type { RosterMember } from "@/lib/data/team-roster-server";
 
 /**
@@ -116,8 +117,8 @@ export function MergeProfilesDialog({
   const ready =
     !bothClaimed &&
     preview !== null &&
-    confirmName.trim().toLowerCase().replace(/\s+/g, " ") ===
-      surviving.name.trim().toLowerCase().replace(/\s+/g, " ");
+    normalizedPersonName(confirmName) ===
+      normalizedPersonName(surviving.name);
 
   function submit() {
     if (!surviving || !absorbed) return;
