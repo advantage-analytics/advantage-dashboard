@@ -97,7 +97,10 @@ function toResult(row: Record<string, unknown>): ProgramSearchResult {
  * Goes through `search_programs()` rather than selecting from the table,
  * because each row needs its owner's display name and an anonymous visitor
  * cannot read `users`. One definer call for the page of results, not one per
- * row. The prefix-vs-contains reasoning lives with the function.
+ * row. The term matches anywhere in the school name or in its abbreviation,
+ * prefix hits first — "angeles" has to find University of California, Los
+ * Angeles. What that costs, and why the floor below is two characters rather
+ * than one, is measured in the migration that defines the function.
  */
 export async function searchPrograms(
   supabase: SupabaseClient,

@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { AlertTriangle } from "lucide-react";
 import { advButton } from "@/lib/ui/adv-button";
 import { EventShell } from "@/components/dashboard/schedule/event-shell";
 import { OpponentPicker } from "@/components/dashboard/schedule/opponent-picker";
@@ -16,7 +17,15 @@ import {
 } from "@/components/dashboard/schedule/field-row";
 import { createDual } from "@/lib/schedule/actions";
 import { splitNames } from "@/lib/schedule/format";
+import { programDisplayName } from "@/lib/data/programs-server";
+// `teamLabel` exists twice under two signatures. This is the workspace one,
+// which takes a nullable squad and answers null for null. The programs-server
+// twin takes a plain string and answers "Men's" to anything that is not
+// "womens" — including null, which here would print a squad nobody chose into
+// a warning about squads.
+import { teamLabel, type Workspace } from "@/lib/workspace/types";
 import type { LadderPlayer } from "@/lib/data/roster-server";
+import type { ProgramSearchResult } from "@/lib/data/programs-server";
 import type { EventSite } from "@/lib/schedule/types";
 
 const SINGLES_SLOTS = ["S1", "S2", "S3", "S4", "S5", "S6"];
@@ -51,10 +60,14 @@ const FORMATS = [
  */
 export function DualForm({
   ourName,
+  ourTeam,
   ladder,
   defaultSurface,
 }: {
   ourName: string;
+  /** The active workspace's squad, so a men's coach who picks the women's row
+   *  of the same school is told before nine lines are written under it. */
+  ourTeam: Workspace["team"];
   ladder: LadderPlayer[];
   defaultSurface: string | null;
 }) {
@@ -67,7 +80,10 @@ export function DualForm({
   // typing. Null is a real answer — a club side or a school the ITA scrape
   // missed has no row — and the line is still recorded, just without a rival
   // to aggregate it under.
-  const [opponentProgramKey, setOpponentProgramKey] = useState<string | null>(null);
+  // Only its key is sent. The rest of the row is here to be compared against
+  // our own squad, which `createDual` has no field to carry and no reason to.
+  const [opponentProgram, setOpponentProgram] =
+    useState<ProgramSearchResult | null>(null);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [site, setSite] = useState<EventSite>("home");
   const [surface, setSurface] = useState(defaultSurface || "Hard");
@@ -96,6 +112,20 @@ export function DualForm({
     }))
     .filter((row) => row.ours.length > 0 && row.theirs.length > 0);
 
+  // Two squads at one school are two programs with two budgets, and the
+  // directory returns both rows under the same school name. Picking the wrong
+  // one writes a dual that looks right on the schedule and aggregates under a
+  // rival nobody played. Null on either side is a squad the dataset never told
+  // us about, which is not a mismatch — and typed text has no row at all. The
+  // squad itself rather than a boolean, so the warning can name it without
+  // asking TypeScript to take the guard's word for the row being there.
+  const mismatchedSquad =
+    ourTeam !== null &&
+    opponentProgram !== null &&
+    opponentProgram.team !== ourTeam
+      ? opponentProgram.team
+      : null;
+
   function submit() {
     setError(null);
     const [bestOf, adScoring] = format.split("|");
@@ -103,7 +133,7 @@ export function DualForm({
     startTransition(async () => {
       const result = await createDual({
         opponent,
-        opponentProgramKey,
+        opponentProgramKey: opponentProgram?.programKey ?? null,
         date,
         site,
         surface,
@@ -167,11 +197,41 @@ export function DualForm({
           <span className="eyebrow">New dual · opponent</span>
           <OpponentPicker
             value={opponent}
-            onChange={(name, programKey) => {
+            onChange={(name, program) => {
               setOpponent(name);
-              setOpponentProgramKey(programKey);
+              setOpponentProgram(program);
             }}
           />
+          {mismatchedSquad !== null ? (
+            // Advisory, and deliberately nothing more: Create stays enabled and
+            // the payload is untouched. A men's program really can host the
+            // women's side of another school, and a form that refused it would
+            // be wrong more often than the coach is.
+            <div
+              role="status"
+              className="mt-3 flex items-start gap-2.5 rounded-[var(--radius-element)] border border-[var(--border-medium)] bg-[var(--surface-subtle)] px-3 py-2.5"
+            >
+              <AlertTriangle
+                strokeWidth={1.5}
+                className="mt-px size-3.5 shrink-0 text-[var(--ink-700)]"
+              />
+              <p
+                className="text-[12px] leading-[1.5]"
+                style={{ color: "var(--ink-700)" }}
+              >
+                <span
+                  className="font-medium"
+                  style={{ color: "var(--ink-900)" }}
+                >
+                  {teamLabel(ourTeam)} squad, {teamLabel(mismatchedSquad)}{" "}
+                  opponent.
+                </span>{" "}
+                This workspace is {programDisplayName(ourName, ourTeam)} and you
+                picked {opponent}. Create the dual anyway if that is the
+                fixture — nothing here is blocked.
+              </p>
+            </div>
+          ) : null}
           <FieldRow>
             <FieldCellText label="Date" value={date} onChange={setDate} type="date" mono />
             <FieldCellSelect
