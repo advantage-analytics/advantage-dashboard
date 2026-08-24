@@ -106,3 +106,11 @@ workers/*/.wrangler/
 
 # design references
 figma/design-refs/
+
+# supabase cli
+#
+# `supabase/.temp/` is the CLI's local link state — project ref, pooler URL,
+# and the service versions it saw last. Any `--linked` command writes it,
+# including ones a gate subagent runs, so it turns up mid-run in a tree that
+# has to be clean before a task commits. Regenerated on demand.
+supabase/.temp/
