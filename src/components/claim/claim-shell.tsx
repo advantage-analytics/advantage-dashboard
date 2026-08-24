@@ -261,9 +261,11 @@ export const CLAIM_BUTTON = advButton("primary");
  * The form chrome. Here rather than in each form because three files had
  * byte-identical copies of both, and this file is already where the flow's
  * shared styling lives.
+ *
+ * No focus treatment of its own — focus.css covers every tag this lands on.
  */
 export const CLAIM_FIELD =
-  "h-[38px] w-full rounded-[var(--radius-element)] border border-[var(--border-field)] bg-[var(--surface-card)] px-3 text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)] focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue-ring-40)]";
+  "h-[38px] w-full rounded-[var(--radius-element)] border border-[var(--border-field)] bg-[var(--surface-card)] px-3 text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)]";
 
 export const CLAIM_LABEL = "mb-2 block text-[11px] text-[var(--ink-700)]";
 

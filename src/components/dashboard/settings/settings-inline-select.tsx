@@ -33,7 +33,9 @@ export function SettingsInlineSelect<T extends string>({
     <div
       className={cn(
         "relative flex h-[30px] shrink-0 items-center gap-2 rounded-[6px] border border-[var(--border-field)] px-3",
-        "focus-within:border-[var(--blue)]",
+        // The `<select>` below is opacity-0, so its own ring is invisible —
+        // this box carries the indicator instead.
+        "focus-within:shadow-[var(--focus-ring-field)]",
         disabled && "opacity-60",
         className
       )}

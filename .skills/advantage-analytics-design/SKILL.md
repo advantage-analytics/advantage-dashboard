@@ -654,9 +654,51 @@ flex items-center gap-2.5
 
 ### Focus
 
+Buttons, links, tabs, pills — every control that is not a text field:
+
 ```
 focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none
 ```
+
+Text fields are the carve-out: `<input>`, `<textarea>` and native `<select>`
+take a neutral ring, because a six-field form would otherwise spend the accent
+six times over.
+
+**Write nothing.** `src/styles/design-system/focus.css` already gives those
+three tags `--focus-ring-field` and gives everything else `--focus-ring`. You
+do not add a focus class to a text field, and a hand-rolled `<input>` is
+covered as-is.
+
+That file is imported outside any `@layer` while Tailwind utilities live in
+`@layer utilities`, and unlayered CSS wins regardless of specificity — so a
+`focus-visible:ring-*` utility on a text field does **not** override the
+default, it is silently discarded. Its `:where()` wrapper keeps specificity at
+0, but that only matters against other unlayered rules. To override, change the
+token or write unlayered CSS.
+
+**Composite fields are the exception to "write nothing."** When the input sits
+inside a bordered box and the box is what reads as the field, the ring belongs
+on the box — otherwise it draws inset, floating inside the border. Put
+`focus-within:shadow-[var(--focus-ring-field)]` on the wrapper and
+`data-focus-ring="none"` on the inner control so it does not draw a second
+ring. `claim/program-search.tsx` and `team/invite-dialog.tsx` are the worked
+examples.
+
+Three gotchas, in the order you will actually hit them:
+
+- The split is keyed on tag name, so `input[type=checkbox]` and
+  `input[type=radio]` take the **neutral** ring even though they are actionable
+  controls the rest of the system rings in blue. Two live call sites today.
+- `border-color` is not part of the ring, so `focus:border-[var(--blue)]` still
+  turns a field blue. That is the deliberate underline vocabulary on auth
+  fields; on a boxed field it is a leak.
+- Radix's `SelectTrigger` is a `<button>`, so it takes the blue ring rather
+  than the carve-out. Latent — that component has no call sites yet — but it
+  will bite whoever adds the first one.
+
+The rule exists because the reset leaves `outline: none` on everything, which
+left keyboard users with no focus indicator at all (WCAG 2.4.7 AA). Recolour a
+ring; never delete one.
 
 ### Disabled
 
