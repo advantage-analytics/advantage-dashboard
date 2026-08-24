@@ -46,15 +46,19 @@ name and a one-line scope:
 
 > Scope: <one line — what this branch owns>
 
-Run one with `/task-next`. Drain the file with `/loop /task-next`.
+Run one with `/task-next`. To drain the file, loop a plain-text instruction —
+**not** `/loop /task-next`, which a scheduled fire cannot invoke:
+
+> `/loop Read .claude/skills/task-next/SKILL.md and follow it exactly — run one task from this branch's queue, then stop.`
+
 Append freely while it runs: the queue is re-read at the start of every
 iteration, and the runner only ever rewrites a task's `status:` line.
 Mark a task `next` to jump the queue.
 
 Status values: `todo` (eligible to run), `next` (jump the queue), `doing` /
 `done` / `blocked` (written by the runner around a dispatch), and `later`
-(deferred — `/task-next`'s picker never selects it, so `/loop /task-next`
-drains straight past it; promote a task to `todo` by hand once it's actually
+(deferred — `/task-next`'s picker never selects it, so a loop drain skips
+straight past it; promote a task to `todo` by hand once it's actually
 ready).
 ```
 

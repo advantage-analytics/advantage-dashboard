@@ -1,6 +1,6 @@
 ---
 name: task-next
-description: Run the next task from this branch's queue in .claude/tasks/ — one task, one subagent, gated, then committed. Use when working through a queued task file. Drain the whole queue with /loop /task-next.
+description: Run the next task from this branch's queue in .claude/tasks/ — one task, one subagent, gated, then committed. Use when working through a queued task file. See the file for how to drain the whole queue on a loop.
 disable-model-invocation: true
 argument-hint: "[optional: a task id like T3, to run that one instead of the next]"
 ---
@@ -9,8 +9,28 @@ argument-hint: "[optional: a task id like T3, to run that one instead of the nex
 
 One task. One subagent. One commit, or one stash. Then stop.
 
-Stopping is what makes `/loop /task-next` safe: the loop re-enters this skill
+Stopping is what makes looping safe: each iteration re-enters this procedure
 for the next task rather than letting one context accumulate all of them.
+
+## Draining the queue — and why it is not `/loop /task-next`
+
+This skill sets `disable-model-invocation: true` because it commits, dispatches
+subagents, and can stash your work. It must never fire on an ambiguous sentence.
+
+That same flag stops a scheduled `/loop` fire from invoking it. Claude Code's
+scheduled-tasks documentation is explicit: a scheduled fire only runs skills the
+model may invoke on its own, and a skill marked `disable-model-invocation: true`
+"reaches Claude as plain text instead of executing". So `/loop /task-next` runs
+exactly once — the time you typed it — and then silently does nothing on every
+fire after. It does not error; it just stops draining.
+
+Loop a plain-text instruction instead. Plain text is precisely what a scheduled
+fire *can* act on:
+
+> `/loop Read .claude/skills/task-next/SKILL.md and follow it exactly — run one task from this branch's queue, then stop.`
+
+**Do not tidy that back into `/loop /task-next`.** It reads better and it does
+not work.
 
 ## 1. Locate the queue
 
