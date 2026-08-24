@@ -41,7 +41,7 @@ ready).
   search-command-palette.tsx, so they are out of scope here.
 
 ## T2 · Attach the squad to school names in the opponent pickers
-- **status:** todo
+- **status:** done
 - **files:** src/components/dashboard/schedule/opponent-picker.tsx,
   src/components/dashboard/matches/new-match-wizard/OpponentProgramField.tsx,
   src/lib/data/programs-server.ts (helpers already there) — guess

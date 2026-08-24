@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
+import { programDisplayName, teamLabel } from "@/lib/data/programs-server";
 
 /**
  * Which program the opponent plays for.
@@ -25,6 +26,13 @@ import type { ProgramSearchResult } from "@/lib/data/programs-server";
  * Deliberately NOT `matches.player2_id`: that column is in the `matches` SELECT
  * policy and would hand the opponent our statistics the day they claim the
  * profile. Migration 20260823090000 has the long version.
+ *
+ * ── Why the squad is part of the name ───────────────────────────────────────
+ * A school that fields both squads comes back as two rows carrying one school
+ * name, so the list and the chip both say which one — `programDisplayName()`
+ * and `teamLabel()`, the same two the claim flow's list uses. The chip is a
+ * label only: `opponentProgramKey` beside it is what the upload resolves and
+ * writes, and it identifies the squad on its own.
  */
 export function OpponentProgramField({
   schoolName,
@@ -133,15 +141,25 @@ export function OpponentProgramField({
               // the field closes out from under the pointer.
               onMouseDown={(event) => {
                 event.preventDefault();
-                onChange(result.schoolName, result.programKey);
+                onChange(
+                  programDisplayName(result.schoolName, result.team),
+                  result.programKey
+                );
                 setOpen(false);
                 setResults([]);
                 setTerm("");
               }}
               className="flex w-full cursor-pointer items-center gap-2 rounded-[var(--radius-element)] px-2 py-1.5 text-left transition-colors hover:bg-[#F7F7F7]"
             >
-              <span className="min-w-0 flex-1 truncate text-[12px] text-[#0D0D0D]">
-                {result.schoolName}
+              <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+                <span className="truncate text-[12px] text-[#0D0D0D]">
+                  {result.schoolName}
+                </span>
+                {/* Beside the name, not out at the meta edge: it is what tells
+                    one identical-looking row from the other. */}
+                <span className="shrink-0 text-[10px] text-[#888888]">
+                  {teamLabel(result.team)}
+                </span>
               </span>
               <span className="shrink-0 text-[10px] text-[#888888]">
                 {result.division ?? result.state ?? ""}

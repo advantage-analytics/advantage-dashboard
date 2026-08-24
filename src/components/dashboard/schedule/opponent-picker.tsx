@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
+import { programDisplayName, teamLabel } from "@/lib/data/programs-server";
 
 /**
  * 25b's opponent field.
@@ -29,6 +30,11 @@ export function OpponentPicker({
   const [term, setTerm] = useState("");
   const [results, setResults] = useState<ProgramSearchResult[]>([]);
   const [editing, setEditing] = useState(value === "");
+  // The bare school name behind whichever row was picked, so "Change" can put
+  // the coach back where they started. `value` carries the squad by then —
+  // "Louisiana State University Men's Tennis" — and the directory matches on
+  // the school name, so seeding the search with it would find nothing.
+  const [pickedSchool, setPickedSchool] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -74,7 +80,7 @@ export function OpponentPicker({
         <button
           type="button"
           onClick={() => {
-            setTerm(value);
+            setTerm(pickedSchool ?? value);
             setEditing(true);
             queueMicrotask(() => inputRef.current?.focus());
           }}
@@ -103,7 +109,11 @@ export function OpponentPicker({
             if (event.key !== "Enter") return;
             event.preventDefault();
             if (!term.trim()) return;
+            // Exactly what was typed. A coach naming a club side, or typing a
+            // school the directory happens to hold, gets their own words back
+            // with no squad appended and no key attached.
             onChange(term.trim(), null);
+            setPickedSchool(null);
             setEditing(false);
           }}
           placeholder="Search programs, or type any opponent"
@@ -118,16 +128,37 @@ export function OpponentPicker({
               key={result.programKey}
               type="button"
               onClick={() => {
-                onChange(result.schoolName, result.programKey);
+                // The squad, not the school. Two rows come back for a program
+                // that fields both, and "Louisiana State University" alone is
+                // the same string on either — on the schedule, in the lineup
+                // header, and in the event this dual becomes.
+                onChange(
+                  programDisplayName(result.schoolName, result.team),
+                  result.programKey
+                );
+                setPickedSchool(result.schoolName);
                 setEditing(false);
                 setResults([]);
               }}
               className="flex w-full cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] px-[11px] py-2.5 text-left transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)]"
             >
-              <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--ink-900)]">
-                {result.schoolName}
+              <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+                <span className="truncate text-[13px] text-[var(--ink-900)]">
+                  {result.schoolName}
+                </span>
+                {/* Beside the name, not out at the meta edge: it is what tells
+                    one identical-looking row from the other. */}
+                <span
+                  className="text-micro shrink-0"
+                  style={{ color: "var(--ink-600)" }}
+                >
+                  {teamLabel(result.team)}
+                </span>
               </span>
-              <span className="text-micro" style={{ color: "var(--ink-600)" }}>
+              <span
+                className="text-micro shrink-0"
+                style={{ color: "var(--ink-600)" }}
+              >
                 {result.division ?? result.state ?? ""}
               </span>
             </button>

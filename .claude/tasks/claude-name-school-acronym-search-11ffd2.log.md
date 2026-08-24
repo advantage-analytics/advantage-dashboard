@@ -28,3 +28,35 @@ is the runner's. Newest entries at the bottom.
   Caveat the diff cannot show: the SQL text recorded in `schema_migrations`
   still carries the draft filename stamp inside a comment, and the header's cost
   paragraph was tightened after applying. The executable SQL is identical.
+
+## T2 · Attach the squad to school names in the opponent pickers — done
+- **gate:** mechanical green (lint 0 errors / 38 warnings, the standing
+  baseline; tsc clean; 66/66 tests). `task-completion-reviewer` VERDICT: pass —
+  all four criteria met, each traced to the call site rather than the stale line
+  numbers in the task, and the one unasked-for change (`pickedSchool`) judged
+  justified rather than scope creep. `pipeline-guardrails-reviewer` ran (the
+  diff is two dashboard components, one of them in the upload wizard) and
+  reported no findings: the three misattributing wizard inputs are untouched,
+  `programKey` still resolves identity at both call sites, and the squad label
+  reuses each component's existing meta token. `rls-boundary-reviewer` skipped:
+  nothing under src/lib/supabase/, src/lib/data/, src/app/api/ or
+  supabase/migrations/, and no new table, view or query.
+- **changed:** Both opponent pickers — the schedule's
+  `opponent-picker.tsx` and the wizard's `OpponentProgramField.tsx` — now show
+  the squad beside the school in each result row via `teamLabel()`, so the two
+  Louisiana State University rows are distinguishable, and store
+  `programDisplayName(...)` ("Louisiana State University Men's Tennis") in place
+  of the bare school name. `programKey` still travels beside it untouched, and
+  the free-text Enter path still stores exactly what was typed. One state,
+  `pickedSchool`, was added to keep the schedule picker's "Change" button
+  seeding the search box with the bare school name — without it the stored
+  squad-qualified string would search the directory and find nothing.
+  Consequence worth knowing: for a dual, that string is persisted as
+  `program_events.name` and copied into `matches.tournament_name`, so schedule
+  rows, breadcrumbs and match headers now read "vs Louisiana State University
+  Men's Tennis". Correct and unambiguous, but longer; if a short form is ever
+  wanted back, the place to fix it is the render, not the stored value, which is
+  the only thing telling the two duals apart. Also noted by the guardrails
+  reviewer, and not reachable today: if `OpponentPicker` ever gains an edit path
+  for a saved dual, `pickedSchool` starts empty and "Change" would seed the
+  qualified string again.
