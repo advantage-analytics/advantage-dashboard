@@ -90,3 +90,39 @@ is the runner's. Newest entries at the bottom.
   same-named `programs-server` twin (which answers "Men's" to null); the import
   carries a comment saying why, since the guard means either would work today
   and a future edit outside that guard would not.
+
+## T4 · Take prefix hits first, and correct the cost the header claims — done
+- **gate:** mechanical green (lint 0 errors / 38 warnings, the standing
+  baseline; tsc clean; 66/66 tests). `task-completion-reviewer` VERDICT: pass —
+  all five criteria, and it did not take the migration's word for any of them:
+  it confirmed the live function body matches the file, rebuilt the predecessor
+  under a temporary shadow function to diff row order term by term, and
+  re-measured every timing in the header itself, reproducing each within noise.
+  `rls-boundary-reviewer` ran (the diff is a migration redefining a definer
+  function granted to `anon`) and reported no findings — projection, grants and
+  `search_path = ''` unchanged, `owner_user_id` confirmed unable to reach the
+  result through the new CTEs, and the two-branch union proved a subset of the
+  old predicate. It could not reach the live database from its tool set, so the
+  runner closed that gap directly: `prosecdef`, `proconfig`, the anon and
+  authenticated grants and both indexes verified live, and `get_advisors`
+  returned nothing new — the only two lints naming `search_programs` are the
+  pre-existing definer-executable WARNs every RPC here carries.
+  `pipeline-guardrails-reviewer` skipped: no dashboard, component or wizard
+  surface in the diff.
+- **changed:** New migration `20260824181009_search_programs_prefix_first.sql`,
+  applied live as version 20260824181009. `search_programs()` is now two
+  branches: prefix hits off `programs_school_name_prefix_idx`, then the contains
+  scan only when the prefix cannot fill the page, gated by an uncorrelated
+  sub-select so the planner drops the scan entirely as a One-Time Filter. The
+  prefix test is written as `~>=~` / `~<~` rather than `like term || '%'`,
+  because Postgres only rewrites LIKE into an index range for a constant
+  pattern — which is why that btree had been idle since the day it was created,
+  including under the prefix-only search it was built for. Measured live, per
+  call: "un" 9.90 → 0.49 ms, "univ" 6.78 → 0.38 ms, "universi" 6.56 → 0.36 ms,
+  a lone "_" 7.14 → 0.08 ms; "angeles" pays 0.11 → 0.17 ms, stated in the
+  header rather than hidden. Row order is preserved by construction (tier,
+  school_name, team) and was verified across 6,185 terms. The two-character
+  floor now measures the trimmed input instead of the escaped term, so a lone
+  `%` or `_` no longer doubles in length and buys a full scan. The header
+  replaces its predecessor's false "from three characters up the scan is gone"
+  with the reason it was false: the index turns on selectivity, not length.

@@ -82,7 +82,7 @@ ready).
   this could fire.
 
 ## T4 · Take prefix hits first, and correct the cost the header claims
-- **status:** todo
+- **status:** done
 - **files:** supabase/migrations/<new>_search_programs_prefix_first.sql
   (redefines public.search_programs) — guess
 - **done when:**
