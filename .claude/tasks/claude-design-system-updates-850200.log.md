@@ -60,3 +60,31 @@ is the runner's. Newest entries at the bottom.
 - **stash:** 9fa3b7597418a95668d5588458df1773ec704944 (comment-only changes to colors.css and effects.css;
   everything except the 2.12 figure is correct and re-verified, so this is worth
   restoring rather than redoing).
+
+## T2 · Correct the stale focus-ring figures in the CSS comments — done (second attempt)
+- **gate:** lint clear (0 errors; 38 pre-existing warnings, none in the touched
+  files) · `tsc --noEmit` exit 0 · `npm test` 93/93 · task-completion-reviewer
+  `VERDICT: pass`, having recomputed every ratio from the hex values in
+  colors.css rather than trusting the task block, and having independently
+  reproduced the rounding split that blocked attempt one (channel 178 -> 2.12,
+  178.5 -> 2.11, 179 -> 2.10). It also grepped for 2.11 and 2.10 to confirm no
+  alternate two-decimal figure was substituted. Both guardrail reviewers skipped
+  legitimately: the diff is two CSS comment blocks plus two documentation files,
+  touching none of `src/app/dashboard/`, `src/components/dashboard/`, the upload
+  wizard, `src/lib/supabase/`, `src/lib/data/`, `src/app/api/` or
+  `supabase/migrations/`; `git ls-files --others` was empty.
+- **changed:** The `--field-ring` rationale in colors.css now names #F5F5F5 —
+  the value `--surface-field` actually resolves to — as the field surface, with
+  the pair at 3.54:1 / 3.25:1 and the retired #E5E5E5 at 1.26:1 / 1.16:1; its
+  closing sentence drops the false "tops out near 1.4:1" ceiling for the real
+  constraint, that 30% alpha cannot reach 3:1 at all. effects.css's two-layer
+  comment computes the shipped band (#DBDBDB, 0.3x136 + 0.7x255 = 219.3, 1.38:1)
+  instead of arithmetic whose 229 was the retired ring. DESIGN.md and SKILL.md
+  moved from 2.12:1 to ~2.1:1, the only figure that holds under every rounding
+  rule, so all four files now agree value-for-value.
+- **note:** attempt one's stash (9fa3b7597418a95668d5588458df1773ec704944) was
+  applied rather than redone, and left in place; it is now redundant.
+- **found, not fixed:** SKILL.md line 126 (`bg-field | bg-[#F7F7F7] | Disabled
+  fields`) and line 775 (`Background: bg-[#F7F7F7]`) still describe the field
+  background as #F7F7F7 while `--surface-field` resolves to #F5F5F5. Disabled-
+  state figures outside the Focus section, so out of scope here — worth a task.

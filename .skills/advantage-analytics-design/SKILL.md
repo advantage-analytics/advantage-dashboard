@@ -704,7 +704,8 @@ edge. `--field-ring` resolves to `--ink-500`, which now carries a **3:1 floor**
 (WCAG 1.4.11) against both the white card and the #F5F5F5 field fill. Do not
 lighten `--ink-500`: it is no longer only a text colour. Raise contrast on
 `--field-ring`, never on the `-30` band — at 30% alpha the band cannot reach 3:1
-whatever colour it carries. The measurements are in DESIGN.md → Focus.
+whatever colour it carries, since even pure black composites to ~2.1:1. The
+measurements are in DESIGN.md → Focus.
 
 `focus.css` is imported outside any `@layer` while Tailwind utilities live in
 `@layer utilities`, and unlayered CSS wins regardless of specificity — so
