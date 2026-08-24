@@ -676,14 +676,25 @@ default, it is silently discarded. Its `:where()` wrapper keeps specificity at
 0, but that only matters against other unlayered rules. To override, change the
 token or write unlayered CSS.
 
-Two gotchas:
+**Composite fields are the exception to "write nothing."** When the input sits
+inside a bordered box and the box is what reads as the field, the ring belongs
+on the box — otherwise it draws inset, floating inside the border. Put
+`focus-within:shadow-[var(--focus-ring-field)]` on the wrapper and
+`data-focus-ring="none"` on the inner control so it does not draw a second
+ring. `claim/program-search.tsx` and `team/invite-dialog.tsx` are the worked
+examples.
 
-- The split is keyed on tag name, so Radix's `SelectTrigger` — a `<button>` —
-  takes the **blue** ring, not the neutral one. Only a native `<select>` gets
-  the carve-out.
+Three gotchas, in the order you will actually hit them:
+
+- The split is keyed on tag name, so `input[type=checkbox]` and
+  `input[type=radio]` take the **neutral** ring even though they are actionable
+  controls the rest of the system rings in blue. Two live call sites today.
 - `border-color` is not part of the ring, so `focus:border-[var(--blue)]` still
   turns a field blue. That is the deliberate underline vocabulary on auth
   fields; on a boxed field it is a leak.
+- Radix's `SelectTrigger` is a `<button>`, so it takes the blue ring rather
+  than the carve-out. Latent — that component has no call sites yet — but it
+  will bite whoever adds the first one.
 
 The rule exists because the reset leaves `outline: none` on everything, which
 left keyboard users with no focus indicator at all (WCAG 2.4.7 AA). Recolour a

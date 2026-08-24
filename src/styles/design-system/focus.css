@@ -46,7 +46,14 @@
   box-shadow: var(--focus-ring);
 }
 
-:where(input, select, textarea):focus-visible {
+/* `data-focus-ring="none"` opts one control out. It exists for composite
+   fields — an input inside a bordered box, where the box is what reads as the
+   field — so the wrapper can draw the ring and the inner control does not draw
+   a second one inset within it. Everything stays inside :where(), so this is
+   still specificity 0. Scoping the opt-out to :focus-visible matters: an
+   inline `style={{boxShadow:"none"}}` would suppress the focus ring AND any
+   shadow the component ever sets for its own reasons, silently. */
+:where(:is(input, select, textarea):not([data-focus-ring="none"])):focus-visible {
   outline: none;
   box-shadow: var(--focus-ring-field);
 }

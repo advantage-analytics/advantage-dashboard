@@ -262,13 +262,7 @@ export const CLAIM_BUTTON = advButton("primary");
  * byte-identical copies of both, and this file is already where the flow's
  * shared styling lives.
  *
- * No focus treatment of its own. This class only ever lands on `<input>`,
- * `<select>` and `<textarea>`, and focus.css gives all three the neutral
- * `--focus-ring-field` — a boxed field does not spend the accent (DESIGN.md,
- * "Focus"). The `focus:ring-2 focus:ring-[var(--blue-ring-40)]` this used to
- * carry was inert anyway, losing to that unlayered rule; the blue that
- * actually rendered came from `focus:border-[var(--blue)]`, since
- * `border-color` is not part of `box-shadow`.
+ * No focus treatment of its own — focus.css covers every tag this lands on.
  */
 export const CLAIM_FIELD =
   "h-[38px] w-full rounded-[var(--radius-element)] border border-[var(--border-field)] bg-[var(--surface-card)] px-3 text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)]";
