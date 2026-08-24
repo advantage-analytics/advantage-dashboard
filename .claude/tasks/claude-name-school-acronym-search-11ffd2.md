@@ -80,3 +80,34 @@ ready).
 - **notes:** Depends on T2, which rewrites the same `onChange` call. Scoped to
   the dual form; the upload wizard's opponent program field is the other place
   this could fire.
+
+## T4 · Take prefix hits first, and correct the cost the header claims
+- **status:** todo
+- **files:** supabase/migrations/<new>_search_programs_prefix_first.sql
+  (redefines public.search_programs) — guess
+- **done when:**
+  - [ ] A new migration redefines `search_programs()` to take prefix hits
+        first — served by the existing `programs_school_name_prefix_idx` —
+        and fall through to the contains scan only when prefix returns fewer
+        than the limit, with the result order unchanged from today
+  - [ ] Its header replaces 20260824165351's "from three characters up the
+        scan is gone", which is false, with what the measurement shows: the
+        index turns on term selectivity, not term length. Numbers, and how
+        they were taken
+  - [ ] Live: "angeles", "ucla", "nccu" and "north carolina state" return the
+        same rows in the same order as they do now, and "un" and "univ" are
+        measurably faster than today's 9.71 ms and 6.61 ms per call, timed the
+        same way — a non-constant term, so the plan is the real one
+  - [ ] The two-character floor is measured on the trimmed input rather than
+        the escaped term, so a lone `%` or `_` no longer doubles in length and
+        slips past it; the 20-row cap, SECURITY DEFINER, `search_path = ''`
+        and the anon/authenticated grants are all unchanged
+  - [ ] `programs_school_name_prefix_idx` is kept, not dropped, and the header
+        says why — the prefix branch is what puts it back to work
+- **notes:** From /pr-check on 2026-08-24, measured against the live directory:
+  the trigram index serves selective terms (`angeles`, 3 rows, 0.09 ms) but not
+  common ones at any length (`univ` and `universi` both scan 1,228 rows). By
+  each school's own name prefix, 16.3% never reach an index path however much
+  the coach types. 20260824165351 is applied live and must not be edited —
+  this is a new migration. The route's cookie-bound client, also flagged by
+  /pr-check, is a separate concern and deliberately not in scope here.
