@@ -72,7 +72,7 @@ ready).
   T4 changes who may open that page, so it must revisit this entry.
 
 ## T4 · Let players upload when their program allows it
-- **status:** todo
+- **status:** blocked
 - **files:** src/app/dashboard/team/upload/page.tsx, a new
   supabase/migrations/ file, src/lib/workspace/actions.ts (guess)
 - **done when:**
