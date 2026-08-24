@@ -34,7 +34,7 @@ ready).
   docs/ui-revamp-guardrails.md applies.
 
 ## T2 · Load the new workspace's page on switch
-- **status:** todo
+- **status:** done
 - **files:** src/lib/workspace/actions.ts,
   src/components/dashboard/sidebar/workspace-row.tsx (guess — the cookie write
   and revalidatePath, and the switchTo transition that calls it)
