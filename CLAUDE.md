@@ -183,6 +183,10 @@ on task files are structurally impossible.
 Every task needs a `done when:` list. It is the contract
 `task-completion-reviewer` gates against, and a task without one is skipped.
 
+`/task-next`, `/task-add` and `/pr-check` are typed to Claude, not to a shell.
+Never present them inside a ```bash fence — the app renders a fenced shell
+block as a Run button, and running one there fails with `command not found`.
+
 ## Conventions
 
 - `@/` alias for imports from `src/`

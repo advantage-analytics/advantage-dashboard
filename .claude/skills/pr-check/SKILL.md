@@ -128,8 +128,35 @@ Give the user:
 Do not soften a failure into "mostly passing". If it is not ready, say what
 blocks it.
 
+## Stage 5 — record the verdict
+
+Run this once, last, **whatever the verdict was**:
+
+```bash
+.claude/hooks/pr-check-receipt.sh record --verdict ready \
+  --reviewed branch-range --note "<one line>" \
+  --ran lint,tsc,test,simplify,code-review \
+  --skipped "rls-boundary-reviewer: no data surface touched"
+```
+
+`--reviewed` must match the target you picked in "What to review" above. A
+`working-tree` receipt does not attest that the commit was gated, and the
+helper renders it differently for exactly that reason — passing the wrong one
+turns an honest record into a false one.
+
+Then tell the user the receipt it printed.
+
+`--verdict not-ready` is not optional and not a failure to hide. A recorded
+`not-ready` is what later distinguishes "the gate ran and said no" from "the
+gate never ran" — different problems, needing different responses. Nothing else
+in this repo records that this gate ran at all.
+
+Read prior receipts with `.claude/hooks/pr-check-receipt.sh show`.
+
 ## Do not
 
 - Do not commit or push unless the user asks. Report the verdict and stop.
+- Do not record a receipt for a run you did not finish. A stage you skipped
+  makes it a `not-ready` with the skip named — never a `ready`.
 - Do not skip stage 3 because stage 1 was green. Lint and tsc do not know what
   a workspace is, and cannot tell you a query crossed an account boundary.

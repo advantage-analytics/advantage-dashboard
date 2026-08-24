@@ -64,12 +64,17 @@ never surfaces as a failure, just a queue that quietly never drains and sends
 ## 3. Pre-flight
 
 ```bash
-[ -d node_modules ] && echo ok || echo missing
+[ -d node_modules ] || npm ci
 ```
 
-Missing → **stop.** The gate cannot run, and an ungated commit is worse than no
-progress. Tell the user to run `npm ci`. The bootstrap hook supplies
-`.env.local` automatically but deliberately does not install.
+A fresh worktree never has `node_modules` — the bootstrap hook supplies
+`.env.local` but deliberately does not install, because a `SessionStart` hook
+must not block a session for minutes. So install here and carry on; this skill
+is already a multi-minute operation.
+
+**If the install itself fails, stop.** The gate cannot run without it, and an
+ungated commit is worse than no progress. Report the install error rather than
+proceeding to dispatch.
 
 Then set the task's `status:` to `doing`. Change that line only.
 
