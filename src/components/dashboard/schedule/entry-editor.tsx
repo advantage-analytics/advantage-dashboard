@@ -1,8 +1,7 @@
 "use client";
 
 import { Plus, X } from "lucide-react";
-import { splitNames } from "@/lib/schedule/format";
-import { normalizedPersonName } from "@/lib/data/person-name";
+import { rosterIdsForLabels } from "@/lib/schedule/roster-match";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 
 export interface DraftEntry {
@@ -17,37 +16,6 @@ export interface DraftEntry {
 const DRAWS = ["Main draw", "Qualifying", "Consolation", "Flight A", "Flight B"];
 
 const GRID = "grid grid-cols-[1fr_220px_140px] items-center gap-4";
-
-/**
- * Roster ids for the names typed into an entry's field.
- *
- * This resolves a typed label to the `userId` the entry — and eventually the
- * match recorded under it — is attributed to, so it is deliberately exact:
- * `normalizedPersonName` settles case and whitespace and nothing else. No
- * nicknames, no initials, no edit distance. A looser rule here would attach an
- * athlete's match to a different athlete, and nothing on screen would say so.
- *
- * Both sides go through the same normalization, which is the whole fix. Each
- * end trims and neither collapses: `splitNames` trims the label, and
- * `program_roster_full` builds `display_name` as
- * `btrim(first_name || ' ' || last_name)`. One trailing space in `first_name`
- * therefore reaches this list as "Dana  Brooks", which never met a typed
- * "Dana Brooks" even though the two render identically.
- *
- * A label matching nobody contributes NO id rather than a near-miss — the entry
- * still records the typed name, which is how a challenge match against someone
- * who has not accepted an invite yet gets written down. `splitNames` drops
- * blank parts, so an empty label can never reach the roster comparison.
- */
-export function rosterIdsForLabels(raw: string, roster: LadderPlayer[]): string[] {
-  return splitNames(raw)
-    .map((label) => {
-      const typed = normalizedPersonName(label);
-      return roster.find((player) => normalizedPersonName(player.name) === typed)
-        ?.userId;
-    })
-    .filter((id): id is string => Boolean(id));
-}
 
 /**
  * 25e's entry list — who is going, and where they start.

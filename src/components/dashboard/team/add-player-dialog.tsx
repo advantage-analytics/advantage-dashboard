@@ -216,13 +216,20 @@ export function AddPlayerDialog({
    * notes: a genuine second holder of the same line, or a same-named teammate
    * who was already there, is still named.
    *
-   * Keyed on the form, because the exclusion is only ever true of the values
-   * that wrote the row. Held on the id alone it would outlive them: the coach
-   * clears the address the invite choked on, submits again, and the note that
-   * would have said "already on this roster" is suppressed — while
-   * `add_program_player` cannot catch it either, because its only duplicate
-   * checks are on an email that is now empty. That is a silent second row for
-   * one athlete, which is the whole thing this note exists to prevent.
+   * Keyed on the form, not on the id alone, because the exclusion is only ever
+   * true of the values that wrote the row. Held on the id, it outlives them:
+   * the coach clears the address the invite choked on, submits again, and the
+   * note that would have said "already on this roster" stays suppressed —
+   * while `add_program_player` cannot catch it either, because both its
+   * duplicate checks sit behind an email that is now empty. A silent second
+   * row for one athlete, which is the thing this note exists to prevent.
+   *
+   * The key is every argument `addProgramPlayer` was handed, including the two
+   * no note reads, because the two ways of being wrong do not cost the same. A
+   * field left out means an edit that changes what would be written leaves the
+   * exclusion standing — the silent duplicate above. A field left in means an
+   * edit that changes nothing either note says brings both notes back against
+   * the row just created: noisy, and true. Prefer the noise.
    */
   const [created, setCreated] = useState<{
     profileId: string | null;
@@ -243,10 +250,13 @@ export function AddPlayerDialog({
   /**
    * Every way out of this dialog, so none of them can forget the reset.
    *
-   * Radix fires `onOpenChange` for its own dismissals — Escape, the overlay,
-   * the shell's X — but not for a parent flipping `open`, and this component
-   * is mounted whether or not it is showing. A Cancel button wired straight to
-   * the prop therefore left the form, and the exclusion above, standing.
+   * Escape and the overlay reach it through Radix; the shell's X is
+   * hand-rolled but calls `RosterDialog`'s `onOpenChange`, so it lands in the
+   * same wrapper. Cancel did not — it called *this* component's `onOpenChange`
+   * prop, the parent's setter, one level above the wrapper that carries the
+   * reset. And this component stays mounted whether or not it is showing, so
+   * what Cancel skipped was not cleaned up later: it left the form, and the
+   * exclusion above, standing into the next time the dialog opened.
    *
    * Refused while the write is in flight, which is why Cancel is disabled with
    * it. The component outlives the close, so a reset that lands mid-request is
@@ -412,23 +422,23 @@ export function AddPlayerDialog({
         </SettingsField>
       </div>
 
+      {/* The accessible copy, and the reason it is a separate node: mounted
+          for as long as the dialog is, so a sentence arriving later is a
+          *change* to a region assistive tech is already watching — the only
+          kind it announces. `sr-only` is absolutely positioned, so it is out
+          of flow and adds nothing to the dialog's 18px rhythm, which is what
+          lets it sit here in reading order rather than being hoisted somewhere
+          it would be read out of context. One region per note: `aria-atomic`
+          re-reads a region whole, so a shared one would repeat the name
+          sentence on every change of lineup spot. */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {nameNote ?? ""}
+      </div>
       {/* Directly under the pair of fields it is about, and full width for the
           same reason as the spot note below: an address in a 212px cell wraps
           to three lines and shoves everything under it around as the coach
           types. GitMerge rather than a person glyph — it is the mark the
           roster row already carries for this exact question. */}
-      {/* The accessible copy of the note beside it, and the reason it is a
-          separate node: mounted for as long as the dialog is, so a sentence
-          arriving later is a *change* to a region assistive tech is already
-          watching — the only kind it announces. `sr-only` is absolutely
-          positioned, so it is out of flow and adds nothing to the dialog's
-          18px rhythm, which is what lets it sit here in reading order rather
-          than being hoisted somewhere it would be read out of context. One
-          region per note: `aria-atomic` re-reads a region whole, so a shared
-          one would repeat the name sentence on every change of lineup spot. */}
-      <div aria-live="polite" aria-atomic="true" className="sr-only">
-        {nameNote ?? ""}
-      </div>
       {nameNote && <RosterNote icon={GitMerge}>{nameNote}</RosterNote>}
 
       <div className="grid grid-cols-2 gap-4">
@@ -465,12 +475,12 @@ export function AddPlayerDialog({
         </SettingsField>
       </div>
 
-      {/* Full width rather than in the field's hint slot: the cell is half of a
-          440px dialog, and a name wrapped over three lines would shove the
-          email field down every time a coach changed the spot. */}
       <div aria-live="polite" aria-atomic="true" className="sr-only">
         {spotNote ?? ""}
       </div>
+      {/* Full width rather than in the field's hint slot: the cell is half of a
+          440px dialog, and a name wrapped over three lines would shove the
+          email field down every time a coach changed the spot. */}
       {spotNote && <RosterNote icon={Users}>{spotNote}</RosterNote>}
 
       <SettingsField

@@ -120,8 +120,20 @@ function SinglePlayerPicker({
             A roster is not a closed list. Challenge matches get played by people
             who have not accepted an invite yet, and a picker that refused them
             would push the coach to attribute the match to somebody else.
+
+            Offered only when the typed name reaches NOBODY on the roster, and
+            asking that with the same rule the list above filters by. Compared
+            raw, a roster row stored as "Dana  Brooks" shows up in the list
+            AND under this button — two rows that look identical, one of which
+            hands `onPick` a null id. That null becomes `player1_id`, so the
+            match is written unattributed for an athlete who is on the roster,
+            and `player1_id` is half the SELECT policy on `matches` — she
+            cannot read her own match.
           */}
-          {term.trim() && !shown.some((p) => p.name === term.trim()) ? (
+          {term.trim() &&
+          !shown.some(
+            (p) => normalizedPersonName(p.name) === normalizedPersonName(term)
+          ) ? (
             <button
               type="button"
               onClick={() => onPick(term.trim(), null)}

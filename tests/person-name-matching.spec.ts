@@ -2,8 +2,7 @@ import { expect, test } from '@playwright/test';
 
 import { normalizedPersonName } from '@/lib/data/person-name';
 import { headToHeadRows, opponentPlayerMatches } from '@/lib/data/opponents-server';
-import { rosterIdsForLabels } from '@/components/dashboard/schedule/entry-editor';
-import { benchFromLines } from '@/components/dashboard/schedule/dual-form';
+import { benchFromLines, rosterIdsForLabels } from '@/lib/schedule/roster-match';
 
 /**
  * One rule for "the same name", applied on BOTH sides of every comparison.
@@ -55,6 +54,21 @@ test.describe('normalizedPersonName', () => {
   });
 });
 
+/**
+ * The row shape both opponents helpers accept, as `OpponentAttributedRow`
+ * bounds it. One builder for both describes: they are testing two functions
+ * over one shape, and two copies is two places to edit when it grows a field.
+ */
+const row = (
+  id: string,
+  name: string | null,
+  opponentId: string | null = null
+) => ({
+  id,
+  player2_name: name,
+  opponent_player_id: opponentId,
+});
+
 test.describe('headToHeadRows', () => {
   // `pooled_roster` hands back first and last name separately and the page
   // joins them, so both spellings below are what one stray space in one column
@@ -64,12 +78,6 @@ test.describe('headToHeadRows', () => {
     { id: 'p-brooks', name: BROOKS_TRAILING },
     { id: 'p-reid', name: REID_DOUBLED },
   ];
-
-  const row = (id: string, name: string | null, opponentId: string | null = null) => ({
-    id,
-    player2_name: name,
-    opponent_player_id: opponentId,
-  });
 
   test('a roster name with a trailing space matches the typed form', () => {
     const kept = headToHeadRows([row('m1', BROOKS_TYPED)], roster);
@@ -118,12 +126,6 @@ test.describe('headToHeadRows', () => {
 });
 
 test.describe('opponentPlayerMatches', () => {
-  const row = (id: string, name: string | null, opponentId: string | null = null) => ({
-    id,
-    player2_name: name,
-    opponent_player_id: opponentId,
-  });
-
   test('the profile name matches the typed name through either spelling', () => {
     expect(
       opponentPlayerMatches([row('m1', BROOKS_TYPED)], 'her-id', BROOKS_TRAILING).map(
