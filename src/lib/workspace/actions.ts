@@ -7,7 +7,11 @@ import {
   WORKSPACE_COOKIE,
   getWorkspaceContext,
 } from './active-workspace-server';
-import { isProgramStaff, type Workspace } from './types';
+import {
+  canUploadForProgram,
+  isProgramStaff,
+  type Workspace,
+} from './types';
 
 const WORKSPACE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
@@ -44,18 +48,37 @@ const PROGRAM_RECORD_LISTS = [
 ] as const;
 
 /**
- * Pages only a program's staff can open, and where someone without that
- * standing lands instead — the path each page's own staff guard redirects to
- * (`team/upload/page.tsx` to the schedule, `settings/team/page.tsx` to
- * Profile).
+ * Pages a member of a program can be turned away from, where they land
+ * instead, and — crucially — *the page's own predicate*, not a second copy of
+ * it.
+ *
+ * This was `STAFF_ONLY_PAGES`, a path→fallback map read behind one
+ * `!isProgramStaff(target)` test. That stopped being true of the upload page
+ * the moment `programs.players_can_upload` started being enforced: staff are
+ * no longer the only people it admits, so a single shared staff test would
+ * divert a player to the schedule from a page that would have rendered for
+ * them. Holding each page's actual guard here is what makes the two agree by
+ * construction rather than by remembering — `admits` is the same function the
+ * page calls, so the pair cannot drift apart in a later edit.
+ *
+ * `settings/team/page.tsx` really is staff-only and keeps `isProgramStaff`.
  *
  * The upload page's *other* guard, which sends a personal workspace to
  * `/dashboard/matches/new`, has no entry here and needs none: `TEAM_ONLY_TREES`
  * matches that path first and goes home before this map is read.
  */
-const STAFF_ONLY_PAGES: Record<string, string> = {
-  '/dashboard/team/upload': '/dashboard/team/schedule',
-  '/dashboard/settings/team': '/dashboard/settings/profile',
+const RESTRICTED_PAGES: Record<
+  string,
+  { admits: (workspace: Workspace) => boolean; fallback: string }
+> = {
+  '/dashboard/team/upload': {
+    admits: canUploadForProgram,
+    fallback: '/dashboard/team/schedule',
+  },
+  '/dashboard/settings/team': {
+    admits: isProgramStaff,
+    fallback: '/dashboard/settings/profile',
+  },
 };
 
 function isUnder(path: string, prefix: string): boolean {
@@ -95,9 +118,10 @@ function landingPath(target: Workspace, from: string): string {
     return DASHBOARD_HOME;
   }
 
-  if (!isProgramStaff(target) && STAFF_ONLY_PAGES[path]) {
-    return STAFF_ONLY_PAGES[path];
-  }
+  // `path` always begins with `/dashboard` by the test above, so this lookup
+  // cannot land on an inherited `Object.prototype` key.
+  const restricted = RESTRICTED_PAGES[path];
+  if (restricted && !restricted.admits(target)) return restricted.fallback;
 
   return (
     PROGRAM_RECORD_LISTS.find((list) => path.startsWith(`${list}/`)) ?? path

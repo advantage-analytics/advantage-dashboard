@@ -94,7 +94,7 @@ ready).
   deliberately turned it off, which the author accepted when adding this task.
 
 ## T5 · Re-land the player-upload gate without the line-picker dead end
-- **status:** blocked
+- **status:** done
 - **files:** recovered from stash 2c5f85b7 — src/lib/workspace/types.ts,
   src/lib/workspace/active-workspace-server.ts, src/lib/workspace/actions.ts,
   src/app/dashboard/team/upload/page.tsx, and the restored migration file

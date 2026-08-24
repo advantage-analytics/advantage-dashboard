@@ -39,6 +39,10 @@ function personalWorkspace(viewer: Viewer): Workspace {
     role: 'owner',
     mark: viewer.initials,
     canSubmitVideo: true,
+    // A program-wide policy about *other* people, in a workspace whose only
+    // member is its owner. False is the honest value; `canUploadForProgram()`
+    // never consults it here because it answers on `kind` first.
+    playersCanUpload: false,
   };
 }
 
@@ -65,7 +69,9 @@ async function listProgramWorkspaces(
 ): Promise<Workspace[]> {
   const { data, error } = await supabase
     .from('program_members')
-    .select('role, programs!inner(id, school_name, team, status)')
+    .select(
+      'role, programs!inner(id, school_name, team, status, players_can_upload)'
+    )
     .eq('user_id', userId)
     .order('joined_at');
 
@@ -82,7 +88,13 @@ async function listProgramWorkspaces(
     const program = (
       Array.isArray(row.programs) ? row.programs[0] : row.programs
     ) as
-      | { id: string; school_name: string; team: string; status: string }
+      | {
+          id: string;
+          school_name: string;
+          team: string;
+          status: string;
+          players_can_upload: boolean;
+        }
       | undefined;
     if (!program) return [];
 
@@ -98,6 +110,11 @@ async function listProgramWorkspaces(
         // whose video submission waits — see /claim/review, which promises
         // exactly that.
         canSubmitVideo: program.status === 'active',
+        // The program's own answer to "anyone, or coaches?" from Team
+        // settings. Read here rather than at the page, so the upload page's
+        // gate and the switcher's `landingPath()` are looking at one value
+        // resolved once per request — see `Workspace.playersCanUpload`.
+        playersCanUpload: program.players_can_upload,
       },
     ];
   });
