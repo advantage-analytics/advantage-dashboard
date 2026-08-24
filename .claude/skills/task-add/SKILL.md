@@ -1,7 +1,6 @@
 ---
 name: task-add
 description: Draft a well-formed task from a one-line intent and append it to this branch's queue. Use when adding work to .claude/tasks/, especially by voice or from a phone.
-disable-model-invocation: true
 argument-hint: "<one-line description of the task>"
 ---
 
