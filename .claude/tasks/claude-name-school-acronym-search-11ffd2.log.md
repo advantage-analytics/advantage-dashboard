@@ -60,3 +60,33 @@ is the runner's. Newest entries at the bottom.
   reviewer, and not reachable today: if `OpponentPicker` ever gains an edit path
   for a saved dual, `pickedSchool` starts empty and "Change" would seed the
   qualified string again.
+
+## T3 · Warn when a dual's opponent is the other squad — done
+- **gate:** mechanical green (lint 0 errors / 38 warnings, the standing
+  baseline; tsc clean; 66/66 tests). `task-completion-reviewer` VERDICT: pass —
+  all five criteria, including the stale-state transition criterion 3 invites
+  (pick a mismatched row, then replace it by typing) and an explicit check that
+  the Create button's `disabled` expression and the `createDual` payload are
+  untouched. `pipeline-guardrails-reviewer` ran (the diff is one dashboard route
+  plus two dashboard components) and reported no findings: authorization is
+  still re-derived server-side by `requireStaff()` rather than trusting the new
+  client prop, the capsule reuses tokens already in colors.css and matches the
+  parse-warning capsule in UploadContent.tsx, and no vendor-bound wizard input
+  is anywhere near this route. `rls-boundary-reviewer` skipped: nothing under
+  src/lib/supabase/, src/lib/data/, src/app/api/ or supabase/migrations/, and no
+  new table, view or query.
+- **changed:** `OpponentPicker`'s `onChange` widened from `(name, programKey)`
+  to `(name, programKey, team)` — the directory row was already in hand, so the
+  squad costs nothing to pass and the free-text path sends null for all three
+  together, which is what keeps a replaced pick from leaving a stale squad
+  behind. `dual/page.tsx` passes `ourTeam={active.team}`, which the server
+  component already had. `DualForm` compares the two and renders an advisory
+  capsule below the opponent field: "Men's squad, Women's opponent. This
+  workspace is <ours> and you picked <theirs>. Create the dual anyway if that is
+  the fixture — nothing here is blocked." It warns and nothing more: Create
+  stays enabled, `createDual` receives exactly what it did before, and
+  `CreateDualInput` has no squad field to carry it. Worth knowing: `dual-form`
+  imports `teamLabel` from `lib/workspace/types` (null-safe) rather than the
+  same-named `programs-server` twin (which answers "Men's" to null); the import
+  carries a comment saying why, since the guard means either would work today
+  and a future edit outside that guard would not.

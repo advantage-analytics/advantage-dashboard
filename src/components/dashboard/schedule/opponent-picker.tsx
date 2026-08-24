@@ -19,13 +19,23 @@ import { programDisplayName, teamLabel } from "@/lib/data/programs-server";
  * are three programs to a GROUP BY and one to a human. The key is what lets a
  * recorded line point at a directory row, and everything on the Opponents page
  * hangs off that.
+ *
+ * The squad rides along as the third argument for the same reason the key
+ * does: the caller already has the row in hand here, and asking the directory
+ * a second question to learn something this component just read would be a
+ * round-trip for a value that was never lost. Null whenever the key is null —
+ * typed text has no squad to report.
  */
 export function OpponentPicker({
   value,
   onChange,
 }: {
   value: string;
-  onChange: (name: string, programKey: string | null) => void;
+  onChange: (
+    name: string,
+    programKey: string | null,
+    team: ProgramSearchResult["team"] | null
+  ) => void;
 }) {
   const [term, setTerm] = useState("");
   const [results, setResults] = useState<ProgramSearchResult[]>([]);
@@ -112,7 +122,7 @@ export function OpponentPicker({
             // Exactly what was typed. A coach naming a club side, or typing a
             // school the directory happens to hold, gets their own words back
             // with no squad appended and no key attached.
-            onChange(term.trim(), null);
+            onChange(term.trim(), null, null);
             setPickedSchool(null);
             setEditing(false);
           }}
@@ -134,7 +144,8 @@ export function OpponentPicker({
                 // header, and in the event this dual becomes.
                 onChange(
                   programDisplayName(result.schoolName, result.team),
-                  result.programKey
+                  result.programKey,
+                  result.team
                 );
                 setPickedSchool(result.schoolName);
                 setEditing(false);

@@ -62,7 +62,7 @@ ready).
   guardrails pass — docs/ui-revamp-guardrails.md.
 
 ## T3 · Warn when a dual's opponent is the other squad
-- **status:** todo
+- **status:** done
 - **files:** src/components/dashboard/schedule/dual-form.tsx,
   src/components/dashboard/schedule/opponent-picker.tsx,
   src/app/dashboard/team/schedule/new/dual/page.tsx — guess
