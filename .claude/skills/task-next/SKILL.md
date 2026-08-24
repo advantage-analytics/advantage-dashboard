@@ -1,6 +1,7 @@
 ---
 name: task-next
 description: Run the next task from this branch's queue in .claude/tasks/ — one task, one subagent, gated, then committed. Use when working through a queued task file. Drain the whole queue with /loop /task-next.
+disable-model-invocation: true
 argument-hint: "[optional: a task id like T3, to run that one instead of the next]"
 ---
 
