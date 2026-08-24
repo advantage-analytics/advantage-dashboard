@@ -140,6 +140,14 @@ internal naming only.
 SDKs are dynamically imported so only the configured one loads. Falls back to mock mode
 with no key. See `docs/llm-setup.md`.
 
+### Transactional email
+
+Product mail (invites, notifications, digests) renders through
+`src/lib/services/email/shell.ts` and sends via Resend; auth mail is Supabase's own, in
+`supabase/email-templates/*.html`. `shell.ts` is a hand-copy of that markup — change one
+and you must change the other. **Read [`docs/email-system.md`](docs/email-system.md)
+before writing a template or wiring a send.**
+
 ## Design System
 
 **Read `.skills/advantage-analytics-design/SKILL.md` before building any UI** — it is the
