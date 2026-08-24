@@ -52,6 +52,7 @@
   },
   "enabledPlugins": {
     "design-for-ai@rtd": true,
-    "cloudflare@cloudflare": true
+    "cloudflare@cloudflare": true,
+    "supabase@claude-plugins-official": true
   }
 }
