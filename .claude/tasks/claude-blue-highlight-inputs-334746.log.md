@@ -157,3 +157,43 @@ is the runner's. Newest entries at the bottom.
   not this worktree. The implementer ran this worktree on 3101 and the reviewer
   followed suit. Verifying a worktree change against 3000 would silently
   measure the wrong tree and report a false pass.
+
+## T5 · Raise the field focus ring to WCAG 1.4.11's 3:1 — done
+- **gate:** mechanical — `npm run lint` 0 errors (38 pre-existing warnings),
+  `npx tsc --noEmit` clean, `npm test` 66/66. Completion review —
+  `VERDICT: pass`; it recomputed the contrast independently (3.55:1 / 3.31:1)
+  rather than trusting the diff's comment, and it drove real keyboard focus on
+  `/login` against port 3101 after confirming via `lsof` that 3101 is this
+  worktree and 3000 is the main checkout. Guardrails —
+  `pipeline-guardrails-reviewer` run despite `src/styles/` not being a literal
+  trigger path, because a token feeding a global rule reaches every field in
+  the product; no violations, and it confirmed the three misattribution-risk
+  wizard inputs are `<button>`-based `SelectCell`s that never receive this
+  token at all. `rls-boundary-reviewer` skipped: no data-layer, API, Supabase
+  or migration path; `git ls-files --others` empty.
+- **changed:** `--field-ring` moves from a hardcoded `#E5E5E5` to
+  `var(--ink-500)` (#888888) and `--field-ring-30` follows to
+  `rgba(136,136,136,0.30)`, with a `.dark` counterpart added. Contrast against
+  white goes 1.26:1 to 3.54:1, and against the `#F7F7F7` fill behind the
+  statistics date inputs 1.18:1 to 3.31:1 — both now clear WCAG 1.4.11's 3:1.
+  An existing token was reused rather than a new grey minted, because a value
+  between `--ink-400` and `--ink-600` is exactly the near-twin this palette
+  documents merging away. The opaque 1px layer carries the contrast; the 30%
+  band is the soft edge and tops out near 1.38:1, so it could never be
+  load-bearing.
+- **note on the `.dark` re-declaration:** it looks redundant and is not. A
+  `:root` declaration of `--field-ring:var(--ink-500)` substitutes against
+  `:root`'s `--ink-500` at computed-value time and then inherits that
+  already-resolved light value, so a `.dark` subtree would keep the light grey.
+  The reviewer initially suspected the redeclaration was unnecessary, built a
+  minimal isolated test, and proved it required. The file already establishes
+  the same pattern for `--ink-border` (line 171) and `--border-field` (187).
+- **open, not gated:** seven components still hardcode `#E5E5E5` as a
+  focus-time border — `ui/input.tsx:12`, `ui/select.tsx:40`,
+  `statistics/match-selector.tsx:104` and `:112`,
+  `schedule/single-score-entry.tsx:157`, `schedule/score-entry.tsx:179` and
+  `:199`. They are stale twins of a token that just moved. No criterion is
+  broken: the operative WCAG indicator is the box-shadow from `focus.css`,
+  which renders the new compliant grey on all seven; the stale literal only
+  tints a 1px border underneath it. Component files were out of scope here.
+  Worth a cleanup pass.

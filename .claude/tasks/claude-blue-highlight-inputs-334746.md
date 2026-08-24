@@ -136,7 +136,7 @@ ready).
   not try to solve either by widening the global rule.
 
 ## T5 · Raise the field focus ring to WCAG 1.4.11's 3:1
-- **status:** todo
+- **status:** done
 - **files:** src/styles/design-system/colors.css (`--field-ring`,
   `--field-ring-30`), possibly src/styles/design-system/effects.css
   (`--focus-ring-field`)

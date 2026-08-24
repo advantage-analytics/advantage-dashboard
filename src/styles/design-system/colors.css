@@ -73,11 +73,21 @@
   /* Field focus ring — the neutral counterpart to --blue-ring-*, consumed by
      --focus-ring-field in effects.css. Deliberately NOT --border-field
      (#E5E5EA): that is the resting hairline, and a focus ring that matches the
-     rest state is not an indicator. No .dark value yet — dark mode is deferred
-     (DESIGN.md), and inventing one here would be guessing at a palette nobody
-     has designed. It needs one before dark mode ships. */
-  --field-ring:#E5E5E5;
-  --field-ring-30:rgba(229,229,229,0.30);
+     rest state is not an indicator.
+
+     WCAG 1.4.11 wants a focus indicator at 3:1 against what it sits on, and a
+     field ring sits on two surfaces in this app: white cards and the #F7F7F7
+     disabled/filled fill (statistics/match-selector.tsx's date inputs).
+     Measured: the previous #E5E5E5 was 1.26:1 / 1.18:1 and the pre-carve-out
+     blue band was 1.62:1 — both failed. --ink-500 is 3.55:1 / 3.31:1, and
+     clears every other DS surface too (#FAFAFA 3.40, #F5F5F5 3.25, #F3F3F3
+     3.20). It is reused rather than minted because a new grey between 400 and
+     600 would be the near-twin this palette keeps merging away.
+
+     The OPAQUE 1px layer carries the contrast; -30 is the soft outer edge and
+     cannot be load-bearing — 30% of any grey on white tops out near 1.4:1. */
+  --field-ring:var(--ink-500);
+  --field-ring-30:rgba(136,136,136,0.30); /* --ink-500 at 30% */
   /* Text-on-tint retired (review): informational capsules are neutral —
      surface-subtle bg + ink text. Aliases kept so nothing breaks. */
   --blue-ink-deep:var(--ink-900);
@@ -189,6 +199,12 @@
   --blue-pressed:rgba(96,165,250,0.14);
   --blue-ring-30:rgba(96,165,250,0.30);
   --blue-ring-40:rgba(96,165,250,0.40);
+  /* Re-declared, not inherited: the :root value has already substituted the
+     light --ink-500 by the time it reaches here, exactly like --ink-border and
+     --border-field above. Dark --ink-500 is #8A8A8A — 5.59:1 on --surface-card
+     and 5.03:1 on --surface-subtle, so it clears 1.4.11's 3:1 on dark too. */
+  --field-ring:var(--ink-500);
+  --field-ring-30:rgba(138,138,138,0.30); /* dark --ink-500 at 30% */
   --blue-ink-deep:var(--ink-900);
   --blue-ink-mid:var(--ink-700);
   --danger:#FF6478;
