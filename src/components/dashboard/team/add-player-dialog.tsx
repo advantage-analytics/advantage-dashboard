@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Loader2, Upload, Users } from "lucide-react";
+import { GitMerge, Loader2, Upload, Users } from "lucide-react";
 import {
   SettingsField,
   SettingsUnderlineInput,
 } from "@/components/dashboard/settings/settings-card";
 import { advButton } from "@/lib/ui/adv-button";
+import { normalizedPersonName } from "@/lib/data/person-name";
 import { addProgramPlayer } from "@/components/dashboard/team/roster-actions";
 import { inviteMember } from "@/components/dashboard/settings/team-actions";
 import {
@@ -42,23 +43,57 @@ import {
  * are written for people, so they render as-is. A second set of rules here
  * would be a second answer able to drift from the enforced one.
  *
- * ── The taken-lineup-spot note ─────────────────────────────────────────────
- * A spot is deliberately not unique per program (see the `length: 9` comment
- * below), so picking one somebody already holds is legal and often correct —
- * a coach mid-reshuffle enters the new line before clearing the old one. What
- * they cannot see from this dialog is *who* is already on that line, so the
- * note answers that and nothing else: no disabled options, no gated submit.
+ * ── The two notes, and why neither is `DialogProblem` ───────────────────────
+ * Both answer the same shape of question — "wait, do we already have this?" —
+ * about something the coach cannot see from inside a dialog. Neither refuses
+ * anything: no disabled options, no gated submit, no extra confirm. That row
+ * is red, `role="alert"`, and reserved for what `add_program_player` actually
+ * refused; these are `role="status"` lines in neutral ink, the same "question,
+ * not an alarm" register as the roster table's Possible duplicate chip.
  *
- * It is deliberately not `DialogProblem`. That row is red, `role="alert"`, and
- * reserved for what `add_program_player` refused; this is a `role="status"`
- * line in neutral ink, the same "question, not an alarm" register as the
- * roster table's Possible duplicate chip.
+ * *The taken lineup spot.* A spot is deliberately not unique per program (see
+ * the `length: 9` comment below), so picking one somebody already holds is
+ * legal and often correct — a coach mid-reshuffle enters the new line before
+ * clearing the old one. The note says whose line it is and nothing else.
+ *
+ * *The name already on the roster.* Two athletes can genuinely share a name,
+ * and a coach adding the same freshman twice looks identical from here — so
+ * the note names the match and shows the address on their row, which is the
+ * one field that tells the two apart. `normalizedPersonName` is the roster's
+ * own duplicate rule (and `merge_program_players`'), not a second, looser one:
+ * a warning the merge path would then refuse to act on is worse than none.
+ *
+ * It shows the *matched player's* email; it does not check the one being
+ * typed. The address collision has real teeth — a partial unique index plus
+ * two checks inside `add_program_player` — and re-stating those here is the
+ * drift the Validation note above is about. They still arrive as sentences in
+ * `DialogProblem`.
  */
 
-/** One live roster member's claim on a line in the lineup. */
-export interface LineupSpotHolder {
-  spot: number;
+/**
+ * One live roster row, as much of it as this dialog needs.
+ *
+ * One list rather than a list per note: both notes ask about the same roster,
+ * and two props would be two chances for the page to pass one and forget the
+ * other.
+ */
+export interface RosterPerson {
   name: string;
+  /** A coach-managed profile may genuinely have no address on file. */
+  email: string | null;
+  /** Their line, or null where the program has never set one. */
+  lineupSpot: number | null;
+  /**
+   * Staff hold lines too, so everyone stays in this list — but only players
+   * can be the duplicate the name note is about, which is the same rule the
+   * roster's own duplicate pass applies in `team-roster-server.ts`.
+   */
+  isPlayer: boolean;
+}
+
+/** The field that tells two same-named rows apart, or the absence of it. */
+function emailNote(person: RosterPerson): string {
+  return person.email?.trim() ? person.email.trim() : "no email on file";
 }
 
 /** "Maya Chen" · "Maya Chen and Alex Ruiz" · "Maya Chen and 2 others". */
@@ -111,14 +146,14 @@ export function AddPlayerDialog({
   open,
   onOpenChange,
   seatNote,
-  lineupSpotHolders,
+  roster,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** What the program's allowance looks like right now, stated by the caller. */
   seatNote: string;
-  /** Who is on which line already, so a repeat pick can say whose it is. */
-  lineupSpotHolders: LineupSpotHolder[];
+  /** Who is on the roster already, so a repeat can say who it would repeat. */
+  roster: RosterPerson[];
 }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -142,13 +177,31 @@ export function AddPlayerDialog({
   const ready = firstName.trim() !== "" && lastName.trim() !== "";
 
   // "Not set" is `""`, which `Number("")` would turn into 0 and match nothing —
-  // but the empty check says so outright rather than relying on that.
+  // but the empty check says so outright rather than relying on that. A member
+  // with no line has `null`, which is never equal to a number, so the same
+  // filter covers the whole roster.
   const spotTakenBy =
     lineupSpot === ""
       ? []
-      : lineupSpotHolders
-          .filter((holder) => holder.spot === Number(lineupSpot))
-          .map((holder) => holder.name);
+      : roster
+          .filter((person) => person.lineupSpot === Number(lineupSpot))
+          .map((person) => person.name);
+
+  // Half a name matches every Maya on the squad, which is a warning about
+  // nothing while somebody is still typing — so this stays empty until both
+  // halves are there, and the note is gone again the moment one is cleared.
+  const typedName =
+    firstName.trim() === "" || lastName.trim() === ""
+      ? ""
+      : normalizedPersonName(firstName, lastName);
+
+  const sameName =
+    typedName === ""
+      ? []
+      : roster.filter(
+          (person) =>
+            person.isPlayer && normalizedPersonName(person.name) === typedName
+        );
 
   function submit() {
     setError(null);
@@ -243,6 +296,32 @@ export function AddPlayerDialog({
           />
         </SettingsField>
       </div>
+
+      {/* Directly under the pair of fields it is about, and full width for the
+          same reason as the spot note below: an address in a 212px cell wraps
+          to three lines and shoves everything under it around as the coach
+          types. GitMerge rather than a person glyph — it is the mark the
+          roster row already carries for this exact question. */}
+      {sameName.length > 0 && (
+        <p
+          role="status"
+          className="-mt-1 flex items-start gap-2 text-[11px] leading-[1.6] text-[var(--ink-600)]"
+        >
+          <GitMerge
+            className="mt-[3px] size-3.5 shrink-0"
+            strokeWidth={1.5}
+            aria-hidden
+          />
+          <span>
+            {sameName.length === 1
+              ? `${sameName[0].name} is already on this roster`
+              : `${sameName.length} people on this roster are already called ${sameName[0].name}`}
+            {" — "}
+            {sameName.map(emailNote).join(", ")}. If this is somebody else, you
+            can still add them.
+          </span>
+        </p>
+      )}
 
       <div className="grid grid-cols-2 gap-4">
         <SettingsField label="Class year">

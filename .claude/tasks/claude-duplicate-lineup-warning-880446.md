@@ -33,7 +33,7 @@ ready).
   (`team-roster-server.ts`), passed page → RosterHeaderButtons → AddPlayerDialog.
 
 ## T2 · Warn on a name already on the roster before submit
-- **status:** todo
+- **status:** done
 - **files:** src/components/dashboard/team/add-player-dialog.tsx,
   src/components/dashboard/team/roster-header-buttons.tsx,
   src/app/dashboard/team/roster/page.tsx *(guess)*
