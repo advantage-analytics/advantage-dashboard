@@ -31,3 +31,24 @@ ready).
   are non-unique on purpose (no swap control exists). Warn, never block or
   disable the taken options. Occupied spots come from `roster.members[].lineupSpot`
   (`team-roster-server.ts`), passed page → RosterHeaderButtons → AddPlayerDialog.
+
+## T2 · Warn on a name already on the roster before submit
+- **status:** todo
+- **files:** src/components/dashboard/team/add-player-dialog.tsx,
+  src/components/dashboard/team/roster-header-buttons.tsx,
+  src/app/dashboard/team/roster/page.tsx *(guess)*
+- **done when:**
+  - [ ] Typing a first + last name that matches a live roster player shows an
+        inline warning in the Add player dialog naming that player and showing
+        their email, or saying they have no email on file
+  - [ ] The match reuses the roster's existing duplicate rule — trim, lowercase,
+        collapse whitespace — and introduces no new fuzzy-matching definition
+  - [ ] Non-blocking: Add player stays enabled and submitting still creates the row
+  - [ ] No warning when the name is unique on the roster or either name field is empty
+  - [ ] No client-side email-collision check is added — `add_program_player`'s
+        messages still render unchanged in `DialogProblem`
+- **notes:** The email tripwire has teeth (partial unique index + two RPC checks);
+  the name rule is warn-not-refuse on purpose — see program_players.sql:84. Keep
+  the tone of roster-table's chip: "a question and not an alarm". Shares the
+  members → RosterHeaderButtons → AddPlayerDialog plumbing with T1, so whichever
+  runs second should reuse it rather than add a second prop path.
