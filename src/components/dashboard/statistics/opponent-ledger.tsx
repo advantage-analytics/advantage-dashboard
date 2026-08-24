@@ -40,8 +40,8 @@ export function OpponentLedger({ matches }: Props) {
     // two rows each showing half her record, and on a 2/1 split the single
     // match falls under the `total >= 2` line and disappears into Others
     // entirely. The opponent pages already count her as one person, so raw
-    // grouping is also two screens disagreeing. The label keeps the first
-    // spelling seen; only the grouping is normalized.
+    // grouping is also two screens disagreeing. Only the grouping is
+    // normalized; the label is one of the real spellings, chosen below.
     const map = new Map<
       string,
       { name: string; wins: number; losses: number; ratings: number[] }
@@ -55,11 +55,23 @@ export function OpponentLedger({ matches }: Props) {
         losses: 0,
         ratings: [],
       };
-      // The lowest spelling wins the label, not the first one seen. `matches`
+      // The tidiest spelling wins the label, not the first one seen. `matches`
       // arrives ordered by date with no tiebreaker, so same-day rows come back
       // in whatever order the planner chose — first-seen would rename the row
-      // between reloads with nothing having changed.
-      if (m.player2Name.localeCompare(entry.name) < 0) entry.name = m.player2Name;
+      // between reloads with nothing having changed. Shortest first, because
+      // the drift being merged here is stray whitespace and the shortest
+      // spelling is the one without it; then code units, which order the same
+      // in every runtime. NOT `localeCompare`: with no locale it follows the
+      // runtime's own, so Node and the browser can disagree — da-DK sorts
+      // uppercase first for any case-only pair — and this renders on both
+      // sides of a hydration boundary.
+      if (
+        m.player2Name.length < entry.name.length ||
+        (m.player2Name.length === entry.name.length &&
+          m.player2Name < entry.name)
+      ) {
+        entry.name = m.player2Name;
+      }
       if (m.isWin) entry.wins++;
       else entry.losses++;
       const r = ((m.serveRating ?? 0) + (m.returnRating ?? 0)) / 2;
@@ -98,7 +110,11 @@ export function OpponentLedger({ matches }: Props) {
       }
     }
 
-    result.sort((a, b) => b.total - a.total);
+    // The key breaks ties, for the same reason the label does not come from
+    // arrival order: two opponents on equal totals would otherwise hold
+    // whichever order the query happened to return, and at the INITIAL_ROWS cut
+    // one can swap into the collapsed view while the other drops out of it.
+    result.sort((a, b) => b.total - a.total || (a.key < b.key ? -1 : 1));
 
     if (othersW + othersL > 0) {
       const total = othersW + othersL;
