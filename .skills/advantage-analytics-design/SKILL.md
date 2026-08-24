@@ -654,9 +654,29 @@ flex items-center gap-2.5
 
 ### Focus
 
+Buttons, links, tabs, pills — every control that is not a text field:
+
 ```
 focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none
 ```
+
+Text fields are the carve-out. `<input>`, `<textarea>` and the `Select` trigger
+take a neutral ring: blue on a focused field reads as a validation state, and a
+six-field form would spend the accent six times over.
+
+```
+focus-visible:border-[#E5E5E5] focus-visible:ring-[#E5E5E5]/30 focus-visible:ring-[1px]
+```
+
+`ui/input.tsx:12` and `ui/select.tsx:40` already set that, so using the
+primitives gets it for free. A hand-rolled field does not:
+`src/styles/design-system/focus.css` lists `input, select, textarea` alongside
+`button` and `a[href]` and hands all of them the blue `--focus-ring`, so a bare
+`<input>` focuses blue today unless it sets the classes above. That rule lives
+inside `:where()` at specificity 0 exactly so a component can override it — and
+it exists because the reset leaves `outline: none` on everything, which left
+keyboard users with no focus indicator at all (WCAG 2.4.7 AA). Recolour the
+ring; never delete it.
 
 ### Disabled
 

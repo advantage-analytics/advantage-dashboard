@@ -33,3 +33,37 @@ is the runner's. Newest entries at the bottom.
   app-wide baseline from `ui/input.tsx`, not something this task invented, but
   it is worth a visual check on `/dashboard/team/schedule/[eventId]`, where the
   26px score cells make the indicator faintest.
+
+## T2 · Carve text fields out of the design-system focus-ring spec — done
+- **gate:** mechanical — `npm run lint` 0 errors (38 pre-existing react-hooks
+  warnings, baseline unchanged), `npx tsc --noEmit` clean, `npm test` 66/66
+  passed. Completion review — `VERDICT: pass`; because this is a
+  documentation-accuracy task, the reviewer was asked to verify every factual
+  claim the new prose makes against the code rather than check that words were
+  added, and it traced each one: the `:where()` selector list, `--focus-ring`
+  through to `rgba(59,130,246,0.40)`, and the quoted class string byte-for-byte
+  against `ui/input.tsx:12`. Guardrails — BOTH skipped, and legitimately: the
+  diff touches no `src/` path at all, only `.skills/`, `DESIGN.md` and this
+  queue file. Confirmed from `git diff HEAD --stat` and an empty
+  `git ls-files --others --exclude-standard`, so no untracked file hid a
+  dashboard or data-layer surface.
+- **changed:** `.skills/advantage-analytics-design/SKILL.md` — the `### Focus`
+  section grew from 4 lines to ~24. It keeps the blue
+  `ring-2 ring-[#3B82F6]/40` string for buttons, links, tabs and pills, adds the
+  neutral `border-[#E5E5E5] ring-[#E5E5E5]/30 ring-[1px]` string for text
+  fields, and states that `focus.css` currently hands the blue `--focus-ring` to
+  bare `input, select, textarea` at specificity 0 — so the doc describes today's
+  behaviour, not the post-T3 world. `DESIGN.md:92` updated to agree rather than
+  left alone; the implementer's reason (docs/README.md indexes only `docs/*`, so
+  nothing marks DESIGN.md point-in-time, and its header already carries live
+  corrections) was checked and held.
+- **note:** The reviewer flagged one clause as editorial rather than sourced —
+  "blue on a focused field reads as a validation state". The codebase's actual
+  validation colour is red (`aria-invalid:border-destructive` in `input.tsx`),
+  not blue. No criterion required that sentence to be sourced, so it did not
+  fail the gate, but in a doc whose whole product is accuracy it is worth
+  deleting on the next pass through that file. Two follow-ups surfaced for T3:
+  `DESIGN.md:91` ("same vocabulary as Input focus") reads ambiguously now, and
+  `schedule/lineup-editor.tsx:295` styles a focus *border* with `outline-none`,
+  so it does not override the focus.css box-shadow and currently renders both a
+  blue ring and a blue underline.

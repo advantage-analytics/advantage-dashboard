@@ -41,7 +41,7 @@ ready).
   design-system and out of scope.
 
 ## T2 · Carve text fields out of the design-system focus-ring spec
-- **status:** todo
+- **status:** done
 - **files:** .skills/advantage-analytics-design/SKILL.md (the `### Focus`
   section at line 655), DESIGN.md (line 92)
   (guess — confirm against src/components/ui/input.tsx:12 and
