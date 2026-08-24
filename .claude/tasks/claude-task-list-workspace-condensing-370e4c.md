@@ -92,3 +92,55 @@ ready).
   `not null default false`, so a stored false cannot be told apart from
   never-set — the backfill in criterion 4 will also flip any program that
   deliberately turned it off, which the author accepted when adding this task.
+
+## T5 · Re-land the player-upload gate without the line-picker dead end
+- **status:** todo
+- **files:** recovered from stash 2c5f85b7 — src/lib/workspace/types.ts,
+  src/lib/workspace/active-workspace-server.ts, src/lib/workspace/actions.ts,
+  src/app/dashboard/team/upload/page.tsx, and the restored migration file
+- **done when:**
+  - [ ] The diff carries T4's stashed work — `Workspace.playersCanUpload`,
+        `canUploadForProgram()`, the `active-workspace-server.ts` select, the
+        `upload/page.tsx` gate, `RESTRICTED_PAGES`, and the migration file
+  - [ ] A player admitted to `/dashboard/team/upload` cannot reach the
+        `?entry=` line-picker path the `matches_block_client_regraft` trigger
+        refuses — picking a line never surfaces a raw `42501`
+  - [ ] `?match=`, `?player=` and the no-preset paths still work for an
+        admitted player, and staff still see the full line picker
+  - [ ] No comment in the changed files claims `program_members.upload_enabled`
+        is checked while nothing checks it
+  - [ ] The stale claim in `matches_block_client_regraft`'s comment, that
+        `/dashboard/team/upload` redirects non-staff, is corrected somewhere a
+        reader will meet it — without editing that already-applied migration,
+        per the create-migration house rule
+- **notes:** Migration `20260824182016` is ALREADY APPLIED to the live database
+  (default true, 1941/1941 rows true, version recorded in
+  `schema_migrations`). Restore the file; do NOT re-apply it. T6 owns the
+  `upload_enabled` question — do not enforce it here, or criterion 4's comment
+  fix and T6 will contradict each other.
+
+## T6 · Make the roster's "Can send video" switch real
+- **status:** todo
+- **files:** src/lib/workspace/types.ts,
+  src/lib/workspace/active-workspace-server.ts,
+  src/app/dashboard/team/upload/page.tsx, a new supabase/migrations/ file
+- **done when:**
+  - [ ] A member whose `program_members.upload_enabled` is false cannot open
+        `/dashboard/team/upload`, even when the program's `players_can_upload`
+        is true
+  - [ ] `owner`, `coach` and `staff` are unaffected by `upload_enabled`
+  - [ ] `program_members.upload_enabled` defaults to true for new members and
+        existing rows are backfilled, verified against the live schema via the
+        Supabase MCP rather than supabase/migrations/
+  - [ ] Flipping the roster's "Can send video" switch off for one player
+        changes what the page admits for that player alone, with no change to
+        the program-wide setting
+  - [ ] The three-condition doc comment in `types.ts` is true of the code once
+        this lands
+- **notes:** Depends on T5. The switch exists in the roster and reads as a
+  working control, but nothing enforces it — `upload_enabled` defaults false on
+  every invite, which is why criterion 3 flips the default: enforcing it
+  without that would make "players can upload by default" false again. THIS
+  TASK WRITES TO THE LIVE DATABASE. T4's lesson is that the migration is
+  applied before the gate runs, and a gate failure cannot undo it — run this
+  one deliberately.
