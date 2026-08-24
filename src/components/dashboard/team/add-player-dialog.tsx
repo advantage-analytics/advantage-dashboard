@@ -50,8 +50,10 @@ import {
  * about something the coach cannot see from inside a dialog. Neither refuses
  * anything: no disabled options, no gated submit, no extra confirm. That row
  * is red, `role="alert"`, and reserved for what `add_program_player` actually
- * refused; these are `role="status"` lines in neutral ink, the same "question,
- * not an alarm" register as the roster table's Possible duplicate chip.
+ * refused; these are quiet lines in neutral ink, the same "question, not an
+ * alarm" register as the roster table's Possible duplicate chip. Neither
+ * carries a live-region role — see `RosterNote` for where the announcing
+ * happens and why it cannot happen on the visible node.
  *
  * *The taken lineup spot.* A spot is deliberately not unique per program (see
  * the `length: 9` comment below), so picking one somebody already holds is
@@ -86,26 +88,53 @@ function emailNote(person: RosterMember): string {
  * duplicate" chip already uses for the same kind of question. One component
  * rather than two copies, so the spacing the two share cannot drift.
  *
- * Visual only, deliberately: it carries no live-region role. Both notes are
- * mounted with their text rather than filled in later, and a live region that
+ * Visual only, deliberately, and `aria-hidden` to say so. A live region that
  * arrives already populated is one assistive tech never announces — it reports
- * *changes* to a region it was already watching. The announcing is done by the
- * always-mounted `sr-only` region below, the same split `performance-tracker`
- * uses.
+ * *changes* to a region it was already watching — and both notes are mounted
+ * with their text rather than filled in later. So the announcing is done by
+ * the always-mounted `sr-only` regions below, the same split
+ * `performance-tracker` uses, and hiding the visible copy keeps each sentence
+ * from being read twice.
  */
 function RosterNote({
   icon: Icon,
   children,
 }: {
   icon: LucideIcon;
-  children: React.ReactNode;
+  /** A prepared sentence, not nodes: the live region has to say the same one. */
+  children: string;
 }) {
   return (
-    <p className="-mt-1 flex items-start gap-2 text-[11px] leading-[1.6] text-[var(--ink-600)]">
+    <p
+      aria-hidden
+      className="-mt-1 flex items-start gap-2 text-[11px] leading-[1.6] text-[var(--ink-600)]"
+    >
       <Icon className="mt-[3px] size-3.5 shrink-0" strokeWidth={1.5} aria-hidden />
       <span>{children}</span>
     </p>
   );
+}
+
+/**
+ * The two sentences, built where the file's other prose helpers live.
+ *
+ * Returned as strings, not JSX, because each one is said twice — once on
+ * screen and once in the live region — and two renderings of one sentence is
+ * two things that can drift.
+ */
+function duplicateNameNote(matches: RosterMember[]): string {
+  const who =
+    matches.length === 1
+      ? `${matches[0].name} is already on this roster`
+      : `${matches.length} people on this roster are already called ${matches[0].name}`;
+  return `${who} — ${matches
+    .map(emailNote)
+    .join(", ")}. If this is somebody else, you can still add them.`;
+}
+
+function spotHeldNote(names: string[], spot: string): string {
+  const holds = names.length === 1 ? "already holds" : "already hold";
+  return `${nameList(names)} ${holds} #${spot}. Spots can be shared while you reshuffle — you can still use this one.`;
 }
 
 /** "Maya Chen" · "Maya Chen and Alex Ruiz" · "Maya Chen and 2 others". */
@@ -176,7 +205,7 @@ export function AddPlayerDialog({
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   /**
-   * The profile this dialog just created, while it is still open.
+   * The profile this dialog just created, and the form that produced it.
    *
    * `add_program_player` revalidates the roster before returning, so on the
    * invite-failure path — the one path that succeeds at the write and stays
@@ -186,8 +215,19 @@ export function AddPlayerDialog({
    * error about it. Excluding that one row is narrower than suppressing the
    * notes: a genuine second holder of the same line, or a same-named teammate
    * who was already there, is still named.
+   *
+   * Keyed on the form, because the exclusion is only ever true of the values
+   * that wrote the row. Held on the id alone it would outlive them: the coach
+   * clears the address the invite choked on, submits again, and the note that
+   * would have said "already on this roster" is suppressed — while
+   * `add_program_player` cannot catch it either, because its only duplicate
+   * checks are on an email that is now empty. That is a silent second row for
+   * one athlete, which is the whole thing this note exists to prevent.
    */
-  const [createdProfileId, setCreatedProfileId] = useState<string | null>(null);
+  const [created, setCreated] = useState<{
+    profileId: string | null;
+    form: string;
+  } | null>(null);
 
   function reset() {
     setFirstName("");
@@ -197,10 +237,42 @@ export function AddPlayerDialog({
     setEmail("");
     setAlsoInvite(false);
     setError(null);
-    setCreatedProfileId(null);
+    setCreated(null);
+  }
+
+  /**
+   * Every way out of this dialog, so none of them can forget the reset.
+   *
+   * Radix fires `onOpenChange` for its own dismissals — Escape, the overlay,
+   * the shell's X — but not for a parent flipping `open`, and this component
+   * is mounted whether or not it is showing. A Cancel button wired straight to
+   * the prop therefore left the form, and the exclusion above, standing.
+   *
+   * Refused while the write is in flight, which is why Cancel is disabled with
+   * it. The component outlives the close, so a reset that lands mid-request is
+   * undone by the `setCreated`/`setError` still to come — the dialog would
+   * reopen holding a red error from an attempt the coach cancelled, and
+   * retyping the same athlete would revive the exclusion for a row no longer
+   * on screen.
+   */
+  function close() {
+    if (pending) return;
+    reset();
+    onOpenChange(false);
   }
 
   const ready = firstName.trim() !== "" && lastName.trim() !== "";
+
+  const formKey = [
+    firstName.trim(),
+    lastName.trim(),
+    classYear,
+    lineupSpot,
+    email.trim(),
+  ].join("\u0000");
+
+  const createdProfileId =
+    created !== null && created.form === formKey ? created.profileId : null;
 
   const others =
     createdProfileId === null
@@ -235,25 +307,9 @@ export function AddPlayerDialog({
             normalizedPersonName(person.name) === typedName
         );
 
-  // Built as strings rather than inline JSX so the visible note and the live
-  // region below cannot drift into saying two different things.
-  const nameNote =
-    sameName.length === 0
-      ? null
-      : `${
-          sameName.length === 1
-            ? `${sameName[0].name} is already on this roster`
-            : `${sameName.length} people on this roster are already called ${sameName[0].name}`
-        } — ${sameName
-          .map(emailNote)
-          .join(", ")}. If this is somebody else, you can still add them.`;
-
+  const nameNote = sameName.length === 0 ? null : duplicateNameNote(sameName);
   const spotNote =
-    spotTakenBy.length === 0
-      ? null
-      : `${nameList(spotTakenBy)} ${
-          spotTakenBy.length === 1 ? "already holds" : "already hold"
-        } #${lineupSpot}. Spots can be shared while you reshuffle — you can still use this one.`;
+    spotTakenBy.length === 0 ? null : spotHeldNote(spotTakenBy, lineupSpot);
 
   function submit() {
     setError(null);
@@ -271,7 +327,7 @@ export function AddPlayerDialog({
         return;
       }
 
-      setCreatedProfileId(result.profileId);
+      setCreated({ profileId: result.profileId, form: formKey });
 
       // The row exists now whatever happens next. If the invitation fails, say
       // so and leave the dialog open — closing on a half-done action would
@@ -306,8 +362,12 @@ export function AddPlayerDialog({
     <RosterDialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) reset();
-        onOpenChange(next);
+        // `close()` is a no-op while pending, so Escape and the overlay leave
+        // the dialog open rather than half-closing it. The success path inside
+        // `submit()` resets directly for the same reason — it runs while the
+        // transition is still pending, and `close()` would refuse it.
+        if (next) onOpenChange(true);
+        else close();
       }}
       title="Add a player"
       description="Creates their roster row now. You can upload their matches straight away — they do not need an account."
@@ -317,7 +377,8 @@ export function AddPlayerDialog({
           <button
             type="button"
             className={advButton("outline")}
-            onClick={() => onOpenChange(false)}
+            disabled={pending}
+            onClick={close}
           >
             Cancel
           </button>
@@ -335,14 +396,6 @@ export function AddPlayerDialog({
         </>
       }
     >
-      {/* Mounted for as long as the dialog is, so a note arriving later is a
-          change to a region assistive tech is already watching — which is the
-          only kind it announces. `sr-only` is absolutely positioned, so it
-          takes no room in the dialog's 18px flex rhythm. */}
-      <div aria-live="polite" aria-atomic="true" className="sr-only">
-        {[nameNote, spotNote].filter(Boolean).join(" ")}
-      </div>
-
       <div className="grid grid-cols-2 gap-4">
         <SettingsField label="First name">
           <SettingsUnderlineInput
@@ -364,6 +417,18 @@ export function AddPlayerDialog({
           to three lines and shoves everything under it around as the coach
           types. GitMerge rather than a person glyph — it is the mark the
           roster row already carries for this exact question. */}
+      {/* The accessible copy of the note beside it, and the reason it is a
+          separate node: mounted for as long as the dialog is, so a sentence
+          arriving later is a *change* to a region assistive tech is already
+          watching — the only kind it announces. `sr-only` is absolutely
+          positioned, so it is out of flow and adds nothing to the dialog's
+          18px rhythm, which is what lets it sit here in reading order rather
+          than being hoisted somewhere it would be read out of context. One
+          region per note: `aria-atomic` re-reads a region whole, so a shared
+          one would repeat the name sentence on every change of lineup spot. */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {nameNote ?? ""}
+      </div>
       {nameNote && <RosterNote icon={GitMerge}>{nameNote}</RosterNote>}
 
       <div className="grid grid-cols-2 gap-4">
@@ -403,6 +468,9 @@ export function AddPlayerDialog({
       {/* Full width rather than in the field's hint slot: the cell is half of a
           440px dialog, and a name wrapped over three lines would shove the
           email field down every time a coach changed the spot. */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {spotNote ?? ""}
+      </div>
       {spotNote && <RosterNote icon={Users}>{spotNote}</RosterNote>}
 
       <SettingsField
