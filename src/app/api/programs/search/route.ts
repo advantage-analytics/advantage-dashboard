@@ -32,8 +32,9 @@ export async function GET(req: NextRequest) {
     { results },
     {
       // The directory changes when the scrape is re-seeded, not between
-      // keystrokes. A short shared cache absorbs the repeated prefixes every
-      // typeahead produces ("mer", "meri", "merid").
+      // keystrokes. Shared, not per-user: one coach's "mer", "meri", "merid"
+      // are three URLs and three cache keys, so what this absorbs is the same
+      // short term typed by everyone — which is also the term that costs most.
       headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600" },
     }
   );

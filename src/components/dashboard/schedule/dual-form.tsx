@@ -80,13 +80,10 @@ export function DualForm({
   // typing. Null is a real answer — a club side or a school the ITA scrape
   // missed has no row — and the line is still recorded, just without a rival
   // to aggregate it under.
-  const [opponentProgramKey, setOpponentProgramKey] = useState<string | null>(null);
-  // The squad on that same directory row, kept only to compare against ours.
-  // It is never sent: `createDual` resolves the program key to a directory row,
-  // and the squad is a property of that row.
-  const [opponentTeam, setOpponentTeam] = useState<
-    ProgramSearchResult["team"] | null
-  >(null);
+  // Only its key is sent. The rest of the row is here to be compared against
+  // our own squad, which `createDual` has no field to carry and no reason to.
+  const [opponentProgram, setOpponentProgram] =
+    useState<ProgramSearchResult | null>(null);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [site, setSite] = useState<EventSite>("home");
   const [surface, setSurface] = useState(defaultSurface || "Hard");
@@ -118,14 +115,16 @@ export function DualForm({
   // Two squads at one school are two programs with two budgets, and the
   // directory returns both rows under the same school name. Picking the wrong
   // one writes a dual that looks right on the schedule and aggregates under a
-  // rival nobody played. A key is what says a directory row was picked at all —
-  // typed text has no squad to disagree with — and a null on either side is a
-  // program the dataset never told us about, which is not a mismatch either.
-  const squadMismatch =
-    opponentProgramKey !== null &&
+  // rival nobody played. Null on either side is a squad the dataset never told
+  // us about, which is not a mismatch — and typed text has no row at all. The
+  // squad itself rather than a boolean, so the warning can name it without
+  // asking TypeScript to take the guard's word for the row being there.
+  const mismatchedSquad =
     ourTeam !== null &&
-    opponentTeam !== null &&
-    opponentTeam !== ourTeam;
+    opponentProgram !== null &&
+    opponentProgram.team !== ourTeam
+      ? opponentProgram.team
+      : null;
 
   function submit() {
     setError(null);
@@ -134,7 +133,7 @@ export function DualForm({
     startTransition(async () => {
       const result = await createDual({
         opponent,
-        opponentProgramKey,
+        opponentProgramKey: opponentProgram?.programKey ?? null,
         date,
         site,
         surface,
@@ -198,13 +197,12 @@ export function DualForm({
           <span className="eyebrow">New dual · opponent</span>
           <OpponentPicker
             value={opponent}
-            onChange={(name, programKey, team) => {
+            onChange={(name, program) => {
               setOpponent(name);
-              setOpponentProgramKey(programKey);
-              setOpponentTeam(team);
+              setOpponentProgram(program);
             }}
           />
-          {squadMismatch ? (
+          {mismatchedSquad !== null ? (
             // Advisory, and deliberately nothing more: Create stays enabled and
             // the payload is untouched. A men's program really can host the
             // women's side of another school, and a form that refused it would
@@ -225,7 +223,7 @@ export function DualForm({
                   className="font-medium"
                   style={{ color: "var(--ink-900)" }}
                 >
-                  {teamLabel(ourTeam)} squad, {teamLabel(opponentTeam)}{" "}
+                  {teamLabel(ourTeam)} squad, {teamLabel(mismatchedSquad)}{" "}
                   opponent.
                 </span>{" "}
                 This workspace is {programDisplayName(ourName, ourTeam)} and you

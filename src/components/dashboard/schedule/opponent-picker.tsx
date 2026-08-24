@@ -20,31 +20,26 @@ import { programDisplayName, teamLabel } from "@/lib/data/programs-server";
  * recorded line point at a directory row, and everything on the Opponents page
  * hangs off that.
  *
- * The squad rides along as the third argument for the same reason the key
- * does: the caller already has the row in hand here, and asking the directory
- * a second question to learn something this component just read would be a
- * round-trip for a value that was never lost. Null whenever the key is null —
- * typed text has no squad to report.
+ * It hands back the whole directory row beside the name, rather than a key
+ * and a squad and whatever the next screen needs after that. The caller has
+ * the row in hand here, and three arguments that are only ever null together
+ * put an invariant in prose that the type can hold instead. Null is typed
+ * text — there is no row behind it.
  */
 export function OpponentPicker({
   value,
   onChange,
 }: {
   value: string;
-  onChange: (
-    name: string,
-    programKey: string | null,
-    team: ProgramSearchResult["team"] | null
-  ) => void;
+  onChange: (name: string, program: ProgramSearchResult | null) => void;
 }) {
-  const [term, setTerm] = useState("");
+  // Holds the bare school name once a row is picked, so "Change" reopens on a
+  // term the directory can answer. `value` carries the squad by then —
+  // "Louisiana State University Men's Tennis" — and searching for that finds
+  // nothing, which is why the box is never seeded from it.
+  const [term, setTerm] = useState(value);
   const [results, setResults] = useState<ProgramSearchResult[]>([]);
   const [editing, setEditing] = useState(value === "");
-  // The bare school name behind whichever row was picked, so "Change" can put
-  // the coach back where they started. `value` carries the squad by then —
-  // "Louisiana State University Men's Tennis" — and the directory matches on
-  // the school name, so seeding the search with it would find nothing.
-  const [pickedSchool, setPickedSchool] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -90,7 +85,6 @@ export function OpponentPicker({
         <button
           type="button"
           onClick={() => {
-            setTerm(pickedSchool ?? value);
             setEditing(true);
             queueMicrotask(() => inputRef.current?.focus());
           }}
@@ -122,8 +116,7 @@ export function OpponentPicker({
             // Exactly what was typed. A coach naming a club side, or typing a
             // school the directory happens to hold, gets their own words back
             // with no squad appended and no key attached.
-            onChange(term.trim(), null, null);
-            setPickedSchool(null);
+            onChange(term.trim(), null);
             setEditing(false);
           }}
           placeholder="Search programs, or type any opponent"
@@ -144,10 +137,10 @@ export function OpponentPicker({
                 // header, and in the event this dual becomes.
                 onChange(
                   programDisplayName(result.schoolName, result.team),
-                  result.programKey,
-                  result.team
+                  result
                 );
-                setPickedSchool(result.schoolName);
+                // The school name, not what was just stored — see `term`.
+                setTerm(result.schoolName);
                 setEditing(false);
                 setResults([]);
               }}
