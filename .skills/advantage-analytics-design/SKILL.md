@@ -230,18 +230,19 @@ Match detail and video sections use additional colors for multi-player different
 | Token | Value | Use |
 |-------|-------|-----|
 | shadow-card | `shadow-[0px_2px_8px_0px_rgba(0,0,0,0.06)]` | Default card |
-| shadow-card-emphasis | `shadow-[0px_4px_16px_0px_rgba(0,0,0,0.1)]` | Emphasized cards |
+| shadow-card-emphasis | `shadow-[var(--shadow-card-emphasis)]` | Lift — hover and selection |
 | shadow-card-raised | `shadow-[0px_6px_20px_0px_rgba(0,0,0,0.12)]` | Raised cards (activity) |
-| shadow-dropdown | `shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]` | Dropdowns, popovers |
-| shadow-floating | `shadow-[0px_8px_32px_rgba(0,0,0,0.25),0px_0px_0px_1px_rgba(255,255,255,0.06)_inset]` | Dark floating UI |
-| shadow-keycap | `shadow-[0_1px_0_rgba(15,23,42,0.04)]` | Kbd chips — a **detail effect**, not elevation. `ui/kbd.tsx` still composes the identical value from globals.css's `--color-shadow-keycap` |
-| shadow-cta-glow | `shadow-[0_1px_3px_rgba(57,134,243,0.25)]` | The primary button's glow, applied by `advButton()` — detail, not elevation |
+| shadow-dropdown | `shadow-[var(--shadow-dropdown)]` | Dropdowns, popovers |
+| shadow-floating | `shadow-[var(--shadow-floating)]` | Dark floating UI |
+| shadow-keycap | `shadow-[var(--shadow-keycap)]` | Kbd chips — a **detail effect**, not elevation |
+| shadow-cta-glow | `shadow-[var(--shadow-cta-glow)]` | The primary button's glow, applied by `advButton()` — detail, not elevation |
 
-Every row above except `shadow-card` and `shadow-card-raised` is a
-`--shadow-*` custom property in `src/styles/design-system/effects.css`; prefer
-`shadow-[var(--shadow-dropdown)]` over retyping the literal. `shadow-card` and
-`shadow-card-raised` are `--shadow-card` and `--shadow-card-elevated` from
-`globals.css` — effects.css deliberately does not redefine either.
+Literal values live in `src/styles/design-system/effects.css` (and are listed
+in DESIGN.md's effects-token ledger) — reach for the token, not the literal, so
+a change to the value reaches every call site. `shadow-card` and
+`shadow-card-raised` are the exception: they are `--shadow-card` and
+`--shadow-card-elevated` from `globals.css`, which effects.css deliberately does
+not redefine.
 
 Tailwind utility shadows are also used in specific contexts:
 - `shadow-none` — Explicit shadow removal (buttons, flat elements)
@@ -260,22 +261,25 @@ Tailwind utility shadows are also used in specific contexts:
 | EASE (spring-like) | `--ease-out-expo` | `[0.23, 1, 0.32, 1]` | Header, layout transitions |
 | EASE_CHART | `--ease-chart` | `[0.2, 0, 0.4, 1]` | Chart/data transitions |
 
-Three curves, one set: the Framer array and the CSS token on each row are the
-same curve, so a component that animates in both places stays in step.
+Three curves, one set: each row's Framer array and CSS token are the same
+curve. Use the token on the CSS side so a component animating in both places
+stays in step — today only `--ease-primary` has `var()` call sites, and the
+other two are hard-coded as literals wherever they appear.
 
 **Forbidden**: bounce, elastic, glassmorphism effects.
 
 ### Duration Scale
 
-Four named tokens in `effects.css` cover the CSS side; use them by name rather
-than hard-coding a `duration-*` utility beside them.
+Four named tokens in `effects.css` cover the CSS side. Prefer them in new
+work; the `duration-200` / `duration-150` utilities in the recipes below are the
+same values written the older way, and are not a defect to go fix ad hoc.
 
 | Token | Value | Use |
 |---|---|---|
 | `--duration-fast` | 150ms | Micro-feedback, colour swaps |
-| `--duration-hover` | 200ms | Hover and press transitions (`advButton()` uses this) |
-| `--duration-enter` | 300ms | Page and section enter |
-| `--duration-reveal` | 400ms | Larger reveals |
+| `--duration-hover` | 200ms | Hover and colour transitions (`advButton()` uses this; its press is a separate hard-coded 80ms — 200ms there reads as a bounce) |
+| `--duration-enter` | 300ms | Page and section enter — reserved, no call sites yet |
+| `--duration-reveal` | 400ms | Larger reveals — reserved, no call sites yet |
 
 The wider scale below is the Framer Motion side, where durations are numbers:
 
@@ -290,7 +294,6 @@ The wider scale below is the Framer Motion side, where durations are numbers:
 | `0.6s` | Larger reveals, chart animations |
 | `0.8s` – `1s` | Progress rings, loaders |
 | `1.2s` | Sparkline path draw |
-| `200ms` | Default CSS hover transition (`transition-colors duration-200`) |
 
 ### Standard Motions (Framer Motion)
 
@@ -682,26 +685,26 @@ flex items-center gap-2.5
 **Write nothing.** `src/styles/design-system/focus.css` is the entire focus
 treatment. It gives `<input>`, `<textarea>` and native `<select>` the neutral
 `--focus-ring-field`, and gives every other tabbable control — `a[href]`,
-`button`, `[role="button"]`, `summary`, any non-negative `tabindex` — the blue
+`button`, `[role="button"]`, `summary`, `[tabindex]:not([tabindex="-1"])` — the blue
 `--focus-ring`. Text fields are the carve-out because a six-field form would
 otherwise spend the accent six times over. You add a focus class to nothing, and
 a hand-rolled `<input>` is covered as-is.
 
 The two shipped rings, defined in `effects.css`:
 
-| Token | Value | Applies to |
-|---|---|---|
-| `--focus-ring` | `0 0 0 2px var(--blue-ring-40)` | links, buttons, tabs, pills — everything actionable |
-| `--focus-ring-field` | `0 0 0 1px var(--field-ring), 0 0 0 2px var(--field-ring-30)` | `input` · `textarea` · native `select` |
+| Token | Value |
+|---|---|
+| `--focus-ring` | `0 0 0 2px var(--blue-ring-40)` |
+| `--focus-ring-field` | `0 0 0 1px var(--field-ring), 0 0 0 2px var(--field-ring-30)` |
 
 The field ring is two layers on purpose. The 30% band alone composites to
-#F7F7F7 on white — present in devtools, invisible to a keyboard user. The opaque
-1px layer is what you actually see; the band only softens its outer edge.
-`--field-ring` resolves to `--ink-500`, which now carries a **3:1 floor**
-(WCAG 1.4.11) against both the white card and the #F7F7F7 field fill — it
-measures 3.55:1 / 3.31:1. Do not lighten `--ink-500`: it is no longer only a
-text colour. Raise contrast on `--field-ring`, never on the `-30` band, which
-tops out near 1.4:1 whatever colour it carries.
+#DBDBDB on white — 1.38:1, present in devtools, invisible to a keyboard user.
+The opaque 1px layer is what you actually see; the band only softens its outer
+edge. `--field-ring` resolves to `--ink-500`, which now carries a **3:1 floor**
+(WCAG 1.4.11) against both the white card and the #F5F5F5 field fill. Do not
+lighten `--ink-500`: it is no longer only a text colour. Raise contrast on
+`--field-ring`, never on the `-30` band — at 30% alpha the band cannot reach 3:1
+whatever colour it carries. The measurements are in DESIGN.md → Focus.
 
 `focus.css` is imported outside any `@layer` while Tailwind utilities live in
 `@layer utilities`, and unlayered CSS wins regardless of specificity — so
@@ -712,6 +715,16 @@ only matters against other unlayered rules. To override, change the token or
 write unlayered CSS. `advButton()` agrees by value rather than by utility — it
 sets `focus-visible:shadow-[var(--focus-ring)]`, the same property the file
 uses, so nothing is competing.
+
+Treat that as a known defect rather than as settled design: it fails silently,
+and 62 files under `src/` carry `focus-visible:ring-*` classes on controls
+`focus.css` already rings, so they are inert — a few of them, including
+`ui/button.tsx` and `ui/input.tsx`, encoding a *different* ring than the
+system's. The structural fixes (importing the design-system CSS into a named
+layer, and a lint rule that makes the dead class a build failure) are filed
+separately, because activating ~190 inert declarations at once is a behaviour
+change that needs its own review. Until then: write no
+focus class.
 
 **The wrapper-ring pattern is the one exception to "write nothing."** When the
 input sits inside a bordered box and the box is what reads as the field, the
