@@ -148,8 +148,9 @@ deliberately deferred (dark mode, v2 shadows). Tokens live in
 `src/styles/design-system/`, imported by `globals.css`.
 
 Inter only (300/400/500/600), type scale 9–56px, blue accent `#3B82F6`, success `#5DB955`,
-error `#E51837`, Lucide icons only, two Framer Motion curves
-(`[0.25, 0.46, 0.45, 0.94]`, `[0.23, 1, 0.32, 1]`), no bounce or glassmorphism.
+error `#E51837`, Lucide icons only, three Framer Motion curves
+(`[0.25, 0.46, 0.45, 0.94]`, `[0.23, 1, 0.32, 1]`, and `[0.2, 0, 0.4, 1]` for chart and
+data transitions), no bounce or glassmorphism.
 
 Auth pages style from CSS variables; dashboard pages use Tailwind utilities directly.
 Primary buttons come from `advButton()` (`src/lib/ui/adv-button.ts`) — don't hand-roll a
