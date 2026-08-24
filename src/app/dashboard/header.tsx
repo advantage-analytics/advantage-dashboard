@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { navLabel, settingsSection } from "@/lib/dashboard/nav";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { workspaceTitle } from "@/lib/workspace/types";
 import { WorkspaceOptionList } from "@/components/dashboard/workspace-switcher";
 import { useRequestLogout } from "@/components/dashboard/logout-dialog";
 
@@ -46,6 +47,23 @@ interface MatchCrumb {
 const MATCHES_STATIC_SEGMENTS = new Set(["new"]);
 
 const MATCHES_CRUMB = { label: "Matches", href: "/dashboard/matches" };
+
+/**
+ * Pages whose leading slot is the workspace itself rather than a position
+ * within a flow (design 9g).
+ *
+ * Team Home is about the program, so naming it "Team Home" spent the slot
+ * restating the rail's highlighted row. The workspace name is the better thing
+ * to spend it on — not the only thing that says it, though: the rail shows the
+ * name whenever it is expanded and its trigger carries
+ * `aria-label="Workspace: <name>. Switch workspace"` in every state. The two
+ * treatments are alternatives, never both — a trail *and* a title in the same
+ * slot reads as two competing answers to "where am I".
+ *
+ * `/dashboard` is deliberately absent: its crumb list is empty today and stays
+ * that way.
+ */
+const WORKSPACE_TITLE_PATHS = new Set(["/dashboard/team"]);
 
 /**
  * The crumb for any page that is simply a navigation destination.
@@ -156,12 +174,17 @@ export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
     fetchMatchCrumb();
   }, [matchId]);
 
+  const title = WORKSPACE_TITLE_PATHS.has(pathname)
+    ? workspaceTitle(active)
+    : null;
+
   // A match detail page is one page. `matches/[matchId]/` has no
   // sub-directories — only error/layout/loading/not-found/page — so the trail
   // that used to be built here for insights/performance/statistics/video/visuals
   // matched routes that cannot be reached.
-  const breadcrumbs: { label: string; href?: string }[] =
-    isMatchDetailPage && matchCrumb
+  const breadcrumbs: { label: string; href?: string }[] = title
+    ? []
+    : isMatchDetailPage && matchCrumb
       ? [
           MATCHES_CRUMB,
           { label: matchCrumb.tournamentName },
@@ -216,9 +239,38 @@ export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
           scrolled ? "border-[#EBEBEB]" : "border-transparent"
         )}
       >
-        {/* Left: breadcrumbs. The collapse toggle moved into the sidebar's
-            bottom group, where it never shifts relative to Settings and Help. */}
+        {/* Left: the workspace title, or breadcrumbs — one or the other, never
+            both. The collapse toggle moved into the sidebar's bottom group,
+            where it never shifts relative to Settings and Help. */}
         <div className="flex min-w-0 flex-1 items-center">
+          {/* School first and heaviest; the squad trails it in micro type with
+              no dash or dot, because the pair reads as one name rather than
+              two facts. The qualifier is dropped entirely — not emptied —
+              where there is no squad, so `gap-2` has nothing to space. */}
+          {title && (
+            <span className="inline-flex items-baseline gap-2">
+              {/* No screen-reader separator between the two spans, and none
+                  needed: both are flex items, so both blockify and already
+                  announce as separate nodes. `element.textContent` runs them
+                  together, but nothing reads that — check the accessibility
+                  tree before "fixing" it. Naming the pair is the rail's job;
+                  its trigger already announces the workspace by name. */}
+              <span className="text-[12px] font-medium text-[var(--ink-900)]">
+                {title.name}
+              </span>
+              {title.qualifier && (
+                /* `text-micro` bakes in --ink-500, which colors.css reserves
+                   for decoration at 3.54:1 — and this qualifier is the only
+                   thing telling a school's men's and women's workspaces apart,
+                   so it has to be read. --ink-600 is the documented AA-gap
+                   token, 4.83:1. Inline because the DS class is unlayered and
+                   beats a Tailwind colour utility. */
+                <span className="text-micro" style={{ color: "var(--ink-600)" }}>
+                  {title.qualifier}
+                </span>
+              )}
+            </span>
+          )}
 
           {isMatchDetailPage && matchCrumbLoading && !matchCrumb && (
             <div className="flex items-center gap-1.5">
