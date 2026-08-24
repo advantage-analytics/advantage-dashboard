@@ -99,10 +99,22 @@ not drafts.
 the subagent the runner dispatches. Mark it as a guess; the runner already
 treats it as one a subagent may correct.
 
-**Numbering.** Take the next free `T<n>`, scanning the file's existing
-headings. **Never reuse a number**, even one freed by a deletion — the run log
-references tasks by id, and a reused id makes the log ambiguous about which
-work a line describes. Take the next id above the highest ever used.
+**Numbering.** Take the next id above the highest ever used — **scan both
+`.claude/tasks/<slug>.md` and `.claude/tasks/<slug>.log.md`**, and take the
+higher of the two:
+
+```bash
+{ grep -ho '^## T[0-9]*' .claude/tasks/<slug>.md .claude/tasks/<slug>.log.md; } \
+  | grep -o '[0-9]*' | sort -n | tail -1
+```
+
+The queue alone is not enough. A finished or abandoned task gets deleted from
+the queue but stays in the log forever, so scanning only the queue silently
+reclaims its id — which is precisely what this rule exists to prevent.
+
+**Never reuse a number**, even one freed by a deletion: the run log references
+tasks by id, and a reused id makes the log ambiguous about which work a line
+describes.
 
 **Duplicates.** If an existing task looks like the same work, name it and let
 the author decide. Flag; never merge.
