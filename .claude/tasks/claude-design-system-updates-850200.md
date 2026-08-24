@@ -31,21 +31,28 @@ ready).
 - **notes:** Docs-only; no component or CSS changes. Adjacent drift found but left out of scope — CLAUDE.md:151 still says "two Framer Motion curves" while both design docs list three (`--ease-chart`).
 
 ## T2 · Correct the stale focus-ring figures in the CSS comments
-- **status:** blocked
+- **status:** todo
 - **files:** src/styles/design-system/colors.css (the `--field-ring` rationale,
-  around lines 74–88), src/styles/design-system/effects.css (the
-  `--focus-ring-field` comment, around lines 41–46)
+  around lines 74-88), src/styles/design-system/effects.css (the
+  `--focus-ring-field` comment, around lines 41-46), DESIGN.md (the Focus
+  bullet), .skills/advantage-analytics-design/SKILL.md (the Focus section)
 - **done when:**
   - [ ] `colors.css`'s `--field-ring` comment names `#F5F5F5` (the value `--surface-field` resolves to) as the field surface, not `#F7F7F7`, and states the pair as 3.54:1 / 3.25:1 against white and that surface, with the retired `#E5E5E5` at 1.26:1 / 1.16:1.
-  - [ ] The same comment no longer claims the `-30` band "tops out near 1.4:1 whatever colour it carries" — it states that 30% alpha cannot reach 3:1 (pure black composites to 2.12:1) and that the band measures 1.38:1 at today's `--ink-500`.
-  - [ ] `effects.css`'s two-layer comment computes the shipped band: `--ink-500` at 30% over white composites to `#DBDBDB` (0.3×136 + 0.7×255 = 219.3), 1.38:1 — not the `0.3x229 + 0.7x255 = 247.2` arithmetic, whose 229 is the retired `#E5E5E5`.
-  - [ ] Every figure written is recomputed from the WCAG relative-luminance formula rather than copied from another comment or from the docs, and the resulting numbers agree with DESIGN.md → Focus and SKILL.md → Focus.
-  - [ ] Comments only: `git diff` shows no change to any declaration, selector or token value, and `npm run lint`, `npx tsc --noEmit` and `npm test` stay green.
-- **notes:** These comments are what DESIGN.md and SKILL.md were originally
-  written from, which is how four wrong figures reached the docs in T1 and
-  survived a completion review. Fixing the docs without fixing these leaves the
-  wrong copy at the definition site, where the next doc update will read it.
-  Verified figures are in commit 55087b4's message.
+  - [ ] The same comment no longer claims the `-30` band "tops out near 1.4:1 whatever colour it carries" — it states that 30% alpha cannot reach 3:1 at all (pure black composites to ~2.1:1) and that the band measures 1.38:1 at today's `--ink-500`.
+  - [ ] `effects.css`'s two-layer comment computes the shipped band: `--ink-500` at 30% over white composites to `#DBDBDB` (0.3x136 + 0.7x255 = 219.3), 1.38:1 — not the `0.3x229 + 0.7x255 = 247.2` arithmetic, whose 229 is the retired `#E5E5E5`.
+  - [ ] DESIGN.md and SKILL.md carry `~2.1:1` too — neither still says `2.12:1` — and every other focus figure in all four files agrees value-for-value.
+  - [ ] Every figure is recomputed from the WCAG relative-luminance formula rather than copied from another file. Where a composite lands exactly on `.5` (pure black at 30% over white is exactly 178.5, giving 2.12 / 2.11 / 2.10 under half-to-even / no rounding / half-up), the figure is written to the precision that holds under every rounding — `~2.1:1` — never to two decimals.
+  - [ ] The CSS diff is comment-only: no declaration, selector, token value or ordering changed. `npm run lint`, `npx tsc --noEmit` and `npm test` stay green.
+- **notes:** Widened from CSS-only after the first attempt was gated
+  `needs-work`: the original criterion demanded `2.12:1`, which is an artifact
+  of Python's banker's rounding, not of the formula. `~2.1:1` is the honest
+  figure, and it now has to land in all four files at once or they disagree.
+  **Restore the first attempt rather than redoing it** — `git stash apply
+  9fa3b7597418a95668d5588458df1773ec704944` has the CSS comments already
+  rewritten and re-verified; everything in it except the `2.12:1` figure was
+  confirmed correct by the reviewer. These comments are what DESIGN.md and
+  SKILL.md were originally written from, which is how four wrong figures reached
+  the docs in T1. Verified figures are in commit 55087b4's message.
 
 ## T3 · Delete the inert focus-visible:ring-* declarations under src/
 - **status:** todo
