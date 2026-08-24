@@ -70,6 +70,14 @@
   --blue-ring-30:rgba(59,130,246,0.30); /* border hint — outline-button hover */
   --blue-ring-40:rgba(59,130,246,0.40); /* focus ring */
   --blue-glow:rgba(59,130,246,0.15);
+  /* Field focus ring — the neutral counterpart to --blue-ring-*, consumed by
+     --focus-ring-field in effects.css. Deliberately NOT --border-field
+     (#E5E5EA): that is the resting hairline, and a focus ring that matches the
+     rest state is not an indicator. No .dark value yet — dark mode is deferred
+     (DESIGN.md), and inventing one here would be guessing at a palette nobody
+     has designed. It needs one before dark mode ships. */
+  --field-ring:#E5E5E5;
+  --field-ring-30:rgba(229,229,229,0.30);
   /* Text-on-tint retired (review): informational capsules are neutral —
      surface-subtle bg + ink text. Aliases kept so nothing breaks. */
   --blue-ink-deep:var(--ink-900);

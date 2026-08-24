@@ -660,23 +660,34 @@ Buttons, links, tabs, pills — every control that is not a text field:
 focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none
 ```
 
-Text fields are the carve-out. `<input>`, `<textarea>` and the `Select` trigger
-take a neutral ring: blue on a focused field reads as a validation state, and a
-six-field form would spend the accent six times over.
+Text fields are the carve-out: `<input>`, `<textarea>` and native `<select>`
+take a neutral ring, because a six-field form would otherwise spend the accent
+six times over.
 
-```
-focus-visible:border-[#E5E5E5] focus-visible:ring-[#E5E5E5]/30 focus-visible:ring-[1px]
-```
+**Write nothing.** `src/styles/design-system/focus.css` already gives those
+three tags `--focus-ring-field` and gives everything else `--focus-ring`. You
+do not add a focus class to a text field, and a hand-rolled `<input>` is
+covered as-is.
 
-`ui/input.tsx:12` and `ui/select.tsx:40` already set that, so using the
-primitives gets it for free. A hand-rolled field does not:
-`src/styles/design-system/focus.css` lists `input, select, textarea` alongside
-`button` and `a[href]` and hands all of them the blue `--focus-ring`, so a bare
-`<input>` focuses blue today unless it sets the classes above. That rule lives
-inside `:where()` at specificity 0 exactly so a component can override it — and
-it exists because the reset leaves `outline: none` on everything, which left
-keyboard users with no focus indicator at all (WCAG 2.4.7 AA). Recolour the
-ring; never delete it.
+That file is imported outside any `@layer` while Tailwind utilities live in
+`@layer utilities`, and unlayered CSS wins regardless of specificity — so a
+`focus-visible:ring-*` utility on a text field does **not** override the
+default, it is silently discarded. Its `:where()` wrapper keeps specificity at
+0, but that only matters against other unlayered rules. To override, change the
+token or write unlayered CSS.
+
+Two gotchas:
+
+- The split is keyed on tag name, so Radix's `SelectTrigger` — a `<button>` —
+  takes the **blue** ring, not the neutral one. Only a native `<select>` gets
+  the carve-out.
+- `border-color` is not part of the ring, so `focus:border-[var(--blue)]` still
+  turns a field blue. That is the deliberate underline vocabulary on auth
+  fields; on a boxed field it is a leak.
+
+The rule exists because the reset leaves `outline: none` on everything, which
+left keyboard users with no focus indicator at all (WCAG 2.4.7 AA). Recolour a
+ring; never delete one.
 
 ### Disabled
 

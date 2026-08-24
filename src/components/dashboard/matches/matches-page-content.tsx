@@ -601,7 +601,7 @@ export function MatchesPageContent({
               title="Search by event, opponent, or round"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-8 w-[216px] pl-8 pr-8 rounded-full ring-1 ring-inset ring-[#EAECF0] text-xs text-[#0D0D0D] placeholder:text-[#CCCCCC] focus:outline-none focus:ring-[#E5E5E5] focus:ring-2 transition-[color,background-color] duration-200 bg-white"
+              className="h-8 w-[216px] pl-8 pr-8 rounded-full ring-1 ring-inset ring-[#EAECF0] text-xs text-[#0D0D0D] placeholder:text-[#CCCCCC] focus:outline-none transition-[color,background-color] duration-200 bg-white"
             />
             {!search && (
               <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-medium text-[#CCCCCC] pointer-events-none">/</kbd>

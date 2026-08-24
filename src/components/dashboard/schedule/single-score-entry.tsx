@@ -154,7 +154,7 @@ function Cell({
       placeholder={small ? "" : "–"}
       aria-label={small ? "Tiebreak points for the side that lost it" : "Games"}
       onChange={(event) => onChange(event.target.value)}
-      className={`tabular h-[30px] w-[26px] rounded-[6px] border border-[#EAECF0] bg-white text-center outline-none focus-visible:border-[#E5E5E5] focus-visible:ring-[#E5E5E5]/30 focus-visible:ring-[1px] ${
+      className={`tabular h-[30px] w-[26px] rounded-[6px] border border-[#EAECF0] bg-white text-center outline-none focus-visible:border-[#E5E5E5] ${
         small
           ? "text-[11px] text-[#525252]"
           : "text-[13px] text-[#0D0D0D] placeholder:text-[#CCCCCC]"

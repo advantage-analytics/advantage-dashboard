@@ -9,20 +9,24 @@
    nothing looks wrong unless you navigate by keyboard, which is exactly why it
    survived review.
 
-   `:where()` keeps specificity at 0, so this is a default any component can
-   still override, never a rule that fights one. `advButton()` already sets the
-   same ring; this simply stops every hand-rolled control from having to
-   remember.
+   `:where()` keeps specificity at 0 — but note what that does NOT buy here.
+   `globals.css` imports this file outside any `@layer`, while Tailwind's
+   utilities live in `@layer utilities`, and unlayered CSS beats layered CSS
+   before specificity is ever consulted. So a `focus-visible:ring-*` utility
+   does not override these rules; it is silently discarded. Measured, not
+   assumed. That makes this file the single source of focus treatment rather
+   than a polite default — override it by changing a token, not by adding a
+   utility class. `advButton()` sets the same ring, so it agrees by value.
 
    ── Two rings, split by control kind ─────────────────────────────────────────
    The floor is one indicator per control, not one COLOUR for every control.
    Text fields are the carve-out (DESIGN.md "Focus"): blue on a focused field
    reads as a validation state, and a six-field form would spend the accent six
    times over. So `input`, `select` and `textarea` resolve to the neutral
-   `--focus-ring-field` — the same treatment `ui/input.tsx:12` and
-   `ui/select.tsx:40` already set on themselves, so a hand-rolled field now
-   matches the primitive instead of out-shouting it. Everything actionable —
-   links, buttons, `summary`, anything tabbable — keeps the blue `--focus-ring`.
+   `--focus-ring-field`, and need no focus class of their own. Everything
+   actionable — links, buttons, `summary`, anything tabbable — keeps the blue
+   `--focus-ring`. The split is keyed on tag name, so Radix's `SelectTrigger`
+   is a `<button>` and takes blue; only a native `<select>` gets the carve-out.
 
    Two things this split must not do, both of which look fine on screen:
    1. Resolve either branch to `none`. "No indicator" is the bug this file
