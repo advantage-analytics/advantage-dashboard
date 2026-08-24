@@ -31,7 +31,7 @@ ready).
 - **notes:** Docs-only; no component or CSS changes. Adjacent drift found but left out of scope — CLAUDE.md:151 still says "two Framer Motion curves" while both design docs list three (`--ease-chart`).
 
 ## T2 · Correct the stale focus-ring figures in the CSS comments
-- **status:** todo
+- **status:** blocked
 - **files:** src/styles/design-system/colors.css (the `--field-ring` rationale,
   around lines 74–88), src/styles/design-system/effects.css (the
   `--focus-ring-field` comment, around lines 41–46)

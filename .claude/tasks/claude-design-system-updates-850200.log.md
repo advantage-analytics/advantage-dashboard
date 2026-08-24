@@ -31,3 +31,32 @@ is the runner's. Newest entries at the bottom.
   "Effects tokens — the shipped set" inventory covering all 14 custom
   properties, with the `.dark` block and `@keyframes adv-status-pulse` marked
   deliberately undocumented (dark mode is staged, not shipped).
+
+## T2 · Correct the stale focus-ring figures in the CSS comments — blocked
+- **gate:** lint clear (0 errors) · `tsc --noEmit` exit 0 · `npm test` 93/93 ·
+  diff confirmed comment-only, no declaration or token value touched ·
+  task-completion-reviewer `VERDICT: needs-work`. Guardrail reviewers skipped
+  legitimately: the diff is two files under `src/styles/design-system/`,
+  touching none of `src/app/dashboard/`, `src/components/dashboard/`, the
+  upload wizard, `src/lib/supabase/`, `src/lib/data/`, `src/app/api/` or
+  `supabase/migrations/`; `git ls-files --others` was empty.
+- **why:** Four of the five criteria were met and independently re-verified by
+  the reviewer, which recomputed every ratio from the hex values rather than
+  trusting the task block. The fifth failed on one figure: the task asked for
+  `2.12:1` as the ceiling at 30% alpha, and that value is an artifact of
+  rounding, not of the formula. Pure black at 30% over white composites to
+  exactly 178.5, and the ratio is 2.12:1 / 2.11:1 / 2.10:1 depending on whether
+  you round half-to-even, leave it unquantized, or round half-up. The task block
+  inherited 2.12 from commit 55087b4, whose script used Python's banker's
+  rounding — an arbitrary choice asserted to two decimals. The criterion
+  demanding that figure be recomputed from the formula is unsatisfiable as
+  written.
+- **needs a decision before re-running:** the honest figure is `~2.1:1`, which
+  holds under every rounding. Writing that in `colors.css` alone leaves it
+  disagreeing with DESIGN.md → Focus and SKILL.md → Focus, which both say
+  `2.12:1` and sit outside T2's `files:` list. So T2 should either be widened
+  to include those two docs, or the ceiling sentence dropped from the criterion
+  — a scope call, not the runner's to make.
+- **stash:** 9fa3b7597418a95668d5588458df1773ec704944 (comment-only changes to colors.css and effects.css;
+  everything except the 2.12 figure is correct and re-verified, so this is worth
+  restoring rather than redoing).
