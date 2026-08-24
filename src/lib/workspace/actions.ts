@@ -45,11 +45,16 @@ const PROGRAM_RECORD_LISTS = [
 
 /**
  * Pages only a program's staff can open, and where someone without that
- * standing lands instead — the destinations those pages redirect to themselves
- * (`team/upload/page.tsx`, `settings/team/page.tsx`).
+ * standing lands instead — the path each page's own staff guard redirects to
+ * (`team/upload/page.tsx` to the schedule, `settings/team/page.tsx` to
+ * Profile).
+ *
+ * The upload page's *other* guard, which sends a personal workspace to
+ * `/dashboard/matches/new`, has no entry here and needs none: `TEAM_ONLY_TREES`
+ * matches that path first and goes home before this map is read.
  */
 const STAFF_ONLY_PAGES: Record<string, string> = {
-  '/dashboard/team/upload': '/dashboard/team',
+  '/dashboard/team/upload': '/dashboard/team/schedule',
   '/dashboard/settings/team': '/dashboard/settings/profile',
 };
 

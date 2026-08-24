@@ -54,7 +54,7 @@ ready).
   Personal.
 
 ## T3 · Correct the STAFF_ONLY_PAGES fallback for team upload
-- **status:** todo
+- **status:** done
 - **files:** src/lib/workspace/actions.ts (guess — STAFF_ONLY_PAGES and the
   comment above it)
 - **done when:**
