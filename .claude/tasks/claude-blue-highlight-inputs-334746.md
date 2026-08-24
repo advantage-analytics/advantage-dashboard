@@ -69,7 +69,7 @@ ready).
   code, not that it match this wording.
 
 ## T3 · Make the global focus-ring default neutral for text fields
-- **status:** todo
+- **status:** done
 - **files:** src/styles/design-system/focus.css,
   src/styles/design-system/effects.css
   (guess — `--focus-ring` is defined at effects.css:40 and consumed at

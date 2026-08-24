@@ -38,6 +38,16 @@
   --duration-enter:300ms;
   --duration-reveal:400ms;
   --focus-ring:0 0 0 2px var(--blue-ring-40);
+  /* Text fields are the carve-out — see focus.css and DESIGN.md "Focus". Blue
+     on a focused field reads as a validation state, and a six-field form would
+     spend the accent six times over. This is `ui/input.tsx:12`'s treatment
+     (`focus-visible:border-[#E5E5E5] focus-visible:ring-[#E5E5E5]/30
+     focus-visible:ring-[1px]`) expressed as a shadow, so a hand-rolled <input>
+     that never sets those classes lands on the same neutral: the 1px solid
+     layer is the border half, the outer band is the 1px ring at 30%. The ring
+     alone would compute to #F7F7F7 on white — present in devtools, invisible to
+     a keyboard user, which is the failure this whole rule exists to prevent. */
+  --focus-ring-field:0 0 0 1px #E5E5E5,0 0 0 2px rgba(229,229,229,0.30);
 }
 .dark{
   --shadow-card-emphasis:0px 4px 16px 0px rgba(0,0,0,0.5);

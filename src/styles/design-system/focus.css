@@ -12,17 +12,37 @@
    `:where()` keeps specificity at 0, so this is a default any component can
    still override, never a rule that fights one. `advButton()` already sets the
    same ring; this simply stops every hand-rolled control from having to
-   remember. */
+   remember.
+
+   ── Two rings, split by control kind ─────────────────────────────────────────
+   The floor is one indicator per control, not one COLOUR for every control.
+   Text fields are the carve-out (DESIGN.md "Focus"): blue on a focused field
+   reads as a validation state, and a six-field form would spend the accent six
+   times over. So `input`, `select` and `textarea` resolve to the neutral
+   `--focus-ring-field` — the same treatment `ui/input.tsx:12` and
+   `ui/select.tsx:40` already set on themselves, so a hand-rolled field now
+   matches the primitive instead of out-shouting it. Everything actionable —
+   links, buttons, `summary`, anything tabbable — keeps the blue `--focus-ring`.
+
+   Two things this split must not do, both of which look fine on screen:
+   1. Resolve either branch to `none`. "No indicator" is the bug this file
+      exists to fix; recolour a ring, never delete one.
+   2. Flatten the underline-input pattern (auth's `form-field.tsx`, the schedule
+      lineup editor), where the rule under the field thickens to 2px blue on
+      focus. That blue is the field's own state vocabulary and stays; what the
+      split removes is the blue BOX that used to sit on top of it. */
 :where(
   a[href],
   button,
   [role="button"],
-  input,
-  select,
-  textarea,
   summary,
   [tabindex]:not([tabindex="-1"])
 ):focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
+}
+
+:where(input, select, textarea):focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring-field);
 }

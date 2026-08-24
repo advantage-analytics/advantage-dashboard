@@ -67,3 +67,51 @@ is the runner's. Newest entries at the bottom.
   `schedule/lineup-editor.tsx:295` styles a focus *border* with `outline-none`,
   so it does not override the focus.css box-shadow and currently renders both a
   blue ring and a blue underline.
+
+## T3 · Make the global focus-ring default neutral for text fields — done
+- **gate:** mechanical — `npm run lint` 0 errors (38 pre-existing react-hooks
+  warnings), `npx tsc --noEmit` clean, `npm test` 66/66. Completion review —
+  `VERDICT: pass`, verified in a live browser on `/login` with computed
+  box-shadow values, not screenshots alone. Guardrails —
+  `pipeline-guardrails-reviewer` RUN, deliberately, even though
+  `src/styles/design-system/` is not one of its literal trigger paths: this is a
+  global rule reaching every focusable control in the app, a wider blast radius
+  than the component change in T1 that did trigger it. Skipping on a path
+  technicality would have been the letter beating the intent. It reported no
+  violations and confirmed the three silent-misattribution wizard inputs are
+  `<button>`-based `SelectCell`s carrying their own `focusRingCls`, so they were
+  never subject to this rule and are unaffected in value, submission and even
+  ring colour. `rls-boundary-reviewer` skipped: no data-layer, API, Supabase or
+  migration path, and `git ls-files --others` was empty.
+- **changed:** `focus.css` splits its `:where()` selector list in two —
+  `input, select, textarea` resolve to a new neutral `--focus-ring-field`,
+  while `a[href]`, `button`, `[role="button"]`, `summary` and `[tabindex]`
+  keep the blue `--focus-ring`. Both stay at specificity 0. The token is
+  defined beside `--focus-ring` in `effects.css` as a two-layer shadow
+  (`0 0 0 1px #E5E5E5, 0 0 0 2px rgba(229,229,229,0.30)`) because
+  `ui/input.tsx:12` is a border+ring pair, not a ring alone; the ring half by
+  itself composites to #F7F7F7 on white and is invisible. The file's header
+  comment was extended to explain the split and name the two things it must not
+  do. `lineup-editor.tsx:295` now renders a neutral ring plus its blue
+  underline — the underline vocabulary survived, the blue box on top of it did
+  not.
+- **correction to the T1 entry above:** T1's classname edits were cosmetically
+  inert, and this run is what actually delivered T1's intent. `globals.css:5`
+  imports the design system OUTSIDE any `@layer` while Tailwind v4 puts its
+  utilities in `@layer utilities`, and unlayered CSS beats layered CSS
+  regardless of specificity. So `focus.css`'s `:where()` rule had always won
+  over `ui/input.tsx`'s and T1's `focus-visible:ring-*` utilities — the blue
+  ring users saw on those six fields came from this file the whole time.
+  Independently confirmed by two reviewers and by direct inspection of
+  `globals.css`. T3's criterion 4 asserted the opposite as its rationale; that
+  premise was false when written. The criterion was ruled met on its testable
+  half (both rules inside `:where()`, specificity 0), with the rationale
+  recorded as an authoring error in the spec rather than a defect in the work.
+- **open, not gated:** the neutral ring measures ~1.07:1 (translucent layer)
+  to ~1.26:1 (opaque layer) against white, both far under WCAG 1.4.11's 3:1
+  bar for non-text contrast. Three separate reviewers have now flagged it. No
+  criterion in T1 or T3 set a contrast floor, so nothing blocked on it, but the
+  app-wide focus indicator for text fields — and now for native checkboxes and
+  radios, which match `input` — is below the accessibility threshold. This
+  wants its own task. Two call sites inherit it incidentally:
+  `statistics/match-selector.tsx:137` and `team/add-player-dialog.tsx:257`.
