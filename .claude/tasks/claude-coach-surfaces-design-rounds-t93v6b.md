@@ -196,7 +196,7 @@ ready).
   and needs rewriting rather than left to contradict the code.
 
 ## T7 · Clear what rounds 44 and 45 left behind
-- **status:** todo
+- **status:** done
 - **files:** `src/lib/data/match-analysis.ts`, `src/lib/schedule/format.ts`,
   `src/lib/data/matches-list-types.ts`, `src/lib/data/types.ts`,
   `src/lib/data/match-detail-server.ts`,

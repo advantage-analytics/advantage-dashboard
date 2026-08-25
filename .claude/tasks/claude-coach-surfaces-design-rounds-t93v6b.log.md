@@ -355,3 +355,36 @@ is the runner's. Newest entries at the bottom.
   change.
 - **also:** two comments defended the full-bleed wash, not the one the task
   named. Both now describe what the code does.
+
+## T7 · Clear what rounds 44 and 45 left behind — done
+- **gate:** mechanical — `npm run lint` 0 errors (38 pre-existing warnings,
+  none in the changed files), `npx tsc --noEmit` clean, `npm test` 93 passed.
+  `rls-boundary-reviewer` — ran (the diff touches `src/lib/data/`, including a
+  `*-server.ts`); no findings. It checked the failure mode that would have been
+  quiet: both `buildSets` and `transformDbMatch` build their sets as explicit
+  field-by-field literals with no `...row` spread, so dropping the field
+  narrows the shape and cannot let a raw database row through in its place. The
+  query, the `getWorkspaceContext()` scoping and the player-id ownership check
+  around `buildSets` are outside the diff and unchanged.
+  `pipeline-guardrails-reviewer` — skipped: no `src/app/dashboard/`,
+  `src/components/dashboard/` or wizard file in the diff. Confirmed against
+  both `git diff HEAD --stat` and `git ls-files --others --exclude-standard`.
+  `task-completion-reviewer` — **`VERDICT: pass`**, all five criteria.
+- **changed:** `resultInk()` and `formatScore()` are gone, along with the
+  `tiebreak?: boolean` field — both declarations and both writers. Nothing
+  rendered differs: the field lost its last reader when `ScoreLine` took over,
+  and the reviewer re-checked every `SetScore` and `score.sets` consumer for a
+  spread, destructure or `JSON.stringify` that would have carried it unnamed.
+- **criterion 4 could not be met as written, and that was the criterion's
+  fault, not the work's.** It asked that `SKILL.md:744` cite a file that
+  exists. None does: T2 deleted the only file demonstrating the
+  `has-[input:focus-visible]` wrapper-ring pattern, and its replacement puts
+  chips above an underline field instead of inside a bordered box. The one
+  surviving `has-[…focus-visible]` is T6's row wash, which is not `input:`
+  scoped — citing it would be a false example. The cell now reads
+  `none in src/ today`, which the reviewer verified independently and judged
+  the correct discharge.
+- **not removed, deliberately:** `buildScoreString` in `match-utils.ts`. It has
+  three live loader callers and delegates to `formatScoreText`, so it is a
+  row-shape adapter rather than a second spelling — the reviewer agreed it
+  satisfies criterion 2 rather than breaking it.

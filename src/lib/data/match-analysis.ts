@@ -240,12 +240,6 @@ export function outcomeInk(status: AnalysisStatus): string {
   return status === "imported" ? "#525252" : "#5DB955";
 }
 
-/** Win/loss/unknown ink for the result marker under the score. */
-export function resultInk(won: boolean | null): string {
-  if (won === null) return "#D9D9D9";
-  return won ? "#5DB955" : "#E51837";
-}
-
 /**
  * Milestones a video passes on its way to being analyzed, each owning a slice of
  * the overall 0-100.

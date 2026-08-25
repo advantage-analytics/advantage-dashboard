@@ -8,7 +8,6 @@ export interface Player {
 export interface SetScore {
   player1: number;
   player2: number;
-  tiebreak?: boolean;
   player1Tiebreak?: number | null;
   player2Tiebreak?: number | null;
 }

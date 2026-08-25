@@ -62,7 +62,6 @@ function buildSets(row: DbMatch): SetScore[] {
     return {
       player1: player1Score,
       player2: scores2[i] ?? 0,
-      tiebreak: t1 != null || t2 != null,
       player1Tiebreak: t1,
       player2Tiebreak: t2,
     };

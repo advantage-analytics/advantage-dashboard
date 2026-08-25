@@ -741,16 +741,17 @@ the box:
 | The box holds | Selector on the wrapper | Worked example |
 |---|---|---|
 | the input and nothing else focusable | `focus-within:shadow-[var(--focus-ring-field)]` | `claim/program-search.tsx` |
-| the input **and** other focusable children | `has-[input:focus-visible]:shadow-[var(--focus-ring-field)]` | `team/invite-dialog.tsx` |
+| the input **and** other focusable children | `has-[input:focus-visible]:shadow-[var(--focus-ring-field)]` | none in `src/` today — see below |
 
 `focus-within` matches on any descendant, so in a box that holds more than the
-input it double-rings: in the invite dialog each email chip carries a remove
-`<button>`, and focusing one drew the wrapper's neutral ring and the button's
-own blue ring at the same time — two indicators, two colours, the larger one on
-an element that was not focused. Keying on `input:focus-visible` scopes the
-wrapper ring to the case it exists for. (`settings/settings-inline-select.tsx`
-is a third case that stays on `focus-within`: its `<select>` is `opacity-0`, so
-there is no second ring to collide with and no opt-out to set.)
+input it double-rings: in the bulk-invite dialog that first needed this, each
+email chip carried a remove `<button>`, and focusing one drew the wrapper's
+neutral ring and the button's own blue ring at the same time — two indicators,
+two colours, the larger one on an element that was not focused. Keying on
+`input:focus-visible` scopes the wrapper ring to the case it exists for.
+(`settings/settings-inline-select.tsx` is a third case that stays on
+`focus-within`: its `<select>` is `opacity-0`, so there is no second ring to
+collide with and no opt-out to set.)
 
 `data-focus-ring="none"` is the opt-out, and it lives in `focus.css` scoped to
 `:focus-visible` rather than as an inline `style={{ boxShadow: "none" }}` on the
