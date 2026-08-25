@@ -399,7 +399,7 @@ ready).
 - **notes:** Found by `/pr-check`. `rosterProgress` is handed `team?.members` (`program_members`), but this file's own comment at ~line 1130 says `program_roster_full` is "the only one that includes a coach-managed player". So `invited = joined + outstanding` is 0 for a fully coach-built roster and the checklist keeps asking a coach to invite a team they have already built.
 
 ## T14 · An expired invite reads "expires today", forever
-- **status:** todo
+- **status:** done
 - **files:** `src/lib/data/team-home-server.ts` (`rosterProgress` expiry arithmetic ~line 660, `teamAttention`'s `invites-expiring` alert ~line 807)
 - **done when:**
   - [ ] An invite whose TTL has already passed is not counted in `expiringSoon` — it is either excluded or surfaced as its own already-expired state, but it is not reported as expiring in the future

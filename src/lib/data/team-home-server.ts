@@ -71,6 +71,9 @@ const RECENT_MATCH_LIMIT = 6;
 /** Invites close enough to expiry to be worth naming on the home page. */
 const EXPIRING_SOON_DAYS = 7;
 
+/** One day. The horizon above is measured in these, and so is the countdown. */
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 /**
  * How far down the schedule the events read goes.
  *
@@ -406,11 +409,28 @@ export interface RosterProgress {
    * and not one login among them.
    */
   players: number;
-  /** Player invitations sent and not yet accepted. */
+  /**
+   * Player invitations sent and not yet accepted.
+   *
+   * Every one of them, whether or not its link still works — the same set the
+   * roster card lists and calls "N invites pending". See `rosterProgress()`
+   * for why a lapsed invitation is still counted here.
+   */
   outstanding: number;
-  /** Outstanding invites falling due inside a week. */
+  /**
+   * Outstanding invites still live and falling due inside a week.
+   *
+   * **Live.** An invitation whose TTL has already run out is not in this count:
+   * it is not expiring, it has expired, and the two are different facts. The
+   * filter used to be `expiry <= horizon`, which a lapsed expiry satisfies as
+   * readily as a near-future one.
+   */
   expiringSoon: number;
-  /** Whole days until the soonest of those, floored at 0. */
+  /**
+   * Whole calendar days until the soonest of those, or null when there are
+   * none. Never negative — `rosterProgress()` counts nothing that has already
+   * expired, so 0 means the soonest one dies today and says so truthfully.
+   */
   expiringInDays: number | null;
 }
 
@@ -735,6 +755,33 @@ function playerCount(rosterRows: { role: string }[]): number {
  * question with a different answer, and merging them made "6 of 10 joined" mean
  * nothing in particular.
  *
+ * **A lapsed invitation stays in `outstanding` and leaves `expiringSoon`,** and
+ * that split is the point rather than an oversight. The two counts answer to
+ * two different surfaces, and each has to say what its surface already says:
+ *
+ * - `outstanding` is the roster card's list. That card, and the Roster page it
+ *   shares `roster-vocabulary.tsx` with, draw every unaccepted invitation the
+ *   same way — dashed ring, "Invited Aug 4 as player", Resend beside it — and
+ *   count them all into "N invites pending". Neither screen has a word for an
+ *   expired invitation; the only place in the product that does is
+ *   `/join/[token]`, which says it to the invitee. Dropping a lapsed row from
+ *   this count would leave the card listing a person the checklist had stopped
+ *   counting.
+ * - `expiringSoon` is the alert list, which is explicitly the *urgent half* —
+ *   the card already says "there are invites out", and the alert exists for
+ *   when the clock has become the point. A dead invitation has no clock left,
+ *   so it has nothing to say there.
+ *
+ * The alternative was a second alert kind announcing the expiry. It was not
+ * taken because it would put "expired" on a page whose roster card calls the
+ * same row "pending", and a coach reading both has to work out whether they are
+ * two invitations. Teaching the roster its first word for "expired" means
+ * teaching it to `roster-vocabulary.tsx`, which Team Home AND
+ * `/dashboard/team/roster` render from — a design round on two screens, not a
+ * countdown fix. Until that round happens the honest arrangement is the one
+ * below: one voice, the card's, and no alert claiming a future for a link that
+ * no longer opens.
+ *
  * **Exported only so that `tests/team-roster-progress.spec.ts` can call it** —
  * the same arrangement, and the same reasoning, as `teamKpis` below: it takes
  * this loader's own row shapes, it should acquire no caller outside this file,
@@ -749,24 +796,62 @@ export function rosterProgress(
   const players = playerCount(rosterRows);
   const outstanding = invites.filter((invite) => invite.role === "player");
 
+  // `created_at + INVITE_TTL_HOURS` rather than a second read of
+  // `program_invites.expires_at`, and it is not an approximation of it:
+  // `create_program_invite` is the only writer, `team-actions.ts` passes it
+  // `now + INVITE_TTL_HOURS`, and the upsert that a resend runs through sets
+  // `created_at = now()` alongside the new `expires_at`. The two columns move
+  // together, so the row this loader already has in hand answers the question.
   const ttlMs = INVITE_TTL_HOURS * 60 * 60 * 1000;
-  const expiries = outstanding
-    .map((invite) => new Date(invite.createdAt).getTime() + ttlMs)
-    .filter((expiry) => Number.isFinite(expiry))
-    .sort((a, b) => a - b);
+  const horizon = now + EXPIRING_SOON_DAYS * DAY_MS;
 
-  const horizon = now + EXPIRING_SOON_DAYS * 24 * 60 * 60 * 1000;
-  const soon = expiries.filter((expiry) => expiry <= horizon);
+  // `expiry > now` is the half of this that was missing. A lapsed invitation
+  // satisfies `expiry <= horizon` exactly as well as a near-future one, so one
+  // that died last month was counted as expiring — and the countdown below,
+  // handed a negative, clamped it to 0 and printed "One invite expires today"
+  // every morning for the rest of the season. `>` and not `>=` because that is
+  // where the database draws the line: `accept_program_invite` refuses on
+  // `expires_at <= now()` — and `resolveJoinState` shows the invitee "That
+  // invitation has expired" on the same comparison — so an invitation reaching
+  // its instant is already dead, not expiring.
+  const soon = outstanding
+    .map((invite) => new Date(invite.createdAt).getTime() + ttlMs)
+    .filter(
+      (expiry) => Number.isFinite(expiry) && expiry > now && expiry <= horizon
+    )
+    .sort((a, b) => a - b);
 
   return {
     players,
     outstanding: outstanding.length,
     expiringSoon: soon.length,
-    expiringInDays:
-      soon.length > 0
-        ? Math.max(0, Math.floor((soon[0] - now) / (24 * 60 * 60 * 1000)))
-        : null,
+    expiringInDays: soon.length > 0 ? wholeDaysUntil(soon[0], now) : null,
   };
+}
+
+/**
+ * Whole days from `now` to `expiry`, counted in calendar days rather than in
+ * elapsed 24-hour blocks.
+ *
+ * The alert this feeds spells 0 "today" and 1 "tomorrow", and those two words
+ * are about the calendar, not about a duration. Elapsed thirds of a day put an
+ * invitation dying at 10am on Tuesday inside "today" when a coach reads the
+ * page at 11pm on Monday — eleven hours away, and on a day that is not today.
+ * Anchoring both ends to their day in `PROGRAM_TIME_ZONE` makes the two words
+ * mean what they say.
+ *
+ * Both anchors are UTC midnights built from a zoned calendar day, so the
+ * subtraction never walks through a DST transition — the same construction, and
+ * the same reason, as `weekBounds`.
+ *
+ * The caller has already dropped everything at or before `now`, so this cannot
+ * return a negative and there is nothing to clamp: `expiry > now` puts the
+ * expiry on `now`'s day or a later one.
+ */
+function wholeDaysUntil(expiry: number, now: number): number {
+  const midnight = (ms: number) =>
+    Date.parse(`${localDay(new Date(ms), PROGRAM_TIME_ZONE)}T00:00:00.000Z`);
+  return Math.round((midnight(expiry) - midnight(now)) / DAY_MS);
 }
 
 /**
@@ -843,8 +928,13 @@ function hoursSince(
  * Broken first, then slow, then the clock on the invitations — three facts this
  * loader already holds, and nothing else. See `TeamAlert` for what is
  * deliberately absent from it.
+ *
+ * **Exported only so that `tests/team-roster-progress.spec.ts` can call it** —
+ * the same arrangement, and the same reasoning, as `rosterProgress` above. The
+ * invite row it builds is the ONLY reader of `expiringSoon` and
+ * `expiringInDays`, so the countdown's contract cannot be tested anywhere else.
  */
-function teamAttention(
+export function teamAttention(
   matches: TeamMatchRow[],
   roster: RosterProgress,
   nowMs: number
@@ -896,6 +986,13 @@ function teamAttention(
   // point, which is what an alert list is for. It counts PLAYER invites —
   // `rosterProgress()` is what holds the expiry, and staff invitations are a
   // different question with a different answer.
+  //
+  // Only invitations that are still LIVE reach this. One whose TTL has run out
+  // has no clock to be the point, so it stays on the roster card with its
+  // Resend and says nothing here — see `rosterProgress()` for why the alert
+  // list does not get its own word for it. That is what keeps every `when`
+  // below in the future tense: `expiringInDays` cannot be negative, and 0 is a
+  // calendar day on which the invitation really does die.
   if (roster.expiringSoon > 0 && roster.expiringInDays !== null) {
     const when =
       roster.expiringInDays === 0

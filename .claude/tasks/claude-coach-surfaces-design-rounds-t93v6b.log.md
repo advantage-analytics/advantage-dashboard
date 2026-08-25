@@ -796,3 +796,60 @@ is the runner's. Newest entries at the bottom.
   drifted, the assumption that breaks is "every player-role seat also appears as a
   `role = 'player'` roster row", which arms 1 and 3 of the UNION exist to
   guarantee.
+
+## T14 · An expired invite reads "expires today", forever — done
+- **gate:** 5a mechanical — `npm run lint` 0 errors / 38 pre-existing warnings;
+  `npx tsc --noEmit` exit 0; `npm test` 135 passed (127 prior + 8 new). 5b
+  `task-completion-reviewer` — `VERDICT: pass`. 5c `rls-boundary-reviewer` ran
+  (`src/lib/data/` touched) and returned an explicit all-clear;
+  `pipeline-guardrails-reviewer` SKIPPED — the diff touches only
+  `src/lib/data/team-home-server.ts` and `tests/`, nothing under
+  `src/app/dashboard/`, `src/components/dashboard/` or the upload wizard.
+  **5a was re-run in full after both reviewers returned** — see the race below.
+- **changed:** the expiry filter is now `expiry > now && expiry <= horizon`, so a
+  lapsed invitation drops out of `expiringSoon` instead of pinning a permanent
+  "One invite expires today" to Needs attention. The `Math.max(0, …)` clamp is
+  removed outright rather than left unreachable, replaced by `wholeDaysUntil()`,
+  which counts CALENDAR days anchored on UTC midnights via `localDay` — the same
+  DST-safe construction `weekBounds` uses. That goes past the criterion on
+  purpose: elapsed-24h arithmetic would still print "today" at 11pm Monday for a
+  10am Tuesday expiry. `teamAttention` exported for the spec, with the same
+  test-only note `rosterProgress` and `teamKpis` carry. Spec extended, not
+  forked — the file already owns `rosterProgress`'s invite contract.
+- **the design decision, and why (a):** an expired invite could be excluded from
+  the count or surfaced as its own state. Neither `roster-card.tsx` nor the
+  Roster page has ANY word for "expired" — both call every unaccepted invite
+  "pending" and give it a Resend, from one shared `roster-vocabulary.tsx`. A new
+  `invite-expired` alert would therefore print "expired" on the same page whose
+  card calls that row "pending", which is the contradiction criterion 4 exists to
+  forbid. So: excluded from `expiringSoon`, still counted in `outstanding`, so the
+  card keeps listing it with the Resend that is the actual remedy. Teaching
+  "expired" to the shared vocabulary is a design round across two screens, not a
+  countdown fix.
+- **worth knowing:** a lapsed invite is genuinely invalid server-side, not merely
+  cosmetically expired — `accept_program_invite` raises on `expires_at <= now()`,
+  `resolveJoinState` returns `expired`, `/join/[token]` says so, and
+  `program_seat_usage` excludes it. The old alert was pointing a coach at a link
+  that opens nothing.
+- **the `>` boundary:** matches the app's own definition of expired, verified
+  against live code (`invite-acceptance.ts:147`, `Date.parse(expiresAt) <= now()`)
+  rather than only the migration — CLAUDE.md warns migrations run behind live.
+- **derived expiry checked, no drift:** the UI computes expiry as
+  `created_at + INVITE_TTL_HOURS` instead of selecting `expires_at`. Verified
+  across four migrations that no path writes one without the other — the
+  invite/resend upsert sets `created_at = now()` in the same statement as
+  `expires_at`, and `inviteMember` is the only caller.
+- **ORCHESTRATION ERROR, mine, recorded so it is not repeated:** I dispatched 5b
+  and 5c concurrently in one message. `task-next` step 5 prescribes them in cost
+  order, b then c, and for good reason — I had explicitly asked 5b to verify the
+  pre-fix failure count, which it did via `git stash` + `git apply -R` round
+  trips. 5c read the working tree during that revert window and correctly reported
+  the tree as broken and inconsistent. Nothing was lost: HEAD never moved, no
+  content was discarded, and both reviewers restored cleanly. But the finding was
+  real and the gate was briefly reading a tree that did not match the diff under
+  review, so 5a was re-run in full afterwards to prove coherence before this
+  commit. Run 5b to completion before dispatching 5c.
+- **test honesty, checked this time:** implementer reported 8 new tests, 6 failing
+  pre-fix, 2 deliberate controls. The reviewer reconstructed the pre-fix state and
+  measured exactly 6 failed / 9 passed, and confirmed both controls assert real
+  behaviour rather than nothing. Report and reality agree.
