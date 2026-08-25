@@ -1141,20 +1141,21 @@ function analysisOf(
  * The three id columns are not display data — they are the only evidence of
  * which side is the program's. See `programSide()`.
  */
-export interface DbRecentMatch {
-  id: string;
-  player1_id: string | null;
-  player2_id: string | null;
-  event_entry_id: string | null;
-  player1_name: string | null;
-  player2_name: string | null;
-  score: MatchScore | null;
+/**
+ * The season row plus the three columns only `matchContext` prints.
+ *
+ * Written as an extension rather than a second field list on purpose. The
+ * recent-matches select IS the season select plus these three, so two
+ * independent declarations of the same table's columns would be free to drift
+ * — and the first draft of this one already had, declaring `player1_name` and
+ * `player2_name` nullable where `DbSeasonMatch` documents them as the `text
+ * NOT NULL` columns they are. Extending makes that impossible and leaves the
+ * id columns' warning stated once, on `DbSeasonMatch`, where it belongs.
+ */
+export interface DbRecentMatch extends DbSeasonMatch {
   tournament_name: string | null;
   round: string | null;
-  date: string;
   match_type: string | null;
-  source_provider: string | null;
-  verified: boolean | null;
 }
 
 /**
@@ -1180,7 +1181,7 @@ export function teamMatchRow(
 ): TeamMatchRow {
   const analysis = analysisOf(row, jobs);
   const { side, swap, title } = oursFirst(row, rosterIds);
-  const score = row.score ?? null;
+  const score = row.score;
 
   return {
     id: row.id,

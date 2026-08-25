@@ -37,10 +37,22 @@ export interface ScoreLineSet {
   player1: number;
   player2: number;
   /**
-   * Tiebreak POINTS, not games — and stored on the side that LOST the set,
-   * which is the encoding every writer in the app uses. See
-   * `single-score-entry.tsx` ("The tiebreak belongs to whoever LOST the set —
-   * the winner took it 7-x") and `edit-match-dialog.tsx`.
+   * Tiebreak POINTS, not games.
+   *
+   * **Which slot holds what is DISPUTED, and this comment used to state one
+   * side of it as fact.** `single-score-entry.tsx` says "The tiebreak belongs
+   * to whoever LOST the set — the winner took it 7-x", and this file long
+   * repeated that as "the encoding every writer in the app uses". Every real
+   * tiebreak in production contradicts it: all three carry BOTH slots, each
+   * holding that player's own points (see `tiebreakOf` below for the rows).
+   * Either a different writer produced them or the comment describes an input
+   * affordance rather than the storage.
+   *
+   * `tiebreakOf` is correct under both readings, which is why nothing here is
+   * being changed to chase it: under own-points-in-own-slot the loser's slot
+   * still holds the loser's points, which is the digit the notation wants.
+   * Reconciling the writers is its own task — do not "fix" the side selection
+   * on the strength of the census alone.
    */
   player1Tiebreak?: number | null;
   player2Tiebreak?: number | null;
@@ -62,18 +74,21 @@ export const SET_JOINER = ", ";
  * scoreboard that prints only one side's games (`match-summary-row.tsx`) raises
  * the digit on the row that WON the set, because that is the row showing the 7.
  *
- * No fallback to the other side's value. A tiebreak recorded against the set's
- * WINNER is not the number this notation prints, and printing it anyway would
- * be a wrong score that looks like a right one — so a misfiled value renders
- * nothing rather than a plausible lie.
+ * No fallback to the other side's value. A value on the set WINNER's side is
+ * not the number this notation prints — under either reading of the storage
+ * (see `ScoreLineSet`) the digit belongs to the loser — and reaching for it
+ * would be a wrong score that looks like a right one.
  *
  * ── Only a one-game margin can have been a tiebreak ─────────────────────────
  * The guard below is on the set's SHAPE, `Math.abs(player1 - player2) === 1`,
  * and never on the stored value. A tiebreak IS the set's last game, so a set
  * it decided is always won by exactly one game; win a set without one and you
  * must win by two, which is why `6-0` through `6-4` and `7-5` are margin ≥ 2.
- * Margin 1 therefore implies a tiebreak, and it keeps implying one for a
- * super-tiebreak stored as `1-0` and for a pro-set played out to `9-8`.
+ * In a FINISHED set, margin 1 therefore implies a tiebreak, and it keeps
+ * implying one for a super-tiebreak stored as `1-0` and for a pro-set played
+ * out to `9-8`. The qualifier is load-bearing: a set abandoned at `5-4` is
+ * margin 1 and had no tiebreak, so this guard is a rule about completed sets
+ * and leans on nothing else refusing to store a part-played one.
  *
  * This was settled from production rather than from the schema, because the
  * schema permits shapes the data does not contain. Of the 47 sets carrying a
@@ -81,8 +96,11 @@ export const SET_JOINER = ", ";
  * tiebreak can decide (`6-3`, `6-4`, `6-2`, `7-5`, `1-6`, …) — and 40 of them
  * printed a spurious superscript before this guard, since `0 ?? null` is `0`
  * and every consumer gates on `!== null`. (The 41st, a `3-3`, escaped only
- * because equal games already returned null here.) The real tiebreaks are
- * three: `1-0` won 10-5, `0-1` won 11-9, and `8-9` won 7-3.
+ * because equal games already returned null here.) Three more are ordinary
+ * `7-6`/`6-7` sets whose stored values the census did not capture. That
+ * leaves three real tiebreaks, and they are the whole evidence for the shapes
+ * above: `1-0` won 10-5, `0-1` won 11-9, and `8-9` won 7-3 — 41 + 3 + 3 = 47,
+ * so nothing here is a sample.
  *
  * Two narrower guards have been tried in this repo and both were wrong, in
  * opposite directions. `mine === 7 && theirs === 6` (once in
@@ -95,6 +113,10 @@ export function tiebreakOf(set: ScoreLineSet): number | null {
   if (Math.abs(set.player1 - set.player2) !== 1) return null;
   if (set.player1 > set.player2) return set.player2Tiebreak ?? null;
   if (set.player2 > set.player1) return set.player1Tiebreak ?? null;
+  // Unreachable past the shape guard — equal games are margin 0. Kept because
+  // `strict` needs a return here, and rewriting the two lines above into a
+  // ternary to remove it would churn the file's most consequential three lines
+  // for one dead one.
   return null;
 }
 

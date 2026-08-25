@@ -5,17 +5,16 @@ import { tiebreakOf, type ScoreLineSet } from '@/lib/ui/score-format';
 /**
  * Which sets are allowed to carry a superscript at all.
  *
- * Both ways of getting this wrong are silent, and both have been live. A
- * census of production found 41 of the 47 sets carrying a non-null tiebreak
- * are zero-fill — a stored `0`/`0` on shapes no tiebreak can decide — and
- * `0 ?? null` is `0`, so 40 of them printed "6-3⁰": a tiebreak nobody played,
- * on a score that otherwise looks right. Guarding on the VALUE instead fails
- * the other way round and just as quietly, erasing the digit from a genuine
- * `7-6` won 7-0 in points. The rule is the set's shape — a one-game margin —
- * and nothing else.
+ * Both ways of getting this wrong are silent: a guard too loose prints a
+ * tiebreak nobody played on a score that otherwise looks right, and a guard on
+ * the VALUE erases the digit from a genuine `7-6` won 7-0 in points. Both have
+ * been live in this repo. `tiebreakOf`'s doc carries the derivation and the
+ * production census the rule was settled from — it is not repeated here,
+ * because a census gets revised and two copies of one set of numbers is one
+ * copy too many.
  *
- * Every fixture here is a shape from that census: the three real tiebreaks
- * (`1-0` 10-5, `0-1` 11-9, `8-9` 7-3) and the zero-fill shapes by frequency.
+ * Every fixture below is a shape from that census: the three real tiebreaks
+ * and the zero-fill shapes by frequency.
  */
 
 /** One set, in the storage the data actually uses: each side's OWN points. */

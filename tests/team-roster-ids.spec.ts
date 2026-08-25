@@ -91,25 +91,22 @@ function recentMatch(opts: {
   };
 }
 
-/** The same row as the season read holds it. */
+/**
+ * The same row as the season read holds it — which is to say, the same row.
+ *
+ * `DbRecentMatch extends DbSeasonMatch`, so the recent row IS a season row
+ * plus the three columns `matchContext` prints. This used to hand-copy field
+ * by field, and had to launder `player1_name ?? ''` because the two types
+ * disagreed about nullability; making the extension explicit in the loader
+ * retired both the copy and the laundering. Kept as a named alias so the
+ * tests below still read as "the season read's view of this match".
+ */
 function seasonMatch(opts: {
   id?: string;
   ourId: string;
   column?: 'player1' | 'player2';
 }): DbSeasonMatch {
-  const row = recentMatch(opts);
-  return {
-    id: row.id,
-    player1_name: row.player1_name ?? '',
-    player2_name: row.player2_name ?? '',
-    player1_id: row.player1_id,
-    player2_id: row.player2_id,
-    event_entry_id: null,
-    score: row.score,
-    date: row.date,
-    source_provider: row.source_provider,
-    verified: row.verified,
-  };
+  return recentMatch(opts);
 }
 
 function jobsFor(

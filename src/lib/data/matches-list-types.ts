@@ -46,11 +46,13 @@ export interface DisplayMatch {
   analysis?: MatchAnalysis;
   score: {
     /**
-     * The two `*Tiebreak` numbers are the POINTS, and they sit on whoever LOST
-     * the set — the encoding every writer in the app uses. `tiebreakOf()` in
-     * `@/lib/ui/score-format` is the one place that knows which of the pair a
-     * given surface raises; `<ScoreLine>` and the match page's boxed scoreboard
-     * both call it rather than restating it.
+     * The two `*Tiebreak` numbers are the POINTS. Which slot holds what is
+     * disputed — production stores both, each side's own points — so see
+     * `ScoreLineSet` in `@/lib/ui/score-format` rather than trusting a
+     * one-line summary here. `tiebreakOf()` there is the one place that knows
+     * which of the pair a given surface raises, and it is right under either
+     * reading; `<ScoreLine>` and the match page's boxed scoreboard both call
+     * it rather than restating it.
      */
     sets: {
       player1: number;
