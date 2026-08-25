@@ -104,3 +104,38 @@ is the runner's. Newest entries at the bottom.
   `View profile` link can only carry the first-named, and the disambiguating
   `aria-label` is screen-reader-only, so sighted users get no cue which profile it
   opens.
+
+## T3 · Add 9d's claim receipt above the roster — done
+- **gate:** re-run after the author resolved the block above. Mechanical re-run
+  against the restored tree — `npm run lint` exit 0 (0 errors, 38 pre-existing
+  warnings), `npx tsc --noEmit` exit 0, `npm test` 93 passed. Completion review —
+  `VERDICT: pass`. It was told the seat exposure was settled and to review
+  everything else fresh rather than rubber-stamp: it re-derived all five criteria
+  and traced the 0/1/many-claimant pluralisation and JSX whitespace token by token,
+  finding no further defect. Guardrails — `pipeline-guardrails-reviewer` ran, the
+  stage the first attempt never reached, and returned no findings: the named
+  claimants, the `matchesPlayed` sum and the `View profile` target all derive from
+  one `claimants` array so they cannot desync, and the new link points at a route
+  `roster-table.tsx` already links every row to, so no viewer gained a capability.
+  `rls-boundary-reviewer` skipped — one server component, no `src/lib/supabase/`,
+  `src/lib/data/`, `src/app/api/` or `supabase/migrations/` path, no new query, and
+  `git ls-files --others --exclude-standard` empty.
+- **changed:** `roster/page.tsx` only, purely additive (+68/-0). Restored unchanged
+  from stash `f0b7b10d1ece1ad1010dcc7bdc364adf38214ed8`; that stash was dropped once
+  this landed, since the work is now in history.
+  **The block above was resolved by the author, not by a code change.** The first
+  run failed because the receipt renders ungated and shows players the program's
+  seat usage — the first ungated element on this page to do so. That finding was
+  put to the author with the alternatives (drop the seat clause for players, gate
+  the whole receipt behind `canManage`, or ship it ungated); they chose to ship it
+  ungated. Criterion 1 was amended to record that decision so a later reviewer does
+  not re-flag intended behaviour as a defect, and criterion 4's stale line numbers —
+  written before T1 rewrote `roster-table.tsx` — were replaced with content-based
+  locators. The code is byte-identical to what the first run gated.
+  Two decisions the task left open were settled in the code: every same-day claimer
+  is named, pluralised and summed (ordering by claim recency is impossible —
+  `claimed_at` reaches `DbRosterRow` but only ever becomes the `claimedToday`
+  boolean), and the lead reads "their", never a pronoun inferred from a name.
+  Known limitation, accepted: with several claimers the single `View profile` link
+  carries the first-named only, and the disambiguating `aria-label` is
+  screen-reader-only.

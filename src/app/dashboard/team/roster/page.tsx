@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { UserCheck } from "lucide-react";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { teamLabel } from "@/lib/workspace/types";
 import { getRosterData } from "@/lib/data/team-roster-server";
@@ -66,6 +68,28 @@ export default async function RosterPage() {
 
   const unclaimed = managedPlayers.length;
 
+  // Design 9d's receipt. Everyone who bound a login today, in the roster's own
+  // order — the same order the table below draws them in.
+  //
+  // The design draws one claimer, because one is the ordinary day. Two people
+  // can claim on the same day, and the rule this page follows is: **name every
+  // one of them**, pluralise the lead, and sum "matches kept" across them. The
+  // alternative — the most recent claimer alone — is not available anyway:
+  // `claimedToday` is a boolean, `claimed_at` never reaches the client, and
+  // ordering by it would need a new field this task is not adding.
+  const claimants = roster.members.filter((m) => m.claimedToday);
+  const claimant = claimants[0];
+  const matchesKept = claimants.reduce((total, m) => total + m.matchesPlayed, 0);
+  // "A", "A and B", "A, B and C" — the last separator is a word, because the
+  // lead is a sentence rather than a list.
+  const claimantNames =
+    claimants.length < 2
+      ? (claimant?.name ?? "")
+      : `${claimants
+          .slice(0, -1)
+          .map((m) => m.name)
+          .join(", ")} and ${claimants[claimants.length - 1].name}`;
+
   const standing = [
     `${playerCount} ${playerCount === 1 ? "player" : "players"}`,
     unclaimed > 0 && `${unclaimed} without an account`,
@@ -106,6 +130,50 @@ export default async function RosterPage() {
             />
           )}
         </div>
+
+        {/* The claim is the one roster change that looks like a loss until it
+            is spelled out — the row a coach built now answers to somebody else.
+            So it is stated once, above the table, in the terms a coach worries
+            about: the history stayed, the credits stayed, and a seat moved.
+            Rendered only on the day of the claim, and only when there was one:
+            no claimer, no element and no gap, because `gap-5` on the column
+            would otherwise reserve space for an empty box every other day. */}
+        {claimant && (
+          <div className="flex items-start gap-2.5 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3.5 py-3">
+            <UserCheck
+              className="mt-0.5 size-3.5 shrink-0 text-[var(--ink-600)]"
+              strokeWidth={1.5}
+              aria-hidden
+            />
+            <p className="text-[11px] leading-[1.6] text-[var(--ink-700)]">
+              {/* "their", never "her" or "his": the roster carries no pronoun
+                  for anybody, and a name is not one. */}
+              <strong className="font-medium text-[var(--ink-900)]">
+                {claimantNames} claimed{" "}
+                {claimants.length === 1 ? "their profile" : "their profiles"}.
+              </strong>{" "}
+              Same {claimants.length === 1 ? "row" : "rows"}, now self-managed —{" "}
+              <span className="tabular">{matchesKept}</span>{" "}
+              {matchesKept === 1 ? "match" : "matches"} kept, upload credits
+              unchanged, seats{" "}
+              <span className="tabular">
+                {roster.seats.used} of {roster.seats.seats}
+              </span>
+              .
+            </p>
+            {/* One action can only carry one profile, so it carries the first
+                name in the sentence — the topmost claimed row in the table
+                below. The label stays what the design wrote; the accessible
+                name says whose. */}
+            <Link
+              href={`/dashboard/team/roster/${claimant.playerId}`}
+              aria-label={`View ${claimant.name}'s profile`}
+              className="ml-auto shrink-0 rounded-[var(--radius-cell)] pt-px text-[11px] font-medium whitespace-nowrap text-[var(--blue-text)] transition-colors hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+            >
+              View profile
+            </Link>
+          </div>
+        )}
 
         <RosterTable
           members={roster.members}

@@ -95,7 +95,7 @@ ready).
   a name.
 
 ## T3 · Add 9d's claim receipt above the roster
-- **status:** blocked
+- **status:** done
 - **files:** src/app/dashboard/team/roster/page.tsx — a guess (read-only:
   src/components/dashboard/team/roster-table.tsx,
   src/lib/data/team-roster-server.ts)
@@ -107,13 +107,26 @@ ready).
         unchanged, and seats as "{used} of {seats}" — every number in
         `tabular`. Where more than one member claimed today the diff states
         its rule rather than silently rendering the first.
+        **Ungated on purpose — do not flag this.** The receipt renders for
+        every roster viewer, players included, and the seat clause renders
+        for them too. The first review run failed this task for exactly
+        that: no other ungated element on this page shows a player seat or
+        billing figures (`RosterHeaderButtons` is behind `canManage`,
+        `roster-table.tsx` never reads `seats`, and the standing line
+        already collapses to a generic sentence for players), so the
+        receipt is the first. The author was shown that finding and chose
+        to ship it ungated anyway. Treat the exposure as intended, not as
+        a defect.
   - [ ] The receipt ends with a trailing `View profile` action linking to
         that member's `/dashboard/team/roster/{playerId}`.
   - [ ] Nothing renders when no member has `claimedToday` — no empty
         container and no reserved vertical space.
   - [ ] 7d's existing carriers are untouched: the "Claimed today" chip in
-        the last-match cell (`roster-table.tsx:390` and `:404`) and the
-        credit footnote (`page.tsx:117`) both still render.
+        the last-match cell and the credit footnote ("Matches uploaded
+        before a player claimed their profile…") both still render. Locate
+        them by content, not by line number — T1 rewrote `roster-table.tsx`
+        and moved both. They currently sit at `roster-table.tsx:431-435`
+        and `:445-449`, and `page.tsx:196`.
   - [ ] Seat figures come from the `SeatUsage` the invite dialog is already
         given — no new loader, query or `RosterMember` field. `npm run
         lint`, `npx tsc --noEmit` and `npm test` stay green.
