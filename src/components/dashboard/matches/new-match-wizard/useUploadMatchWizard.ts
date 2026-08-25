@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { capitalize } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -94,7 +95,7 @@ function explainWriteFailure(error: {
     }
     // The triggers write lowercase sentences, the way an error message reads
     // inside SQL. Give it a capital so it reads as UI copy.
-    return message.charAt(0).toUpperCase() + message.slice(1);
+    return capitalize(message);
   }
 
   return `Database error: ${message || error.details || JSON.stringify(error)}`;

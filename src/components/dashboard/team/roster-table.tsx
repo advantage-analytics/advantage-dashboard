@@ -235,6 +235,11 @@ function RowMenu({
   // account to grant it to.
   const canToggleSend = member.userId !== null && member.role === "player";
   const canRemove = member.role !== "owner" && !isViewer;
+  // Whether anything renders in the grant slot at all. Both arms of it are
+  // player-only — the switch, and the "no account yet" note — so a coach or
+  // staff row fills nothing, and the divider below would open the popover with
+  // a rule drawn across the top of nothing.
+  const grantSlotFilled = canToggleSend || member.role === "player";
 
   // An owner has neither control, but the slot still has to exist. Returning
   // null let the upload icon slide right into the space where the menu would
@@ -304,7 +309,9 @@ function RowMenu({
 
         {canRemove && (
           <>
-            <span className="my-1 block h-px bg-[var(--border-hairline)]" />
+            {grantSlotFilled ? (
+              <span className="my-1 block h-px bg-[var(--border-hairline)]" />
+            ) : null}
             <button
               type="button"
               disabled={pending}
