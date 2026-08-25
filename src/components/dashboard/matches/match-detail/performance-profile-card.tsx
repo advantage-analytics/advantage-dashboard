@@ -58,7 +58,7 @@ export function PerformanceProfileCard({
                   type="button"
                   aria-label="About the Performance Profile"
                   aria-haspopup="dialog"
-                  className="relative inline-flex items-center justify-center size-5 -m-1 text-[var(--color-text-dim)] hover:text-[var(--color-text-secondary)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-full"
+                  className="relative inline-flex items-center justify-center size-5 -m-1 text-[var(--color-text-dim)] hover:text-[var(--color-text-secondary)] transition-colors duration-150 focus-visible:outline-none rounded-full"
                 >
                   <Info className="size-3" strokeWidth={1.75} aria-hidden="true" />
                 </button>

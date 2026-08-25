@@ -485,7 +485,7 @@ function RosterButton({
       disabled={disabled}
       className={cn(
         "flex size-5 items-center justify-center rounded-[6px] text-[var(--ink-300)] transition-colors duration-150",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]",
+        "focus-visible:outline-none",
         disabled
           ? "cursor-not-allowed opacity-50"
           : "cursor-pointer hover:bg-[var(--surface-subtle)] hover:text-[var(--danger)]",

@@ -227,7 +227,7 @@ export function StatProgressionChart({ matches }: Props) {
                   key={key}
                   type="button"
                   onClick={() => toggleStat(key)}
-                  className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 ${
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition-all duration-200 focus-visible:outline-none ${
                     isOn
                       ? "text-[#0D0D0D] bg-[#F7F7F7]"
                       : "text-[#AAAAAA] bg-transparent hover:bg-[#FAFAFA]"

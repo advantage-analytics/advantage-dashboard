@@ -63,14 +63,14 @@ export function ErrorState({
             <button
               onClick={primaryAction.onClick}
               disabled={primaryAction.loading}
-              className="px-5 py-2 bg-[#3B82F6] hover:bg-[#2563EB] disabled:opacity-60 disabled:cursor-not-allowed text-white text-[13px] font-medium rounded-[6px] transition-colors duration-200 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
+              className="px-5 py-2 bg-[#3B82F6] hover:bg-[#2563EB] disabled:opacity-60 disabled:cursor-not-allowed text-white text-[13px] font-medium rounded-[6px] transition-colors duration-200 active:scale-[0.97] focus-visible:outline-none"
             >
               {primaryAction.loading ? "Retrying…" : primaryAction.label}
             </button>
           ) : (
             <Link
               href={primaryAction.href}
-              className="px-5 py-2 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[13px] font-medium rounded-[6px] transition-colors duration-200 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-2"
+              className="px-5 py-2 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[13px] font-medium rounded-[6px] transition-colors duration-200 active:scale-[0.97] focus-visible:outline-none"
             >
               {primaryAction.label}
             </Link>
@@ -141,7 +141,7 @@ function MetaRow({ item }: { item: MetaItem }) {
         type="button"
         onClick={copy}
         aria-label={copied ? "Copied" : `Copy ${item.label.toLowerCase()}`}
-        className="ml-0.5 p-1 rounded-[4px] text-[#AAAAAA] hover:text-[#525252] hover:bg-[#F5F5F5] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6] focus-visible:ring-offset-1"
+        className="ml-0.5 p-1 rounded-[4px] text-[#AAAAAA] hover:text-[#525252] hover:bg-[#F5F5F5] transition-colors duration-150 focus-visible:outline-none"
       >
         {copied ? (
           <Check className="size-3" strokeWidth={2} />

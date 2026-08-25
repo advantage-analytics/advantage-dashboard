@@ -240,7 +240,7 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
                   onClick={() => set("role", option.value)}
                   className={cn(
                     "cursor-pointer rounded-full border px-3.5 py-[5px] text-[12px] transition-colors duration-150",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]",
+                    "focus-visible:outline-none",
                     isSelected
                       ? "border-[var(--blue)] bg-[var(--blue-soft)] text-[var(--ink-900)]"
                       : "border-[var(--border-field)] text-[var(--ink-700)] hover:border-[var(--ink-300)]"

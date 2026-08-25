@@ -304,7 +304,7 @@ export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
             >
               <button
                 onClick={() => setIsSearchOpen(true)}
-                className="group flex h-7 cursor-pointer items-center gap-1.5 rounded-[8px] px-2 text-[var(--ink-500)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]"
+                className="group flex h-7 cursor-pointer items-center gap-1.5 rounded-[8px] px-2 text-[var(--ink-500)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] active:scale-[0.97] focus-visible:outline-none"
               >
                 <Search className="h-[14px] w-[14px]" strokeWidth={1.5} aria-hidden="true" />
                 <span className="text-[12px] text-[var(--ink-600)] transition-colors duration-150 group-hover:text-[var(--ink-700)]">
@@ -333,7 +333,7 @@ export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
               <PopoverTrigger asChild>
                 <button
                   className={cn(
-                    "flex cursor-pointer items-center gap-1 rounded-full py-[3px] pl-[3px] pr-1.5 transition-colors duration-150 hover:bg-[var(--surface-subtle)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]",
+                    "flex cursor-pointer items-center gap-1 rounded-full py-[3px] pl-[3px] pr-1.5 transition-colors duration-150 hover:bg-[var(--surface-subtle)] active:scale-[0.97] focus-visible:outline-none",
                     isProfileOpen && "bg-[var(--surface-subtle)]"
                   )}
                   aria-label="Account menu"

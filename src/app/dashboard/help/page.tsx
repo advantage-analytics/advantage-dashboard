@@ -28,7 +28,7 @@ const topicHeadingClass =
 const blockLabelClass = "text-[12px] font-medium text-[var(--ink-900)]";
 const proseClass = "text-[12px] leading-[1.65] text-[var(--ink-700)]";
 const linkClass =
-  "text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)] focus-visible:rounded-sm";
+  "text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)] focus-visible:outline-none focus-visible:rounded-sm";
 const blockDividerClass = "border-t border-[var(--border-hairline)] pt-[22px]";
 
 // Anchor offset accounts for the 44px sticky dashboard header and breathing room.

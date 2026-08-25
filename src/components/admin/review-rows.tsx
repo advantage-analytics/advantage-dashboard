@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 const CARD =
   "rounded-[10px] border border-[var(--border-hairline)] bg-[var(--surface-card)] p-4";
 const BTN =
-  "inline-flex h-8 items-center rounded-[6px] px-3 text-[12px] font-medium transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)] cursor-pointer";
+  "inline-flex h-8 items-center rounded-[6px] px-3 text-[12px] font-medium transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none cursor-pointer";
 
 /** Shape the queries return. Loose on purpose — PostgREST embeds vary. */
 type Row = Record<string, unknown>;

@@ -90,7 +90,7 @@ function EmptyOverlay() {
         </p>
         <Link
           href="/dashboard/help"
-          className="text-[10px] font-medium uppercase tracking-[1.5px] text-[var(--color-accent-blue)] hover:text-[var(--color-accent-blue-hover)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-sm"
+          className="text-[10px] font-medium uppercase tracking-[1.5px] text-[var(--color-accent-blue)] hover:text-[var(--color-accent-blue-hover)] transition-colors duration-150 focus-visible:outline-none rounded-sm"
         >
           Upload help
         </Link>

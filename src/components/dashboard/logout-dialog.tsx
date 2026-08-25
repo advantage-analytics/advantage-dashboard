@@ -102,14 +102,14 @@ export function LogoutProvider({ children }: { children: React.ReactNode }) {
           <div className="flex items-center justify-end gap-2.5">
             <AlertDialogCancel
               disabled={isLoggingOut}
-              className="h-8 rounded-[6px] px-4 border border-[#EAECF0] bg-transparent text-[10px] font-medium uppercase tracking-[1.5px] text-[#525252] hover:bg-[#F5F5F5] active:scale-[0.97] transition-colors duration-200 cursor-pointer m-0 focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none"
+              className="h-8 rounded-[6px] px-4 border border-[#EAECF0] bg-transparent text-[10px] font-medium uppercase tracking-[1.5px] text-[#525252] hover:bg-[#F5F5F5] active:scale-[0.97] transition-colors duration-200 cursor-pointer m-0 focus-visible:outline-none"
             >
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleLogout}
               disabled={isLoggingOut}
-              className="h-8 rounded-[6px] px-4 border-none bg-[#E51837] hover:bg-[#CC1530] text-[10px] font-medium uppercase tracking-[1.5px] text-white active:scale-[0.97] transition-colors duration-200 cursor-pointer shadow-none disabled:opacity-50 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:outline-none"
+              className="h-8 rounded-[6px] px-4 border-none bg-[#E51837] hover:bg-[#CC1530] text-[10px] font-medium uppercase tracking-[1.5px] text-white active:scale-[0.97] transition-colors duration-200 cursor-pointer shadow-none disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none"
             >
               {isLoggingOut ? (
                 <span className="inline-flex items-center gap-1.5">

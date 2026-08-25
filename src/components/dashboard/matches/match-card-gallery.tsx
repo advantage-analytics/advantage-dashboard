@@ -75,7 +75,7 @@ export function MatchCardGallery({
       </div>
       <Link
         href={`/dashboard/matches/${match.id}`}
-        className="block w-full bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:shadow-[0px_6px_20px_0px_rgba(0,0,0,0.10)] hover:border-[#E5E5EA] transition-[box-shadow,border-color] duration-200 overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1"
+        className="block w-full bg-white border border-[#F3F3F3] rounded-[14px] shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:shadow-[0px_6px_20px_0px_rgba(0,0,0,0.10)] hover:border-[#E5E5EA] transition-[box-shadow,border-color] duration-200 overflow-hidden focus-visible:outline-none"
       >
       <div className="p-5">
         {/* Header: match context + verified + duration */}

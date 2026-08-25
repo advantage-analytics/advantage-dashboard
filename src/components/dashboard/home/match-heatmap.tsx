@@ -172,7 +172,7 @@ export default function MatchHeatmap({
                   ref={(el) => { if (el) cellRefs.current.set(cell.date, el); }}
                   type="button"
                   tabIndex={isSelected || (!selectedDate && cell.date === navigableDates[0]) ? 0 : -1}
-                  className={`aspect-square rounded-[4px] flex items-center justify-center relative transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 ${
+                  className={`aspect-square rounded-[4px] flex items-center justify-center relative transition-all duration-150 focus-visible:outline-none ${
                     isToday && !isSelected ? "ring-1 ring-[#3B82F6] ring-offset-1" : ""
                   } ${isSelected ? "ring-2 ring-[#3B82F6] ring-offset-1 z-10" : ""} ${
                     hasMatches ? "cursor-pointer hover:brightness-90" : "cursor-default"

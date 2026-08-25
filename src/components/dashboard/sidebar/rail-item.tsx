@@ -83,7 +83,7 @@ export function RailItem({
   );
 
   const className = cn(
-    "group/row flex h-10 w-full items-center overflow-hidden rounded-[8px] text-left transition-colors duration-200 ease-[var(--ease-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)] cursor-pointer",
+    "group/row flex h-10 w-full items-center overflow-hidden rounded-[8px] text-left transition-colors duration-200 ease-[var(--ease-primary)] focus-visible:outline-none cursor-pointer",
     active
       ? "bg-[var(--surface-subtle)] font-medium text-[var(--ink-900)]"
       : "text-[var(--nav-fg)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]"

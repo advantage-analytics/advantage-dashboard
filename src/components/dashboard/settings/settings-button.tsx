@@ -69,7 +69,7 @@ export function SettingsButton({
       disabled={isDisabled}
       className={cn(
         "inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-[6px] border border-transparent font-medium transition-colors duration-200",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]",
+        "focus-visible:outline-none",
         "active:enabled:scale-[0.97] motion-reduce:active:enabled:scale-100",
         "disabled:pointer-events-none disabled:opacity-50",
         SIZES[size],
@@ -107,7 +107,7 @@ export function SettingsIconButton({
       aria-label={label}
       className={cn(
         "flex size-5 items-center justify-center rounded-[8px] transition-colors duration-150",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]",
+        "focus-visible:outline-none",
         "disabled:cursor-not-allowed disabled:opacity-40",
         tone === "danger"
           ? "text-[var(--ink-300)] hover:bg-[var(--surface-subtle)] hover:text-[var(--danger)]"

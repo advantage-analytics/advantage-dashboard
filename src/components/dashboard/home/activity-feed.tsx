@@ -288,7 +288,7 @@ export default function ActivityFeed({
           <button
             type="button"
             onClick={load}
-            className="flex items-center gap-1.5 mt-2 px-3 py-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-medium uppercase tracking-[1.5px] rounded-[6px] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+            className="flex items-center gap-1.5 mt-2 px-3 py-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-medium uppercase tracking-[1.5px] rounded-[6px] transition-colors duration-200 focus-visible:outline-none"
           >
             <RefreshCw className="size-3" aria-hidden />
             Retry
@@ -345,7 +345,7 @@ export default function ActivityFeed({
                 key={item.id}
                 href={item.href}
                 aria-label={`${item.label}${item.detail ? ` ${item.detail}` : ""}, ${item.timeAgo}`}
-                className="group flex gap-3 items-stretch rounded-lg px-2 -mx-2 py-2.5 transition-[background-color,transform] duration-200 ease-out hover:bg-[#FAFAFA] active:scale-[0.998] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1"
+                className="group flex gap-3 items-stretch rounded-lg px-2 -mx-2 py-2.5 transition-[background-color,transform] duration-200 ease-out hover:bg-[#FAFAFA] active:scale-[0.998] focus-visible:outline-none"
               >
                 {rail}
                 {body}

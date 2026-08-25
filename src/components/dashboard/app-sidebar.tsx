@@ -129,7 +129,7 @@ function ViewerFooter({
       <Link
         href="/dashboard/settings/profile"
         aria-label={viewer.name}
-        className="flex min-w-0 flex-1 items-center rounded-[8px] transition-opacity duration-150 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]"
+        className="flex min-w-0 flex-1 items-center rounded-[8px] transition-opacity duration-150 hover:opacity-80 focus-visible:outline-none"
       >
         <span className="flex size-10 shrink-0 items-center justify-center">
           <span
@@ -156,7 +156,7 @@ function ViewerFooter({
           type="button"
           onClick={onSignOut}
           aria-label="Sign out"
-          className="flex size-8 shrink-0 items-center justify-center rounded-[6px] text-[var(--ink-400)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)] cursor-pointer"
+          className="flex size-8 shrink-0 items-center justify-center rounded-[6px] text-[var(--ink-400)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] focus-visible:outline-none cursor-pointer"
         >
           <LogOut className="size-[13px]" strokeWidth={1.5} aria-hidden="true" />
         </button>

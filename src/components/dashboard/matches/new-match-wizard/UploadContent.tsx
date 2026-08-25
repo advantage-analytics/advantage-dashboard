@@ -302,7 +302,7 @@ function UploadContentImpl({
                   type="button"
                   onClick={onRemoveFile}
                   disabled={isUploading}
-                  className="size-7 flex items-center justify-center rounded-[6px] text-[#AAAAAA] hover:text-[#E51837] hover:bg-[rgba(229,24,55,0.06)] transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E51837]/40 shrink-0"
+                  className="size-7 flex items-center justify-center rounded-[6px] text-[#AAAAAA] hover:text-[#E51837] hover:bg-[rgba(229,24,55,0.06)] transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none shrink-0"
                   aria-label="Remove file"
                 >
                   <Trash2 className="size-3.5" strokeWidth={1.5} />

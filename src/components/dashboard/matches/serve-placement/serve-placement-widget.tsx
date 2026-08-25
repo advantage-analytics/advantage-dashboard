@@ -854,7 +854,7 @@ function FullscreenEmptyState({
         <button
           type="button"
           onClick={onReset}
-          className="mt-1 inline-flex items-center px-3 py-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-medium uppercase tracking-[1.5px] rounded-full shadow-none transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 cursor-pointer"
+          className="mt-1 inline-flex items-center px-3 py-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-medium uppercase tracking-[1.5px] rounded-full shadow-none transition-colors duration-200 focus-visible:outline-none cursor-pointer"
         >
           Reset filters
         </button>
@@ -1396,13 +1396,13 @@ function ServePlacementFullscreen({
               onClick={() => setShortcutsOpen((v) => !v)}
               aria-expanded={shortcutsOpen}
               aria-label="Show keyboard shortcuts"
-              className="cursor-pointer h-7 w-7 rounded-lg flex items-center justify-center text-[#888888] hover:text-[#0D0D0D] hover:bg-[#F5F5F5] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+              className="cursor-pointer h-7 w-7 rounded-lg flex items-center justify-center text-[#888888] hover:text-[#0D0D0D] hover:bg-[#F5F5F5] transition-colors duration-200 focus-visible:outline-none"
             >
               <HelpCircle className="size-3.5" strokeWidth={1.5} />
             </button>
             <button
               onClick={onClose}
-              className="cursor-pointer h-7 w-7 rounded-lg flex items-center justify-center text-[#888888] hover:text-[#0D0D0D] hover:bg-[#F5F5F5] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+              className="cursor-pointer h-7 w-7 rounded-lg flex items-center justify-center text-[#888888] hover:text-[#0D0D0D] hover:bg-[#F5F5F5] transition-colors duration-200 focus-visible:outline-none"
               aria-label="Close fullscreen view"
             >
               <X className="size-3.5" strokeWidth={1.5} />
@@ -1447,7 +1447,7 @@ function ServePlacementFullscreen({
                 aria-pressed={vizType === tab}
                 className={cn(
                   "rounded-full px-3.5 h-7 text-[11px] font-medium transition-all duration-200 cursor-pointer",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40",
+                  "focus-visible:outline-none",
                   vizType === tab
                     ? "bg-white text-[#0D0D0D] shadow-[0px_1px_3px_rgba(0,0,0,0.08)]"
                     : "text-[#71717A] hover:text-[#525252]",
@@ -1473,7 +1473,7 @@ function ServePlacementFullscreen({
                 aria-pressed={colorMode === mode}
                 className={cn(
                   "rounded-full px-3.5 h-7 text-[11px] font-medium transition-all duration-200 cursor-pointer",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40",
+                  "focus-visible:outline-none",
                   colorMode === mode
                     ? "bg-white text-[#0D0D0D] shadow-[0px_1px_3px_rgba(0,0,0,0.08)]"
                     : "text-[#71717A] hover:text-[#525252]",
@@ -1550,7 +1550,7 @@ function ServePlacementFullscreen({
                 onClick={() => setMobileRailOpen((v) => !v)}
                 aria-expanded={mobileRailOpen}
                 aria-controls="serve-placement-filter-body"
-                className="flex lg:hidden items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 rounded-sm"
+                className="flex lg:hidden items-center gap-1.5 cursor-pointer focus-visible:outline-none rounded-sm"
               >
                 <span className="text-[12px] font-medium text-[#0D0D0D]">
                   Filters
@@ -1631,7 +1631,7 @@ function ServePlacementFullscreen({
                             aria-expanded={expanded}
                             className={cn(
                               "flex items-center justify-between gap-2 rounded-sm cursor-pointer",
-                              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40",
+                              "focus-visible:outline-none",
                             )}
                           >
                             <span className="text-[12px] font-medium text-[#525252]">{g.label}</span>
@@ -1682,7 +1682,7 @@ function ServePlacementFullscreen({
                   disabled={empty}
                   aria-pressed={!hidden}
                   className={cn(
-                    "flex gap-1.5 items-center transition-opacity duration-200 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40",
+                    "flex gap-1.5 items-center transition-opacity duration-200 rounded-sm focus-visible:outline-none",
                     empty ? "cursor-not-allowed opacity-40" : "cursor-pointer",
                   )}
                 >
@@ -1795,7 +1795,7 @@ export function ServePlacementWidget({
           disabled={!canExpand}
           className={cn(
             "flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[2.5px] transition-colors duration-200 rounded-sm",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40",
+            "focus-visible:outline-none",
             canExpand
               ? "text-[#3B82F6] hover:text-[#2563EB] cursor-pointer"
               : "text-[#CCCCCC] cursor-not-allowed",

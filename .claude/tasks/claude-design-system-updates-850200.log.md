@@ -88,3 +88,39 @@ is the runner's. Newest entries at the bottom.
   fields`) and line 775 (`Background: bg-[#F7F7F7]`) still describe the field
   background as #F7F7F7 while `--surface-field` resolves to #F5F5F5. Disabled-
   state figures outside the Focus section, so out of scope here — worth a task.
+
+## T3 · Delete the inert focus-visible:ring-* declarations under src/ — done
+- **gate:** lint clear (0 errors; 38 pre-existing warnings, none in a class
+  string) · `tsc --noEmit` exit 0 · `npm test` 93/93 · task-completion-reviewer
+  `VERDICT: pass` · pipeline-guardrails-reviewer clear. Both reviewers were run
+  because 52 of the 62 changed files sit under `src/components/dashboard/` or
+  `src/app/dashboard/`, the upload wizard among them. rls-boundary-reviewer
+  skipped legitimately: nothing under `src/lib/supabase/`, `src/lib/data/`,
+  `src/app/api/` or `supabase/migrations/` is in the diff, and there is no new
+  table, view or query.
+- **verification:** the completion reviewer did not take the sweep on trust — it
+  re-derived the inert claim against focus.css's selector list across all 61
+  changed files, grepped for the three named failure modes (a `peer-`/`group-`
+  variant removed, a `focus:` rather than `focus-visible:` ring removed, a
+  non-focus `ring-1 ring-inset` or `aria-invalid:ring-*` caught by mistake) and
+  found none, confirmed `focus-visible:outline-none` survives at an identical
+  count, and measured two of the three surfaces itself in a live browser
+  (`/login`'s input and button) rather than trusting the reported values. The
+  sidebar rail sits behind auth it had no credentials for, so it reasoned from
+  source instead and said so. The guardrails reviewer separately traced all
+  three wizard misattribution inputs and confirmed ScoreCell, DetailsContent and
+  ConfirmContent changed nothing but class strings.
+- **changed:** 209 inert `focus-visible:ring-*` declarations removed from 61
+  files — 95 colour values, 93 widths, 19 `ring-offset-*`, 3 `ring-inset`. They
+  never rendered: focus.css is imported outside any `@layer` while Tailwind
+  utilities live in `@layer utilities`, so the unlayered rule wins before
+  specificity is consulted. Two of them encoded a ring contradicting the system
+  — `ui/input.tsx`'s `#E5E5E5` (the value T5 retired at 1.26:1) and
+  `ui/button.tsx`'s `ring-ring/50 ring-[3px]`. The wizard's `focusRingCls` is
+  now just `focus-visible:outline-none`, and its doc comment no longer cites a
+  ring utility as the source of truth.
+- **deliberately not done:** the layering itself. Moving the design-system
+  import into a named layer, plus a lint rule making the dead class a build
+  failure, is the structural fix — but it had to come after this sweep, not
+  before, or it would have flipped 209 declarations from inert to live in one
+  commit. That follow-up is now unblocked and unfiled.

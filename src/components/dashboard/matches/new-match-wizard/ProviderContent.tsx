@@ -53,7 +53,7 @@ function ProviderContentImpl({ selectedProvider, onProviderSelect }: ProviderCon
                 onProviderSelect(isSelected ? null : provider.id);
               }
             }}
-            className={`group relative w-full flex items-center gap-6 px-6 py-5 rounded-[14px] bg-white border text-left transition-colors duration-200 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-2 ${
+            className={`group relative w-full flex items-center gap-6 px-6 py-5 rounded-[14px] bg-white border text-left transition-colors duration-200 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] focus-visible:outline-none ${
               isAvailable
                 ? "border-[#F3F3F3] hover:border-[#E5E5EA] cursor-pointer"
                 : "border-[#F3F3F3] cursor-not-allowed"

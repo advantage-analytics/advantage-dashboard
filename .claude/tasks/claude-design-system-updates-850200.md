@@ -55,7 +55,7 @@ ready).
   the docs in T1. Verified figures are in commit 55087b4's message.
 
 ## T3 · Delete the inert focus-visible:ring-* declarations under src/
-- **status:** todo
+- **status:** done
 - **files:** ~62 files under src/ carrying `focus-visible:ring-*` (start from
   `grep -rl 'focus-visible:ring-' src/`), notably src/components/ui/input.tsx,
   src/components/ui/button.tsx, src/components/dashboard/sidebar/rail-item.tsx;

@@ -141,7 +141,7 @@ export function MatchStatisticsCard({
                 type="button"
                 aria-label="How to read these statistics"
                 aria-haspopup="dialog"
-                className="relative inline-flex items-center justify-center size-5 -m-1 text-[var(--color-text-dim)] hover:text-[var(--color-text-secondary)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-full"
+                className="relative inline-flex items-center justify-center size-5 -m-1 text-[var(--color-text-dim)] hover:text-[var(--color-text-secondary)] transition-colors duration-150 focus-visible:outline-none rounded-full"
               >
                 <Info className="size-3" strokeWidth={1.75} aria-hidden="true" />
               </button>
@@ -219,7 +219,7 @@ export function MatchStatisticsCard({
                           <TooltipTrigger asChild>
                             <span
                               tabIndex={0}
-                              className={`inline cursor-help rounded-sm underline decoration-dotted decoration-[var(--color-text-faint)] underline-offset-[3px] decoration-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] ${touchTargetExpanderClass}`}
+                              className={`inline cursor-help rounded-sm underline decoration-dotted decoration-[var(--color-text-faint)] underline-offset-[3px] decoration-1 focus:outline-none ${touchTargetExpanderClass}`}
                             >
                               {row.label}
                             </span>
@@ -316,7 +316,7 @@ function ValueText({
           <span
             tabIndex={0}
             aria-label="No data recorded for this stat"
-            className={`inline-block whitespace-nowrap text-[var(--color-text-muted)] italic cursor-help focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-sm text-[14px] leading-[18px] font-light tabular-nums ${touchTargetExpanderClass}`}
+            className={`inline-block whitespace-nowrap text-[var(--color-text-muted)] italic cursor-help focus:outline-none rounded-sm text-[14px] leading-[18px] font-light tabular-nums ${touchTargetExpanderClass}`}
           >
             —
           </span>

@@ -58,7 +58,7 @@ export function SettingsNavigation(): React.ReactElement {
               aria-current={isActive ? "page" : undefined}
               className={cn(
                 "whitespace-nowrap rounded-[8px] px-2.5 py-[7px] text-[12px] transition-colors duration-150",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]",
+                "focus-visible:outline-none",
                 isActive
                   ? "bg-[var(--surface-subtle)] font-medium text-[var(--ink-900)]"
                   : "text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]"

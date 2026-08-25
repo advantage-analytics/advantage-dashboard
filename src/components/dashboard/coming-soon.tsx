@@ -103,7 +103,7 @@ function ComingSoon({
             <motion.div {...anim(T.CTA)}>
               <Link
                 href={action.href}
-                className="inline-flex h-9 items-center justify-center rounded-[6px] bg-[#3B82F6] px-4 text-[13px] font-medium text-white shadow-[0_1px_3px_rgba(57,134,243,0.25)] transition-colors duration-200 hover:bg-[#2563EB] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+                className="inline-flex h-9 items-center justify-center rounded-[6px] bg-[#3B82F6] px-4 text-[13px] font-medium text-white shadow-[0_1px_3px_rgba(57,134,243,0.25)] transition-colors duration-200 hover:bg-[#2563EB] focus-visible:outline-none"
               >
                 {action.label}
               </Link>
@@ -113,7 +113,7 @@ function ComingSoon({
             <motion.div {...anim(T.HELP)}>
               <Link
                 href="/dashboard/help"
-                className="inline-flex items-center gap-1.5 rounded-sm text-[11px] font-medium uppercase tracking-[1.5px] text-[#888888] transition-colors duration-200 hover:text-[#525252] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+                className="inline-flex items-center gap-1.5 rounded-sm text-[11px] font-medium uppercase tracking-[1.5px] text-[#888888] transition-colors duration-200 hover:text-[#525252] focus-visible:outline-none"
               >
                 <HelpCircle className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
                 Visit the help center

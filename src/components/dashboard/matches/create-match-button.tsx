@@ -50,7 +50,7 @@ export function CreateMatchButton({ variant = "dark" }: CreateMatchButtonProps):
     <Link
       href={NEW_MATCH_HREF}
       className={cn(
-        "flex items-center rounded-[6px] text-white cursor-pointer transition-[color,background-color,transform] duration-200 ease-out shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1",
+        "flex items-center rounded-[6px] text-white cursor-pointer transition-[color,background-color,transform] duration-200 ease-out shrink-0 focus-visible:outline-none",
         variantStyles[variant]
       )}
     >
