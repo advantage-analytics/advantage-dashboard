@@ -409,7 +409,7 @@ ready).
 - **notes:** Found by `/pr-check`, confirmed in the source. `outstanding` is every pending player invite regardless of TTL, and `expiries.filter(e => e <= horizon)` matches past expiries as readily as near-future ones; the `Math.max(0, …)` then turns the negative into 0. Net effect: an invite that lapsed last month pins a permanent "One invite expires today" to Needs attention, which is exactly the kind of alert that teaches a coach to ignore the list.
 
 ## T15 · Guard the tiebreak superscript on set shape
-- **status:** next
+- **status:** done
 - **files:** `src/lib/ui/score-format.ts` (`tiebreakOf`); a new `tests/score-format.spec.ts`
 - **done when:**
   - [ ] A superscript renders only where the set was won by exactly ONE game — `Math.abs(player1 - player2) === 1`. That admits `7-6`, `1-0` and `9-8`; it refuses `6-3`, `7-5`, `3-3` and every other shape

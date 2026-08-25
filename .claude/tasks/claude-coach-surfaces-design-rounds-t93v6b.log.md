@@ -1209,3 +1209,60 @@ is the runner's. Newest entries at the bottom.
 - **flagged, correctly not fixed:** `player-profile-server.ts:130` has the same
   class of gap — it computes `isPlayer1` from one id, so a claimed player's
   pre-claim matches are missing from their OWN profile page. Queued as T29.
+
+## T15 · Guard the tiebreak superscript on set shape — done
+- **gate:** 5a mechanical — `npm run lint` 0 errors / 38 pre-existing warnings;
+  `npx tsc --noEmit` exit 0; `npm test` 183 passed (172 prior + 11 new). 5b
+  `task-completion-reviewer` — `VERDICT: pass`, dispatched ALONE and finished
+  before 5c. 5c `pipeline-guardrails-reviewer` ran (`src/lib/ui/` score rendering,
+  a surface the guardrails doc names) and returned an explicit all-clear;
+  `rls-boundary-reviewer` SKIPPED — the diff touches only `src/lib/ui/` and
+  `tests/`, nothing under `src/lib/supabase/`, `src/lib/data/`, `src/app/api/` or
+  `supabase/migrations/`, and adds no query.
+- **this was the second of two merge blockers**, and it had been `blocked` since
+  its first run because the answer was not in the repo.
+- **unblocked by two production queries the author ran.** The census: 47 sets
+  carry a non-null tiebreak, 41 of them zero-fill (`tb1=0, tb2=0`) on shapes no
+  tiebreak can decide, and 40 of those were PRINTING a spurious superscript —
+  `6-3⁰`, `6-4⁰`, `7-5⁰` — because `0 ?? null` is `0` and `<ScoreLine>` gates on
+  `!== null`. Live output, not a latent hazard. The three real tiebreaks: `1-0
+  (tb 10,5)`, `0-1 (tb 9,11)`, `8-9 (tb 3,7)`.
+- **changed:** one line prepended to `tiebreakOf` —
+  `if (Math.abs(set.player1 - set.player2) !== 1) return null;` — plus a doc
+  paragraph recording the derivation, plus a new `tests/score-format.spec.ts`
+  (11 tests) where no spec for this module existed.
+- **the rule, and why it is not pattern-matching:** a set decided by a tiebreak is
+  won by exactly one game, because the tiebreak IS the final game; without one you
+  must win by two. So margin 1 implies a tiebreak. That is a fact about tennis,
+  and 5b verified it AGAINST THE SPORT rather than against the census, at my
+  explicit request: the only one-game-margin completions are 6-6→7-6, 8-8→9-8, and
+  a super-tiebreak stored as 1-0 — every non-tiebreak completion needs two. It
+  also checked the incomplete-set states (`formatScoreboardStatus` has unfinished
+  / withdrew / default) and confirmed they are not counterexamples to a rule about
+  FINISHED sets. No counterexample exists.
+- **both narrower guards this repo previously tried were wrong, in opposite
+  directions**, and the comment now records both so nobody re-litigates:
+  `mine === 7 && theirs === 6` (too tight — hides the `1-0` super-tiebreaks that
+  production actually holds) and `tiebreak > 0` (guards VALUE — hides a real `7-6`
+  won 7-0 in points). The new guard reads only the games, never the value.
+- **side selection untouched, verified byte-for-byte by both reviewers.** The diff
+  is a pure prepend; the three original lines are identical, and the now-unreachable
+  trailing `return null` was deliberately left rather than tidied, so those lines
+  stay undisturbed. This matters because the production data stores each player's
+  OWN points in their own slot, contradicting the comment `tiebreakOf` quotes —
+  and `tiebreakOf` is nevertheless correct under both conventions, since the
+  loser's slot holds the loser's points either way. An agent "fixing" the side to
+  match the data would have broken what works. That conflict is T30's.
+- **effect on the real rows:** `1-0`→5, `0-1`→9, `8-9`→3, all unchanged; `6-3`
+  with `0,0` goes from `0` to `null`. Every consumer inherits it —
+  `<ScoreLine>` (matches list, Team Home rows, search palette, schedule, dual
+  sheet, home rail) and `match-summary-row`'s scoreboard, whose `setWon` the
+  reviewer confirmed is layout (which player row hangs the digit) and not a second
+  shape rule.
+- **test honesty, volunteered unprompted:** the implementer reported 3 of 11
+  failing pre-fix AND flagged, without being asked, that `an unfinished 3-3
+  renders nothing` passes either way — equal games already returned null via the
+  pre-existing comparisons — marking it in the source and keeping it only because
+  the criterion names it. 5b confirmed the count, confirmed the disclosure
+  accurate, and checked that none of the other seven both-ways tests share that
+  property. Third task running where the implementer caught this class itself.

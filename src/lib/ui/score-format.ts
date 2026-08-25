@@ -66,8 +66,33 @@ export const SET_JOINER = ", ";
  * WINNER is not the number this notation prints, and printing it anyway would
  * be a wrong score that looks like a right one — so a misfiled value renders
  * nothing rather than a plausible lie.
+ *
+ * ── Only a one-game margin can have been a tiebreak ─────────────────────────
+ * The guard below is on the set's SHAPE, `Math.abs(player1 - player2) === 1`,
+ * and never on the stored value. A tiebreak IS the set's last game, so a set
+ * it decided is always won by exactly one game; win a set without one and you
+ * must win by two, which is why `6-0` through `6-4` and `7-5` are margin ≥ 2.
+ * Margin 1 therefore implies a tiebreak, and it keeps implying one for a
+ * super-tiebreak stored as `1-0` and for a pro-set played out to `9-8`.
+ *
+ * This was settled from production rather than from the schema, because the
+ * schema permits shapes the data does not contain. Of the 47 sets carrying a
+ * non-null tiebreak, 41 are zero-fill — `0`/`0` written onto shapes no
+ * tiebreak can decide (`6-3`, `6-4`, `6-2`, `7-5`, `1-6`, …) — and 40 of them
+ * printed a spurious superscript before this guard, since `0 ?? null` is `0`
+ * and every consumer gates on `!== null`. (The 41st, a `3-3`, escaped only
+ * because equal games already returned null here.) The real tiebreaks are
+ * three: `1-0` won 10-5, `0-1` won 11-9, and `8-9` won 7-3.
+ *
+ * Two narrower guards have been tried in this repo and both were wrong, in
+ * opposite directions. `mine === 7 && theirs === 6` (once in
+ * `match-summary-row.tsx`) is a shape guard drawn too tight: it hides exactly
+ * the super-tiebreaks the data stores as `1-0` / `0-1`. `tiebreak > 0` (once
+ * in `matches-list-types.ts`) is a guard on VALUE, and hides a legitimate
+ * `7-6` won 7-0 in points. Shape, and the whole of it.
  */
 export function tiebreakOf(set: ScoreLineSet): number | null {
+  if (Math.abs(set.player1 - set.player2) !== 1) return null;
   if (set.player1 > set.player2) return set.player2Tiebreak ?? null;
   if (set.player2 > set.player1) return set.player1Tiebreak ?? null;
   return null;
