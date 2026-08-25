@@ -529,3 +529,19 @@
     background-image: none;
   }
 }
+
+/* Team Home's KPI sparkline — the only motion on that strip.
+   `--ease-chart` is the curve reserved for chart and data transitions, and a
+   sparkline arriving is exactly that. Opacity only, so it costs no layout and
+   the line's geometry is never interpolated. The strip is server-rendered, so
+   this is CSS rather than a Framer entrance: the markup is in the first paint
+   and the fade runs off it. */
+.kpi-spark {
+  animation: fadeIn var(--duration-reveal) var(--ease-chart) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kpi-spark {
+    animation: none;
+  }
+}

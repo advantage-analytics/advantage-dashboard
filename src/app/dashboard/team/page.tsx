@@ -12,6 +12,7 @@ import { advButton } from "@/lib/ui/adv-button";
 import { UsageFooter } from "@/components/dashboard/team/usage-footer";
 import { FirstSteps } from "@/components/dashboard/team/first-steps";
 import { DualSheet } from "@/components/dashboard/team/dual-sheet";
+import { KpiStrip } from "@/components/dashboard/team/kpi-strip";
 import { MatchRows } from "@/components/dashboard/team/match-rows";
 
 /**
@@ -54,8 +55,15 @@ export default async function TeamHomePage() {
   if (active.kind !== "team") redirect("/dashboard");
 
   const billingMonth = currentBillingMonth();
-  const { usage, matches, roster, nextEvent, weekendDual, playersCanUpload } =
-    await getTeamHomeData(active.id, billingMonth);
+  const {
+    usage,
+    matches,
+    kpis,
+    roster,
+    nextEvent,
+    weekendDual,
+    playersCanUpload,
+  } = await getTeamHomeData(active.id, billingMonth);
 
   // Roster facts and the setup checklist are staff business. A player reaches
   // this page from the same rail item, and `program_roster` returns them only
@@ -154,6 +162,19 @@ export default async function TeamHomePage() {
               </button>
             ))}
         </div>
+
+        {/* The strip — up to four figures, directly under the greeting it
+            summarises and above everything the page then details. Outside the
+            `!empty` gate because it carries its own, stricter one: `kpis` is
+            empty until the program has a match that has actually been
+            ANALYZED, which is later than having a row. On day zero this mounts
+            nothing at all — no skeleton, no zeroed tiles — which is the rule
+            round 45 states about this strip in particular. Fewer than four
+            arrive whenever a figure cannot be computed honestly; `teamKpis()`
+            says which and when. Not staff-only: every figure on it is about
+            the program, and a player reads the same numbers their coach
+            does. */}
+        <KpiStrip tiles={kpis} />
 
         {/* The middle — the only thing empty → populated changes.
 

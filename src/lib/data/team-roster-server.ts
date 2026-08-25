@@ -7,7 +7,7 @@ import {
   shortName,
   type MatchScore,
 } from "@/lib/data/match-utils";
-import { meanOfPresent, pct } from "@/lib/data/aggregate";
+import { meanOfPresent, pct, statKey } from "@/lib/data/aggregate";
 import { normalizedPersonName } from "@/lib/data/person-name";
 import type { MemberRole } from "@/lib/data/team-settings-server";
 
@@ -183,11 +183,6 @@ function isToday(iso: string | null): boolean {
     then.getMonth() === now.getMonth() &&
     then.getDate() === now.getDate()
   );
-}
-
-/** The stats view's natural key — one row per side of a match. */
-function statKey(matchId: string, isPlayer1: boolean): string {
-  return `${matchId}:${isPlayer1 ? 1 : 0}`;
 }
 
 /** One match as it bears on one of the two people who played it. */

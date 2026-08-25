@@ -635,3 +635,43 @@ is the runner's. Newest entries at the bottom.
 - **stash:** `9db3e34683717299c6f72c36731c26a3f50bbe41` — the strip, the
   aggregation, the tests, and the `setTally`/`statKey` de-duplication.
   Recoverable; nothing discarded.
+
+## T10 · KPI strip, only once the numbers are honest — done (second attempt)
+- **gate:** mechanical — `npm run lint` 0 errors (38 pre-existing warnings),
+  `npx tsc --noEmit` clean, `npm test` **111 passed** (93 at branch start).
+  `task-completion-reviewer` — **`VERDICT: pass`**, all six criteria, and it
+  did not take the mutation claims on trust: it reproduced all five mutations
+  against the real files, confirmed each broke a specific `teamKpis`-level
+  assertion, reverted them and diffed to confirm the originals were restored.
+  It also verified the mid-season fixture genuinely alternates `programSide` by
+  index parity and that the decoy 20% opponent stat rows do degrade the serve
+  average under a wrong-attribution mutation.
+  `pipeline-guardrails-reviewer` and `rls-boundary-reviewer` — **not re-run for
+  this attempt, on a mechanically verified basis.** The only non-comment change
+  in `src/` since the revision they cleared is three `export` keywords
+  (`teamKpis`, `DbSeasonMatch`, `DbTeamStat`); everything else is prose inside
+  comment blocks. Their first-attempt results stand and are recorded above
+  under "T10 — blocked": `setTally()` verified line by line as a verbatim
+  extraction of `matchOutcome`'s body (T8's glyphs depend on it), and
+  `match_stats_with_percentages` confirmed `security_invoker = on` with the
+  migration history that made it so.
+- **changed:** Team Home gains a KPI strip between the greeting and the rest of
+  the page — dual record, sets won, team first serve, matches analyzed. It
+  renders nothing at all until a match has actually been analyzed, states the
+  sample under every figure computed from fewer than five matches, and draws no
+  trend or sparkline until there are five observations spanning at least seven
+  days. `SMALL_SAMPLE_MIN` and `TREND_MIN_SPAN_DAYS` are named constants
+  carrying their reasoning.
+- **the honesty rules, which are the point of the task:** a figure that cannot
+  be computed honestly is omitted rather than printed as `0–0` or `—%`, so the
+  strip carries one to four tiles; the dual record and the analyzed count never
+  draw a trend, because a W–L record's only drawable line is a different
+  statistic wearing its label and a count that only rises reports growth as
+  improvement; and a match whose side cannot be established contributes to no
+  average rather than defaulting to a column.
+- **what the first attempt failed on:** criterion 1 demanded four tiles
+  unconditionally — my wording, which would have required the `0–0` the round
+  exists to refuse. The reviewer refused to soften it and was right to: the
+  three-tile state is reachable in any normal early season. It also found the
+  real gap, that `teamKpis()` — the function deciding which tiles exist — had
+  no coverage while its helpers did. Four tests now cover it.

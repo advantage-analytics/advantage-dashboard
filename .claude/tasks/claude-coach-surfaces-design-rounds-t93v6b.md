@@ -314,7 +314,7 @@ ready).
   not through any real collegiate season.
 
 ## T10 · KPI strip, only once the numbers are honest
-- **status:** next
+- **status:** done
 - **files:** `src/lib/data/team-home-server.ts`, a new
   `src/components/dashboard/team/kpi-strip.tsx` — a guess
 - **done when:**

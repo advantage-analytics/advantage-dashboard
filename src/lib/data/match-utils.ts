@@ -143,6 +143,33 @@ export function buildScoreString(
 }
 
 /**
+ * Sets taken by each side, from the game counts — or null where the score
+ * cannot say.
+ *
+ * Extracted from `matchOutcome` below, which now reads it, so that a surface
+ * needing the tally itself (Team Home's "sets won" tile) does not add a third
+ * spelling of "who took this set". Counting games rather than reading a column
+ * is not a shortcut: `matches.result` holds a CONTEXT string ("Final Score"),
+ * never an outcome.
+ *
+ * A set neither side took — level games, which the schema permits on an
+ * unfinished set — is counted for nobody, so the two halves need not add up to
+ * the number of sets played.
+ */
+export function setTally(
+  score: MatchScore | null,
+): { player1: number; player2: number } | null {
+  if (!score?.player1?.length || !score?.player2?.length) return null;
+  let p1Sets = 0;
+  let p2Sets = 0;
+  score.player1.forEach((s, i) => {
+    if (s > (score.player2[i] ?? 0)) p1Sets++;
+    else if ((score.player2[i] ?? 0) > s) p2Sets++;
+  });
+  return { player1: p1Sets, player2: p2Sets };
+}
+
+/**
  * Who took the match, by counting sets — or null where the score cannot say.
  *
  * Null and false are different answers and some callers need them apart. A
@@ -155,15 +182,12 @@ export function matchOutcome(
   score: MatchScore | null,
   isUserPlayer1: boolean,
 ): boolean | null {
-  if (!score?.player1?.length || !score?.player2?.length) return null;
-  let p1Sets = 0;
-  let p2Sets = 0;
-  score.player1.forEach((s, i) => {
-    if (s > (score.player2[i] ?? 0)) p1Sets++;
-    else if ((score.player2[i] ?? 0) > s) p2Sets++;
-  });
-  if (p1Sets === p2Sets) return null;
-  return isUserPlayer1 ? p1Sets > p2Sets : p2Sets > p1Sets;
+  const sets = setTally(score);
+  if (!sets) return null;
+  if (sets.player1 === sets.player2) return null;
+  return isUserPlayer1
+    ? sets.player1 > sets.player2
+    : sets.player2 > sets.player1;
 }
 
 /**

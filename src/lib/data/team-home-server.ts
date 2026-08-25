@@ -5,16 +5,27 @@ import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import {
   ANALYSIS_LABEL,
   importedAnalysis,
+  isAnalysisReady,
   manualAnalysis,
   type AnalysisStatus,
+  type MatchAnalysis,
 } from "@/lib/data/match-analysis";
 import {
   matchOutcome,
+  setTally,
   shortDate,
   type MatchScore,
 } from "@/lib/data/match-utils";
+import { meanOfPresent, pct, statKey } from "@/lib/data/aggregate";
+import {
+  countTile,
+  seriesTile,
+  type TeamKpiObservation,
+  type TeamKpiTile,
+} from "@/lib/data/team-kpi";
 import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
-import { getEventDetail } from "@/lib/data/schedule-server";
+import { getEventDetail, getScheduleRows } from "@/lib/data/schedule-server";
+import type { ScheduleRow } from "@/lib/schedule/types";
 import {
   dualScore,
   entryPlayed,
@@ -256,6 +267,23 @@ export interface RosterProgress {
 export interface TeamHomeData {
   usage: ProgramUsage;
   matches: TeamMatchRow[];
+  /**
+   * The strip — **zero to four tiles**, and empty is the day-zero answer rather
+   * than a shape to draw placeholders from.
+   *
+   * The page renders nothing at all for an empty array: no skeleton, no zeroed
+   * tiles. `0–0`, `—%`, `—%`, `0` on a coach's first morning teaches them the
+   * product is broken, which is the one lesson a first visit must not carry.
+   *
+   * Any count in between is deliberate too: a figure with no rows behind it is
+   * dropped rather than filled in. A program that has never decided a dual has
+   * no dual record, and printing "0–0" for it would be inventing a season; a
+   * program that has never uploaded video has no team first serve. Same
+   * precedent as a match row whose side cannot be established going without
+   * its `<ResultMark>`. `teamKpis()` lists every tile that can go missing and
+   * exactly when — read it there, not here.
+   */
+  kpis: TeamKpiTile[];
   roster: RosterProgress;
   /** Null when the program has nothing on the schedule from today onwards. */
   nextEvent: TeamNextEvent | null;
@@ -545,6 +573,244 @@ function rosterProgress(
   };
 }
 
+/**
+ * Every match the program has recorded, as the strip reads it.
+ *
+ * Deliberately a SECOND read rather than a widening of the list's six-row
+ * query. The list's ordering — `date` descending, PostgreSQL's own null
+ * placement, `limit 6` — is what T8's rows are built on, and re-planning that
+ * query to serve a different question is how a committed surface changes
+ * quietly. This one asks for the whole history and orders it for itself.
+ *
+ * The three id columns are here for the same reason they are on the list's
+ * row: they are the only evidence of which side of a match is the program's.
+ * See `programSide()`.
+ *
+ * Exported with `teamKpis` below, so its spec builds fixtures in the shape the
+ * `select()` actually returns rather than a hand-typed approximation of it.
+ */
+export interface DbSeasonMatch {
+  id: string;
+  player1_id: string | null;
+  player2_id: string | null;
+  event_entry_id: string | null;
+  score: MatchScore | null;
+  date: string;
+  source_provider: string | null;
+  verified: boolean | null;
+}
+
+/** One side of one match, from `match_stats_with_percentages`. */
+export interface DbTeamStat {
+  match_id: string;
+  is_player1: boolean;
+  /** A `numeric` column: PostgREST hands it over as a string. */
+  first_serve_pct: string | number | null;
+}
+
+/**
+ * What state a match row is in — a job's, or the state implied by having no job.
+ *
+ * Two callers now ask (the list's rows and the strip's counts), and they have
+ * to agree: a match the list marks "Imported" and the strip does not count as
+ * analyzed would be two answers about one row on one screen. The fallbacks are
+ * the shared ones — `importedAnalysis` for a file that arrived complete,
+ * `manualAnalysis` for a score somebody typed.
+ */
+function analysisOf(
+  row: { id: string; source_provider: string | null; verified: boolean | null },
+  jobs: Map<string, MatchAnalysis>
+): MatchAnalysis {
+  return (
+    jobs.get(row.id) ??
+    (row.source_provider
+      ? importedAnalysis(row.source_provider, Boolean(row.verified))
+      : manualAnalysis())
+  );
+}
+
+/**
+ * The strip's figures — up to four of them, and sometimes none.
+ *
+ * **None until a match has actually been analyzed.** That is the gate round 45
+ * states as "never a skeleton strip on day zero", and it is `isAnalysisReady`,
+ * the same predicate the greeting line above counts with and the matches list
+ * offers a report on. A program with a schedule full of hand-scored duals and
+ * no analysis has plenty of rows and nothing this strip was built to say.
+ *
+ * **Past that gate, every tile is conditional but one.** A tile is pushed only
+ * when rows exist behind it, so a figure that cannot be computed honestly is
+ * ABSENT — never `0–0`, never `—%`, never a zero standing in for a number
+ * nobody has earned yet. Same rule as a match row whose side cannot be
+ * established going without its outcome glyph: silence beats a plausible wrong
+ * answer. Which tile can go missing, and exactly when:
+ *
+ * - **`dual-record`** — absent until some dual has a DECIDED team score.
+ *   That covers three separate cases: no dual played; a dual played but not
+ *   finished (`teamScore` is null until every line is in); and a dual that
+ *   ended level, which belongs in neither column. Present from the first dual
+ *   the program wins or loses.
+ * - **`sets-won`** — absent while no match this program can be attributed to
+ *   carries a readable set score: `programSide` null on every row (nobody on
+ *   the roster in either id column and no `event_entry_id`), or `setTally`
+ *   null / every set level. Present from the first attributable match with a
+ *   set somebody took.
+ * - **`first-serve`** — absent while no attributable match has a
+ *   `first_serve_pct` row in `match_stats_with_percentages`. A program
+ *   importing scores without video sits here indefinitely, and that is the
+ *   correct answer rather than a `0%` team serve. Present from the first
+ *   attributable match that measured it.
+ * - **`matches-analyzed`** — never absent. It is the count the day-zero gate
+ *   is itself drawn from, so past that gate it is at least 1 by construction.
+ *
+ * So the strip renders one, two, three or four tiles and the component lays out
+ * however many arrive. The two shapes worth picturing: a program's first
+ * analyzed upload, before any dual is decided, gets `sets-won` +
+ * `first-serve` + `matches-analyzed`; a program importing scores without video
+ * gets everything but `first-serve`.
+ *
+ * Nothing here is a new source of truth:
+ * - **Dual record** is `getScheduleRows()`'s `teamScore`, which is `dualScore`
+ *   over the lines and is present only once every line is in. The season
+ *   aggregate of the rule the dual sheet above prints, not a second one.
+ * - **Sets won** counts games with `setTally`, the function `matchOutcome`
+ *   itself now reads, and orients the count with `programSide` — never a
+ *   second answer to which side is ours.
+ * - **Team first serve** reads `match_stats_with_percentages`, keyed by
+ *   `statKey(match_id, is_player1)` exactly as the roster page keys it, and
+ *   `is_player1` is matched against the side `programSide` established.
+ * - **Matches analyzed** is `isAnalysisReady` over the same rows.
+ *
+ * Both percentage tiles are means of PER-MATCH percentages, via
+ * `meanOfPresent` — the app's established rule for aggregating this view, and
+ * the one that keeps an unmeasured match out of the average instead of
+ * entering it as a zero. It also makes the headline the mean of the series the
+ * sparkline draws, so the two cannot disagree.
+ *
+ * **Exported only so that `tests/team-kpi.spec.ts` can call it.** It has no
+ * caller outside this file and should not acquire one — it takes this loader's
+ * private row shapes. It is exported here rather than moved next to the
+ * thresholds in `lib/data/team-kpi.ts` because it could not travel alone:
+ * `programSide` and `analysisOf` are the two refusals it is made of, and both
+ * are read by the match rows below as well, so moving it would carry a
+ * team-home-wide attribution rule into a file named for one strip. The spec
+ * therefore imports this module, Supabase client and all — which is safe
+ * because nothing here runs at module scope: `createClient()` is called inside
+ * `getTeamHomeData`, and `teamKpis` itself performs no I/O. Should that ever
+ * stop being true, move the function and its two refusals out together rather
+ * than giving the test a copy of the logic.
+ */
+export function teamKpis(
+  rows: DbSeasonMatch[],
+  jobs: Map<string, MatchAnalysis>,
+  stats: DbTeamStat[],
+  schedule: ScheduleRow[],
+  rosterIds: ReadonlySet<string>
+): TeamKpiTile[] {
+  // Oldest first. The read arrives newest-first, like the list's, and every
+  // series below is chronological by definition — a sparkline drawn backwards
+  // is a trend reported in reverse.
+  const chronological = [...rows].reverse();
+
+  const analyzed = chronological.filter((row) =>
+    isAnalysisReady(analysisOf(row, jobs).status)
+  );
+  if (analyzed.length === 0) return [];
+
+  const tiles: TeamKpiTile[] = [];
+
+  // A dual that ended level is in neither column and so is in no sample: it is
+  // not a win, not a loss, and counting it under a "9–4" would make the record
+  // stop adding up to the number of duals beside it. A seven-point card cannot
+  // tie; a shortened one can.
+  const decisiveDuals = schedule
+    .filter((row) => row.kind === "dual")
+    .map((row) => ({ startsOn: row.startsOn, score: row.teamScore }))
+    .filter(
+      (row): row is { startsOn: string; score: { us: number; them: number } } =>
+        row.score !== null && row.score.us !== row.score.them
+    );
+  if (decisiveDuals.length > 0) {
+    const wins = decisiveDuals.filter((row) => row.score.us > row.score.them);
+    tiles.push(
+      countTile(
+        "dual-record",
+        "Dual record",
+        "dual",
+        `${wins.length}–${decisiveDuals.length - wins.length}`,
+        decisiveDuals.map((row) => row.startsOn)
+      )
+    );
+  }
+
+  const setsWon: TeamKpiObservation[] = [];
+  const firstServe: TeamKpiObservation[] = [];
+
+  const serveBySide = new Map<string, number | null>();
+  for (const stat of stats) {
+    serveBySide.set(
+      statKey(stat.match_id, stat.is_player1),
+      pct(stat.first_serve_pct)
+    );
+  }
+
+  for (const row of chronological) {
+    // No side, no figure. A row nothing attributes to this program contributes
+    // to neither average rather than contributing the stored order's guess —
+    // the same refusal the row itself makes when it draws no outcome mark.
+    const side = programSide(row, rosterIds);
+    if (side === null) continue;
+
+    const sets = setTally(row.score);
+    const setsPlayed = sets ? sets.player1 + sets.player2 : 0;
+    if (sets && setsPlayed > 0) {
+      const ours = side === "player1" ? sets.player1 : sets.player2;
+      setsWon.push({ value: (ours / setsPlayed) * 100, date: row.date });
+    }
+
+    const serve = serveBySide.get(statKey(row.id, side === "player1"));
+    // `null` is a match that did not measure it, and it is dropped rather than
+    // averaged as a zero — `lib/data/aggregate.ts` exists for that distinction.
+    if (serve !== null && serve !== undefined) {
+      firstServe.push({ value: serve, date: row.date });
+    }
+  }
+
+  const setsMean = meanOfPresent(setsWon.map((observation) => observation.value));
+  if (setsMean !== null) {
+    tiles.push(
+      seriesTile("sets-won", "Sets won", "match", `${Math.round(setsMean)}%`, setsWon)
+    );
+  }
+
+  const serveMean = meanOfPresent(
+    firstServe.map((observation) => observation.value)
+  );
+  if (serveMean !== null) {
+    tiles.push(
+      seriesTile(
+        "first-serve",
+        "Team 1st serve",
+        "match",
+        `${Math.round(serveMean)}%`,
+        firstServe
+      )
+    );
+  }
+
+  tiles.push(
+    countTile(
+      "matches-analyzed",
+      "Matches analyzed",
+      "match",
+      `${analyzed.length}`,
+      analyzed.map((row) => row.date)
+    )
+  );
+
+  return tiles;
+}
+
 export async function getTeamHomeData(
   programId: string,
   billingMonth: string
@@ -558,8 +824,15 @@ export async function getTeamHomeData(
   const today = localDay(now);
   const week = weekBounds(now);
 
-  const [usage, team, { data: rows }, { data: eventRows }, { data: rosterRows }] =
-    await Promise.all([
+  const [
+    usage,
+    team,
+    { data: rows },
+    { data: eventRows },
+    { data: rosterRows },
+    { data: seasonRows },
+    schedule,
+  ] = await Promise.all([
       getProgramUsage(programId, billingMonth),
       getTeamSettings(programId),
       supabase
@@ -603,13 +876,62 @@ export async function getTeamHomeData(
       // and are kept: a coach uploading without a schedule preset lands their own
       // user id in `player1_id`, and that is still our side of the net.
       supabase.rpc("program_roster_full", { p_program_id: programId }),
+      // The KPI strip's own read: every match the program has recorded, not
+      // the six the list shows. Six rows cannot answer "sets won" or "matches
+      // analyzed" — a strip built from the page's most recent handful would
+      // report a season it never looked at.
+      //
+      // Unbounded on purpose, and precedented: `team-roster-server.ts` reads
+      // exactly this way for the same reason, because every per-player
+      // aggregate on the roster is over the whole history too. `nullsFirst:
+      // false` is not a detail — Postgres puts NULLs FIRST on a DESC sort, and
+      // an undated row taking the front of a chronological reversal would be
+      // reported as the oldest match of the season.
+      supabase
+        .from("matches")
+        .select(
+          "id, player1_id, player2_id, event_entry_id, score, date, source_provider, verified"
+        )
+        .eq("program_id", programId)
+        .order("date", { ascending: false, nullsFirst: false }),
+      // Dual record, through the schedule's own loader. `dualScore` over the
+      // lines is what the sheet above prints and what the schedule list prints;
+      // a season record assembled from a second query set would be a fifth
+      // place that decides who won a dual. It costs its own round trips — this
+      // is the one card on the page that reads the whole season — and it is
+      // `cache()`d, so a later reader on the same request pays nothing.
+      getScheduleRows(programId),
     ]);
 
-  // `reap: true` is deliberately NOT passed. It is a write, and it belongs to
-  // the two surfaces that draw a progress bar big enough for a frozen one to
-  // mislead — the matches list and match detail. This page shows a dot.
-  const ids = (rows ?? []).map((row) => row.id as string);
-  const jobs = await loadMatchAnalysis(supabase, ids);
+  const season = (seasonRows ?? []) as DbSeasonMatch[];
+  const seasonIds = season.map((row) => row.id);
+  // One analysis read for both consumers. The list's six rows are a subset of
+  // the season read, but the union is taken rather than assumed: two queries
+  // against a table that can be written between them is not somewhere to save
+  // a `Set`.
+  const analysisIds = Array.from(
+    new Set([...(rows ?? []).map((row) => row.id as string), ...seasonIds])
+  );
+
+  const [jobs, stats] = await Promise.all([
+    // `reap: true` is deliberately NOT passed. It is a write, and it belongs to
+    // the two surfaces that draw a progress bar big enough for a frozen one to
+    // mislead — the matches list and match detail. This page shows a dot.
+    loadMatchAnalysis(supabase, analysisIds),
+    // The same view, the same three columns and the same natural key the
+    // roster page reads (`team-roster-server.ts`) — including how it decides
+    // which side of a match a stat row belongs to. A second way to attribute a
+    // statistic to a side is a serve percentage printed under the wrong
+    // player's name, with nothing on screen looking wrong.
+    (async (): Promise<DbTeamStat[]> => {
+      if (seasonIds.length === 0) return [];
+      const { data } = await supabase
+        .from("match_stats_with_percentages")
+        .select("match_id, is_player1, first_serve_pct")
+        .in("match_id", seasonIds);
+      return (data ?? []) as DbTeamStat[];
+    })(),
+  ]);
 
   const rosterIds = new Set(
     ((rosterRows ?? []) as { player_id: string | null }[])
@@ -618,11 +940,14 @@ export async function getTeamHomeData(
   );
 
   const matches: TeamMatchRow[] = (rows ?? []).map((row) => {
-    const analysis =
-      jobs.get(row.id as string) ??
-      (row.source_provider
-        ? importedAnalysis(row.source_provider as string, Boolean(row.verified))
-        : manualAnalysis());
+    const analysis = analysisOf(
+      row as {
+        id: string;
+        source_provider: string | null;
+        verified: boolean | null;
+      },
+      jobs
+    );
 
     const side = programSide(
       row as {
@@ -679,6 +1004,7 @@ export async function getTeamHomeData(
   return {
     usage,
     matches,
+    kpis: teamKpis(season, jobs, stats, schedule, rosterIds),
     roster: rosterProgress(
       team?.members ?? [],
       team?.invites ?? [],

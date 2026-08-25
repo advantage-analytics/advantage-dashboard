@@ -65,3 +65,18 @@ export function presentPairs<T>(
   });
   return out;
 }
+
+/**
+ * The `match_stats_with_percentages` natural key — one row per side of a match.
+ *
+ * Every reader of that view has to pair `match_id` with `is_player1` to pick
+ * the side it means, and a reader that gets the pairing wrong reads the
+ * OPPONENT's serve percentage under our player's name — a wrong number that
+ * looks entirely plausible on screen. One spelling, so there is one thing to
+ * check. Lives here rather than beside a loader because both the roster's
+ * per-player read and Team Home's program-wide read need it, and neither
+ * should import the other.
+ */
+export function statKey(matchId: string, isPlayer1: boolean): string {
+  return `${matchId}:${isPlayer1 ? 1 : 0}`;
+}
