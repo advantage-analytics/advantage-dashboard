@@ -20,7 +20,11 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { videoObjectKey } from '@/lib/services/splitstep/object-keys';
 import { mintUploadSas } from '@/lib/services/splitstep/video-url';
 import { getWorkspaceContext } from '@/lib/workspace/active-workspace-server';
-import { billingWorkspaceFor, explainVideoRefusal } from '@/lib/workspace/types';
+import {
+  billingWorkspaceFor,
+  explainVideoRefusal,
+  NO_BILLING_WORKSPACE_REFUSAL,
+} from '@/lib/workspace/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -99,7 +103,10 @@ export async function POST(request: NextRequest) {
   // tens of minutes. A player refused only at submit would watch that whole
   // transfer finish before being told they were never allowed to send it, and
   // leave a blob behind for the orphan sweeper. Refusing before the credential
-  // is minted costs one cached lookup and spends nothing.
+  // is minted costs one workspace resolve and spends nothing. Not a cached one:
+  // `getWorkspaceContext()` is React-`cache()`d per request, and a route handler
+  // is its own request, so nothing here was warmed by the page that called it.
+  // Cheap against a transfer measured in tens of minutes, but not free.
   //
   // Asked about the MATCH's workspace, via the same `billingWorkspaceFor()`
   // that `/api/splitstep/jobs` bills through — see the note there. Ownership
@@ -121,7 +128,7 @@ export async function POST(request: NextRequest) {
 
   if (!billingWorkspace) {
     return NextResponse.json(
-      { error: 'You do not have access to the workspace this match belongs to.' },
+      { error: NO_BILLING_WORKSPACE_REFUSAL },
       { status: 403 }
     );
   }

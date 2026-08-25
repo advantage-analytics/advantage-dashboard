@@ -31,7 +31,10 @@ import {
 } from '@/lib/services/splitstep/video-url';
 import { releaseQuota, reserveQuota } from '@/lib/services/splitstep/quota';
 import { getWorkspaceContext } from '@/lib/workspace/active-workspace-server';
-import { billingWorkspaceFor } from '@/lib/workspace/types';
+import {
+  billingWorkspaceFor,
+  NO_BILLING_WORKSPACE_REFUSAL,
+} from '@/lib/workspace/types';
 
 export const runtime = 'nodejs';
 
@@ -350,7 +353,7 @@ export async function POST(request: NextRequest) {
 
   if (!billingWorkspace) {
     return NextResponse.json(
-      { error: 'You do not have access to the workspace this match belongs to.' },
+      { error: NO_BILLING_WORKSPACE_REFUSAL },
       { status: 403 }
     );
   }

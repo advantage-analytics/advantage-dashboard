@@ -216,6 +216,17 @@ export function billingWorkspaceFor(
 }
 
 /**
+ * What both video seams say when a match names a program the viewer is not in.
+ *
+ * `billingWorkspaceFor()` returning `undefined` MEANS this sentence, so the
+ * two live together: `/api/splitstep/jobs` and `/api/splitstep/upload-url`
+ * both refuse on that `undefined`, and a second copy of the wording is a
+ * second copy to edit.
+ */
+export const NO_BILLING_WORKSPACE_REFUSAL =
+  'You do not have access to the workspace this match belongs to.';
+
+/**
  * The one wording for "this program is still being confirmed, so nobody here
  * may spend its video budget yet". A function rather than a constant only
  * because it names the program.
