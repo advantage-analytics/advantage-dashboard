@@ -95,7 +95,7 @@ ready).
   a name.
 
 ## T3 · Add 9d's claim receipt above the roster
-- **status:** todo
+- **status:** doing
 - **files:** src/app/dashboard/team/roster/page.tsx — a guess (read-only:
   src/components/dashboard/team/roster-table.tsx,
   src/lib/data/team-roster-server.ts)
