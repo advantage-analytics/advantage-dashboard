@@ -133,3 +133,41 @@ ready).
 - **notes:** Today the `!playersCanUpload` branch returns first, so a coach who
   opens Team settings as instructed finds the player still refused, now with a
   different message pointing at the roster row. Two round trips for one refusal.
+
+## T10 · Catch a roster email that belongs to an account, not a roster row
+- **status:** todo
+- **files:** src/components/dashboard/team/roster-actions.ts,
+  supabase/migrations/ (one migration, likely a check inside
+  `update_program_player` / `add_program_player`)
+- **done when:**
+  - [ ] Saving a roster row whose email matches a `users.email` in the program
+        — a coach's or another athlete's login address — is refused with a
+        sentence a coach can act on, not saved silently
+  - [ ] The refusal names whose account it collides with only as much as a
+        coach may already see on the roster; it must not disclose an address
+        the caller could not otherwise read
+  - [ ] `addProgramPlayer` and `updateProgramPlayer` behave the same way — the
+        gap is in both paths, not only Edit
+  - [ ] The existing `program_players_email_key` path is untouched: a
+        collision with another live roster row still maps to the same
+        coach-readable sentence, not the raw constraint string
+  - [ ] The check runs in the database, not only in the server action, so a
+        direct RPC call from a staff session cannot bypass it
+- **notes:** `program_players_email_key` is
+  `(program_id, lower(email)) where email is not null and merged_into_id is
+  null and archived_at is null` — it is scoped to **`program_players` rows**
+  (`supabase/migrations/20260822090000_program_players.sql:96`). An address
+  that lives in `users.email` and on no live roster row in that program passes
+  it and saves. That is the reverse of the collision the tripwire was built
+  for: `program_roster_full` coalesces `pp.email` with `u.email`, so the
+  roster already *displays* account addresses, and a coach retyping one has no
+  signal that it binds a personal login address into the program's own column.
+  Deferred from the T1 roster-edit work on `claude/roster-edit-player`
+  (branch merged and deleted); the finding is in
+  `.claude/tasks/claude-roster-edit-player.log.md` and
+  `docs/roster-edit-and-people-search.md`, which a log alone never makes
+  runnable. Smaller follow-ups from the same review, not worth their own
+  tasks: consolidate `toMessage`/`activeProgramId` in `roster-actions.ts`,
+  dedupe the repeated select field list, give `UnderlineSelect` a chevron
+  affordance, and put a unit suite over `spotHolders`/`spotHeldNote` and the
+  error classifier (T4's Vitest task is the natural home for the last one).
