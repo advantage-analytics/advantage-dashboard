@@ -853,3 +853,57 @@ is the runner's. Newest entries at the bottom.
   pre-fix, 2 deliberate controls. The reviewer reconstructed the pre-fix state and
   measured exactly 6 failed / 9 passed, and confirmed both controls assert real
   behaviour rather than nothing. Report and reality agree.
+
+## T15 · Restore the 7-6 guard on the tiebreak superscript — blocked
+- **gate:** stopped at 5b's question before 5b was dispatched. The subagent
+  produced NO diff — it followed the mandated order, put criterion 3 first, and
+  reported that the writers do not agree, which the task block pre-authorized as
+  a stop. `git diff HEAD` outside `.claude/tasks/` is empty and
+  `git ls-files --others --exclude-standard` is empty, so there was nothing for
+  `task-completion-reviewer` to judge and nothing for either guardrail reviewer to
+  review. 5a `npx tsc --noEmit` exit 0 (unchanged baseline). 5b, 5c
+  `pipeline-guardrails-reviewer` and 5c `rls-boundary-reviewer` NOT dispatched —
+  an empty diff satisfies no criteria and reviewing one is theatre, not a gate.
+- **stash:** no stash — the task produced no changes. `git stash push` reported
+  `No local changes to save` and created no entry; `stash@{0}` is still T10's, so
+  no ref is recorded here rather than a borrowed SHA.
+- **why it blocked:** nothing in this repo records a super-tiebreak set
+  distinctly. `matches.format` is `{best_of, ad_scoring, play_on_lets}` and
+  `matches.score` is per-set games plus per-set tiebreak points — no flag says "a
+  10-point tiebreak decided this set", and no migration constrains it. Of the
+  score writers, two CANNOT produce one: `DetailsContent.tsx:74-77` and
+  `edit-match-dialog.tsx:52-55` share an identical `needsTiebreak` that renders a
+  tiebreak cell ONLY on 7-6 or 6-7, and the wizard's `validateSetScore` caps games
+  at 7 ("Games must be 0–7"), so a 10-8 is refused outright; `edit-match-dialog`
+  even wipes a loaded tiebreak when a set stops being 7-6. Two CAN, unbounded and
+  ungated: `single-score-entry.tsx` and `score-entry.tsx` strip non-digits only
+  and render the tiebreak cell for every set, and neither the PATCH route's
+  `validateScore` nor `lib/schedule/actions.ts` bounds them. So three shapes are
+  producible — `10-8` with no digit, `1-0` with a digit, `7-6` with a digit — and
+  they demand contradictory guards. Two of the three are satisfied by exactly the
+  `7-6` check the author's decision forbids; only the `1-0` shape needs a wider
+  one, and that shape is UNATTESTED: nothing writes it, no comment describes it,
+  no fixture contains it. Its only appearance in this repo is an assertion in this
+  very log at lines 228 and 315, from an earlier investigation. The subagent
+  refused to build a guard on that, which is correct — that is the inference the
+  task told it not to repeat.
+- **verified independently before recording:** I re-ran the `needsTiebreak` greps
+  and the games cap myself rather than take the report on trust. Both hold.
+- **the missing datum, and how to get it:** one read of production settles it —
+  for rows where a set carries a non-null tiebreak, what are that set's game
+  counts? If real rows only ever show 7-6, the strict guard is right and the
+  author's premise does not apply to stored data. If `1-0`+tiebreak rows exist,
+  the guard becomes "7-6 or 1-0", documented as such. Unobtainable here: no
+  `.env.local` in the tree, and the Supabase MCP surface in this session exposes
+  only `query_logs` — no `execute_sql`, no table read. Same gap that qualified
+  T13's `program_roster_full` finding and that T20 carries a warning about.
+- **a correction to the task block, for whoever re-queues it:** its `files:` line
+  named four writers. There are FIVE, and the two it omitted —
+  `src/components/dashboard/schedule/score-entry.tsx` and
+  `src/lib/schedule/actions.ts` — are among the ungated ones that make this
+  ambiguous at all. A re-queued T15 should name them.
+- **the durable alternative**, if the answer is "make them agree" rather than
+  "read production": have the two free-entry schedule forms adopt the wizard's
+  `needsTiebreak` / `validateSetScore`, so all five writers agree by construction.
+  That changes what a coach is allowed to type, so it is the author's call and a
+  separate task, not a widening of this one.

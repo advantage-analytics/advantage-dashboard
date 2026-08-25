@@ -409,7 +409,7 @@ ready).
 - **notes:** Found by `/pr-check`, confirmed in the source. `outstanding` is every pending player invite regardless of TTL, and `expiries.filter(e => e <= horizon)` matches past expiries as readily as near-future ones; the `Math.max(0, …)` then turns the negative into 0. Net effect: an invite that lapsed last month pins a permanent "One invite expires today" to Needs attention, which is exactly the kind of alert that teaches a coach to ignore the list.
 
 ## T15 · Restore the 7-6 guard on the tiebreak superscript
-- **status:** todo
+- **status:** blocked
 - **files:** `src/lib/ui/score-format.ts` (`tiebreakOf`); `src/components/dashboard/matches/match-detail/match-summary-row.tsx` (~line 220)
 - **done when:**
   - [ ] A superscript is rendered only where the set score is one a tiebreak can decide — a stored tiebreak value on, say, a 6-4 set renders no digit
