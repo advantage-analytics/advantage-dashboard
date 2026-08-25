@@ -203,7 +203,7 @@ ready).
   the guard is roughly four lines plus an import.
 
 ## T9 · Make the upload switch report a write that changed nothing
-- **status:** todo
+- **status:** done
 - **files:** a new supabase/migrations/ file,
   src/components/dashboard/team/roster-actions.ts,
   src/components/dashboard/team/roster-table.tsx (guess)
