@@ -413,10 +413,13 @@ ready).
 - **files:** `src/lib/ui/score-format.ts` (`tiebreakOf`); `src/components/dashboard/matches/match-detail/match-summary-row.tsx` (~line 220)
 - **done when:**
   - [ ] A superscript is rendered only where the set score is one a tiebreak can decide — a stored tiebreak value on, say, a 6-4 set renders no digit
+  - [ ] A third set played as a 10-point super-tiebreak DOES render its digit — it is a set a tiebreak decided, and the guard must not swallow it
+  - [ ] How this app actually records a super-tiebreak set is established from the WRITERS (`single-score-entry.tsx`, `edit-match-dialog.tsx`, the SwingVision parser, `job-request.ts`) and written into `tiebreakOf`'s doc comment, rather than inferred from the shape of the guard
   - [ ] The guard lives in `tiebreakOf` so every consumer inherits it, rather than being restated at each scoreboard
   - [ ] `<ScoreLine>` and `match-summary-row`'s per-player scoreboard agree on which sets get a digit, and both still put it on the side the notation requires
-  - [ ] A test covers a set carrying a tiebreak value it should not have and asserts nothing is printed
-- **notes:** Found by `/pr-check`. T3 routed `match-summary-row` through the shared `tiebreakOf` and dropped the local `set.tiebreak && mine === 7 && theirs === 6` check in the process. `tiebreakOf` already refuses a tiebreak filed against the set's winner, and documents why ("a misfiled value renders nothing rather than a plausible lie") — this is the same argument applied to the set score, so the guard belongs beside it. Worth deciding explicitly what a super-tiebreak third set (1-0, 10-point) should do; if the answer needs data we do not have, say so rather than guessing.
+  - [ ] Tests cover both directions: a set carrying a tiebreak value it cannot have prints nothing, and a super-tiebreak set prints its digit
+- **notes:** Found by `/pr-check`. T3 routed `match-summary-row` through the shared `tiebreakOf` and dropped the local `set.tiebreak && mine === 7 && theirs === 6` check in the process. `tiebreakOf` already refuses a tiebreak filed against the set's winner, and documents why ("a misfiled value renders nothing rather than a plausible lie") — this is the same argument applied to the set score, so the guard belongs beside it.
+  **Decided by the author, 2026-08-25:** a super-tiebreak set gets its digit. So the guard is NOT `mine === 7 && theirs === 6`; that was the old local check and it would hide exactly the set this decision says to show. If the writers cannot be made to agree on how a super-tiebreak is recorded — i.e. the answer genuinely needs data that is not in the repo — mark this `blocked` and say what is missing rather than picking a shape that looks plausible. A guard that silently drops a real tiebreak is the same class of bug as the one being fixed.
 
 ## T16 · The first-report card reads only the six rows the list shows
 - **status:** todo
@@ -457,3 +460,14 @@ ready).
   - [ ] The narrow `program_events` query and `EVENT_WINDOW` are retired if `ScheduleRow` can answer the next event and the weekend dual, as the corrected `TeamNextEvent` comment says it can
   - [ ] Team Home renders the same next event, weekend dual and KPI figures as it does today
 - **notes:** Found by `/simplify` during `/pr-check` and deliberately deferred: `getScheduleRows` and `getEventDetail` are separately `cache()`d over one uncached inner function, so React's cache dedupes neither. Render cost went from 7 queries / 2 deep to 19 / 9 with a dual in range. Deferred at the time because rewriting a loader straight after per-task review would merge code no reviewer had seen — which is the reason it is a task rather than a fix.
+
+## T20 · Give a program its own timezone
+- **status:** todo
+- **files:** a new migration under `supabase/migrations/`; `src/lib/data/team-home-server.ts` (`PROGRAM_TIME_ZONE`, `localDay`, `weekBounds`); wherever the program record is read into `getTeamHomeData`
+- **done when:**
+  - [ ] `programs` carries a timezone column with a sane default, and the migration backfills existing rows rather than leaving them null
+  - [ ] `getTeamHomeData` passes the program's own zone where it currently passes the `PROGRAM_TIME_ZONE` constant, and the constant is retired or demoted to the fallback for a program with none
+  - [ ] A test pins a program in `America/Los_Angeles` at Sunday 18:00 Pacific and asserts the weekend dual sheet is still in range — the case T12 documented as still broken
+  - [ ] The column is a real IANA zone name validated on write, not a UTC offset — an offset cannot express DST and is wrong twice a year
+  - [ ] `tests/team-home-week.spec.ts`'s existing assertions still pass, including the one that pins today's shipped UTC behaviour for a program with no zone set
+- **notes:** The other half of T12, which pinned UTC explicitly and made the comments honest but left the bug: a Pacific program's weekend dual sheet still leaves Team Home around 17:00 PT Sunday, because midnight UTC rolls the week forward while the coach is still reading about Saturday's dual. T12 deliberately shaped `localDay`/`weekBounds` so this is a one-line change from a constant to a field. `programs.state` was considered as a substitute and rejected — Arizona keeps no DST and nine states straddle two zones. Schema work, so verify the live database via the Supabase MCP before writing the migration; note that in this session only `query_logs` was exposed, so if `execute_sql`/`list_tables` are still unavailable, say so and mark this `blocked` rather than writing a migration against an unverified schema.
