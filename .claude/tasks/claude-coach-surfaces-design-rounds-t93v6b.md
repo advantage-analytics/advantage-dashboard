@@ -221,24 +221,41 @@ ready).
   field removal, not a query change.
 
 ## T8 · Results in the Team Home rows
-- **status:** blocked
+- **status:** next
 - **files:** `src/lib/data/team-home-server.ts`,
   `src/components/dashboard/team/match-rows.tsx` — a guess
 - **done when:**
   - [ ] `TeamMatchRow` carries the match outcome and its set scores, tiebreak
-        values included, read from the `matches.score` JSONB the loader already
-        selects — no migration, no new table or column
+        values included. `matches.score` and anything else needed may be added
+        to the loader's existing select — that query did **not** select `score`
+        before. No migration, no new table, column or view in the database
   - [ ] A finished row renders `<ResultMark>` + `<ScoreLine>` + a "View report"
         link in place of the status dot and word; a row still processing keeps
         the dot and its `ANALYSIS_LABEL` text
   - [ ] Scores render through `src/lib/ui/score-format.ts` — no new formatter,
         and the tiebreak digit comes from the loser's slot, as `tiebreakOf`
         defines it
-  - [ ] Row height, column tracks and T4's treatment (rounded inset hover, no
-        hairlines inside the card) are unchanged
+  - [ ] Row height is unchanged, and T4's treatment is intact — rounded inset
+        hover, no hairlines inside the card, the `Matches` eyebrow, and the
+        row's `px-[18px] py-3.5`. The column *tracks* may change, because
+        criterion 2 puts a glyph, a score and a report affordance where a dot
+        and a word used to fit: state the new template and why each track is
+        the width it is
+  - [ ] Every claim a comment makes about which code writes a column is true.
+        The first attempt said only `recordResult` writes `event_entry_id`; the
+        upload wizard writes it too (`useUploadMatchWizard.ts:1130`). The
+        invariant survives — the wizard resolves `player1_id` to the same
+        roster pick a preset implies — but the comment must say so
 - **notes:** was T5's first bullet, and the one that most changes how the page
   reads — T3 shipped both renderers, so this is the data to feed them. Board E
   of the preview shows the target; boards B–D show today's dot-and-word.
+  First attempt is stashed at `a4ec547032a5e53b173763e39e88a9fb6da87c63` —
+  start from it. It failed only on the tracks assertion above, which was a
+  defect in the criterion rather than in the work. Everything else stands, and
+  the part worth protecting is the attribution rule: roster id first, then a
+  set `event_entry_id` implying player1, then `null` and **no glyph at all**
+  rather than a guess. Both guardrail reviewers verified all three premises
+  against the writers themselves; do not re-derive or "simplify" that rule.
 
 ## T9 · This weekend — the dual sheet
 - **status:** todo
