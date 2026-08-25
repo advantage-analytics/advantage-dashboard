@@ -70,3 +70,50 @@ is the runner's. Newest entries at the bottom.
 - **stash:** `91cbfcd519f3da568913a1d90a9aefbb6a8d4747` — the full T2 diff
   (`first-steps.tsx`, `team/page.tsx`, `team-home-server.ts`, the
   `invite-dialog.tsx` deletion). Recoverable; nothing was discarded.
+
+## T3 · Score and outcome primitives — superscript tiebreak, ResultMark — blocked
+- **gate:** mechanical — `npm run lint` 0 errors (38 pre-existing warnings),
+  `npx tsc --noEmit` clean, `npm test` 93 passed.
+  `rls-boundary-reviewer` — ran (the diff touches `src/lib/data/`); no findings:
+  the widened types expose nothing new, since the tiebreak arrays already
+  travel inside the `matches.score` JSONB that existing loaders select
+  wholesale; no loader, migration or query in the diff; the new
+  `format.ts` → `score-line.tsx` import is safe in both bundle directions.
+  `pipeline-guardrails-reviewer` — ran (dashboard UI); no findings. It verified
+  the tiebreak convention against the writers rather than the implementer's
+  word: `single-score-entry.tsx:50-57` writes the number to the loser's slot,
+  and `match-summary-row.tsx:219-222` already reads it that way, so the
+  convention predates this diff. `tiebreakOf()` has no fallback to the winner's
+  slot, so a misplaced value renders nothing rather than a wrong number. The
+  orientation swap flips games and both tiebreak arrays from one boolean, so it
+  cannot split a tiebreak from its set.
+  `task-completion-reviewer` — **`VERDICT: needs-work`**. This is the stage that
+  failed.
+- **why it failed:**
+  1. Criterion 1, second half. Schedule surfaces (`line-row.tsx`, and the hero
+     score on `single-detail.tsx`) now render `6-4, 6-2` where they rendered
+     `6–4 6–2` — en dash, space-joined — before. The criterion says a set with
+     no tiebreak "renders exactly as it does today", with no carve-out for
+     consolidation. The change is deliberate and well argued (it adopts the
+     spelling the round-44 artboards and two of the three existing formatters
+     use), but it is a literal miss.
+  2. Criterion 3, second clause. `match-summary-row.tsx:219-244` still carries
+     its own implementation of the same tiebreak-superscript rule — reads the
+     loser's field, renders a raised digit — and does not import from
+     `score-line.tsx`. That is a second copy of the tiebreak rule surviving in
+     `src/`, which the criterion rules out. The implementer had judged it a
+     boxed per-set scoreboard rather than a score line and left it alone.
+  The reviewer judged every out-of-guess file necessary rather than creep, and
+  confirmed `resultInk()` was left in place rather than deleted, per
+  instruction. It also corrected one of the implementer's citations:
+  `edit-match-dialog.tsx:42-43` is a type declaration, not the encoding
+  comment it was cited as.
+- **stash:** `4860c8d05b92bffb0e68219b879451271f70703a` — the full T3 diff, both
+  new components included. Recoverable; nothing discarded.
+- **also noted, outside this diff:** `swingvision-parser.ts` fills
+  `hostTiebreak`/`guestTiebreak` straight from spreadsheet columns without the
+  loser-only zeroing the manual-entry paths do. Harmless today because
+  `tiebreakOf()` never reads the winner's slot, but it is a latent question for
+  whoever owns the parser. `buildScoreString()` in
+  `src/app/dashboard/(home)/recent-activity.tsx:127` is a fifth score spelling,
+  carrying no tiebreak rule, left unconverted.

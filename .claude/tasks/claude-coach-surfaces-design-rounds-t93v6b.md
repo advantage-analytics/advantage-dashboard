@@ -78,7 +78,7 @@ ready).
   rerun does with the dialog, that export must not be left orphaned.
 
 ## T3 · Score and outcome primitives — superscript tiebreak, ResultMark
-- **status:** doing
+- **status:** blocked
 - **files:** new shared components under `src/components/dashboard/` (e.g.
   `score-line.tsx`, `result-mark.tsx`), replacing the local formatters in
   `src/lib/schedule/format.ts`, `matches/match-card-list.tsx` and
