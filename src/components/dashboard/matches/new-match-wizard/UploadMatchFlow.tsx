@@ -127,10 +127,25 @@ export function UploadMatchFlow({ preset }: { preset?: EventPreset | null } = {}
         });
       }
 
-      // Same Map identity when the match is unknown — returning a fresh one
-      // would re-render the tree for an event we are ignoring.
       const current = prev.get(event.matchId);
-      if (!current) return prev;
+      if (!current) {
+        // A failure can land before `"started"` ever does: the upload-url call
+        // was refused, the session expired, the file's container was rejected.
+        // Dropped, it left the card below with nothing to show and falling
+        // through to "Sent for analysis." for a video that never moved a byte.
+        // `"started"` is what carries the file name, so this entry has none.
+        if (event.kind !== "failed") {
+          // Every other kind follows a `"started"` and cannot arrive first.
+          // Same Map identity, so an event we ignore does not re-render.
+          return prev;
+        }
+        return new Map(prev).set(event.matchId, {
+          matchId: event.matchId,
+          phase: "failed",
+          fileName: "Video",
+          error: event.error,
+        });
+      }
 
       const patch: Partial<UploadState> =
         event.kind === "progress"

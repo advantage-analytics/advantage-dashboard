@@ -192,6 +192,104 @@ export function canUploadForProgram(workspace: Workspace): boolean {
   return workspace.playersCanUpload && workspace.memberUploadEnabled;
 }
 
+/**
+ * Which workspace's allowance a match bills against.
+ *
+ * The match's own `program_id`, never the cookie's active workspace: somebody
+ * can switch workspaces between starting an upload and finishing it, and the
+ * budget that pays for a match is the one the match belongs to. NULL means a
+ * personal upload, whose ledger is keyed by user id — see
+ * `personalWorkspace()`.
+ *
+ * One spelling because two server seams resolve it — `/api/splitstep/upload-url`
+ * before the bytes move and `/api/splitstep/jobs` at the spend — and a
+ * permission asked about one workspace but charged to another would be a check
+ * that looks enforced and is not.
+ */
+export function billingWorkspaceFor(
+  available: Workspace[],
+  programId: string | null
+): Workspace | undefined {
+  return programId
+    ? available.find((workspace) => workspace.id === programId)
+    : available.find((workspace) => workspace.kind === 'personal');
+}
+
+/**
+ * The one wording for "this program is still being confirmed, so nobody here
+ * may spend its video budget yet". A function rather than a constant only
+ * because it names the program.
+ *
+ * Two seams say it: `reserveQuota()` at the spend, where the answer is
+ * authoritative, and `/api/splitstep/upload-url` before the browser is handed a
+ * write credential. Kept as one spelling because a rule explained one way
+ * before an upload and another way after it reads as two rules — the same
+ * reason `explainVideoRefusal()` returns a sentence rather than a boolean.
+ */
+export function pendingReviewRefusal(workspace: Pick<Workspace, 'name'>): string {
+  return (
+    `${workspace.name} is still being confirmed. You can invite staff and ` +
+    `build your roster now; sending video opens as soon as that's done.`
+  );
+}
+
+/**
+ * Why this viewer may not spend that workspace's video allowance, in a
+ * sentence — or null when they may.
+ *
+ * Two gates, in the order `reserveQuota()` asks them: the claim state
+ * (`canSubmitVideo` — may ANYONE here spend the budget yet), then the two
+ * upload switches (`canUploadForProgram()` — may this person). One call and one
+ * sentence covers both, so a seam that asks cannot close one door and leave the
+ * other standing open.
+ *
+ * `canUploadForProgram()` answers who may OPEN the team upload page.
+ * This answers the same question one layer down, where the minutes are
+ * actually committed, and it exists as a separate function for exactly one
+ * reason: **`canUploadForProgram()` returns false for a personal workspace.**
+ * That is right for a page that only exists inside a program, and calling it
+ * bare at the spend point would refuse every individual upload in the product.
+ * So `kind` is answered first here, and a personal upload never reaches the
+ * flags at all.
+ *
+ * Staff are unaffected by both flags, because `canUploadForProgram()` answers
+ * them from `isProgramStaff` before it reads either one. There is no
+ * arrangement of switches that locks a program's own coaches out of its budget.
+ *
+ * It returns the SENTENCE rather than a boolean because both seams that ask
+ * need to say something to the person: a refusal worded one way before the
+ * upload and another way after it is two rules as far as the reader is
+ * concerned. Copy lives here for the same reason `workspaceSubtitle()` and
+ * `teamLabel()` do — the rule and the way it is explained change together or
+ * they drift.
+ */
+export function explainVideoRefusal(workspace: Workspace): string | null {
+  if (workspace.kind !== 'team') return null;
+
+  // Claim state before the switches, because it is a different question and it
+  // answers for everyone: while a program sits in `pending_review` nobody there
+  // may spend the budget, its own coaches included, however the two switches
+  // are set. `reserveQuota()` asks it first for exactly the same reason.
+  if (!workspace.canSubmitVideo) return pendingReviewRefusal(workspace);
+
+  if (canUploadForProgram(workspace)) return null;
+
+  // Only a player reaches here, and only having failed one of the two flags.
+  // Which one decides who can fix it, so they are not one message.
+  if (!workspace.playersCanUpload) {
+    return (
+      `${workspace.name} has video uploads set to coaches only, so this match ` +
+      `can't be sent for analysis from your account. A coach can send it, or ` +
+      `open uploads to players in Team settings.`
+    );
+  }
+
+  return (
+    `Sending video for ${workspace.name} isn't switched on for your account. ` +
+    `A coach can turn on "Can send video" on your roster row.`
+  );
+}
+
 /** The label under the workspace name in the switcher. */
 export function workspaceSubtitle(workspace: Workspace): string {
   return workspace.kind === 'team' ? 'Team workspace' : 'Personal workspace';

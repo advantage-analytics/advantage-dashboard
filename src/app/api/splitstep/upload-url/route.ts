@@ -19,6 +19,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { videoObjectKey } from '@/lib/services/splitstep/object-keys';
 import { mintUploadSas } from '@/lib/services/splitstep/video-url';
+import { getWorkspaceContext } from '@/lib/workspace/active-workspace-server';
+import { billingWorkspaceFor, explainVideoRefusal } from '@/lib/workspace/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -67,7 +69,9 @@ export async function POST(request: NextRequest) {
   const admin = createAdminClient();
   const { data: match, error: matchError } = await admin
     .from('matches')
-    .select('id, created_by')
+    // `program_id` for the permission check below: NULL is a personal upload,
+    // and a program id is whose budget this video will eventually be charged to.
+    .select('id, created_by, program_id')
     .eq('id', matchId)
     .maybeSingle();
 
@@ -83,6 +87,64 @@ export async function POST(request: NextRequest) {
   // match id exists is itself a disclosure.
   if (!match || match.created_by !== user.id) {
     return NextResponse.json({ error: 'No such match' }, { status: 404 });
+  }
+
+  // May this person send video for the workspace this match belongs to?
+  //
+  // NOT the authoritative answer — `reserveQuota()` is, because that is where a
+  // minute is actually spent, and it refuses there no matter what happens here.
+  // This asks the identical question at the only earlier moment a server sees
+  // the upload, and the step between the two is the expensive one: the browser
+  // takes this credential and pushes gigabytes straight to Blob Storage for
+  // tens of minutes. A player refused only at submit would watch that whole
+  // transfer finish before being told they were never allowed to send it, and
+  // leave a blob behind for the orphan sweeper. Refusing before the credential
+  // is minted costs one cached lookup and spends nothing.
+  //
+  // Asked about the MATCH's workspace, via the same `billingWorkspaceFor()`
+  // that `/api/splitstep/jobs` bills through — see the note there. Ownership
+  // above proves the caller created this match; it does not prove the budget it
+  // bills is open to them, which is a different question with three answers:
+  // the program's claim state and the two upload switches.
+  //
+  // All three in one call. `explainVideoRefusal()` asks `canSubmitVideo` before
+  // the switches, in the order `reserveQuota()` asks them, so a coach of a
+  // program still in `pending_review` is stopped here too. Asking only about
+  // the switches would have left that caller minting the credential, moving
+  // gigabytes for tens of minutes, and being refused at submit on a blob nobody
+  // wanted — the exact cost this seam exists to avoid.
+  const workspaceContext = await getWorkspaceContext();
+  const billingWorkspace = billingWorkspaceFor(
+    workspaceContext?.available ?? [],
+    (match.program_id as string | null) ?? null // NULL = personal upload
+  );
+
+  if (!billingWorkspace) {
+    return NextResponse.json(
+      { error: 'You do not have access to the workspace this match belongs to.' },
+      { status: 403 }
+    );
+  }
+
+  const refusal = explainVideoRefusal(billingWorkspace);
+  if (refusal) {
+    console.log(`${LOG} refused — not permitted`, {
+      matchId,
+      workspaceId: billingWorkspace.id,
+      role: billingWorkspace.role,
+    });
+    // The sentence goes back as `error`, the field the caller already reads:
+    // `uploadAndSubmitVideo()` throws `payload.error` verbatim. That throw
+    // happens BEFORE its `"started"` event, so what carries the words to the
+    // person is `onTransferFailed` → the `match-upload-failed` window event →
+    // `UploadFailureListener`, mounted in the dashboard layout, which raises a
+    // toast headed "That upload didn't finish" with this sentence as its body —
+    // and it says so wherever the person has navigated to by then. The wizard's
+    // own success card shows it as well, but only because `handleVideoUpload`
+    // in `UploadMatchFlow` adopts a failure that arrives before `"started"`;
+    // without that branch the card has no entry to update and reads as if the
+    // video had been sent. Either way: words, and no bytes moved.
+    return NextResponse.json({ error: refusal }, { status: 403 });
   }
 
   // Throws on any container outside ACCEPTED_VIDEO_EXTENSIONS. The old edge

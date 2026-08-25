@@ -173,7 +173,7 @@ ready).
   blocked T5 is answered at the layer it asked for.
 
 ## T8 · Enforce the upload permission where the budget is spent
-- **status:** blocked
+- **status:** done
 - **files:** src/app/api/splitstep/jobs/route.ts (guess — between the
   `billingWorkspace` resolve at ~342 and `reserveQuota` at ~353),
   src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts
