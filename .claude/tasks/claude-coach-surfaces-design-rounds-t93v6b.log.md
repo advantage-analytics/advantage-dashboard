@@ -907,3 +907,55 @@ is the runner's. Newest entries at the bottom.
   `needsTiebreak` / `validateSetScore`, so all five writers agree by construction.
   That changes what a coach is allowed to type, so it is the author's call and a
   separate task, not a widening of this one.
+
+## T16 · The first-report card reads only the six rows the list shows — done
+- **gate:** 5a mechanical — `npm run lint` 0 errors / 38 pre-existing warnings;
+  `npx tsc --noEmit` exit 0; `npm test` 143 passed (135 prior + 8 new). 5b
+  `task-completion-reviewer` — `VERDICT: pass`. 5c BOTH guardrails ran, neither
+  skipped: `pipeline-guardrails-reviewer` (`src/app/dashboard/` and
+  `src/components/dashboard/`) and `rls-boundary-reviewer` (`src/lib/data/`), both
+  explicit no-findings all-clears. 5b was dispatched ALONE and allowed to finish
+  before 5c, per the correction recorded under T14.
+- **changed:** the card's two questions — "has a report ever come back?" and "is
+  one on its way?" — moved into the loader as `teamFirstReport(rows, jobs,
+  rosterIds)`, computed over the season read that already exists for the KPI
+  strip. `FirstSteps` no longer receives `matches` at all; it receives a
+  discriminated union `TeamFirstReport` = `{state:"done", id, title, date}` |
+  `{state:"progress", status, startedAt?}` | `null`. A union rather than two
+  nullable props because "a report is back AND one is on its way" is not a state
+  the card has a branch for, and two props would let a caller build it. The season
+  `select` widened by `player1_name, player2_name` so the receipt can print a
+  title. New spec `tests/team-first-report.spec.ts`, 8 tests.
+- **the judgement call, ruled on rather than assumed:** criterion 3 says "nothing
+  new is fetched". Widening an already-unbounded season select by two `text`
+  columns is not obviously inside that. I put it to the reviewer as an explicit
+  question rather than accepting the implementer's framing; it ruled the intent is
+  "no second read, no second answer" — no new `.from()`, `.rpc()`, `await` or
+  `Promise.all` member was added, and the alternative was a per-match query for
+  one row. The implementer flagged the cost itself instead of burying it.
+- **`programSide()` gained a second consumer, and that was the risk:** it decides
+  which side of a match is the program's, so a wrong read prints a result under
+  the wrong player with nothing on screen looking broken. Checked twice, by both
+  5b and the guardrails reviewer: `programSide` is byte-for-byte outside every
+  diff hunk; the new swap is character-for-character the convention the existing
+  `TeamMatchRow` builder uses; and the receipt carries no score field, so there is
+  no path where a name half and a score half could half-swap. A row nothing
+  attributes to the program keeps stored column order — same as the row builder,
+  and pinned by a test.
+- **checked for a third instance of the a8479e2 bug:** that commit fixed two
+  surfaces asking `isInFlight` where they meant `isLiveUpdating`, because
+  `processed` is in flight but never moving. `teamFirstReport` also uses
+  `isInFlight`, so I asked the guardrails reviewer directly whether it reintroduces
+  it. It does not: `isInFlight` here decides only WHICH SLOT a match falls into,
+  which is the question it is documented for, and the "is anything actually
+  coming" questions stay downstream on `isLiveUpdating`/`isWorking` in the
+  component. T14's `stalled` flag reads the same status it did before.
+- **test honesty, verified not trusted:** implementer reported 8 new tests, 4
+  failing pre-fix, 4 controls. The reviewer independently reproduced the pre-fix
+  state by slicing the season to six rows and measured exactly 4 failed / 4
+  passed, and confirmed the controls assert real behaviour. Report and reality
+  agree. Pre-fix reproduction was done with `cp`, not `git stash` — the standing
+  fix for T14's tree race.
+- **outside `files:`, all necessary:** `src/app/dashboard/team/page.tsx` owns the
+  prop (3 lines); `tests/team-kpi.spec.ts` fixture widened 4 lines because
+  `DbSeasonMatch` gained required fields and `tsconfig` includes `tests/**`.

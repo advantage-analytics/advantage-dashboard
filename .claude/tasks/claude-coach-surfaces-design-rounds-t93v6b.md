@@ -422,7 +422,7 @@ ready).
   **Decided by the author, 2026-08-25:** a super-tiebreak set gets its digit. So the guard is NOT `mine === 7 && theirs === 6`; that was the old local check and it would hide exactly the set this decision says to show. If the writers cannot be made to agree on how a super-tiebreak is recorded — i.e. the answer genuinely needs data that is not in the repo — mark this `blocked` and say what is missing rather than picking a shape that looks plausible. A guard that silently drops a real tiebreak is the same class of bug as the one being fixed.
 
 ## T16 · The first-report card reads only the six rows the list shows
-- **status:** todo
+- **status:** done
 - **files:** `src/components/dashboard/team/first-steps.tsx` (~line 94); `src/lib/data/team-home-server.ts` (whatever it has to hand the card)
 - **done when:**
   - [ ] `report` and `inFlight` are answered from the program's matches, not from the six-row list prop

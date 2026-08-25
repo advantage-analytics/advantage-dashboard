@@ -14,6 +14,7 @@ import {
   importedAnalysis,
   isAnalysisFailed,
   isAnalysisReady,
+  isInFlight,
   isLiveUpdating,
   manualAnalysis,
   type AnalysisStatus,
@@ -454,6 +455,17 @@ export interface TeamHomeData {
    * exactly when — read it there, not here.
    */
   kpis: TeamKpiTile[];
+  /**
+   * The setup checklist's first card, already answered — see
+   * `teamFirstReport()`. Null when nothing has been sent yet.
+   *
+   * Here rather than derived in the card from `matches`, because it is a
+   * question about the whole program and `matches` is the six rows the list
+   * renders. Same rule as the strip beside it: this loader reduces the season
+   * to the answer, and hands a component the answer rather than a collection to
+   * search.
+   */
+  firstReport: TeamFirstReport | null;
   roster: RosterProgress;
   /** Null when the program has nothing on the schedule from today onwards. */
   nextEvent: TeamNextEvent | null;
@@ -1036,6 +1048,14 @@ export function teamAttention(
  */
 export interface DbSeasonMatch {
   id: string;
+  /**
+   * Both names, because `teamFirstReport()` prints one of these rows and the
+   * receipt it prints names the players — the same "ours first" title the
+   * matches list gives the row. Two `text NOT NULL` columns on a read that was
+   * already happening; the alternative was a second query for one match.
+   */
+  player1_name: string;
+  player2_name: string;
   player1_id: string | null;
   player2_id: string | null;
   event_entry_id: string | null;
@@ -1072,6 +1092,89 @@ function analysisOf(
       ? importedAnalysis(row.source_provider, Boolean(row.verified))
       : manualAnalysis())
   );
+}
+
+/**
+ * The checklist's first card, decided here rather than in the card.
+ *
+ * Null is "nothing has been sent yet" — the card asks for a match. Otherwise
+ * one of two receipts, each carrying only what it prints:
+ *
+ * - **`done`** names the match whose report came back, in the matches list's
+ *   own words: our side first, its short date, and the id the "View report"
+ *   link points at.
+ * - **`progress`** carries the state of the one match on its way, because the
+ *   card prints a `StatusChip` for it and — while something is actually
+ *   running — how long it has been going. `stalled` is derived from `status`
+ *   in the card, where the copy that turns on it lives.
+ *
+ * A discriminated union rather than two nullable fields, because "a report is
+ * back AND one is on its way" is not a state the card can render: it shows one
+ * receipt, and `done` outranks `progress`. Two fields would let a caller build
+ * the pair the card has no branch for.
+ */
+export type TeamFirstReport =
+  | { state: "done"; id: string; title: string; date: string }
+  | { state: "progress"; status: AnalysisStatus; startedAt?: string };
+
+/**
+ * Has a first report ever come back for this program, and is one on its way?
+ *
+ * **Both are season questions**, and they were being asked of the six rows the
+ * matches list renders. Six recent rows cannot answer "ever": a program whose
+ * only analysed match is the seventh most recent was shown "Send your first
+ * match", asking a coach to redo work they had already done — and the older a
+ * program's history gets, the further out of that window its first report
+ * falls. So this reads the season rows the strip already has, with `analysisOf`
+ * and the same two predicates the matches list and the match page ask.
+ *
+ * Newest first, as the read hands them over, so the receipt names the most
+ * recent report — which is the match the six-row version named too whenever it
+ * could see one at all.
+ *
+ * **A FAILED match is neither**, and falls through to null. That leaves the
+ * card active, which is right: after a failure the next thing to do really is
+ * to send a match, and the row in the list below says what happened to the last
+ * one.
+ *
+ * One pass, not two `find`s: `analysisOf` resolves a row's state and there is
+ * no reason to resolve any row's twice. `done` short-circuits wherever it is
+ * found, because it outranks an in-flight match however recent that one is.
+ */
+export function teamFirstReport(
+  rows: DbSeasonMatch[],
+  jobs: Map<string, MatchAnalysis>,
+  rosterIds: ReadonlySet<string>
+): TeamFirstReport | null {
+  let inFlight: TeamFirstReport | null = null;
+
+  for (const row of rows) {
+    const analysis = analysisOf(row, jobs);
+
+    if (isAnalysisReady(analysis.status)) {
+      // Our side named first, exactly as the list's rows name it — the receipt
+      // and the row it points at are one match, on one page, read one way.
+      const swap = programSide(row, rosterIds) === "player2";
+      return {
+        state: "done",
+        id: row.id,
+        title: `${swap ? row.player2_name : row.player1_name} vs ${
+          swap ? row.player1_name : row.player2_name
+        }`,
+        date: shortDate(row.date),
+      };
+    }
+
+    if (inFlight === null && isInFlight(analysis.status)) {
+      inFlight = {
+        state: "progress",
+        status: analysis.status,
+        startedAt: analysis.startedAt,
+      };
+    }
+  }
+
+  return inFlight;
 }
 
 /**
@@ -1325,10 +1428,12 @@ export async function getTeamHomeData(
       // and are kept: a coach uploading without a schedule preset lands their own
       // user id in `player1_id`, and that is still our side of the net.
       supabase.rpc("program_roster_full", { p_program_id: programId }),
-      // The KPI strip's own read: every match the program has recorded, not
-      // the six the list shows. Six rows cannot answer "sets won" or "matches
-      // analyzed" — a strip built from the page's most recent handful would
-      // report a season it never looked at.
+      // The season read: every match the program has recorded, not the six the
+      // list shows. Six rows cannot answer "sets won" or "matches analyzed" —
+      // a strip built from the page's most recent handful would report a season
+      // it never looked at. Nor can they answer the checklist's "has a first
+      // report ever come back?", which is why `teamFirstReport()` reads this
+      // too and why the names are in the select: it prints one of these rows.
       //
       // Unbounded on purpose, and precedented: `team-roster-server.ts` reads
       // exactly this way for the same reason, because every per-player
@@ -1339,7 +1444,7 @@ export async function getTeamHomeData(
       supabase
         .from("matches")
         .select(
-          "id, player1_id, player2_id, event_entry_id, score, date, source_provider, verified"
+          "id, player1_name, player2_name, player1_id, player2_id, event_entry_id, score, date, source_provider, verified"
         )
         .eq("program_id", programId)
         .order("date", { ascending: false, nullsFirst: false }),
@@ -1477,6 +1582,10 @@ export async function getTeamHomeData(
     usage,
     matches,
     kpis: teamKpis(season, jobs, stats, schedule, rosterIds),
+    // Same three inputs the strip is built from, and deliberately the same
+    // `jobs` map: the checklist saying a report is back while the strip counts
+    // no analyzed match would be two answers about one program, on one screen.
+    firstReport: teamFirstReport(season, jobs, rosterIds),
     roster: progress,
     nextEvent: nextEventRow
       ? {

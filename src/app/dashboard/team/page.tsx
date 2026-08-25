@@ -59,6 +59,7 @@ export default async function TeamHomePage() {
     usage,
     matches,
     kpis,
+    firstReport,
     roster,
     rosterCard,
     attention,
@@ -239,7 +240,7 @@ export default async function TeamHomePage() {
             {isStaff && (
               <FirstSteps
                 canSubmitVideo={active.canSubmitVideo}
-                matches={matches}
+                firstReport={firstReport}
                 nextEvent={nextEvent}
                 roster={roster}
                 nowMs={now.getTime()}

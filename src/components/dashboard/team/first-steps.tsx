@@ -6,14 +6,12 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { formatEventDay } from "@/lib/schedule/format";
 import {
   ANALYSIS_LABEL,
-  isAnalysisReady,
-  isInFlight,
   isLiveUpdating,
   isWorking,
 } from "@/lib/data/match-analysis";
 import type {
   RosterProgress,
-  TeamMatchRow,
+  TeamFirstReport,
   TeamNextEvent,
 } from "@/lib/data/team-home-server";
 
@@ -64,7 +62,7 @@ type Variant = "active" | "progress" | "done";
 
 export function FirstSteps({
   canSubmitVideo,
-  matches,
+  firstReport,
   nextEvent,
   roster,
   nowMs,
@@ -76,8 +74,18 @@ export function FirstSteps({
    * refuse.
    */
   canSubmitVideo: boolean;
-  /** The same rows the list below renders — no second read, no second answer. */
-  matches: TeamMatchRow[];
+  /**
+   * The card's answer, decided over the whole season by `teamFirstReport()` —
+   * null when nothing has been sent yet.
+   *
+   * It used to be handed the six rows the matches list renders and asked them
+   * "has a report ever come back?", which is a window that cannot answer it: a
+   * program whose only analysed match is older than those six was told to send
+   * its first match, having sent one. The answer is a season fact, so it is
+   * settled where the season is read — and the card is handed the receipt it
+   * prints rather than a collection to search.
+   */
+  firstReport: TeamFirstReport | null;
   nextEvent: TeamNextEvent | null;
   roster: RosterProgress;
   /**
@@ -93,13 +101,19 @@ export function FirstSteps({
   // active, which is right — after a failure the next thing to do really is to
   // send a match, and the row above says what happened to the last one.
   //
-  // `isInFlight` is the right question for WHICH SLOT the card sits in — a
-  // `processed` match belongs in the progress slot and emphatically not back on
-  // "Send your first match", which would ask a coach to redo work they have
-  // already done. What that slot may then ASSERT is a narrower question, and
-  // `stalled` is where it gets asked.
-  const report = matches.find((match) => isAnalysisReady(match.status));
-  const inFlight = matches.find((match) => isInFlight(match.status));
+  // Which of those it is was settled in `teamFirstReport()`, over every match
+  // the program has, with the same `isAnalysisReady` / `isInFlight` pair the
+  // matches list and the match page ask. `isInFlight` is the right question for
+  // WHICH SLOT the card sits in — a `processed` match belongs in the progress
+  // slot and emphatically not back on "Send your first match", which would ask
+  // a coach to redo work they have already done. What that slot may then
+  // ASSERT is a narrower question, and `stalled` below is where it gets asked.
+  //
+  // The union is read here rather than re-decided, because the only rows this
+  // card ever had were the six the list renders — a window that cannot answer
+  // a question about the whole program.
+  const report = firstReport?.state === "done" ? firstReport : null;
+  const inFlight = firstReport?.state === "progress" ? firstReport : null;
   // In flight, but only a DEPLOY will move it — so no notification is coming
   // and no duration is counting toward anything. Today that is every
   // vendor-analysed match, which is why the card's copy turns on it below.

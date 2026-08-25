@@ -247,6 +247,10 @@ function seasonMatch(opts: {
   const analyzed = opts.analyzed ?? true;
   return {
     id: opts.id,
+    // Names are on the row for `teamFirstReport()`'s receipt, not for the
+    // strip — nothing `teamKpis` returns has a player's name in it.
+    player1_name: opts.side === 'player1' ? 'Ours' : 'Stranger One',
+    player2_name: opts.side === 'player2' ? 'Ours' : 'Stranger Two',
     player1_id: opts.side === 'player1' ? OURS : 'stranger-1',
     player2_id: opts.side === 'player2' ? OURS : 'stranger-2',
     event_entry_id: null,
