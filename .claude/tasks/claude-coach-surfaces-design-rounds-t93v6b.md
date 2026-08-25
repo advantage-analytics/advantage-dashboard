@@ -471,3 +471,24 @@ ready).
   - [ ] The column is a real IANA zone name validated on write, not a UTC offset — an offset cannot express DST and is wrong twice a year
   - [ ] `tests/team-home-week.spec.ts`'s existing assertions still pass, including the one that pins today's shipped UTC behaviour for a program with no zone set
 - **notes:** The other half of T12, which pinned UTC explicitly and made the comments honest but left the bug: a Pacific program's weekend dual sheet still leaves Team Home around 17:00 PT Sunday, because midnight UTC rolls the week forward while the coach is still reading about Saturday's dual. T12 deliberately shaped `localDay`/`weekBounds` so this is a one-line change from a constant to a field. `programs.state` was considered as a substitute and rejected — Arizona keeps no DST and nine states straddle two zones. Schema work, so verify the live database via the Supabase MCP before writing the migration; note that in this session only `query_logs` was exposed, so if `execute_sql`/`list_tables` are still unavailable, say so and mark this `blocked` rather than writing a migration against an unverified schema.
+
+## T21 · One managed profile can hold any number of open invitations
+- **status:** todo
+- **files:** a new migration under `supabase/migrations/`; possibly `src/components/dashboard/settings/team-actions.ts` for the error mapping
+- **done when:**
+  - [ ] `create_program_invite` refuses a `p_player_id` that already has an open invitation on a different address, or a partial unique index makes it impossible — verify against the LIVE database before writing either, per CLAUDE.md
+  - [ ] The refusal reaches the invite dialog as a message a coach can act on, in the same shape as the existing `link_player` tripwire rather than a raw Postgres error
+  - [ ] An invitee who arrives second no longer leaves a seat reserved indefinitely — either their row is closed when the profile is claimed, or the seat count stops treating a dead invite as pending
+  - [ ] `accept_program_invite`'s existing race guard (`where claimed_by_user_id is null`) still decides the winner, unchanged
+  - [ ] A test or a documented manual check covers two open invitations naming one profile
+- **notes:** Confirmed by `rls-boundary-reviewer` during T18's gate, reading `20260822120000_invites_target_a_player.sql` and `20260822120100_accept_invite_claims_profile.sql` directly. `create_program_invite` validates the player belongs to the program and is unclaimed, but never checks whether another open invite already names it; the upsert conflict target is `(program_id, lower(email)) where accepted_at is null`, keyed on the ADDRESS, and there is no unique index on `program_invites.player_id`. T18 closed the UI path that produced this by accident, but a client guard is not a security boundary — the RPC still accepts it. Consequence traced by the reviewer: `accept_program_invite` returns `already_claimed` for every invitee after the first BEFORE stamping `accepted_at`, so their row stays open, which is exactly the state the seat-reservation count treats as reserved. The seat is held with no path to release short of the coach deleting the row by hand. Reviewer's suggested shape: a partial unique index on `(program_id, player_id) where accepted_at is null and player_id is not null`, or an explicit existence check inside the RPC. Authorization is NOT the issue — `is_program_staff` is checked before any write and the player is validated against the program, so this is same-program only. Schema work: only `query_logs` was exposed in this session, so if `execute_sql`/`list_tables` are still unavailable, mark this `blocked` rather than writing a migration against an unverified schema.
+
+## T22 · Cancel and Done leave the invite dialog's state behind
+- **status:** todo
+- **files:** `src/components/dashboard/team/roster-invite-dialog.tsx` (the footer buttons and the `RosterDialog` wrapper)
+- **done when:**
+  - [ ] Closing by Cancel or Done resets the dialog exactly as Escape, overlay click and the shell's X already do
+  - [ ] Reopening after any close route shows an empty form — no chip, no selected target, no error, no receipt
+  - [ ] There is ONE close path that resets, not four callers each remembering to
+  - [ ] The receipt's Done still does whatever refresh it does today
+- **notes:** Found by the T18 subagent, which correctly did not fix it — out of that task's scope. The footer's Cancel and Done call the `onOpenChange` prop directly rather than the `RosterDialog` wrapper that calls `reset()`. Escape, overlay click and the shell's own X do reset. It matters more after T18: `submit()`'s tripwire can still set a `target` on the receipt path, and closing by Done then carries that selection into the next open, where it silently applies to whatever the coach types next.
