@@ -129,6 +129,273 @@ export async function addProgramPlayer(input: {
 }
 
 /**
+ * One `program_players` row, as the edit form needs it.
+ *
+ * The five editable columns and nothing else, already in the shapes the fields
+ * hold them in — `""` for a column nobody has set, so the dialog does not
+ * repeat the null handling five times.
+ */
+export interface PlayerFields {
+  firstName: string;
+  lastName: string;
+  classYear: string;
+  lineupSpot: string;
+  email: string;
+  /** A login is bound to this profile, so the address above is not their only one. */
+  claimed: boolean;
+}
+
+interface DbPlayerFieldsRow {
+  program_id: string;
+  first_name: string;
+  last_name: string;
+  class_year: string | null;
+  lineup_spot: number | null;
+  email: string | null;
+  claimed_by_user_id: string | null;
+  archived_at: string | null;
+  merged_into_id: string | null;
+}
+
+/**
+ * `gone` is its own outcome, not a flavour of error: the dialog turns terminal
+ * on it — no retry, no Save — because there is no longer a row to write to.
+ */
+export type PlayerFieldsResult =
+  | { ok: true; fields: PlayerFields }
+  | { ok: false; error: string; gone: boolean };
+
+export type UpdatePlayerResult =
+  | { ok: true }
+  | { ok: false; error: string; gone: boolean };
+
+/**
+ * One sentence for a row that is not on this roster anymore, said the same way
+ * whether it was already gone when the dialog opened or went while it was. What
+ * to do about it belongs to the dialog, which knows which of the two happened.
+ */
+const GONE_MESSAGE = "This player is no longer on this roster.";
+
+/**
+ * The row's own five columns, read fresh for the edit form.
+ *
+ * **Not** derivable from the `RosterMember` the table already holds, and the
+ * difference is not cosmetic. `program_roster_full` returns
+ * `coalesce(pp.email, u.email)` and `coalesce(pp.class_year, u.class)`, so a
+ * claimed player whose profile carries neither shows their *login* address and
+ * their *own* class year on the roster. Seeding a form from that and saving it
+ * copies both onto the profile — writing a personal login address into the
+ * roster's email column, which is the field the duplicate tripwire and the
+ * invite flow both key on. This reads `program_players` directly so an empty
+ * column arrives empty.
+ *
+ * Every member of the program may select this row (the "Roster is visible to
+ * program members" policy); only staff may write it, and that check lives in
+ * `update_program_player`.
+ */
+export async function getProgramPlayerFields(
+  profileId: string
+): Promise<PlayerFieldsResult> {
+  const workspace = await getWorkspaceContext();
+  if (!workspace || workspace.active.kind !== "team") {
+    return {
+      ok: false,
+      error: "Switch to your team workspace to edit players.",
+      gone: false,
+    };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("program_players")
+    .select(
+      "program_id, first_name, last_name, class_year, lineup_spot, email, claimed_by_user_id, archived_at, merged_into_id"
+    )
+    .eq("id", profileId)
+    .maybeSingle();
+
+  if (error) {
+    const raw = error.message?.trim();
+    return {
+      ok: false,
+      error: raw && raw.length > 0 ? raw : "Couldn't read that player.",
+      gone: false,
+    };
+  }
+
+  const row = data as DbPlayerFieldsRow | null;
+  // A coach may belong to two programs, so "readable" is not "on this roster".
+  // Archived and merged rows are gone from this page's point of view as well.
+  // `update_program_player` declines both of those since 20260825120000, but it
+  // declines them by returning silently — refusing them here is what turns that
+  // into a sentence the coach can read.
+  if (
+    !row ||
+    row.program_id !== workspace.active.id ||
+    row.archived_at !== null ||
+    row.merged_into_id !== null
+  ) {
+    return { ok: false, error: GONE_MESSAGE, gone: true };
+  }
+
+  return {
+    ok: true,
+    fields: {
+      firstName: row.first_name,
+      lastName: row.last_name,
+      classYear: row.class_year ?? "",
+      lineupSpot: row.lineup_spot === null ? "" : String(row.lineup_spot),
+      email: row.email ?? "",
+      claimed: row.claimed_by_user_id !== null,
+    },
+  };
+}
+
+/**
+ * Rewrite a roster row: name, class year, lineup spot, email.
+ *
+ * `update_program_player` overwrites all five columns on every call — its three
+ * optional parameters default to NULL, so an argument left off does not mean
+ * "leave it alone", it means "clear it". Every one of them is therefore passed
+ * explicitly here, and the dialog holds all five in state whether or not the
+ * coach touched them. Changing only the lineup spot must not silently drop the
+ * class year and the email beside it.
+ *
+ * Guards that are the RPC's: staff-only, both names, the email shape. Its
+ * messages are written for people and pass through.
+ *
+ * Archived rows are the database's guard now, not this file's. Migration
+ * 20260825120000 added `archived_at is null` to the RPC's row lookup — the
+ * three conditions `archive_program_player` had all along — so a write to
+ * somebody who has left the program is refused at the one place every caller
+ * comes through, including the ones that never run this code.
+ *
+ * The pre-flight read below is therefore defence in depth on that point, and
+ * still the only guard on two others. It is what scopes the edit to the roster
+ * on screen: the RPC reads the program off the row and checks staff against
+ * that, so a coach who staffs two programs would otherwise edit the other
+ * program's player through it, successfully, while looking at this one. And it
+ * is the only thing that can say *why* a save did nothing — the RPC returns
+ * silently on a row it cannot find, so without the read a vanished player would
+ * close the dialog as a success instead of reaching `gone` and the terminal
+ * "no longer on this roster" state.
+ *
+ * It is a check-then-act and not a lock: the row can still be archived in the
+ * gap between the read and the RPC. What that race costs is now a success
+ * message for a save that did nothing, rather than an invisible write to a row
+ * that is off the roster.
+ */
+export async function updateProgramPlayer(input: {
+  profileId: string;
+  firstName: string;
+  lastName: string;
+  classYear: string | null;
+  lineupSpot: number | null;
+  email: string | null;
+}): Promise<UpdatePlayerResult> {
+  // Resolved here as well as inside the read below, because the program id is
+  // what scopes the duplicate-email lookup on the failure path.
+  const workspace = await getWorkspaceContext();
+  if (!workspace || workspace.active.kind !== "team") {
+    return {
+      ok: false,
+      error: "Switch to your team workspace to edit players.",
+      gone: false,
+    };
+  }
+
+  // Re-read rather than trusting what the dialog was seeded with: the case this
+  // is for is the other tab that archived this row while the form was open.
+  const live = await getProgramPlayerFields(input.profileId);
+  if (!live.ok) return { ok: false, error: live.error, gone: live.gone };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("update_program_player", {
+    p_player_id: input.profileId,
+    p_first_name: input.firstName,
+    p_last_name: input.lastName,
+    p_class_year: input.classYear,
+    p_lineup_spot: input.lineupSpot,
+    p_email: input.email,
+  });
+
+  if (error) {
+    return {
+      ok: false,
+      error: await describeUpdateFailure(
+        error.message,
+        workspace.active.id,
+        input
+      ),
+      gone: false,
+    };
+  }
+
+  revalidatePath(ROSTER_PATH);
+  revalidatePath(`${ROSTER_PATH}/${input.profileId}`);
+  revalidatePath(TEAM_HOME_PATH);
+  return { ok: true };
+}
+
+/**
+ * Turn what Postgres refused into a sentence.
+ *
+ * `update_program_player` has no duplicate-email check of its own — unlike
+ * `add_program_player`, which turns the collision into prose before it can
+ * happen — so a repeated address reaches `program_players_email_key`, the
+ * partial unique index on `(program_id, lower(email))` over live rows, and
+ * comes back as `duplicate key value violates unique constraint
+ * "program_players_email_key"`. That string is not something to show a coach.
+ *
+ * The clashing row is looked up only on this path, so the ordinary save costs
+ * no extra query and the roster's rules are still stated once, in SQL. The
+ * wording matches `add_program_player`'s, because it is the same collision
+ * arriving from the other direction.
+ */
+async function describeUpdateFailure(
+  message: string | undefined,
+  programId: string,
+  input: { profileId: string; email: string | null }
+): Promise<string> {
+  const raw = message?.trim() ?? "";
+  const isEmailClash =
+    raw.includes("program_players_email_key") ||
+    raw.includes("duplicate key value violates unique constraint");
+
+  if (!isEmailClash) {
+    return raw.length > 0 ? raw : "Couldn't save that player.";
+  }
+
+  const address = input.email?.trim().toLowerCase() ?? "";
+  if (address !== "") {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("program_players")
+      .select("first_name, last_name")
+      // Scoped to the program, not just to what RLS permits: a coach who runs
+      // two squads may read both, and naming somebody from the other one would
+      // be a sentence about a roster that is not on screen.
+      .eq("program_id", programId)
+      // Stored lowercased by every RPC that writes the column, so an exact
+      // match is the case-insensitive one — and `eq` cannot be fooled by an
+      // address carrying `%` or `_`, which `ilike` would read as wildcards.
+      .eq("email", address)
+      .neq("id", input.profileId)
+      .is("archived_at", null)
+      .is("merged_into_id", null)
+      .maybeSingle();
+
+    const clash = data as { first_name: string; last_name: string } | null;
+    if (clash) {
+      const name = `${clash.first_name} ${clash.last_name}`.trim();
+      return `${name} is already on this roster with that email.`;
+    }
+  }
+
+  return "Somebody else on this roster already has that email address.";
+}
+
+/**
  * Take a player off the roster.
  *
  * Archives rather than deletes, and the reason is in the SQL: `player1_id` has

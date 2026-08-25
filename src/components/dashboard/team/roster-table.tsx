@@ -24,6 +24,7 @@ import {
   type InviteResult,
 } from "@/components/dashboard/settings/team-actions";
 import type { ActionResult } from "@/components/dashboard/settings/actions";
+import { EditPlayerDialog } from "@/components/dashboard/team/edit-player-dialog";
 import { MergeProfilesDialog } from "@/components/dashboard/team/merge-profiles-dialog";
 import type {
   RosterInvite,
@@ -203,9 +204,9 @@ function FormTicks({ form }: { form: RosterMember["form"] }) {
 }
 
 /**
- * The per-row menu: the permission, and the way off the roster.
+ * The per-row menu: the permission, the correction, and the way off the roster.
  *
- * Neither is something to put a click away from a row a coach is scanning.
+ * None of them is something to put a click away from a row a coach is scanning.
  * Owners are absent from the removal case: ownership moves by transfer, and a
  * roster screen is not where a program should be able to lose the only person
  * who runs it.
@@ -213,36 +214,59 @@ function FormTicks({ form }: { form: RosterMember["form"] }) {
 function RowMenu({
   member,
   isViewer,
+  onEdit,
   onError,
   run,
   pending,
 }: {
   member: RosterMember;
   isViewer: boolean;
+  onEdit: () => void;
   onError: (message: string | null) => void;
   run: (action: () => Promise<ActionResult | InviteResult>) => void;
   pending: boolean;
 }) {
   const [enabled, setEnabled] = useState(member.uploadEnabled);
   const [sending, startSend] = useTransition();
+  /**
+   * Controlled so Edit can close the menu itself.
+   *
+   * Both the popover and the dialog trap focus, so the two must not overlap.
+   * Left uncontrolled, the popover only closes when the click outside it lands
+   * — which, for a click on its own item, is never — and the dialog would open
+   * inside a live focus trap. Setting this false in the same event as `onEdit`
+   * puts both in one commit: the popover unmounts and returns focus, then the
+   * dialog mounts and takes it.
+   */
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // The owner always may. Offering a switch that the RPC would honour but that
   // would lock a program's only owner out of its own budget is a control with
   // one useful position. A coach-managed player has no account to grant it to.
   const canToggleSend = member.userId !== null && member.role !== "owner";
   const canRemove = member.role !== "owner" && !isViewer;
+  // Gated on there being a profile row to write, and on nothing else. A coach
+  // and a claimed player both have one; staff seats do not, because
+  // `program_roster_full` only fills `profile_id` from `program_players`. Role
+  // is the wrong test: it would either drop the claimed players — the rows most
+  // likely to carry a stale spot — or offer the item on a coach whose name
+  // lives in `users` and which this dialog cannot write.
+  const canEdit = member.profileId !== null;
+  // Whether anything is drawn above the divider: the switch, or the sentence
+  // that stands in for it on a player who has no account.
+  const hasSendBlock = canToggleSend || member.role === "player";
 
-  // An owner has neither control, but the slot still has to exist. Returning
+  // An owner has none of the three, but the slot still has to exist. Returning
   // null let the upload icon slide right into the space where the menu would
   // be, so the one row without a menu had its icon a step out of line with
   // every other row's. A column of icons that does not line up reads as a
   // rendering fault.
-  if (!canToggleSend && !canRemove) {
+  if (!canToggleSend && !canRemove && !canEdit) {
     return <span aria-hidden className="size-6 shrink-0" />;
   }
 
   return (
-    <Popover>
+    <Popover open={menuOpen} onOpenChange={setMenuOpen}>
       <PopoverTrigger
         aria-label={`Options for ${member.name}`}
         title="Options"
@@ -298,29 +322,47 @@ function RowMenu({
           )
         )}
 
+        {hasSendBlock && (canEdit || canRemove) && (
+          <span className="my-1 block h-px bg-[var(--border-hairline)]" />
+        )}
+
+        {canEdit && (
+          <button
+            type="button"
+            onClick={() => {
+              // Close first. See `menuOpen` above for why the two cannot
+              // overlap — and no `run()` here, because this opens a dialog
+              // rather than performing a write.
+              setMenuOpen(false);
+              onError(null);
+              onEdit();
+            }}
+            className="block w-full rounded-[var(--radius-element)] px-2 py-2 text-left text-[12px] text-[var(--ink-700)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]"
+          >
+            Edit player
+          </button>
+        )}
+
         {canRemove && (
-          <>
-            <span className="my-1 block h-px bg-[var(--border-hairline)]" />
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() =>
-                run(() =>
-                  // A coach-managed player has no membership row to remove, so
-                  // the profile is archived instead — which also keeps their
-                  // matches attributable. Archiving releases the seat when the
-                  // profile had been claimed, so the claimed case goes the same
-                  // way rather than through `removeMember`.
-                  member.profileId
-                    ? archiveProgramPlayer(member.profileId)
-                    : removeMember(member.userId as string)
-                )
-              }
-              className="block w-full rounded-[var(--radius-element)] px-2 py-2 text-left text-[12px] text-[var(--ink-700)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--danger)] disabled:opacity-50"
-            >
-              Remove from roster
-            </button>
-          </>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() =>
+              run(() =>
+                // A coach-managed player has no membership row to remove, so
+                // the profile is archived instead — which also keeps their
+                // matches attributable. Archiving releases the seat when the
+                // profile had been claimed, so the claimed case goes the same
+                // way rather than through `removeMember`.
+                member.profileId
+                  ? archiveProgramPlayer(member.profileId)
+                  : removeMember(member.userId as string)
+              )
+            }
+            className="block w-full rounded-[var(--radius-element)] px-2 py-2 text-left text-[12px] text-[var(--ink-700)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--danger)] disabled:opacity-50"
+          >
+            Remove from roster
+          </button>
         )}
       </PopoverContent>
     </Popover>
@@ -331,6 +373,7 @@ function MemberRow({
   member,
   canManage,
   isViewer,
+  onEdit,
   onError,
   onMerge,
   run,
@@ -339,6 +382,7 @@ function MemberRow({
   member: RosterMember;
   canManage: boolean;
   isViewer: boolean;
+  onEdit: (member: RosterMember) => void;
   onError: (message: string | null) => void;
   onMerge: (member: RosterMember) => void;
   run: (action: () => Promise<ActionResult | InviteResult>) => void;
@@ -490,6 +534,7 @@ function MemberRow({
             <RowMenu
               member={member}
               isViewer={isViewer}
+              onEdit={() => onEdit(member)}
               onError={onError}
               run={run}
               pending={pending}
@@ -523,6 +568,14 @@ export function RosterTable({
   const [merging, setMerging] = useState<[RosterMember, RosterMember] | null>(
     null
   );
+  /**
+   * The row whose editor is open, held here rather than in the row.
+   *
+   * Same reason as `merging`: one dialog for the whole table, so the popover it
+   * was opened from can unmount without taking it with it, and dropping the
+   * member on close is what resets the form.
+   */
+  const [editing, setEditing] = useState<RosterMember | null>(null);
   const [pending, start] = useTransition();
 
   /**
@@ -577,6 +630,7 @@ export function RosterTable({
                 member={member}
                 canManage={canManage}
                 isViewer={member.userId === viewerId}
+                onEdit={setEditing}
                 onError={setError}
                 onMerge={(row) => {
                   const other = members.find(
@@ -653,6 +707,17 @@ export function RosterTable({
           </ul>
         </div>
       </div>
+
+      {/* `members` unfiltered, so the lineup-spot note can name whoever else
+          is on the line the coach picks. The dialog drops the edited row from
+          that list itself. */}
+      <EditPlayerDialog
+        member={editing}
+        roster={members}
+        onOpenChange={(open) => {
+          if (!open) setEditing(null);
+        }}
+      />
 
       <MergeProfilesDialog
         pair={merging}

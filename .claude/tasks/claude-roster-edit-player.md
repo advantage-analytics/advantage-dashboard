@@ -18,7 +18,7 @@ straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Let staff edit a roster player from the row menu
-- **status:** blocked
+- **status:** done
 - **files:** src/components/dashboard/team/roster-actions.ts,
   src/components/dashboard/team/roster-table.tsx,
   src/components/dashboard/team/add-player-dialog.tsx, plus two new files
@@ -40,6 +40,20 @@ ready).
         `duplicate key value violates unique constraint` string; and a player removed
         in another tab yields a terminal "no longer on this roster" state with the
         archived row left unchanged in the database.
-- **notes:** `update_program_player` already exists and has zero callers. No migration.
+  - [ ] `update_program_player` refuses an archived row in the database itself, not only
+        in the server action: its row lookup gains `archived_at is null` alongside the
+        existing `merged_into_id is null`, so a staff member calling the RPC directly —
+        browser console, any API client — cannot overwrite an archived player. The
+        server-action pre-flight read stays, as defence in depth.
+- **notes:** `update_program_player` already exists and has zero callers.
+  **Migration permitted, scoped to exactly one change:** adding `archived_at is null` to
+  that RPC's row lookup. The design doc's §1 Risks deliberately chose *no* migration here,
+  mitigating in TypeScript instead, on the premise that the write is "reachable only from
+  a stale dialog". `rls-boundary-reviewer` disproved that premise on the first run: the
+  RPC is `security definer` with `grant execute … to authenticated`, so any staff member
+  can call it directly and bypass the TypeScript guard entirely. That finding blocked the
+  run; the user permitted the migration on 2026-08-25. Nothing else in the schema is in
+  scope. Keep the TOCTOU comment honest — the pre-flight read is defence in depth, not a
+  lock.
   Drag-and-drop reordering is deliberately a separate later task — it needs a bulk
   reorder RPC. Full design and risks: `docs/roster-edit-and-people-search.md` §1.

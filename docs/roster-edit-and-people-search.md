@@ -8,6 +8,18 @@
 > is the contract, and this document is the reasoning behind it. Plan 2 is not queued.
 > Both were researched against the code at `998c4b5` — re-verify line numbers before
 > relying on them.
+>
+> **Superseded in part (2026-08-25) — Plan 1 is built.** T1 shipped on
+> `claude/roster-edit-player`. One §1 decision did not survive review: the
+> *"Archived rows are editable"* risk below chose to mitigate in TypeScript and write no
+> migration, on the premise that the write was "reachable only from a stale dialog".
+> `rls-boundary-reviewer` disproved that premise — `update_program_player` is
+> `security definer` and granted to `authenticated`, so any staff session can call it
+> directly and skip the pre-flight read entirely. Migration
+> `20260825120000_update_program_player_skips_archived.sql` adds `archived_at is null` to
+> the RPC's row lookup and is applied live. That risk bullet and step 7 of §1's test list
+> are annotated where they now read false; the rest of §1 is as built, and §2 and §3 are
+> untouched.
 
 ## 1 · Edit a roster player (meatball → Edit)
 
@@ -192,19 +204,28 @@ Click-through as owner/coach on a team workspace:
    name the player being edited when re-selecting their own spot.
 6. Enter an email another player has → mapped sentence, not the raw constraint string.
 7. Stale-open: remove the player in a second tab, then Save → terminal "no longer on
-   this roster". Then verify in SQL that the archived row is **unchanged** — the RPC
-   does not filter `archived_at`, so the pre-check is the only thing stopping a real,
-   invisible write to an off-roster row.
+   this roster". Then verify in SQL that the archived row is **unchanged**.
+   *(Superseded: as built, the RPC filters `archived_at` itself — migration
+   `20260825120000`. The pre-check is no longer the only thing stopping the write; it is
+   what turns the database's silent refusal into a sentence the coach can read.)*
 8. As a player viewer: no meatball at all.
 9. Audit: `select action, subject_id from program_audit_log where action = 'player.updated'`.
 
 ### Risks
 
 - **The email coalesce** (above) — the worst one, silent, common.
-- **Archived rows are editable.** The RPC filters `merged_into_id` but not
-  `archived_at`. Reachable only from a stale dialog, but it is a successful invisible
-  write, not a no-op. The pre-flight read is the mitigation and is TOCTOU — say so in
-  the comment rather than implying it is a lock.
+- **Archived rows are editable.** **Superseded (2026-08-25) by migration
+  `20260825120000`,** which added `archived_at is null` to the RPC's row lookup. The
+  original reasoning is kept because the mistake in it is the instructive part: "The RPC
+  filters `merged_into_id` but not `archived_at`. Reachable only from a stale dialog, but
+  it is a successful invisible write, not a no-op. The pre-flight read is the mitigation
+  and is TOCTOU — say so in the comment rather than implying it is a lock." *Reachable
+  only from a stale dialog* was the false step: the function is `security definer` and
+  granted to `authenticated`, so a staff session can call it directly and never touch the
+  pre-flight read at all. A guard a caller can skip is not a guard. The TOCTOU point
+  still holds for what that read does now — it is what produces the friendly "no longer
+  on this roster" state, and the residual race costs a stale success message rather than
+  an invisible write.
 - **Moving a player leaves a hole.** `lineup_spot` is deliberately non-unique. Moving
   #3 → #2 leaves #2 doubled and #3 empty; `getLadder()` sorts by spot with ties broken
   alphabetically and `seedLineup()` fills S1–S6 positionally, so everyone below shifts
