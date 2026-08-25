@@ -77,9 +77,6 @@ const COL = {
   actions: "w-[64px] shrink-0",
 } as const;
 
-/** 9a's column labels are the design system's `eyebrow-sm`, carried over from 5a. */
-const HEAD = "eyebrow-sm";
-
 /**
  * Horizontal padding belongs to the CARD, and each row pulls its own back out
  * again with a negative margin (design 9a, row treatment from 8a). That is what
@@ -91,6 +88,14 @@ const ROW = "flex items-center gap-3";
 
 /** 12/16 padding, pulled back 16px so the wash sits inside the card's 24px. */
 const ROW_INSET = "-mx-4 rounded-[var(--radius-element)] px-4 py-3";
+
+/**
+ * 9d's "Claimed today" marker. Both branches of the last-match cell draw it,
+ * so it is named once — the two copies were byte-identical and a single edit
+ * could have left them disagreeing.
+ */
+const CLAIM_PILL =
+  "inline-flex h-5 shrink-0 items-center rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-2 text-[10px] font-medium text-[var(--ink-700)]";
 
 /** The trailing controls, so both read as one class of thing. */
 const ROW_ICON =
@@ -429,7 +434,7 @@ function MemberRow({
               {lastMatch.score}
             </span>
             {member.claimedToday && (
-              <span className="inline-flex h-5 shrink-0 items-center rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-2 text-[10px] font-medium text-[var(--ink-700)]">
+              <span className={CLAIM_PILL}>
                 Claimed today
               </span>
             )}
@@ -443,7 +448,7 @@ function MemberRow({
               No matches yet
             </span>
             {member.claimedToday && (
-              <span className="inline-flex h-5 shrink-0 items-center rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-2 text-[10px] font-medium text-[var(--ink-700)]">
+              <span className={CLAIM_PILL}>
                 Claimed today
               </span>
             )}
@@ -550,7 +555,7 @@ export function RosterTable({
                 already in lineup order, so the header says which way it reads
                 rather than offering a sort that does not exist. */}
             <span className={`${COL.spot} inline-flex items-center gap-[3px]`}>
-              <span className={HEAD}>#</span>
+              <span className="eyebrow-sm">#</span>
               <ArrowUp
                 className="size-2.5 text-[var(--ink-700)]"
                 strokeWidth={1.5}
@@ -558,10 +563,10 @@ export function RosterTable({
               />
               <span className="sr-only">Lineup order, lowest first</span>
             </span>
-            <span className={`${COL.player} ${HEAD}`}>Player</span>
-            <span className={`${COL.form} ${HEAD}`}>Form</span>
-            <span className={`${COL.last} ${HEAD}`}>Last match</span>
-            <span className={`${COL.serve} ${HEAD}`}>1st serve</span>
+            <span className={`${COL.player} eyebrow-sm`}>Player</span>
+            <span className={`${COL.form} eyebrow-sm`}>Form</span>
+            <span className={`${COL.last} eyebrow-sm`}>Last match</span>
+            <span className={`${COL.serve} eyebrow-sm`}>1st serve</span>
             <span className={COL.actions} />
           </div>
 

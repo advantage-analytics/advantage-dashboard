@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { UserCheck } from "lucide-react";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
@@ -8,6 +7,7 @@ import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { formatResetDate } from "@/lib/data/usage-format";
 import { RosterTable } from "@/components/dashboard/team/roster-table";
 import { RosterHeaderButtons } from "@/components/dashboard/team/roster-header-buttons";
+import { RowAction } from "@/components/dashboard/schedule/row-action";
 
 export const metadata = { title: "Roster" };
 
@@ -80,15 +80,15 @@ export default async function RosterPage() {
   const claimants = roster.members.filter((m) => m.claimedToday);
   const claimant = claimants[0];
   const matchesKept = claimants.reduce((total, m) => total + m.matchesPlayed, 0);
+  // Asked once and reused: the sentence below inflects in three places, and
+  // three separate length tests are three chances to disagree.
+  const soloClaim = claimants.length === 1;
   // "A", "A and B", "A, B and C" — the last separator is a word, because the
   // lead is a sentence rather than a list.
-  const claimantNames =
-    claimants.length < 2
-      ? (claimant?.name ?? "")
-      : `${claimants
-          .slice(0, -1)
-          .map((m) => m.name)
-          .join(", ")} and ${claimants[claimants.length - 1].name}`;
+  const names = claimants.map((m) => m.name);
+  const claimantNames = soloClaim
+    ? names[0]
+    : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 
   const standing = [
     `${playerCount} ${playerCount === 1 ? "player" : "players"}`,
@@ -150,9 +150,9 @@ export default async function RosterPage() {
                   for anybody, and a name is not one. */}
               <strong className="font-medium text-[var(--ink-900)]">
                 {claimantNames} claimed{" "}
-                {claimants.length === 1 ? "their profile" : "their profiles"}.
+                {soloClaim ? "their profile" : "their profiles"}.
               </strong>{" "}
-              Same {claimants.length === 1 ? "row" : "rows"}, now self-managed —{" "}
+              Same {soloClaim ? "row" : "rows"}, now self-managed —{" "}
               <span className="tabular">{matchesKept}</span>{" "}
               {matchesKept === 1 ? "match" : "matches"} kept, upload credits
               unchanged, seats{" "}
@@ -165,13 +165,13 @@ export default async function RosterPage() {
                 name in the sentence — the topmost claimed row in the table
                 below. The label stays what the design wrote; the accessible
                 name says whose. */}
-            <Link
+            <RowAction
               href={`/dashboard/team/roster/${claimant.playerId}`}
-              aria-label={`View ${claimant.name}'s profile`}
-              className="ml-auto shrink-0 rounded-[var(--radius-cell)] pt-px text-[11px] font-medium whitespace-nowrap text-[var(--blue-text)] transition-colors hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+              ariaLabel={`View ${claimant.name}'s profile`}
+              className="mt-px ml-auto shrink-0 whitespace-nowrap"
             >
               View profile
-            </Link>
+            </RowAction>
           </div>
         )}
 
@@ -192,7 +192,7 @@ export default async function RosterPage() {
             : "Coaches can upload for any player"}
           {" — analysis time resets "}
           {formatResetDate(currentBillingMonth())}.
-          {roster.members.some((m) => m.claimedToday) &&
+          {claimant &&
             " Matches uploaded before a player claimed their profile still credit whoever added them."}
         </p>
       </div>
