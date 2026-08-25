@@ -377,3 +377,83 @@ ready).
         main column alone with no empty gutter beside it
 - **notes:** was T5's fourth bullet. Run this last of the four — it changes the
   page's layout, and T8–T10 all land inside the main column.
+
+## T12 · Team Home's day and week arithmetic is the server's, not the reader's
+- **status:** todo
+- **files:** `src/lib/data/team-home-server.ts` (`localDay`, `weekBounds`, ~lines 85-120); a new or extended spec under `tests/`
+- **done when:**
+  - [ ] `localDay()` and `weekBounds()` state which timezone they actually compute in, and the comments no longer claim "the reader's own reckoning" unless a zone is being passed in to make that true
+  - [ ] The zone is explicit at the call site rather than inherited from the server process — the same shape as `usage-format.ts` and `active-workspace-server.ts`, which both pin `timeZone: "UTC"` on purpose
+  - [ ] A test pins `now` to Sunday 18:00 US Pacific (Monday 01:00 UTC) and asserts `weekBounds` returns the week still containing the preceding Friday and Saturday
+  - [ ] `getTeamHomeData` derives the day, the week bounds and the invite-expiry arithmetic from one clock, so no two of them can disagree about what day it is
+- **notes:** Found by `/pr-check` on this branch. The comment argues these getters protect readers west of Greenwich from `toISOString()`; on Vercel the server's local time *is* UTC, so the protection does not exist and the code is a no-op relative to its own rationale. Live effect: after 17:00 PT Sunday the week rolls forward and the weekend dual sheet disappears — exactly the failure the Monday-start rationale two lines below exists to prevent. Note the repo has no `programs.timezone` column that surfaced in a grep; if the fix needs one, that is a schema task and this one should be `blocked` naming it rather than inventing the column.
+
+## T13 · Roster progress counts `program_members`, so coach-managed players are invisible
+- **status:** todo
+- **files:** `src/lib/data/team-home-server.ts` (`rosterProgress`, ~line 653, and its call site ~line 1274); `src/components/dashboard/team/first-steps.tsx` (`teamVariant`, ~line 106)
+- **done when:**
+  - [ ] `rosterProgress` counts coach-managed players, using the same `program_roster_full` rows `getTeamHomeData` already loads for `rosterIds` — not a second read and not a second answer to who is on this team
+  - [ ] A program whose roster is entirely coach-managed profiles gets `joined > 0`, so the "Build your team" card shows its done receipt instead of asking for invitations that are not needed
+  - [ ] The receipt's count and `playersLabel()` report the same number a coach sees on `/dashboard/team/roster`
+  - [ ] Staff seats are still excluded from the player count — the existing comment's reason ("a program with four coaches and no roster is not 0% of the way to being set up") still holds
+- **notes:** Found by `/pr-check`. `rosterProgress` is handed `team?.members` (`program_members`), but this file's own comment at ~line 1130 says `program_roster_full` is "the only one that includes a coach-managed player". So `invited = joined + outstanding` is 0 for a fully coach-built roster and the checklist keeps asking a coach to invite a team they have already built.
+
+## T14 · An expired invite reads "expires today", forever
+- **status:** todo
+- **files:** `src/lib/data/team-home-server.ts` (`rosterProgress` expiry arithmetic ~line 660, `teamAttention`'s `invites-expiring` alert ~line 807)
+- **done when:**
+  - [ ] An invite whose TTL has already passed is not counted in `expiringSoon` — it is either excluded or surfaced as its own already-expired state, but it is not reported as expiring in the future
+  - [ ] `expiringInDays` no longer reaches its `Math.max(0, …)` clamp with a negative input, so "expires today" is only ever printed on a day it is true
+  - [ ] A test covers an invite that expired before `now` and asserts the alert list does not claim it expires today
+  - [ ] Whatever the alert does with an expired invite, the roster card and the alert agree — a coach is not told two different things about the same invitation
+- **notes:** Found by `/pr-check`, confirmed in the source. `outstanding` is every pending player invite regardless of TTL, and `expiries.filter(e => e <= horizon)` matches past expiries as readily as near-future ones; the `Math.max(0, …)` then turns the negative into 0. Net effect: an invite that lapsed last month pins a permanent "One invite expires today" to Needs attention, which is exactly the kind of alert that teaches a coach to ignore the list.
+
+## T15 · Restore the 7-6 guard on the tiebreak superscript
+- **status:** todo
+- **files:** `src/lib/ui/score-format.ts` (`tiebreakOf`); `src/components/dashboard/matches/match-detail/match-summary-row.tsx` (~line 220)
+- **done when:**
+  - [ ] A superscript is rendered only where the set score is one a tiebreak can decide — a stored tiebreak value on, say, a 6-4 set renders no digit
+  - [ ] The guard lives in `tiebreakOf` so every consumer inherits it, rather than being restated at each scoreboard
+  - [ ] `<ScoreLine>` and `match-summary-row`'s per-player scoreboard agree on which sets get a digit, and both still put it on the side the notation requires
+  - [ ] A test covers a set carrying a tiebreak value it should not have and asserts nothing is printed
+- **notes:** Found by `/pr-check`. T3 routed `match-summary-row` through the shared `tiebreakOf` and dropped the local `set.tiebreak && mine === 7 && theirs === 6` check in the process. `tiebreakOf` already refuses a tiebreak filed against the set's winner, and documents why ("a misfiled value renders nothing rather than a plausible lie") — this is the same argument applied to the set score, so the guard belongs beside it. Worth deciding explicitly what a super-tiebreak third set (1-0, 10-point) should do; if the answer needs data we do not have, say so rather than guessing.
+
+## T16 · The first-report card reads only the six rows the list shows
+- **status:** todo
+- **files:** `src/components/dashboard/team/first-steps.tsx` (~line 94); `src/lib/data/team-home-server.ts` (whatever it has to hand the card)
+- **done when:**
+  - [ ] `report` and `inFlight` are answered from the program's matches, not from the six-row list prop
+  - [ ] A program whose only analysed match is older than the six most recent rows shows the done receipt, not "Send your first match"
+  - [ ] Nothing new is fetched for it — the season read `getTeamHomeData` already performs for the KPI strip is the source, or the answer is computed server-side and passed as a flag
+  - [ ] The three checklist cards still unmount together once all three read done
+- **notes:** Found by `/pr-check`. `matches` is the six-row `TeamMatchRow[]` the list renders, so the card's question ("has a first report ever come back?") is being asked of a window that cannot answer it. Low frequency today because young programs have few matches, and it gets worse as a program's history grows past six.
+
+## T17 · KPI sparkline and headline read different windows
+- **status:** todo
+- **files:** `src/lib/data/team-kpi.ts` (~line 192, `seriesTile`); `tests/team-kpi.spec.ts`
+- **done when:**
+  - [ ] The sparkline and the headline figure are computed from the same set of observations, or the tile states plainly that the spark shows a shorter recent window
+  - [ ] The doc comment no longer claims the two cannot disagree if they still can
+  - [ ] A test constructs a series longer than the spark window where the trailing slice moves opposite to the whole, and asserts the tile does not show a rising spark beside a falling change
+  - [ ] `SMALL_SAMPLE_MIN` and `TREND_MIN_SPAN_DAYS` still gate the trend exactly as they do now
+- **notes:** Found by `/pr-check`. The spark draws the last 8 observations while the headline and the change read the whole series, so a season that improved overall but dipped recently can show a falling spark next to a rising change — two claims about one number, on one tile.
+
+## T18 · A bulk invite binds every pasted address to one managed profile
+- **status:** todo
+- **files:** `src/components/dashboard/team/roster-invite-dialog.tsx` (~lines 230-245)
+- **done when:**
+  - [ ] The current behaviour is established first and recorded in the task log — whether a selected `target` is meant to apply to a whole pasted list, or only to a single-address invite
+  - [ ] If it is a bug: no run can attach more than one invitation to the same `profileId`, either because the form refuses a multi-address paste while a target is selected or because `playerId` is carried per-address rather than per-run
+  - [ ] If it is intended: the dialog says so on screen before sending, so a coach pasting twelve addresses is not silently claiming all twelve are one player
+  - [ ] Either way the one-open-invite upsert is not made to race itself — the sequential loop and its stated reason survive
+- **notes:** Found by `/pr-check` (code-review), and the ONLY task in this batch whose premise I did not confirm — hence the investigate-first criterion. What is certain from the source: the loop passes `playerId: target?.profileId ?? null` unchanged for every address in `addresses`. What is not certain is whether the UI can even reach that state, since selecting a managed player may already constrain the form to one address. Establish that before changing anything; if the answer is "unreachable", close this `blocked` with the reason rather than hardening a path nobody can take.
+
+## T19 · `readSchedule` runs twice per Team Home render
+- **status:** todo
+- **files:** `src/lib/data/team-home-server.ts`; `src/lib/data/schedule-server.ts` (or wherever `getScheduleRows` / `getEventDetail` are defined)
+- **done when:**
+  - [ ] `readSchedule` executes once per Team Home render, not once per `cache()`d wrapper
+  - [ ] The measured query count for a render with a dual in range drops from 19 back toward the 7 it was before this branch, and the number is stated in the task log
+  - [ ] The narrow `program_events` query and `EVENT_WINDOW` are retired if `ScheduleRow` can answer the next event and the weekend dual, as the corrected `TeamNextEvent` comment says it can
+  - [ ] Team Home renders the same next event, weekend dual and KPI figures as it does today
+- **notes:** Found by `/simplify` during `/pr-check` and deliberately deferred: `getScheduleRows` and `getEventDetail` are separately `cache()`d over one uncached inner function, so React's cache dedupes neither. Render cost went from 7 queries / 2 deep to 19 / 9 with a dual in range. Deferred at the time because rewriting a loader straight after per-task review would merge code no reviewer had seen — which is the reason it is a task rather than a fix.
