@@ -314,12 +314,18 @@ ready).
   not through any real collegiate season.
 
 ## T10 · KPI strip, only once the numbers are honest
-- **status:** blocked
+- **status:** next
 - **files:** `src/lib/data/team-home-server.ts`, a new
   `src/components/dashboard/team/kpi-strip.tsx` — a guess
 - **done when:**
-  - [ ] Four tiles — dual record, sets won, team first serve, matches analyzed
-        — render between the greeting row and the matches list
+  - [ ] The strip renders between the greeting row and the matches list, and
+        carries a tile for each of dual record, sets won, team first serve and
+        matches analyzed **whose figure can be computed honestly**. A figure
+        that cannot — a dual record before any dual is decided, a first serve
+        with no stat rows — is **omitted**, never printed as `0–0`, `—%` or any
+        other placeholder. This is the same rule T8 set for a row whose side
+        cannot be established: silence beats a plausible wrong answer. Say in
+        the code which tiles can be absent and when
   - [ ] The strip renders only when the program has at least one analyzed
         match; on day zero it renders nothing at all — no skeleton, no zeroed
         tiles
@@ -328,9 +334,27 @@ ready).
         no sparkline
   - [ ] Trend and sparkline appear only once there is at least a week of data
   - [ ] Every figure traces to an existing table; no migration
+  - [ ] `teamKpis()` itself is under test, not only the pure helpers it calls.
+        Cover the four states that decide what a coach sees: day zero (no
+        analyzed match — no tiles at all), a program with analyzed matches but
+        **no decided dual** (the tile is absent, and nothing prints `0–0`),
+        below the sample threshold (every tile carries its count, no trend, no
+        sparkline), and mid-season (trend and sparkline on the tiles that
+        carry them)
 - **notes:** was T5's third bullet. 45d is the honest-small-sample reference;
   44a is the same strip at mid-season. The rule the round states is "never a
   skeleton strip on day zero".
+  First attempt is stashed at `9db3e34683717299c6f72c36731c26a3f50bbe41` —
+  start from it. Everything in it passed except the two criteria above, and the
+  first of those was my wording rather than its work: it already omits a tile
+  it cannot compute, which is what the amended criterion now asks for. So the
+  real work left is the `teamKpis()` tests.
+  Do not re-derive any of this, all of it reviewed and cleared: `setTally()` is
+  a verbatim extraction of `matchOutcome`'s counting body (both guardrail
+  reviewers checked it line by line — T8's glyphs depend on it); the constants
+  `SMALL_SAMPLE_MIN = 5` and `TREND_MIN_SPAN_DAYS = 7`, required together; the
+  decision that dual record and matches analyzed never carry a trend or
+  sparkline; and `statKey`'s move into `aggregate.ts`.
 
 ## T11 · The right column — next event, roster, needs attention
 - **status:** todo
