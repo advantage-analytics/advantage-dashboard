@@ -1,3 +1,5 @@
+import { formatScoreText, scoreSetsFrom } from "@/lib/ui/score-format";
+
 /**
  * Extract initials from a player name
  * Handles both single names and "Name & Partner" formats
@@ -113,17 +115,31 @@ export interface MatchScore {
 }
 
 /**
- * Build a per-set score string from the user's perspective, e.g. "6-4 3-6 7-5".
+ * A per-set score from the user's perspective, as plain text — "6-4, 3-6, 7-5".
  * Returns "" when the score is missing or malformed.
+ *
+ * The spelling is not this function's to decide: it is `formatScoreText`'s, in
+ * `@/lib/ui/score-format`, which is the one place the product's score notation
+ * lives. All this adds is the shape the loaders actually hold — a raw
+ * `matches.score` row plus "is the user player 1" — so that the
+ * perspective-flip is spelled `swap: !isUserPlayer1` once here rather than at
+ * every call site.
+ *
+ * Tiebreaks are deliberately absent. A superscript cannot survive a plain
+ * string, and `formatScoreText` drops it rather than inventing a second
+ * notation; render `<ScoreLine>` wherever markup is allowed.
+ *
+ * Until round 44 this returned a LEGACY space-joined form ("6-4 3-6 7-5") that
+ * two of its three callers patched back with `.replaceAll(" ", ", ")`, while
+ * the third rendered the old spacing on screen. Both the downgrade and the
+ * patches are gone — do not add either back.
  */
 export function buildScoreString(
   score: MatchScore | null,
   isUserPlayer1: boolean,
 ): string {
   if (!score?.player1?.length || !score?.player2?.length) return "";
-  const userScores = isUserPlayer1 ? score.player1 : score.player2;
-  const oppScores = isUserPlayer1 ? score.player2 : score.player1;
-  return userScores.map((s, i) => `${s}-${oppScores[i] ?? 0}`).join(" ");
+  return formatScoreText(scoreSetsFrom(score, { swap: !isUserPlayer1 }));
 }
 
 /**

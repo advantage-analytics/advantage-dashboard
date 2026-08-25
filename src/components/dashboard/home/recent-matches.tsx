@@ -4,6 +4,8 @@ import { memo, useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { MatchMetadataRow } from "@/components/dashboard/matches/match-metadata-row";
+import { ScoreLine } from "@/components/dashboard/score-line";
+import { formatScoreText } from "@/lib/ui/score-format";
 import type { EventGroup, MatchRow } from "@/app/dashboard/(home)/recent-activity";
 
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
@@ -36,7 +38,7 @@ function MatchLink({ match }: { match: MatchRow }) {
   return (
     <Link
       href={`/dashboard/matches/${match.id}`}
-      aria-label={`${match.won ? "Win" : "Loss"} vs ${match.opponentName}, ${match.score}`}
+      aria-label={`${match.won ? "Win" : "Loss"} vs ${match.opponentName}, ${formatScoreText(match.score)}`}
       className="flex items-center justify-between rounded-lg px-2 py-2.5 -mx-2 transition-[background-color,transform] duration-200 ease-out hover:bg-[#FAFAFA] active:scale-[0.998] focus-visible:outline-none"
     >
       <div className="flex gap-3 items-center">
@@ -50,9 +52,10 @@ function MatchLink({ match }: { match: MatchRow }) {
             <span className="text-[14px] font-normal text-[#0D0D0D]">
               {match.opponentName}
             </span>
-            <span className="text-[12px] font-normal text-[#888888] tracking-[0.3px]">
-              {match.score}
-            </span>
+            <ScoreLine
+              sets={match.score}
+              className="text-[12px] font-normal text-[#888888] tracking-[0.3px]"
+            />
             <span
               className={`text-[10px] leading-[16px] font-medium uppercase tracking-[2.5px] ${
                 match.won ? "text-[#5DB955]" : "text-[#E51837]"

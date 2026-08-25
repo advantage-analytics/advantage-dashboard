@@ -6,6 +6,7 @@
  * is three chances to drift.
  */
 
+import { formatScoreText, scoreSetsFrom } from "@/lib/ui/score-format";
 import type { EventSite } from "./types";
 
 const MONTHS = [
@@ -68,15 +69,24 @@ export function siteTitle(site: EventSite): string {
   return siteLabel(site).charAt(0).toUpperCase() + siteLabel(site).slice(1);
 }
 
-/** "6–4 6–2", tiebreaks folded into the game count they belong to. */
+/**
+ * "6-4, 6-2", tiebreaks folded into the game count they belong to.
+ *
+ * The spelling now comes from `@/lib/ui/score-format` rather than living here,
+ * so the schedule cannot drift away from the rest of the app again — it used to
+ * print "6–4 6–2" while the matches list printed "6-4, 6-2" for the same match.
+ *
+ * A string cannot carry a superscript, so this drops the tiebreak digit.
+ * **Render `<ScoreLine>` instead wherever markup is allowed** — every surface in
+ * the app now does, which leaves this with no callers. It is kept because
+ * removing an export is not this change's job.
+ */
 export function formatScore(
   ours: number[] | undefined,
   theirs: number[] | undefined
 ): string {
   if (!ours?.length || !theirs?.length) return "";
-  return ours
-    .map((game, index) => `${game}–${theirs[index] ?? 0}`)
-    .join(" ");
+  return formatScoreText(scoreSetsFrom({ player1: ours, player2: theirs }));
 }
 
 /**

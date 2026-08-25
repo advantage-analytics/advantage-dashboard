@@ -215,7 +215,7 @@ export const getPlayerProfile = cache(async function getPlayerProfile(
       opponent: shortName(
         (r.isPlayer1 ? r.match.player2_name : r.match.player1_name) ?? "Unknown"
       ),
-      score: buildScoreString(r.match.score, r.isPlayer1).replaceAll(" ", ", "),
+      score: buildScoreString(r.match.score, r.isPlayer1),
       date: r.match.date ? shortDate(r.match.date) : "",
       event: r.match.tournament_name,
       isPlayer1: r.isPlayer1,

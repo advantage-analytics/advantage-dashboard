@@ -11,8 +11,9 @@ import {
   isInFlight,
   isWorking,
   outcomeInk,
-  resultInk,
 } from "@/lib/data/match-analysis";
+import { ResultMark } from "@/components/dashboard/result-mark";
+import { ScoreLine } from "@/components/dashboard/score-line";
 import { MatchActionsMenu } from "@/components/dashboard/matches/match-actions/match-actions-menu";
 import { AnalysisProgressTrack } from "./analysis-progress-track";
 
@@ -21,9 +22,10 @@ import { AnalysisProgressTrack } from "./analysis-progress-track";
  *
  * Every field gets its own column and its own header, so the eye scans down a
  * column instead of parsing a stacked block per row. Result is a fixed 62px —
- * it only ever holds "Won" or "Lost", so giving it a share of the fluid space
- * would just pad it. Analysis stays the widest fluid column because it is the
- * only cell whose contents change shape (bar, check, cross, or a phrase).
+ * it holds a single 14px `ResultMark`, so the width is set by the "RESULT"
+ * header above it and a share of the fluid space would just pad it. Analysis
+ * stays the widest fluid column because it is the only cell whose contents
+ * change shape (bar, check, cross, or a phrase).
  *
  * Date is not a column: it is one of the least-scanned fields and reachable
  * from the sort control, and dropping it is what buys Analysis its width.
@@ -39,10 +41,6 @@ export const LIST_GRID_COLS = {
  * it names and nothing catches it.
  */
 export const LIST_ROW_FRAME = "grid items-center gap-x-5 pl-3.5 pr-9";
-
-function formatScore(sets: DisplayMatch["score"]["sets"]): string {
-  return sets.map((s) => `${s.player1}-${s.player2}`).join(", ");
-}
 
 interface MatchCardListProps {
   match: DisplayMatch;
@@ -73,18 +71,16 @@ export function MatchCardList({ match, isNew }: MatchCardListProps): React.JSX.E
         {match.tournamentName}
       </Link>
 
-      {/* Result */}
-      <span
-        className="whitespace-nowrap text-[9.5px] font-medium uppercase tracking-[1.8px]"
-        style={{ color: resultInk(isWin) }}
-      >
-        {isWin ? "Won" : "Lost"}
-      </span>
+      {/* Result — round 44's glyph rather than the word. The column keeps its
+          "RESULT" header, so the mark is still read against a label; "Won" /
+          "Lost" itself survives as the mark's accessible name. */}
+      <ResultMark won={isWin} />
 
       {/* Score */}
-      <span className="min-w-0 truncate text-[12px] text-[#71717A] tabular-nums tracking-[0.3px]">
-        {formatScore(match.score.sets)}
-      </span>
+      <ScoreLine
+        sets={match.score.sets}
+        className="min-w-0 truncate text-[12px] text-[#71717A] tracking-[0.3px]"
+      />
 
       {/* Opponent — the bare name. The "vs" that used to prefix it was carrying
           no information the Opponent header does not already give. */}

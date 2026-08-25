@@ -6,12 +6,12 @@ import { AlertCircle, ChevronRight, RefreshCw } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createClient } from "@/lib/supabase/client";
 import {
-  buildScoreString,
   didUserWin,
   formatDisplayDate,
   shortName,
   type MatchScore,
 } from "@/lib/data/match-utils";
+import { formatScoreText, scoreSetsFrom } from "@/lib/ui/score-format";
 
 type ActivityKind =
   | "result-win"
@@ -70,7 +70,11 @@ function buildResultItem(m: DbMatchLite, playerIds: readonly string[]): Activity
   const isUserP1 = mine(m.player1_id, playerIds);
   const opponent = shortName(isUserP1 ? m.player2_name : m.player1_name);
   const won = didUserWin(m.score, isUserP1);
-  const scoreStr = buildScoreString(m.score, isUserP1);
+  // `detail` can only hold a string, so this is the text form of the one
+  // spelling — "6-4, 7-5", never the space-joined "6-4 7-5" this rail used to
+  // print. A superscript cannot ride in a string, so the tiebreak digit is
+  // dropped rather than spelled a second way.
+  const scoreStr = formatScoreText(scoreSetsFrom(m.score, { swap: !isUserP1 }));
   return {
     id: `result-${m.id}`,
     kind: won ? "result-win" : "result-loss",

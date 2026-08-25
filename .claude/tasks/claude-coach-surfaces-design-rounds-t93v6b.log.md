@@ -282,3 +282,42 @@ is the runner's. Newest entries at the bottom.
   full-bleed wash with `border-b` hairlines between rows, and a comment
   defending the full-bleed. Roster is a result list too, so round 44's rule
   arguably applies there. Out of scope here; worth its own task.
+
+## T3 · Score and outcome primitives — done (third attempt)
+- **gate:** mechanical — `npm run lint` 0 errors (38 pre-existing warnings,
+  none in the changed files), `npx tsc --noEmit` clean, `npm test` 93 passed.
+  `rls-boundary-reviewer` — ran (two `*-server.ts` files entered the diff under
+  the amended criterion); nothing regressed. Each loader has exactly one hunk,
+  dropping only the `.replaceAll`; the `cache()` wrapper, every `.select()`,
+  filter and `.order()`, and the workspace scoping are untouched and absent
+  from the diff. `buildScoreString` keeps its guard and its `""` on a malformed
+  score. The three new files are directive-free and pure.
+  `pipeline-guardrails-reviewer` — ran; no new findings. The wizard is clean
+  again (`validateSetScore` byte-for-byte unchanged, only string literals
+  moved; `PinnedMatchContent` display-only, not wired to `job-request.ts`). It
+  traced digit orientation through `transformDbMatch` and confirmed
+  `tiebreakOf()` is symmetric on winner/loser rather than on the viewer, which
+  is what keeps the digit on the correct row. Its earlier finding was
+  sanctioned by the author and is now criterion 9.
+  `task-completion-reviewer` — **`VERDICT: pass`**, all nine criteria. It swept
+  every remaining en dash in `src/` and confirmed each is a different quantity
+  — team scores, win-loss records, shot ranges, 0–100 composites, date ranges,
+  placeholder dashes — not a set score.
+- **changed:** one score/outcome vocabulary now, defined in
+  `src/lib/ui/score-format.ts` (`GAME_SEPARATOR`, `SET_JOINER`, `tiebreakOf`,
+  `formatScoreText`, `scoreSetsFrom`) with `<ScoreLine>` and `<ResultMark>` as
+  the renderers. Six private formatters are gone. `match-summary-row` imports
+  the rule and keeps its boxed layout. `/dashboard/opponents/[programId]` picks
+  up the canonical spelling for free — `opponents-server.ts` has an empty diff.
+- **the two author decisions this attempt encodes:** criterion 6 now permits a
+  loader *call-site* edit (no query, column, shape or logic), which is what
+  made the three-line spelling fix reachable at all; and the superscript stays
+  ungated on game count, so a super-tiebreak stored `1-0` with the loser's `8`
+  renders `1⁸` — the shared rule's long-standing behaviour on every surface.
+- **orphans, reported not deleted:** `resultInk()` (`match-analysis.ts:244`),
+  `formatScore()` (`schedule/format.ts`), and the `tiebreak?: boolean` field,
+  which lost its last reader but is still written by loaders.
+- **noted, outside this task:** `performance-server.ts:448` has its own score
+  formatter. It already matches the canonical spelling and never renders
+  tiebreaks, so it breaks no criterion, but it is a seventh place that formats
+  a score.

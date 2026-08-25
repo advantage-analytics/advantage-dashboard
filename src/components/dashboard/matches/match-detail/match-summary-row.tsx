@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { formatPlayerStyle, formatScoreboardStatus } from "@/lib/data/match-utils";
 import type { Match, Player, SetScore } from "@/lib/data/types";
+import { tiebreakOf } from "@/lib/ui/score-format";
 import { cn } from "@/lib/utils";
 
 interface MatchSummaryRowProps {
@@ -216,15 +217,23 @@ function PlayerRow({
           const mine = set[mineKey];
           const theirs = set[theirsKey];
           const setWon = mine > theirs;
-          const theirTiebreak =
-            mineKey === "player1" ? set.player2Tiebreak : set.player1Tiebreak;
-          const isTiebreakSet = set.tiebreak && mine === 7 && theirs === 6;
-          const showTiebreak = isTiebreakSet && setWon && theirTiebreak != null;
+          /* Which side holds the tiebreak digit is NOT decided here — it is
+             `tiebreakOf`, the same rule `<ScoreLine>` prints "6-7³" with. What
+             is local to this scoreboard is the layout: each player gets their
+             own row showing only their own games, so the digit hangs off the
+             row that WON the set, because that is the row showing the 7. */
+          const tiebreak = tiebreakOf({
+            player1: mine,
+            player2: theirs,
+            player1Tiebreak: set[`${mineKey}Tiebreak`],
+            player2Tiebreak: set[`${theirsKey}Tiebreak`],
+          });
+          const showTiebreak = setWon && tiebreak !== null;
           return (
             <span
               key={i}
               aria-label={`Set ${i + 1}: ${mine}${
-                showTiebreak ? ` tiebreak ${theirTiebreak}` : ""
+                showTiebreak ? ` tiebreak ${tiebreak}` : ""
               }`}
               className={cn(
                 "flex h-6 w-10 items-baseline justify-center gap-0.5 text-[18px] leading-6 tracking-[-0.3px] tabular-nums",
@@ -239,7 +248,7 @@ function PlayerRow({
                   aria-hidden="true"
                   className="text-[10px] font-medium text-[var(--color-text-dim)] leading-none relative -top-2.5"
                 >
-                  {theirTiebreak}
+                  {tiebreak}
                 </span>
               )}
             </span>

@@ -50,8 +50,21 @@ export interface EntryMatch {
    * and "Analyzing" on the match page are the same claim about the same job.
    */
   status: AnalysisStatus;
-  /** Game counts. `player1` is always our side. A 7-6 set is 7 here, not the tiebreak. */
-  score: { player1: number[]; player2: number[] } | null;
+  /**
+   * Game counts. `player1` is always our side. A 7-6 set is 7 here, not the
+   * tiebreak.
+   *
+   * The tiebreak POINTS ride along in the same `matches.score` JSONB — the
+   * loader selects the whole column and hands it over untouched — and are
+   * stored against whoever LOST the set. Optional because a match scored before
+   * the tiebreak cells existed has neither array.
+   */
+  score: {
+    player1: number[];
+    player2: number[];
+    player1_tiebreaks?: (number | null)[];
+    player2_tiebreaks?: (number | null)[];
+  } | null;
   opponentLabels: string[];
   /** Has a processing job, i.e. video was actually sent. */
   hasVideo: boolean;

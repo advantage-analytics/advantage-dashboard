@@ -329,7 +329,7 @@ export function formatHoursMinutes(seconds: number): string {
 
 /**
  * Validate a single set's score pair against standard tennis rules.
- * Allowed completed sets: 6–0..6–4, 7–5, 7–6, and the mirror images.
+ * Allowed completed sets: 6-0..6-4, 7-5, 7-6, and the mirror images.
  * Returns null when the set is empty/incomplete (no error to show yet).
  */
 export function validateSetScore(
@@ -345,15 +345,15 @@ export function validateSetScore(
   // Valid completed combinations
   if (hi === 6 && lo <= 4) return { kind: "ok" };
   if (hi === 7 && (lo === 5 || lo === 6)) return { kind: "ok" };
-  // In-progress (e.g. 4–3, 5–5) — accept as incomplete, not invalid
+  // In-progress (e.g. 4-3, 5-5) — accept as incomplete, not invalid
   if (hi <= 6 && lo <= 6 && !(hi === 6 && lo === 5) && !(hi === 6 && lo === 6)) {
     if (hi < 6) return { kind: "incomplete" };
   }
-  // 6–5, 6–6 are transitional but not final scores
+  // 6-5, 6-6 are transitional but not final scores
   if ((hi === 6 && lo === 5) || (hi === 6 && lo === 6)) {
     return { kind: "incomplete" };
   }
-  return { kind: "invalid", message: "Set must end 6–0..6–4, 7–5, or 7–6." };
+  return { kind: "invalid", message: "Set must end 6-0..6-4, 7-5, or 7-6." };
 }
 
 /**

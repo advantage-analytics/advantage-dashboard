@@ -45,7 +45,25 @@ export interface DisplayMatch {
    */
   analysis?: MatchAnalysis;
   score: {
-    sets: { player1: number; player2: number; tiebreak?: boolean }[];
+    /**
+     * The two `*Tiebreak` numbers are the POINTS, and they sit on whoever LOST
+     * the set — the encoding every writer in the app uses. `tiebreakOf()` in
+     * `@/lib/ui/score-format` is the one place that knows which of the pair a
+     * given surface raises; `<ScoreLine>` and the match page's boxed scoreboard
+     * both call it rather than restating it.
+     *
+     * `tiebreak` is the older boolean "was this set decided in one". Nothing
+     * reads it any more — a boolean cannot be rendered as `6-7³` — but it is
+     * still written here and in `match-detail-server.ts`, so retiring it is a
+     * loader change and not this one.
+     */
+    sets: {
+      player1: number;
+      player2: number;
+      tiebreak?: boolean;
+      player1Tiebreak?: number | null;
+      player2Tiebreak?: number | null;
+    }[];
     winner: "player1" | "player2";
   };
 }
@@ -75,6 +93,10 @@ export function transformDbMatch(
     tiebreak:
       (row.score?.player1_tiebreaks?.[i] ?? 0) > 0 ||
       (row.score?.player2_tiebreaks?.[i] ?? 0) > 0,
+    // The points themselves, carried through rather than reduced to the flag
+    // above: the list row prints them as the superscript in "6-7³".
+    player1Tiebreak: row.score?.player1_tiebreaks?.[i] ?? null,
+    player2Tiebreak: row.score?.player2_tiebreaks?.[i] ?? null,
   }));
 
   let p1Sets = 0;

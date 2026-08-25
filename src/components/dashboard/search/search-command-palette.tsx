@@ -16,6 +16,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { ScoreLine } from "@/components/dashboard/score-line";
+import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
 import { createClient } from "@/lib/supabase/client";
 
 // --- Types ---
@@ -24,7 +26,8 @@ interface MatchResult {
   id: string;
   opponentName: string;
   tournamentName: string;
-  score: string;
+  /** Sets, already turned the viewer's way round — not a formatted string. */
+  score: ScoreLineSet[];
   date: string;
   isWin: boolean;
 }
@@ -62,16 +65,6 @@ function formatShortDate(isoDate: string): string {
   } catch {
     return isoDate;
   }
-}
-
-function formatScore(
-  score: { player1: number[]; player2: number[] } | null,
-  isUserPlayer1: boolean
-): string {
-  if (!score?.player1?.length || !score?.player2?.length) return "";
-  const user = isUserPlayer1 ? score.player1 : score.player2;
-  const opp = isUserPlayer1 ? score.player2 : score.player1;
-  return user.map((s, i) => `${s}-${opp[i] ?? 0}`).join(", ");
 }
 
 function didUserWin(
@@ -219,7 +212,9 @@ export function SearchCommandPalette({
           id: m.id,
           opponentName: isP1 ? m.player2_name : m.player1_name,
           tournamentName: m.tournament_name ?? "Unknown event",
-          score: formatScore(m.score, isP1),
+          // `swap` when the viewer is stored as player2, so the row reads from
+          // their side — game counts and tiebreaks flipped together.
+          score: scoreSetsFrom(m.score, { swap: !isP1 }),
           date: formatShortDate(m.date),
           isWin: didUserWin(m.score, isP1),
         };
@@ -528,7 +523,7 @@ export function SearchCommandPalette({
                             <span className="text-[12px] text-[#888888]">
                               {match.tournamentName}
                               <span className="text-[#CCCCCC] mx-1">&middot;</span>
-                              <span className="tabular-nums">{match.score}</span>
+                              <ScoreLine sets={match.score} />
                               <span className="text-[#CCCCCC] mx-1">&middot;</span>
                               {match.date}
                             </span>

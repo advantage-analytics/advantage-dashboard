@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Check, CornerDownRight, Layers, Search } from "lucide-react";
 import { normalizedPersonName } from "@/lib/data/person-name";
+import { formatScoreText, scoreSetsFrom } from "@/lib/ui/score-format";
 import type { EventPreset } from "./types";
 
 /**
@@ -223,9 +224,9 @@ function PinnedLine({ preset }: { preset: EventPreset }) {
       ? [
           {
             label: "Score",
-            value: preset.score.player1
-              .map((game, index) => `${game}–${preset.score?.player2[index] ?? 0}`)
-              .join(" "),
+            // The one spelling, from `@/lib/ui/score-format` — this line used
+            // to hand-roll a sixth ("6–4 6–2", en dash, space-joined).
+            value: formatScoreText(scoreSetsFrom(preset.score)),
           },
         ]
       : []),

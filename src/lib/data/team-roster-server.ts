@@ -364,10 +364,7 @@ export const getRosterData = cache(async function getRosterData(
               (latest.isPlayer1 ? latest.match.player2_name : latest.match.player1_name) ??
                 "Unknown"
             ),
-            score: buildScoreString(latest.match.score, latest.isPlayer1).replaceAll(
-              " ",
-              ", "
-            ),
+            score: buildScoreString(latest.match.score, latest.isPlayer1),
             won: latest.won,
             date: latest.match.date ? shortDate(latest.match.date) : "",
           }

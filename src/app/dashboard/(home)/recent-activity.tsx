@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import RecentMatches from "@/components/dashboard/home/recent-matches";
 import { createClient } from "@/lib/supabase/client";
+import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
 
 type ToastState =
   | { kind: "idle" }
@@ -86,7 +87,13 @@ export interface EventGroup {
 export interface MatchRow {
   id: string;
   opponentName: string;
-  score: string;
+  /**
+   * Sets, already turned the viewer's way round — not a formatted string. The
+   * rail used to carry "6-4 6-2" from a private formatter here, which is how
+   * the home page ended up spelling scores differently from the matches list.
+   * `<ScoreLine>` owns the spelling now; this row only owns the orientation.
+   */
+  score: ScoreLineSet[];
   won: boolean;
   firstServePct: number | null;
   winners: number | null;
@@ -121,16 +128,6 @@ function formatDisplayDate(isoDate: string): string {
   } catch {
     return isoDate;
   }
-}
-
-function buildScoreString(
-  score: DbMatch["score"],
-  isUserPlayer1: boolean
-): string {
-  if (!score?.player1?.length || !score?.player2?.length) return "";
-  const userScores = isUserPlayer1 ? score.player1 : score.player2;
-  const oppScores = isUserPlayer1 ? score.player2 : score.player1;
-  return userScores.map((s, i) => `${s}-${oppScores[i] ?? 0}`).join(" ");
 }
 
 function didUserWin(
@@ -185,7 +182,9 @@ function groupMatchesIntoEvents(
       mapped.push({
         id: m.id,
         opponentName: opponent,
-        score: buildScoreString(m.score, isUserPlayer1),
+        // `swap` when the viewer is stored as player2, so the row reads from
+        // their side — game counts and tiebreaks flipped together.
+        score: scoreSetsFrom(m.score, { swap: !isUserPlayer1 }),
         won: didUserWin(m.score, isUserPlayer1),
         firstServePct: stat ? Math.round(parseFloat(stat.first_serve_pct ?? "0")) : null,
         winners: stat?.winners ?? null,

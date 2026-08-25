@@ -5,10 +5,12 @@ import Link from "next/link";
 import { advButton } from "@/lib/ui/adv-button";
 import { Badge } from "@/components/ui/badge";
 import { StatusChip } from "@/components/ui/status-chip";
+import { ScoreLine } from "@/components/dashboard/score-line";
+import { scoreSetsFrom } from "@/lib/ui/score-format";
 import { EventShell } from "@/components/dashboard/schedule/event-shell";
 import { SingleScoreEntry } from "@/components/dashboard/schedule/single-score-entry";
 import { matchWon } from "@/lib/schedule/entry-state";
-import { formatEventDay, formatScore } from "@/lib/schedule/format";
+import { formatEventDay } from "@/lib/schedule/format";
 import { isAnalysisFailed, isAnalysisReady, isInFlight, isWorking } from "@/lib/data/match-analysis";
 import type { TeamSingleMatch } from "@/lib/data/single-match-server";
 
@@ -40,7 +42,12 @@ export function SingleDetail({
     opponentLabels: [],
     hasVideo: match.hasVideo,
   });
-  const scored = formatScore(match.score?.player1, match.score?.player2);
+  // Doubles as this page's "has anyone recorded a result yet" test, which is
+  // what the old score STRING was silently doing — an empty string meant an
+  // unplayed line. Empty sets say the same thing without a formatter deciding
+  // it.
+  const sets = scoreSetsFrom(match.score);
+  const scored = sets.length > 0;
   const ready = isAnalysisReady(match.status) && match.hasVideo;
   const working = isWorking(match.status);
   const waiting = match.hasVideo && isInFlight(match.status) && !working;
@@ -98,12 +105,11 @@ export function SingleDetail({
 
         {scored ? (
           <div className="flex shrink-0 flex-col items-end gap-2.5">
-            <span
+            <ScoreLine
+              sets={sets}
               className="tabular text-[40px] font-light leading-[40px]"
               style={{ color: "var(--ink-900)" }}
-            >
-              {scored}
-            </span>
+            />
             {ready ? (
               <Link
                 href={`/dashboard/matches/${match.id}`}

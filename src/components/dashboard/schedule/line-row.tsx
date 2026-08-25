@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
 import { StatusChip } from "@/components/ui/status-chip";
+import { ResultMark } from "@/components/dashboard/result-mark";
+import { ScoreLine } from "@/components/dashboard/score-line";
+import { scoreSetsFrom } from "@/lib/ui/score-format";
 import { ScoreEntry } from "@/components/dashboard/schedule/score-entry";
 import { RowAction } from "@/components/dashboard/schedule/row-action";
 import {
@@ -12,7 +14,6 @@ import {
   matchWon,
   supportsVideo,
 } from "@/lib/schedule/entry-state";
-import { formatScore } from "@/lib/schedule/format";
 import type { EntryMatch, EventEntry } from "@/lib/schedule/types";
 
 /**
@@ -77,11 +78,11 @@ export function LineRow({
         {label}
       </span>
 
-      <span>
-        {won === null ? null : (
-          <Badge variant={won ? "win" : "loss"}>{won ? "Won" : "Lost"}</Badge>
-        )}
-      </span>
+      {/* Round 44: the glyph, not the word. This row already spells the outcome
+          a second way in the d./f. verb beside the matchup, and it has no
+          Result header to read a badge against — one outcome vocabulary per row
+          shape. "Won"/"Lost" survives as the mark's accessible name. */}
+      <span>{won === null ? null : <ResultMark won={won} />}</span>
 
       <span className="min-w-0 truncate text-[13px] text-[var(--ink-900)]">
         {ourLabel || "—"}{" "}
@@ -94,12 +95,11 @@ export function LineRow({
         ) : null}
       </span>
 
-      <span
+      <ScoreLine
+        sets={match ? scoreSetsFrom(match.score) : []}
         className="tabular text-right text-[13px]"
         style={{ color: "var(--ink-900)" }}
-      >
-        {match ? formatScore(match.score?.player1, match.score?.player2) : ""}
-      </span>
+      />
 
       <span className="flex justify-end text-right">
         <Action
