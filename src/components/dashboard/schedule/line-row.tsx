@@ -14,6 +14,7 @@ import {
   matchWon,
   supportsVideo,
 } from "@/lib/schedule/entry-state";
+import { LINE_STATUS } from "@/lib/schedule/line-status";
 import type { EntryMatch, EventEntry } from "@/lib/schedule/types";
 
 /**
@@ -141,22 +142,16 @@ function Action({
     );
   }
 
-  if (state === "working") {
+  // The waiting states — working, waiting, failed — and their words come from
+  // `LINE_STATUS`, which the dual sheet on Team Home reads too. The words are
+  // not retyped here.
+  const status = LINE_STATUS[state];
+  if (status) {
     return (
-      <StatusChip tone="blue" live>
-        Analyzing
+      <StatusChip tone={status.tone} live={status.live}>
+        {status.label}
       </StatusChip>
     );
-  }
-
-  if (state === "waiting") {
-    // Blue, but not pulsing — the same distinction isWorking draws. Something
-    // is queued, nothing is moving.
-    return <StatusChip tone="blue">In line</StatusChip>;
-  }
-
-  if (state === "failed") {
-    return <StatusChip tone="loss">Analysis failed</StatusChip>;
   }
 
   if (state === "ready" && match) {

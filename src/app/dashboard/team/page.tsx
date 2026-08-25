@@ -11,6 +11,7 @@ import { isAnalysisReady, isWorking } from "@/lib/data/match-analysis";
 import { advButton } from "@/lib/ui/adv-button";
 import { UsageFooter } from "@/components/dashboard/team/usage-footer";
 import { FirstSteps } from "@/components/dashboard/team/first-steps";
+import { DualSheet } from "@/components/dashboard/team/dual-sheet";
 import { MatchRows } from "@/components/dashboard/team/match-rows";
 
 /**
@@ -53,7 +54,7 @@ export default async function TeamHomePage() {
   if (active.kind !== "team") redirect("/dashboard");
 
   const billingMonth = currentBillingMonth();
-  const { usage, matches, roster, nextEvent, playersCanUpload } =
+  const { usage, matches, roster, nextEvent, weekendDual, playersCanUpload } =
     await getTeamHomeData(active.id, billingMonth);
 
   // Roster facts and the setup checklist are staff business. A player reaches
@@ -172,6 +173,16 @@ export default async function TeamHomePage() {
             nowMs={now.getTime()}
           />
         )}
+
+        {/* Above the matches list, and outside its `!empty` gate: a program's
+            first dual is on the schedule before anybody has played it, so the
+            sheet has something to say on a page with no rows in it yet. It is
+            not part of the frame either — most weeks there is no dual in range
+            and `weekendDual` is null, in which case nothing renders here at
+            all. Not staff-only: a player's lines are on this card, and the same
+            `program_events` policy that lets them read the schedule page is
+            what put it there. */}
+        {weekendDual && <DualSheet dual={weekendDual} />}
 
         {!empty && (
           <>

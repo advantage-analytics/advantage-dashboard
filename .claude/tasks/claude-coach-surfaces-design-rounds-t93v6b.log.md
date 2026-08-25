@@ -555,3 +555,41 @@ is the runner's. Newest entries at the bottom.
   words. The reviewer accepted it as narrowly contained — but noted it does not
   rescue criterion 6, since `single-detail.tsx` duplicates the tones and the
   `live` flag too.
+
+## T9 · This weekend — the dual sheet — done (third attempt)
+- **gate:** mechanical — `npm run lint` 0 errors (38 pre-existing warnings),
+  `npx tsc --noEmit` clean, `npm test` 93 passed.
+  `pipeline-guardrails-reviewer` — no findings. It verified all four states on
+  `single-detail.tsx` word-for-word against their prior inline versions and
+  checked the detail the equivalence turns on: `StatusChip` destructures
+  `live = false`, so `undefined` hits the same default an omitted prop would
+  and no chip can start pulsing that did not before.
+  `rls-boundary-reviewer` — not re-run for the last two passes: nothing under
+  `src/lib/data/` changed since the revision it cleared, and extracting strings
+  has no query, column or shape implication. Its clearance of the loader work
+  stands and is recorded above.
+  `task-completion-reviewer` — **`VERDICT: pass`**, all seven criteria. It
+  confirmed the `live` default by direct read rather than inference, checked
+  the `ready` branch byte-identical against `git show HEAD`, and walked the
+  nested ternary to confirm the `else` is still reachable only via `waiting`
+  and no branch renders `null` where a chip rendered before.
+- **changed:** Team Home gains a "This weekend" card above the matches list —
+  the dual's lines in position order, each with its players and either a
+  ResultMark and score or a status chip, under a tally and a clinch note. It
+  reuses `getEventDetail` and `dualScore` rather than assembling a dual a
+  second way, and adds no query: T2's existing `program_events` read was
+  widened instead.
+- **and one vocabulary now has one home.** `src/lib/schedule/line-status.ts`
+  holds the words, tones and pulse for a line's waiting states;
+  `line-row.tsx`, `dual-sheet.tsx` and `single-detail.tsx` all read it. Before
+  this, three surfaces spelled "Analyzing", "In line" and "Analysis failed"
+  into their own JSX. `single-detail.tsx`'s `ready` branch keeps its own
+  wording and its own state model deliberately — it has no key in the map and
+  says something the other surfaces never say.
+- **what the three attempts cost, and why:** the first was blocked on the
+  duplicated words, which the guardrails reviewer found and I had wrongly told
+  it were already shared. The second extracted them but left a third file
+  spelling them; I expected that to be my criterion overreaching and it was
+  not — the reviewer showed three of that file's four branches could read the
+  map with no behaviour change. Only the third attempt was a straightforward
+  finish. Two of the three blocks were real defects; one was mine.

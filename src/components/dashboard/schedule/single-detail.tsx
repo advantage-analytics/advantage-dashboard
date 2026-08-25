@@ -10,6 +10,7 @@ import { scoreSetsFrom } from "@/lib/ui/score-format";
 import { EventShell } from "@/components/dashboard/schedule/event-shell";
 import { SingleScoreEntry } from "@/components/dashboard/schedule/single-score-entry";
 import { matchWon } from "@/lib/schedule/entry-state";
+import { LINE_STATUS, type LineStatus } from "@/lib/schedule/line-status";
 import { formatEventDay } from "@/lib/schedule/format";
 import { isAnalysisFailed, isAnalysisReady, isInFlight, isWorking } from "@/lib/data/match-analysis";
 import type { TeamSingleMatch } from "@/lib/data/single-match-server";
@@ -125,7 +126,7 @@ export function SingleDetail({
       {ready || working || waiting || failed ? (
         <div className="mt-[26px] flex items-center gap-2 border-t border-[var(--border-hairline)] pt-3.5">
           {failed ? (
-            <StatusChip tone="loss">Analysis failed</StatusChip>
+            <WaitingChip status={LINE_STATUS.failed} />
           ) : ready ? (
             // "Analysis ready" and nothing more. 25j says "confidence high",
             // but the five quality scores the vendor returns sit unqueryable in
@@ -133,11 +134,9 @@ export function SingleDetail({
             // report — printing one would be the page making it up.
             <StatusChip tone="win">Analysis ready</StatusChip>
           ) : working ? (
-            <StatusChip tone="blue" live>
-              Analyzing
-            </StatusChip>
+            <WaitingChip status={LINE_STATUS.working} />
           ) : (
-            <StatusChip tone="blue">In line</StatusChip>
+            <WaitingChip status={LINE_STATUS.waiting} />
           )}
         </div>
       ) : null}
@@ -222,6 +221,31 @@ export function SingleDetail({
         </p>
       ) : null}
     </EventShell>
+  );
+}
+
+/**
+ * One of the three waiting chips, in the words `LINE_STATUS` keeps.
+ *
+ * This page derives its states from the `match-analysis` predicates rather than
+ * from `EntryState` — it is one match, not a line in an event — but the three
+ * waiting states it lands on are the same three the event page's rows and Team
+ * Home's dual sheet show, so the word, the tone and the pulse come from the
+ * same map they read instead of being typed here a third time. `ready` has no
+ * entry: what this page says once a report exists is its own (above).
+ *
+ * The map is `Partial<Record<EntryState, …>>`, so a lookup is optional at the
+ * type level. A missing entry renders nothing at all rather than a stand-in
+ * word — a chip with the wrong word is a coach told the wrong thing about a
+ * job, which is the failure the shared map exists to prevent.
+ */
+function WaitingChip({ status }: { status: LineStatus | undefined }) {
+  if (!status) return null;
+
+  return (
+    <StatusChip tone={status.tone} live={status.live}>
+      {status.label}
+    </StatusChip>
   );
 }
 

@@ -14,6 +14,16 @@ import {
   type MatchScore,
 } from "@/lib/data/match-utils";
 import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
+import { getEventDetail } from "@/lib/data/schedule-server";
+import {
+  dualScore,
+  entryPlayed,
+  entryState,
+  matchState,
+  matchWon,
+  type EntryState,
+} from "@/lib/schedule/entry-state";
+import type { EventEntry, EventSite } from "@/lib/schedule/types";
 import { INVITE_TTL_HOURS } from "@/lib/services/programs/tokens";
 
 /**
@@ -42,6 +52,17 @@ const RECENT_MATCH_LIMIT = 6;
 const EXPIRING_SOON_DAYS = 7;
 
 /**
+ * How far down the schedule the events read goes.
+ *
+ * It answers two questions off one list — the next event, and this week's dual
+ * — and the rows are ordered by start date from this week's Monday, so the
+ * only way the limit could hide the next event is a program that has already
+ * finished a dozen events since Monday. Twelve rather than one, and nowhere
+ * near the whole season.
+ */
+const EVENT_WINDOW = 12;
+
+/**
  * Today as YYYY-MM-DD in the reader's own reckoning.
  *
  * `program_events.starts_on` and `ends_on` are dates, not instants, so the
@@ -53,6 +74,30 @@ function localDay(now: Date): string {
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   return `${now.getFullYear()}-${month}-${day}`;
+}
+
+/**
+ * The week `now` falls in, Monday to Sunday, in the reader's own reckoning.
+ *
+ * **Monday-start, and that is the whole point.** A dual is played on a Friday or
+ * a Saturday and read about for the rest of the weekend; under the US
+ * Sunday-start week, Saturday's dual falls into *last* week the moment Sunday
+ * begins, and the sheet naming it would vanish overnight while the coach was
+ * still looking for it. Monday-start keeps Friday, Saturday and Sunday on one
+ * side of the boundary, which is what makes "this weekend" a single object.
+ *
+ * Both ends are YYYY-MM-DD because `program_events.starts_on` is a date, not an
+ * instant — the same reason `localDay` exists.
+ */
+function weekBounds(now: Date): { start: string; end: string } {
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // getDay() is 0 for Sunday, so Sunday is six days into a Monday-start week.
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+
+  return { start: localDay(start), end: localDay(end) };
 }
 
 export interface TeamMatchRow {
@@ -115,6 +160,88 @@ export interface TeamNextEvent {
   startsOn: string;
 }
 
+/**
+ * One line of the dual sheet — a court, who stood on it, and how it went.
+ *
+ * **`player1` is our side, and nothing here asks a second time.** Every row on
+ * this card is by definition a line off this program's schedule, and
+ * `lib/schedule/entry-state.ts` states the convention the whole schedule is
+ * read under: a match tied to an entry has us in `player1`. So the sets are
+ * taken unswapped and `won` comes from the shared `matchWon`, which counts
+ * `score.player1` as ours. `programSide()` above answers the same question for
+ * the matches list, where a row may be nobody's line and the answer can be
+ * genuinely unknown; here it cannot, so a third rule would only be a chance to
+ * disagree with the two that exist.
+ *
+ * `won` is still nullable, for the two silences that survive that convention:
+ * no score recorded, and a score that decides nothing. Both render without a
+ * `<ResultMark>` — a glyph on the wrong side of a line is the silent wrong
+ * result `docs/ui-revamp-guardrails.md` exists to prevent.
+ */
+export interface DualSheetLine {
+  /** The entry's id. The line is the thing that persists; a match may not exist. */
+  id: string;
+  /** "S1"…"S6", "D1"…"D3". */
+  slot: string;
+  /** "Reid", or "Brooks / Reid" on a doubles line. */
+  ours: string;
+  theirs: string;
+  /** Empty when nobody has recorded a score — the row shows its state instead. */
+  sets: ScoreLineSet[];
+  won: boolean | null;
+  /** What this line is waiting for, in the schedule's own vocabulary. */
+  state: EntryState;
+  /** The match to read a report on — set only where analysis produced one. */
+  reportId: string | null;
+}
+
+/**
+ * This week's dual, as the home page's sheet.
+ *
+ * Assembled from `getEventDetail()` — the same loader the event page reads
+ * through — rather than from a second query set of its own. Everything counted
+ * here is counted by `lib/schedule/entry-state.ts`: a dual's team score is
+ * never stored, because a stored one stops agreeing with the lines above it the
+ * first time a result is corrected.
+ */
+export interface WeekendDual {
+  id: string;
+  /** The opponent school. `program_events.name` is the opponent on a dual. */
+  opponent: string;
+  site: EventSite;
+  surface: string | null;
+  /** YYYY-MM-DD. */
+  startsOn: string;
+  /** Position order: S1–S6, then D1–D3. */
+  lines: DualSheetLine[];
+  /** Team points, from `dualScore` — six singles and one doubles point. */
+  us: number;
+  them: number;
+  /**
+   * Every line is in.
+   *
+   * The same rule `getScheduleRows` prints a team score under, and it is here
+   * for the same reason: a partial tally presented as a final one is a result
+   * the page invented. The card shows its running tally either way — it is a
+   * live sheet — and says "final" only when this is true.
+   */
+  decided: boolean;
+  /** Lines with a decided match under them, for "3 of 9 in". */
+  playedLines: number;
+  /** The tally's two halves, and they add up to it — see `dualBreakdown`. */
+  singles: { us: number; them: number };
+  doubles: { us: number; them: number };
+  /**
+   * Who has taken more points than the dual has left to give, or null.
+   *
+   * Named only when the lines actually clinch it: a majority of the points this
+   * dual can award, which for a full nine-line dual is 4 of 7. Never inferred
+   * from `decided` — a dual can be over without either side having clinched
+   * (an abandoned card), and clinched long before it is over.
+   */
+  clinchedBy: "us" | "them" | null;
+}
+
 export interface RosterProgress {
   /** Players who have accepted. */
   joined: number;
@@ -132,6 +259,12 @@ export interface TeamHomeData {
   roster: RosterProgress;
   /** Null when the program has nothing on the schedule from today onwards. */
   nextEvent: TeamNextEvent | null;
+  /**
+   * This week's dual, or null — and null is the common case. The card that
+   * renders this renders nothing at all when it is null: no empty sheet, no
+   * placeholder, no line explaining that there is no dual.
+   */
+  weekendDual: WeekendDual | null;
   /**
    * The program's upload permission, carried here because it decides whether a
    * player sees a New match control at all. Read from the same row Settings ›
@@ -221,6 +354,162 @@ function programSide(
 }
 
 /**
+ * One discipline's lines, in position order, labelled the way the event page
+ * labels them.
+ *
+ * `entry.slot ?? prefix + n` is `dual-detail.tsx`'s own fallback, kept so a
+ * line missing its slot is called the same thing on both screens. `matches[0]`
+ * is likewise the dual's shape rather than a shortcut: a dual line holds one
+ * match, where a tournament entry holds a whole run.
+ */
+function dualLines(
+  entries: EventEntry[],
+  discipline: "singles" | "doubles",
+  prefix: "S" | "D"
+): DualSheetLine[] {
+  return entries
+    .filter((entry) => entry.discipline === discipline)
+    .map((entry, index) => {
+      const match = entry.matches[0] ?? null;
+      // This row's own match where there is one. `entryState` is right only for
+      // the line nobody has recorded yet, which has no match to ask.
+      const state = match ? matchState(match) : entryState(entry);
+
+      return {
+        id: entry.id,
+        slot: entry.slot ?? `${prefix}${index + 1}`,
+        ours: entry.playerLabels.join(" / "),
+        // The match's opponent where it was recorded — a lineup can be written
+        // days before anyone knows who they are actually playing.
+        theirs:
+          match?.opponentLabels.join(" / ") || entry.opponentLabels.join(" / "),
+        // No `swap`. See `DualSheetLine` — on an entry line our side is
+        // `player1`, which is the convention the whole schedule is read under.
+        sets: scoreSetsFrom(match?.score),
+        won: match ? matchWon(match) : null,
+        state,
+        // A report exists only where analysis produced one. `matchState`
+        // returns "ready" for exactly that — analysis ready AND video actually
+        // sent — so a hand-scored line offers no link to a page of zeroes.
+        reportId: state === "ready" && match ? match.id : null,
+      };
+    });
+}
+
+/**
+ * The tally's two halves — and they add up to it.
+ *
+ * Both are `dualScore` over a subset, never a second counting rule: run over
+ * the singles alone it returns the singles points, and over the doubles alone
+ * it returns the one folded doubles point, so the two sum to `dualScore` over
+ * the whole card by construction. Counting doubles COURTS here instead would
+ * print "S 3–3 · D 1–2" beside a 4–3 that does not follow from it.
+ */
+function dualBreakdown(entries: EventEntry[]): {
+  singles: { us: number; them: number };
+  doubles: { us: number; them: number };
+} {
+  const singles = dualScore(
+    entries.filter((entry) => entry.discipline === "singles")
+  );
+  const doubles = dualScore(
+    entries.filter((entry) => entry.discipline === "doubles")
+  );
+
+  return {
+    singles: { us: singles.us, them: singles.them },
+    doubles: { us: doubles.us, them: doubles.them },
+  };
+}
+
+/**
+ * Which dual this week the sheet is about, or null.
+ *
+ * The next one first, then the one just played: on Thursday a coach is
+ * preparing for Saturday, and on Sunday morning they are reading Saturday's
+ * card. Rows arrive ordered by `starts_on` ascending and the query floor is
+ * this week's Monday, so "first from today onwards" and "the last one before
+ * that" are both reads off the front and back of the same list.
+ */
+function weekendDualRow<T extends { kind: string; starts_on: string }>(
+  events: T[],
+  week: { start: string; end: string },
+  today: string
+): T | null {
+  // Both ends tested here rather than leaning on the query's floor. That floor
+  // is on `ends_on`, and a dual's two dates are equal only because `createDual`
+  // writes them that way — a row that ever disagreed would put last week's dual
+  // under a card headed "this weekend". Dates are YYYY-MM-DD, so a string
+  // comparison IS a date comparison.
+  const duals = events.filter(
+    (event) =>
+      event.kind === "dual" &&
+      event.starts_on >= week.start &&
+      event.starts_on <= week.end
+  );
+  return duals.find((event) => event.starts_on >= today) ?? duals.at(-1) ?? null;
+}
+
+/**
+ * The dual sheet, through the event page's own loader.
+ *
+ * `getEventDetail` is `cache()`d, RLS-scoped and already refuses an event
+ * belonging to another program, so this adds a read of existing tables and no
+ * second way to assemble a dual. It runs only when there is a dual in range —
+ * on every other day of the season this costs nothing at all.
+ */
+async function loadWeekendDual(
+  programId: string,
+  eventId: string
+): Promise<WeekendDual | null> {
+  const detail = await getEventDetail(programId, eventId);
+  // A dual with no lines is not a sheet with nothing in it — it is not a sheet.
+  // `createDual` rolls the event back if its lines fail to write, so this is a
+  // shape the product does not produce; it renders nothing rather than a header
+  // over an empty list.
+  if (!detail || detail.entries.length === 0) return null;
+
+  const { event, entries } = detail;
+  const score = dualScore(entries);
+
+  // What this dual can award: one point per singles court, plus the single
+  // point the three doubles courts add up to. Read off the lines rather than
+  // assumed to be seven, because a card can be shortened.
+  const points =
+    entries.filter((entry) => entry.discipline === "singles").length +
+    (entries.some((entry) => entry.discipline === "doubles") ? 1 : 0);
+  const clinchedBy =
+    points === 0
+      ? null
+      : // Doubled rather than halved: a majority of an odd number of points is
+        // not an integer, and `us > points / 2` invites a rounding argument
+        // nobody should have to have about a dual score.
+        score.us * 2 > points
+        ? "us"
+        : score.them * 2 > points
+          ? "them"
+          : null;
+
+  return {
+    id: event.id,
+    opponent: event.name,
+    site: event.site,
+    surface: event.surface,
+    startsOn: event.startsOn,
+    lines: [
+      ...dualLines(entries, "singles", "S"),
+      ...dualLines(entries, "doubles", "D"),
+    ],
+    us: score.us,
+    them: score.them,
+    decided: score.decided,
+    playedLines: entries.filter(entryPlayed).length,
+    ...dualBreakdown(entries),
+    clinchedBy,
+  };
+}
+
+/**
  * Player invites, seen from the home page.
  *
  * Counts players only. Staff invites are a different question with a different
@@ -262,6 +551,13 @@ export async function getTeamHomeData(
 ): Promise<TeamHomeData> {
   const supabase = await createClient();
 
+  // One clock for the whole read. The greeting, the schedule window and the
+  // dual sheet all have to agree about what day it is, and a request that
+  // straddles midnight would otherwise answer two different questions.
+  const now = new Date();
+  const today = localDay(now);
+  const week = weekBounds(now);
+
   const [usage, team, { data: rows }, { data: eventRows }, { data: rosterRows }] =
     await Promise.all([
       getProgramUsage(programId, billingMonth),
@@ -282,13 +578,23 @@ export async function getTeamHomeData(
       // the next thing on the schedule on Saturday morning. The same policy the
       // schedule page reads under, on the same table — this adds a read, not a
       // source of truth.
+      //
+      // The floor is this week's MONDAY rather than today, and the limit is a
+      // handful of rows rather than one, because two questions are answered
+      // from this one query: the next event (T2's checklist card) and this
+      // week's dual (the sheet). The second needs the days already elapsed —
+      // Saturday's dual is still the weekend's story on Sunday — and both read
+      // off the same ascending list, so widening the window costs no round
+      // trip. `nextEvent` is unchanged by it: taking the first row whose
+      // `ends_on` has not passed reproduces exactly what `.gte("ends_on",
+      // today).limit(1)` returned.
       supabase
         .from("program_events")
-        .select("id, name, starts_on")
+        .select("id, name, kind, starts_on, ends_on")
         .eq("program_id", programId)
-        .gte("ends_on", localDay(new Date()))
+        .gte("ends_on", week.start)
         .order("starts_on", { ascending: true })
-        .limit(1),
+        .limit(EVENT_WINDOW),
       // Every id that means "us" on a match row. The same SECURITY DEFINER
       // function Roster and the lineup builder read (`roster-server.ts`,
       // `team-roster-server.ts`) — not a second answer to who is on this team,
@@ -351,11 +657,24 @@ export async function getTeamHomeData(
     };
   });
 
-  const [nextEventRow] = (eventRows ?? []) as {
+  const events = (eventRows ?? []) as {
     id: string;
     name: string;
+    kind: string;
     starts_on: string;
+    ends_on: string;
   }[];
+
+  // Still "the soonest event the program has not finished yet" — the query's
+  // window now reaches back to Monday, so the test that used to be its
+  // `.gte("ends_on", today)` is made here instead, over the same ordering.
+  const nextEventRow = events.find((event) => event.ends_on >= today);
+
+  // Sequential, and it has to be: which dual to read is an answer from the
+  // query above. It is also the whole cost of this card — no dual in range,
+  // no read at all.
+  const dualRow = weekendDualRow(events, week, today);
+  const weekendDual = dualRow ? await loadWeekendDual(programId, dualRow.id) : null;
 
   return {
     usage,
@@ -372,6 +691,7 @@ export async function getTeamHomeData(
           startsOn: nextEventRow.starts_on,
         }
       : null,
+    weekendDual,
     playersCanUpload: team?.program.playersCanUpload ?? false,
   };
 }
