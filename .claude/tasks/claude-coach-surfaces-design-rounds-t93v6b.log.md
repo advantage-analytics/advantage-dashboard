@@ -725,3 +725,34 @@ is the runner's. Newest entries at the bottom.
      content is fluid and wrapping so it is unlikely to break visibly, but the
      implementer's blanket claim that every protected component's narrowest new
      container is wider than one it already renders in is not quite true here.
+
+## T12 · Team Home's day and week arithmetic is the server's, not the reader's — done
+- **gate:** 5a mechanical — `npm run lint` 0 errors / 38 pre-existing warnings;
+  `npx tsc --noEmit` exit 0, no stale-`.next` rerun needed; `npm test` 120 passed
+  (114 prior + 6 new). 5b `task-completion-reviewer` — `VERDICT: pass`; it
+  independently re-ran the new spec against the pre-change file and confirmed all
+  six fail there, so the test is not vacuous. 5c `rls-boundary-reviewer` ran
+  (`src/lib/data/` touched) and returned an explicit no-findings all-clear;
+  `pipeline-guardrails-reviewer` SKIPPED — the diff touches nothing under
+  `src/app/dashboard/`, `src/components/dashboard/` or the upload wizard.
+- **changed:** `localDay` and `weekBounds` now take an explicit `timeZone` and read
+  the day through `Intl.DateTimeFormat(...).formatToParts` instead of the local
+  date getters, which on Vercel silently read UTC while the comment claimed they
+  read the visitor's zone. A named `PROGRAM_TIME_ZONE = "UTC"` is passed at the
+  single call site in `getTeamHomeData`, matching how `usage-format.ts` and
+  `active-workspace-server.ts` pin their zone. Monday-start semantics are
+  unchanged; the ±6-day arithmetic moved onto a UTC-midnight anchor so no week
+  crosses a DST discontinuity and comes out six or eight days long. Both helpers
+  are now exported solely so `tests/team-home-week.spec.ts` (new, 6 tests) can pin
+  a zone — every component-side import of this module is `import type`, so the
+  exports create no runtime edge into a client bundle.
+- **not fixed, and deliberately:** pinning UTC makes the code honest, not correct.
+  A Pacific program's weekend dual sheet still leaves the page around 17:00 PT
+  Sunday. Closing that needs a `programs.timezone` column, which does not exist —
+  the task said to name the schema work rather than invent the column, and the
+  implementer took the other branch the task allowed: satisfy the four criteria
+  (all four are about honesty and explicitness, not per-program zones) and write
+  the residual cost into the code. `programs.state` was considered and rejected as
+  a substitute: Arizona keeps no DST and nine states straddle two zones. The two
+  helpers are now shaped so landing a real column is a one-line change from a
+  constant to a field. Worth queueing as a schema task.

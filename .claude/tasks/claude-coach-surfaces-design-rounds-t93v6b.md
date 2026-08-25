@@ -379,7 +379,7 @@ ready).
   page's layout, and T8–T10 all land inside the main column.
 
 ## T12 · Team Home's day and week arithmetic is the server's, not the reader's
-- **status:** todo
+- **status:** done
 - **files:** `src/lib/data/team-home-server.ts` (`localDay`, `weekBounds`, ~lines 85-120); a new or extended spec under `tests/`
 - **done when:**
   - [ ] `localDay()` and `weekBounds()` state which timezone they actually compute in, and the comments no longer claim "the reader's own reckoning" unless a zone is being passed in to make that true

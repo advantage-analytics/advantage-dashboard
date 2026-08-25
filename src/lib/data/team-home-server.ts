@@ -83,21 +83,58 @@ const EXPIRING_SOON_DAYS = 7;
 const EVENT_WINDOW = 12;
 
 /**
- * Today as YYYY-MM-DD in the reader's own reckoning.
+ * The zone Team Home does its calendar arithmetic in.
+ *
+ * Pinned, not inherited from the process. `usage-format.ts` and
+ * `active-workspace-server.ts` both pass `timeZone: "UTC"` for this reason: a
+ * day computed in whatever zone the runtime happens to sit in is one answer on
+ * a laptop and a different one on Vercel, and nothing on screen says which you
+ * are looking at.
+ *
+ * UTC is the honest constant here, NOT the right answer. The week turns over at
+ * midnight UTC, which is Sunday afternoon on the West Coast, so a Pacific
+ * program's weekend sheet still leaves the page while Sunday evening is going
+ * on — the same failure the Monday-start rule below exists to prevent, moved a
+ * few hours rather than fixed. Fixing it needs the PROGRAM's zone, and there is
+ * no `programs.timezone` column to read one from. `programs.state` is not a
+ * substitute: Arizona keeps no DST and nine states are split across two zones,
+ * so a state-to-zone table would be a guess wearing a schema's clothes. When
+ * that column lands, this constant becomes that field and both getters below
+ * already take it as an argument.
+ */
+const PROGRAM_TIME_ZONE = "UTC";
+
+/**
+ * The day `now` falls on in `timeZone`, as YYYY-MM-DD.
  *
  * `program_events.starts_on` and `ends_on` are dates, not instants, so the
- * comparison has to be made in the same units. `new Date().toISOString()` would
- * hand the query a UTC day, which for anyone west of Greenwich drops this
- * evening's dual off the schedule several hours early.
+ * comparison has to be made in the same units — and which day an instant falls
+ * on depends entirely on where the person asking is standing.
+ *
+ * This used to read the day off `now.getMonth()`/`getDate()` and call the
+ * result "the reader's own reckoning", arguing that it protected anyone west of
+ * Greenwich from `toISOString()`. It never did: those getters read the SERVER's
+ * zone, and on Vercel the server's zone is UTC, so they returned the very UTC
+ * day the comment said they were avoiding. The zone is an argument now, so the
+ * answer belongs to whoever the caller names and a test can name one.
+ *
+ * Exported for `tests/team-home-week.spec.ts` only — the page reads it through
+ * `getTeamHomeData` below.
  */
-function localDay(now: Date): string {
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${now.getFullYear()}-${month}-${day}`;
+export function localDay(now: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((piece) => piece.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
 /**
- * The week `now` falls in, Monday to Sunday, in the reader's own reckoning.
+ * The week `now` falls in, Monday to Sunday, as read in `timeZone`.
  *
  * **Monday-start, and that is the whole point.** A dual is played on a Friday or
  * a Saturday and read about for the rest of the weekend; under the US
@@ -106,18 +143,33 @@ function localDay(now: Date): string {
  * still looking for it. Monday-start keeps Friday, Saturday and Sunday on one
  * side of the boundary, which is what makes "this weekend" a single object.
  *
+ * Which instant "the moment Sunday begins" names is the zone's business, not
+ * the server's — see `PROGRAM_TIME_ZONE`, whose comment says what today's
+ * pinned value costs.
+ *
  * Both ends are YYYY-MM-DD because `program_events.starts_on` is a date, not an
  * instant — the same reason `localDay` exists.
+ *
+ * Exported for `tests/team-home-week.spec.ts` only, for the same reason
+ * `localDay` is: the zone this computes in is the thing worth pinning down.
  */
-function weekBounds(now: Date): { start: string; end: string } {
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  // getDay() is 0 for Sunday, so Sunday is six days into a Monday-start week.
-  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+export function weekBounds(now: Date, timeZone: string): { start: string; end: string } {
+  // Take the calendar day in `timeZone`, then step days on a UTC-midnight
+  // anchor for it. Stepping on a zoned Date walks through DST twice a year and
+  // a week built across that boundary is six days or eight; no UTC day is
+  // shorter or longer than another.
+  const [year, month, day] = localDay(now, timeZone).split("-").map(Number);
+  const start = new Date(Date.UTC(year, month - 1, day));
+  // getUTCDay() is 0 for Sunday, so Sunday is six days into a Monday-start week.
+  start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7));
 
   const end = new Date(start);
-  end.setDate(end.getDate() + 6);
+  end.setUTCDate(end.getUTCDate() + 6);
 
-  return { start: localDay(start), end: localDay(end) };
+  // Both anchors are UTC midnights by construction, so UTC is the zone that
+  // reads them back as the days they were built to be — passing `timeZone`
+  // here would shift them off by one for anyone behind Greenwich.
+  return { start: localDay(start, "UTC"), end: localDay(end, "UTC") };
 }
 
 export interface TeamMatchRow {
@@ -1073,12 +1125,16 @@ export async function getTeamHomeData(
 ): Promise<TeamHomeData> {
   const supabase = await createClient();
 
-  // One clock for the whole read. The greeting, the schedule window and the
-  // dual sheet all have to agree about what day it is, and a request that
-  // straddles midnight would otherwise answer two different questions.
+  // One clock AND one zone for the whole read. The greeting, the schedule
+  // window, the dual sheet and the invite expiry below all have to agree about
+  // what day it is: a request that straddles midnight would otherwise answer
+  // two different questions, and a day read in one zone against a week read in
+  // another would put "this weekend" outside "this week". `now` is the single
+  // instant, `PROGRAM_TIME_ZONE` the single zone it is read in — neither is
+  // taken from the process.
   const now = new Date();
-  const today = localDay(now);
-  const week = weekBounds(now);
+  const today = localDay(now, PROGRAM_TIME_ZONE);
+  const week = weekBounds(now, PROGRAM_TIME_ZONE);
 
   const [
     usage,
