@@ -61,7 +61,7 @@ ready).
   9b–9d are T2 and T3.
 
 ## T2 · Align the roster dialogs with 9b and 9c
-- **status:** doing
+- **status:** done
 - **files:** src/components/dashboard/team/roster-invite-dialog.tsx,
   src/components/dashboard/team/add-player-dialog.tsx — a guess
   (read-only: src/components/dashboard/team/dialog-shell.tsx,

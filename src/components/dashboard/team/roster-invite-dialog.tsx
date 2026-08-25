@@ -1,12 +1,20 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { AlertCircle, Check, Link2, Loader2, Users } from "lucide-react";
+import {
+  AlertCircle,
+  Check,
+  Link as LinkIcon,
+  Link2,
+  Loader2,
+  Users,
+} from "lucide-react";
 import {
   SettingsField,
   SettingsUnderlineInput,
 } from "@/components/dashboard/settings/settings-card";
 import { advButton } from "@/lib/ui/adv-button";
+import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { inviteMember } from "@/components/dashboard/settings/team-actions";
 import {
   DialogInfoRow,
@@ -30,6 +38,10 @@ import type { SeatUsage } from "@/lib/data/team-roster-server";
  *   7b  a profile chosen                  — email prefilled, role fixed, the
  *                                           note about what stays put
  *   7c  a typed address matches a profile — the tripwire, proposing the link
+ *
+ * 9b is the same object again, and settles the two lines above the fields: the
+ * title names the program this invitation is into, and one description covers
+ * every frame rather than one per branch.
  *
  * There is deliberately no `mode` enum and no frame counter. Adding one is how
  * the four drift apart: the picker and the tripwire would each get their own
@@ -78,6 +90,14 @@ export function RosterInviteDialog({
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  /**
+   * The program this invitation is into, named in the title (9b: "Invite to
+   * Meridian State"). It is read from the shell's workspace context rather
+   * than fetched or prop-drilled — `dashboard/layout.tsx` already resolved it
+   * once for this request, and the Roster page only renders this dialog inside
+   * a team workspace, so `active.name` is the school.
+   */
+  const { active } = useWorkspace();
 
   const linked = target !== null;
 
@@ -156,12 +176,8 @@ export function RosterInviteDialog({
         if (!next) reset();
         onOpenChange(next);
       }}
-      title="Invite to the program"
-      description={
-        linked
-          ? "This invitation binds a login to an existing profile."
-          : "They create their own login, manage their own profile, and upload their own matches."
-      }
+      title={`Invite to ${active.name}`}
+      description="Link the invite to a player you've added, or start fresh."
       footer={
         sent ? (
           <>
@@ -176,6 +192,7 @@ export function RosterInviteDialog({
           </>
         ) : (
           <>
+            <CopyInviteLink />
             <div className="flex-1" />
             <button
               type="button"
@@ -355,6 +372,50 @@ export function RosterInviteDialog({
         </>
       )}
     </RosterDialog>
+  );
+}
+
+/**
+ * 9b's left-hand footer action — and it is disabled, deliberately.
+ *
+ * ── Why there is no URL to copy ─────────────────────────────────────────────
+ * An invite link is `${siteUrl()}/join/<token>`, and that token exists for
+ * exactly one instant in one place: `inviteMember()` (`settings/team-actions.ts`)
+ * mints it with `generateToken()`, hands it to `programInviteEmail()`, and
+ * passes only `hashToken(token)` to `create_program_invite` — whose signature
+ * is `p_token_hash text`. Nothing but the SHA-256 digest is ever stored, and
+ * the action's return type (`InviteResult`) carries no token either. That is a
+ * stated rule, not an oversight: a database dump must not be a set of working
+ * links into somebody's program, and a token that reaches the browser has been
+ * handed to whoever is looking at the screen rather than to the person invited.
+ *
+ * So before Send there is no invite row and no token; after Send the row exists
+ * but its token is unrecoverable — the digest is one-way. Both of the ways to
+ * light this control up are worse than leaving it dark: minting an invitation
+ * the coach has not asked for yet, or returning the raw token to a client
+ * component. It renders as the affordance the design draws, disabled, saying
+ * where the link actually goes, rather than putting a dead `/join/…` URL on
+ * somebody's clipboard.
+ *
+ * When it can be enabled: a server action that returns a link for an invite
+ * that already exists — minting a fresh token, storing the new hash through the
+ * same upsert `inviteMember` uses, and handing back the one-time URL. That is a
+ * new server-side capability with its own trade-off to weigh, not a copy
+ * button.
+ */
+function CopyInviteLink() {
+  const reason = "The link is emailed to them — it is never shown here.";
+  return (
+    <button
+      type="button"
+      disabled
+      title={reason}
+      className="inline-flex cursor-not-allowed items-center gap-1.5 text-[11px] font-medium text-[var(--ink-400)]"
+    >
+      <LinkIcon className="size-3.5" strokeWidth={1.5} aria-hidden />
+      Copy invite link
+      <span className="sr-only"> — unavailable. {reason}</span>
+    </button>
   );
 }
 

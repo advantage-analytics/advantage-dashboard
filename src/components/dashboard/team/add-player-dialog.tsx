@@ -380,7 +380,7 @@ export function AddPlayerDialog({
         else close();
       }}
       title="Add a player"
-      description="Creates their roster row now. You can upload their matches straight away — they do not need an account."
+      description="A coach-managed profile — no login needed. You upload their matches; Advantage builds their stats the same."
       footer={
         <>
           <div className="flex-1" />
