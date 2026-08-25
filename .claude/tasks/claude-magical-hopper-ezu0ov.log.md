@@ -71,3 +71,36 @@ is the runner's. Newest entries at the bottom.
   reason in a code comment plus `title` and `sr-only` text; no URL is fabricated.
   One deviation from the mockup, accepted by review: the link icon is 14px per the
   task contract rather than 9b's 12px, matching every other glyph in the dialog.
+
+## T3 · Add 9d's claim receipt above the roster — blocked
+- **gate:** mechanical — `npm run lint` exit 0 (0 errors, 38 pre-existing
+  warnings), `npx tsc --noEmit` exit 0, `npm test` 93 passed. Completion review —
+  **`VERDICT: needs-work`**, which is where this run stopped. Guardrails were not
+  reached: the gate runs in cost order and stops at the first failure, so neither
+  `pipeline-guardrails-reviewer` nor `rls-boundary-reviewer` ran. Stash:
+  `f0b7b10d1ece1ad1010dcc7bdc364adf38214ed8` (`blocked: T3`).
+- **changed:** nothing landed. All five `done when:` bullets were judged satisfied
+  as literally written, and the two smaller decisions were accepted — "their"
+  rather than a pronoun inferred from a name, and naming every same-day claimer
+  (the reviewer confirmed "most recent" was genuinely impossible: `claimed_at`
+  exists on `DbRosterRow` but is consumed only to compute the `claimedToday`
+  boolean and never reaches `RosterMember`, so ordering by claim time would need
+  the field the task forbids).
+  **What failed is not in the criteria.** The receipt renders ungated, for every
+  roster viewer, and prints the program's seat usage. The reviewer established
+  that no ungated element on this page shows a player seat or billing figures
+  today: `RosterHeaderButtons` is the only other consumer of `roster.seats` and is
+  inside `{canManage && …}`, `roster-table.tsx` never references seats, and the
+  standing line is already replaced by a generic sentence for non-`canManage`
+  viewers. So the diff would newly disclose the program's seat budget to players.
+  Criterion 1's wording ("whenever at least one member has `claimedToday`", no role
+  qualifier) permits it, which is the defect: the criterion was written without
+  considering the player view, and the implementer followed it faithfully. A
+  follow-up task needs to decide between gating the whole receipt behind
+  `canManage` and dropping the seat clause from the player-visible version — and
+  should fix criterion 1's wording so the next attempt is not graded against the
+  same blind spot.
+  Also noted, not the blocker: with several same-day claimers the single
+  `View profile` link can only carry the first-named, and the disambiguating
+  `aria-label` is screen-reader-only, so sighted users get no cue which profile it
+  opens.
