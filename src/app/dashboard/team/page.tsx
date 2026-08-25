@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import { canUploadForProgram } from "@/lib/workspace/types";
 import { getTeamHomeData } from "@/lib/data/team-home-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { isAnalysisReady, isWorking } from "@/lib/data/match-analysis";
@@ -78,7 +79,7 @@ export default async function TeamHomePage() {
                   <>
                     Your matches appear here as they come back from analysis.
                     Your coach sends them
-                    {playersCanUpload ? ", and so can you." : "."}
+                    {canUploadForProgram(active) ? ", and so can you." : "."}
                   </>
                 )
               ) : (

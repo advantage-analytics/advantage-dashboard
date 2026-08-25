@@ -77,6 +77,11 @@ const RESTRICTED_PAGES: Record<
   },
   '/dashboard/settings/team': {
     admits: isProgramStaff,
+    // The literal path, deliberately, not `nav.ts`'s SETTINGS_DEFAULT_HREF:
+    // that constant is `SETTINGS_SECTIONS[0].href`, so promoting a staff-only
+    // section to first would make this entry's fallback the very page it is
+    // diverting away from — a bounce, or a loop. `settings/team/page.tsx`
+    // hardcodes the same literal for the same reason.
     fallback: '/dashboard/settings/profile',
   },
 };
@@ -124,7 +129,7 @@ function landingPath(target: Workspace, from: string): string {
   if (restricted && !restricted.admits(target)) return restricted.fallback;
 
   return (
-    PROGRAM_RECORD_LISTS.find((list) => path.startsWith(`${list}/`)) ?? path
+    PROGRAM_RECORD_LISTS.find((list) => isUnder(path, list)) ?? path
   );
 }
 

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import { isProgramStaff } from "@/lib/workspace/types";
 import { getTeamSettings } from "@/lib/data/team-settings-server";
 import { TeamSettingsForm } from "@/components/dashboard/settings/team-settings-form";
 
@@ -16,7 +17,11 @@ export default async function TeamSettingsPage() {
   if (!workspace) redirect("/login");
 
   const { active } = workspace;
-  if (active.kind !== "team" || active.role === "player") {
+  // `isProgramStaff` rather than the same test spelled by hand: the workspace
+  // switcher's `RESTRICTED_PAGES` predicts this redirect by calling that exact
+  // function, and its comment claims the two cannot drift. That is only true
+  // while this guard and that entry share one spelling.
+  if (!isProgramStaff(active)) {
     redirect("/dashboard/settings/profile");
   }
 

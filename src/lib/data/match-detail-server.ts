@@ -282,6 +282,11 @@ async function resolveUploadedBy(
   row: Pick<DbMatch, "program_id" | "created_by" | "player1_id">,
 ): Promise<string | null> {
   if (!row.program_id || !row.created_by) return null;
+  // A match filed by the player it is attributed to has nothing to report, and
+  // that is the shape the ordinary wizard writes — `player1_id` is the
+  // uploader's own login. Answering it here rather than after the fetch skips
+  // a whole-roster RPC on the commonest case, on the app's heaviest page.
+  if (row.created_by === row.player1_id) return null;
 
   const { data } = await supabase.rpc("program_roster_full", {
     p_program_id: row.program_id,
