@@ -717,14 +717,18 @@ write unlayered CSS. `advButton()` agrees by value rather than by utility — it
 sets `focus-visible:shadow-[var(--focus-ring)]`, the same property the file
 uses, so nothing is competing.
 
-Treat that as a known defect rather than as settled design: it fails silently,
-and 62 files under `src/` carry `focus-visible:ring-*` classes on controls
-`focus.css` already rings, so they are inert — a few of them, including
-`ui/button.tsx` and `ui/input.tsx`, encoding a *different* ring than the
-system's. The structural fixes (importing the design-system CSS into a named
-layer, and a lint rule that makes the dead class a build failure) are filed
-separately, because activating ~190 inert declarations at once is a behaviour
-change that needs its own review. Until then: write no
+Treat that as a known defect rather than as settled design — it fails silently,
+which is how 209 such declarations accumulated across 61 files before anyone
+noticed. A few encoded a *different* ring than the system's: `ui/input.tsx` set
+`#E5E5E5`, the value retired for measuring 1.26:1. All 209 were deleted in
+`247f054`, so `src/` carries none today.
+
+Two structural fixes remain, and neither is done: importing the design-system
+CSS into a named layer, so a utility overrides normally and this warning
+collapses to "prefer the token"; and a lint rule or test-gated grep that makes
+the dead class a build failure. Nothing enforces this today — the repo has no
+CI, and the ESLint hook is non-blocking — so the rule below is the only thing
+standing between a new author and a silently inert focus treatment. Write no
 focus class.
 
 **The wrapper-ring pattern is the one exception to "write nothing."** When the
