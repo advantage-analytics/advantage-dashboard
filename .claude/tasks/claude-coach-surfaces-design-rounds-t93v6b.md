@@ -42,7 +42,7 @@ ready).
   reference artboard.
 
 ## T2 · Checklist cards flip in place
-- **status:** todo
+- **status:** blocked
 - **files:** `src/components/dashboard/team/first-steps.tsx` — a guess
 - **done when:**
   - [ ] Each of the three cards renders one of three variants in its own fixed
