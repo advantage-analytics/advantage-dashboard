@@ -248,3 +248,37 @@ is the runner's. Newest entries at the bottom.
   (`match-analysis.ts:244`), `formatScore()` (`schedule/format.ts`), and the
   `tiebreak?: boolean` field, which lost its last reader in this change but is
   still written by loaders.
+
+## T4 · Round-44 row treatment on Team Home — done (second attempt)
+- **gate:** mechanical — `npm run lint` 0 errors (38 pre-existing warnings,
+  none in the changed files), `npx tsc --noEmit` clean, `npm test` 93 passed.
+  `pipeline-guardrails-reviewer` — no findings, nothing regressed: the row's
+  `href={/dashboard/matches/${match.id}}` is byte-identical, `dotColor()` still
+  calls the shared analysis predicates unmodified, `match.label` still comes
+  from the shared vocabulary, and extracting `PendingInvites` did not move or
+  duplicate the `isStaff && roster.invited > roster.joined` guard.
+  `rls-boundary-reviewer` — skipped: two component/page files, no
+  `src/lib/data/`, `src/lib/supabase/`, `src/app/api/` or migration, no new
+  query. Confirmed against both `git diff HEAD --stat` and
+  `git ls-files --others --exclude-standard`.
+  `task-completion-reviewer` — **`VERDICT: pass`**, all five criteria.
+- **changed:** Team Home's match list is a `<section>` carrying the only border
+  in play; rows hover to a `--surface-muted` wash on a rounded rect inset 6px
+  by the list's `p-1.5`, so the row's 8px corners sit concentric inside the
+  card's 14px radius. Every hairline inside the card is gone — between rows and
+  under the header alike — with whitespace doing the separating. The card is
+  headed `<h2 class="eyebrow">Matches</h2>`, the design's own label. The
+  pending-invites line became a `PendingInvites` component pointing at
+  `/dashboard/team/roster` and saying to resend from there.
+- **on the count:** left out deliberately, and the reviewer verified why —
+  `RECENT_MATCH_LIMIT = 6` caps the matches query, so `matches.length` would
+  render the page's fetch cap while reading as the program's match count. A
+  truthful total needs a loader change, which criterion 4 forbids. The
+  criterion made the count optional for exactly this kind of reason.
+- **what the first attempt got wrong:** only the header — "Recent matches"
+  instead of the design's `Matches`, and a `border-b` under it. Everything else
+  in that attempt passed review both times.
+- **follow-up left open:** `roster-table.tsx` still uses the old treatment —
+  full-bleed wash with `border-b` hairlines between rows, and a comment
+  defending the full-bleed. Roster is a result list too, so round 44's rule
+  arguably applies there. Out of scope here; worth its own task.

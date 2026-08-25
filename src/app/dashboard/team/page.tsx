@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Mail } from "lucide-react";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { getTeamHomeData } from "@/lib/data/team-home-server";
+import {
+  getTeamHomeData,
+  type RosterProgress,
+} from "@/lib/data/team-home-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { isAnalysisReady, isWorking } from "@/lib/data/match-analysis";
 import { advButton } from "@/lib/ui/adv-button";
@@ -176,32 +180,7 @@ export default async function TeamHomePage() {
             {/* Only when there is something outstanding to say. A program whose
                 roster is fully joined does not need a row telling it so. */}
             {isStaff && roster.invited > roster.joined && (
-              <div className="flex flex-wrap items-center gap-3 rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-subtle)] px-[18px] py-3.5">
-                <span className="flex-1 text-[12px] leading-[1.5] text-[var(--ink-700)]">
-                  {roster.joined} of {roster.invited} invited players have
-                  joined.
-                  {roster.expiringSoon > 0 && roster.expiringInDays !== null && (
-                    <>
-                      {" "}
-                      {roster.expiringSoon === 1
-                        ? "One invite expires"
-                        : `${roster.expiringSoon} invites expire`}{" "}
-                      {roster.expiringInDays === 0
-                        ? "today"
-                        : roster.expiringInDays === 1
-                          ? "tomorrow"
-                          : `in ${roster.expiringInDays} days`}
-                      .
-                    </>
-                  )}
-                </span>
-                <Link
-                  href="/dashboard/settings/team"
-                  className="text-[11px] text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-                >
-                  See who hasn&#39;t
-                </Link>
-              </div>
+              <PendingInvites roster={roster} />
             )}
           </>
         )}
@@ -213,6 +192,68 @@ export default async function TeamHomePage() {
           billingMonth={usage.billingMonth}
         />
       </div>
+    </div>
+  );
+}
+
+/**
+ * "2 invites pending" — and where to do something about it.
+ *
+ * Round 44 sends this at **Roster**, not Settings › Team. Invites live on the
+ * roster now: they render there as dashed rows in the same list as the players
+ * who accepted, each with its own Resend, and the bulk invite dialog opens from
+ * that page's header. Settings › Team was where the invite controls used to be,
+ * so the old link sent a coach to the settings form to do a thing the roster
+ * does better — and after T2 moved the dialog, to a page that no longer holds
+ * the action this line is about at all.
+ *
+ * The count is outstanding invites rather than "N of M have joined", because
+ * the number that decides whether to act is the one still owed a reply. The
+ * sub-line carries the expiry, which is the only part of this that is urgent,
+ * and names Roster a second time — the link is a destination, the sentence is
+ * the instruction, and someone reading rather than clicking still learns where
+ * Resend is.
+ *
+ * Names and send dates are what 44a shows beside the count; `RosterProgress`
+ * carries neither, and this task is presentation. Roster itself has both.
+ */
+function PendingInvites({ roster }: { roster: RosterProgress }) {
+  const pending = roster.invited - roster.joined;
+  const expiring =
+    roster.expiringSoon > 0 && roster.expiringInDays !== null
+      ? `${roster.expiringSoon === 1 ? "One expires" : `${roster.expiringSoon} expire`} ${
+          roster.expiringInDays === 0
+            ? "today"
+            : roster.expiringInDays === 1
+              ? "tomorrow"
+              : `in ${roster.expiringInDays} days`
+        }`
+      : null;
+
+  return (
+    <div className="flex flex-wrap items-start gap-3 rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-subtle)] px-[18px] py-3.5">
+      <Mail
+        className="mt-px size-[15px] shrink-0 text-[var(--ink-400)]"
+        strokeWidth={1.5}
+        aria-hidden
+      />
+
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="text-[12px] leading-[1.5] text-[var(--ink-700)]">
+          <span className="tabular">{pending}</span>{" "}
+          {pending === 1 ? "invite" : "invites"} pending
+        </span>
+        <span className="text-micro">
+          {expiring ? `${expiring} · ` : ""}Resend from Roster
+        </span>
+      </div>
+
+      <Link
+        href="/dashboard/team/roster"
+        className="shrink-0 text-[11px] text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+      >
+        Roster
+      </Link>
     </div>
   );
 }
