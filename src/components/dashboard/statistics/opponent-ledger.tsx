@@ -2,12 +2,21 @@
 
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { normalizedPersonName } from "@/lib/data/person-name";
 import type { SelectableMatch } from "@/lib/data/statistics-server";
 
 const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
 const INITIAL_ROWS = 5;
 
 interface OpponentRow {
+  /**
+   * Stable across renders, unlike `name`. The row is keyed on this because the
+   * label can change while the group does not — deselect the match that
+   * supplied the winning spelling and a different one takes over — and a
+   * changed React key inside `AnimatePresence` is an unmount plus a mount, so
+   * an untouched row would visibly collapse and re-enter.
+   */
+  key: string;
   name: string;
   wins: number;
   losses: number;
@@ -25,16 +34,49 @@ export function OpponentLedger({ matches }: Props) {
   const [expanded, setExpanded] = useState(false);
 
   const rows = useMemo(() => {
-    const map = new Map<string, { wins: number; losses: number; ratings: number[] }>();
+    // Keyed by the app's name rule, not the raw string. `player2_name` is free
+    // text the uploader types per match, so one opponent drifts across a season
+    // — "Ana Garcia" and "ana garcia" are one person. Grouped raw, she becomes
+    // two rows each showing half her record, and on a 2/1 split the single
+    // match falls under the `total >= 2` line and disappears into Others
+    // entirely. The opponent pages already count her as one person, so raw
+    // grouping is also two screens disagreeing. Only the grouping is
+    // normalized; the label is one of the real spellings, chosen below.
+    const map = new Map<
+      string,
+      { name: string; wins: number; losses: number; ratings: number[] }
+    >();
 
     for (const m of matches) {
-      const name = m.player2Name;
-      const entry = map.get(name) ?? { wins: 0, losses: 0, ratings: [] };
+      const key = normalizedPersonName(m.player2Name);
+      const entry = map.get(key) ?? {
+        name: m.player2Name,
+        wins: 0,
+        losses: 0,
+        ratings: [],
+      };
+      // The tidiest spelling wins the label, not the first one seen. `matches`
+      // arrives ordered by date with no tiebreaker, so same-day rows come back
+      // in whatever order the planner chose — first-seen would rename the row
+      // between reloads with nothing having changed. Shortest first, because
+      // the drift being merged here is stray whitespace and the shortest
+      // spelling is the one without it; then code units, which order the same
+      // in every runtime. NOT `localeCompare`: with no locale it follows the
+      // runtime's own, so Node and the browser can disagree — da-DK sorts
+      // uppercase first for any case-only pair — and this renders on both
+      // sides of a hydration boundary.
+      if (
+        m.player2Name.length < entry.name.length ||
+        (m.player2Name.length === entry.name.length &&
+          m.player2Name < entry.name)
+      ) {
+        entry.name = m.player2Name;
+      }
       if (m.isWin) entry.wins++;
       else entry.losses++;
       const r = ((m.serveRating ?? 0) + (m.returnRating ?? 0)) / 2;
       if (r > 0) entry.ratings.push(r);
-      map.set(name, entry);
+      map.set(key, entry);
     }
 
     const result: OpponentRow[] = [];
@@ -42,13 +84,18 @@ export function OpponentLedger({ matches }: Props) {
     let othersL = 0;
     let othersRatings: number[] = [];
 
-    for (const [name, data] of map.entries()) {
+    for (const [key, data] of map.entries()) {
+      const name = data.name;
       const total = data.wins + data.losses;
-      if (total >= 2) {
+      // A blank key is whitespace the uploader typed into an opponent name.
+      // Those are not one opponent, so they go to Others rather than becoming a
+      // row with an empty cell.
+      if (total >= 2 && key !== "") {
         const avg = data.ratings.length > 0
           ? Math.round(data.ratings.reduce((a, b) => a + b, 0) / data.ratings.length)
           : 0;
         result.push({
+          key,
           name,
           wins: data.wins,
           losses: data.losses,
@@ -63,7 +110,11 @@ export function OpponentLedger({ matches }: Props) {
       }
     }
 
-    result.sort((a, b) => b.total - a.total);
+    // The key breaks ties, for the same reason the label does not come from
+    // arrival order: two opponents on equal totals would otherwise hold
+    // whichever order the query happened to return, and at the INITIAL_ROWS cut
+    // one can swap into the collapsed view while the other drops out of it.
+    result.sort((a, b) => b.total - a.total || (a.key < b.key ? -1 : 1));
 
     if (othersW + othersL > 0) {
       const total = othersW + othersL;
@@ -71,6 +122,8 @@ export function OpponentLedger({ matches }: Props) {
         ? Math.round(othersRatings.reduce((a, b) => a + b, 0) / othersRatings.length)
         : 0;
       result.push({
+        // Not a name, so it cannot collide with a normalized one.
+        key: "\u0000others",
         name: "Others",
         wins: othersW,
         losses: othersL,
@@ -116,7 +169,7 @@ export function OpponentLedger({ matches }: Props) {
             <AnimatePresence initial={false}>
               {visibleRows.map((row, i) => (
                 <motion.div
-                  key={row.name}
+                  key={row.key}
                   initial={shouldReduceMotion ? false : { opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}

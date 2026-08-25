@@ -15,6 +15,7 @@ import {
   useLiveMatchAnalysis,
   withLiveAnalysis,
 } from "@/hooks/use-live-match-analysis";
+import { normalizedPersonName } from "@/lib/data/person-name";
 import { providers } from "@/lib/providers";
 import { MatchesGrid, type SortField, type SortDir } from "./matches-grid";
 import { MatchesFilterPanel, type FilterGroup } from "./matches-filter-panel";
@@ -39,6 +40,25 @@ type FilterKey =
   | "analysis"
   /** Team scope only — see `FILTER_GROUPS`. */
   | "player";
+
+/**
+ * Whether a stored filter value and a chip mean the same thing.
+ *
+ * Exact for every group but `player`, whose values are people's names and so
+ * answer to the same rule the list itself filters by. The chip list keeps ONE
+ * raw spelling per person, so a value stored from a different spelling — an
+ * older bookmark, or a newer upload that changed which spelling wins the label
+ * — would otherwise render its chip unchecked while the list stayed filtered,
+ * and clicking it would append a second filter rather than clearing the first.
+ *
+ * Values stay raw rather than normalized so URLs written before this still
+ * resolve; the normalization happens on comparison instead.
+ */
+function sameValue(key: FilterKey, a: string, b: string): boolean {
+  return key === "player"
+    ? normalizedPersonName(a) === normalizedPersonName(b)
+    : a === b;
+}
 
 const FILTER_KEYS: FilterKey[] = [
   "result",
@@ -88,8 +108,22 @@ const FILTER_GROUPS: {
     key: "player",
     label: "Player",
     teamOnly: true,
-    getValues: (matches) =>
-      [...new Set(matches.map((m) => m.player1.name).filter(Boolean))].sort(),
+    // Deduplicated by the app's name rule, not by raw string: a season
+    // recorded under both "Dana Brooks" and "Dana  Brooks" otherwise offers two
+    // chips that render identically — HTML collapses the double space — and
+    // each shows half her matches with nothing on screen saying so. The label
+    // keeps the first spelling seen; the filter below compares by the same rule,
+    // so either spelling's rows come back under the one chip.
+    getValues: (matches) => {
+      const byName = new Map<string, string>();
+      for (const m of matches) {
+        const key = normalizedPersonName(m.player1.name);
+        if (key && !byName.has(key)) byName.set(key, m.player1.name);
+      }
+      return [...byName.values()].sort((a, b) =>
+        normalizedPersonName(a).localeCompare(normalizedPersonName(b))
+      );
+    },
   },
   {
     key: "result",
@@ -319,6 +353,14 @@ export function MatchesPageContent({
     const result: ActiveFilter[] = [];
     for (const key of FILTER_KEYS) {
       for (const value of searchParams.getAll(key)) {
+        // Deduplicated on the way in, by the same rule the chips use. A URL
+        // written before the Player chips collapsed to one spelling per person
+        // can carry both — `?player=Dana+Brooks&player=Dana++Brooks` — and two
+        // entries for one chip make the badge out-count the checked chips and
+        // render two pills that look identical in the empty state.
+        if (result.some((f) => f.key === key && sameValue(key, f.value, value))) {
+          continue;
+        }
         result.push({ key, value });
       }
     }
@@ -417,12 +459,18 @@ export function MatchesPageContent({
 
     // Search
     if (search.trim()) {
-      const q = search.toLowerCase();
+      // Two needles, because one box searches two kinds of thing. Names go
+      // through the app's own rule so a row stored as "Dana  Brooks" is
+      // reachable by typing her name; tournament and round are not people and
+      // keep the plain contains. The plain needle is trimmed either way — a
+      // trailing space in the box used to empty the whole list.
+      const q = search.trim().toLowerCase();
+      const person = normalizedPersonName(search);
       result = result.filter(
         (m) =>
           m.tournamentName.toLowerCase().includes(q) ||
-          m.player1.name.toLowerCase().includes(q) ||
-          m.player2.name.toLowerCase().includes(q) ||
+          normalizedPersonName(m.player1.name).includes(person) ||
+          normalizedPersonName(m.player2.name).includes(person) ||
           (m.round?.toLowerCase().includes(q) ?? false)
       );
     }
@@ -444,7 +492,10 @@ export function MatchesPageContent({
           case "analysis":
             return analysisGroup(m) === filter.value;
           case "player":
-            return m.player1.name === filter.value;
+            return (
+              normalizedPersonName(m.player1.name) ===
+              normalizedPersonName(filter.value)
+            );
           default:
             return true;
         }
@@ -526,8 +577,9 @@ export function MatchesPageContent({
 
   const toggleFilter = useCallback((key: FilterKey, value: string) => {
     setFilters((prev) => {
-      const exists = prev.some((f) => f.key === key && f.value === value);
-      if (exists) return prev.filter((f) => !(f.key === key && f.value === value));
+      const exists = prev.some((f) => f.key === key && sameValue(key, f.value, value));
+      if (exists)
+        return prev.filter((f) => !(f.key === key && sameValue(key, f.value, value)));
       return [...prev, { key, value }];
     });
   }, []);
@@ -535,7 +587,8 @@ export function MatchesPageContent({
   const clearFilters = useCallback(() => setFilters([]), []);
 
   const isFilterActive = useCallback(
-    (key: FilterKey, value: string) => filters.some((f) => f.key === key && f.value === value),
+    (key: FilterKey, value: string) =>
+      filters.some((f) => f.key === key && sameValue(key, f.value, value)),
     [filters]
   );
 
@@ -601,7 +654,7 @@ export function MatchesPageContent({
               title="Search by event, opponent, or round"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-8 w-[216px] pl-8 pr-8 rounded-full ring-1 ring-inset ring-[#EAECF0] text-xs text-[#0D0D0D] placeholder:text-[#CCCCCC] focus:outline-none focus:ring-[#3B82F6] focus:ring-2 transition-[color,background-color] duration-200 bg-white"
+              className="h-8 w-[216px] pl-8 pr-8 rounded-full ring-1 ring-inset ring-[#EAECF0] text-xs text-[#0D0D0D] placeholder:text-[#CCCCCC] focus:outline-none transition-[color,background-color] duration-200 bg-white"
             />
             {!search && (
               <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-medium text-[#CCCCCC] pointer-events-none">/</kbd>

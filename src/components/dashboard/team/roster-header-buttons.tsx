@@ -5,12 +5,12 @@ import { advButton } from "@/lib/ui/adv-button";
 import { AddPlayerDialog } from "./add-player-dialog";
 import { RosterInviteDialog } from "./roster-invite-dialog";
 import type { ManagedPlayer } from "./invite-target-picker";
-import type { SeatUsage } from "@/lib/data/team-roster-server";
+import type { RosterMember, SeatUsage } from "@/lib/data/team-roster-server";
 
 /**
  * The Roster page's two ways of growing a squad.
  *
- * Design 6a. They are not two flavours of one action, and the button weights
+ * Design 9a. They are not two flavours of one action, and the button weights
  * say so: **Add player** creates the row now and always works, so it is the
  * page's one blue action. **Invite** sends email and waits on somebody else, so
  * it is secondary.
@@ -21,10 +21,16 @@ import type { SeatUsage } from "@/lib/data/team-roster-server";
 export function RosterHeaderButtons({
   managedPlayers,
   seats,
+  roster,
 }: {
   /** Coach-managed rows, so an invitation can target one instead of duplicating it. */
   managedPlayers: ManagedPlayer[];
   seats: SeatUsage;
+  /**
+   * Everyone already on the roster, so Add player can name who holds the line
+   * that was picked and who already answers to the name that was typed.
+   */
+  roster: RosterMember[];
 }) {
   const [inviting, setInviting] = useState(false);
   const [addingPlayer, setAddingPlayer] = useState(false);
@@ -65,6 +71,7 @@ export function RosterHeaderButtons({
         open={addingPlayer}
         onOpenChange={setAddingPlayer}
         seatNote={seatNote}
+        roster={roster}
       />
     </>
   );

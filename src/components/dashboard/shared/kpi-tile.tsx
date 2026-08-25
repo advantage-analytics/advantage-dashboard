@@ -235,7 +235,7 @@ export function KpiTile({
 
   const baseClass = "flex-1 flex flex-col gap-3 px-5 py-5 min-w-0";
   const linkClass = href
-    ? "cursor-pointer hover:bg-[#FAFAFA] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] focus-visible:ring-inset"
+    ? "cursor-pointer hover:bg-[#FAFAFA] transition-colors duration-200 focus-visible:outline-none"
     : hasDetail
       ? "hover:bg-[#FAFAFA] transition-colors duration-200"
       : "";
@@ -245,7 +245,7 @@ export function KpiTile({
       <Tooltip>
         <TooltipTrigger asChild>
           <p
-            className={`text-[9px] font-normal text-[var(--color-text-dim)] uppercase tracking-[2.5px] whitespace-nowrap w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-sm ${description ? "cursor-help" : ""}`}
+            className={`text-[9px] font-normal text-[var(--color-text-dim)] uppercase tracking-[2.5px] whitespace-nowrap w-fit focus-visible:outline-none rounded-sm ${description ? "cursor-help" : ""}`}
             tabIndex={description ? 0 : undefined}
           >
             {label}

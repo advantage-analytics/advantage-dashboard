@@ -513,7 +513,7 @@ export function DetailsContent({
             <button
               type="button"
               onClick={confirmRemoveSets}
-              className="rounded-full px-2 py-0.5 text-[#E51837] transition-colors duration-150 hover:bg-[rgba(229,24,55,0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E51837]/40"
+              className="rounded-full px-2 py-0.5 text-[#E51837] transition-colors duration-150 hover:bg-[rgba(229,24,55,0.08)] focus-visible:outline-none"
             >
               Remove
             </button>

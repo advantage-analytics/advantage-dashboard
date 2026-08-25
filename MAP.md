@@ -89,6 +89,7 @@ which exists four separate times.
 | `src/lib/supabase/` | Three client factories: `server`, `client`, `admin` (service role) |
 | `src/lib/data/` | Server-side data layer, one file per domain (matches, activity, roster, team, schedule, statistics, ...); only `statistics` is split `*-server.ts` / `*-client.ts` for client-side recomputation |
 | `src/lib/services/upload/` | Provider-strategy upload pipeline: parsers, providers, validators |
+| `src/lib/services/email/` | Transactional email: one sender, one HTML shell, templates grouped by family. Auth mail is Supabase's own, in `supabase/email-templates/` — see [`docs/email-system.md`](docs/email-system.md) |
 | `src/lib/llm/` | Provider-agnostic streaming adapter |
 | `src/hooks/` | Shared React hooks |
 | `supabase/functions/` | Edge functions |

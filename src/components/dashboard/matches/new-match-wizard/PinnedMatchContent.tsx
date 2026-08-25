@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Check, CornerDownRight, Layers, Search } from "lucide-react";
+import { normalizedPersonName } from "@/lib/data/person-name";
 import type { EventPreset } from "./types";
 
 /**
@@ -58,10 +59,17 @@ function SinglePlayerPicker({
 }) {
   const [term, setTerm] = useState("");
 
+  // Narrowing only — the id still comes from the row that gets clicked, never
+  // from the text. Both sides go through `normalizedPersonName` so the search
+  // is asking the same question about whitespace that the rest of the app does:
+  // a roster row spelled "Dana  Brooks" was previously unreachable by typing
+  // her name.
   const shown = useMemo(() => {
-    const needle = term.trim().toLowerCase();
+    const needle = normalizedPersonName(term);
     if (!needle) return roster;
-    return roster.filter((player) => player.name.toLowerCase().includes(needle));
+    return roster.filter((player) =>
+      normalizedPersonName(player.name).includes(needle)
+    );
   }, [roster, term]);
 
   return (
@@ -112,8 +120,20 @@ function SinglePlayerPicker({
             A roster is not a closed list. Challenge matches get played by people
             who have not accepted an invite yet, and a picker that refused them
             would push the coach to attribute the match to somebody else.
+
+            Offered only when the typed name reaches NOBODY on the roster, and
+            asking that with the same rule the list above filters by. Compared
+            raw, a roster row stored as "Dana  Brooks" shows up in the list
+            AND under this button — two rows that look identical, one of which
+            hands `onPick` a null id. That null becomes `player1_id`, so the
+            match is written unattributed for an athlete who is on the roster,
+            and `player1_id` is half the SELECT policy on `matches` — she
+            cannot read her own match.
           */}
-          {term.trim() && !shown.some((p) => p.name === term.trim()) ? (
+          {term.trim() &&
+          !shown.some(
+            (p) => normalizedPersonName(p.name) === normalizedPersonName(term)
+          ) ? (
             <button
               type="button"
               onClick={() => onPick(term.trim(), null)}

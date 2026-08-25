@@ -228,7 +228,7 @@ export function TeamSettingsForm({ data }: { data: TeamSettingsData }) {
                 }}
                 placeholder="email@school.edu"
                 aria-label="Invite by email"
-                className="h-[30px] w-[190px] rounded-[6px] border border-[var(--border-field)] px-3 text-[12px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)] focus:border-[var(--blue)]"
+                className="h-[30px] w-[190px] rounded-[6px] border border-[var(--border-field)] px-3 text-[12px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)]"
               />
               <SettingsButton
                 variant="outline"
@@ -485,7 +485,7 @@ function RosterButton({
       disabled={disabled}
       className={cn(
         "flex size-5 items-center justify-center rounded-[6px] text-[var(--ink-300)] transition-colors duration-150",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]",
+        "focus-visible:outline-none",
         disabled
           ? "cursor-not-allowed opacity-50"
           : "cursor-pointer hover:bg-[var(--surface-subtle)] hover:text-[var(--danger)]",

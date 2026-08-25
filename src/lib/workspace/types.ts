@@ -318,3 +318,28 @@ export function teamLabel(team: Workspace['team']): string | null {
   if (team === 'womens') return "Women's";
   return null;
 }
+
+/**
+ * The header's leading slot on the pages whose subject is the workspace itself
+ * rather than a position within a flow (design 9g).
+ *
+ * The school carries the weight and the squad is a quiet qualifier beside it,
+ * so the two are returned separately rather than joined into one string: the
+ * caller renders them as two spans in different type, and a workspace with no
+ * squad to name — every personal one, and a program that fields a single team —
+ * must render the name alone rather than an empty element and its gap.
+ *
+ * `teamLabel()` yields the possessive on its own because the switcher already
+ * sits under the word "workspace"; a header naming nothing else has to say what
+ * sport it is.
+ */
+export function workspaceTitle(workspace: Workspace): {
+  name: string;
+  qualifier: string | null;
+} {
+  const squad = teamLabel(workspace.team);
+  return {
+    name: workspace.name,
+    qualifier: squad ? `${squad} tennis` : null,
+  };
+}

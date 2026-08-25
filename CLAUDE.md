@@ -140,6 +140,14 @@ internal naming only.
 SDKs are dynamically imported so only the configured one loads. Falls back to mock mode
 with no key. See `docs/llm-setup.md`.
 
+### Transactional email
+
+Product mail (invites, notifications, digests) renders through
+`src/lib/services/email/shell.ts` and sends via Resend; auth mail is Supabase's own, in
+`supabase/email-templates/*.html`. `shell.ts` is a hand-copy of that markup — change one
+and you must change the other. **Read [`docs/email-system.md`](docs/email-system.md)
+before writing a template or wiring a send.**
+
 ## Design System
 
 **Read `.skills/advantage-analytics-design/SKILL.md` before building any UI** — it is the
@@ -148,8 +156,9 @@ deliberately deferred (dark mode, v2 shadows). Tokens live in
 `src/styles/design-system/`, imported by `globals.css`.
 
 Inter only (300/400/500/600), type scale 9–56px, blue accent `#3B82F6`, success `#5DB955`,
-error `#E51837`, Lucide icons only, two Framer Motion curves
-(`[0.25, 0.46, 0.45, 0.94]`, `[0.23, 1, 0.32, 1]`), no bounce or glassmorphism.
+error `#E51837`, Lucide icons only, three Framer Motion curves
+(`[0.25, 0.46, 0.45, 0.94]`, `[0.23, 1, 0.32, 1]`, and `[0.2, 0, 0.4, 1]` — `--ease-chart`,
+reserved for chart and data transitions), no bounce or glassmorphism.
 
 Auth pages style from CSS variables; dashboard pages use Tailwind utilities directly.
 Primary buttons come from `advButton()` (`src/lib/ui/adv-button.ts`) — don't hand-roll a
@@ -171,17 +180,23 @@ with `/` replaced by `-`). Distinct filenames per branch mean merge conflicts
 on task files are structurally impossible.
 
 - `/task-next` runs one task: a fresh subagent, gated, then committed.
-- `/loop /task-next` — no interval — drains the queue, self-paced.
+- To drain the queue, loop a plain-text instruction — **not** `/loop /task-next`,
+  which a scheduled fire cannot invoke:
+  > `/loop Read .claude/skills/task-next/SKILL.md and follow it exactly — run one task from this branch's queue, then stop.`
 - The queue file is yours; append to it any time, including while the loop
   runs. The runner only ever rewrites a task's `status:` line.
 - `.claude/tasks/<slug>.log.md` is the runner's. Do not hand-edit it.
 - Status values: `todo`, `next`, `doing`, `done` and `blocked` are the
   runner-driven ones. `later` is a deferred task — `/task-next`'s picker never
-  selects it automatically, so a `/loop /task-next` drain skips straight past
+  selects it automatically, so a loop drain skips straight past
   it. Promote it to `todo` by hand when it's actually ready to run.
 
 Every task needs a `done when:` list. It is the contract
 `task-completion-reviewer` gates against, and a task without one is skipped.
+
+`/task-next`, `/task-add` and `/pr-check` are typed to Claude, not to a shell.
+Never present them inside a ```bash fence — the app renders a fenced shell
+block as a Run button, and running one there fails with `command not found`.
 
 ## Conventions
 

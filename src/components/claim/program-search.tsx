@@ -85,7 +85,10 @@ export function ProgramSearch({ intent = "claim" }: { intent?: SearchIntent }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex h-[38px] items-center gap-2.5 rounded-[var(--radius-element)] border border-[var(--border-field)] bg-[var(--surface-card)] px-3 focus-within:border-[var(--blue)] focus-within:ring-2 focus-within:ring-[var(--blue-ring-40)]">
+      {/* The box is the field; the input inside is only its text area, so the
+          ring lands here. See focus.css for why a wrapper must opt its input
+          out. */}
+      <div className="flex h-[38px] items-center gap-2.5 rounded-[var(--radius-element)] border border-[var(--border-field)] bg-[var(--surface-card)] px-3 focus-within:shadow-[var(--focus-ring-field)]">
         <Search
           className="size-[15px] shrink-0 text-[var(--ink-600)]"
           strokeWidth={1.5}
@@ -99,6 +102,7 @@ export function ProgramSearch({ intent = "claim" }: { intent?: SearchIntent }) {
           aria-label="Search for your program"
           autoFocus
           className="h-full w-full bg-transparent text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)]"
+          data-focus-ring="none" /* the box above carries it */
         />
         {loading && (
           <Loader2

@@ -101,7 +101,7 @@ export function SettingsAlert({
           onClick={onDismiss}
           aria-label="Dismiss alert"
           className={cn(
-            "size-4 flex-shrink-0 rounded flex items-center justify-center hover:bg-black/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-blue)]/40",
+            "size-4 flex-shrink-0 rounded flex items-center justify-center hover:bg-black/5 transition-colors focus-visible:outline-none",
             config.text
           )}
         >

@@ -92,7 +92,7 @@ export function AiInsightCard({
                   <button
                     type="button"
                     onClick={dismiss}
-                    className="text-[9px] font-medium uppercase tracking-[1.5px] text-[#AAAAAA] transition-colors duration-200 hover:text-[#525252] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-sm"
+                    className="text-[9px] font-medium uppercase tracking-[1.5px] text-[#AAAAAA] transition-colors duration-200 hover:text-[#525252] active:scale-[0.97] focus-visible:outline-none rounded-sm"
                   >
                     Dismiss
                   </button>
@@ -112,7 +112,7 @@ export function AiInsightCard({
             opacity: 1,
             transition: { duration: 0.2, delay: 0.1, ease: EASE_CURVE },
           }}
-          className="flex items-center gap-1.5 self-start px-3 py-2 text-[9px] font-medium uppercase tracking-[1.5px] text-[#3B82F6] transition-colors duration-200 hover:text-[#2563EB] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-sm"
+          className="flex items-center gap-1.5 self-start px-3 py-2 text-[9px] font-medium uppercase tracking-[1.5px] text-[#3B82F6] transition-colors duration-200 hover:text-[#2563EB] focus-visible:outline-none rounded-sm"
         >
           <MessageSquare className="size-3" aria-hidden />
           Show AI Insight

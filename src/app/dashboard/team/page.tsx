@@ -10,6 +10,17 @@ import { FirstSteps } from "@/components/dashboard/team/first-steps";
 import { MatchRows } from "@/components/dashboard/team/match-rows";
 
 /**
+ * The page's own name. Its `<h1>` is a greeting rather than the program, and
+ * the header names the workspace rather than the page, so the tab fell back to
+ * the root layout's "Advantage Analytics" — the app, not where you are.
+ *
+ * Most of this subtree is still in that state (schedule, settings, upload and
+ * the schedule sub-routes export no metadata); this covers the one route the
+ * header change left with nothing naming it.
+ */
+export const metadata = { title: "Team Home" };
+
+/**
  * F6 and F8 — the program's home page, empty and a week in.
  *
  * One route with two states rather than two routes, because the transition

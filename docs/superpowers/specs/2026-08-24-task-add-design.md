@@ -108,14 +108,31 @@ makes it review the task file instead of the branch.
 ```yaml
 name: task-add
 description: Draft a well-formed task from a one-line intent and append it to this branch's queue. Use when adding work to .claude/tasks/, especially by voice or from a phone.
-disable-model-invocation: true
 argument-hint: "<one-line description of the task>"
 ```
 
-`disable-model-invocation: true` matches `pr-check` and `task-next`, the
-repo's other two committing skills. A skill that writes and commits should not
-fire on an ambiguous sentence. Typing `/task-add` on a phone is cheap, and
-plain conversation remains available for the unstructured path.
+**No `disable-model-invocation`, unlike `pr-check` and `task-next`.** It carried
+the flag at first, on the reasoning that a skill which writes and commits should
+not fire on an ambiguous sentence. That reasoning held while every invocation was
+typed into a terminal, where it cost nothing.
+
+It stops holding anywhere else. The flag removes a skill from the model-facing
+catalog outright, leaving it reachable only when a front end expands a typed
+`/task-add` into an invocation. Cloud sessions, scheduled fires and remote
+triggers all reach the model as plain text instead, so the slash command arrives
+as literal characters matching nothing — the same failure `task-next` documents
+for `/loop /task-next`.
+
+Step 3 is what keeps this skill safe without the flag, not the frontmatter: it
+drafts, shows the block, and writes nothing before a yes — and refuses outright
+when there is no human turn to supply one, which is precisely the case the flag
+used to make unreachable.
+
+Both halves are load-bearing. A confirm gate on its own still commits on
+nobody's authority in an autonomous loop, a scheduled fire, or the subagent
+`/task-next` dispatches. `task-next` keeps its flag, because `git add -A`,
+subagent dispatch and stashing have no equivalent gate — it is driven from
+non-terminal front ends by plain text instead.
 
 ## Out of scope
 

@@ -2,6 +2,7 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { PLAYER_MEASURES } from "@/lib/data/player-measures";
 import { meanOfPresent, pct } from "@/lib/data/aggregate";
+import { normalizedPersonName } from "@/lib/data/person-name";
 import { buildScoreString, matchOutcome, shortDate, type MatchScore } from "@/lib/data/match-utils";
 import { programDisplayName, teamLabel } from "@/lib/data/programs-server";
 
@@ -130,6 +131,73 @@ function toProgram(row: DbProgramRow, selfId: string): ConferenceProgram {
     state: row.state,
     isSelf: row.id === selfId,
   };
+}
+
+/**
+ * A match row as both name-matching helpers below need to see it.
+ *
+ * Structural, so the two callers can keep their own wider row shapes — the
+ * head-to-head query also selects a score, the profile query an opponent's
+ * hand — without either helper having to know about them.
+ */
+interface OpponentAttributedRow {
+  opponent_player_id: string | null;
+  player2_name: string | null;
+}
+
+/**
+ * Which of these matches were played against someone on that roster.
+ *
+ * Identity first, name second — every row recorded before the
+ * opponent-identity path shipped carries a name and nothing else, and
+ * `docs/ui-revamp-guardrails.md` §2 rules out backfilling them.
+ *
+ * Both sides go through `normalizedPersonName`, and that is the only reason a
+ * roster row ever meets a typed one. The roster name is joined from two
+ * columns, so a trailing space in `first_name` produces a doubled internal
+ * space that trimming the typed side alone can never reach — the pair looked
+ * identical on screen and the row silently dropped out of the head-to-head.
+ *
+ * A nameless row matches nobody. `normalizedPersonName` returns `""` for null,
+ * and `"" === ""` would file a match with no opponent name under a roster
+ * player with no name.
+ */
+export function headToHeadRows<T extends OpponentAttributedRow>(
+  rows: T[],
+  roster: { id: string; name: string }[]
+): T[] {
+  const rosterIds = new Set(roster.map((p) => p.id));
+  const rosterNames = new Set(
+    roster.map((p) => normalizedPersonName(p.name)).filter(Boolean)
+  );
+  return rows.filter((m) => {
+    if (m.opponent_player_id) return rosterIds.has(m.opponent_player_id);
+    const typed = normalizedPersonName(m.player2_name);
+    return typed !== "" && rosterNames.has(typed);
+  });
+}
+
+/**
+ * This program's matches against one opposing player.
+ *
+ * The name fallback is confined to rows carrying no identity at all, so a match
+ * explicitly attributed to somebody else can never be pulled in by a namesake.
+ * Same normalization on both sides as `headToHeadRows`, and the same refusal to
+ * let two blanks count as a match.
+ */
+export function opponentPlayerMatches<T extends OpponentAttributedRow>(
+  rows: T[],
+  playerId: string,
+  playerName: string
+): T[] {
+  const wanted = normalizedPersonName(playerName);
+  return rows.filter(
+    (m) =>
+      m.opponent_player_id === playerId ||
+      (m.opponent_player_id === null &&
+        wanted !== "" &&
+        normalizedPersonName(m.player2_name) === wanted)
+  );
 }
 
 /**
@@ -313,25 +381,18 @@ export const getOpponentDetail = cache(async function getOpponentDetail(
         b.startsOn.localeCompare(a.startsOn) || (a.slot ?? "").localeCompare(b.slot ?? "")
     );
 
-  // Head to head. Identity first, name second — every row recorded before the
-  // opponent-identity path shipped carries a name and nothing else, and
-  // `docs/ui-revamp-guardrails.md` §2 rules out backfilling them.
-  const rosterIds = new Set(roster.map((p) => p.id));
-  const rosterNames = new Set(roster.map((p) => p.name.toLowerCase()));
-  const headToHead: HeadToHeadMatch[] = (
+  // Head to head. The identity-or-name rule, and why it is spelled the way it
+  // is, live on `headToHeadRows`.
+  const headToHead: HeadToHeadMatch[] = headToHeadRows(
     (matchRows ?? []) as {
       id: string;
       player2_name: string | null;
       score: MatchScore | null;
       date: string;
       opponent_player_id: string | null;
-    }[]
+    }[],
+    roster
   )
-    .filter((m) =>
-      m.opponent_player_id
-        ? rosterIds.has(m.opponent_player_id)
-        : rosterNames.has((m.player2_name ?? "").trim().toLowerCase())
-    )
     .map((m) => ({
       matchId: m.id,
       date: shortDate(m.date),
@@ -417,7 +478,7 @@ export const getOpponentPlayerProfile = cache(async function getOpponentPlayerPr
     .eq("program_id", programId)
     .order("date", { ascending: false, nullsFirst: false });
 
-  const matches = (
+  const matches = opponentPlayerMatches(
     (matchRows ?? []) as {
       id: string;
       opponent_player_id: string | null;
@@ -425,15 +486,9 @@ export const getOpponentPlayerProfile = cache(async function getOpponentPlayerPr
       date: string;
       opponent_hand: string | null;
       opponent_backhand: string | null;
-    }[]
-  ).filter(
-    (m) =>
-      m.opponent_player_id === playerId ||
-      // The name fallback is confined to rows carrying no identity at all, so a
-      // match explicitly attributed to somebody else can never be pulled in by
-      // a namesake.
-      (m.opponent_player_id === null &&
-        (m.player2_name ?? "").trim().toLowerCase() === name.toLowerCase())
+    }[],
+    playerId,
+    name
   );
 
   const measures: OpponentMeasure[] = PLAYER_MEASURES.map((measure) => ({

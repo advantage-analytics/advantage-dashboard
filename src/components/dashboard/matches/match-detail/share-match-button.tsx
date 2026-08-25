@@ -60,7 +60,7 @@ export function ShareMatchButton({ match }: ShareMatchButtonProps): React.JSX.El
             "text-[13px] font-medium tracking-[0.5px]",
             "shadow-[0_1px_3px_rgba(57,134,243,0.25)]",
             "active:scale-[0.97] transition-[color,background-color,transform] duration-200 ease-out",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1",
+            "focus-visible:outline-none",
           )}
         >
           <Link2 className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
@@ -152,7 +152,7 @@ function SharePopoverPanel({
             "bg-white border border-[#EAECF0] text-[#525252]",
             "hover:bg-[#F5F5F5] hover:text-[#1D1D1F] active:bg-[#EBEBEB]",
             "active:scale-[0.97] transition-[background-color,transform,color] duration-150 ease-out",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1",
+            "focus-visible:outline-none",
           )}
         >
           {copied ? (

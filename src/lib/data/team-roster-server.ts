@@ -8,6 +8,7 @@ import {
   type MatchScore,
 } from "@/lib/data/match-utils";
 import { meanOfPresent, pct } from "@/lib/data/aggregate";
+import { normalizedPersonName } from "@/lib/data/person-name";
 import type { MemberRole } from "@/lib/data/team-settings-server";
 
 /**
@@ -382,11 +383,13 @@ export const getRosterData = cache(async function getRosterData(
   // ── Likely duplicates ─────────────────────────────────────────────────────
   // Same normalized name, exactly two live player rows, not both claimed. The
   // same comparison `normalized_person_name` makes in SQL, so the affordance
-  // and the function that backs it agree about what a duplicate is.
+  // and the function that backs it agree about what a duplicate is. That
+  // comparison now lives in `person-name.ts`, because Add player's warning has
+  // to ask the same question before the second row exists.
   const byName = new Map<string, RosterMember[]>();
   for (const member of members) {
     if (member.role !== "player") continue;
-    const key = member.name.trim().toLowerCase().replace(/\s+/g, " ");
+    const key = normalizedPersonName(member.name);
     byName.set(key, [...(byName.get(key) ?? []), member]);
   }
   for (const pair of byName.values()) {

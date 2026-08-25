@@ -201,7 +201,7 @@ function KpiCell({ label, value, split, statLabel, approximate }: KpiCellProps) 
             window.history.replaceState(null, "", `#${anchorId}`);
           }
         }}
-        className={`${baseClass} cursor-pointer hover:bg-[var(--color-surface-muted)] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] focus-visible:ring-inset`}
+        className={`${baseClass} cursor-pointer hover:bg-[var(--color-surface-muted)] transition-colors duration-200 focus-visible:outline-none`}
       >
         {inner}
       </a>

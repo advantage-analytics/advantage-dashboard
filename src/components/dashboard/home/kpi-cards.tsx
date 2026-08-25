@@ -134,7 +134,7 @@ export default function KpiCards({ cards, matchCount }: KpiCardsProps) {
           <button
             type="button"
             aria-label="Customize KPI tiles"
-            className="absolute top-2 right-2 h-7 w-7 rounded-lg flex items-center justify-center text-[#8A8A8E] hover:text-[#3C3C43] hover:bg-[#F5F5F5] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 data-[state=open]:bg-[#F5F5F5] data-[state=open]:text-[#0D0D0D]"
+            className="absolute top-2 right-2 h-7 w-7 rounded-lg flex items-center justify-center text-[#8A8A8E] hover:text-[#3C3C43] hover:bg-[#F5F5F5] transition-colors duration-200 focus-visible:outline-none data-[state=open]:bg-[#F5F5F5] data-[state=open]:text-[#0D0D0D]"
           >
             <Settings2 className="size-3.5" strokeWidth={1.5} />
           </button>

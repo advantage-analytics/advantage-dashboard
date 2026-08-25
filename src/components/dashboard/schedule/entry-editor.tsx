@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus, X } from "lucide-react";
-import { splitNames } from "@/lib/schedule/format";
+import { rosterIdsForLabels } from "@/lib/schedule/roster-match";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 
 export interface DraftEntry {
@@ -100,16 +100,10 @@ export function EntryEditor({
                 // are resolved from the split form, which is stable enough for
                 // matching while the raw text keeps typing usable.
                 const raw = event.target.value;
-                const userIds = splitNames(raw)
-                  .map(
-                    (label) =>
-                      roster.find(
-                        (player) =>
-                          player.name.toLowerCase() === label.toLowerCase()
-                      )?.userId
-                  )
-                  .filter((id): id is string => Boolean(id));
-                update(entry.key, { labels: [raw], userIds });
+                update(entry.key, {
+                  labels: [raw],
+                  userIds: rosterIdsForLabels(raw, roster),
+                });
               }}
               className="w-full min-w-0 bg-transparent text-[14px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-300)]"
             />

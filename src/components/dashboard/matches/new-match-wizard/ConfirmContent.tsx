@@ -345,7 +345,7 @@ function ConfirmContentImpl({
                       <button
                         type="button"
                         onClick={() => onEditDetail(item.field)}
-                        className="group/add inline-flex items-baseline gap-1 text-[13px] leading-[18px] font-normal tracking-[-0.1px] text-[#525252] hover:text-[#2563EB] focus-visible:text-[#3B82F6] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 rounded-sm"
+                        className="group/add inline-flex items-baseline gap-1 text-[13px] leading-[18px] font-normal tracking-[-0.1px] text-[#525252] hover:text-[#2563EB] focus-visible:text-[#3B82F6] transition-colors duration-150 focus-visible:outline-none rounded-sm"
                       >
                         <span className="text-[#CCCCCC] group-hover/add:text-[#3B82F6] group-focus-visible/add:text-[#3B82F6] transition-colors duration-150">
                           +

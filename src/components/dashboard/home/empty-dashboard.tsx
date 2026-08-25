@@ -98,7 +98,7 @@ export default function EmptyDashboard() {
         >
           <Link
             href="/dashboard/help"
-            className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#888888] uppercase tracking-[1.5px] transition-colors duration-200 hover:text-[#525252] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 rounded-sm"
+            className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#888888] uppercase tracking-[1.5px] transition-colors duration-200 hover:text-[#525252] focus-visible:outline-none rounded-sm"
           >
             <HelpCircle className="w-3 h-3" strokeWidth={1.5} aria-hidden />
             How to export from SwingVision

@@ -37,7 +37,7 @@ export function TeamPills({
               // without it the pair reflows by 1px each time the answer
               // changes.
               "cursor-pointer rounded-[var(--radius-pill)] border px-3 py-1.5 text-[12px] transition-colors duration-150",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]",
+              "focus-visible:outline-none",
               selected
                 ? "border-transparent bg-[var(--blue-soft)] text-[var(--blue)]"
                 : "border-[var(--border-field)] text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]"

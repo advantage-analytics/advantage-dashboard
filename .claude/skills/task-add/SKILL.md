@@ -1,7 +1,6 @@
 ---
 name: task-add
 description: Draft a well-formed task from a one-line intent and append it to this branch's queue. Use when adding work to .claude/tasks/, especially by voice or from a phone.
-disable-model-invocation: true
 argument-hint: "<one-line description of the task>"
 ---
 
@@ -46,15 +45,19 @@ name and a one-line scope:
 
 > Scope: <one line — what this branch owns>
 
-Run one with `/task-next`. Drain the file with `/loop /task-next`.
+Run one with `/task-next`. To drain the file, loop a plain-text instruction —
+**not** `/loop /task-next`, which a scheduled fire cannot invoke:
+
+> `/loop Read .claude/skills/task-next/SKILL.md and follow it exactly — run one task from this branch's queue, then stop.`
+
 Append freely while it runs: the queue is re-read at the start of every
 iteration, and the runner only ever rewrites a task's `status:` line.
 Mark a task `next` to jump the queue.
 
 Status values: `todo` (eligible to run), `next` (jump the queue), `doing` /
 `done` / `blocked` (written by the runner around a dispatch), and `later`
-(deferred — `/task-next`'s picker never selects it, so `/loop /task-next`
-drains straight past it; promote a task to `todo` by hand once it's actually
+(deferred — `/task-next`'s picker never selects it, so a loop drain skips
+straight past it; promote a task to `todo` by hand once it's actually
 ready).
 ```
 
@@ -144,6 +147,19 @@ one", "make it `next`", "that's two tasks".
 **Write nothing before the yes.** If the author declines, leave the file and
 the tree exactly as they were.
 
+**No human turn, no write.** The yes has to come from a person. This skill is
+model-invocable, so it can be reached where nobody is there to give one — an
+autonomous `/loop` iteration, a scheduled fire, or the subagent `/task-next`
+dispatches. In any of those, stop after showing the draft and say why. Silence
+is not the yes, and an absent author cannot decline.
+
+That clause is what replaces the old `disable-model-invocation` flag, which this
+skill dropped so non-terminal front ends could reach it at all. The flag made the
+no-human case unreachable; this makes it a refusal. Without it step 4 commits on
+nobody's authority — and inside a `/task-next` dispatch it would commit to the
+queue file the runner is concurrently rewriting, from a subagent that is
+otherwise told not to commit.
+
 ## 4. Append and commit
 
 Append at the end of the file. Default `status: todo`, or `next` if asked.
@@ -177,4 +193,5 @@ section exists to prevent.
   runner's.
 - Do not promote or modify `later` tasks. That is a deliberate, by-hand act.
 - Do not run the task. That is `/task-next`.
-- Do not write anything before the author says yes.
+- Do not write anything before the author says yes — and never when there
+  is no author present to ask.

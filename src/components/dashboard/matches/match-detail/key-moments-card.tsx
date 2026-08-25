@@ -159,7 +159,7 @@ export function KeyMomentsCard({
               type="button"
               aria-label="How to read these moments"
               aria-haspopup="dialog"
-              className="relative inline-flex items-center justify-center size-5 -m-1 text-[var(--color-text-dim)] hover:text-[#525252] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-blue-ring)] rounded-full"
+              className="relative inline-flex items-center justify-center size-5 -m-1 text-[var(--color-text-dim)] hover:text-[#525252] transition-colors duration-200 focus-visible:outline-none rounded-full"
             >
               <Info className="size-3" strokeWidth={1.75} aria-hidden="true" />
             </button>
@@ -256,7 +256,7 @@ export function KeyMomentsCard({
                 type="button"
                 onClick={() => showOnMomentumTracker(m.id)}
                 aria-label={`Show ${m.title} on the momentum tracker`}
-                className="group flex gap-3 items-start px-5 py-3 w-full text-left hover:bg-[#FAFAFA] active:scale-[0.998] transition-[background-color,transform] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-inset"
+                className="group flex gap-3 items-start px-5 py-3 w-full text-left hover:bg-[#FAFAFA] active:scale-[0.998] transition-[background-color,transform] duration-200 ease-out focus-visible:outline-none"
               >
                 {inner}
               </button>

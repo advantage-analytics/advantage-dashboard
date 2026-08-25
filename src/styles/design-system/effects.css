@@ -38,6 +38,13 @@
   --duration-enter:300ms;
   --duration-reveal:400ms;
   --focus-ring:0 0 0 2px var(--blue-ring-40);
+  /* Why the carve-out exists lives in focus.css; this is only why it takes two
+     layers. The 30% band alone composites to #DBDBDB on white — --ink-500 at
+     30% is 0.3x136 + 0.7x255 = 219.3 per channel, 1.38:1 — present in devtools,
+     invisible to a keyboard user, which is the failure that file exists to
+     prevent. The opaque 1px layer is what you actually see; the band softens
+     its outer edge. */
+  --focus-ring-field:0 0 0 1px var(--field-ring),0 0 0 2px var(--field-ring-30);
 }
 .dark{
   --shadow-card-emphasis:0px 4px 16px 0px rgba(0,0,0,0.5);
