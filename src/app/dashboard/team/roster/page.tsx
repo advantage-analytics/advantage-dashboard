@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import { teamLabel } from "@/lib/workspace/types";
 import { getRosterData } from "@/lib/data/team-roster-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { formatResetDate } from "@/lib/data/usage-format";
@@ -11,9 +12,10 @@ export const metadata = { title: "Roster" };
 /**
  * Everyone on the program, and how each of them is playing.
  *
- * Design 6a: a title, one line of standing, and a single table carrying form,
- * last match and first serve — with the people a coach has emailed but who have
- * not joined yet living in that same list rather than in a second one below it.
+ * Design 9a: the program named above the title, one line of standing, and a
+ * single table carrying lineup order, form, last match and first serve — with
+ * the people a coach has emailed but who have not joined yet living in that
+ * same list rather than in a second one below it.
  *
  * Both ways of growing a squad sit here rather than only in Settings › Team,
  * because this is where a coach notices somebody is missing. They are different
@@ -35,6 +37,12 @@ export default async function RosterPage() {
   // A hidden control is not authorization — every write behind these re-checks
   // `is_program_staff` in SQL. This only decides what is worth rendering.
   const canManage = active.role !== "player";
+
+  // The eyebrow names the workspace this roster belongs to. A coach running
+  // both squads holds two of these, and "Roster" alone would not say which one
+  // is on screen — the squad is the whole difference between them.
+  const squad = teamLabel(active.team);
+  const eyebrow = squad ? `${active.name} · ${squad}` : active.name;
 
   const playerCount = roster.members.filter((m) => m.role === "player").length;
   const visibility = roster.rosterVisible
@@ -71,12 +79,14 @@ export default async function RosterPage() {
   return (
     <div className="w-full flex-1 bg-[var(--surface-card)]">
       <div className="mx-auto flex max-w-screen-2xl flex-col gap-5 px-6 py-8 sm:px-10">
-        <div className="flex flex-col items-start justify-between gap-4 lg:flex-row lg:items-start lg:gap-10">
+        {/* The actions sit on the heading's baseline rather than its top edge
+            (9a): the eyebrow makes the block three lines tall, and buttons
+            aligned to the top of it float away from the title they act on. */}
+        <div className="flex flex-col items-start justify-between gap-4 lg:flex-row lg:items-end lg:gap-10">
           <div>
-            <h1 className="text-[30px] leading-9 font-light tracking-[-0.6px] text-[var(--ink-900)]">
-              Roster
-            </h1>
-            <p className="mt-1 text-[12px] leading-[1.5] tabular-nums text-[var(--ink-700)]">
+            <span className="eyebrow">{eyebrow}</span>
+            <h1 className="text-display mt-3">Roster</h1>
+            <p className="text-body-sm tabular mt-1">
               {canManage
                 ? standing
                 : `Your coaching staff manage who is on the program and who can send video. Match results are ${visibility}.`}
