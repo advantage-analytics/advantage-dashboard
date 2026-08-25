@@ -155,3 +155,43 @@ is the runner's. Newest entries at the bottom.
   still cites `team/invite-dialog.tsx` as its reference example for the
   `has-[input:focus-visible]` pattern, and that file no longer exists. A stale
   doc pointer, out of this task's scope, not fixed here.
+
+## T4 · Round-44 row treatment on Team Home — blocked
+- **gate:** mechanical — `npm run lint` 0 errors (38 pre-existing warnings,
+  none in the changed files), `npx tsc --noEmit` clean, `npm test` 93 passed.
+  `pipeline-guardrails-reviewer` — ran (dashboard UI); no findings. It checked
+  the things that would matter rather than assuming: the row's
+  `href={/dashboard/matches/${match.id}}` and `key` are byte-identical, so no
+  row can point at the wrong match; `dotColor()` still calls the shared
+  analysis predicates with an unedited body; `match.label` still comes from
+  `ANALYSIS_LABEL` in the untouched loader; the `isStaff` gate is unchanged and
+  the new Roster destination derives the same role predicate, with
+  authorisation still enforced by `is_program_staff` in SQL.
+  `rls-boundary-reviewer` — skipped: the diff is two component/page files, no
+  `src/lib/data/`, `src/lib/supabase/`, `src/app/api/` or migration, and no new
+  query. Confirmed against both `git diff HEAD --stat` and
+  `git ls-files --others --exclude-standard` (nothing untracked).
+  `task-completion-reviewer` — **`VERDICT: needs-work`**. This is the stage
+  that failed, and it is the only one that did.
+- **why it failed:** all four criteria are met — the reviewer verified the
+  geometry arithmetic (14px card radius − 6px list inset = the row's 8px
+  radius, genuinely concentric), that `focus.css` already rings `a[href]` so no
+  ring utility was needed, that nothing escapes the corners without
+  `overflow-hidden`, that the `ROW` constant and all four cell spans are
+  byte-identical, that the `RosterProgress` import is type-only, and that
+  `roster.invited - roster.joined` really is `outstanding.length` rather than a
+  misleading figure. What sank it is scope: the added
+  `<h2 class="eyebrow">Recent matches</h2>` is new user-visible copy that no
+  criterion and no line of the design reference asked for. Criterion 2 —
+  "one hairline sits above the list only" — is satisfiable by putting the rule
+  on the `<ul>` or `<section>` directly; the "a bare line reads as a rendering
+  fault" argument is aesthetic, not a logical requirement. The implementer
+  flagged it as its one judgement call, which is the right instinct; it should
+  have been asked rather than shipped.
+- **stash:** `111732d2f04500cf1e820342e95b7ec1b8f76ce1` — the full T4 diff, both
+  files. Recoverable; nothing discarded. Everything except the header stands.
+- **also noted, outside this diff:** `roster-table.tsx:312` and `:539` still use
+  the old treatment — full-bleed wash with `border-b` hairlines between rows,
+  and a comment at `:498` defending the full-bleed. Roster is a result list, so
+  round 44's rule arguably applies there too. Left alone, correctly, as outside
+  T4's scope.

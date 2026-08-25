@@ -116,7 +116,7 @@ ready).
   and moving the shared pure functions into `lib/` would settle it.
 
 ## T4 · Round-44 row treatment on Team Home
-- **status:** doing
+- **status:** blocked
 - **files:** `src/components/dashboard/team/match-rows.tsx`,
   `src/app/dashboard/team/page.tsx` — a guess
 - **done when:**
