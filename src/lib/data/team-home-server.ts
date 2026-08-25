@@ -27,6 +27,7 @@ import {
   type MatchScore,
 } from "@/lib/data/match-utils";
 import { meanOfPresent, pct, statKey } from "@/lib/data/aggregate";
+import { rosterMatchIds } from "@/lib/data/roster-ids";
 import {
   countTile,
   seriesTile,
@@ -1135,6 +1136,69 @@ function analysisOf(
 }
 
 /**
+ * One row of the matches list's read, in the shape the `select()` returns.
+ *
+ * The three id columns are not display data — they are the only evidence of
+ * which side is the program's. See `programSide()`.
+ */
+export interface DbRecentMatch {
+  id: string;
+  player1_id: string | null;
+  player2_id: string | null;
+  event_entry_id: string | null;
+  player1_name: string | null;
+  player2_name: string | null;
+  score: MatchScore | null;
+  tournament_name: string | null;
+  round: string | null;
+  date: string;
+  match_type: string | null;
+  source_provider: string | null;
+  verified: boolean | null;
+}
+
+/**
+ * One match, as the page's list renders it.
+ *
+ * Lifted out of `getTeamHomeData` so the row a coach actually sees can be
+ * asserted on: `won` here IS the outcome mark, and it is the one thing on the
+ * row that fails silently — a row whose side nothing established still prints
+ * correct names, a real date and a real score, with only an empty glyph slot
+ * to say that the program was never attributed to it.
+ *
+ * Both halves of the flip travel together, and they have to: names read one
+ * way and games the other is the same wrong answer as a wrong glyph, told more
+ * quietly. `oursFirst` is where that rule lives — the checklist receipt reads
+ * the same call, so the two cannot drift. With no side established nothing
+ * flips: the row keeps the stored order, and `won` stays null so no mark is
+ * drawn.
+ */
+export function teamMatchRow(
+  row: DbRecentMatch,
+  jobs: Map<string, MatchAnalysis>,
+  rosterIds: ReadonlySet<string>
+): TeamMatchRow {
+  const analysis = analysisOf(row, jobs);
+  const { side, swap, title } = oursFirst(row, rosterIds);
+  const score = row.score ?? null;
+
+  return {
+    id: row.id,
+    title,
+    context: matchContext(row),
+    status: analysis.status,
+    label: ANALYSIS_LABEL[analysis.status],
+    date: shortDate(row.date),
+    // Sets counted, never a stored outcome: `matches.result` holds a CONTEXT
+    // string ("Final Score"), so `matchOutcome` is the shared rule the matches
+    // list, the schedule and every player profile already ask.
+    sets: scoreSetsFrom(score, { swap }),
+    won: side === null ? null : matchOutcome(score, side === "player1"),
+    startedAt: analysis.startedAt,
+  };
+}
+
+/**
  * The checklist's first card, decided here rather than in the card.
  *
  * Null is "nothing has been sent yet" — the card asks for a match. Otherwise
@@ -1526,61 +1590,27 @@ export async function getTeamHomeData(
   // card nor the checklist adds a read of its own.
   const people = (rosterRows ?? []) as {
     player_id: string | null;
+    // Not display data and not redundant with `player_id`: for a CLAIMED
+    // player the two differ, and a match recorded before they claimed carries
+    // this one. See `rosterMatchIds`.
+    user_id: string | null;
     role: string;
     display_name: string | null;
     email: string | null;
     claimed_at: string | null;
   }[];
 
-  const rosterIds = new Set(
-    people
-      .map((rosterRow) => rosterRow.player_id)
-      .filter((id): id is string => Boolean(id))
+  // Both ids the RPC returns per person, through the one rule the Roster page
+  // resolves by (`lib/data/roster-ids.ts`). This was `player_id` alone, and the
+  // miss was invisible on every seat it was ever read against — staff and
+  // unclaimed players carry the same value in both columns. A claimed player's
+  // pre-claim match was the one row it dropped: correct names, a real score,
+  // and no outcome mark, missing from the sets-won and first-serve tiles.
+  const rosterIds = rosterMatchIds(people);
+
+  const matches: TeamMatchRow[] = ((rows ?? []) as DbRecentMatch[]).map((row) =>
+    teamMatchRow(row, jobs, rosterIds)
   );
-
-  const matches: TeamMatchRow[] = (rows ?? []).map((row) => {
-    const analysis = analysisOf(
-      row as {
-        id: string;
-        source_provider: string | null;
-        verified: boolean | null;
-      },
-      jobs
-    );
-
-    // Both halves of the flip travel together, and they have to: names read
-    // one way and games the other is the same wrong answer as a wrong glyph,
-    // told more quietly. `oursFirst` is where that rule lives — the checklist
-    // receipt reads the same call, so the two cannot drift. With no side
-    // established nothing flips: the row keeps the stored order, and `won`
-    // stays null so no mark is drawn.
-    const { side, swap, title } = oursFirst(
-      row as {
-        player1_id: string | null;
-        player2_id: string | null;
-        event_entry_id: string | null;
-        player1_name: string | null;
-        player2_name: string | null;
-      },
-      rosterIds
-    );
-    const score = (row.score ?? null) as MatchScore | null;
-
-    return {
-      id: row.id as string,
-      title,
-      context: matchContext(row),
-      status: analysis.status,
-      label: ANALYSIS_LABEL[analysis.status],
-      date: shortDate(row.date as string),
-      // Sets counted, never a stored outcome: `matches.result` holds a CONTEXT
-      // string ("Final Score"), so `matchOutcome` is the shared rule the
-      // matches list, the schedule and every player profile already ask.
-      sets: scoreSetsFrom(score, { swap }),
-      won: side === null ? null : matchOutcome(score, side === "player1"),
-      startedAt: analysis.startedAt,
-    };
-  });
 
   // `readSchedule` returns events newest first, which is the order the schedule
   // page renders them in. Both questions below are asked forwards in time, so

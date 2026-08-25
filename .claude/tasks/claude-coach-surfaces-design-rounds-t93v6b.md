@@ -538,7 +538,7 @@ ready).
 - **notes:** Raised by the altitude reviewer during `/pr-check`, as the deeper form of T18's fix. The invariant "`linked` and `listed` are never both true" is stated in the module docblock and maintained by FIVE different mechanisms at five writers of `target`: nothing at all (`useState`, safe because `emails` starts empty), a `setEmails([])` on the next line (`reset`), a render gate (`InviteTargetPicker`), a blanked `normalized` (the on-screen tripwire), and now T18's explicit `&& !listed` (the submit path). One rule, five techniques — and the next writer has to know it and pick one. Note this file's own docblock argues against a `mode` enum because "the picker and the tripwire would each get their own idea of whether an invitation is linked"; that argument is about a second source of truth, and deriving `target` from `listed` is the opposite — one source, read consistently. The consequence when a writer is missed is what T18's comment spends fifteen lines describing, and T21's open schema hole means the client guard is currently the only thing in front of it. **Do T22 first or together** — same file, and T22's reset path is another way `target` outlives the state it belongs to.
 
 ## T27 · Team Home's `rosterIds` misses a claimed player's user id
-- **status:** next
+- **status:** done
 - **files:** `src/lib/data/team-home-server.ts` (`rosterIds`, ~line 1527); `src/lib/data/team-roster-server.ts` (`canonical`, ~lines 304-322) — extract the shared rule rather than copying it
 - **done when:**
   - [ ] Team Home's `rosterIds` recognises BOTH ids `program_roster_full` returns for a claimed player — `player_id` and `user_id` — so `programSide()` attributes a match carrying either
@@ -560,3 +560,13 @@ ready).
   - [ ] Bulk-invite dedupe is case-insensitive, matching `create_program_invite`'s own `lower(email)` conflict target — today two spellings of one address send twice, the second invalidates the first's token, and the receipt reports "2 invitations sent" and two seats used
   - [ ] `roster-card.tsx`'s claimed-today rows are keyed by something unique, not by display name
 - **notes:** All four from `code-review` during `/pr-check` over the whole branch range. None blocks the merge on its own; grouped because each is a few lines and they touch four files that other queued tasks also touch. The invite-dedupe one is the most user-visible: a coach pasting a squad list with inconsistent capitalisation is told they sent more invitations than exist, and the earlier token silently stops working.
+
+## T29 · A claimed player's pre-claim matches are missing from their own profile
+- **status:** todo
+- **files:** `src/lib/data/player-profile-server.ts` (~line 130); `src/lib/data/roster-ids.ts` (the helper T27 extracted)
+- **done when:**
+  - [ ] The profile page finds a claimed player's matches whether the row carries their `program_players.id` or their `users.id`
+  - [ ] `isPlayer1` is decided against the same set of ids the fetch used, not against a single `playerId` — today a row found by one id can still be sided by the other and come out wrong
+  - [ ] It reuses `canonicalRosterIds`/`rosterMatchIds` from `roster-ids.ts` rather than growing a third answer to "which ids are this player's"
+  - [ ] A test covers a claimed player with a pre-claim match and asserts it appears on their profile, on the correct side
+- **notes:** Found by the T27 subagent while fixing the Team Home half, and correctly left alone — no `done when:` line of T27's covered it. `player-profile-server.ts:130` fetches with `.or('player1_id.eq.${playerId},player2_id.eq.${playerId}')` and then computes `isPlayer1` as `match.player1_id === playerId` — one id in both halves. So a claimed player's matches from before the `program_players` backfill, which carry their user id, are absent from their own profile page. Note the second criterion is the sharper half: once the fetch widens, siding against a single `playerId` would find a row and then attribute it to the wrong player, which is worse than not finding it. That page already reads `program_roster_full` and has the `user_id` in hand. Same class as T27; the helper now exists.

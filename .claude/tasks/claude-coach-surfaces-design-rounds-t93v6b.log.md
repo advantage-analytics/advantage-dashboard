@@ -1153,3 +1153,59 @@ is the runner's. Newest entries at the bottom.
 - **`git worktree` is the right way to compare against HEAD.** 5b used one instead
   of `git stash`; it does not touch the working tree or index, and it is what the
   reviewer in T14 should have reached for.
+
+## T27 · Team Home's `rosterIds` misses a claimed player's user id — done
+- **gate:** 5a mechanical — `npm run lint` 0 errors / 38 pre-existing warnings;
+  `npx tsc --noEmit` exit 0; `npm test` 172 passed (159 prior + 13 new). 5b
+  `task-completion-reviewer` — `VERDICT: pass`, dispatched ALONE and finished
+  before 5c. 5c BOTH guardrails ran: `pipeline-guardrails-reviewer` and
+  `rls-boundary-reviewer`, both explicit no-findings all-clears.
+- **this was the blocker on `/pr-check`'s not-ready verdict** at 40e7b56, found by
+  `code-review` and confirmed independently by both project reviewers and by hand.
+- **changed:** new `src/lib/data/roster-ids.ts` holds the rule ONCE —
+  `canonicalRosterIds(rows): Map` (moved out of `team-roster-server.ts`, where it
+  already existed) and `rosterMatchIds(rows): ReadonlySet`, literally
+  `new Set(canonicalRosterIds(rows).keys())`. `team-roster-server.ts` calls the
+  helper instead of its inline loop; `team-home-server.ts`'s `people` row type
+  gains `user_id` and `rosterIds` becomes `rosterMatchIds(people)`. The inline
+  `matches` mapping was extracted verbatim into an exported `teamMatchRow(...)` so
+  a test can assert the row a coach actually sees — both reviewers diffed the body
+  field-for-field against the original lambda and the `.select()` behind it.
+- **why one builder plus a derived view, rather than handing Team Home the Map:**
+  the two callers ask different questions — the Roster page RESOLVES an id to a
+  row (`canonical.get(raw) ?? raw`), Team Home asks MEMBERSHIP (`Set.has`). Giving
+  the membership call site a `.get()` it has no business calling is this same bug
+  one level along. One loop decides which ids belong to a roster row, so the two
+  answers cannot drift; a test asserts the set IS the map's key set.
+- **the widening direction was the risk, and it was checked:** the bug was a set
+  too NARROW; the fix makes it wider, and a set grown too far attributes
+  strangers' matches to the team — worse than what was fixed. `canonicalRosterIds`
+  adds `user_id` only when non-null AND different from `player_id`, so a staff seat
+  and an unclaimed player (both columns equal, per the RPC's three UNION arms)
+  contribute exactly one id; a null `player_id` row is skipped entirely; and every
+  id still comes from a row already scoped to `p_program_id`.
+- **side is unaffected by the widening, verified not assumed:** `programSide` tests
+  `player1_id` then `player2_id` in order, so the set decides only WHETHER a row is
+  attributed, never which column wins. A test puts the user id in `player2_id` with
+  a score that is a win for player1 — so a wrong side would print a win under the
+  player who lost — and asserts `won === false` with the sets flipped.
+- **THE IMPLEMENTER CAUGHT ITS OWN BAD TEST, which is the thing worth recording.**
+  Its first `teamFirstReport` test PASSED against the pre-fix code: an unattributed
+  row keeps stored order, and the fixture already had the player in
+  `player1_name`, so the title read correctly whether or not attribution ever
+  happened. It rewrote the fixture to store the player in `player2`, so the title
+  only reverses if the side was established. Same trap, same fix, for
+  `teamAttention` — whose alert would otherwise have named the opponent first to
+  that player's own coach. 5b confirmed both now fail pre-fix with the stated
+  symptom by substituting the old rule in a disposable worktree: exactly 8 of 13
+  fail, across all four consumers, and the 5 that pass both ways are genuine
+  controls (strangers not ours, profile id on both sides, coach seat, unclaimed
+  player, two-stranger row).
+- **`rosterIds` never reaches a query.** The RLS reviewer confirmed it is used only
+  for in-memory attribution — no `.in()`, `.eq()` or `.or()` receives it — so no
+  query returns rows a caller could not previously read. And `user_id`, though now
+  on the `people` row type, is never read or forwarded: every return shape was
+  traced and none carries a raw id.
+- **flagged, correctly not fixed:** `player-profile-server.ts:130` has the same
+  class of gap — it computes `isPlayer1` from one id, so a claimed player's
+  pre-claim matches are missing from their OWN profile page. Queued as T29.

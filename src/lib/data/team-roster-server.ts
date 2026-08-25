@@ -8,6 +8,7 @@ import {
   type MatchScore,
 } from "@/lib/data/match-utils";
 import { meanOfPresent, pct, statKey } from "@/lib/data/aggregate";
+import { canonicalRosterIds } from "@/lib/data/roster-ids";
 import { normalizedPersonName } from "@/lib/data/person-name";
 import type { MemberRole } from "@/lib/data/team-settings-server";
 
@@ -301,25 +302,12 @@ export const getRosterData = cache(async function getRosterData(
   // is a slice from the front.
   const rows = (rosterResult.data ?? []) as DbRosterRow[];
 
-  // Both eras of player id resolve to the same roster row.
-  //
-  // A match recorded today carries the athlete's PROFILE id, because that is
-  // what `getLadder()` hands the upload wizard. A match recorded before
-  // coach-managed profiles existed carries their USER id. `my_player_ids()`
-  // already treats the two as the same person for read access; this is the
-  // same rule for aggregation, so a claimed player's season does not split in
-  // half at the moment they claimed it.
-  //
-  // There are no such rows in this database today. That is exactly why it is
-  // worth writing down now rather than discovering later on the one program
-  // that has them.
-  const canonical = new Map<string, string>();
-  for (const row of rows) {
-    canonical.set(row.player_id, row.player_id);
-    if (row.user_id && row.user_id !== row.player_id) {
-      canonical.set(row.user_id, row.player_id);
-    }
-  }
+  // Both eras of player id resolve to the same roster row — the shared rule,
+  // in `lib/data/roster-ids.ts`, which Team Home asks the membership half of.
+  // It used to be spelled out here and read `player_id` only over there, and
+  // that is precisely the drift the file exists to end: a claimed player's
+  // pre-claim matches counted on this page and went unattributed on that one.
+  const canonical = canonicalRosterIds(rows);
 
   const resultsByMember = new Map<string, MemberResult[]>();
   for (const match of matches) {
