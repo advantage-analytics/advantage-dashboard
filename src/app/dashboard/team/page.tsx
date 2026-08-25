@@ -4,7 +4,8 @@ import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { getTeamHomeData } from "@/lib/data/team-home-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { isAnalysisReady, isWorking } from "@/lib/data/match-analysis";
-import { UsageMeter } from "@/components/dashboard/team/usage-meter";
+import { advButton } from "@/lib/ui/adv-button";
+import { UsageFooter } from "@/components/dashboard/team/usage-footer";
 import { FirstSteps } from "@/components/dashboard/team/first-steps";
 import { MatchRows } from "@/components/dashboard/team/match-rows";
 
@@ -27,9 +28,15 @@ export const metadata = { title: "Team Home" };
  * rows in it. A separate "welcome" screen would have to be dismissed, and a
  * dismissable welcome is a screen that lies about whether anything happened.
  *
- * The empty state reads as an instruction, not a greeting — "Nothing here yet"
- * followed by the three things to do, in order. The populated one greets,
- * because by then the person is arriving rather than starting.
+ * **Round 45, rule 1: the frame never moves.** Greeting, New match and the
+ * usage footer are on screen from day zero, in the positions they will still
+ * be in a season later; only the middle changes as data arrives. The empty
+ * state used to be its own composition — an instructional headline announcing
+ * its own emptiness, with the budget card promoted beside it — which meant a
+ * coach's second visit rearranged the page under them and taught the first
+ * visit's layout to nobody. An empty middle makes the point the headline was
+ * making, and makes it without a ghost row or a dashed placeholder standing in
+ * for content that has not arrived.
  */
 export default async function TeamHomePage() {
   const workspace = await getWorkspaceContext();
@@ -55,10 +62,18 @@ export default async function TeamHomePage() {
   const isStaff = active.role !== "player";
   const empty = matches.length === 0;
 
-  const hour = new Date().getHours();
+  const now = new Date();
+  const hour = now.getHours();
   const greeting =
     hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const firstName = viewer.name.split(" ")[0];
+  // Server clock, like the greeting it sits under — the two would contradict
+  // each other if one were rendered here and the other in the browser.
+  const today = now.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  });
 
   // The same predicates the matches list and the match page ask. A dot that
   // means "running" here and something else there is how two screens start
@@ -66,56 +81,85 @@ export default async function TeamHomePage() {
   const working = matches.filter((match) => isWorking(match.status)).length;
   const ready = matches.filter((match) => isAnalysisReady(match.status)).length;
 
+  // Who may send video at all. A player only when the program has opened
+  // uploads to them — that is the rule the database enforces, so a player
+  // without it gets no button rather than a disabled one: it is not paused,
+  // it is not theirs to do. Staff whose claim is still being confirmed DO get
+  // the button, disabled, because for them it genuinely is paused and the slot
+  // it occupies is the one it will stay in.
+  const canUpload = isStaff || playersCanUpload;
+
   return (
     <div className="w-full flex-1 bg-[var(--surface-card)]">
-      <div
-        className={`mx-auto flex max-w-screen-2xl flex-col px-6 py-8 sm:px-10 sm:py-8 ${
-          empty ? "gap-7" : "gap-6"
-        }`}
-      >
-        <div className="flex flex-col items-start justify-between gap-6 lg:flex-row lg:gap-10">
-          <div className="flex flex-col gap-1.5">
-            <h1 className="text-[24px] font-light leading-[1.2] tracking-[-0.4px] text-[var(--ink-900)]">
-              {empty ? "Nothing here yet" : `${greeting}, ${firstName}`}
+      <div className="mx-auto flex max-w-screen-2xl flex-col gap-6 px-6 py-8 sm:px-10">
+        {/* The frame's top edge. Greeting, subline and the primary sit in the
+            same places in every state — the gap between the h1 and the line
+            under it is the only thing tuned by hand (9px), because 8 reads as
+            attached and 12 as unrelated. */}
+        <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end sm:gap-6">
+          <div className="flex flex-col gap-[9px]">
+            <h1 className="text-display">
+              {greeting}, {firstName}
             </h1>
-            <p className="max-w-[56ch] text-[13px] leading-[1.6] text-[var(--ink-700)]">
-              {empty ? (
-                isStaff ? (
-                  <>
-                    Send a match and the analysis comes back into this page.
-                    Start with a dual you already have on film.
-                  </>
+
+            {/* Subline and date share a baseline. The subline is the one part
+                of the frame whose words change with the state — that is the
+                point of it; the frame is the geometry, not the sentence. */}
+            <div className="flex flex-wrap items-baseline gap-3">
+              <p className="text-body-sm max-w-[56ch]">
+                {empty ? (
+                  isStaff ? (
+                    "Send a match and the analysis comes back to this page."
+                  ) : playersCanUpload ? (
+                    "Your matches appear here — your coach sends them, and so can you."
+                  ) : (
+                    "Your matches appear here as your coach sends them."
+                  )
                 ) : (
-                  <>
-                    Your matches appear here as they come back from analysis.
-                    Your coach sends them
-                    {playersCanUpload ? ", and so can you." : "."}
-                  </>
-                )
-              ) : (
-                <ProgressLine
-                  working={working}
-                  ready={ready}
-                  joined={isStaff ? roster.joined : 0}
-                />
-              )}
-            </p>
+                  <ProgressLine
+                    working={working}
+                    ready={ready}
+                    joined={isStaff ? roster.joined : 0}
+                  />
+                )}
+              </p>
+              <span className="text-micro tabular">{today}</span>
+            </div>
           </div>
 
-          <UsageMeter
-            usedSeconds={usage.usedSeconds}
-            capSeconds={usage.capSeconds}
-            showTerms={empty}
-          />
+          {canUpload &&
+            (active.canSubmitVideo ? (
+              <Link
+                href="/dashboard/matches/new"
+                className={advButton("primary")}
+              >
+                New match
+              </Link>
+            ) : (
+              /* Claim still in review. The claim-review screen promises that
+                 everything except sending video works now, so this keeps the
+                 promise in the honest way — the control is where it will be,
+                 and refuses rather than disappearing. `title` carries the
+                 reason; the checklist card below states it in full. */
+              <button
+                type="button"
+                disabled
+                title="Paused until we confirm the program."
+                className={advButton("primary")}
+              >
+                New match
+              </button>
+            ))}
         </div>
 
+        {/* The middle — the only thing empty → populated changes. */}
         {empty ? (
-          isStaff && (
+          isStaff ? (
             <FirstSteps
               canSubmitVideo={active.canSubmitVideo}
               playersCanUpload={playersCanUpload}
             />
-          )
+          ) : null
         ) : (
           <>
             <MatchRows matches={matches} />
@@ -152,6 +196,13 @@ export default async function TeamHomePage() {
             )}
           </>
         )}
+
+        {/* The frame's bottom edge — last block on the page in both states. */}
+        <UsageFooter
+          usedSeconds={usage.usedSeconds}
+          capSeconds={usage.capSeconds}
+          billingMonth={usage.billingMonth}
+        />
       </div>
     </div>
   );

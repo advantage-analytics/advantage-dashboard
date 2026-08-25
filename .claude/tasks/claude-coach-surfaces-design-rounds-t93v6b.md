@@ -19,7 +19,7 @@ straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · The Team Home frame that never moves
-- **status:** todo
+- **status:** done
 - **files:** `src/app/dashboard/team/page.tsx`,
   `src/components/dashboard/team/usage-meter.tsx` (likely a new footer strip
   beside it) — a guess
