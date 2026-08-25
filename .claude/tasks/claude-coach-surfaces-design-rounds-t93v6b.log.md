@@ -593,3 +593,45 @@ is the runner's. Newest entries at the bottom.
   not — the reviewer showed three of that file's four branches could read the
   map with no behaviour change. Only the third attempt was a straightforward
   finish. Two of the three blocks were real defects; one was mine.
+
+## T10 · KPI strip, only once the numbers are honest — blocked
+- **gate:** mechanical — `npm run lint` 0 errors (38 pre-existing warnings),
+  `npx tsc --noEmit` clean, `npm test` **107 passed** (93 baseline + 14 new in
+  `tests/team-kpi.spec.ts`).
+  `pipeline-guardrails-reviewer` — no findings. The check that mattered: it
+  diffed `matchOutcome()`'s old and new bodies line by line rather than
+  reasoning about them, and confirmed `setTally()` is a verbatim extraction —
+  same guard, same `forEach`, same tie check, same orientation. Missing score,
+  empty arrays, level sets and unequal-length arrays all behave identically.
+  **T8's glyphs are safe.** It also confirmed a match whose side cannot be
+  established is skipped before reaching either average rather than defaulting
+  to a column, and that headline and sparkline read the same array.
+  `rls-boundary-reviewer` — no findings, and it answered the
+  `match_stats_with_percentages` question with history: the view *was* a
+  definer view readable by `anon` — a real past bug — and
+  `20260817074053_secure_match_stats_view.sql` set `security_invoker = on` and
+  revoked `anon`. It checked every later migration touching the view to confirm
+  none reverts it. The widened reads change how many of a player's *own*
+  visible rows are aggregated, not which rows exist.
+  `task-completion-reviewer` — **`VERDICT: needs-work`** on criterion 1.
+- **why it failed:** criterion 1 says four tiles render. The strip renders
+  three whenever no dual is decided, omitting the dual-record tile rather than
+  printing `0–0`. I had assumed this was my wording being loose — the reviewer
+  showed it is not a rare corner: **any program with matches but no completed
+  dual hits it in normal operation**, which is most of a season's early weeks
+  and any program playing individual matches. Criterion 2 already carves out
+  the true empty state; nothing carves out this partial one. It also found that
+  **no test exercises `teamKpis()` itself** — the 14 new tests cover the pure
+  helpers, not the function that decides which tiles exist — so the branch in
+  question is unverified as well as unmet.
+- **judged sound and not softened:** the never-trending decision on the dual
+  record and matches-analyzed tiles. The reviewer read "only once there is a
+  week of data" as a ceiling on when a trend may appear rather than a mandate
+  that every tile gets one, and accepted the reasoning — a W–L record's only
+  drawable line is a cumulative win percentage wearing the record's label, and
+  a count that only rises reports growth as improvement. The chosen constants
+  (`SMALL_SAMPLE_MIN = 5`, `TREND_MIN_SPAN_DAYS = 7`, required together) were
+  judged defensible and implemented as described.
+- **stash:** `9db3e34683717299c6f72c36731c26a3f50bbe41` — the strip, the
+  aggregation, the tests, and the `setTally`/`statKey` de-duplication.
+  Recoverable; nothing discarded.
