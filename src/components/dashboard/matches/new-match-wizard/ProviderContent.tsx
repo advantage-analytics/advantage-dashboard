@@ -14,6 +14,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { providers, type Provider } from "@/lib/providers";
 import { providerKindOrNull } from "@/lib/services/upload";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { explainVideoRefusal } from "@/lib/workspace/types";
 import { eyebrowLabelCls } from "./styles";
 
 export interface ProviderContentProps {
@@ -33,12 +34,31 @@ function ProviderContentImpl({ selectedProvider, onProviderSelect }: ProviderCon
   const importProviders = providers.filter((p) => !isVideoProvider(p));
 
   /**
-   * A program still being confirmed can build a roster but must not spend the
-   * vendor budget. Advisory only — `reserveQuota()` is the choke point every
-   * submission passes and the only thing that actually refuses. This exists so
-   * a coach hears it before uploading gigabytes, not after.
+   * Whether this workspace may spend the vendor budget at all, and if not, why.
+   *
+   * The same `explainVideoRefusal()` the two server seams call, so the wizard
+   * says the same thing the spend would — not so it stops you; see below. It
+   * used to ask only about the claim state, which was the whole question until
+   * the per-program and per-member upload switches arrived. After that, a
+   * player either switch had turned off was offered the provider with nothing
+   * said, answered the three camera questions, and had a `matches` row written
+   * before `/api/splitstep/upload-url` refused. The rollback there only covers
+   * a failed job insert, so each attempt left a videoless match behind — with
+   * whatever score they typed, since the match step requires one.
+   *
+   * Advisory, and only advisory — this says WHY, it does not close the door.
+   * It deliberately does not gate the provider row: `useUploadMatchWizard`
+   * selects the video provider by default on open, so a refused person arrives
+   * with it already chosen and Continue already enabled, and the resume and
+   * preset paths skip this component altogether. Disabling the row here would
+   * look like a closed door while all three of those walked past it. Closing it
+   * properly belongs where the provider is chosen and where Continue is gated;
+   * until then a `matches` row is still written before the seam refuses.
+   *
+   * `reserveQuota()` remains the choke point every submission passes and the
+   * only thing that actually refuses, so no barred workspace is ever billed.
    */
-  const videoBlocked = active.kind === "team" && !active.canSubmitVideo;
+  const videoRefusal = explainVideoRefusal(active);
 
   const renderProvider = (provider: Provider) => {
         const isAvailable = provider.available !== false;
@@ -161,10 +181,9 @@ function ProviderContentImpl({ selectedProvider, onProviderSelect }: ProviderCon
           <div className="mt-2.5 flex flex-col gap-2.5">
             {videoProviders.map(renderProvider)}
           </div>
-          {videoBlocked && (
+          {videoRefusal !== null && (
             <p className="mt-2.5 text-[12px] leading-[1.5] text-[#888888]">
-              {active.name} is still being confirmed. You can invite staff and build
-              your roster now; sending video opens as soon as that&apos;s done.
+              {videoRefusal}
             </p>
           )}
         </div>

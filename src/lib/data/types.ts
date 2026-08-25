@@ -42,6 +42,17 @@ export interface Match {
    * matches, which are deliberately minted with no `event_entry_id`.
    */
   eventId?: string | null;
+  /**
+   * Who filed this match, when that is not the player it is attributed to.
+   *
+   * Null for every personal match — there the uploader IS the player — and
+   * null for a team match somebody filed for themselves. It is set only when
+   * `matches.created_by` is a different person from `player1_id`, which inside
+   * a program is routine: a coach files for their squad, and a player may file
+   * for a teammate. Resolved in `match-detail-server.ts`; see the note there
+   * for why the two columns cannot be compared directly.
+   */
+  uploadedBy?: string | null;
   player1: Player;
   player2: Player;
   score: MatchScore;

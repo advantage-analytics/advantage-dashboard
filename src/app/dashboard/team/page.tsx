@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import { canUploadForProgram, isProgramStaff } from "@/lib/workspace/types";
 import { getTeamHomeData } from "@/lib/data/team-home-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { isAnalysisReady, isWorking } from "@/lib/data/match-analysis";
@@ -52,7 +53,10 @@ export default async function TeamHomePage() {
   // their own line — so without this the greeting would tell a player that "1
   // player has joined", and the invite buttons would open a dialog whose every
   // write the database refuses.
-  const isStaff = active.role !== "player";
+  // `isProgramStaff` rather than the same test spelled by hand — its own doc
+  // comment exists because the rail and this page once wrote the rule in
+  // opposite directions.
+  const isStaff = isProgramStaff(active);
   const empty = matches.length === 0;
 
   const hour = new Date().getHours();
@@ -89,7 +93,7 @@ export default async function TeamHomePage() {
                   <>
                     Your matches appear here as they come back from analysis.
                     Your coach sends them
-                    {playersCanUpload ? ", and so can you." : "."}
+                    {canUploadForProgram(active) ? ", and so can you." : "."}
                   </>
                 )
               ) : (

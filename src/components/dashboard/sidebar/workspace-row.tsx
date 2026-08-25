@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Check, ChevronsUpDown, Plus, Loader2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -25,6 +26,7 @@ import { RailTooltip } from "./rail-tooltip";
  */
 export function WorkspaceRow({ expanded }: { expanded: boolean }) {
   const { active, available } = useWorkspace();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [, startTransition] = useTransition();
@@ -40,9 +42,18 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
     }
     setPendingId(workspace.id);
     startTransition(async () => {
-      await setActiveWorkspace(workspace.id);
-      setPendingId(null);
-      setOpen(false);
+      try {
+        // The action redirects into the new workspace, so on success this
+        // rejects with Next's internal redirect signal instead of resolving —
+        // by then the navigation is already under way and the router handles
+        // it. Only a refused switch comes back normally. Either way the
+        // sidebar survives that navigation, so clearing the spinner and
+        // closing the menu is this component's job.
+        await setActiveWorkspace(workspace.id, pathname);
+      } finally {
+        setPendingId(null);
+        setOpen(false);
+      }
     });
   }
 
@@ -121,6 +132,19 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
         style={{ width: PANEL_WIDTH }}
         className="rounded-[12px] border-[var(--border-medium)] p-1.5"
       >
+        {/* Squad in, role out — every row here is one line, so they are all
+            the same height and the list reads as a list.
+
+            The squad stays because it is the only thing separating two rows
+            that both say "Meridian State". The role goes: it is the same word
+            on both of a coach's rows, so it never decides which one to click,
+            and carrying it cost a stacked second line on team rows only —
+            "ZZ Test Program · Men's" over "Coach" standing visibly taller
+            than "Personal". Condensing it onto the line was the other option
+            and is worse: 232px leaves about 149px for text here, roughly 24
+            characters, and a third `·` segment would truncate the squad to
+            pay for a word that disambiguates nothing. Role is a fact about a
+            workspace you are already in — the Team pages state it. */}
         {available.map((workspace) => {
           const isActive = workspace.id === active.id;
           const squadLabel = teamLabel(workspace.team);
@@ -150,17 +174,10 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
                 {workspace.mark}
               </span>
 
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[12px] text-[var(--ink-900)]">
-                  {workspace.name}
-                  {squadLabel && (
-                    <span className="text-[var(--ink-500)]"> · {squadLabel}</span>
-                  )}
-                </span>
-                {workspace.kind === "team" && (
-                  <span className="block truncate text-[10px] text-[var(--ink-500)]">
-                    {workspace.role.charAt(0).toUpperCase() + workspace.role.slice(1)}
-                  </span>
+              <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink-900)]">
+                {workspace.name}
+                {squadLabel && (
+                  <span className="text-[var(--ink-500)]"> · {squadLabel}</span>
                 )}
               </span>
 

@@ -240,10 +240,14 @@ function RowMenu({
    */
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // The owner always may. Offering a switch that the RPC would honour but that
-  // would lock a program's only owner out of its own budget is a control with
-  // one useful position. A coach-managed player has no account to grant it to.
-  const canToggleSend = member.userId !== null && member.role !== "owner";
+  // Players only, and not merely the owner. `canUploadForProgram()` answers
+  // for owner, coach and staff before it reads `upload_enabled`, so on a staff
+  // row this switch would move, write, and change nothing anyone could
+  // observe — the position it appears to set is not a position the upload page
+  // has. Staff are exempt on purpose: a program's own coaches must not be
+  // lockable out of its budget by a switch. A coach-managed player has no
+  // account to grant it to.
+  const canToggleSend = member.userId !== null && member.role === "player";
   const canRemove = member.role !== "owner" && !isViewer;
   // Gated on there being a profile row to write, and on nothing else. A coach
   // and a claimed player both have one; staff seats do not, because
@@ -252,9 +256,11 @@ function RowMenu({
   // likely to carry a stale spot — or offer the item on a coach whose name
   // lives in `users` and which this dialog cannot write.
   const canEdit = member.profileId !== null;
-  // Whether anything is drawn above the divider: the switch, or the sentence
-  // that stands in for it on a player who has no account.
-  const hasSendBlock = canToggleSend || member.role === "player";
+  // Whether anything renders in the grant slot at all. Both arms of it are
+  // player-only — the switch, and the "no account yet" note — so a coach or
+  // staff row fills nothing, and the divider below would open the popover with
+  // a rule drawn across the top of nothing.
+  const grantSlotFilled = canToggleSend || member.role === "player";
 
   // An owner has none of the three, but the slot still has to exist. Returning
   // null let the upload icon slide right into the space where the menu would
@@ -322,7 +328,10 @@ function RowMenu({
           )
         )}
 
-        {hasSendBlock && (canEdit || canRemove) && (
+        {/* One rule, above the action group rather than inside Remove: with
+            Edit player present there are two actions under it, and a divider
+            owned by Remove would draw a second one between them. */}
+        {grantSlotFilled && (canEdit || canRemove) && (
           <span className="my-1 block h-px bg-[var(--border-hairline)]" />
         )}
 

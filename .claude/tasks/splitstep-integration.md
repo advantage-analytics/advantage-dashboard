@@ -82,3 +82,54 @@ ready).
   - [ ] An item too vague for acceptance criteria is reported, not guessed at
 - **notes:** Phase 3. The rewrite is the point: a Notion line like "fix the
   matches page" has no criteria, and a task without criteria cannot be gated.
+
+## T7 · Stop a refused upload stranding its blob and job
+- **status:** todo
+- **files:** src/lib/services/splitstep/submit-match-video.ts,
+  src/app/api/splitstep/jobs/route.ts (guess)
+- **done when:**
+  - [ ] A permission refusal at `/api/splitstep/jobs` leaves the job in a state
+        something eventually reclaims — not `uploaded`, which
+        `reap_stalled_uploads()` skips, reaping only `pending`/`uploading`
+  - [ ] The blob for a refused job becomes reclaimable by the `reclaim-videos`
+        cron rather than staying pinned by a job row that names it
+  - [ ] A genuine transient submit failure — network, vendor 5xx — still leaves
+        the job retryable without re-uploading, which is why `uploaded` exists
+  - [ ] The person is told the upload will not be retried, instead of a
+        "Not submitted" state inviting a retry that can never succeed
+- **notes:** `/pr-check` finding. A coach revoking "Can send video" mid-transfer
+  is the trigger: bytes land, submit 403s, and the job sits at `uploaded`
+  forever with the blob behind it. The pending-review refusal has the same shape
+  but self-resolves when the claim is approved; a permission refusal does not.
+
+## T8 · Tell "cannot resolve your workspace" apart from "you are not a member"
+- **status:** todo
+- **files:** src/app/api/splitstep/upload-url/route.ts (guess)
+- **done when:**
+  - [ ] A null `getWorkspaceContext()` on a personal upload no longer returns
+        the "you do not have access to the workspace this match belongs to" 403
+  - [ ] That case returns a status the client treats as transient, with a
+        message that asserts no membership fact
+  - [ ] A real non-member — a match whose `program_id` the caller genuinely has
+        no membership for — still gets the 403 and the existing sentence
+  - [ ] The transient case does not mark the job failed, so a retry needs no
+        re-upload
+- **notes:** The route calls `getWorkspaceContext()` a second time (after its own
+  `getUser()`); any transient GoTrue failure collapses `available` to `[]`, and
+  `billingWorkspaceFor([], null)` returns undefined — reported as "no access" to
+  the user's *own* personal workspace.
+
+## T9 · Name every remedy a refused uploader actually needs
+- **status:** todo
+- **files:** src/lib/workspace/types.ts (guess — `explainVideoRefusal`)
+- **done when:**
+  - [ ] With both `players_can_upload` and the member's `upload_enabled` off,
+        the refusal names both fixes, not only the program-wide one
+  - [ ] With only one off, the sentence still names just that one
+  - [ ] Staff and personal workspaces are unaffected — the `kind` and
+        `isProgramStaff` short-circuits still answer first
+  - [ ] The pending-review sentence is unchanged and still answered before the
+        switches
+- **notes:** Today the `!playersCanUpload` branch returns first, so a coach who
+  opens Team settings as instructed finds the player still refused, now with a
+  different message pointing at the roster row. Two round trips for one refusal.

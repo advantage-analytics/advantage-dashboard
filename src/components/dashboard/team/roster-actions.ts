@@ -17,9 +17,15 @@ import type { ActionResult } from "@/components/dashboard/settings/actions";
  * needs no account. Settings › Team is a list of seats and has no opinion about
  * a freshman who has never signed in.
  *
- * `set_member_upload_enabled` has existed since the membership migration and
- * has never had a caller: there was no screen with a per-person control on it,
- * because there was no roster. This is that caller.
+ * `set_member_upload_enabled` came with the membership migration
+ * (`20260818041025`) and was dropped three migrations later by
+ * `20260818043926`, which found no caller anywhere in `src/` — there was no
+ * screen with a per-person control on it, because there was no roster — and
+ * said it "comes back with the control that needs it". This is that caller;
+ * `20260824223337_enforce_member_upload_enabled.sql` is what brought the
+ * function back, and made what it writes decide something, and
+ * `20260825021649_set_member_upload_enabled_reports_no_row.sql` is what made
+ * it say so when it changed nothing.
  */
 
 const ROSTER_PATH = "/dashboard/team/roster";
@@ -38,6 +44,13 @@ const TEAM_HOME_PATH = "/dashboard/team";
  * workspace context already resolves; accepting it from the form would mean
  * treating it as untrusted on arrival and re-checking it against exactly the
  * lookup happening here anyway.
+ *
+ * A write that matches no row is a failure, not a quiet success. The RPC
+ * returns void, so until `20260825021649` it was silent about matching nothing
+ * and this returned `{ok: true}` for a member who no longer exists — the
+ * roster switch stayed where the coach put it and the next load showed it
+ * back. It now raises, which is the whole reason the caller can tell the two
+ * apart at all.
  */
 export async function setMemberUploadEnabled(
   userId: string,
@@ -56,13 +69,18 @@ export async function setMemberUploadEnabled(
   });
 
   if (error) {
-    // The RPC raises 42501 for a non-staff caller, and its message is written
-    // for a person. Pass it through rather than replacing it with a guess.
+    // Two raises, two codes. `42501` is a non-staff caller. `P0002` is a write
+    // that matched no `program_members` row — reachable because
+    // `remove_program_member` leaves the claimed profile behind, so the roster
+    // keeps drawing a switch for somebody with no membership to write to.
+    // Both messages are written for a person, so pass them through rather than
+    // replacing them with a guess; the fallbacks only cover an empty one.
     const raw = error.message?.trim();
-    return {
-      ok: false,
-      error: raw && raw.length > 0 ? raw : "Couldn't change that permission.",
-    };
+    const fallback =
+      error.code === "P0002"
+        ? "They are no longer on this team, so there is nothing to grant."
+        : "Couldn't change that permission.";
+    return { ok: false, error: raw && raw.length > 0 ? raw : fallback };
   }
 
   revalidatePath(ROSTER_PATH);
