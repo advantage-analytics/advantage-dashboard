@@ -195,3 +195,56 @@ is the runner's. Newest entries at the bottom.
   and a comment at `:498` defending the full-bleed. Roster is a result list, so
   round 44's rule arguably applies there too. Left alone, correctly, as outside
   T4's scope.
+
+## T3 · Score and outcome primitives — second attempt — blocked
+- **gate:** mechanical — `npm run lint` 0 errors (38 pre-existing warnings),
+  `npx tsc --noEmit` clean, `npm test` 93 passed.
+  `rls-boundary-reviewer` — no findings. It diffed the query sites to show the
+  `program_id` / `created_by` scoping is byte-identical, confirmed
+  `match-detail-server.ts` already destructured the tiebreak arrays so the type
+  widening only catches TypeScript up to data already flowing, and read the new
+  `src/lib/ui/score-format.ts` to confirm it is directive-free with zero
+  imports and so cannot cross a bundle boundary either way.
+  `pipeline-guardrails-reviewer` — **one finding** (below). The wizard is
+  clean: `validateSetScore`'s branching is byte-for-byte unchanged, only a
+  comment and one validation message swapped en dash for hyphen, and
+  `PinnedMatchContent` is display-only and not wired to `job-request.ts`.
+  `initialTopPlayerIsPlayer1`, set-score ordering and the games-not-points
+  encoding are untouched. ResultMark keeps "Won"/"Lost" as `sr-only`, and no
+  surface shows both a glyph and a word.
+  `task-completion-reviewer` — **`VERDICT: needs-work`**.
+- **why it failed:**
+  1. Criterion 2 is not met. `opponents-server.ts:374,400` calls
+     `buildScoreString(score, true)` without the `.replaceAll(" ", ", ")` its two
+     sibling callers apply, so `/dashboard/opponents/[programId]` still renders
+     the space-joined `6-4 3-6 7-5`. **This is a conflict between criteria, not
+     an oversight**: completing the consolidation means editing three loader
+     call sites, and criterion 6 forbids a `*-server.ts` file in the diff. The
+     implementer took criterion 6 as binding, rewired `buildScoreString` onto
+     the shared rule and marked it `@deprecated` naming the three lines. That is
+     the right call given the instruction; the criteria need reconciling.
+  2. Guardrails finding: dropping `match-summary-row`'s
+     `mine === 7 && theirs === 6` clause makes the superscript apply to sets
+     that are not 7-6. A super-tiebreak third set stored `1-0` with the loser's
+     `[8]` used to render a bare `1` and now renders `1` with a raised `8`.
+     Worth knowing: this is **not** specific to that file — `tiebreakOf()` never
+     had a games gate, so every converted surface already behaves this way, and
+     the change brings the scoreboard into line with the shared rule rather
+     than diverging from it. The completion reviewer examined the same code and
+     ruled criterion 5 **met** on exactly that reasoning, adding that keeping
+     the guard would itself be a second copy; it also verified all three
+     writers null-default the field, that the wizard cannot produce a non-7-6
+     set carrying a tiebreak, and that the only path that can is deliberate
+     freeform entry in `score-entry.tsx`. The two reviewers differ in emphasis,
+     not in fact.
+- **stash:** `c449df8e2e5fe730a9b5d359074d9ce9a3a101fd` — the full rerun,
+  including the three new files. Recoverable; nothing discarded. Everything
+  except the `opponents-server.ts` spelling stands.
+- **what this attempt did land:** the shared rule now lives in
+  `src/lib/ui/score-format.ts` (lib→lib, so the earlier `lib/` → `components/`
+  import inversion is gone), six private formatters are collapsed into it, and
+  `match-summary-row` imports the rule while keeping its boxed layout.
+- **orphans, reported not deleted:** `resultInk()`
+  (`match-analysis.ts:244`), `formatScore()` (`schedule/format.ts`), and the
+  `tiebreak?: boolean` field, which lost its last reader in this change but is
+  still written by loaders.
