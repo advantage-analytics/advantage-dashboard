@@ -168,9 +168,16 @@ export interface TeamMatchRow {
  *
  * Upcoming only, and deliberately so: a program whose schedule holds nothing
  * but last season has the same next action as one holding nothing at all.
- * Read here rather than through `getScheduleRows()` because that loads every
- * event, every entry under them and every match pointing at those entries —
- * three round trips to answer a yes/no question.
+ *
+ * This is read by its own narrow `program_events` query, and that is now
+ * REDUNDANT rather than frugal. The comment here used to argue the query
+ * earned its place by avoiding `getScheduleRows()`'s three round trips — but
+ * the KPI strip's dual record made that call unconditional in the same
+ * `Promise.all`, so the page pays those round trips regardless and this query
+ * is a fourth on top. `ScheduleRow` already carries `id`, `kind`, `name`,
+ * `startsOn` and `endsOn` for every event. Deriving both this and the weekend
+ * dual from that one read retires the query, `EVENT_WINDOW`, and the second
+ * ordering of `program_events` that has to agree with the schedule page's.
  */
 export interface TeamNextEvent {
   id: string;

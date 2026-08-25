@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Check } from "lucide-react";
 import { advButton } from "@/lib/ui/adv-button";
+import { playersLabel } from "./roster-vocabulary";
 import { StatusChip } from "@/components/ui/status-chip";
 import { formatEventDay } from "@/lib/schedule/format";
 import {
@@ -228,7 +229,7 @@ export function FirstSteps({
           <DoneReceipt
             title={
               roster.joined > 0
-                ? `${roster.joined} ${roster.joined === 1 ? "player" : "players"} on the roster`
+                ? `${playersLabel(roster.joined)} on the roster`
                 : "Invitations are out"
             }
             body={

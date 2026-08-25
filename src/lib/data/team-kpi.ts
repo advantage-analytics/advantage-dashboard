@@ -222,9 +222,8 @@ export function countTile(
 }
 
 function plural(sample: number, unit: TeamKpiUnit): string {
-  const word = unit === "dual" ? "dual" : "match";
-  if (sample === 1) return `1 ${word}`;
-  return `${sample} ${unit === "dual" ? "duals" : "matches"}`;
+  const [one, many] = unit === "dual" ? ["dual", "duals"] : ["match", "matches"];
+  return `${sample} ${sample === 1 ? one : many}`;
 }
 
 /**
