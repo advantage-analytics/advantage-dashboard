@@ -389,7 +389,7 @@ ready).
 - **notes:** Found by `/pr-check` on this branch. The comment argues these getters protect readers west of Greenwich from `toISOString()`; on Vercel the server's local time *is* UTC, so the protection does not exist and the code is a no-op relative to its own rationale. Live effect: after 17:00 PT Sunday the week rolls forward and the weekend dual sheet disappears — exactly the failure the Monday-start rationale two lines below exists to prevent. Note the repo has no `programs.timezone` column that surfaced in a grep; if the fix needs one, that is a schema task and this one should be `blocked` naming it rather than inventing the column.
 
 ## T13 · Roster progress counts `program_members`, so coach-managed players are invisible
-- **status:** todo
+- **status:** done
 - **files:** `src/lib/data/team-home-server.ts` (`rosterProgress`, ~line 653, and its call site ~line 1274); `src/components/dashboard/team/first-steps.tsx` (`teamVariant`, ~line 106)
 - **done when:**
   - [ ] `rosterProgress` counts coach-managed players, using the same `program_roster_full` rows `getTeamHomeData` already loads for `rosterIds` — not a second read and not a second answer to who is on this team

@@ -111,10 +111,15 @@ export function FirstSteps({
       ? "progress"
       : "active";
   const scheduleVariant: Variant = nextEvent ? "done" : "active";
-  // Joined players and outstanding invitations both count: a coach who has
-  // sent the invitations has built the roster and is now waiting on other
-  // people, which is not a task the checklist should keep asking for.
-  const teamVariant: Variant = roster.invited > 0 ? "done" : "active";
+  // Players on the roster and outstanding invitations both count, and the
+  // first of those is the roster as `/dashboard/team/roster` counts it —
+  // coach-managed profiles included, which on this product is how most squads
+  // are built. A coach who has added their players by hand has built the
+  // roster; a coach who has sent the invitations has built it and is now
+  // waiting on other people. Neither is a task the checklist should keep
+  // asking for.
+  const teamVariant: Variant =
+    roster.players > 0 || roster.outstanding > 0 ? "done" : "active";
 
   const variants = [reportVariant, scheduleVariant, teamVariant];
 
@@ -266,14 +271,17 @@ export function FirstSteps({
       <Slot eyebrow="Your team" emphasis={emphasis === 2}>
         {teamVariant === "done" ? (
           <DoneReceipt
+            /* `playersLabel` over the roster's own count, so this receipt and
+               the "8 players" on `/dashboard/team/roster` are the same number
+               in the same words — a coach one click apart from both. */
             title={
-              roster.joined > 0
-                ? `${playersLabel(roster.joined)} on the roster`
+              roster.players > 0
+                ? `${playersLabel(roster.players)} on the roster`
                 : "Invitations are out"
             }
             body={
-              roster.invited > roster.joined
-                ? `${roster.invited - roster.joined} still to accept.`
+              roster.outstanding > 0
+                ? `${roster.outstanding} still to accept.`
                 : "Add more whenever the squad changes."
             }
             href="/dashboard/team/roster"

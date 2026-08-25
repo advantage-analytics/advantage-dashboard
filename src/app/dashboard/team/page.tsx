@@ -13,6 +13,7 @@ import { MatchRows } from "@/components/dashboard/team/match-rows";
 import { NextEventCard } from "@/components/dashboard/team/next-event-card";
 import { RosterCard } from "@/components/dashboard/team/roster-card";
 import { NeedsAttention } from "@/components/dashboard/team/needs-attention";
+import { playersLabel } from "@/components/dashboard/team/roster-vocabulary";
 
 /**
  * The page's own name. Its `<h1>` is a greeting rather than the program, and
@@ -145,7 +146,7 @@ export default async function TeamHomePage() {
                   <ProgressLine
                     working={working}
                     ready={ready}
-                    joined={isStaff ? roster.joined : 0}
+                    players={isStaff ? roster.players : 0}
                   />
                 )}
               </p>
@@ -289,20 +290,28 @@ export default async function TeamHomePage() {
 }
 
 /**
- * "One match analyzing, one ready. Six players have joined."
+ * "One match analyzing, one ready. Six players on the roster."
  *
  * Assembled from counts rather than written as a template with numbers in it,
  * because every clause has to be able to disappear: a program with nothing
  * running and nobody new should not read "0 matches analyzing, 0 ready".
+ *
+ * The roster clause used to read "six players have JOINED", off a count of
+ * seats. It could not stay that way once `RosterProgress` started counting the
+ * roster rather than the seat list: most players here are coach-managed
+ * profiles who have joined nothing and may never sign in at all. So it is the
+ * roster's own phrase now, in the roster's own words (`playersLabel`) — the
+ * same number the card in the right column and the checklist's receipt print,
+ * on the same page.
  */
 function ProgressLine({
   working,
   ready,
-  joined,
+  players,
 }: {
   working: number;
   ready: number;
-  joined: number;
+  players: number;
 }) {
   const clauses: string[] = [];
   if (working > 0) clauses.push(`${working} analyzing`);
@@ -312,10 +321,7 @@ function ProgressLine({
     clauses.length > 0
       ? `${clauses.join(", ")}.`
       : "Nothing is running right now.";
-  const rosterPart =
-    joined > 0
-      ? ` ${joined} ${joined === 1 ? "player has" : "players have"} joined.`
-      : "";
+  const rosterPart = players > 0 ? ` ${playersLabel(players)} on the roster.` : "";
 
   return (
     <>

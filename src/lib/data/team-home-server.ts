@@ -348,13 +348,12 @@ export interface TeamRosterCard {
   /**
    * Players on the roster, counted the way the Roster page counts them.
    *
-   * **Not `RosterProgress.joined`, and the difference matters.** That number is
-   * seats — people who accepted an invitation — because it answers "is anyone
-   * turning up". This one is `program_roster_full` rows with the player role,
-   * which is what the Roster page prints "8 players" over, and it includes the
-   * coach-managed profiles that have no login at all. Printing the seat count
-   * under the roster's own phrase would put two different numbers behind one
-   * sentence on two screens a click apart.
+   * **The same number as `RosterProgress.players`, off the same rows and the
+   * same predicate** — both go through `playerCount()`. That was not always
+   * true: `RosterProgress` used to count SEATS, people who had accepted an
+   * invitation, so a squad a coach had built by hand read "8 players" in this
+   * card while the checklist beside it was still asking them to invite
+   * somebody. Two numbers behind one sentence, on one page.
    */
   players: number;
   /**
@@ -399,10 +398,16 @@ export interface TeamAlert {
 }
 
 export interface RosterProgress {
-  /** Players who have accepted. */
-  joined: number;
-  /** Players invited in total — accepted plus still outstanding. */
-  invited: number;
+  /**
+   * Players on the roster — the Roster page's own count, `playerCount()`.
+   *
+   * Coach-managed profiles included, because they are how most of these
+   * rosters are built: a program can have a full squad, a season of matches
+   * and not one login among them.
+   */
+  players: number;
+  /** Player invitations sent and not yet accepted. */
+  outstanding: number;
   /** Outstanding invites falling due inside a week. */
   expiringSoon: number;
   /** Whole days until the soonest of those, floored at 0. */
@@ -695,19 +700,53 @@ async function loadWeekendDual(
 }
 
 /**
- * Player invites, seen from the home page.
+ * How many players are on this roster — the page's one answer, used twice.
  *
- * Counts players only. Staff invites are a different question with a different
- * answer — a program with four coaches and no roster is not 0% of the way to
- * being set up — and merging them made "6 of 10 joined" mean nothing in
- * particular.
+ * `program_roster_full` rows carrying the player role, which is exactly the
+ * predicate `/dashboard/team/roster` counts its "8 players" with
+ * (`roster/page.tsx` — `roster.members.filter((m) => m.role === "player")`).
+ * Both readers on this page go through here so the checklist's receipt and the
+ * right column's card cannot start reporting different squads.
+ *
+ * **Staff are excluded and stay excluded.** The RPC returns coach and staff
+ * seats too — they are kept in `rosterIds` because a coach who uploads without
+ * a lineup preset lands their own id on the match — but a program with four
+ * coaches and no players has no roster yet, and counting the coaching staff
+ * into it would report a program as set up on the strength of the people who
+ * set it up.
  */
-function rosterProgress(
-  members: { role: string }[],
+function playerCount(rosterRows: { role: string }[]): number {
+  return rosterRows.filter((row) => row.role === "player").length;
+}
+
+/**
+ * The roster, as the checklist reads it: who is on it, and who is still coming.
+ *
+ * **Counted off `program_roster_full`, not off `program_members`.** The seat
+ * list cannot answer this question: a coach-managed player is a
+ * `program_players` row with no login and therefore no seat, and a program can
+ * be built entirely out of them — squad, season and all. Counting seats told
+ * such a coach they had nobody, and the "Your team" card went on asking them to
+ * send invitations for a team they had already finished building. The same rows
+ * `rosterIds` is reduced from, so this is not a second read and not a second
+ * answer to who is on this team.
+ *
+ * `outstanding` counts PLAYER invitations only. Staff invites are a different
+ * question with a different answer, and merging them made "6 of 10 joined" mean
+ * nothing in particular.
+ *
+ * **Exported only so that `tests/team-roster-progress.spec.ts` can call it** —
+ * the same arrangement, and the same reasoning, as `teamKpis` below: it takes
+ * this loader's own row shapes, it should acquire no caller outside this file,
+ * and the spec can import the module safely because nothing here runs at module
+ * scope.
+ */
+export function rosterProgress(
+  rosterRows: { role: string }[],
   invites: { role: string; createdAt: string }[],
   now: number
 ): RosterProgress {
-  const joined = members.filter((member) => member.role === "player").length;
+  const players = playerCount(rosterRows);
   const outstanding = invites.filter((invite) => invite.role === "player");
 
   const ttlMs = INVITE_TTL_HOURS * 60 * 60 * 1000;
@@ -720,8 +759,8 @@ function rosterProgress(
   const soon = expiries.filter((expiry) => expiry <= horizon);
 
   return {
-    joined,
-    invited: joined + outstanding.length,
+    players,
+    outstanding: outstanding.length,
     expiringSoon: soon.length,
     expiringInDays:
       soon.length > 0
@@ -750,8 +789,9 @@ function rosterCard(
   }[]
 ): TeamRosterCard | null {
   // The Roster page's own count, off the same RPC and the same predicate — see
-  // `TeamRosterCard.players` for why this is not the seat count beside it.
-  const players = rosterRows.filter((row) => row.role === "player").length;
+  // `TeamRosterCard.players` for why this and the checklist's receipt have to
+  // be one number rather than two.
+  const players = playerCount(rosterRows);
   const claimedToday = claimedTodayNames(rosterRows);
   const open: RosterInvite[] = invites.map((invite) => ({
     id: invite.id,
@@ -1245,9 +1285,10 @@ export async function getTeamHomeData(
     })(),
   ]);
 
-  // One RPC, three questions off it: which ids mean "us" on a match row, how
-  // many players the roster holds, and who claimed a profile today. The roster
-  // card adds no read of its own.
+  // One RPC, four questions off it: which ids mean "us" on a match row, how
+  // many players the roster holds, how far along the setup checklist that
+  // makes the program, and who claimed a profile today. Neither the roster
+  // card nor the checklist adds a read of its own.
   const people = (rosterRows ?? []) as {
     player_id: string | null;
     role: string;
@@ -1324,14 +1365,16 @@ export async function getTeamHomeData(
   const dualRow = weekendDualRow(events, week, today);
   const weekendDual = dualRow ? await loadWeekendDual(programId, dualRow.id) : null;
 
+  // `people`, not `team?.members`: the seat list has no row for a
+  // coach-managed player, so a hand-built squad counted zero here and the
+  // checklist kept asking for invitations that were not needed. These are the
+  // same rows `rosterIds` and the roster card above are built from — one read,
+  // one answer to who is on this team.
+  //
   // `now`, not a second `Date.now()`: the invite clock, the greeting, the
   // schedule window and the dual sheet are all answered on this read's one
   // clock, and the alert list below reads the expiry this returns.
-  const progress = rosterProgress(
-    team?.members ?? [],
-    team?.invites ?? [],
-    now.getTime()
-  );
+  const progress = rosterProgress(people, team?.invites ?? [], now.getTime());
 
   return {
     usage,

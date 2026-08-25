@@ -756,3 +756,43 @@ is the runner's. Newest entries at the bottom.
   a substitute: Arizona keeps no DST and nine states straddle two zones. The two
   helpers are now shaped so landing a real column is a one-line change from a
   constant to a field. Worth queueing as a schema task.
+
+## T13 · Roster progress counts `program_members`, so coach-managed players are invisible — done
+- **gate:** 5a mechanical — `npm run lint` 0 errors / 38 pre-existing warnings;
+  `npx tsc --noEmit` exit 0; `npm test` 127 passed (120 prior + 7 new). 5b
+  `task-completion-reviewer` — `VERDICT: pass`. 5c BOTH guardrails ran, neither
+  skipped: `pipeline-guardrails-reviewer` (diff touches `src/app/dashboard/` and
+  `src/components/dashboard/`) and `rls-boundary-reviewer` (`src/lib/data/`), both
+  returned explicit no-findings all-clears.
+- **changed:** `rosterProgress` now counts the `program_roster_full` rows already
+  loaded for `rosterIds` instead of `program_members` seats, so a coach-built
+  roster stops reading as empty and the "Build your team" card shows its receipt.
+  A new private `playerCount()` holds the `role === "player"` predicate once,
+  shared with `rosterCard`. `RosterProgress.joined`/`.invited` renamed to
+  `.players`/`.outstanding` — deliberately a rename rather than a silent
+  re-pointing, so the compiler surfaced every reader; that turned up a fourth the
+  task's `files:` list had missed, `src/app/dashboard/team/page.tsx`, whose
+  greeting said "N players have joined" and would have become false the moment the
+  count included profiles that have joined nothing. Reworded to "N players on the
+  roster". New spec `tests/team-roster-progress.spec.ts`, 7 tests.
+- **verified, because the risk here was attribution:** `rosterIds` feeds
+  `programSide()`, which decides whose side of a match is the program's, and it
+  deliberately KEEPS staff ids — a coach uploading without a lineup preset lands
+  their own id in `player1_id`. `playerCount()`'s player-role filter reaching that
+  set would have silently dropped the outcome glyph from every coach-uploaded
+  match with nothing on screen looking wrong. The guardrails reviewer confirmed
+  `rosterIds`, `programSide()` and `teamKpis()` are byte-for-byte outside every
+  diff hunk, and that only counts — never rows — cross into a component.
+- **noted, not a criterion failure:** the implementer reported its new spec as
+  "6 of 7 fail against the pre-fix code, the 7th a deliberate fixture guard". The
+  completion reviewer re-ran it and found all SEVEN fail, because every test
+  touches `.players` at least once. The spec's assertions are real either way;
+  the inaccuracy was in the report, not the code.
+- **unverified assumption, carried forward:** CLAUDE.md requires schema claims be
+  checked against the live database via the Supabase MCP, but only `query_logs` is
+  exposed in this session — no `execute_sql` or `list_tables` — so the deployed
+  `program_roster_full` body could not be read. Evidence is migration
+  `20260822090500` plus three corroborating comments. If the live function has
+  drifted, the assumption that breaks is "every player-role seat also appears as a
+  `role = 'player'` roster row", which arms 1 and 3 of the UNION exist to
+  guarantee.
