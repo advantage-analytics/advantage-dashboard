@@ -4,6 +4,8 @@ import {
   ANALYSIS_LABEL,
   isAnalysisFailed,
   isInFlight,
+  isLiveUpdating,
+  isWorking,
   resolveAnalysisStatus,
   withStatsPublished,
 } from '@/lib/data/match-analysis';
@@ -75,5 +77,64 @@ test.describe('resolveAnalysisStatus is unchanged', () => {
     expect(resolveAnalysisStatus('completed', '0.2.0-transcript')).toBe('completed');
     expect(resolveAnalysisStatus('deriving', null)).toBe('deriving');
     expect(resolveAnalysisStatus('nonsense', null)).toBeUndefined();
+  });
+});
+
+/**
+ * `processed` is in flight and nothing is coming for it — and Team Home has to
+ * ask the second question, not the first.
+ *
+ * The same silent-failure shape as the block above. `processed` is where every
+ * vendor-analysed match rests until Phase 2 derivation ships, so a surface that
+ * asks `isInFlight` treats the ORDINARY state as the exceptional one: Team
+ * Home's match rows withheld a score they had known since the upload wizard,
+ * and the first-report card promised a notification no process was ever going
+ * to send. Nothing looked broken on either — they just quietly said the wrong
+ * thing about most of the program's matches.
+ *
+ * These assertions pin the distinction the fix rests on. If `processed` is ever
+ * moved out of IN_FLIGHT, or STALLED is emptied when Phase 2 lands, this block
+ * fails and points at the surfaces that have to be revisited together.
+ */
+test.describe('processed: in flight, but no update is coming', () => {
+  test('the three predicates give three different answers', () => {
+    // Will it ever change? Yes — when Phase 2 ships.
+    expect(isInFlight('processed')).toBe(true);
+    // Is anything running right now? No.
+    expect(isWorking('processed')).toBe(false);
+    // Is a database update actually coming? No — only a deploy moves it.
+    expect(isLiveUpdating('processed')).toBe(false);
+  });
+
+  test('it is the only in-flight status that is not live-updating', () => {
+    // `uploaded` is the near neighbour and the reason this is a set rather
+    // than a second `&&`: also idle, but auto-submit moves it within seconds,
+    // so it must keep its dot and its counter.
+    expect(isWorking('uploaded')).toBe(false);
+    expect(isLiveUpdating('uploaded')).toBe(true);
+
+    for (const status of ['uploading', 'queued', 'processing', 'deriving'] as const) {
+      expect(isLiveUpdating(status)).toBe(true);
+    }
+  });
+
+  test('the settled question separates it from the states that are running', () => {
+    // `!isLiveUpdating && !isAnalysisFailed` is Team Home's `settled` in
+    // `match-rows.tsx`. Spelled out here as a table because the row it decides
+    // shows a result or hides one, and `isInFlight` in its place is a bug that
+    // renders perfectly.
+    const settled = (status: Parameters<typeof isLiveUpdating>[0]) =>
+      !isLiveUpdating(status) && !isAnalysisFailed(status);
+
+    for (const status of ['processed', 'completed', 'timeline', 'imported', 'manual'] as const) {
+      expect(settled(status)).toBe(true);
+    }
+    for (const status of ['uploading', 'uploaded', 'queued', 'processing', 'deriving'] as const) {
+      expect(settled(status)).toBe(false);
+    }
+    // A failed job keeps its dot even though no update is coming for it.
+    for (const status of ['failed', 'derivation_failed'] as const) {
+      expect(settled(status)).toBe(false);
+    }
   });
 });

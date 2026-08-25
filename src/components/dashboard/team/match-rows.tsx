@@ -2,7 +2,7 @@ import Link from "next/link";
 import {
   isAnalysisFailed,
   isAnalysisReady,
-  isInFlight,
+  isLiveUpdating,
   isWorking,
   type AnalysisStatus,
 } from "@/lib/data/match-analysis";
@@ -109,19 +109,38 @@ export function MatchRows({ matches }: { matches: TeamMatchRow[] }) {
 
       <ul className="p-1.5">
         {matches.map((match) => {
-          /* Settled: nothing is running, nothing broke, and somebody recorded
-             a score. A failed job keeps the dot — the score may be true, but
-             burying "Failed" under a result is how a job nobody retries stops
-             being visible. A settled row with no score has nothing to put in
-             the column and falls back to the dot as well. */
+          /* Settled: no update is coming that would change what this row
+             says, nothing broke, and somebody recorded a score. A failed job
+             keeps the dot — the score may be true, but burying "Failed" under
+             a result is how a job nobody retries stops being visible. A
+             settled row with no score has nothing to put in the column and
+             falls back to the dot as well.
+
+             `isLiveUpdating`, NOT `isInFlight`, and the difference is this
+             card's whole point. `isInFlight` answers "will this ever change",
+             which is true of `processed` — the state every vendor-analysed
+             match sits in until Phase 2 derivation ships. Asking it here held
+             the score off the one row a coach is most likely to have, showing
+             "Stats pending" beside a result we have known since upload: the
+             score comes from `matches.score`, entered in the wizard, and owes
+             the vendor nothing. `isLiveUpdating` asks whether an update is
+             actually coming, which for `processed` is no — only a deploy moves
+             it. `teamAttention()` in `team-home-server.ts` already refuses
+             `isInFlight` for the same reason and says so. */
           const settled =
-            !isInFlight(match.status) &&
+            !isLiveUpdating(match.status) &&
             !isAnalysisFailed(match.status) &&
             match.sets.length > 0;
           /* There is only a report where analysis actually produced one. A
              hand-scored dual line is settled and has a score, but its match
              page has no numbers on it — offering "View report" there promises
-             a page of zeroes, which is guardrails §3.3 in link form. */
+             a page of zeroes, which is guardrails §3.3 in link form. This is
+             also what keeps `processed` honest now that it settles: the row
+             shows the result, and the absent link is the whole of what it
+             claims about the statistics. `isAnalysisReady`, deliberately
+             narrower than `settled` — the two questions are "is this row's
+             score final" and "is there a stats page behind it", and only
+             `imported`, `completed` and `timeline` answer yes to both. */
           const hasReport = settled && isAnalysisReady(match.status);
 
           return (

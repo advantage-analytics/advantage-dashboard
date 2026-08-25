@@ -8,6 +8,7 @@ import {
   ANALYSIS_LABEL,
   isAnalysisReady,
   isInFlight,
+  isLiveUpdating,
   isWorking,
 } from "@/lib/data/match-analysis";
 import type {
@@ -91,8 +92,18 @@ export function FirstSteps({
   // while one is on its way. A match that FAILED is neither: it leaves the card
   // active, which is right — after a failure the next thing to do really is to
   // send a match, and the row above says what happened to the last one.
+  //
+  // `isInFlight` is the right question for WHICH SLOT the card sits in — a
+  // `processed` match belongs in the progress slot and emphatically not back on
+  // "Send your first match", which would ask a coach to redo work they have
+  // already done. What that slot may then ASSERT is a narrower question, and
+  // `stalled` is where it gets asked.
   const report = matches.find((match) => isAnalysisReady(match.status));
   const inFlight = matches.find((match) => isInFlight(match.status));
+  // In flight, but only a DEPLOY will move it — so no notification is coming
+  // and no duration is counting toward anything. Today that is every
+  // vendor-analysed match, which is why the card's copy turns on it below.
+  const stalled = inFlight ? !isLiveUpdating(inFlight.status) : false;
 
   const reportVariant: Variant = report
     ? "done"
@@ -136,10 +147,32 @@ export function FirstSteps({
           />
         ) : reportVariant === "progress" && inFlight ? (
           <>
-            <span className={`${TITLE} text-[var(--ink-700)]`}>On its way</span>
-            <span className={`${BODY} text-[var(--ink-700)]`}>
-              We&#39;ll notify you when it&#39;s ready — the tray tracks it.
-            </span>
+            {/* Two receipts share this slot, and `stalled` picks between them.
+                Promising a notification for a `processed` match left this card
+                reading "On its way" beside an `Elapsed` counter climbing
+                through days — for what is today the ordinary resting state of
+                every vendor-analysed match, not an exception. The stalled copy
+                says the true half instead: the video is back, the numbers are
+                not, and there is nothing to wait by the tray for. */}
+            {stalled ? (
+              <>
+                <span className={`${TITLE} text-[var(--ink-700)]`}>
+                  Match received
+                </span>
+                <span className={`${BODY} text-[var(--ink-700)]`}>
+                  The video is back. Team statistics are still being prepared.
+                </span>
+              </>
+            ) : (
+              <>
+                <span className={`${TITLE} text-[var(--ink-700)]`}>
+                  On its way
+                </span>
+                <span className={`${BODY} text-[var(--ink-700)]`}>
+                  We&#39;ll notify you when it&#39;s ready — the tray tracks it.
+                </span>
+              </>
+            )}
             {/* The button's slot, holding the state instead. When this card
                 carries emphasis there is nothing here to turn primary, so the
                 lifted border and the card shadow are the whole of it — which is
@@ -152,7 +185,13 @@ export function FirstSteps({
               <StatusChip tone="blue" live={isWorking(inFlight.status)}>
                 {ANALYSIS_LABEL[inFlight.status]}
               </StatusChip>
-              <Elapsed startedAt={inFlight.startedAt} nowMs={nowMs} />
+              {/* Elapsed-toward-WHAT. The counter is only meaningful while
+                  something is running to finish, so it goes when nothing is. A
+                  duration that only ever grows is not a progress signal; it is
+                  a stopwatch on a race nobody is running. */}
+              {stalled ? null : (
+                <Elapsed startedAt={inFlight.startedAt} nowMs={nowMs} />
+              )}
             </div>
           </>
         ) : (
