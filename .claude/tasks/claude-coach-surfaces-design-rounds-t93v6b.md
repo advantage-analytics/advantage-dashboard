@@ -175,19 +175,129 @@ ready).
   old full-bleed wash with between-row hairlines, and Roster is a result list
   too.
 
-## T5 · Team Home data surfaces (rounds 44a / 45c / 45d)
-- **status:** later
-- **files:** `src/lib/data/team-home-server.ts`,
-  `src/components/dashboard/team/*` — a guess
+## T6 · Roster rows take the round-44 treatment
+- **status:** todo
+- **files:** `src/components/dashboard/team/roster-table.tsx` — a guess
 - **done when:**
-  - [ ] `TeamMatchRow` carries outcome and set scores, so rows render ResultMark
-        + score + "View report" instead of the status dot and word
-  - [ ] The "This weekend" dual sheet renders its lines and the 4–3 tally from
-        `program_events`
-  - [ ] The KPI strip renders in slot 2 only once numbers are honest —
-        small-sample subtext, no trend or sparkline until a week of data, never
-        a skeleton strip on day zero
-  - [ ] The right column carries Next event, roster ("Claimed today" pill,
-        dashed-ring invited avatars, quiet Resend) and Needs attention
-- **notes:** deferred by request — schema work is a later phase. Promote to
-  `todo` by hand.
+  - [ ] Member and invite rows hover to a `--surface-muted` wash on a rounded
+        rect inset from the card edge, not the current full-bleed row wash
+        (`roster-table.tsx:312`), and keyboard focus gets the same wash
+  - [ ] The `border-b` hairlines between rows are gone (`:312`, `:541`); the
+        single rule under the column-header row (`:506`) stays, because it
+        heads a table rather than following an eyebrow
+  - [ ] Pending invites keep their dashed-ring rows, Resend and Withdraw
+        exactly as they are — this is a hover and hairline change only
+  - [ ] Row heights, column tracks and every action are unchanged, and no
+        `*-server.ts` file appears in the diff
+- **notes:** round 44's 8a rule — "surface-muted wash on a rounded row inset
+  from the card edge; hairline only above the list, none between rows" — for
+  result lists. Roster is one; `match-rows.tsx` (T4, `cadfee2`) is the worked
+  example to copy. The comment at `:498` currently defends the full-bleed wash
+  and needs rewriting rather than left to contradict the code.
+
+## T7 · Clear what rounds 44 and 45 left behind
+- **status:** todo
+- **files:** `src/lib/data/match-analysis.ts`, `src/lib/schedule/format.ts`,
+  `src/lib/data/matches-list-types.ts`, `src/lib/data/types.ts`,
+  `src/lib/data/match-detail-server.ts`,
+  `.skills/advantage-analytics-design/SKILL.md` — a guess
+- **done when:**
+  - [ ] `resultInk()` is gone from `match-analysis.ts:244` and
+        `grep -rn "resultInk" src/` returns nothing
+  - [ ] `formatScore()` is gone from `schedule/format.ts:84` and nothing
+        imports it; `formatScoreText` from `src/lib/ui/score-format.ts` is the
+        only score-to-string function left in `src/`
+  - [ ] The `tiebreak?: boolean` field is gone from both declarations
+        (`matches-list-types.ts:63`, `types.ts:11`) **and** from the two places
+        that still write it (`transformDbMatch`, `match-detail-server.ts:65`) —
+        it lost its last reader when `ScoreLine` took over
+  - [ ] `.skills/advantage-analytics-design/SKILL.md:744` cites a file that
+        exists — it currently points at `team/invite-dialog.tsx`, deleted in T2
+  - [ ] `npm run lint`, `npx tsc --noEmit` and `npm test` are clean, and
+        nothing rendered on any page differs
+- **notes:** all four were found by reviewers during T2–T4 and deliberately
+  reported rather than deleted, because each sat outside the task that found
+  it. The `tiebreak` boolean is the only one needing a loader edit, and it is a
+  field removal, not a query change.
+
+## T8 · Results in the Team Home rows
+- **status:** todo
+- **files:** `src/lib/data/team-home-server.ts`,
+  `src/components/dashboard/team/match-rows.tsx` — a guess
+- **done when:**
+  - [ ] `TeamMatchRow` carries the match outcome and its set scores, tiebreak
+        values included, read from the `matches.score` JSONB the loader already
+        selects — no migration, no new table or column
+  - [ ] A finished row renders `<ResultMark>` + `<ScoreLine>` + a "View report"
+        link in place of the status dot and word; a row still processing keeps
+        the dot and its `ANALYSIS_LABEL` text
+  - [ ] Scores render through `src/lib/ui/score-format.ts` — no new formatter,
+        and the tiebreak digit comes from the loser's slot, as `tiebreakOf`
+        defines it
+  - [ ] Row height, column tracks and T4's treatment (rounded inset hover, no
+        hairlines inside the card) are unchanged
+- **notes:** was T5's first bullet, and the one that most changes how the page
+  reads — T3 shipped both renderers, so this is the data to feed them. Board E
+  of the preview shows the target; boards B–D show today's dot-and-word.
+
+## T9 · This weekend — the dual sheet
+- **status:** todo
+- **files:** `src/lib/data/team-home-server.ts`, a new
+  `src/components/dashboard/team/dual-sheet.tsx` — a guess
+- **done when:**
+  - [ ] When the program has a dual in the current week, a "This weekend" card
+        renders above the matches list with the event name, site, surface and
+        date
+  - [ ] It lists that dual's lines in position order — S1–S6 then D1–D3 — each
+        with its players, and either ResultMark + score where a result exists
+        or a status chip where one does not
+  - [ ] The team tally ("4–3") is computed from the lines, never stored, and a
+        clinch is named only when the lines actually clinch it
+  - [ ] Nothing renders when no dual is in range — no empty card, no
+        placeholder, no explanatory ghost
+  - [ ] Every read goes through the existing RLS-scoped server client and
+        existing tables; no migration
+- **notes:** was T5's second bullet. 44a is the reference artboard. The
+  schedule pages already read these tables — reuse their loaders rather than
+  writing a second way to assemble a dual.
+
+## T10 · KPI strip, only once the numbers are honest
+- **status:** todo
+- **files:** `src/lib/data/team-home-server.ts`, a new
+  `src/components/dashboard/team/kpi-strip.tsx` — a guess
+- **done when:**
+  - [ ] Four tiles — dual record, sets won, team first serve, matches analyzed
+        — render between the greeting row and the matches list
+  - [ ] The strip renders only when the program has at least one analyzed
+        match; on day zero it renders nothing at all — no skeleton, no zeroed
+        tiles
+  - [ ] Below the stated sample threshold each tile carries a subtext naming
+        the match count ("3 matches — small sample") and renders no trend and
+        no sparkline
+  - [ ] Trend and sparkline appear only once there is at least a week of data
+  - [ ] Every figure traces to an existing table; no migration
+- **notes:** was T5's third bullet. 45d is the honest-small-sample reference;
+  44a is the same strip at mid-season. The rule the round states is "never a
+  skeleton strip on day zero".
+
+## T11 · The right column — next event, roster, needs attention
+- **status:** todo
+- **files:** `src/app/dashboard/team/page.tsx`,
+  `src/lib/data/team-home-server.ts`, `src/components/dashboard/team/*`
+  — a guess
+- **done when:**
+  - [ ] Team Home becomes a two-column grid — main plus a 340px right column —
+        at desktop width and stacks to one column below it, with T1's frame
+        (greeting row, primary, usage footer) spanning the full width in both
+  - [ ] The right column carries a "Next" event card, a roster card and a
+        "Needs attention" list, each rendering nothing at all when it has
+        nothing to say
+  - [ ] The roster card uses the Roster page's own vocabulary — dashed-ring
+        invited rows with Resend, the claimed-today pill — not a second set of
+        words for the same states
+  - [ ] "Needs attention" keeps per-row hairlines: round 44 exempts alert lists
+        from the 8a rule, which is for result lists
+  - [ ] Staff only, matching the existing `isStaff` gate; a player sees the
+        main column alone with no empty gutter beside it
+- **notes:** was T5's fourth bullet. Run this last of the four — it changes the
+  page's layout, and T8–T10 all land inside the main column.
