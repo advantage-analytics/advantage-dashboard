@@ -18,7 +18,7 @@ straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Let staff edit a roster player from the row menu
-- **status:** todo
+- **status:** blocked
 - **files:** src/components/dashboard/team/roster-actions.ts,
   src/components/dashboard/team/roster-table.tsx,
   src/components/dashboard/team/add-player-dialog.tsx, plus two new files
