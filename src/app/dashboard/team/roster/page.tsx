@@ -5,6 +5,10 @@ import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { formatResetDate } from "@/lib/data/usage-format";
 import { RosterTable } from "@/components/dashboard/team/roster-table";
 import { RosterHeaderButtons } from "@/components/dashboard/team/roster-header-buttons";
+import {
+  invitesPendingLabel,
+  playersLabel,
+} from "@/components/dashboard/team/roster-vocabulary";
 
 export const metadata = { title: "Roster" };
 
@@ -58,11 +62,14 @@ export default async function RosterPage() {
 
   const unclaimed = managedPlayers.length;
 
+  // Two of these clauses are the roster's own vocabulary rather than this
+  // page's: Team Home's roster card prints the same standing in a 340px card,
+  // and one spelling of "2 invites pending" is what stops two screens
+  // describing the same two people differently.
   const standing = [
-    `${playerCount} ${playerCount === 1 ? "player" : "players"}`,
+    playersLabel(playerCount),
     unclaimed > 0 && `${unclaimed} without an account`,
-    roster.invites.length > 0 &&
-      `${roster.invites.length} ${roster.invites.length === 1 ? "invite" : "invites"} pending`,
+    roster.invites.length > 0 && invitesPendingLabel(roster.invites.length),
     visibility,
   ]
     .filter(Boolean)

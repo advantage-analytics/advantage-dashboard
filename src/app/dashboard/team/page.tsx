@@ -1,11 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Mail } from "lucide-react";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import {
-  getTeamHomeData,
-  type RosterProgress,
-} from "@/lib/data/team-home-server";
+import { getTeamHomeData } from "@/lib/data/team-home-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { isAnalysisReady, isWorking } from "@/lib/data/match-analysis";
 import { advButton } from "@/lib/ui/adv-button";
@@ -14,6 +10,9 @@ import { FirstSteps } from "@/components/dashboard/team/first-steps";
 import { DualSheet } from "@/components/dashboard/team/dual-sheet";
 import { KpiStrip } from "@/components/dashboard/team/kpi-strip";
 import { MatchRows } from "@/components/dashboard/team/match-rows";
+import { NextEventCard } from "@/components/dashboard/team/next-event-card";
+import { RosterCard } from "@/components/dashboard/team/roster-card";
+import { NeedsAttention } from "@/components/dashboard/team/needs-attention";
 
 /**
  * The page's own name. Its `<h1>` is a greeting rather than the program, and
@@ -60,6 +59,8 @@ export default async function TeamHomePage() {
     matches,
     kpis,
     roster,
+    rosterCard,
+    attention,
     nextEvent,
     weekendDual,
     playersCanUpload,
@@ -99,6 +100,20 @@ export default async function TeamHomePage() {
   // the button, disabled, because for them it genuinely is paused and the slot
   // it occupies is the one it will stay in.
   const canUpload = isStaff || playersCanUpload;
+
+  // Whether there is a right column at all.
+  //
+  // Two gates, and both matter. **Staff**, because every card in it is staff
+  // business — `program_invites` returns a player nothing, `program_roster`
+  // returns them their own line, and a failed job on somebody else's match is
+  // not theirs to chase. And **something to say**, because each of the three
+  // cards renders nothing when it is empty: without this a coach on a quiet
+  // morning would get a 340px strip of blank page beside their matches. One
+  // column when there is one column's worth of page — which is also every
+  // player's view of it, gutter included.
+  const showRail =
+    isStaff &&
+    (nextEvent !== null || rosterCard !== null || attention.length > 0);
 
   return (
     <div className="w-full flex-1 bg-[var(--surface-card)]">
@@ -163,59 +178,104 @@ export default async function TeamHomePage() {
             ))}
         </div>
 
-        {/* The strip — up to four figures, directly under the greeting it
-            summarises and above everything the page then details. Outside the
-            `!empty` gate because it carries its own, stricter one: `kpis` is
-            empty until the program has a match that has actually been
-            ANALYZED, which is later than having a row. On day zero this mounts
-            nothing at all — no skeleton, no zeroed tiles — which is the rule
-            round 45 states about this strip in particular. Fewer than four
-            arrive whenever a figure cannot be computed honestly; `teamKpis()`
-            says which and when. Not staff-only: every figure on it is about
-            the program, and a player reads the same numbers their coach
-            does. */}
-        <KpiStrip tiles={kpis} />
+        {/* Two columns from `xl` up, one below it.
 
-        {/* The middle — the only thing empty → populated changes.
+            **The frame spans both.** The greeting row above and the usage
+            footer below are siblings of this grid rather than cells in it —
+            round 45's first rule is that the frame never moves, and a greeting
+            that narrowed to make room for a card would be the frame moving.
+            What splits is the middle: the page's own detail on the left, and on
+            the right the three cards answering what is next, who is on the
+            roster, and what is waiting.
 
-            The checklist is no longer part of what changes. It renders in both
-            states and holds one position, because its cards flip to receipts
-            rather than disappearing as they are done; it takes itself off the
-            page in one step once all three are, which is the only layout
-            change it ever makes. Staff only: `program_roster` returns a player
-            their own line and nothing else, and every write behind these cards
-            is one the database refuses them. */}
-        {isStaff && (
-          <FirstSteps
-            canSubmitVideo={active.canSubmitVideo}
-            matches={matches}
-            nextEvent={nextEvent}
-            roster={roster}
-            nowMs={now.getTime()}
-          />
-        )}
+            340px is a fixed track rather than a fraction, because the cards in
+            it are sized to their contents and a proportional column would
+            stretch a two-line event card across a 27-inch monitor. `minmax(0,
+            1fr)` on the main column is what lets its rows truncate instead of
+            forcing the grid wider than the page.
 
-        {/* Above the matches list, and outside its `!empty` gate: a program's
-            first dual is on the schedule before anybody has played it, so the
-            sheet has something to say on a page with no rows in it yet. It is
-            not part of the frame either — most weeks there is no dual in range
-            and `weekendDual` is null, in which case nothing renders here at
-            all. Not staff-only: a player's lines are on this card, and the same
-            `program_events` policy that lets them read the schedule page is
-            what put it there. */}
-        {weekendDual && <DualSheet dual={weekendDual} />}
+            `xl` (1280px), not `lg`: the matches card is a five-track grid
+            whose three fixed columns are measured to the widest score a row
+            can hold, and everything the 340px takes comes out of the two name
+            tracks that share what is left. At `xl` the main column is 836px —
+            the width that card already has at a 916px window, and comfortably
+            above the 560px it is laid out in at the `sm` breakpoint where its
+            grid first appears. At `lg` it would be 580px, narrower than
+            anything the card renders in today, which is why the split waits.
 
-        {!empty && (
-          <>
-            <MatchRows matches={matches} />
+            One column when there is no right column to show — see `showRail`. A
+            player never meets an empty gutter, because a player never meets the
+            split at all. */}
+        <div
+          className={`grid gap-6 ${
+            showRail ? "xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start" : ""
+          }`}
+        >
+          <div className="flex min-w-0 flex-col gap-6">
+            {/* The strip — up to four figures, directly under the greeting
+                it summarises and above everything the page then details.
+                Outside the `!empty` gate because it carries its own, stricter
+                one: `kpis` is empty until the program has a match that has
+                actually been ANALYZED, which is later than having a row. On
+                day zero this mounts nothing at all — no skeleton, no zeroed
+                tiles — which is the rule round 45 states about this strip in
+                particular. Fewer than four arrive whenever a figure cannot be
+                computed honestly; `teamKpis()` says which and when. Not
+                staff-only: every figure on it is about the program, and a
+                player reads the same numbers their coach does. */}
+            <KpiStrip tiles={kpis} />
 
-            {/* Only when there is something outstanding to say. A program whose
-                roster is fully joined does not need a row telling it so. */}
-            {isStaff && roster.invited > roster.joined && (
-              <PendingInvites roster={roster} />
+            {/* The middle — the only thing empty → populated changes.
+
+                The checklist is no longer part of what changes. It renders in
+                both states and holds one position, because its cards flip to
+                receipts rather than disappearing as they are done; it takes
+                itself off the page in one step once all three are, which is
+                the only layout change it ever makes. Staff only:
+                `program_roster` returns a player their own line and nothing
+                else, and every write behind these cards is one the database
+                refuses them. */}
+            {isStaff && (
+              <FirstSteps
+                canSubmitVideo={active.canSubmitVideo}
+                matches={matches}
+                nextEvent={nextEvent}
+                roster={roster}
+                nowMs={now.getTime()}
+              />
             )}
-          </>
-        )}
+
+            {/* Above the matches list, and outside its `!empty` gate: a
+                program's first dual is on the schedule before anybody has
+                played it, so the sheet has something to say on a page with no
+                rows in it yet. It is not part of the frame either — most weeks
+                there is no dual in range and `weekendDual` is null, in which
+                case nothing renders here at all. Not staff-only: a player's
+                lines are on this card, and the same `program_events` policy
+                that lets them read the schedule page is what put it there. */}
+            {weekendDual && <DualSheet dual={weekendDual} />}
+
+            {!empty && <MatchRows matches={matches} />}
+          </div>
+
+          {/* The right column. Three cards, each rendering nothing at all when
+              it has nothing to say — so this is a column of one card as often
+              as it is a column of three, and never a column of headings over
+              empty lists. The invitations that used to be summarised in a line
+              under the matches list are here now: the roster card lists them
+              with a Resend beside each, which is what 44a shows and what a
+              count could never offer. */}
+          {showRail && (
+            <aside
+              aria-label="Program status"
+              className="flex min-w-0 flex-col gap-6"
+            >
+              <NextEventCard event={nextEvent} />
+              <RosterCard roster={rosterCard} />
+              <NeedsAttention alerts={attention} />
+            </aside>
+          )}
+        </div>
 
         {/* The frame's bottom edge — last block on the page in both states. */}
         <UsageFooter
@@ -224,68 +284,6 @@ export default async function TeamHomePage() {
           billingMonth={usage.billingMonth}
         />
       </div>
-    </div>
-  );
-}
-
-/**
- * "2 invites pending" — and where to do something about it.
- *
- * Round 44 sends this at **Roster**, not Settings › Team. Invites live on the
- * roster now: they render there as dashed rows in the same list as the players
- * who accepted, each with its own Resend, and the bulk invite dialog opens from
- * that page's header. Settings › Team was where the invite controls used to be,
- * so the old link sent a coach to the settings form to do a thing the roster
- * does better — and after T2 moved the dialog, to a page that no longer holds
- * the action this line is about at all.
- *
- * The count is outstanding invites rather than "N of M have joined", because
- * the number that decides whether to act is the one still owed a reply. The
- * sub-line carries the expiry, which is the only part of this that is urgent,
- * and names Roster a second time — the link is a destination, the sentence is
- * the instruction, and someone reading rather than clicking still learns where
- * Resend is.
- *
- * Names and send dates are what 44a shows beside the count; `RosterProgress`
- * carries neither, and this task is presentation. Roster itself has both.
- */
-function PendingInvites({ roster }: { roster: RosterProgress }) {
-  const pending = roster.invited - roster.joined;
-  const expiring =
-    roster.expiringSoon > 0 && roster.expiringInDays !== null
-      ? `${roster.expiringSoon === 1 ? "One expires" : `${roster.expiringSoon} expire`} ${
-          roster.expiringInDays === 0
-            ? "today"
-            : roster.expiringInDays === 1
-              ? "tomorrow"
-              : `in ${roster.expiringInDays} days`
-        }`
-      : null;
-
-  return (
-    <div className="flex flex-wrap items-start gap-3 rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-subtle)] px-[18px] py-3.5">
-      <Mail
-        className="mt-px size-[15px] shrink-0 text-[var(--ink-400)]"
-        strokeWidth={1.5}
-        aria-hidden
-      />
-
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="text-[12px] leading-[1.5] text-[var(--ink-700)]">
-          <span className="tabular">{pending}</span>{" "}
-          {pending === 1 ? "invite" : "invites"} pending
-        </span>
-        <span className="text-micro">
-          {expiring ? `${expiring} · ` : ""}Resend from Roster
-        </span>
-      </div>
-
-      <Link
-        href="/dashboard/team/roster"
-        className="shrink-0 text-[11px] text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-      >
-        Roster
-      </Link>
     </div>
   );
 }

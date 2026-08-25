@@ -19,6 +19,14 @@ import {
 } from "@/components/dashboard/settings/team-actions";
 import type { ActionResult } from "@/components/dashboard/settings/actions";
 import { MergeProfilesDialog } from "@/components/dashboard/team/merge-profiles-dialog";
+import {
+  ClaimedTodayPill,
+  InviteRing,
+  RESEND_CLASS,
+  RESEND_LABEL,
+  invitedLine,
+  resendRole,
+} from "@/components/dashboard/team/roster-vocabulary";
 import type {
   RosterInvite,
   RosterMember,
@@ -409,11 +417,7 @@ function MemberRow({
               <span className="text-scoreboard-sm tabular shrink-0">
                 {lastMatch.score}
               </span>
-              {member.claimedToday && (
-                <span className="inline-flex h-5 shrink-0 items-center rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-2 text-[10px] font-medium text-[var(--ink-700)]">
-                  Claimed today
-                </span>
-              )}
+              {member.claimedToday && <ClaimedTodayPill />}
               <span className="text-micro tabular ml-auto shrink-0">
                 {lastMatch.date}
               </span>
@@ -423,11 +427,7 @@ function MemberRow({
               <span className="text-[12px] text-[var(--ink-400)]">
                 No matches yet
               </span>
-              {member.claimedToday && (
-                <span className="inline-flex h-5 shrink-0 items-center rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-2 text-[10px] font-medium text-[var(--ink-700)]">
-                  Claimed today
-                </span>
-              )}
+              {member.claimedToday && <ClaimedTodayPill />}
             </>
           )}
         </span>
@@ -570,17 +570,13 @@ export function RosterTable({
                 className={`${ROW} ${ROW_SURFACE} py-[13px]`}
               >
                 <span className={`${COL.player} flex items-center gap-2.5`}>
-                  <span
-                    aria-hidden
-                    className="size-[26px] shrink-0 rounded-full border border-dashed border-[var(--ink-300)]"
-                  />
+                  <InviteRing />
                   <span className="min-w-0 truncate text-[12px] text-[var(--ink-500)]">
                     {invite.email}
                   </span>
                 </span>
                 <span className={`${COL.last} text-[11px] text-[var(--ink-500)]`}>
-                  Invited {invite.invitedOn} as{" "}
-                  {invite.role === "owner" ? "owner" : invite.role}
+                  {invitedLine(invite.invitedOn, invite.role)}
                 </span>
                 {/* Resend is the same call as invite: `create_program_invite`
                     upserts on the one-open-invite index, so it refreshes the
@@ -593,13 +589,13 @@ export function RosterTable({
                     run(() =>
                       inviteMember({
                         email: invite.email,
-                        role: invite.role === "owner" ? "player" : invite.role,
+                        role: resendRole(invite.role),
                       })
                     )
                   }
-                  className="text-[11px] font-medium text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)] disabled:opacity-50"
+                  className={RESEND_CLASS}
                 >
-                  Resend
+                  {RESEND_LABEL}
                 </button>
                 <button
                   type="button"

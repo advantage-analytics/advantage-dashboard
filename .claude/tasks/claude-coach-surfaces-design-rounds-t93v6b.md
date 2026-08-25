@@ -357,7 +357,7 @@ ready).
   sparkline; and `statKey`'s move into `aggregate.ts`.
 
 ## T11 · The right column — next event, roster, needs attention
-- **status:** todo
+- **status:** done
 - **files:** `src/app/dashboard/team/page.tsx`,
   `src/lib/data/team-home-server.ts`, `src/components/dashboard/team/*`
   — a guess

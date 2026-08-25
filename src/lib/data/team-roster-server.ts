@@ -210,6 +210,27 @@ function fallbackName(email: string | null): string {
   return email.split("@")[0] || email;
 }
 
+/**
+ * Everyone on the roster who bound a login to a profile today, by name.
+ *
+ * Team Home's roster card reads this over the rows it has already fetched from
+ * the same `program_roster_full` RPC — so "claimed today" means one thing on
+ * both surfaces, resolved on one clock, with one answer for a row whose name is
+ * missing. A second definition of "today" is a pill that shows on one page and
+ * not the other for the same person on the same afternoon.
+ */
+export function claimedTodayNames(
+  rows: {
+    display_name: string | null;
+    email: string | null;
+    claimed_at: string | null;
+  }[]
+): string[] {
+  return rows
+    .filter((row) => isToday(row.claimed_at))
+    .map((row) => row.display_name?.trim() || fallbackName(row.email));
+}
+
 export const getRosterData = cache(async function getRosterData(
   programId: string
 ): Promise<RosterData> {

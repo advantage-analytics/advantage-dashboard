@@ -675,3 +675,53 @@ is the runner's. Newest entries at the bottom.
   three-tile state is reachable in any normal early season. It also found the
   real gap, that `teamKpis()` — the function deciding which tiles exist — had
   no coverage while its helpers did. Four tests now cover it.
+
+## T11 · The right column — next event, roster, needs attention — done
+- **gate:** mechanical — `npm run lint` 0 errors (38 pre-existing warnings),
+  `npx tsc --noEmit` clean, `npm test` 111 passed.
+  `pipeline-guardrails-reviewer` — no violations. It verified the new write
+  path calls the *existing* `inviteMember`, which takes no `programId` and
+  resolves it server-side, and enumerated the predicate sets to confirm
+  `isLiveUpdating` is exactly `IN_FLIGHT` minus `processed` — `isInFlight`
+  would have flagged every analysed match as "taking longer", `isWorking` would
+  have dropped `uploaded`, which the guardrails doc says must stay alertable.
+  `rls-boundary-reviewer` — no findings. `create_program_invite` is
+  `security definer` re-checking `is_program_staff` and raising `42501`, so a
+  player is refused by the database even if they reach the action. Only
+  `resend-invite.tsx` is a Client Component, taking `email` and `role` — both
+  already client-rendered on the Roster table. The `program_roster_full` change
+  is a **TypeScript cast widening**, not a new read.
+  `task-completion-reviewer` — **`VERDICT: pass`**, all five criteria.
+- **changed:** Team Home is a two-column page at `xl` — main plus a 340px rail
+  carrying a Next event card, a roster card and a Needs-attention list, each
+  rendering nothing at all when it has nothing to say. The frame spans both
+  columns by construction: greeting and usage footer are siblings of the grid,
+  never cells in it. A player, or a staff member whose three cards are all
+  empty, gets a single-track grid with no gutter.
+- **the deleted `PendingInvites` block, ruled a gain not a regression.** T4's
+  line is gone from the main column; the reviewer checked reachability state by
+  state rather than the phrase, and found the old block was gated on `!empty`
+  as well as pending invites — so **on day zero it never rendered at all**. The
+  roster card has no such gate, lists every open invitation with an inline
+  Resend, and surfaces pending *staff* invites that `rosterProgress()` never
+  counted. "Resend from Roster" and the `/dashboard/team/roster` link survive
+  verbatim on the urgent alert. No state exists where a coach could resend or
+  reach Roster from Team Home before and cannot now.
+- **T8, T9 and T10 are untouched** — `match-rows.tsx`, `dual-sheet.tsx`,
+  `kpi-strip.tsx`, `first-steps.tsx` and `usage-footer.tsx` show no
+  modification, and their call sites pass identical props. The brief required
+  reporting rather than retuning if anything could not survive the narrower
+  column; nothing had to give.
+- **two accurate criticisms the reviewer raised, neither blocking, both worth
+  fixing later:**
+  1. A comment in `page.tsx` justifying the `xl` breakpoint claims the `lg`
+     split's 580px column is "narrower than anything the card renders in
+     today" — inconsistent with its own preceding sentence, since the card
+     already renders at 560px at `sm`. The conclusion (use `xl`) stands; the
+     stated reason does not. Same class as T8's `event_entry_id` comment: a
+     justification someone later trusts instead of re-deriving.
+  2. `first-steps.tsx`'s checklist gets a new minimum container of 268px at the
+     `xl` split, narrower than the 304px it previously bottomed out at. Its
+     content is fluid and wrapping so it is unlikely to break visibly, but the
+     implementer's blanket claim that every protected component's narrowest new
+     container is wider than one it already renders in is not quite true here.

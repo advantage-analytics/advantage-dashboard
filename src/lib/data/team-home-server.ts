@@ -1,11 +1,20 @@
 import { createClient } from "@/lib/supabase/server";
 import { getProgramUsage, type ProgramUsage } from "@/lib/data/usage-server";
-import { getTeamSettings } from "@/lib/data/team-settings-server";
+import {
+  getTeamSettings,
+  type TeamInvite,
+} from "@/lib/data/team-settings-server";
 import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
+import {
+  claimedTodayNames,
+  type RosterInvite,
+} from "@/lib/data/team-roster-server";
 import {
   ANALYSIS_LABEL,
   importedAnalysis,
+  isAnalysisFailed,
   isAnalysisReady,
+  isLiveUpdating,
   manualAnalysis,
   type AnalysisStatus,
   type MatchAnalysis,
@@ -34,7 +43,7 @@ import {
   matchWon,
   type EntryState,
 } from "@/lib/schedule/entry-state";
-import type { EventEntry, EventSite } from "@/lib/schedule/types";
+import type { EventEntry, EventKind, EventSite } from "@/lib/schedule/types";
 import { INVITE_TTL_HOURS } from "@/lib/services/programs/tokens";
 
 /**
@@ -167,6 +176,14 @@ export interface TeamNextEvent {
   id: string;
   /** Opponent school for a dual, the tournament's own name for a tournament. */
   name: string;
+  /**
+   * Which of those two the name above is, because they are read differently: a
+   * dual's `name` is the opponent and wants a "vs" in front of it, a
+   * tournament's is the event's own title and stands alone. Off the row the
+   * query already selects — `kind` is what tells the sheet which of these
+   * events is a dual — so this is a field, not a column and not a read.
+   */
+  kind: EventKind;
   /** YYYY-MM-DD. */
   startsOn: string;
 }
@@ -253,6 +270,75 @@ export interface WeekendDual {
   clinchedBy: "us" | "them" | null;
 }
 
+/**
+ * The roster, as the right column reads it.
+ *
+ * **The Roster page's own vocabulary, not a second set of words for it.** The
+ * rows are `RosterInvite` — the very type `getRosterData` hands its table —
+ * built the same way, `shortDate` included, so "Invited Aug 4" means the same
+ * thing and is spelled the same way on both screens. The claimed-today names
+ * come through `claimedTodayNames()`, which is where the pill's rule about what
+ * "today" means already lives.
+ *
+ * Null when the program has nobody, nothing outstanding and no news: the card
+ * renders nothing at all rather than a heading over an empty list. On day zero
+ * that is the whole card — the checklist in the main column is what a program
+ * with no roster is looking at.
+ */
+export interface TeamRosterCard {
+  /**
+   * Players on the roster, counted the way the Roster page counts them.
+   *
+   * **Not `RosterProgress.joined`, and the difference matters.** That number is
+   * seats — people who accepted an invitation — because it answers "is anyone
+   * turning up". This one is `program_roster_full` rows with the player role,
+   * which is what the Roster page prints "8 players" over, and it includes the
+   * coach-managed profiles that have no login at all. Printing the seat count
+   * under the roster's own phrase would put two different numbers behind one
+   * sentence on two screens a click apart.
+   */
+  players: number;
+  /**
+   * Every outstanding invitation, staff included, exactly as the Roster page
+   * lists them. Not filtered to players the way `RosterProgress` is: this card
+   * is the list of open invitations, and an assistant coach who has not
+   * accepted is one of them.
+   */
+  invites: RosterInvite[];
+  /** Who bound a login to a profile today, by name. */
+  claimedToday: string[];
+}
+
+/**
+ * One thing on the page that is waiting for somebody.
+ *
+ * **Every row here is a fact the loader already holds.** No alert is
+ * manufactured to make the list look fuller and no query was added to find one:
+ * a failed job and a job that has been running too long come off the same
+ * `matches` rows the list below renders, and the invite clock is the one
+ * `rosterProgress()` already reads. Two rows is the right length when two
+ * things need attention.
+ *
+ * Deliberately NOT here: "stats did not reconcile". `processed` is what a
+ * completed vendor job sits in until Phase 2 derivation runs, and derivation is
+ * gated (`docs/ui-revamp-guardrails.md` §5) — so every analysed match in the
+ * product today is in that state, and an alert on it would fire on all of them
+ * and mean nothing. There is no reconciliation signal to read yet.
+ */
+export interface TeamAlert {
+  id: string;
+  /** What kind of thing this is. The list picks its icon from it. */
+  kind: "match-failed" | "match-slow" | "invite-expiring";
+  /** What it is about — a match by its title, or the invitations. */
+  subject: string;
+  /**
+   * Why it needs attention, in the product's own vocabulary: a match's line is
+   * built from `ANALYSIS_LABEL`, never from a second word for the same state.
+   */
+  detail: string;
+  href: string;
+}
+
 export interface RosterProgress {
   /** Players who have accepted. */
   joined: number;
@@ -287,6 +373,18 @@ export interface TeamHomeData {
   roster: RosterProgress;
   /** Null when the program has nothing on the schedule from today onwards. */
   nextEvent: TeamNextEvent | null;
+  /**
+   * The right column's roster card, or null when there is nothing to say — see
+   * `TeamRosterCard`. Staff read it; the page never renders the right column
+   * for a player, whose `program_roster` line is their own and whose
+   * `program_invites` policy returns them nothing anyway.
+   */
+  rosterCard: TeamRosterCard | null;
+  /**
+   * The right column's "Needs attention" list, and an empty array is the
+   * ordinary case. Nothing renders for it — no empty card, no "all clear".
+   */
+  attention: TeamAlert[];
   /**
    * This week's dual, or null — and null is the common case. The card that
    * renders this renders nothing at all when it is null: no empty sheet, no
@@ -571,6 +669,157 @@ function rosterProgress(
         ? Math.max(0, Math.floor((soon[0] - now) / (24 * 60 * 60 * 1000)))
         : null,
   };
+}
+
+/**
+ * The roster card, or null when there is nothing on it to say.
+ *
+ * Built entirely from rows this loader has already fetched — `getTeamSettings`
+ * for the open invitations, and the `program_roster_full` rows the match
+ * attribution already needed — so the card costs no query of its own. The
+ * invitations are mapped exactly as `getRosterData` maps them, into the same
+ * `RosterInvite`, because the Roster page is where these rows have their
+ * vocabulary and this is that same list seen from the home page.
+ */
+function rosterCard(
+  invites: TeamInvite[],
+  rosterRows: {
+    role: string;
+    display_name: string | null;
+    email: string | null;
+    claimed_at: string | null;
+  }[]
+): TeamRosterCard | null {
+  // The Roster page's own count, off the same RPC and the same predicate — see
+  // `TeamRosterCard.players` for why this is not the seat count beside it.
+  const players = rosterRows.filter((row) => row.role === "player").length;
+  const claimedToday = claimedTodayNames(rosterRows);
+  const open: RosterInvite[] = invites.map((invite) => ({
+    id: invite.id,
+    email: invite.email,
+    role: invite.role,
+    invitedOn: shortDate(invite.createdAt),
+  }));
+
+  // Nobody, nothing outstanding, no news: the card is absent rather than empty.
+  if (players === 0 && open.length === 0 && claimedToday.length === 0) {
+    return null;
+  }
+
+  return { players, invites: open, claimedToday };
+}
+
+/**
+ * How long a job may be expected to change before the page says something.
+ *
+ * The one full-length job on record turned round in 75 minutes for 86 minutes
+ * of video (`docs/ui-revamp-guardrails.md` §1), and the monthly cap is two
+ * hours of billable footage, so nothing legitimate is much longer than that.
+ * Six hours is comfortably past both — late enough that a coach reading this
+ * row is being told something true, rather than made anxious about a job that
+ * is simply running.
+ */
+const SLOW_ANALYSIS_HOURS = 6;
+
+/**
+ * Whole hours since a job row was created, or null when there is no clock.
+ *
+ * An imported match never had a job and so has no `startedAt`; inventing one
+ * would put a fabricated elapsed time beside a real status, which is what
+ * `first-steps.tsx`'s `Elapsed` refuses for the same reason.
+ */
+function hoursSince(
+  startedAt: string | undefined,
+  nowMs: number
+): number | null {
+  if (!startedAt) return null;
+  const started = Date.parse(startedAt);
+  if (!Number.isFinite(started)) return null;
+  return Math.floor((nowMs - started) / (60 * 60 * 1000));
+}
+
+/**
+ * What is waiting for somebody, in the order a coach would deal with it.
+ *
+ * Broken first, then slow, then the clock on the invitations — three facts this
+ * loader already holds, and nothing else. See `TeamAlert` for what is
+ * deliberately absent from it.
+ */
+function teamAttention(
+  matches: TeamMatchRow[],
+  roster: RosterProgress,
+  nowMs: number
+): TeamAlert[] {
+  const alerts: TeamAlert[] = [];
+
+  for (const match of matches) {
+    if (isAnalysisFailed(match.status)) {
+      alerts.push({
+        id: `failed-${match.id}`,
+        kind: "match-failed",
+        subject: match.title,
+        // The row's own word for its state — `ANALYSIS_LABEL`, the same one the
+        // list below prints beside its dot.
+        detail: match.label,
+        href: `/dashboard/matches/${match.id}`,
+      });
+      continue;
+    }
+
+    // `isLiveUpdating`, not `isInFlight`: a `processed` match is waiting on
+    // Phase 2 shipping rather than on anything running, and counting it here
+    // would report every analysed match in the program as overdue. This is the
+    // set where a database update is genuinely coming — so one that has not
+    // arrived in six hours is a fact worth a row.
+    const hours = hoursSince(match.startedAt, nowMs);
+    if (
+      isLiveUpdating(match.status) &&
+      hours !== null &&
+      hours >= SLOW_ANALYSIS_HOURS
+    ) {
+      alerts.push({
+        id: `slow-${match.id}`,
+        kind: "match-slow",
+        subject: match.title,
+        // The status word and how long it has been true. "Uploaded · 8h" is a
+        // job whose auto-submit never fired; "Processing · 9h" is one the
+        // vendor has not come back on. Both are the row's own label — never a
+        // second word for the state — with the clock beside it.
+        detail: `${match.label} · ${hours}h`,
+        href: `/dashboard/matches/${match.id}`,
+      });
+    }
+  }
+
+  // The urgent half of the invitations, and only that half. The roster card
+  // above lists every open one with a Resend beside it, so "there are invites
+  // out" is already on screen; this row appears when the clock has become the
+  // point, which is what an alert list is for. It counts PLAYER invites —
+  // `rosterProgress()` is what holds the expiry, and staff invitations are a
+  // different question with a different answer.
+  if (roster.expiringSoon > 0 && roster.expiringInDays !== null) {
+    const when =
+      roster.expiringInDays === 0
+        ? "today"
+        : roster.expiringInDays === 1
+          ? "tomorrow"
+          : `in ${roster.expiringInDays} days`;
+
+    alerts.push({
+      id: "invites-expiring",
+      kind: "invite-expiring",
+      subject:
+        roster.expiringSoon === 1
+          ? `One invite expires ${when}`
+          : `${roster.expiringSoon} invites expire ${when}`,
+      // Round 44 sends this at Roster, where the dashed rows and their Resend
+      // live — the same instruction the line this replaces carried.
+      detail: "Resend from Roster",
+      href: "/dashboard/team/roster",
+    });
+  }
+
+  return alerts;
 }
 
 /**
@@ -933,8 +1182,19 @@ export async function getTeamHomeData(
     })(),
   ]);
 
+  // One RPC, three questions off it: which ids mean "us" on a match row, how
+  // many players the roster holds, and who claimed a profile today. The roster
+  // card adds no read of its own.
+  const people = (rosterRows ?? []) as {
+    player_id: string | null;
+    role: string;
+    display_name: string | null;
+    email: string | null;
+    claimed_at: string | null;
+  }[];
+
   const rosterIds = new Set(
-    ((rosterRows ?? []) as { player_id: string | null }[])
+    people
       .map((rosterRow) => rosterRow.player_id)
       .filter((id): id is string => Boolean(id))
   );
@@ -1001,22 +1261,30 @@ export async function getTeamHomeData(
   const dualRow = weekendDualRow(events, week, today);
   const weekendDual = dualRow ? await loadWeekendDual(programId, dualRow.id) : null;
 
+  // `now`, not a second `Date.now()`: the invite clock, the greeting, the
+  // schedule window and the dual sheet are all answered on this read's one
+  // clock, and the alert list below reads the expiry this returns.
+  const progress = rosterProgress(
+    team?.members ?? [],
+    team?.invites ?? [],
+    now.getTime()
+  );
+
   return {
     usage,
     matches,
     kpis: teamKpis(season, jobs, stats, schedule, rosterIds),
-    roster: rosterProgress(
-      team?.members ?? [],
-      team?.invites ?? [],
-      Date.now()
-    ),
+    roster: progress,
     nextEvent: nextEventRow
       ? {
           id: nextEventRow.id,
           name: nextEventRow.name,
+          kind: nextEventRow.kind === "dual" ? "dual" : "tournament",
           startsOn: nextEventRow.starts_on,
         }
       : null,
+    rosterCard: rosterCard(team?.invites ?? [], people),
+    attention: teamAttention(matches, progress, now.getTime()),
     weekendDual,
     playersCanUpload: team?.program.playersCanUpload ?? false,
   };
