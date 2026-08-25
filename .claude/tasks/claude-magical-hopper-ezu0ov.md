@@ -18,7 +18,7 @@ straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Bring the roster widget to Design 9a (v3 chrome)
-- **status:** todo
+- **status:** doing
 - **files:** src/components/dashboard/team/roster-table.tsx,
   src/app/dashboard/team/roster/page.tsx,
   src/components/dashboard/team/roster-header-buttons.tsx — a guess
