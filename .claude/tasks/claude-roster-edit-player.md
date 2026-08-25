@@ -42,4 +42,4 @@ ready).
         archived row left unchanged in the database.
 - **notes:** `update_program_player` already exists and has zero callers. No migration.
   Drag-and-drop reordering is deliberately a separate later task — it needs a bulk
-  reorder RPC. Full design and risks: /root/.claude/plans/a-way-dapper-pine.md
+  reorder RPC. Full design and risks: `docs/roster-edit-and-people-search.md` §1.
