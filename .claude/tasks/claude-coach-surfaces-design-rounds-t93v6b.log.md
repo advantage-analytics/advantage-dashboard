@@ -520,3 +520,38 @@ is the runner's. Newest entries at the bottom.
   silently revert T2's checklist card *and* null this card. Reachable through
   the app's own write path; not reachable through any real collegiate season.
   Worth a guard if this loader is touched again.
+
+## T9 · This weekend — the dual sheet — blocked (second attempt)
+- **gate:** mechanical — `npm run lint` 0 errors (38 pre-existing warnings),
+  `npx tsc --noEmit` clean, `npm test` 93 passed.
+  `pipeline-guardrails-reviewer` — **its own earlier finding resolved**, and
+  nothing to block on. It checked the extraction byte-for-byte against the
+  prior inline versions: each state produces the same word, tone and pulse on
+  both surfaces, `line-row.tsx`'s control flow is preserved (the `empty` branch
+  and its `canEdit` gate still run before the map is consulted, and `ready`
+  plus the upload fallback still fall through), no write affordance migrated to
+  the read-only card, and the `StatusTone` import is type-only under
+  `isolatedModules` so nothing from a component reaches the server module.
+  `rls-boundary-reviewer` — not re-run: nothing under `src/lib/data/` changed
+  since the revision it cleared, and a string extraction has no query, column
+  or shape implication.
+  `task-completion-reviewer` — **`VERDICT: needs-work`** on criterion 6.
+- **why it failed, and why this one is not another criterion defect:** I
+  expected the reviewer to find my "a grep finds exactly one definition"
+  wording overreaching, because a third, pre-existing surface —
+  `single-detail.tsx:128,137,140` — still spells the three words. It ruled the
+  opposite way, and it is right. The implementer's argument for leaving that
+  file alone covers only its `ready` branch, which genuinely has no key in the
+  map. Its `failed`/`working`/`waiting` branches map onto exactly the three
+  `LINE_STATUS` keys with matching tones and could read the map without
+  touching `ready` or changing any behaviour. The criterion is satisfiable; the
+  work is incomplete. That is a different thing from T4's and T8's failures,
+  where the criteria genuinely contradicted what the task required.
+- **stash:** `dbceda33b679372da2c172f48466f25da0e55546` — the dual sheet, the
+  loader work, the page wiring, `line-status.ts` and the converted
+  `line-row.tsx`. Recoverable; nothing discarded.
+- **judged fine, not scope creep:** moving `tone` and `live` into the map
+  alongside the labels widens the literal criterion, which named only the
+  words. The reviewer accepted it as narrowly contained — but noted it does not
+  rescue criterion 6, since `single-detail.tsx` duplicates the tones and the
+  `live` flag too.

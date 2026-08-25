@@ -258,7 +258,7 @@ ready).
   against the writers themselves; do not re-derive or "simplify" that rule.
 
 ## T9 · This weekend — the dual sheet
-- **status:** next
+- **status:** blocked
 - **files:** `src/lib/data/team-home-server.ts`, a new
   `src/components/dashboard/team/dual-sheet.tsx` — a guess
 - **done when:**
