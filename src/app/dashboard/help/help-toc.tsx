@@ -196,7 +196,7 @@ export function HelpToc() {
               className={cn(
                 "inline-flex h-11 items-center rounded-full px-4",
                 "border text-[13px] font-medium transition-colors",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]",
+                "focus-visible:outline-none",
                 isActive
                   ? "border-[var(--blue)] bg-[var(--surface-raised)] text-[var(--ink-900)]"
                   : "border-[var(--border-hairline)] bg-[var(--surface-muted)] text-[var(--ink-700)] hover:border-[var(--ink-200)] hover:bg-[var(--surface-raised)] hover:text-[var(--ink-900)]",
@@ -235,7 +235,7 @@ export function HelpToc() {
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
                     "block rounded-[8px] px-2.5 py-1.5 text-[12px] leading-[1.5] transition-colors duration-150",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]",
+                    "focus-visible:outline-none",
                     isActive
                       ? "bg-[var(--surface-subtle)] font-medium text-[var(--ink-900)]"
                       : "text-[var(--ink-700)] hover:bg-[var(--surface-subtle)]",

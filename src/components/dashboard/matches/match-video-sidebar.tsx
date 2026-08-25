@@ -122,7 +122,7 @@ function SavedIcon({
       type="button"
       onClick={onClick}
       aria-label={filled ? "Remove from saved" : "Save event"}
-      className="shrink-0 p-1 -m-1 hover:opacity-70 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1 rounded-sm"
+      className="shrink-0 p-1 -m-1 hover:opacity-70 transition-opacity focus-visible:outline-none rounded-sm"
     >
       <Bookmark
         size={12}
@@ -186,7 +186,7 @@ function EventRow({
         "flex flex-col gap-1 rounded-[6px] transition-colors",
         isDisabled
           ? "opacity-40 cursor-default"
-          : "cursor-pointer hover:bg-[#FAFAFA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1",
+          : "cursor-pointer hover:bg-[#FAFAFA] focus-visible:outline-none",
       )}
       onMouseEnter={() => { if (!isDisabled) setIsHovered(true); }}
       onMouseLeave={() => setIsHovered(false)}

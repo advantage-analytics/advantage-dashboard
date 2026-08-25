@@ -36,7 +36,7 @@ export function SettingsToggle({
       onClick={() => onChange(!checked)}
       className={cn(
         "relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)] focus-visible:ring-offset-2",
+        "focus-visible:outline-none",
         disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
         checked ? "bg-[var(--blue)]" : "bg-[var(--ink-200)]"
       )}
@@ -87,7 +87,7 @@ export function SettingsRadioGroup<T extends string>({
             onClick={() => onChange(option.value)}
             className={cn(
               "flex items-center gap-2 rounded-[6px] text-left text-[12px] text-[var(--ink-900)]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]",
+              "focus-visible:outline-none",
               disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"
             )}
           >

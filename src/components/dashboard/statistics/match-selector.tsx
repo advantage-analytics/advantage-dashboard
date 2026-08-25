@@ -64,7 +64,7 @@ export function MatchSelector({
       <button
         type="button"
         onClick={() => setIsOpen((v) => !v)}
-        className="flex items-center gap-2 px-4 py-2 bg-white ring-1 ring-inset ring-[#D9D9D9] rounded-full text-[12px] text-[#525252] hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/50 focus-visible:ring-offset-1"
+        className="flex items-center gap-2 px-4 py-2 bg-white ring-1 ring-inset ring-[#D9D9D9] rounded-full text-[12px] text-[#525252] hover:bg-[#EFF6FF] hover:ring-[#BFDBFE] hover:text-[#3B82F6] transition-colors duration-200 focus-visible:outline-none"
       >
         <span className="text-[#0D0D0D] font-medium">
           {isFiltered

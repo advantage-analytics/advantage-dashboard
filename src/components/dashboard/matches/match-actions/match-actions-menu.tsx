@@ -30,7 +30,7 @@ export function MatchActionsMenu({
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
 
   const triggerClasses =
-    "inline-flex items-center justify-center h-7 w-7 rounded-lg text-[#888888] hover:text-[#0D0D0D] hover:bg-[#F5F5F5] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 data-[state=open]:bg-[#F5F5F5] data-[state=open]:text-[#0D0D0D]";
+    "inline-flex items-center justify-center h-7 w-7 rounded-lg text-[#888888] hover:text-[#0D0D0D] hover:bg-[#F5F5F5] transition-colors duration-200 focus-visible:outline-none data-[state=open]:bg-[#F5F5F5] data-[state=open]:text-[#0D0D0D]";
 
   return (
     <>

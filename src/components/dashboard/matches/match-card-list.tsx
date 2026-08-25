@@ -68,7 +68,7 @@ export function MatchCardList({ match, isNew }: MatchCardListProps): React.JSX.E
       {/* Event */}
       <Link
         href={`/dashboard/matches/${match.id}`}
-        className="min-w-0 truncate rounded-sm text-[12px] text-[#0D0D0D] after:absolute after:inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1"
+        className="min-w-0 truncate rounded-sm text-[12px] text-[#0D0D0D] after:absolute after:inset-0 focus-visible:outline-none"
       >
         {match.tournamentName}
       </Link>
@@ -150,7 +150,7 @@ export function MatchCardList({ match, isNew }: MatchCardListProps): React.JSX.E
           (action.href ? (
             <Link
               href={action.href}
-              className="group/cta whitespace-nowrap rounded-sm text-[11px] font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+              className="group/cta whitespace-nowrap rounded-sm text-[11px] font-medium transition-colors duration-200 focus-visible:outline-none"
               style={{ color: action.ink }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.color = action.hoverInk;

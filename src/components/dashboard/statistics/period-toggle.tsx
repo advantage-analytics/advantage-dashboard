@@ -33,7 +33,7 @@ export function PeriodToggle({ value, onChange, matchCount }: PeriodToggleProps)
             role="radio"
             aria-checked={isActive}
             onClick={() => onChange(option.value)}
-            className={`px-3.5 py-1.5 text-[11px] font-medium rounded-full transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1 ${
+            className={`px-3.5 py-1.5 text-[11px] font-medium rounded-full transition-all duration-200 focus-visible:outline-none ${
               isActive
                 ? "bg-white text-[#0D0D0D] shadow-[0px_1px_3px_rgba(0,0,0,0.08)]"
                 : "text-[#888888] hover:text-[#525252]"

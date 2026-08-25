@@ -76,14 +76,16 @@
      indicator.
 
      WCAG 1.4.11 wants 3:1 against what the ring sits on, which here means both
-     white cards and the #F7F7F7 field fill. --ink-500 is 3.55:1 / 3.31:1;
-     the #E5E5E5 this replaced was 1.26:1 / 1.18:1 and failed. Reused rather
-     than minted — a new grey between 400 and 600 is the near-twin this palette
-     keeps merging away. The floor is why --ink-500 cannot simply be lightened:
-     it now has a non-text consumer.
+     white cards and the #F5F5F5 field fill — the value --surface-field
+     resolves to. --ink-500 is 3.54:1 / 3.25:1; the #E5E5E5 this replaced was
+     1.26:1 / 1.16:1 and failed. Reused rather than minted — a new grey between
+     400 and 600 is the near-twin this palette keeps merging away. The floor is
+     why --ink-500 cannot simply be lightened: it now has a non-text consumer.
 
      Raise contrast on --field-ring, never on the -30 band: the band is the
-     soft outer edge and tops out near 1.4:1 whatever colour it carries. */
+     soft outer edge, and at 30% alpha it cannot reach 3:1 whatever colour it
+     carries — pure black composites to ~2.1:1 — while today's --ink-500
+     measures 1.38:1. */
   --field-ring:var(--ink-500);
   --field-ring-30:color-mix(in srgb, var(--ink-500) 30%, transparent);
   /* Text-on-tint retired (review): informational capsules are neutral —

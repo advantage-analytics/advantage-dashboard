@@ -42,7 +42,7 @@ Built by former collegiate players, Advantage Analytics is a premium tool for se
 
 - **Target**: WCAG 2.1 AA compliance.
 - **Color contrast**: All text meets 4.5:1 ratio (normal text) and 3:1 ratio (large text) against backgrounds.
-- **Focus indicators**: Visible focus rings on all interactive elements (`ring-2 ring-[#3B82F6]/40`).
+- **Focus indicators**: Every interactive element rings automatically via `design-system/focus.css` — blue for actionable controls, a neutral ring for text fields. Components write no focus class of their own (DESIGN.md “Focus”).
 - **Motion**: Respect `prefers-reduced-motion` — skip transforms, keep opacity.
 - **Keyboard**: All interactive elements reachable and operable via keyboard.
 - **Screen readers**: Semantic HTML, ARIA labels on icons and custom controls.

@@ -403,7 +403,7 @@ export function EditMatchDialog({ matchId, open, onOpenChange }: EditMatchDialog
                       onClick={requestRemoveLastSet}
                       disabled={numSets <= MIN_SETS}
                       aria-label="Remove a set"
-                      className="size-7 flex items-center justify-center rounded-full text-[#3B82F6] hover:text-[#2563EB] hover:bg-[#F5F5F5] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+                      className="size-7 flex items-center justify-center rounded-full text-[#3B82F6] hover:text-[#2563EB] hover:bg-[#F5F5F5] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors duration-150 focus-visible:outline-none"
                     >
                       <CircleMinus className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
                     </button>
@@ -415,7 +415,7 @@ export function EditMatchDialog({ matchId, open, onOpenChange }: EditMatchDialog
                       onClick={addSet}
                       disabled={numSets >= MAX_SETS}
                       aria-label="Add a set"
-                      className="size-7 flex items-center justify-center rounded-full text-[#3B82F6] hover:text-[#2563EB] hover:bg-[#F5F5F5] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+                      className="size-7 flex items-center justify-center rounded-full text-[#3B82F6] hover:text-[#2563EB] hover:bg-[#F5F5F5] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors duration-150 focus-visible:outline-none"
                     >
                       <CirclePlus className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
                     </button>
@@ -430,14 +430,14 @@ export function EditMatchDialog({ matchId, open, onOpenChange }: EditMatchDialog
                     <button
                       type="button"
                       onClick={() => setPendingRemoveAt(null)}
-                      className="px-2 py-0.5 rounded-full text-[#525252] hover:text-[#0D0D0D] hover:bg-[#F5F5F5] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+                      className="px-2 py-0.5 rounded-full text-[#525252] hover:text-[#0D0D0D] hover:bg-[#F5F5F5] transition-colors duration-150 focus-visible:outline-none"
                     >
                       Cancel
                     </button>
                     <button
                       type="button"
                       onClick={() => doRemoveLastSet(pendingRemoveAt)}
-                      className="px-2 py-0.5 rounded-full text-[#E51837] hover:bg-[rgba(229,24,55,0.08)] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E51837]/40"
+                      className="px-2 py-0.5 rounded-full text-[#E51837] hover:bg-[rgba(229,24,55,0.08)] transition-colors duration-150 focus-visible:outline-none"
                     >
                       Remove
                     </button>

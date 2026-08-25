@@ -486,7 +486,7 @@ export default function RecentActivity({
         </p>
         <Link
           href="/dashboard/matches"
-          className="text-[10px] font-medium text-[#3B82F6] uppercase tracking-[2.5px] transition-colors duration-200 hover:text-[#2563EB] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 rounded-sm"
+          className="text-[10px] font-medium text-[#3B82F6] uppercase tracking-[2.5px] transition-colors duration-200 hover:text-[#2563EB] focus-visible:outline-none rounded-sm"
         >
           VIEW ALL
         </Link>
@@ -534,7 +534,7 @@ export default function RecentActivity({
             <button
               type="button"
               onClick={load}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-medium uppercase tracking-[1.5px] rounded-[6px] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-medium uppercase tracking-[1.5px] rounded-[6px] transition-colors duration-200 focus-visible:outline-none"
             >
               <RefreshCw className="size-3" aria-hidden />
               Retry
@@ -641,7 +641,7 @@ export default function RecentActivity({
                 e.stopPropagation();
                 dismissToast();
               }}
-              className="ml-1 p-1 rounded-full text-white/60 hover:text-white/80 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+              className="ml-1 p-1 rounded-full text-white/60 hover:text-white/80 transition-colors duration-200 focus-visible:outline-none"
               aria-label="Dismiss notification"
             >
               <X className="size-3.5" />

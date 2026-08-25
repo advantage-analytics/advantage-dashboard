@@ -37,7 +37,7 @@ function MatchLink({ match }: { match: MatchRow }) {
     <Link
       href={`/dashboard/matches/${match.id}`}
       aria-label={`${match.won ? "Win" : "Loss"} vs ${match.opponentName}, ${match.score}`}
-      className="flex items-center justify-between rounded-lg px-2 py-2.5 -mx-2 transition-[background-color,transform] duration-200 ease-out hover:bg-[#FAFAFA] active:scale-[0.998] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40 focus-visible:ring-offset-1"
+      className="flex items-center justify-between rounded-lg px-2 py-2.5 -mx-2 transition-[background-color,transform] duration-200 ease-out hover:bg-[#FAFAFA] active:scale-[0.998] focus-visible:outline-none"
     >
       <div className="flex gap-3 items-center">
         <div

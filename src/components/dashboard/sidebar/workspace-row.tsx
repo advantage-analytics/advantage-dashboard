@@ -53,7 +53,7 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
       aria-expanded={open}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className="flex h-[42px] w-full items-center overflow-hidden rounded-[8px] transition-colors duration-200 ease-[var(--ease-primary)] hover:bg-[var(--surface-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)] cursor-pointer"
+      className="flex h-[42px] w-full items-center overflow-hidden rounded-[8px] transition-colors duration-200 ease-[var(--ease-primary)] hover:bg-[var(--surface-subtle)] focus-visible:outline-none cursor-pointer"
     >
       {/* Same 40px column as every nav row, so the mark does not move. */}
       <span className="flex size-10 shrink-0 items-center justify-center">

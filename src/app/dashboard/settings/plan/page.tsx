@@ -246,7 +246,7 @@ function PlanContent() {
                   aria-pressed={isSelected}
                   className={cn(
                     "flex cursor-pointer flex-col gap-2.5 rounded-[14px] border p-[18px] text-left transition-colors duration-200",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)]",
+                    "focus-visible:outline-none",
                     isSelected
                       ? "border-[var(--blue)] shadow-[var(--shadow-card-emphasis)]"
                       : "border-[var(--border-card)] hover:border-[var(--ink-300)]"

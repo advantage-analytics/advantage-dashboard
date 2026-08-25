@@ -38,13 +38,17 @@ export const eyebrowLabelCls =
   "text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]";
 
 /**
- * Focus ring shared by every interactive element in the modal.
+ * Focus treatment shared by every interactive element in the modal.
  *
- * Source: SKILL.md › Interaction States › Focus
- *   focus-visible:ring-2 ring-accent/40, no outline.
+ * The ring itself is NOT set here. `src/styles/design-system/focus.css` draws
+ * it for every control in the wizard — buttons, links, the trim-handle sliders,
+ * the score `<input>`s — and because `globals.css` imports that file outside any
+ * `@layer` while Tailwind's utilities live in `@layer utilities`, a
+ * `focus-visible:ring-*` utility here would be discarded before specificity was
+ * ever consulted. This constant now carries only what the utility layer still
+ * decides; change the ring by editing the token, not by adding a class back.
  */
-export const focusRingCls =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40";
+export const focusRingCls = "focus-visible:outline-none";
 
 /**
  * Destructive icon button — the remove affordances.

@@ -189,7 +189,7 @@ export function ActivityTray({ feed }: { feed: ActivityFeed }) {
             type="button"
             aria-label={`Activity, ${detail}`}
             className={cn(
-              "group relative flex size-7 items-center justify-center rounded-[8px] transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-ring-40)] cursor-pointer",
+              "group relative flex size-7 items-center justify-center rounded-[8px] transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:outline-none cursor-pointer",
               isOpen && "bg-[var(--surface-subtle)]"
             )}
           >
