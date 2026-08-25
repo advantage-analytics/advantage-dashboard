@@ -8,7 +8,12 @@ import {
   manualAnalysis,
   type AnalysisStatus,
 } from "@/lib/data/match-analysis";
-import { shortDate } from "@/lib/data/match-utils";
+import {
+  matchOutcome,
+  shortDate,
+  type MatchScore,
+} from "@/lib/data/match-utils";
+import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
 import { INVITE_TTL_HOURS } from "@/lib/services/programs/tokens";
 
 /**
@@ -21,10 +26,13 @@ import { INVITE_TTL_HOURS } from "@/lib/services/programs/tokens";
  *
  * None of this is a new source of truth. Usage comes from the same SECURITY
  * DEFINER functions Settings › Usage reads, the roster from the same
- * `program_roster` RPC Settings › Team reads, the next event from the same
- * `program_events` policy the schedule page reads under, and match state from
- * the shared analysis loader. A second answer to "how many hours have we used"
- * would be worse than no answer, because someone would believe this one.
+ * `program_roster` RPC Settings › Team reads and the same `program_roster_full`
+ * RPC the Roster page reads, the next event from the same `program_events`
+ * policy the schedule page reads under, match state from the shared analysis
+ * loader, and who won from the same `matchOutcome` the matches list, the
+ * schedule and every player profile ask. A second answer to "how many hours
+ * have we used" — or to "did we win that" — would be worse than no answer,
+ * because someone would believe this one.
  */
 
 /** How many rows the page shows before "see all" would be the honest control. */
@@ -49,7 +57,11 @@ function localDay(now: Date): string {
 
 export interface TeamMatchRow {
   id: string;
-  /** "M. Reid vs J. Park" */
+  /**
+   * "M. Reid vs J. Park" — the program's side named FIRST wherever the row
+   * establishes one, so the names, the score and the mark all read from the
+   * same point of view. See `programSide()`.
+   */
   title: string;
   /** "Big Sky dual · away", or the match type when there is no event. */
   context: string;
@@ -58,6 +70,25 @@ export interface TeamMatchRow {
   label: string;
   /** "Aug 8" */
   date: string;
+  /**
+   * The set scores, oriented so `player1` is the side `title` names first.
+   *
+   * Resolved here rather than in the row, because `<ScoreLine>` takes
+   * pre-oriented sets and deliberately never asks who is looking. Empty when
+   * nobody has recorded a score — the row falls back to its status dot then.
+   */
+  sets: ScoreLineSet[];
+  /**
+   * Did the PROGRAM's side win?
+   *
+   * `null` covers three different silences, and all three must render the same
+   * way — without a `<ResultMark>`: no score recorded, a score that decides
+   * nothing (level sets), and a row whose side `programSide()` cannot
+   * establish. A row with no glyph is honest; a green check on a match the
+   * program lost is the silent misattribution `docs/ui-revamp-guardrails.md`
+   * exists to prevent, and nothing on screen would look broken.
+   */
+  won: boolean | null;
   /**
    * When the job row was created, ISO — absent for an import, which never had
    * one. Carried so a surface showing an in-flight match can say how long it
@@ -129,6 +160,67 @@ function matchContext(row: {
 }
 
 /**
+ * Which side of a match row is the program's — and `null` when nothing says.
+ *
+ * Team Home's rows are name-based: `player1_name vs player2_name`, with no
+ * "us" anywhere in them. `<ResultMark>` draws a green check or a red cross, so
+ * an answer guessed here shows a coach a win where they lost with nothing on
+ * screen looking wrong. Two things establish the side; where neither does, the
+ * row goes without a mark rather than with a coin flip.
+ *
+ * 1. **An id on this program's roster.** `program_roster_full.player_id` is
+ *    documented as "the id their matches carry" (`roster-server.ts`), and it is
+ *    what both writers of a program match put in `player1_id`: the upload
+ *    wizard from the roster pick (`useUploadMatchWizard.ts` — "whose match this
+ *    is, which in a team workspace is not the uploader"), and `recordResult`
+ *    from the event entry's player (`lib/schedule/actions.ts`). An opponent
+ *    cannot collide with it: opponent identities are written to
+ *    `matches.opponent_player_id`, deliberately NOT to `player2_id`
+ *    (`opponents-server.ts`), so a roster id in either column is one of ours.
+ * 2. **The row is a line off this program's schedule.** `event_entry_id` says
+ *    so, and what makes it evidence is a convention rather than a single
+ *    writer — do not "verify" this clause by reading one function and stopping.
+ *    **Two places write the column, and both write our side into `player1`:**
+ *    - `recordResult` (`lib/schedule/actions.ts`) inserts `event_entry_id:
+ *      entry.id` alongside `player1_name: ourLabel` / `player1_id:
+ *      playerUserId`, having first refused an entry belonging to another
+ *      program.
+ *    - the upload wizard (`useUploadMatchWizard.ts:1130`) inserts
+ *      `event_entry_id: preset?.entryId ?? null`, so the column is non-null
+ *      exactly when the coach opened the wizard from a schedule preset — and
+ *      that same preset supplies `playerName`/`playerUserId`, which
+ *      `buildMatchData` puts in `player1_name`/`player1_id`. The roster pick a
+ *      preset implies and the id `recordResult` would have written are the same
+ *      person. (Its other branch fills a row that already carries the column
+ *      rather than setting it, and writes `player1_name` the same way round.)
+ *
+ *    So the invariant is the convention `lib/schedule/entry-state.ts` reads the
+ *    whole schedule under — a match tied to an entry has us in `player1` — not
+ *    a property of one function. This clause is what covers a DOUBLES line,
+ *    whose `player1_id` is deliberately null because two accounts do not fit
+ *    one column. Should a third writer ever appear, it has to honour the same
+ *    convention or this clause stops being true.
+ *
+ * Both clauses answer `player1` in every case they overlap on, which is the
+ * point: they are two readings of one convention, not two rules. The id test
+ * runs first because an id is evidence about THIS row, where the entry test is
+ * evidence about how the row was written.
+ */
+function programSide(
+  row: {
+    player1_id: string | null;
+    player2_id: string | null;
+    event_entry_id: string | null;
+  },
+  rosterIds: ReadonlySet<string>
+): "player1" | "player2" | null {
+  if (row.player1_id && rosterIds.has(row.player1_id)) return "player1";
+  if (row.player2_id && rosterIds.has(row.player2_id)) return "player2";
+  if (row.event_entry_id) return "player1";
+  return null;
+}
+
+/**
  * Player invites, seen from the home page.
  *
  * Counts players only. Staff invites are a different question with a different
@@ -170,35 +262,54 @@ export async function getTeamHomeData(
 ): Promise<TeamHomeData> {
   const supabase = await createClient();
 
-  const [usage, team, { data: rows }, { data: eventRows }] = await Promise.all([
-    getProgramUsage(programId, billingMonth),
-    getTeamSettings(programId),
-    supabase
-      .from("matches")
-      .select(
-        "id, player1_name, player2_name, tournament_name, round, date, match_type, source_provider, verified"
-      )
-      .eq("program_id", programId)
-      .order("date", { ascending: false })
-      .limit(RECENT_MATCH_LIMIT),
-    // `ends_on`, not `starts_on`: a tournament that began on Thursday is still
-    // the next thing on the schedule on Saturday morning. The same policy the
-    // schedule page reads under, on the same table — this adds a read, not a
-    // source of truth.
-    supabase
-      .from("program_events")
-      .select("id, name, starts_on")
-      .eq("program_id", programId)
-      .gte("ends_on", localDay(new Date()))
-      .order("starts_on", { ascending: true })
-      .limit(1),
-  ]);
+  const [usage, team, { data: rows }, { data: eventRows }, { data: rosterRows }] =
+    await Promise.all([
+      getProgramUsage(programId, billingMonth),
+      getTeamSettings(programId),
+      supabase
+        .from("matches")
+        // `score` carries the games AND both tiebreak arrays, which is what lets
+        // the row print "6-7³" rather than a set that looks decided 7-6 the same
+        // as one decided 7-5. The three id columns are not display data: they are
+        // the only evidence of which side is the program's — see `programSide()`.
+        .select(
+          "id, player1_id, player2_id, event_entry_id, player1_name, player2_name, score, tournament_name, round, date, match_type, source_provider, verified"
+        )
+        .eq("program_id", programId)
+        .order("date", { ascending: false })
+        .limit(RECENT_MATCH_LIMIT),
+      // `ends_on`, not `starts_on`: a tournament that began on Thursday is still
+      // the next thing on the schedule on Saturday morning. The same policy the
+      // schedule page reads under, on the same table — this adds a read, not a
+      // source of truth.
+      supabase
+        .from("program_events")
+        .select("id, name, starts_on")
+        .eq("program_id", programId)
+        .gte("ends_on", localDay(new Date()))
+        .order("starts_on", { ascending: true })
+        .limit(1),
+      // Every id that means "us" on a match row. The same SECURITY DEFINER
+      // function Roster and the lineup builder read (`roster-server.ts`,
+      // `team-roster-server.ts`) — not a second answer to who is on this team,
+      // and the only one that includes a coach-managed player, whose profile id
+      // is precisely what their matches carry. Staff seats come back from it too
+      // and are kept: a coach uploading without a schedule preset lands their own
+      // user id in `player1_id`, and that is still our side of the net.
+      supabase.rpc("program_roster_full", { p_program_id: programId }),
+    ]);
 
   // `reap: true` is deliberately NOT passed. It is a write, and it belongs to
   // the two surfaces that draw a progress bar big enough for a frozen one to
   // mislead — the matches list and match detail. This page shows a dot.
   const ids = (rows ?? []).map((row) => row.id as string);
   const jobs = await loadMatchAnalysis(supabase, ids);
+
+  const rosterIds = new Set(
+    ((rosterRows ?? []) as { player_id: string | null }[])
+      .map((rosterRow) => rosterRow.player_id)
+      .filter((id): id is string => Boolean(id))
+  );
 
   const matches: TeamMatchRow[] = (rows ?? []).map((row) => {
     const analysis =
@@ -207,13 +318,35 @@ export async function getTeamHomeData(
         ? importedAnalysis(row.source_provider as string, Boolean(row.verified))
         : manualAnalysis());
 
+    const side = programSide(
+      row as {
+        player1_id: string | null;
+        player2_id: string | null;
+        event_entry_id: string | null;
+      },
+      rosterIds
+    );
+    // Both halves of the flip travel together, and they have to: names read
+    // one way and games the other is the same wrong answer as a wrong glyph,
+    // told more quietly. With no side established nothing flips — the row
+    // keeps the stored order, and `won` stays null so no mark is drawn.
+    const swap = side === "player2";
+    const score = (row.score ?? null) as MatchScore | null;
+    const ourName = (swap ? row.player2_name : row.player1_name) as string;
+    const theirName = (swap ? row.player1_name : row.player2_name) as string;
+
     return {
       id: row.id as string,
-      title: `${row.player1_name as string} vs ${row.player2_name as string}`,
+      title: `${ourName} vs ${theirName}`,
       context: matchContext(row),
       status: analysis.status,
       label: ANALYSIS_LABEL[analysis.status],
       date: shortDate(row.date as string),
+      // Sets counted, never a stored outcome: `matches.result` holds a CONTEXT
+      // string ("Final Score"), so `matchOutcome` is the shared rule the
+      // matches list, the schedule and every player profile already ask.
+      sets: scoreSetsFrom(score, { swap }),
+      won: side === null ? null : matchOutcome(score, side === "player1"),
       startedAt: analysis.startedAt,
     };
   });

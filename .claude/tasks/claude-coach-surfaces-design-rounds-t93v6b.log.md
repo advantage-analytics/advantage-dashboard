@@ -436,3 +436,43 @@ is the runner's. Newest entries at the bottom.
   re-checking.
 - **stash:** `a4ec547032a5e53b173763e39e88a9fb6da87c63` — the full T8 diff.
   Recoverable; nothing discarded.
+
+## T8 · Results in the Team Home rows — done (second attempt)
+- **gate:** mechanical — `npm run lint` 0 errors (38 pre-existing warnings),
+  `npx tsc --noEmit` clean, `npm test` 93 passed.
+  `task-completion-reviewer` — **`VERDICT: pass`**, all five criteria. It went
+  past the claims twice over: it grepped for every writer of `event_entry_id`
+  and found the two the comment names plus a DB trigger blocking the column
+  from changing on UPDATE, so no third writer can exist; and it re-derived the
+  track arithmetic (270 → 318 is 48px, plus one more 16px gap = 64px) and
+  checked each per-track figure against the actual JSX classes.
+  `pipeline-guardrails-reviewer` and `rls-boundary-reviewer` — **not re-run,
+  deliberately.** Both cleared this diff on the first attempt, and the rerun
+  changed comments only: `git diff a4ec547 -- src/` yields zero non-comment
+  changed lines, so the executable code they reviewed is byte-identical.
+  Their first-attempt results stand and are recorded above under
+  "T8 — blocked": the RPC re-derives membership from `auth.uid()` rather than
+  trusting its argument, the new person identifiers never leave the server, and
+  every writer of the three columns was traced to confirm the glyph cannot
+  flip.
+- **changed:** Team Home's match rows now show a result. `TeamMatchRow` carries
+  `sets` and `won`, built in the loader from `matches.score` (newly selected,
+  with `player1_id`, `player2_id` and `event_entry_id` alongside it) and
+  oriented to the program's side. A settled row renders `<ResultMark>` +
+  `<ScoreLine>` and, when the analysis is actually ready, a "View report"
+  affordance; an in-flight or failed row keeps its dot and `ANALYSIS_LABEL`.
+- **the rule this task turns on**, in `programSide()`: a roster id in either
+  player column means the row is ours; failing that, a set `event_entry_id`
+  means our side is `player1`; otherwise `null` and **no glyph at all**. The
+  third clause is the point — a row nobody can attribute shows a score and no
+  mark, because a row with the wrong mark looks exactly like a row with the
+  right one.
+- **two deliberate narrowings of criterion 2, both upheld:** a failed row keeps
+  its dot rather than showing a score, because burying "Failed" under a result
+  hides a job nobody will retry; and "View report" appears only when
+  `isAnalysisReady`, so a hand-scored dual line gets a mark and a score but no
+  link to a page of zeroes.
+- **what the first attempt failed on:** criterion 4 forbade the column-track
+  change criterion 2 requires — a defect in the criteria, corrected in
+  `63dd69b`, not a defect in the work. The rerun added the track reasoning and
+  fixed a comment that named only one writer of `event_entry_id`.
