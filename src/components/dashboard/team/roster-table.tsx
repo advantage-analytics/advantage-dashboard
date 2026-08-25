@@ -629,11 +629,16 @@ export function RosterTable({
                   >
                     Resend
                   </button>
+                  {/* Revoke hovers to `--danger`, not to the `--ink-900` that
+                      9a's markup draws. Deliberate divergence: this is the one
+                      destructive action in the row, and the tint is the only
+                      thing distinguishing it from Resend beside it. Do not
+                      "restore" it to ink on a later fidelity pass. */}
                   <button
                     type="button"
                     disabled={pending}
                     onClick={() => run(() => revokeInvite(invite.id))}
-                    className="text-[11px] text-[var(--ink-500)] transition-colors hover:text-[var(--ink-900)] disabled:opacity-50"
+                    className="text-[11px] text-[var(--ink-500)] transition-colors hover:text-[var(--danger)] disabled:opacity-50"
                   >
                     Revoke
                   </button>

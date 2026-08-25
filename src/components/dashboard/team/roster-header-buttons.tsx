@@ -10,7 +10,7 @@ import type { RosterMember, SeatUsage } from "@/lib/data/team-roster-server";
 /**
  * The Roster page's two ways of growing a squad.
  *
- * Design 6a. They are not two flavours of one action, and the button weights
+ * Design 9a. They are not two flavours of one action, and the button weights
  * say so: **Add player** creates the row now and always works, so it is the
  * page's one blue action. **Invite** sends email and waits on somebody else, so
  * it is secondary.
