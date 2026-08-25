@@ -101,15 +101,25 @@ export function EditPlayerDialog({
     // `live` guards the slow-early-response race: close one row and open
     // another quickly, and the first reply must not fill in the second's form.
     let live = true;
-    getProgramPlayerFields(profileId).then((result) => {
-      if (!live) return;
-      if (result.ok) {
-        setFields(result.fields);
-        return;
-      }
-      setError(result.error);
-      setGone(result.gone);
-    });
+    getProgramPlayerFields(profileId)
+      .then((result) => {
+        if (!live) return;
+        if (result.ok) {
+          setFields(result.fields);
+          return;
+        }
+        setError(result.error);
+        setGone(result.gone);
+      })
+      // A server action *rejects* rather than resolving when the request never
+      // completes — a dropped connection, a deploy mid-flight. Without this the
+      // dialog keeps the "Reading …" placeholder forever, because that state is
+      // exactly "no fields, no error, not gone", and Save never enables. Not
+      // `gone`: the row may be perfectly fine and the network is not.
+      .catch(() => {
+        if (!live) return;
+        setError("Couldn't reach the server. Close this and try again.");
+      });
     return () => {
       live = false;
     };
@@ -148,16 +158,27 @@ export function EditPlayerDialog({
     if (!fields) return;
     setError(null);
     start(async () => {
-      const result = await updateProgramPlayer({
-        // `profileId` rather than `member.profileId`: the same value, but a
-        // const the guard above has already narrowed to a real id.
-        profileId,
-        firstName: fields.firstName.trim(),
-        lastName: fields.lastName.trim(),
-        classYear: fields.classYear || null,
-        lineupSpot: fields.lineupSpot ? Number(fields.lineupSpot) : null,
-        email: fields.email.trim() || null,
-      });
+      // Wrapped because a rejected save is the one failure the coach must not
+      // read as "nothing happened": the request may have committed before the
+      // connection went. Say so rather than leaving a silent form.
+      let result: Awaited<ReturnType<typeof updateProgramPlayer>>;
+      try {
+        result = await updateProgramPlayer({
+          // `profileId` rather than `member.profileId`: the same value, but a
+          // const the guard above has already narrowed to a real id.
+          profileId,
+          firstName: fields.firstName.trim(),
+          lastName: fields.lastName.trim(),
+          classYear: fields.classYear || null,
+          lineupSpot: fields.lineupSpot ? Number(fields.lineupSpot) : null,
+          email: fields.email.trim() || null,
+        });
+      } catch {
+        setError(
+          "Couldn't reach the server, so this may or may not have saved. Reload the page to check."
+        );
+        return;
+      }
 
       if (!result.ok) {
         setError(result.error);
@@ -302,13 +323,7 @@ export function EditPlayerDialog({
             </SettingsField>
           </div>
 
-          {/* Mounted for as long as the form is, so a sentence arriving later
-              is a *change* to a region assistive tech is already watching —
-              the only kind it announces. See `RosterNote`. */}
-          <div aria-live="polite" aria-atomic="true" className="sr-only">
-            {spotNote ?? ""}
-          </div>
-          {spotNote && <RosterNote icon={Users}>{spotNote}</RosterNote>}
+          <RosterNote icon={Users} note={spotNote} />
 
           <SettingsField
             label="Email · optional"

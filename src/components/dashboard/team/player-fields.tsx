@@ -77,33 +77,50 @@ export function UnderlineSelect({
  * free to ignore — the register the roster table's "Possible duplicate" chip
  * already uses for the same kind of question.
  *
- * Visual only, deliberately, and `aria-hidden` to say so. A live region that
- * arrives already populated is one assistive tech never announces — it reports
- * *changes* to a region it was already watching — so the announcing is done by
- * an always-mounted `sr-only` region beside it, and hiding the visible copy
- * keeps each sentence from being read twice.
+ * Renders both halves of the note, because the visible half alone is not the
+ * whole component. A live region that arrives already populated is one
+ * assistive tech never announces — it reports *changes* to a region it was
+ * already watching — so the sentence is announced by an `sr-only` region that
+ * stays mounted whether or not there is a sentence yet, and the visible copy is
+ * `aria-hidden` so each one is not read twice.
+ *
+ * Both halves live here rather than at the call sites so that invariant cannot
+ * drift: mount the region conditionally, or write `&&` where `?? ""` belongs,
+ * and the note silently announces nothing — no type error, no failing test.
+ * Pass `note={null}` for "no note"; do not wrap this in a conditional.
+ *
+ * The fragment keeps the two elements siblings in the caller's layout, and each
+ * note owns its own region on purpose: `aria-atomic` re-reads a region whole,
+ * so a shared one would repeat the name sentence every time the spot changed.
  */
 export function RosterNote({
   icon: Icon,
-  children,
+  note,
 }: {
   icon: LucideIcon;
   /** A prepared sentence, not nodes: the live region has to say the same one. */
-  children: string;
+  note: string | null;
 }) {
   return (
-    <p
-      aria-hidden
-      className="-mt-1 flex items-start gap-2 text-[11px] leading-[1.6] text-[var(--ink-600)]"
-    >
-      <Icon className="mt-[3px] size-3.5 shrink-0" strokeWidth={1.5} aria-hidden />
-      <span>{children}</span>
-    </p>
+    <>
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {note ?? ""}
+      </div>
+      {note === null ? null : (
+        <p
+          aria-hidden
+          className="-mt-1 flex items-start gap-2 text-[11px] leading-[1.6] text-[var(--ink-600)]"
+        >
+          <Icon className="mt-[3px] size-3.5 shrink-0" strokeWidth={1.5} aria-hidden />
+          <span>{note}</span>
+        </p>
+      )}
+    </>
   );
 }
 
 /** "Maya Chen" · "Maya Chen and Alex Ruiz" · "Maya Chen and 2 others". */
-export function nameList(names: string[]): string {
+function nameList(names: string[]): string {
   if (names.length === 1) return names[0];
   if (names.length === 2) return `${names[0]} and ${names[1]}`;
   return `${names[0]} and ${names.length - 1} others`;

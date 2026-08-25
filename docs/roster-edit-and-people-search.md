@@ -16,7 +16,7 @@
 > `rls-boundary-reviewer` disproved that premise — `update_program_player` is
 > `security definer` and granted to `authenticated`, so any staff session can call it
 > directly and skip the pre-flight read entirely. Migration
-> `20260825120000_update_program_player_skips_archived.sql` adds `archived_at is null` to
+> `20260825131815_update_program_player_skips_archived.sql` adds `archived_at is null` to
 > the RPC's row lookup and is applied live. That risk bullet and step 7 of §1's test list
 > are annotated where they now read false; the rest of §1 is as built, and §2 and §3 are
 > untouched.
@@ -206,7 +206,7 @@ Click-through as owner/coach on a team workspace:
 7. Stale-open: remove the player in a second tab, then Save → terminal "no longer on
    this roster". Then verify in SQL that the archived row is **unchanged**.
    *(Superseded: as built, the RPC filters `archived_at` itself — migration
-   `20260825120000`. The pre-check is no longer the only thing stopping the write; it is
+   `20260825131815`. The pre-check is no longer the only thing stopping the write; it is
    what turns the database's silent refusal into a sentence the coach can read.)*
 8. As a player viewer: no meatball at all.
 9. Audit: `select action, subject_id from program_audit_log where action = 'player.updated'`.
@@ -215,7 +215,7 @@ Click-through as owner/coach on a team workspace:
 
 - **The email coalesce** (above) — the worst one, silent, common.
 - **Archived rows are editable.** **Superseded (2026-08-25) by migration
-  `20260825120000`,** which added `archived_at is null` to the RPC's row lookup. The
+  `20260825131815`,** which added `archived_at is null` to the RPC's row lookup. The
   original reasoning is kept because the mistake in it is the instructive part: "The RPC
   filters `merged_into_id` but not `archived_at`. Reachable only from a stale dialog, but
   it is a successful invisible write, not a no-op. The pre-flight read is the mitigation

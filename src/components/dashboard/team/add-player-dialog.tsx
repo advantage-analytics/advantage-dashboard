@@ -343,18 +343,14 @@ export function AddPlayerDialog({
           kind it announces. `sr-only` is absolutely positioned, so it is out
           of flow and adds nothing to the dialog's 18px rhythm, which is what
           lets it sit here in reading order rather than being hoisted somewhere
-          it would be read out of context. One region per note: `aria-atomic`
-          re-reads a region whole, so a shared one would repeat the name
-          sentence on every change of lineup spot. */}
-      <div aria-live="polite" aria-atomic="true" className="sr-only">
-        {nameNote ?? ""}
-      </div>
-      {/* Directly under the pair of fields it is about, and full width for the
+          it would be read out of context.
+
+          Directly under the pair of fields it is about, and full width for the
           same reason as the spot note below: an address in a 212px cell wraps
           to three lines and shoves everything under it around as the coach
           types. GitMerge rather than a person glyph — it is the mark the
           roster row already carries for this exact question. */}
-      {nameNote && <RosterNote icon={GitMerge}>{nameNote}</RosterNote>}
+      <RosterNote icon={GitMerge} note={nameNote} />
 
       <div className="grid grid-cols-2 gap-4">
         <SettingsField label="Class year">
@@ -387,13 +383,10 @@ export function AddPlayerDialog({
         </SettingsField>
       </div>
 
-      <div aria-live="polite" aria-atomic="true" className="sr-only">
-        {spotNote ?? ""}
-      </div>
       {/* Full width rather than in the field's hint slot: the cell is half of a
           440px dialog, and a name wrapped over three lines would shove the
           email field down every time a coach changed the spot. */}
-      {spotNote && <RosterNote icon={Users}>{spotNote}</RosterNote>}
+      <RosterNote icon={Users} note={spotNote} />
 
       <SettingsField
         label="Email · optional"

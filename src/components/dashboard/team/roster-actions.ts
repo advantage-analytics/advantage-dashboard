@@ -196,7 +196,26 @@ const GONE_MESSAGE = "This player is no longer on this roster.";
 export async function getProgramPlayerFields(
   profileId: string
 ): Promise<PlayerFieldsResult> {
-  const workspace = await getWorkspaceContext();
+  // Started together on purpose. The row read does not need the workspace — the
+  // id is only used below, to check the row is on *this* roster — and
+  // `getWorkspaceContext()` is itself an `auth.getUser()` plus two selects, so
+  // awaiting it first put that whole chain in front of a read that could have
+  // been in flight beside it. The coach watches a spinner for this on every
+  // dialog open and every save. Reading in parallel exposes nothing: the row is
+  // already RLS-scoped to program members, so a read the guard below would have
+  // rejected could not have returned anything anyway.
+  const supabase = await createClient();
+  const [workspace, read] = await Promise.all([
+    getWorkspaceContext(),
+    supabase
+      .from("program_players")
+      .select(
+        "program_id, first_name, last_name, class_year, lineup_spot, email, claimed_by_user_id, archived_at, merged_into_id"
+      )
+      .eq("id", profileId)
+      .maybeSingle(),
+  ]);
+
   if (!workspace || workspace.active.kind !== "team") {
     return {
       ok: false,
@@ -205,14 +224,7 @@ export async function getProgramPlayerFields(
     };
   }
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("program_players")
-    .select(
-      "program_id, first_name, last_name, class_year, lineup_spot, email, claimed_by_user_id, archived_at, merged_into_id"
-    )
-    .eq("id", profileId)
-    .maybeSingle();
+  const { data, error } = read;
 
   if (error) {
     const raw = error.message?.trim();
@@ -226,7 +238,7 @@ export async function getProgramPlayerFields(
   const row = data as DbPlayerFieldsRow | null;
   // A coach may belong to two programs, so "readable" is not "on this roster".
   // Archived and merged rows are gone from this page's point of view as well.
-  // `update_program_player` declines both of those since 20260825120000, but it
+  // `update_program_player` declines both of those since 20260825131815, but it
   // declines them by returning silently — refusing them here is what turns that
   // into a sentence the coach can read.
   if (
@@ -265,7 +277,7 @@ export async function getProgramPlayerFields(
  * messages are written for people and pass through.
  *
  * Archived rows are the database's guard now, not this file's. Migration
- * 20260825120000 added `archived_at is null` to the RPC's row lookup — the
+ * 20260825131815 added `archived_at is null` to the RPC's row lookup — the
  * three conditions `archive_program_player` had all along — so a write to
  * somebody who has left the program is refused at the one place every caller
  * comes through, including the ones that never run this code.
@@ -358,11 +370,33 @@ async function describeUpdateFailure(
   input: { profileId: string; email: string | null }
 ): Promise<string> {
   const raw = message?.trim() ?? "";
-  const isEmailClash =
-    raw.includes("program_players_email_key") ||
-    raw.includes("duplicate key value violates unique constraint");
+  // Two questions, not one. Postgres writes the constraint name *into* the
+  // duplicate-key sentence, so a single `includes` on the sentence would also
+  // swallow a violation of some future unique index on this table and report it
+  // as an email clash; a single `includes` on the name would let that same
+  // violation fall through and hand the coach the raw string. Ask separately:
+  // this constraint gets the specific sentence, any other duplicate still gets
+  // a written one.
+  const isDuplicate = raw.includes(
+    "duplicate key value violates unique constraint"
+  );
+  const isEmailClash = raw.includes("program_players_email_key");
+
+  // A CHECK the RPC does not pre-validate reaches here as Postgres prose. The
+  // RPC guards the names and the email *shape*, but `program_players` also
+  // carries `program_players_contributed_no_email` (an email on a contributed
+  // row) and `program_players_lineup_check` (`lineup_spot > 0`) — the first
+  // reachable from this form as soon as a roster holds a contributed player,
+  // the second only from a hand-made call, since a server action's arguments
+  // are the caller's. Either would otherwise show the coach
+  // `new row for relation "program_players" violates check constraint …`.
+  const isConstraint =
+    raw.includes("violates check constraint") ||
+    raw.includes("violates not-null constraint");
 
   if (!isEmailClash) {
+    if (isDuplicate) return "That change collides with another roster row.";
+    if (isConstraint) return "That combination of details isn't allowed here.";
     return raw.length > 0 ? raw : "Couldn't save that player.";
   }
 
