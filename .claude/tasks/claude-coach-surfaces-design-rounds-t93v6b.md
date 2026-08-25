@@ -258,7 +258,7 @@ ready).
   against the writers themselves; do not re-derive or "simplify" that rule.
 
 ## T9 · This weekend — the dual sheet
-- **status:** blocked
+- **status:** next
 - **files:** `src/lib/data/team-home-server.ts`, a new
   `src/components/dashboard/team/dual-sheet.tsx` — a guess
 - **done when:**
@@ -281,11 +281,25 @@ ready).
         `grep` for any of those strings finds exactly one definition. The
         states themselves already come from the shared `EntryState`; it is only
         the words that are duplicated
+  - [ ] `single-detail.tsx` reads the map too, for the three branches that
+        match it. Its `failed`, `working` and `waiting` chips
+        (`single-detail.tsx:127-140`) carry the same three words and the same
+        tones as `LINE_STATUS`'s keys, so they read from it. Its **`ready`
+        branch stays exactly as it is** — "Analysis ready", tone `win`, no key
+        in the map — and that file keeps deriving its states from the
+        `match-analysis` predicates rather than adopting `EntryState`. Nothing
+        it renders may change
 - **notes:** was T5's second bullet. 44a is the reference artboard. The
   schedule pages already read these tables — reuse their loaders rather than
   writing a second way to assemble a dual.
-  First attempt is stashed at `eed71ae14e51e209f8422c2ce8c51139c66c2576` —
-  start from it. Every criterion passed and both boundary reviews were clean;
+  Second attempt is stashed at `dbceda33b679372da2c172f48466f25da0e55546` —
+  start from **that** one. It carries the sheet, the loader work, the page
+  wiring, `line-status.ts` and the converted `line-row.tsx`; only
+  `single-detail.tsx` is left. (The first attempt is at
+  `eed71ae14e51e209f8422c2ce8c51139c66c2576`; superseded, ignore it.)
+  Do not fold `single-detail.tsx`'s `ready` branch into the map, do not convert
+  that file to `EntryState`, and do not touch its fourth chip — the reviewer
+  accepted that argument, and only the three matching branches are in scope. Every criterion passed and both boundary reviews were clean;
   the only thing that blocked it is the duplicated strings the criterion above
   now names. Do not rebuild the sheet, do not re-derive the tally, and do not
   restructure the loader: it reuses `getEventDetail` and `dualScore`, adds no
