@@ -42,8 +42,9 @@ ready).
   reference artboard.
 
 ## T2 · Checklist cards flip in place
-- **status:** blocked
-- **files:** `src/components/dashboard/team/first-steps.tsx` — a guess
+- **status:** next
+- **files:** `src/components/dashboard/team/first-steps.tsx`, and whatever
+  restoring the bulk invite flow needs — a guess
 - **done when:**
   - [ ] Each of the three cards renders one of three variants in its own fixed
         slot, keeping its eyebrow ("First report" / "Your schedule" /
@@ -54,15 +55,30 @@ ready).
   - [ ] Done receipt: a plain 15px Lucide `check` before the title, title and
         body at `--ink-500`, one quiet link and no button; `circle-check` and
         `circle-x` appear nowhere in the file (outcome glyphs are match-only)
-  - [ ] Exactly one card carries emphasis (`--border-medium` + `--shadow-card` +
-        the primary button) — the first card not yet done
+  - [ ] Exactly one card carries emphasis (`--border-medium` + `--shadow-card`,
+        and the primary button when that card has a button) — the first card
+        that is not `done`, whatever its variant. A progress receipt is not
+        done, so it takes emphasis when it is first; its emphasised slot is the
+        StatusChip row, since a receipt has no button to promote. The only
+        state with no emphasised card is the one where the row has already
+        exited
   - [ ] All three done → the whole row unmounts in one step; no card is removed
         on its own and no ghost or explanatory placeholder replaces it
+  - [ ] The bulk invite flow survives: a coach can still paste a list of
+        addresses and send them in one action, reachable from the product
+        without opening a dialog that no longer exists. No user-facing invite
+        capability is lost relative to `ea2bcd6`
 - **notes:** 45b/45c/45d. 40b's "remove done cards immediately" is what this
   revises — receipts hold their slots so nothing reflows mid-week.
+  First attempt is stashed at `91cbfcd519f3da568913a1d90a9aefbb6a8d4747` —
+  start from it rather than rebuilding; it satisfied every criterion except
+  emphasis, and it deleted `invite-dialog.tsx`, which is where the bulk flow
+  went. Its dialog deletion also left `setPlayersCanUpload`
+  (`src/components/dashboard/settings/team-actions.ts:279`) dead; whatever the
+  rerun does with the dialog, that export must not be left orphaned.
 
 ## T3 · Score and outcome primitives — superscript tiebreak, ResultMark
-- **status:** todo
+- **status:** doing
 - **files:** new shared components under `src/components/dashboard/` (e.g.
   `score-line.tsx`, `result-mark.tsx`), replacing the local formatters in
   `src/lib/schedule/format.ts`, `matches/match-card-list.tsx` and
