@@ -73,15 +73,14 @@ export default async function RosterPage() {
   //
   // The design draws one claimer, because one is the ordinary day. Two people
   // can claim on the same day, and the rule this page follows is: **name every
-  // one of them**, pluralise the lead, and sum "matches kept" across them. The
-  // alternative — the most recent claimer alone — is not available anyway:
-  // `claimedToday` is a boolean, `claimed_at` never reaches the client, and
-  // ordering by it would need a new field this task is not adding.
+  // one of them** and pluralise the lead. The alternative — the most recent
+  // claimer alone — is not available anyway: `claimedToday` is a boolean,
+  // `claimed_at` never reaches the client, and ordering by it would need a new
+  // field this task is not adding.
   const claimants = roster.members.filter((m) => m.claimedToday);
   const claimant = claimants[0];
-  const matchesKept = claimants.reduce((total, m) => total + m.matchesPlayed, 0);
-  // Asked once and reused: the sentence below inflects in three places, and
-  // three separate length tests are three chances to disagree.
+  // Asked once and reused: the sentence below inflects in two places, and
+  // separate length tests are chances to disagree.
   const soloClaim = claimants.length === 1;
   // "A", "A and B", "A, B and C" — the last separator is a word, because the
   // lead is a sentence rather than a list.
@@ -131,13 +130,26 @@ export default async function RosterPage() {
           )}
         </div>
 
-        {/* The claim is the one roster change that looks like a loss until it
-            is spelled out — the row a coach built now answers to somebody else.
-            So it is stated once, above the table, in the terms a coach worries
-            about: the history stayed, the credits stayed, and a seat moved.
-            Rendered only on the day of the claim, and only when there was one:
-            no claimer, no element and no gap, because `gap-5` on the column
-            would otherwise reserve space for an empty box every other day. */}
+        {/* Somebody bound a login to a roster row today. Stated once, above
+            the table, in the terms a coach worries about: the credits stayed,
+            and a seat moved.
+
+            The wording deliberately stops short of 9d's, which reads "Same
+            row, now self-managed — N matches kept". That sentence is only true
+            of a genuine claim, where a coach built the row first. It is NOT
+            true of the other path into this banner: `accept_program_invite`
+            also stamps `claimed_at` when it INSERTS a fresh row for a
+            "Someone new" player invite, so a first-time joiner would be told
+            their nonexistent row was kept along with nought matches. Nothing
+            on `RosterMember` separates the two — `claimedToday` is true for
+            both and `managedBy` flips to "self" for both — so telling them
+            apart needs a new field (`created_by` vs `claimed_by_user_id`), and
+            that is deferred database work. Until then this says only what
+            holds either way.
+
+            Rendered only on the day, and only when there was one: no claimer,
+            no element and no gap, because `gap-5` on the column would
+            otherwise reserve space for an empty box every other day. */}
         {claimant && (
           <div className="flex items-start gap-2.5 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3.5 py-3">
             <UserCheck
@@ -149,13 +161,13 @@ export default async function RosterPage() {
               {/* "their", never "her" or "his": the roster carries no pronoun
                   for anybody, and a name is not one. */}
               <strong className="font-medium text-[var(--ink-900)]">
-                {claimantNames} claimed{" "}
-                {soloClaim ? "their profile" : "their profiles"}.
+                {claimantNames} now{" "}
+                {soloClaim
+                  ? "manages their own profile"
+                  : "manage their own profiles"}
+                .
               </strong>{" "}
-              Same {soloClaim ? "row" : "rows"}, now self-managed —{" "}
-              <span className="tabular">{matchesKept}</span>{" "}
-              {matchesKept === 1 ? "match" : "matches"} kept, upload credits
-              unchanged, seats{" "}
+              Upload credits unchanged, seats{" "}
               <span className="tabular">
                 {roster.seats.used} of {roster.seats.seats}
               </span>
