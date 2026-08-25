@@ -176,7 +176,7 @@ ready).
   too.
 
 ## T6 · Roster rows take the round-44 treatment
-- **status:** todo
+- **status:** done
 - **files:** `src/components/dashboard/team/roster-table.tsx` — a guess
 - **done when:**
   - [ ] Member and invite rows hover to a `--surface-muted` wash on a rounded

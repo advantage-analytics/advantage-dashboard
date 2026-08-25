@@ -321,3 +321,37 @@ is the runner's. Newest entries at the bottom.
   formatter. It already matches the canonical spelling and never renders
   tiebreaks, so it breaks no criterion, but it is a seventh place that formats
   a score.
+
+## T6 · Roster rows take the round-44 treatment — done
+- **gate:** mechanical — `npm run lint` 0 errors (38 pre-existing warnings,
+  none in the changed file), `npx tsc --noEmit` clean, `npm test` 93 passed.
+  `pipeline-guardrails-reviewer` — ran (dashboard UI); no findings. It diffed
+  out comments and class strings to show every remaining changed line is a
+  Tailwind constant or a `className`: no JSX element type, prop, handler,
+  `href` or import moved. The name link still points at
+  `/dashboard/team/roster/${member.playerId}`, Resend, Withdraw, Upload and the
+  row menu are byte-identical, and `canManage` is still computed once on the
+  page and passed in.
+  `rls-boundary-reviewer` — skipped: one component file, no `src/lib/data/`,
+  `src/lib/supabase/`, `src/app/api/` or migration, and no new query. Confirmed
+  against both `git diff HEAD --stat` and
+  `git ls-files --others --exclude-standard` (nothing untracked).
+  `task-completion-reviewer` — **`VERDICT: pass`**, all four criteria.
+- **changed:** the Roster table's member and invite rows take round 44's 8a
+  hover — a `--surface-muted` wash on a rounded rect inset from the card edge —
+  and lose their between-row hairlines. The invite row had no hover at all
+  before and gains one. The column-header rule stays, because it heads a table
+  rather than following an eyebrow.
+- **the two deviations from T4's worked example, both upheld on review:**
+  alignment is paid for out of the row's own padding (`px-6` → `px-[18px]` plus
+  `mx-1.5`) rather than `match-rows.tsx`'s `p-1.5` on the list, because a list
+  inset would have pushed every cell 6px right of the un-inset header — the
+  reviewer redid the arithmetic and confirmed 6+18 = 24 per side matches the
+  header's `px-6`, on both row shapes. And focus keys on
+  `has-[:focus-visible]` rather than `focus-visible:`, because this row is not
+  itself the anchor: the name link stretches it with `after:inset-0` while
+  Upload and the overflow trigger are separately focusable. It adds a wash on
+  top of each control's existing ring, so no duplicate ring and no tab-order
+  change.
+- **also:** two comments defended the full-bleed wash, not the one the task
+  named. Both now describe what the code does.

@@ -67,12 +67,34 @@ const COL = {
 const HEAD =
   "text-[10px] font-medium tracking-[1.5px] text-[var(--ink-500)] uppercase";
 
+/** The columns themselves, shared by the header row and every row under it. */
+const COLUMNS = "flex items-center gap-3";
+
 /**
- * Horizontal padding belongs on the ROW, not on the card that holds it. That is
- * what lets a row's hover wash reach both edges of the card instead of stopping
- * 24px short of them.
+ * A row's own padding — 18px, not the card's 24px, because the remaining 6px is
+ * the inset `ROW_SURFACE` adds back as a margin. 18 + 6 is what the column
+ * header pads by on its own, so every cell still starts under the word that
+ * names it. The two numbers have to keep summing to 24 or the table drifts out
+ * of line with its own header.
  */
-const ROW = "flex items-center gap-3 px-6";
+const ROW = `${COLUMNS} px-[18px]`;
+
+/**
+ * The rect a row's hover paints.
+ *
+ * Round 44's rule for a result list: the wash is a rounded rect inset from the
+ * card edge rather than a band running edge to edge, so the corners stay
+ * visible inside the border and the highlight reads as *this row*. The inset is
+ * 6px against the card's 14px radius, which leaves the row's own 8px exactly
+ * concentric with it. Nothing is ruled between rows either — the card's border
+ * and the single rule under the column header are the only lines here.
+ *
+ * Keyboard gets what the mouse gets. The name link stretches over the row via
+ * `after:inset-0`, but Upload and the overflow menu are focusable too, so this
+ * keys on any descendant taking focus rather than on that one link.
+ */
+const ROW_SURFACE =
+  "mx-1.5 rounded-[var(--radius-element)] transition-colors duration-150 hover:bg-[var(--surface-muted)] has-[:focus-visible]:bg-[var(--surface-muted)]";
 
 /** The trailing controls, so both read as one class of thing. */
 const ROW_ICON =
@@ -309,7 +331,7 @@ function MemberRow({
   // moused-over, and a row that looks stuck is a bug report, not a highlight.
   // The pill already says it in words.
   return (
-    <li className="relative border-b border-[var(--border-hairline)] transition-colors last:border-b-0 hover:bg-[var(--surface-muted)]">
+    <li className={`relative ${ROW_SURFACE}`}>
       <div className={`${ROW} py-[13px]`}>
         <span className={`${COL.player} flex items-center gap-2.5`}>
           <Avatar name={member.name} />
@@ -498,12 +520,19 @@ export function RosterTable({
     <div className="flex flex-col gap-4">
       <Problem message={error} />
 
-      {/* Horizontal padding lives on the rows, not here, so a row's hover wash
-          runs the full width of the card. */}
+      {/* Horizontal padding lives on the rows, not here — the rows are inset
+          from the card by a margin of their own, and paying for that inset out
+          of their padding rather than out of the card's is what keeps their
+          columns under the un-inset column header. */}
       <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-medium)] bg-[var(--surface-card)]">
         <div className="min-w-[840px] pt-1.5 pb-2.5">
+          {/* The one rule left inside the card. It heads a table — four
+              columns that have to be named — rather than following an eyebrow,
+              which is the shape round 44 ruled out. `COLUMNS` without `ROW`'s
+              padding: this row is not inset, so it pads by the card's own 24px
+              and lands on the same tracks. */}
           <div
-            className={`${ROW} border-b border-[var(--border-hairline)] pt-3 pb-2.5`}
+            className={`${COLUMNS} border-b border-[var(--border-hairline)] px-6 pt-3 pb-2.5`}
           >
             <span className={`${COL.player} ${HEAD}`}>Player</span>
             <span className={`${COL.form} ${HEAD}`}>Form</span>
@@ -538,7 +567,7 @@ export function RosterTable({
             {invites.map((invite) => (
               <li
                 key={invite.id}
-                className={`${ROW} border-b border-[var(--border-hairline)] py-[13px] last:border-b-0`}
+                className={`${ROW} ${ROW_SURFACE} py-[13px]`}
               >
                 <span className={`${COL.player} flex items-center gap-2.5`}>
                   <span
