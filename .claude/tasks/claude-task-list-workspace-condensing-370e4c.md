@@ -171,3 +171,62 @@ ready).
   uuid at all. THIS TASK WRITES TO THE LIVE DATABASE. Land it before re-queuing
   T5: with the constraint in place, the `rls-boundary-reviewer` finding that
   blocked T5 is answered at the layer it asked for.
+
+## T8 · Enforce the upload permission where the budget is spent
+- **status:** todo
+- **files:** src/app/api/splitstep/jobs/route.ts (guess — between the
+  `billingWorkspace` resolve at ~342 and `reserveQuota` at ~353),
+  src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts
+- **done when:**
+  - [ ] A player whose program has `players_can_upload` false, or whose own
+        `program_members.upload_enabled` is false, cannot reserve the
+        program's video quota from `/dashboard/matches/new` — refused
+        server-side, not merely hidden in the UI
+  - [ ] `owner`, `coach` and `staff` can still file from either route,
+        unaffected by both flags
+  - [ ] A personal upload (`program_id is null`) is unaffected and still
+        reserves against the personal account exactly as today
+  - [ ] The refusal reaches the wizard as a written sentence, not a raw error
+        or a silent failure after the video has uploaded
+  - [ ] The check sits at the point the spend is committed, so it holds
+        whichever page opened the wizard — adding a guard only to
+        `/dashboard/matches/new/page.tsx` does not satisfy this
+- **notes:** `/pr-check` blocker, found independently by six reviewers.
+  `canUploadForProgram()` is enforced on one page only; `/dashboard/matches/new`
+  renders the same wizard unguarded, and the "New match" button plus the global
+  ⌘U shortcut reach it from five-plus surfaces. `matches_block_client_regraft`
+  checks membership only and `reserveQuota` checks only `canSubmitVideo`, so a
+  revoked player spends the budget with no error. T6 is what makes this urgent:
+  it turned a visibly-broken switch into one that persists silently, so a coach
+  now gets false confidence rather than an error. `route.ts` already holds
+  `billingWorkspace` as a full `Workspace` four lines before `reserveQuota` —
+  the guard is roughly four lines plus an import.
+
+## T9 · Make the upload switch report a write that changed nothing
+- **status:** todo
+- **files:** a new supabase/migrations/ file,
+  src/components/dashboard/team/roster-actions.ts,
+  src/components/dashboard/team/roster-table.tsx (guess)
+- **done when:**
+  - [ ] `set_member_upload_enabled` distinguishes a write that matched a row
+        from one that matched none, and the caller can tell them apart
+  - [ ] When the write matches no row, the roster switch reverts its optimistic
+        state and the coach sees a message — the existing revert at
+        `roster-table.tsx:246` actually fires
+  - [ ] An ordinary flip on a real member still succeeds and persists, in both
+        directions, with no new round trip on the success path
+  - [ ] The RPC stays staff-gated, `search_path`-pinned and closed to `anon` —
+        a player calling it still gets `42501`
+  - [ ] Verified against the live schema via the Supabase MCP rather than
+        supabase/migrations/
+- **notes:** `/pr-check` finding 2, found independently by four reviewers.
+  `set_member_upload_enabled` returns void whether it updated one row or none,
+  so `roster-actions.ts` reports `{ok:true}` either way and the optimistic
+  `setEnabled(next)` sticks. Reachable because `remove_program_member` deletes
+  the `program_members` row but leaves `program_players.claimed_by_user_id`
+  set, so the profile still returns from `program_roster_full` arm 1 with a
+  non-null `user_id` and `role='player'` — and the switch renders. The coach
+  believes they granted upload; the next roster load shows it off again with
+  nothing explaining why. Depends on T8: without it the switch still does not
+  gate the budget, so making it honest about failed writes fixes reporting on a
+  control that means nothing. THIS TASK WRITES TO THE LIVE DATABASE.
