@@ -34,8 +34,12 @@ import {
   type TeamKpiTile,
 } from "@/lib/data/team-kpi";
 import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
-import { getEventDetail, getScheduleRows } from "@/lib/data/schedule-server";
-import type { ScheduleRow } from "@/lib/schedule/types";
+import {
+  eventDetailFrom,
+  getProgramSchedule,
+  scheduleRowsFrom,
+} from "@/lib/data/schedule-server";
+import type { EventDetail, ScheduleRow } from "@/lib/schedule/types";
 import {
   dualScore,
   entryPlayed,
@@ -58,8 +62,9 @@ import { INVITE_TTL_HOURS } from "@/lib/services/programs/tokens";
  * None of this is a new source of truth. Usage comes from the same SECURITY
  * DEFINER functions Settings › Usage reads, the roster from the same
  * `program_roster` RPC Settings › Team reads and the same `program_roster_full`
- * RPC the Roster page reads, the next event from the same `program_events`
- * policy the schedule page reads under, match state from the shared analysis
+ * RPC the Roster page reads, the next event, the weekend dual and the dual
+ * record from the one `getProgramSchedule()` the schedule page reads through,
+ * match state from the shared analysis
  * loader, and who won from the same `matchOutcome` the matches list, the
  * schedule and every player profile ask. A second answer to "how many hours
  * have we used" — or to "did we win that" — would be worse than no answer,
@@ -74,17 +79,6 @@ const EXPIRING_SOON_DAYS = 7;
 
 /** One day. The horizon above is measured in these, and so is the countdown. */
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-/**
- * How far down the schedule the events read goes.
- *
- * It answers two questions off one list — the next event, and this week's dual
- * — and the rows are ordered by start date from this week's Monday, so the
- * only way the limit could hide the next event is a program that has already
- * finished a dozen events since Monday. Twelve rather than one, and nowhere
- * near the whole season.
- */
-const EVENT_WINDOW = 12;
 
 /**
  * The zone Team Home does its calendar arithmetic in.
@@ -225,15 +219,18 @@ export interface TeamMatchRow {
  * Upcoming only, and deliberately so: a program whose schedule holds nothing
  * but last season has the same next action as one holding nothing at all.
  *
- * This is read by its own narrow `program_events` query, and that is now
- * REDUNDANT rather than frugal. The comment here used to argue the query
- * earned its place by avoiding `getScheduleRows()`'s three round trips — but
- * the KPI strip's dual record made that call unconditional in the same
- * `Promise.all`, so the page pays those round trips regardless and this query
- * is a fourth on top. `ScheduleRow` already carries `id`, `kind`, `name`,
- * `startsOn` and `endsOn` for every event. Deriving both this and the weekend
- * dual from that one read retires the query, `EVENT_WINDOW`, and the second
- * ordering of `program_events` that has to agree with the schedule page's.
+ * Read off `getProgramSchedule()`, which the KPI strip's dual record makes an
+ * unconditional cost of this page anyway. It used to have its own narrow
+ * `program_events` query, windowed to a dozen rows from this week's Monday and
+ * ordered ascending — a fourth round trip for four fields the schedule read
+ * already carries, plus a second ordering of `program_events` that had to stay
+ * in step with the schedule page's. Both are gone: this and the weekend dual
+ * are two reads off the one list, and there is no longer a second ordering to
+ * keep in agreement.
+ *
+ * The window went with the query, and that is a strict gain rather than a
+ * trade: a limit of twelve could in principle hide the next event behind a
+ * program that had finished a dozen since Monday, and the whole list cannot.
  */
 export interface TeamNextEvent {
   id: string;
@@ -289,8 +286,10 @@ export interface DualSheetLine {
 /**
  * This week's dual, as the home page's sheet.
  *
- * Assembled from `getEventDetail()` — the same loader the event page reads
- * through — rather than from a second query set of its own. Everything counted
+ * Assembled from the page's one `getProgramSchedule()` read — the same loader
+ * the event page and the schedule page read through, and the same
+ * `EventDetail` the event page is built from — rather than from a second query
+ * set of its own, or a second trip for an event already in hand. Everything counted
  * here is counted by `lib/schedule/entry-state.ts`: a dual's team score is
  * never stored, because a stored one stops agreeing with the lines above it the
  * first time a result is corrected.
@@ -649,42 +648,45 @@ function dualBreakdown(entries: EventEntry[]): {
  *
  * The next one first, then the one just played: on Thursday a coach is
  * preparing for Saturday, and on Sunday morning they are reading Saturday's
- * card. Rows arrive ordered by `starts_on` ascending and the query floor is
- * this week's Monday, so "first from today onwards" and "the last one before
- * that" are both reads off the front and back of the same list.
+ * card. `events` must be ordered by start date ASCENDING — the caller reverses
+ * the schedule read's newest-first list — so "first from today onwards" and
+ * "the last one before that" are both reads off the front and back of the same
+ * list.
+ *
+ * Exported for `tests/team-home-schedule-reads.spec.ts` only — the page reads
+ * it through `getTeamHomeData` below, for the same reason `localDay` and
+ * `weekBounds` are exported: which dual this is, is the thing worth pinning.
  */
-function weekendDualRow<T extends { kind: string; starts_on: string }>(
+export function weekendDualRow<T extends { kind: string; startsOn: string }>(
   events: T[],
   week: { start: string; end: string },
   today: string
 ): T | null {
-  // Both ends tested here rather than leaning on the query's floor. That floor
-  // is on `ends_on`, and a dual's two dates are equal only because `createDual`
-  // writes them that way — a row that ever disagreed would put last week's dual
-  // under a card headed "this weekend". Dates are YYYY-MM-DD, so a string
-  // comparison IS a date comparison.
+  // Both ends tested here, and now that the list is the whole season there is
+  // no query floor to lean on at all. There never should have been: the old
+  // floor was on `ends_on`, and a dual's two dates are equal only because
+  // `createDual` writes them that way — a row that ever disagreed would put
+  // last week's dual under a card headed "this weekend". Dates are YYYY-MM-DD,
+  // so a string comparison IS a date comparison.
   const duals = events.filter(
     (event) =>
       event.kind === "dual" &&
-      event.starts_on >= week.start &&
-      event.starts_on <= week.end
+      event.startsOn >= week.start &&
+      event.startsOn <= week.end
   );
-  return duals.find((event) => event.starts_on >= today) ?? duals.at(-1) ?? null;
+  return duals.find((event) => event.startsOn >= today) ?? duals.at(-1) ?? null;
 }
 
 /**
- * The dual sheet, through the event page's own loader.
+ * The dual sheet, off the `EventDetail` the event page is built from.
  *
- * `getEventDetail` is `cache()`d, RLS-scoped and already refuses an event
- * belonging to another program, so this adds a read of existing tables and no
- * second way to assemble a dual. It runs only when there is a dual in range —
- * on every other day of the season this costs nothing at all.
+ * Synchronous, and that is the point: `detail` comes out of the schedule read
+ * this page has already paid for, via `eventDetailFrom`. It used to call
+ * `getEventDetail`, which is RLS-scoped and refuses another program's event —
+ * both of which the read that produced `detail` has already done — at the cost
+ * of reading the same three tables a second time in the same render.
  */
-async function loadWeekendDual(
-  programId: string,
-  eventId: string
-): Promise<WeekendDual | null> {
-  const detail = await getEventDetail(programId, eventId);
+function buildWeekendDual(detail: EventDetail | null): WeekendDual | null {
   // A dual with no lines is not a sheet with nothing in it — it is not a sheet.
   // `createDual` rolls the event back if its lines fail to write, so this is a
   // shape the product does not produce; it renders nothing rather than a header
@@ -1218,7 +1220,8 @@ export function teamFirstReport(
  * gets everything but `first-serve`.
  *
  * Nothing here is a new source of truth:
- * - **Dual record** is `getScheduleRows()`'s `teamScore`, which is `dualScore`
+ * - **Dual record** is `teamScore` off `scheduleRowsFrom()` — the very mapping
+ *   `/dashboard/team/schedule` renders its rows from — which is `dualScore`
  *   over the lines and is present only once every line is in. The season
  *   aggregate of the rule the dual sheet above prints, not a second one.
  * - **Sets won** counts games with `setTally`, the function `matchOutcome`
@@ -1390,10 +1393,9 @@ export async function getTeamHomeData(
     usage,
     team,
     { data: rows },
-    { data: eventRows },
     { data: rosterRows },
     { data: seasonRows },
-    schedule,
+    programSchedule,
   ] = await Promise.all([
       getProgramUsage(programId, billingMonth),
       getTeamSettings(programId),
@@ -1409,27 +1411,6 @@ export async function getTeamHomeData(
         .eq("program_id", programId)
         .order("date", { ascending: false })
         .limit(RECENT_MATCH_LIMIT),
-      // `ends_on`, not `starts_on`: a tournament that began on Thursday is still
-      // the next thing on the schedule on Saturday morning. The same policy the
-      // schedule page reads under, on the same table — this adds a read, not a
-      // source of truth.
-      //
-      // The floor is this week's MONDAY rather than today, and the limit is a
-      // handful of rows rather than one, because two questions are answered
-      // from this one query: the next event (T2's checklist card) and this
-      // week's dual (the sheet). The second needs the days already elapsed —
-      // Saturday's dual is still the weekend's story on Sunday — and both read
-      // off the same ascending list, so widening the window costs no round
-      // trip. `nextEvent` is unchanged by it: taking the first row whose
-      // `ends_on` has not passed reproduces exactly what `.gte("ends_on",
-      // today).limit(1)` returned.
-      supabase
-        .from("program_events")
-        .select("id, name, kind, starts_on, ends_on")
-        .eq("program_id", programId)
-        .gte("ends_on", week.start)
-        .order("starts_on", { ascending: true })
-        .limit(EVENT_WINDOW),
       // Every id that means "us" on a match row. The same SECURITY DEFINER
       // function Roster and the lineup builder read (`roster-server.ts`,
       // `team-roster-server.ts`) — not a second answer to who is on this team,
@@ -1458,13 +1439,19 @@ export async function getTeamHomeData(
         )
         .eq("program_id", programId)
         .order("date", { ascending: false, nullsFirst: false }),
-      // Dual record, through the schedule's own loader. `dualScore` over the
-      // lines is what the sheet above prints and what the schedule list prints;
-      // a season record assembled from a second query set would be a fifth
-      // place that decides who won a dual. It costs its own round trips — this
-      // is the one card on the page that reads the whole season — and it is
-      // `cache()`d, so a later reader on the same request pays nothing.
-      getScheduleRows(programId),
+      // The schedule, through the schedule's own loader, and the page's ONLY
+      // read of `program_events`. Three questions come off this one call: the
+      // dual record in the KPI strip, the next event on the checklist card, and
+      // this week's dual sheet. `dualScore` over the lines is what the sheet
+      // prints and what the schedule list prints; a season record assembled
+      // from a second query set would be a fifth place that decides who won a
+      // dual, and a next event read separately would be a second ordering of
+      // `program_events` that has to agree with this one.
+      //
+      // It costs its own round trips — this is the one card on the page that
+      // reads the whole season — and it is `cache()`d on the read itself, so a
+      // later reader on the same request pays nothing.
+      getProgramSchedule(programId),
     ]);
 
   const season = (seasonRows ?? []) as DbSeasonMatch[];
@@ -1558,24 +1545,28 @@ export async function getTeamHomeData(
     };
   });
 
-  const events = (eventRows ?? []) as {
-    id: string;
-    name: string;
-    kind: string;
-    starts_on: string;
-    ends_on: string;
-  }[];
+  // `readSchedule` returns events newest first, which is the order the schedule
+  // page renders them in. Both questions below are asked forwards in time, so
+  // they are asked of that one list reversed — never of a second query with an
+  // ordering of its own to keep in step.
+  const upcoming = [...programSchedule.events].reverse();
 
-  // Still "the soonest event the program has not finished yet" — the query's
-  // window now reaches back to Monday, so the test that used to be its
-  // `.gte("ends_on", today)` is made here instead, over the same ordering.
-  const nextEventRow = events.find((event) => event.ends_on >= today);
+  // The schedule page's own rows, off the schedule page's own mapping. The KPI
+  // strip's dual record is `teamScore` on these, so "did we win that dual" is
+  // one answer read twice rather than two answers that can drift.
+  const scheduleRows = scheduleRowsFrom(programSchedule);
 
-  // Sequential, and it has to be: which dual to read is an answer from the
-  // query above. It is also the whole cost of this card — no dual in range,
-  // no read at all.
-  const dualRow = weekendDualRow(events, week, today);
-  const weekendDual = dualRow ? await loadWeekendDual(programId, dualRow.id) : null;
+  // Still "the soonest event the program has not finished yet". `ends_on`, not
+  // `starts_on`: a tournament that began on Thursday is still the next thing on
+  // the schedule on Saturday morning.
+  const nextEventRow = upcoming.find((event) => event.endsOn >= today);
+
+  // No round trip left in this card: the dual, if there is one, is already in
+  // `programSchedule` with its lines under it.
+  const dualRow = weekendDualRow(upcoming, week, today);
+  const weekendDual = dualRow
+    ? buildWeekendDual(eventDetailFrom(programSchedule, dualRow.id))
+    : null;
 
   // `people`, not `team?.members`: the seat list has no row for a
   // coach-managed player, so a hand-built squad counted zero here and the
@@ -1591,7 +1582,7 @@ export async function getTeamHomeData(
   return {
     usage,
     matches,
-    kpis: teamKpis(season, jobs, stats, schedule, rosterIds),
+    kpis: teamKpis(season, jobs, stats, scheduleRows, rosterIds),
     // Same three inputs the strip is built from, and deliberately the same
     // `jobs` map: the checklist saying a report is back while the strip counts
     // no analyzed match would be two answers about one program, on one screen.
@@ -1601,8 +1592,10 @@ export async function getTeamHomeData(
       ? {
           id: nextEventRow.id,
           name: nextEventRow.name,
-          kind: nextEventRow.kind === "dual" ? "dual" : "tournament",
-          startsOn: nextEventRow.starts_on,
+          // Already an `EventKind` off the schedule loader, which narrows the
+          // column once for every surface — no second string test here.
+          kind: nextEventRow.kind,
+          startsOn: nextEventRow.startsOn,
         }
       : null,
     rosterCard: rosterCard(team?.invites ?? [], people),

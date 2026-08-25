@@ -89,15 +89,36 @@ function toEvent(row: DbEvent): ProgramEvent {
 }
 
 /**
+ * One program's schedule, as everything below reads it.
+ *
+ * `events` is newest first — the schedule page's own reading order. A surface
+ * that asks its questions forwards in time reverses this list rather than
+ * ordering `program_events` a second way; two orderings of one table that have
+ * to agree are two chances to disagree.
+ */
+export interface ProgramSchedule {
+  events: ProgramEvent[];
+  entriesByEvent: Map<string, EventEntry[]>;
+}
+
+/**
  * Everything one program's schedule needs, in three reads.
  *
  * Returns events oldest-last, entries keyed to them, and the matches those
  * entries have produced with their analysis state resolved.
+ *
+ * **Uncached on purpose.** It has two shapes — the whole program, and one
+ * event — and each is memoised where it is read: `getProgramSchedule` and
+ * `getEventDetail` below. Memoisation used to sit on the exported *derived*
+ * functions instead, one `cache()` per wrapper over this one uncached
+ * function, which dedupes nothing: React's `cache` keys on the wrapped
+ * function's identity, so two wrappers are two caches, and Team Home — reading
+ * through both — paid for the whole read twice in one render.
  */
 async function readSchedule(
   programId: string,
   eventId?: string
-): Promise<{ events: ProgramEvent[]; entriesByEvent: Map<string, EventEntry[]> }> {
+): Promise<ProgramSchedule> {
   const supabase = await createClient();
 
   let eventQuery = supabase
@@ -192,12 +213,37 @@ async function readSchedule(
   return { events, entriesByEvent };
 }
 
-/** The schedule page's rows, newest event first. */
-export const getScheduleRows = cache(async function getScheduleRows(
+/**
+ * One program's whole schedule, read once per request.
+ *
+ * **The memoisation lives here, on the read, and nowhere above it.** Every
+ * surface that wants the schedule — the schedule page's rows, the upload
+ * queue, Team Home's KPI strip and weekend dual — derives from this one call,
+ * so React's per-request `cache` has a single key to hit and two readers on one
+ * render cost one set of round trips rather than two. Wrapping the derived
+ * functions below instead is what made a Team Home render with a dual in range
+ * cost 19 round trips where it now costs 14.
+ *
+ * `getScheduleRows` and `getUploadQueue` are therefore plain async functions —
+ * pure mapping over this one await. A second `cache()` layer over a shared one
+ * only invites the question of which is doing the work.
+ */
+export const getProgramSchedule = cache(async function getProgramSchedule(
   programId: string
-): Promise<ScheduleRow[]> {
-  const { events, entriesByEvent } = await readSchedule(programId);
+): Promise<ProgramSchedule> {
+  return readSchedule(programId);
+});
 
+/**
+ * The schedule page's rows, newest event first.
+ *
+ * Pure, over a schedule already read, so a caller holding one can have the rows
+ * without a second trip — and so this mapping can be tested without a database.
+ */
+export function scheduleRowsFrom({
+  events,
+  entriesByEvent,
+}: ProgramSchedule): ScheduleRow[] {
   return events.map((event) => {
     const entries = entriesByEvent.get(event.id) ?? [];
     const played = entries.filter(entryPlayed).length;
@@ -224,22 +270,51 @@ export const getScheduleRows = cache(async function getScheduleRows(
       teamScore: score?.decided ? { us: score.us, them: score.them } : null,
     };
   });
-});
+}
+
+/** The schedule page's rows, newest event first. */
+export async function getScheduleRows(programId: string): Promise<ScheduleRow[]> {
+  return scheduleRowsFrom(await getProgramSchedule(programId));
+}
 
 /** Did this entry produce any match at all? Distinguishes "unplayed" from "filmed". */
 function hasAnyMatch(all: EventEntry[], entryId: string): boolean {
   return (all.find((entry) => entry.id === entryId)?.matches.length ?? 0) > 0;
 }
 
-/** One event and its entries, or null when it is not this program's. */
+/**
+ * One event off a schedule already read, or null when it is not in it.
+ *
+ * The `programId` check the query does is done by the read that produced
+ * `schedule`: an event that is not this program's is not in this list.
+ */
+export function eventDetailFrom(
+  { events, entriesByEvent }: ProgramSchedule,
+  eventId: string
+): EventDetail | null {
+  const event = events.find((candidate) => candidate.id === eventId);
+  if (!event) return null;
+  return { event, entries: entriesByEvent.get(event.id) ?? [] };
+}
+
+/**
+ * One event and its entries, or null when it is not this program's.
+ *
+ * Reads the one event rather than the season, and stays that way: the event
+ * page is the only caller, and making a single event's page pull every entry
+ * and every match the program has ever recorded would pay Team Home's
+ * economies with the event page's rows. A caller that already holds a
+ * `ProgramSchedule` should use `eventDetailFrom` above and add no read at all.
+ *
+ * `cache()` sits directly on its read for the same reason
+ * `getProgramSchedule`'s does — the memo has to be on the thing that costs
+ * round trips, not on a wrapper over it.
+ */
 export const getEventDetail = cache(async function getEventDetail(
   programId: string,
   eventId: string
 ): Promise<EventDetail | null> {
-  const { events, entriesByEvent } = await readSchedule(programId, eventId);
-  const event = events[0];
-  if (!event) return null;
-  return { event, entries: entriesByEvent.get(event.id) ?? [] };
+  return eventDetailFrom(await readSchedule(programId, eventId), eventId);
 });
 
 /**
@@ -248,10 +323,10 @@ export const getEventDetail = cache(async function getEventDetail(
  * This is the whole answer to "what needs me": the upload wizard's first step
  * is this list and nothing else.
  */
-export const getUploadQueue = cache(async function getUploadQueue(
+export async function getUploadQueue(
   programId: string
 ): Promise<UploadQueueGroup[]> {
-  const { events, entriesByEvent } = await readSchedule(programId);
+  const { events, entriesByEvent } = await getProgramSchedule(programId);
 
   return events
     .map((event) => {
@@ -281,4 +356,4 @@ export const getUploadQueue = cache(async function getUploadQueue(
       return { event, entries: waiting, withVideo, total };
     })
     .filter((group) => group.entries.length > 0);
-});
+}

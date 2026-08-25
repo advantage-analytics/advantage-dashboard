@@ -1084,3 +1084,72 @@ is the runner's. Newest entries at the bottom.
   `onOpenChange` prop directly rather than the wrapper that calls `reset()`, so
   closing by those two leaves dialog state — including a `target` — in place for
   the next open. Escape, overlay click and the shell's X do reset. Separate task.
+
+## T19 · `readSchedule` runs twice per Team Home render — done
+- **gate:** 5a mechanical — `npm run lint` 0 errors / 38 pre-existing warnings;
+  `npx tsc --noEmit` exit 0; `npm test` 159 passed (149 prior + 10 new). 5b
+  `task-completion-reviewer` — `VERDICT: pass`, dispatched ALONE and finished
+  before 5c. 5c `rls-boundary-reviewer` ran (`src/lib/data/` touched) and returned
+  an explicit no-findings all-clear; `pipeline-guardrails-reviewer` SKIPPED — the
+  diff touches only `src/lib/data/` and `tests/`.
+- **MEASURED QUERY COUNT: 19 → 14** for a render with a dual in range. Measured,
+  not read: the implementer built a throwaway harness patching Node's
+  `Module._load` to swap `next/headers` and `@supabase/ssr` for a counting fake,
+  ran the real `getTeamHomeData` end to end over six scenarios against HEAD and
+  against the new code, then deleted it. 5b verified the arithmetic
+  mechanistically rather than trusting the harness: the diff removes exactly the
+  narrow `program_events` query (1 round trip) plus `getEventDetail`'s separate
+  `readSchedule` (events + entries + entry-matches + analysis jobs = 4) — the 5
+  that accounts for the difference. Other scenarios: 17→14, 15→14, 15→14, 10→9,
+  11→10. `program_events` reads drop 2-3 → 1 in every one.
+- **the "7" in my criterion was never a real number.** I wrote "back toward the 7
+  it was before this branch". The implementer could not reproduce it: reverting
+  ALL of this branch's schedule work still measures 11, because six other reads on
+  the page — recent matches, season matches, `program_roster_full`, two usage
+  RPCs, `getTeamSettings`, `processing_jobs`, `match_stats` — have nothing to do
+  with this task. The 7 came from the `/simplify` agent's reading, not an
+  instrumented run. It reported the shortfall plainly instead of massaging it. 5b
+  ruled the criterion satisfied on its own wording — "toward", not "to".
+- **criterion 3's premise was also wrong, and this is the third time in this queue
+  my wording was the problem rather than the code.** It said retire the query "if
+  `ScheduleRow` can answer the next event and the weekend dual". `ScheduleRow`
+  answers the next event but CANNOT build the dual sheet: no `surface`, and
+  entries reduced to `entryCount`/`playedCount`/`workingCount`, where
+  `DualSheetLine` needs per-line players, scores, state and `reportId`. The
+  comment I corrected during T12's `/simplify` pass was right that the query was
+  redundant and optimistic about WHICH object replaces it. Retired anyway by
+  routing Team Home through `ProgramSchedule`, the read `ScheduleRow` derives
+  from. 5b confirmed the `ScheduleRow` finding independently and called the
+  workaround a legitimate resolution, not an evasion.
+- **changed:** new `getProgramSchedule = cache(...)` is the single memoised
+  whole-program read; `readSchedule` stays private and uncached, with a comment
+  saying why the old per-wrapper `cache()` deduped nothing. `getScheduleRows` split
+  into pure `scheduleRowsFrom(schedule)` + a thin wrapper; new pure
+  `eventDetailFrom(schedule, eventId)`; `getUploadQueue` reads through the shared
+  cache. Team Home: `EVENT_WINDOW` and the narrow query deleted, `loadWeekendDual`
+  became synchronous `buildWeekendDual(detail)`, and next event / dual selection /
+  KPI rows all derive from the one `ProgramSchedule`.
+- **an ordering hazard disappeared with the query.** `program_events` is now
+  ordered in exactly one place in the codebase — `readSchedule`'s `starts_on
+  DESC`. Team Home reverses that array in memory rather than asking Postgres for a
+  second ordering, so there is no longer a second `ORDER BY` that has to stay in
+  step with the schedule page's.
+- **`getEventDetail` deliberately NOT routed through the shared read.** Same
+  round-trip count either way, but it would make one event's page pull every entry
+  and match in the program. 5b judged the call sound.
+- **one deliberate behaviour change, disclosed:** the retired 12-row `EVENT_WINDOW`
+  used to HIDE a next event behind 13 finished ones. The new code finds it.
+  Criterion 4 said "renders the same"; 5b judged this an unavoidable consequence
+  of criterion 3 rather than an embellishment. Scenarios A-E are byte-identical on
+  `{nextEvent, weekendDual, kpis}`, established by diffing serialised output from
+  the real loader before and after.
+- **test honesty, volunteered rather than extracted:** all 10 new tests fail
+  against HEAD, but the implementer disclosed unprompted that they fail for a WEAK
+  reason — `scheduleRowsFrom` does not exist there and `weekendDualRow` was
+  private, so `TypeError`, not a wrong assertion — and stated it was not claiming
+  they reproduce a bug. 5b reproduced that at HEAD via a disposable `git worktree`
+  and confirmed the characterisation exact. The real evidence for criterion 4 is
+  the before/after output diff, not the tests.
+- **`git worktree` is the right way to compare against HEAD.** 5b used one instead
+  of `git stash`; it does not touch the working tree or index, and it is what the
+  reviewer in T14 should have reached for.

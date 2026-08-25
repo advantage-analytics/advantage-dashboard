@@ -452,7 +452,7 @@ ready).
 - **notes:** Found by `/pr-check` (code-review), and the ONLY task in this batch whose premise I did not confirm — hence the investigate-first criterion. What is certain from the source: the loop passes `playerId: target?.profileId ?? null` unchanged for every address in `addresses`. What is not certain is whether the UI can even reach that state, since selecting a managed player may already constrain the form to one address. Establish that before changing anything; if the answer is "unreachable", close this `blocked` with the reason rather than hardening a path nobody can take.
 
 ## T19 · `readSchedule` runs twice per Team Home render
-- **status:** todo
+- **status:** done
 - **files:** `src/lib/data/team-home-server.ts`; `src/lib/data/schedule-server.ts` (or wherever `getScheduleRows` / `getEventDetail` are defined)
 - **done when:**
   - [ ] `readSchedule` executes once per Team Home render, not once per `cache()`d wrapper
