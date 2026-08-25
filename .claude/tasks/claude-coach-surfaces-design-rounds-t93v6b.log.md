@@ -117,3 +117,41 @@ is the runner's. Newest entries at the bottom.
   whoever owns the parser. `buildScoreString()` in
   `src/app/dashboard/(home)/recent-activity.tsx:127` is a fifth score spelling,
   carrying no tiebreak rule, left unconverted.
+
+## T2 · Checklist cards flip in place — done (second attempt)
+- **gate:** mechanical — `npm run lint` 0 errors (38 pre-existing warnings,
+  none in the changed files), `npx tsc --noEmit` clean, `npm test` 93 passed.
+  `rls-boundary-reviewer` — ran (`src/lib/data/`, plus invite writes moving
+  surface); no findings. The client never sends a program id: both
+  `setPlayersCanUpload` and `inviteMember` resolve it server-side from the
+  session workspace, and `update_program_settings` / `create_program_invite`
+  are `SECURITY DEFINER` functions that re-check `is_program_staff` and raise
+  `42501` otherwise — so relocating the controls to Roster cannot widen who may
+  write, and the bulk loop cannot target another program.
+  `pipeline-guardrails-reviewer` — ran (dashboard UI); clear on every
+  guardrailed surface. It noted, as pre-existing rather than a regression, that
+  the players-can-upload switch, the Roster footer and Settings › Team state
+  one boolean three different ways — now visible on one screen rather than two.
+  `task-completion-reviewer` — **`VERDICT: pass`**, all six criteria met.
+- **changed:** the three first-steps cards now flip in place — active →
+  progress receipt (StatusChip + mono elapsed) → done receipt (plain 15px
+  check, `--ink-500`, one quiet link) — holding their slots, and the row
+  unmounts in one step once all three are done. `emphasis =
+  variants.findIndex(v => v !== "done")` puts emphasis on the first card that
+  is not done, progress receipts included; the reviewer enumerated the states
+  and found exactly one emphasised card in every one that renders.
+  `team-home-server.ts` gained `TeamMatchRow.startedAt` (a free projection) and
+  a `nextEvent` read from `program_events` inside the existing `Promise.all`.
+- **on the deleted dialog:** the first attempt's deletion of
+  `invite-dialog.tsx` stands, but its bulk paste-a-list flow is folded into
+  `RosterInviteDialog` rather than lost — separators, email-shape filter,
+  dedupe, removable chips, Backspace-eats-last-chip, "Send N invites",
+  sequential send, the delivered/undelivered split and the players-can-upload
+  switch were all compared against `ea2bcd6` and are present. Reachability is
+  the same population (`role !== "player"`) and strictly more states: the old
+  dialog vanished once the program had a match, the Roster one never does.
+  `setPlayersCanUpload` has a caller again, with `ROSTER_PATH` revalidation.
+- **follow-up left open:** `.skills/advantage-analytics-design/SKILL.md:744`
+  still cites `team/invite-dialog.tsx` as its reference example for the
+  `has-[input:focus-visible]` pattern, and that file no longer exists. A stale
+  doc pointer, out of this task's scope, not fixed here.

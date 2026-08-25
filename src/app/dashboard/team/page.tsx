@@ -49,15 +49,13 @@ export default async function TeamHomePage() {
   if (active.kind !== "team") redirect("/dashboard");
 
   const billingMonth = currentBillingMonth();
-  const { usage, matches, roster, playersCanUpload } = await getTeamHomeData(
-    active.id,
-    billingMonth
-  );
+  const { usage, matches, roster, nextEvent, playersCanUpload } =
+    await getTeamHomeData(active.id, billingMonth);
 
-  // Roster facts and the two invite cards are staff business. A player reaches
+  // Roster facts and the setup checklist are staff business. A player reaches
   // this page from the same rail item, and `program_roster` returns them only
   // their own line — so without this the greeting would tell a player that "1
-  // player has joined", and the invite buttons would open a dialog whose every
+  // player has joined", and the checklist would send them to pages whose every
   // write the database refuses.
   const isStaff = active.role !== "player";
   const empty = matches.length === 0;
@@ -152,15 +150,26 @@ export default async function TeamHomePage() {
             ))}
         </div>
 
-        {/* The middle — the only thing empty → populated changes. */}
-        {empty ? (
-          isStaff ? (
-            <FirstSteps
-              canSubmitVideo={active.canSubmitVideo}
-              playersCanUpload={playersCanUpload}
-            />
-          ) : null
-        ) : (
+        {/* The middle — the only thing empty → populated changes.
+
+            The checklist is no longer part of what changes. It renders in both
+            states and holds one position, because its cards flip to receipts
+            rather than disappearing as they are done; it takes itself off the
+            page in one step once all three are, which is the only layout
+            change it ever makes. Staff only: `program_roster` returns a player
+            their own line and nothing else, and every write behind these cards
+            is one the database refuses them. */}
+        {isStaff && (
+          <FirstSteps
+            canSubmitVideo={active.canSubmitVideo}
+            matches={matches}
+            nextEvent={nextEvent}
+            roster={roster}
+            nowMs={now.getTime()}
+          />
+        )}
+
+        {!empty && (
           <>
             <MatchRows matches={matches} />
 

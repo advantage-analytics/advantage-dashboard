@@ -42,7 +42,7 @@ ready).
   reference artboard.
 
 ## T2 · Checklist cards flip in place
-- **status:** next
+- **status:** done
 - **files:** `src/components/dashboard/team/first-steps.tsx`, and whatever
   restoring the bulk invite flow needs — a guess
 - **done when:**

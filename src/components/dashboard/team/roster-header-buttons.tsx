@@ -22,10 +22,16 @@ export function RosterHeaderButtons({
   managedPlayers,
   seats,
   roster,
+  playersCanUpload,
 }: {
   /** Coach-managed rows, so an invitation can target one instead of duplicating it. */
   managedPlayers: ManagedPlayer[];
   seats: SeatUsage;
+  /**
+   * The program's upload permission — the rule the invitations arrive under,
+   * which the invite dialog both states and lets a coach change on the spot.
+   */
+  playersCanUpload: boolean;
   /**
    * Everyone already on the roster, so Add player can name who holds the line
    * that was picked and who already answers to the name that was typed.
@@ -65,6 +71,7 @@ export function RosterHeaderButtons({
         onOpenChange={setInviting}
         managedPlayers={managedPlayers}
         seats={seats}
+        playersCanUpload={playersCanUpload}
       />
 
       <AddPlayerDialog

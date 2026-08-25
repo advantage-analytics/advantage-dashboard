@@ -266,10 +266,10 @@ export async function removeMember(userId: string): Promise<ActionResult> {
 /**
  * Flip one permission without opening the settings page.
  *
- * The invite dialog states this rule at the moment it becomes true for
- * somebody — "off, their matches still appear when you send them" — so the
- * switch beside that sentence has to be the real permission, not a copy of it
- * that Settings could contradict an hour later.
+ * The Roster page's invite dialog states this rule at the moment it becomes
+ * true for somebody — "off, their matches still appear when you send them" — so
+ * the switch beside that sentence has to be the real permission, not a copy of
+ * it that Settings could contradict an hour later.
  *
  * It re-reads the row and writes it back through the same RPC rather than
  * patching one column, because `update_program_settings` is where the staff
@@ -316,5 +316,9 @@ export async function setPlayersCanUpload(
 
   revalidatePath(SETTINGS_PATH);
   revalidatePath(TEAM_HOME_PATH);
+  // The Roster page prints this rule in its own footer line, and the dialog
+  // that flips it lives on that page — without this the sentence under the
+  // table contradicts the switch the coach just moved.
+  revalidatePath(ROSTER_PATH);
   return { ok: true };
 }

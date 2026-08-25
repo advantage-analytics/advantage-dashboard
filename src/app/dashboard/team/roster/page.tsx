@@ -93,6 +93,7 @@ export default async function RosterPage() {
               managedPlayers={managedPlayers}
               seats={roster.seats}
               roster={roster.members}
+              playersCanUpload={roster.playersCanUpload}
             />
           )}
         </div>

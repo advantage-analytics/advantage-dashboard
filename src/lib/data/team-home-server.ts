@@ -21,9 +21,10 @@ import { INVITE_TTL_HOURS } from "@/lib/services/programs/tokens";
  *
  * None of this is a new source of truth. Usage comes from the same SECURITY
  * DEFINER functions Settings › Usage reads, the roster from the same
- * `program_roster` RPC Settings › Team reads, and match state from the shared
- * analysis loader. A second answer to "how many hours have we used" would be
- * worse than no answer, because someone would believe this one.
+ * `program_roster` RPC Settings › Team reads, the next event from the same
+ * `program_events` policy the schedule page reads under, and match state from
+ * the shared analysis loader. A second answer to "how many hours have we used"
+ * would be worse than no answer, because someone would believe this one.
  */
 
 /** How many rows the page shows before "see all" would be the honest control. */
@@ -31,6 +32,20 @@ const RECENT_MATCH_LIMIT = 6;
 
 /** Invites close enough to expiry to be worth naming on the home page. */
 const EXPIRING_SOON_DAYS = 7;
+
+/**
+ * Today as YYYY-MM-DD in the reader's own reckoning.
+ *
+ * `program_events.starts_on` and `ends_on` are dates, not instants, so the
+ * comparison has to be made in the same units. `new Date().toISOString()` would
+ * hand the query a UTC day, which for anyone west of Greenwich drops this
+ * evening's dual off the schedule several hours early.
+ */
+function localDay(now: Date): string {
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
 
 export interface TeamMatchRow {
   id: string;
@@ -43,6 +58,30 @@ export interface TeamMatchRow {
   label: string;
   /** "Aug 8" */
   date: string;
+  /**
+   * When the job row was created, ISO — absent for an import, which never had
+   * one. Carried so a surface showing an in-flight match can say how long it
+   * has been going; `loadMatchAnalysis` already reads it, so this costs no
+   * query.
+   */
+  startedAt?: string;
+}
+
+/**
+ * The soonest event the program has not finished yet.
+ *
+ * Upcoming only, and deliberately so: a program whose schedule holds nothing
+ * but last season has the same next action as one holding nothing at all.
+ * Read here rather than through `getScheduleRows()` because that loads every
+ * event, every entry under them and every match pointing at those entries —
+ * three round trips to answer a yes/no question.
+ */
+export interface TeamNextEvent {
+  id: string;
+  /** Opponent school for a dual, the tournament's own name for a tournament. */
+  name: string;
+  /** YYYY-MM-DD. */
+  startsOn: string;
 }
 
 export interface RosterProgress {
@@ -60,9 +99,11 @@ export interface TeamHomeData {
   usage: ProgramUsage;
   matches: TeamMatchRow[];
   roster: RosterProgress;
+  /** Null when the program has nothing on the schedule from today onwards. */
+  nextEvent: TeamNextEvent | null;
   /**
-   * The program's upload permission, carried here so the invite dialog can
-   * state the rule it is about to apply. Read from the same row Settings ›
+   * The program's upload permission, carried here because it decides whether a
+   * player sees a New match control at all. Read from the same row Settings ›
    * Team writes — never a second copy of the setting.
    */
   playersCanUpload: boolean;
@@ -129,7 +170,7 @@ export async function getTeamHomeData(
 ): Promise<TeamHomeData> {
   const supabase = await createClient();
 
-  const [usage, team, { data: rows }] = await Promise.all([
+  const [usage, team, { data: rows }, { data: eventRows }] = await Promise.all([
     getProgramUsage(programId, billingMonth),
     getTeamSettings(programId),
     supabase
@@ -140,6 +181,17 @@ export async function getTeamHomeData(
       .eq("program_id", programId)
       .order("date", { ascending: false })
       .limit(RECENT_MATCH_LIMIT),
+    // `ends_on`, not `starts_on`: a tournament that began on Thursday is still
+    // the next thing on the schedule on Saturday morning. The same policy the
+    // schedule page reads under, on the same table — this adds a read, not a
+    // source of truth.
+    supabase
+      .from("program_events")
+      .select("id, name, starts_on")
+      .eq("program_id", programId)
+      .gte("ends_on", localDay(new Date()))
+      .order("starts_on", { ascending: true })
+      .limit(1),
   ]);
 
   // `reap: true` is deliberately NOT passed. It is a write, and it belongs to
@@ -162,8 +214,15 @@ export async function getTeamHomeData(
       status: analysis.status,
       label: ANALYSIS_LABEL[analysis.status],
       date: shortDate(row.date as string),
+      startedAt: analysis.startedAt,
     };
   });
+
+  const [nextEventRow] = (eventRows ?? []) as {
+    id: string;
+    name: string;
+    starts_on: string;
+  }[];
 
   return {
     usage,
@@ -173,6 +232,13 @@ export async function getTeamHomeData(
       team?.invites ?? [],
       Date.now()
     ),
+    nextEvent: nextEventRow
+      ? {
+          id: nextEventRow.id,
+          name: nextEventRow.name,
+          startsOn: nextEventRow.starts_on,
+        }
+      : null,
     playersCanUpload: team?.program.playersCanUpload ?? false,
   };
 }

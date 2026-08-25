@@ -1,13 +1,17 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { AlertCircle, Check, Link2, Loader2, Users } from "lucide-react";
+import { AlertCircle, Check, Link2, Loader2, Users, X } from "lucide-react";
 import {
   SettingsField,
   SettingsUnderlineInput,
 } from "@/components/dashboard/settings/settings-card";
+import { AdvSwitch } from "@/components/ui/adv-switch";
 import { advButton } from "@/lib/ui/adv-button";
-import { inviteMember } from "@/components/dashboard/settings/team-actions";
+import {
+  inviteMember,
+  setPlayersCanUpload,
+} from "@/components/dashboard/settings/team-actions";
 import {
   DialogInfoRow,
   DialogProblem,
@@ -49,12 +53,33 @@ import type { SeatUsage } from "@/lib/data/team-roster-server";
  * stats stay exactly where they are — `accept_program_invite` sets
  * `claimed_by_user_id` and writes no match rows at all — and a seat starts
  * counting only when she accepts.
+ *
+ * ── The pasted list is a fifth frame, not a second dialog ───────────────────
+ * A coach in August has the squad's addresses in a spreadsheet, not in their
+ * head, so the field takes a whole block and splits it. That used to live in a
+ * separate bulk dialog on Team Home; it is here now because two invite controls
+ * on one product are two answers to one question, and this is the page where a
+ * coach notices somebody is missing.
+ *
+ * It stays derived like the rest: **a list is "the field has parsed a chip"**,
+ * and that turns off the two things that are single-person questions by nature
+ * — the target picker and the tripwire, both of which propose binding ONE login
+ * to ONE roster row. Going the other way, a linked invitation keeps a plain
+ * single-address field, because that is what it is. No mode, no counter.
  */
+
+/** Whitespace, commas and semicolons all separate addresses in a pasted list. */
+const SEPARATORS = /[\s,;]+/;
+
+/** Deliberately loose. The database and the mail server are the real checks. */
+const LOOKS_LIKE_EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
 export function RosterInviteDialog({
   open,
   onOpenChange,
   managedPlayers,
   seats,
+  playersCanUpload,
   /** Preselect a row, e.g. from a roster row's "invite to claim" affordance. */
   initialTarget = null,
 }: {
@@ -62,13 +87,26 @@ export function RosterInviteDialog({
   onOpenChange: (open: boolean) => void;
   managedPlayers: ManagedPlayer[];
   seats: SeatUsage;
+  /**
+   * The program's current upload permission. The dialog states the rule at the
+   * moment it becomes true for somebody, so the switch beside that sentence has
+   * to be the real setting rather than a copy Settings could contradict later.
+   */
+  playersCanUpload: boolean;
   initialTarget?: ManagedPlayer | null;
 }) {
   const [target, setTarget] = useState<ManagedPlayer | null>(initialTarget);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [email, setEmail] = useState(initialTarget?.email ?? "");
+  /**
+   * Addresses that have already parsed, held apart from the one being typed.
+   * Anything that did NOT parse stays in the field instead — a typo'd roster
+   * entry that vanishes is worse than one that stays visible.
+   */
+  const [emails, setEmails] = useState<string[]>([]);
   const [emailEdited, setEmailEdited] = useState(false);
   const [role, setRole] = useState<"player" | "staff">("player");
+  const [canUpload, setCanUpload] = useState(playersCanUpload);
   /**
    * The address the coach said to leave alone. Suppresses the tripwire for
    * that address only — typing a different one re-arms it, which is right:
@@ -76,28 +114,83 @@ export function RosterInviteDialog({
    */
   const [keptSeparate, setKeptSeparate] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [sent, setSent] = useState<string | null>(null);
+  /**
+   * The outcome, once there is one. Delivered and undelivered kept apart, not
+   * summed: a run that saved four invitations and mailed three is not "4 sent",
+   * and a coach told it was would wait for a reply that cannot come.
+   * `inviteMember` returns `{ok: true, warning}` on exactly that case so the
+   * caller can say so.
+   */
+  const [sent, setSent] = useState<{
+    delivered: string[];
+    problems: string[];
+  } | null>(null);
   const [pending, start] = useTransition();
 
   const linked = target !== null;
 
-  const normalized = email.trim().toLowerCase();
-  const emailMatch = linked
-    ? null
-    : (managedPlayers.find(
-        (p) => p.email && p.email.trim().toLowerCase() === normalized
-      ) ?? null);
+  const draft = email.trim();
+  /**
+   * Everything this send would invite: the parsed chips plus a finished address
+   * still sitting in the field. That last part matters — nobody expects to
+   * press a separator key before pressing Send.
+   */
+  const addresses = [
+    ...new Set([...emails, ...(LOOKS_LIKE_EMAIL.test(draft) ? [draft] : [])]),
+  ];
+  /**
+   * The field is holding a list rather than an address. This is what turns the
+   * single-person questions off, and it goes true at the FIRST chip rather than
+   * the second: at one chip the picker would still be offering to bind a link
+   * that the next paste could contradict, and there is no honest way to carry a
+   * chosen profile across a list.
+   */
+  const listed = emails.length > 0;
+
+  // Which makes a typed address the only thing the tripwire can ask about.
+  const normalized = listed ? "" : draft.toLowerCase();
+  const emailMatch =
+    linked || normalized === ""
+      ? null
+      : (managedPlayers.find(
+          (p) => p.email && p.email.trim().toLowerCase() === normalized
+        ) ?? null);
   const showTripwire = emailMatch !== null && normalized !== keptSeparate;
 
   function reset() {
     setTarget(initialTarget);
     setPickerOpen(false);
     setEmail(initialTarget?.email ?? "");
+    setEmails([]);
     setEmailEdited(false);
     setRole("player");
+    setCanUpload(playersCanUpload);
     setKeptSeparate(null);
     setError(null);
     setSent(null);
+  }
+
+  /**
+   * Pull every complete address out of what was typed or pasted and leave the
+   * rest in the field. Deduped against the chips already there AND within the
+   * paste itself — a roster copied out of a spreadsheet routinely carries the
+   * same address twice, and two chips would spend two seats on one player.
+   */
+  function absorb(text: string, keepTrailing: boolean) {
+    const parts = text.split(SEPARATORS);
+    // Mid-typing, the last fragment is not finished being typed; on paste and
+    // on Enter, everything in the box is fair game.
+    const trailing = keepTrailing ? (parts.pop() ?? "") : "";
+    const found = parts.filter((part) => LOOKS_LIKE_EMAIL.test(part));
+    const rejected = parts.filter(
+      (part) => part.length > 0 && !LOOKS_LIKE_EMAIL.test(part)
+    );
+
+    if (found.length > 0) {
+      setEmails((current) => [...new Set([...current, ...found])]);
+    }
+    setEmail([...rejected, trailing].filter(Boolean).join(" "));
+    setEmailEdited(true);
   }
 
   function pick(player: ManagedPlayer | null) {
@@ -118,36 +211,86 @@ export function RosterInviteDialog({
   }
 
   function submit() {
+    if (addresses.length === 0) return;
     setError(null);
     start(async () => {
-      const result = await inviteMember({
-        email: email.trim(),
-        role,
-        playerId: target?.profileId ?? null,
-      });
-
-      if (!result.ok) {
-        // The tripwire named the row this should have attached to. Select it
-        // and let the coach press send again, rather than making them find it.
-        if (result.linkTo) {
-          const match = managedPlayers.find(
-            (p) => p.profileId === result.linkTo?.profileId
-          );
-          if (match) pick(match);
+      // The permission first, because it is the rule the invitations are about
+      // to be sent under. A failure here stops the run: sending a squad an
+      // invitation on terms the coach just declined is worse than sending none.
+      if (role === "player" && canUpload !== playersCanUpload) {
+        const permission = await setPlayersCanUpload(canUpload);
+        if (!permission.ok) {
+          setError(permission.error);
+          return;
         }
-        setError(result.error);
-        return;
       }
 
-      setSent(
-        result.warning ??
-          `Invitation sent to ${email.trim()}. It lasts 14 days.`
-      );
+      // Sequential, not parallel: `create_program_invite` upserts on the
+      // one-open-invite index, and a pasted list that survived dedupe with two
+      // spellings of one address would otherwise race itself for that row.
+      const delivered: string[] = [];
+      const problems: string[] = [];
+
+      for (let i = 0; i < addresses.length; i++) {
+        const address = addresses[i];
+        const result = await inviteMember({
+          email: address,
+          role,
+          playerId: target?.profileId ?? null,
+        });
+
+        // A refusal is a question to answer, not a hiccup to log, so it stops
+        // the run either way. Where it is REPORTED depends on whether anything
+        // has happened yet.
+        if (!result.ok) {
+          // The tripwire named the row this should have attached to. Select it
+          // and let the coach press send again, rather than making them find it.
+          if (result.linkTo) {
+            const match = managedPlayers.find(
+              (p) => p.profileId === result.linkTo?.profileId
+            );
+            if (match) pick(match);
+          }
+
+          // Nothing has gone out: keep the coach in the form, which is where
+          // the answer is — the tripwire has just selected a row, and pressing
+          // send again is the next move.
+          if (delivered.length === 0 && problems.length === 0) {
+            setError(result.error);
+            return;
+          }
+
+          // Otherwise part of the list is already real, so the dialog owes a
+          // receipt — and the refusal has to be a line ON it, because the form
+          // that would have shown it is no longer the thing being rendered.
+          const untried = addresses.slice(i + 1);
+          problems.push(
+            `${address} — ${result.error}${
+              untried.length > 0
+                ? ` Nothing was sent to ${untried.join(", ")}.`
+                : ""
+            }`
+          );
+          setEmails([]);
+          setEmail("");
+          setSent({ delivered, problems });
+          return;
+        }
+
+        // The warning describes the failure, not who it happened to, and in a
+        // list of nine that is the only part a coach needs. Named here.
+        if (result.warning) problems.push(`${address} — ${result.warning}`);
+        else delivered.push(address);
+      }
+
+      setEmails([]);
+      setEmail("");
+      setSent({ delivered, problems });
     });
   }
 
   const remaining = Math.max(0, seats.seats - seats.used - seats.pending);
-  const ready = email.trim() !== "" && !pending;
+  const ready = addresses.length > 0 && !pending;
 
   return (
     <RosterDialog
@@ -193,20 +336,42 @@ export function RosterInviteDialog({
               {pending && (
                 <Loader2 className="size-3.5 animate-spin" aria-hidden />
               )}
-              Send invite
+              {/* Counted, so the number sent is agreed before it is sent —
+                  a pasted list is exactly where a coach cannot tell at a
+                  glance whether the box holds nine addresses or ten. */}
+              {addresses.length > 1
+                ? `Send ${addresses.length} invites`
+                : "Send invite"}
             </button>
           </>
         )
       }
     >
       {sent ? (
-        <p className="text-[12px] leading-[1.6] text-[var(--ink-700)]">{sent}</p>
+        <>
+          {sent.delivered.length > 0 && (
+            <p className="text-[12px] leading-[1.6] text-[var(--ink-700)]">
+              {sent.delivered.length === 1
+                ? `Invitation sent to ${sent.delivered[0]}. It lasts 14 days.`
+                : `${sent.delivered.length} invitations sent. They last 14 days, and you can resend any of them from this page.`}
+            </p>
+          )}
+          {/* One line per address that did not come out clean — a saved
+              invitation whose mail bounced, or the refusal that stopped the
+              run. Named individually, because "one of these failed" is not
+              something a coach can act on. */}
+          {sent.problems.map((problem) => (
+            <DialogProblem key={problem} message={problem} />
+          ))}
+        </>
       ) : (
         <>
           {/* 7a lives here. Hidden entirely when there is nobody to target —
               a picker offering one option is a control that asks a question
-              with no alternatives. */}
-          {managedPlayers.length > 0 && (
+              with no alternatives — and while a list is in the field, because
+              a targeted invitation binds one login to one row and nine
+              addresses have no one row to bind to. */}
+          {managedPlayers.length > 0 && !listed && (
             <InviteTargetPicker
               players={managedPlayers}
               selected={target}
@@ -217,21 +382,88 @@ export function RosterInviteDialog({
           )}
 
           <SettingsField
-            label="Email"
+            label={listed ? "Emails" : "Email"}
             hint={
               linked && !emailEdited && target?.email
                 ? "From their profile — edit if it has changed"
-                : undefined
+                : linked
+                  ? undefined
+                  : "One address, or paste a list"
             }
           >
+            {/* The chips sit above the rule rather than inside it: this field
+                is the settings underline input, not a bordered box, and a row
+                of pills threaded through a 1px rule reads as debris on it. */}
+            {listed && (
+              <span className="flex flex-wrap gap-1.5 pb-0.5">
+                {emails.map((address) => (
+                  <span
+                    key={address}
+                    className="inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] py-1 pl-2.5 pr-1.5 font-mono text-[11px] text-[var(--ink-700)]"
+                  >
+                    {address}
+                    <button
+                      type="button"
+                      aria-label={`Remove ${address}`}
+                      onClick={(event) => {
+                        // `SettingsField` is a <label>, so a click in here
+                        // would otherwise also land on the input behind it.
+                        event.preventDefault();
+                        setEmails((current) =>
+                          current.filter((item) => item !== address)
+                        );
+                      }}
+                      className="cursor-pointer rounded-full p-0.5 text-[var(--ink-400)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)]"
+                    >
+                      <X className="size-3" strokeWidth={1.5} aria-hidden />
+                    </button>
+                  </span>
+                ))}
+              </span>
+            )}
             <SettingsUnderlineInput
-              type="email"
+              /* `text`, not `email`: a pasted block is several addresses and a
+                 browser validating it as one would mark the field invalid for
+                 the whole time it takes to split. The split is the check. */
+              type="text"
+              inputMode="email"
               value={email}
               emphasis={!linked}
-              placeholder="name@school.edu"
+              placeholder={listed ? "Add another" : "name@school.edu"}
               onChange={(event) => {
-                setEmail(event.target.value);
-                setEmailEdited(true);
+                // A linked invitation is one address by definition, so the
+                // field stays plain there — splitting it would offer to send
+                // a second invitation nothing could bind.
+                if (linked) {
+                  setEmail(event.target.value);
+                  setEmailEdited(true);
+                  return;
+                }
+                absorb(event.target.value, true);
+              }}
+              onPaste={(event) => {
+                if (linked) return;
+                event.preventDefault();
+                absorb(
+                  `${email} ${event.clipboardData.getData("text")} `,
+                  false
+                );
+              }}
+              onKeyDown={(event) => {
+                if (linked) return;
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  absorb(`${email} `, false);
+                }
+                // Backspace on an empty field takes the last chip back, the
+                // way it does in every address field people already use.
+                if (
+                  event.key === "Backspace" &&
+                  email === "" &&
+                  emails.length > 0
+                ) {
+                  setEmails((current) => current.slice(0, -1));
+                }
               }}
             />
           </SettingsField>
@@ -270,6 +502,32 @@ export function RosterInviteDialog({
                   detail="Full roster access · uploads for any player · no playing stats"
                 />
               </div>
+            </div>
+          )}
+
+          {/* The permission these invitations arrive under, stated at the
+              moment it becomes true for somebody and settable there. Staff are
+              not covered by it — they may always upload for anyone — so the
+              row appears only when players are what is being invited. */}
+          {role === "player" && (
+            <div className="flex items-center gap-3 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3 py-2.5">
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-[12px] text-[var(--ink-900)]">
+                  Let players send their own video
+                </span>
+                <span className="text-[11px] leading-[1.5] text-[var(--ink-600)]">
+                  {canUpload
+                    ? "On. Their uploads come out of the program's hours."
+                    : "Off. Their matches still appear when you send them."}
+                </span>
+              </span>
+              <span className="ml-auto">
+                <AdvSwitch
+                  checked={canUpload}
+                  onCheckedChange={setCanUpload}
+                  label="Let players send their own video"
+                />
+              </span>
             </div>
           )}
 
@@ -338,7 +596,15 @@ export function RosterInviteDialog({
             <DialogInfoRow
               icon={<Users className="size-3.5" strokeWidth={1.5} aria-hidden />}
             >
-              Uses a team seat when they accept ·{" "}
+              {addresses.length > 1 ? (
+                <>
+                  Uses <span className="tabular">{addresses.length}</span> team
+                  seats when they accept
+                </>
+              ) : (
+                "Uses a team seat when they accept"
+              )}{" "}
+              ·{" "}
               <span className="tabular">
                 {seats.used} of {seats.seats}
               </span>{" "}
