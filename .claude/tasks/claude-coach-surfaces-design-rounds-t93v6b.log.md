@@ -476,3 +476,47 @@ is the runner's. Newest entries at the bottom.
   change criterion 2 requires — a defect in the criteria, corrected in
   `63dd69b`, not a defect in the work. The rerun added the track reasoning and
   fixed a comment that named only one writer of `event_entry_id`.
+
+## T9 · This weekend — the dual sheet — blocked
+- **gate:** mechanical — `npm run lint` 0 errors (38 pre-existing warnings),
+  `npx tsc --noEmit` clean, `npm test` 93 passed.
+  `task-completion-reviewer` — **`VERDICT: pass`**, all five criteria.
+  `rls-boundary-reviewer` — no findings. It read the policies rather than the
+  comments asserting parity: Team Home's card and the schedule page call the
+  same `cache()`d `getEventDetail()` under the same cookie session, so the
+  `matches` policy that row-filters a `player` to their own line when
+  `roster_visible` is off applies identically on both. It also confirmed the
+  widened read cannot be steered — `eventId` comes only from already-scoped
+  rows — and that no person identifier reaches the client.
+  `pipeline-guardrails-reviewer` — clean on misattribution, having traced every
+  writer that can populate a line, confirmed doubles work off the game arrays
+  rather than the deliberately-null `player1_id`, and confirmed both silences
+  render no glyph. **But it raised one finding, and that is why this is
+  blocked.**
+- **why it failed:** "Analyzing", "In line" and "Analysis failed" are now
+  spelled byte-identically in `line-row.tsx:146-159` and the new
+  `dual-sheet.tsx:220-233`, hardcoded in JSX conditionals in both. The
+  reviewer's words: "a real drift risk worth flagging — nothing enforces the
+  two literal strings stay in sync mechanically." The shared `EntryState` still
+  decides *which* state a line is in, so the two screens cannot disagree about
+  that; they can only disagree about the words, once someone edits one copy.
+  The gate does not triage severity, and the implementer had itself flagged
+  this and offered it as a follow-up, so it blocks rather than shipping.
+  **Note the review brief I wrote was wrong on this point**: I told the
+  reviewer `ANALYSIS_LABEL` was the shared source for these words. It is not —
+  both files hardcode the strings. The reviewer corrected me.
+- **stash:** `eed71ae14e51e209f8422c2ce8c51139c66c2576` — the dual sheet, the
+  loader work and the page wiring. Recoverable; nothing discarded. Everything
+  except the duplicated strings stands.
+- **what this attempt got right, and must not be rebuilt:** it reused
+  `getEventDetail` and `dualScore` rather than assembling a dual a second way,
+  and it added no query — it widened T2's existing `program_events` read
+  instead. The tally is `dualScore`'s, "final" appears only when its `decided`
+  flag is true, and a clinch is derived from the points the lines can actually
+  award rather than an assumed seven.
+- **a real but implausible risk, recorded not fixed:** widening that read to
+  `.limit(12)` means the derived `nextEvent` could be truncated by a program
+  with 12+ events inside one Monday–Sunday week, all already past — which would
+  silently revert T2's checklist card *and* null this card. Reachable through
+  the app's own write path; not reachable through any real collegiate season.
+  Worth a guard if this loader is touched again.
