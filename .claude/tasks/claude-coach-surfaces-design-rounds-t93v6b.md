@@ -78,7 +78,7 @@ ready).
   rerun does with the dialog, that export must not be left orphaned.
 
 ## T3 · Score and outcome primitives — superscript tiebreak, ResultMark
-- **status:** blocked
+- **status:** next
 - **files:** new shared components under `src/components/dashboard/` (e.g.
   `score-line.tsx`, `result-mark.tsx`), replacing the local formatters in
   `src/lib/schedule/format.ts`, `matches/match-card-list.tsx` and
@@ -100,12 +100,30 @@ ready).
         the tiebreak digit* rather than restating it, and keeps its own boxed
         per-set scoreboard layout. The rule lives in one place; the layout stays
         where it is
-  - [ ] Neither component fetches or derives data — both take resolved props,
-        and no `*-server.ts` loader changes in the diff
+  - [ ] Neither component fetches or derives data — both take resolved props.
+        A `*-server.ts` file may appear in the diff **only** to update a call
+        site to the shared rule: no query, no selected column, no returned
+        shape and no loader logic may change. The three
+        `buildScoreString` callers are the intended case
+  - [ ] `/dashboard/opponents/[programId]` renders the canonical spelling.
+        `buildScoreString`'s legacy space-joined form is gone, along with the
+        `.replaceAll(" ", ", ")` patches its other two callers apply
+  - [ ] The superscript is not gated on a 7-6 game count. A set recorded with a
+        tiebreak value carries its digit whatever the games read — a
+        super-tiebreak third set stored `1-0` with the loser's `8` renders
+        `1⁸`. This is what the shared rule already does on every surface;
+        `match-summary-row` matching it is the point, not a regression
 - **notes:** round 44 — "one outcome vocabulary per row shape, never both";
   superscript applies to any score on any page.
-  First attempt is stashed at `4860c8d05b92bffb0e68219b879451271f70703a` —
-  start from it rather than rebuilding. It met criteria 2 and 4 and got the
+  Second attempt is stashed at `c449df8e2e5fe730a9b5d359074d9ce9a3a101fd` —
+  start from **that** one, not the first. It landed the shared rule in
+  `src/lib/ui/score-format.ts`, collapsed six private formatters into it, and
+  made `match-summary-row` import the rule while keeping its boxed layout. The
+  two criteria added above are the only gaps left, and both were previously
+  forbidden by a criterion of mine that was wrong rather than by anything in
+  the code.
+  (The first attempt is stashed at
+  `4860c8d05b92bffb0e68219b879451271f70703a`; superseded, ignore it.) It met criteria 2 and 4 and got the
   superscript and the loser-side attribution right; the two criteria added
   above are exactly what it missed. Two things it found and left alone, both
   fine to leave: `buildScoreString()` in `(home)/recent-activity.tsx:127` is a
