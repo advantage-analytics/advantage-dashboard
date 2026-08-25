@@ -575,6 +575,44 @@ function programSide(
 }
 
 /**
+ * A match named our side first, and the flip that named it.
+ *
+ * **One rule, one place, because two spellings of it is the quiet failure.**
+ * `programSide` decides WHICH side is ours; this decides what that means for
+ * everything a row shows. The two consumers below need different parts of the
+ * answer — the list rows want `swap` for `scoreSetsFrom` and `side` for
+ * `matchOutcome` as well as the title, the checklist receipt wants the title
+ * alone — but they must not each derive it. Names read one way and games the
+ * other is the same wrong answer as a wrong outcome glyph, told more quietly,
+ * and the receipt links to the very row it would be disagreeing with.
+ *
+ * With no side established nothing flips: the row keeps its stored order, and
+ * callers that draw an outcome leave it null rather than guess. See
+ * `programSide` for when that happens and why an empty slot is the honest
+ * answer.
+ */
+function oursFirst(
+  row: {
+    player1_id: string | null;
+    player2_id: string | null;
+    event_entry_id: string | null;
+    player1_name: string | null;
+    player2_name: string | null;
+  },
+  rosterIds: ReadonlySet<string>
+): {
+  side: "player1" | "player2" | null;
+  swap: boolean;
+  title: string;
+} {
+  const side = programSide(row, rosterIds);
+  const swap = side === "player2";
+  const ourName = swap ? row.player2_name : row.player1_name;
+  const theirName = swap ? row.player1_name : row.player2_name;
+  return { side, swap, title: `${ourName} vs ${theirName}` };
+}
+
+/**
  * One discipline's lines, in position order, labelled the way the event page
  * labels them.
  *
@@ -1154,15 +1192,13 @@ export function teamFirstReport(
     const analysis = analysisOf(row, jobs);
 
     if (isAnalysisReady(analysis.status)) {
-      // Our side named first, exactly as the list's rows name it — the receipt
-      // and the row it points at are one match, on one page, read one way.
-      const swap = programSide(row, rosterIds) === "player2";
+      // Our side named first, by the same call the list's rows are named by —
+      // the receipt and the row it points at are one match, on one page, read
+      // one way, and now by construction rather than by transcription.
       return {
         state: "done",
         id: row.id,
-        title: `${swap ? row.player2_name : row.player1_name} vs ${
-          swap ? row.player1_name : row.player2_name
-        }`,
+        title: oursFirst(row, rosterIds).title,
         date: shortDate(row.date),
       };
     }
@@ -1512,26 +1548,27 @@ export async function getTeamHomeData(
       jobs
     );
 
-    const side = programSide(
+    // Both halves of the flip travel together, and they have to: names read
+    // one way and games the other is the same wrong answer as a wrong glyph,
+    // told more quietly. `oursFirst` is where that rule lives — the checklist
+    // receipt reads the same call, so the two cannot drift. With no side
+    // established nothing flips: the row keeps the stored order, and `won`
+    // stays null so no mark is drawn.
+    const { side, swap, title } = oursFirst(
       row as {
         player1_id: string | null;
         player2_id: string | null;
         event_entry_id: string | null;
+        player1_name: string | null;
+        player2_name: string | null;
       },
       rosterIds
     );
-    // Both halves of the flip travel together, and they have to: names read
-    // one way and games the other is the same wrong answer as a wrong glyph,
-    // told more quietly. With no side established nothing flips — the row
-    // keeps the stored order, and `won` stays null so no mark is drawn.
-    const swap = side === "player2";
     const score = (row.score ?? null) as MatchScore | null;
-    const ourName = (swap ? row.player2_name : row.player1_name) as string;
-    const theirName = (swap ? row.player1_name : row.player2_name) as string;
 
     return {
       id: row.id as string,
-      title: `${ourName} vs ${theirName}`,
+      title,
       context: matchContext(row),
       status: analysis.status,
       label: ANALYSIS_LABEL[analysis.status],

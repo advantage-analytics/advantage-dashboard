@@ -6,7 +6,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { formatEventDay } from "@/lib/schedule/format";
 import {
   ANALYSIS_LABEL,
-  isLiveUpdating,
+  isStalled,
   isWorking,
 } from "@/lib/data/match-analysis";
 import type {
@@ -117,13 +117,14 @@ export function FirstSteps({
   // In flight, but only a DEPLOY will move it — so no notification is coming
   // and no duration is counting toward anything. Today that is every
   // vendor-analysed match, which is why the card's copy turns on it below.
-  const stalled = inFlight ? !isLiveUpdating(inFlight.status) : false;
+  // `isStalled` rather than `!isLiveUpdating`: the negation is only correct
+  // while something upstream has established the status is in flight at all,
+  // and a reader should not have to go and check that.
+  const stalled = inFlight ? isStalled(inFlight.status) : false;
 
-  const reportVariant: Variant = report
-    ? "done"
-    : inFlight
-      ? "progress"
-      : "active";
+  // `TeamFirstReport["state"]` is deliberately a subset of `Variant`, so the
+  // slot the card sits in IS the union's tag — no third spelling of one fact.
+  const reportVariant: Variant = firstReport?.state ?? "active";
   const scheduleVariant: Variant = nextEvent ? "done" : "active";
   // Players on the roster and outstanding invitations both count, and the
   // first of those is the roster as `/dashboard/team/roster` counts it —

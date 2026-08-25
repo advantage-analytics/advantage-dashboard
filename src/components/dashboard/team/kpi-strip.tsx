@@ -81,10 +81,21 @@ function Sparkline({
       ((value - min) / range) * (SPARK_HEIGHT - SPARK_PADDING * 2),
   }));
 
-  const line = coords.map((point) => `${point.x},${point.y}`).join(" ");
-  const area = `M ${coords[0].x},${SPARK_HEIGHT} ${coords
-    .map((point) => `L ${point.x},${point.y}`)
-    .join(" ")} L ${coords[coords.length - 1].x},${SPARK_HEIGHT} Z`;
+  /* Two decimals, and the reason is payload rather than taste. The series is
+     the whole season by design — see `TeamKpiTile.sparkline` — so a program
+     with 300 analysed matches emits 300 coordinates TWICE, once into the
+     polyline and once into the area path. At full double precision
+     ("2.2608695652173916,14.318181818181817") that is tens of kilobytes of
+     coordinate text for a picture 76 pixels wide. Two decimals is
+     sub-pixel at this size, so the rendering is identical and the markup is
+     several times smaller. */
+  const xy = (point: { x: number; y: number }) =>
+    `${point.x.toFixed(2)},${point.y.toFixed(2)}`;
+
+  const line = coords.map(xy).join(" ");
+  const area = `M ${coords[0].x.toFixed(2)},${SPARK_HEIGHT} ${coords
+    .map((point) => `L ${xy(point)}`)
+    .join(" ")} L ${coords[coords.length - 1].x.toFixed(2)},${SPARK_HEIGHT} Z`;
 
   return (
     <svg

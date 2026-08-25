@@ -464,6 +464,23 @@ export function isLiveUpdating(status: AnalysisStatus): boolean {
   return IN_FLIGHT.has(status) && !STALLED.has(status);
 }
 
+/**
+ * In flight, and only a DEPLOY will move it. The fourth question.
+ *
+ * `isLiveUpdating`'s complement within IN_FLIGHT, named because surfaces need
+ * to say it rather than derive it. A card that reads `!isLiveUpdating(status)`
+ * is right only while something upstream has already established the status is
+ * in flight at all — true of `completed`, `imported`, `timeline`, `failed` and
+ * `manual` otherwise — so the negation carries an invariant the reader has to
+ * go and check. This carries none.
+ *
+ * Retires itself with STALLED: empty that set when Phase 2 lands and every
+ * caller correctly stops distinguishing.
+ */
+export function isStalled(status: AnalysisStatus): boolean {
+  return STALLED.has(status);
+}
+
 export function isAnalysisFailed(status: AnalysisStatus): boolean {
   return FAILED.has(status);
 }

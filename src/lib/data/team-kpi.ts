@@ -73,35 +73,6 @@ export const SMALL_SAMPLE_MIN = 5;
  */
 export const TREND_MIN_SPAN_DAYS = 7;
 
-/**
- * Why there is no spark window here — the tile draws the whole series.
- *
- * There used to be one: eight observations, copied from the personal
- * dashboard's strip (`performance-server.ts` — `measured.slice(0, 8)`) so the
- * two strips would draw the same length of line. That alignment was the wrong
- * thing to hold, for two reasons.
- *
- * The eight there bounds a window whose points are individually inspectable:
- * `performance-server` pairs each with a date and an opponent for
- * `KpiTile`'s hover chart, and its headline IS that window's newest point
- * while its change is that point against the one before it. Headline, change
- * and line are one window, and eight is how many match cards fit in a popover.
- * This strip has no popover and no per-point metadata — the shape came across;
- * the reason for its length did not.
- *
- * And a team tile's figure is not a recent reading. It is the season's mean
- * (`meanOfPresent` in `team-home-server.ts`) and its change is a half-split
- * across the season, so a trailing slice underneath them drew a *third*
- * window: a program that improved over the year but dipped last month showed a
- * falling line beside a rising number, and neither was wrong — they were
- * answers to different questions, stacked on one tile. Matching the personal
- * strip's pixel-length while the numbers underneath mean different things is a
- * false alignment; it makes two incomparable figures look comparable.
- *
- * So: one set of observations, read three times. The headline is its mean, the
- * change is its halves, and the line is its shape.
- */
-
 /** One row's contribution to a tile, and when it happened. */
 export interface TeamKpiObservation {
   /** The figure this row contributed, in the tile's own units. */
@@ -144,6 +115,18 @@ export interface TeamKpiTile {
    * one tile carries three claims about three different stretches of season.
    * Drawn in full, the line is what the number is an average of, and the
    * change is visibly its left half against its right.
+   *
+   * There used to be a window of eight, copied from the personal strip
+   * (`performance-server.ts` — `measured.slice(0, 8)`) so the two would draw
+   * the same length of line. The eight there bounds a window whose points are
+   * individually inspectable — each paired with a date and an opponent for
+   * `KpiTile`'s hover chart — and its headline IS that window's newest point,
+   * so headline, change and line are one window and eight is how many match
+   * cards fit a popover. This strip has neither popover nor per-point
+   * metadata: the shape came across, the reason for its length did not. And
+   * matching the pixel-length of two figures that answer different questions —
+   * a most-recent reading against a season mean — is a false alignment, making
+   * incomparable numbers look comparable.
    */
   sparkline: number[];
   /**
