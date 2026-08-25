@@ -78,27 +78,45 @@ ready).
   rerun does with the dialog, that export must not be left orphaned.
 
 ## T3 · Score and outcome primitives — superscript tiebreak, ResultMark
-- **status:** blocked
+- **status:** next
 - **files:** new shared components under `src/components/dashboard/` (e.g.
   `score-line.tsx`, `result-mark.tsx`), replacing the local formatters in
   `src/lib/schedule/format.ts`, `matches/match-card-list.tsx` and
   `search/search-command-palette.tsx` — a guess
 - **done when:**
   - [ ] A shared score renderer prints a tiebreak as a superscript digit —
-        `6-7³`, 0.6em, raised, 0.5px offset — and never `6-7(3)`; a set with no
-        tiebreak renders exactly as it does today
+        `6-7³`, 0.6em, raised, 0.5px offset — and never `6-7(3)`
+  - [ ] One spelling survives, and it is the artboards': hyphen between games,
+        comma-space between sets — `4-6, 6-7³`. Schedule surfaces
+        (`line-row.tsx`, the `single-detail.tsx` hero) therefore change from
+        `6–4 6–2`; that is intended, not a regression. No en-dash or
+        space-joined score spelling is left anywhere in `src/`
   - [ ] A shared ResultMark renders Lucide `circle-check` (win) / `circle-x`
         (loss) at 14px, 1.5 stroke, with an accessible label and no "Won"/"Lost"
         word or badge
   - [ ] Both are consumed by at least the schedule line row and the matches card
         list, so no second copy of the tiebreak rule survives in `src/`
+  - [ ] `match-summary-row.tsx` imports the shared rule for *which side holds
+        the tiebreak digit* rather than restating it, and keeps its own boxed
+        per-set scoreboard layout. The rule lives in one place; the layout stays
+        where it is
   - [ ] Neither component fetches or derives data — both take resolved props,
         and no `*-server.ts` loader changes in the diff
 - **notes:** round 44 — "one outcome vocabulary per row shape, never both";
   superscript applies to any score on any page.
+  First attempt is stashed at `4860c8d05b92bffb0e68219b879451271f70703a` —
+  start from it rather than rebuilding. It met criteria 2 and 4 and got the
+  superscript and the loser-side attribution right; the two criteria added
+  above are exactly what it missed. Two things it found and left alone, both
+  fine to leave: `buildScoreString()` in `(home)/recent-activity.tsx:127` is a
+  fifth spelling carrying no tiebreak rule, and `resultInk()` in
+  `match-analysis.ts:244` lost its last caller — report either again rather
+  than deleting. Its own architectural wart is worth revisiting: `lib/`
+  importing `formatScoreText` from `components/` inverts the usual direction,
+  and moving the shared pure functions into `lib/` would settle it.
 
 ## T4 · Round-44 row treatment on Team Home
-- **status:** todo
+- **status:** doing
 - **files:** `src/components/dashboard/team/match-rows.tsx`,
   `src/app/dashboard/team/page.tsx` — a guess
 - **done when:**
