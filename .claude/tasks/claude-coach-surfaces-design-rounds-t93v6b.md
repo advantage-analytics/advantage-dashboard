@@ -258,7 +258,7 @@ ready).
   against the writers themselves; do not re-derive or "simplify" that rule.
 
 ## T9 · This weekend — the dual sheet
-- **status:** blocked
+- **status:** next
 - **files:** `src/lib/data/team-home-server.ts`, a new
   `src/components/dashboard/team/dual-sheet.tsx` — a guess
 - **done when:**
@@ -274,9 +274,30 @@ ready).
         placeholder, no explanatory ghost
   - [ ] Every read goes through the existing RLS-scoped server client and
         existing tables; no migration
+  - [ ] One place spells a line's state. "Analyzing", "In line" and "Analysis
+        failed" currently appear byte-identically in both `line-row.tsx` and
+        the dual sheet, hardcoded in each file's JSX. Extract the words to one
+        exported map keyed on `EntryState` and have both files read it, so a
+        `grep` for any of those strings finds exactly one definition. The
+        states themselves already come from the shared `EntryState`; it is only
+        the words that are duplicated
 - **notes:** was T5's second bullet. 44a is the reference artboard. The
   schedule pages already read these tables — reuse their loaders rather than
   writing a second way to assemble a dual.
+  First attempt is stashed at `eed71ae14e51e209f8422c2ce8c51139c66c2576` —
+  start from it. Every criterion passed and both boundary reviews were clean;
+  the only thing that blocked it is the duplicated strings the criterion above
+  now names. Do not rebuild the sheet, do not re-derive the tally, and do not
+  restructure the loader: it reuses `getEventDetail` and `dualScore`, adds no
+  query (it widened T2's existing `program_events` read), and derives a clinch
+  from the points the lines can actually award rather than an assumed seven.
+  `line-row.tsx` renders those words interleaved with the event page's *write*
+  actions, which have no place on this read-only card — so extract the words,
+  not the component.
+  Recorded and deliberately not fixed here: widening that read to `.limit(12)`
+  means `nextEvent` could truncate for a program with 12+ events inside one
+  Monday–Sunday week, all already past. Reachable through the app's write path,
+  not through any real collegiate season.
 
 ## T10 · KPI strip, only once the numbers are honest
 - **status:** todo
