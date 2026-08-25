@@ -74,14 +74,33 @@ export const SMALL_SAMPLE_MIN = 5;
 export const TREND_MIN_SPAN_DAYS = 7;
 
 /**
- * How many observations the sparkline draws.
+ * Why there is no spark window here — the tile draws the whole series.
  *
- * The same window the personal dashboard's strip uses
- * (`performance-server.ts` — `measured.slice(0, 8)`), so the two strips draw
- * the same length of history and a coach who reads both is not comparing a
- * season against a fortnight.
+ * There used to be one: eight observations, copied from the personal
+ * dashboard's strip (`performance-server.ts` — `measured.slice(0, 8)`) so the
+ * two strips would draw the same length of line. That alignment was the wrong
+ * thing to hold, for two reasons.
+ *
+ * The eight there bounds a window whose points are individually inspectable:
+ * `performance-server` pairs each with a date and an opponent for
+ * `KpiTile`'s hover chart, and its headline IS that window's newest point
+ * while its change is that point against the one before it. Headline, change
+ * and line are one window, and eight is how many match cards fit in a popover.
+ * This strip has no popover and no per-point metadata — the shape came across;
+ * the reason for its length did not.
+ *
+ * And a team tile's figure is not a recent reading. It is the season's mean
+ * (`meanOfPresent` in `team-home-server.ts`) and its change is a half-split
+ * across the season, so a trailing slice underneath them drew a *third*
+ * window: a program that improved over the year but dipped last month showed a
+ * falling line beside a rising number, and neither was wrong — they were
+ * answers to different questions, stacked on one tile. Matching the personal
+ * strip's pixel-length while the numbers underneath mean different things is a
+ * false alignment; it makes two incomparable figures look comparable.
+ *
+ * So: one set of observations, read three times. The headline is its mean, the
+ * change is its halves, and the line is its shape.
  */
-const SPARK_WINDOW = 8;
 
 /** One row's contribution to a tile, and when it happened. */
 export interface TeamKpiObservation {
@@ -116,11 +135,21 @@ export interface TeamKpiTile {
    * yet, and the tile says different things about them.
    */
   trendable: boolean;
-  /** Oldest → newest. Empty unless BOTH gates above pass. */
+  /**
+   * Oldest → newest, and EVERY observation behind the figure — not a trailing
+   * window of them. Empty unless BOTH gates above pass.
+   *
+   * The whole series rather than a recent slice because `value` above is that
+   * series' mean and `change` below is its halves: draw a shorter window and
+   * one tile carries three claims about three different stretches of season.
+   * Drawn in full, the line is what the number is an average of, and the
+   * change is visibly its left half against its right.
+   */
   sparkline: number[];
   /**
-   * Recent half minus earlier half, in the figure's own units. Null unless both
-   * gates pass — and null is not zero: zero is "it did not move".
+   * Recent half minus earlier half, in the figure's own units, over the same
+   * observations `sparkline` draws. Null unless both gates pass — and null is
+   * not zero: zero is "it did not move".
    */
   change: number | null;
 }
@@ -168,6 +197,11 @@ export function halfSplitChange(values: number[]): number | null {
  * did not measure the thing. An absent measurement is not a zero, which is the
  * rule `lib/data/aggregate.ts` exists to hold; a row dropped there is a row
  * that never belonged in this sample, so it is not counted in `sample` either.
+ *
+ * The three things a tile says about its figure — the headline the caller
+ * formatted, the change, and the line — are all read off `observations`
+ * entire. Nothing below takes a window of it; the note above
+ * `TeamKpiObservation` is what happened when something did.
  */
 export function seriesTile(
   key: TeamKpiKey,
@@ -189,7 +223,10 @@ export function seriesTile(
     unit,
     spanDays: span,
     trendable: true,
-    sparkline: earned ? values.slice(-SPARK_WINDOW) : [],
+    // One `values`, three readings: the caller's headline averaged it, the
+    // line is it, and the change is its halves. Both gates decide only WHETHER
+    // the last two appear, never how much of the series they see.
+    sparkline: earned ? values : [],
     change: earned ? halfSplitChange(values) : null,
   };
 }

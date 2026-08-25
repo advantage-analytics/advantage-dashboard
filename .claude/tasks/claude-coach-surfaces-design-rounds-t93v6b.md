@@ -432,7 +432,7 @@ ready).
 - **notes:** Found by `/pr-check`. `matches` is the six-row `TeamMatchRow[]` the list renders, so the card's question ("has a first report ever come back?") is being asked of a window that cannot answer it. Low frequency today because young programs have few matches, and it gets worse as a program's history grows past six.
 
 ## T17 · KPI sparkline and headline read different windows
-- **status:** todo
+- **status:** done
 - **files:** `src/lib/data/team-kpi.ts` (~line 192, `seriesTile`); `tests/team-kpi.spec.ts`
 - **done when:**
   - [ ] The sparkline and the headline figure are computed from the same set of observations, or the tile states plainly that the spark shows a shorter recent window

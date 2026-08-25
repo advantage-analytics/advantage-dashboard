@@ -959,3 +959,57 @@ is the runner's. Newest entries at the bottom.
 - **outside `files:`, all necessary:** `src/app/dashboard/team/page.tsx` owns the
   prop (3 lines); `tests/team-kpi.spec.ts` fixture widened 4 lines because
   `DbSeasonMatch` gained required fields and `tsconfig` includes `tests/**`.
+
+## T17 · KPI sparkline and headline read different windows — done
+- **gate:** 5a mechanical — `npm run lint` 0 errors / 38 pre-existing warnings;
+  `npx tsc --noEmit` exit 0; `npm test` 149 passed (143 prior + 6 new). 5b
+  `task-completion-reviewer` — `VERDICT: pass`, dispatched ALONE and finished
+  before 5c. 5c `rls-boundary-reviewer` ran (`src/lib/data/` touched) and returned
+  an explicit all-clear; `pipeline-guardrails-reviewer` SKIPPED — the diff touches
+  only `src/lib/data/` and `tests/`, nothing under `src/app/dashboard/`,
+  `src/components/dashboard/` or the upload wizard.
+- **changed:** `SPARK_WINDOW = 8` deleted; `seriesTile` returns
+  `sparkline: earned ? values : []` rather than `values.slice(-SPARK_WINDOW)`. The
+  tile's three claims — headline, change and line — now read one array. Route (a)
+  of the two the criteria allowed; route (b), labelling the shorter window, was
+  rejected because `kpi-strip.tsx`'s note slot is a one-slot/three-occupants
+  design where a window caption would have to displace the delta line or the
+  sample note, and because it concedes that one tile carries claims about two
+  stretches of season rather than fixing it.
+- **the finding that decided it, and it was verified twice:** `SPARK_WINDOW`'s
+  comment claimed 8 was chosen so the team and personal strips "draw the same
+  shape". That has cause and effect backwards. On the personal strip
+  (`performance-server.ts:647-667`) the 8 is not a spark length at all — it is the
+  ONE window everything reads: headline is `measured[0].value`, change is
+  `measured[0] - measured[1]`, and the same window feeds `KpiTile`'s hover-preview
+  `detail`, bounded by how many match cards fit a popover. What was copied to the
+  team strip was the number; the reason did not come with it. The two headlines
+  also answer different questions — personal is a most-recent reading, team is a
+  season mean — so matching their pixel lengths made incomparable figures LOOK
+  comparable. Deleting the constant restores on the team strip the invariant the
+  personal strip actually holds. I put this to the reviewer as the thing that
+  decides pass-or-block, and it confirmed independently from the source.
+- **an existing test was rewritten, not just added to** — `'the sparkline is
+  chronological and capped at the drawn window'` became `'…and draws every
+  observation'`, expectation `[3…10]` → all ten. Sometimes that is the tell of a
+  bad change, so I asked for a ruling: it is a legitimate consequence, because the
+  old expectation encoded the window the fix removes.
+- **criterion 4 was a no-change criterion**, the kind most easily claimed and
+  least often checked. `earned`, `SMALL_SAMPLE_MIN` and `TREND_MIN_SPAN_DAYS` are
+  byte-identical, and the three new gate tests pin both edges. The reviewer built
+  a harness importing HEAD's and the working tree's `team-kpi.ts` side by side and
+  reproduced the split exactly: 4 window tests fail under old code and pass under
+  new; 3 gate tests pass under BOTH, which is what makes them regression pins
+  rather than tests of the fix. Implementer's report and reality agree.
+- **`Sparkline` needed no edit, and that was checked rather than assumed:** its
+  coordinate math normalises x by `index / (points.length - 1)`, so an unbounded
+  series draws denser but correctly scaled. A bounded assumption there would have
+  rendered badly on a long season. Its own comment — "the line and the number
+  under it can never disagree about which way things went" — becomes true rather
+  than aspirational.
+- **outside `files:`, one file, comments only:** `team-home-server.ts:1232-1246`.
+  The false claim criterion 2 targets lives on `teamKpis()` there, not in
+  `team-kpi.ts` — the `files:` list was wrong about where. The RLS reviewer
+  confirmed the whole hunk sits inside one `/** */` block with no statement,
+  filter or predicate changed, which mattered because that file holds every Team
+  Home query and `programSide()`.

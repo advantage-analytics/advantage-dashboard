@@ -155,7 +155,7 @@ test.describe('the week-of-data gate', () => {
     expect(sampleNote(tile)).toBeNull();
   });
 
-  test('the sparkline is chronological and capped at the drawn window', () => {
+  test('the sparkline is chronological and draws every observation, not a trailing window', () => {
     const tile = seriesTile(
       'sets-won',
       'Sets won',
@@ -163,9 +163,211 @@ test.describe('the week-of-data gate', () => {
       '50%',
       daily([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
     );
-    // Oldest → newest, most recent eight. A sparkline drawn backwards is a
-    // trend reported in reverse.
-    expect(tile.sparkline).toEqual([3, 4, 5, 6, 7, 8, 9, 10]);
+    // Oldest → newest — a sparkline drawn backwards is a trend reported in
+    // reverse — and all ten, because ten is what the headline above it
+    // averaged and what the change beside it split in half.
+    expect(tile.sparkline).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  });
+});
+
+/* ------------------------------------------------------------------------- *
+ * One tile, one window
+ * ------------------------------------------------------------------------- */
+
+/**
+ * The tile makes three claims about its figure — the headline, the signed
+ * change, and the shape of the line — and all three must be about the same
+ * matches.
+ *
+ * They were not. The line drew a trailing eight while the headline averaged
+ * the whole season and the change split that whole season in half, so a
+ * program that improved across the year but dipped in its last few weeks got a
+ * falling line beside a rising number. Nothing looks broken when that happens:
+ * both are drawn correctly, neither is labelled with the stretch of season it
+ * covers, and a coach reads whichever one they looked at first.
+ *
+ * This is the failure a length cap cannot be tested for by inspection — it is
+ * invisible until the series is longer than the cap AND its tail disagrees
+ * with its body, which is why the fixtures below arrange exactly that.
+ */
+test.describe('the headline, the change and the line read one series', () => {
+  /**
+   * Twelve observations, one a day, that FALL across the whole span and RISE across
+   * their last eight: four high readings, then a low run climbing back.
+   *
+   * Halves of all twelve: [90, 90, 90, 90, 10, 15] → 64.2 against
+   * [20, 25, 30, 35, 40, 45] → 32.5, so the season fell by about 32 points.
+   * The trailing eight, [10 … 45], climbs monotonically from first to last.
+   */
+  const DIPPED_THEN_CLIMBED = [90, 90, 90, 90, 10, 15, 20, 25, 30, 35, 40, 45];
+
+  /** What the old code drew: the most recent eight observations. */
+  const OLD_SPARK_WINDOW = 8;
+
+  const mean = (values: number[]) =>
+    values.reduce((sum, value) => sum + value, 0) / values.length;
+
+  /** What the loader would print above the line — `meanOfPresent`, rounded. */
+  const HEADLINE = `${Math.round(mean(DIPPED_THEN_CLIMBED))}%`;
+
+  test('a falling season never draws the rising tail underneath it', () => {
+    const tile = seriesTile(
+      'first-serve',
+      'Team 1st serve',
+      'match',
+      HEADLINE,
+      daily(DIPPED_THEN_CLIMBED)
+    );
+
+    const tail = DIPPED_THEN_CLIMBED.slice(-OLD_SPARK_WINDOW);
+    // The fixture is only a test of anything if its tail really does move
+    // against its body: the tail climbs, the season drops.
+    expect(halfSplitChange(tail)).toBeGreaterThan(0);
+    expect(tile.change).toBeLessThan(0);
+
+    // So the tail must not be what gets drawn beside that negative number.
+    expect(tile.sparkline).not.toEqual(tail);
+    expect(tile.sparkline).toEqual(DIPPED_THEN_CLIMBED);
+    // And the drawn line falls end to end, the way the change says it did.
+    expect(tile.sparkline[tile.sparkline.length - 1]).toBeLessThan(
+      tile.sparkline[0]
+    );
+  });
+
+  test('the change is the drawn line halved, not a different stretch of season', () => {
+    const tile = seriesTile(
+      'sets-won',
+      'Sets won',
+      'match',
+      HEADLINE,
+      daily(DIPPED_THEN_CLIMBED)
+    );
+
+    // The strongest form of the rule: recompute the change from nothing but
+    // what a coach can see, and get the number printed beside it.
+    expect(halfSplitChange(tile.sparkline)).toBe(tile.change);
+  });
+
+  test('the headline is the mean of the line, not the mean of something longer', () => {
+    // The loader formats `meanOfPresent` over these same observations, so the
+    // headline is honest only while the line is the whole series.
+    const tile = seriesTile(
+      'first-serve',
+      'Team 1st serve',
+      'match',
+      HEADLINE,
+      daily(DIPPED_THEN_CLIMBED)
+    );
+
+    expect(tile.sample).toBe(DIPPED_THEN_CLIMBED.length);
+    expect(mean(tile.sparkline)).toBeCloseTo(mean(DIPPED_THEN_CLIMBED), 10);
+    expect(`${Math.round(mean(tile.sparkline))}%`).toBe(tile.value);
+  });
+});
+
+/* ------------------------------------------------------------------------- *
+ * The gates, at their exact edges
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Drawing the whole series changes HOW MUCH a tile draws, and must change
+ * nothing about WHETHER it draws. These pin both thresholds to the observation
+ * either side of them, including on series longer than the window that used to
+ * be capped — a long season that fails a gate has more to hide, not less.
+ */
+test.describe('the gates are unmoved by the length of the series', () => {
+  /** `n` values, one a day, so the span is `n - 1` days. */
+  const ramp = (n: number) => Array.from({ length: n }, (_, i) => 50 + i);
+
+  test('the count gate opens exactly at SMALL_SAMPLE_MIN', () => {
+    // One short of the threshold, with weeks of calendar behind it.
+    const short = seriesTile(
+      'first-serve',
+      'Team 1st serve',
+      'match',
+      '55%',
+      Array.from({ length: SMALL_SAMPLE_MIN - 1 }, (_, i) => ({
+        value: 50 + i,
+        date: new Date(
+          Date.parse('2026-01-05T00:00:00.000Z') + i * 7 * 86_400_000
+        ).toISOString(),
+      }))
+    );
+    expect(short.sample).toBe(SMALL_SAMPLE_MIN - 1);
+    expect(short.spanDays).toBeGreaterThanOrEqual(TREND_MIN_SPAN_DAYS);
+    expect(short.sparkline).toEqual([]);
+    expect(short.change).toBeNull();
+
+    // The threshold itself, over the same weekly calendar.
+    const exact = seriesTile(
+      'first-serve',
+      'Team 1st serve',
+      'match',
+      '55%',
+      Array.from({ length: SMALL_SAMPLE_MIN }, (_, i) => ({
+        value: 50 + i,
+        date: new Date(
+          Date.parse('2026-01-05T00:00:00.000Z') + i * 7 * 86_400_000
+        ).toISOString(),
+      }))
+    );
+    expect(exact.sample).toBe(SMALL_SAMPLE_MIN);
+    expect(exact.sparkline).toHaveLength(SMALL_SAMPLE_MIN);
+    expect(exact.change).not.toBeNull();
+  });
+
+  test('the span gate opens exactly at TREND_MIN_SPAN_DAYS', () => {
+    // A day short of a week, and past the count threshold twice over.
+    const day = 86_400_000;
+    const start = Date.parse('2026-03-01T00:00:00.000Z');
+    const tight = seriesTile(
+      'sets-won',
+      'Sets won',
+      'match',
+      '55%',
+      Array.from({ length: 12 }, (_, i) => ({
+        value: 50 + i,
+        date: new Date(
+          start + Math.round((i * (TREND_MIN_SPAN_DAYS - 1) * day) / 11)
+        ).toISOString(),
+      }))
+    );
+    expect(tight.sample).toBe(12);
+    expect(tight.spanDays).toBe(TREND_MIN_SPAN_DAYS - 1);
+    expect(tight.sparkline).toEqual([]);
+    expect(tight.change).toBeNull();
+    expect(sampleNote(tight)).toBe('12 matches — trends after a week');
+
+    // The same twelve, one day wider.
+    const wide = seriesTile(
+      'sets-won',
+      'Sets won',
+      'match',
+      '55%',
+      daily(ramp(TREND_MIN_SPAN_DAYS + 1))
+    );
+    expect(wide.spanDays).toBe(TREND_MIN_SPAN_DAYS);
+    expect(wide.sparkline).toHaveLength(TREND_MIN_SPAN_DAYS + 1);
+  });
+
+  test('a long season played in one afternoon still draws nothing', () => {
+    // Twenty observations — well past both the count threshold and the eight
+    // the line used to cap at — spanning no calendar at all. Length is not
+    // evidence of time, and a longer line drawn through one Saturday is a
+    // bigger lie, not a smaller one.
+    const tile = seriesTile(
+      'sets-won',
+      'Sets won',
+      'match',
+      '55%',
+      oneAfternoon(ramp(20))
+    );
+
+    expect(tile.sample).toBe(20);
+    expect(tile.spanDays).toBe(0);
+    expect(tile.sparkline).toEqual([]);
+    expect(tile.change).toBeNull();
+    expect(sampleNote(tile)).toBe('20 matches — trends after a week');
   });
 });
 

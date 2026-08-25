@@ -1232,8 +1232,18 @@ export function teamFirstReport(
  * Both percentage tiles are means of PER-MATCH percentages, via
  * `meanOfPresent` — the app's established rule for aggregating this view, and
  * the one that keeps an unmeasured match out of the average instead of
- * entering it as a zero. It also makes the headline the mean of the series the
- * sparkline draws, so the two cannot disagree.
+ * entering it as a zero.
+ *
+ * It also makes the headline the mean of the series the sparkline draws. That
+ * only holds while the tile makes ONE window's worth of claims, and for a
+ * while it did not: `seriesTile` drew a trailing slice of the series it was
+ * handed, so the headline averaged a season, the change split that season in
+ * half, and the line showed the last few weeks — three answers, three
+ * stretches of calendar, one tile. The array passed below is now the array
+ * drawn, so the headline is the mean of the line and the change is the line's
+ * halves, and none of the three can point a different way from the others. If
+ * this ever starts averaging over a window, `seriesTile` has to be handed that
+ * same window rather than the whole season.
  *
  * **Exported only so that `tests/team-kpi.spec.ts` can call it.** It has no
  * caller outside this file and should not acquire one — it takes this loader's
