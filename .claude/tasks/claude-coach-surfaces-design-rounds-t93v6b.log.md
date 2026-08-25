@@ -388,3 +388,51 @@ is the runner's. Newest entries at the bottom.
   three live loader callers and delegates to `formatScoreText`, so it is a
   row-shape adapter rather than a second spelling — the reviewer agreed it
   satisfies criterion 2 rather than breaking it.
+
+## T8 · Results in the Team Home rows — blocked
+- **gate:** mechanical — `npm run lint` 0 errors (38 pre-existing warnings),
+  `npx tsc --noEmit` clean, `npm test` 93 passed.
+  `rls-boundary-reviewer` — ran (new columns and a new RPC); no findings. It
+  checked the thing that would have been an RLS bypass wearing a function
+  signature: `program_roster_full` is `SECURITY DEFINER`, but every one of its
+  three `UNION ALL` branches ends `and p_program_id in (select
+  public.user_program_ids())`, derived from `auth.uid()` — a non-member passing
+  any id gets zero rows. It also established that the new person identifiers
+  never leave the server: `player1_id`/`player2_id` are consumed inside
+  `programSide()` and discarded, and the RPC's rows are reduced to a bare
+  `Set<player_id>` before use, so names, emails and roles stay in the loader.
+  `pipeline-guardrails-reviewer` — ran; clean on the misattribution question.
+  It traced every writer of the three columns: the wizard always resolves
+  `player1_id` to the roster pick regardless of who won, `recordResult` never
+  touches `player2_id`, and `opponent_player_id` exists precisely because
+  `player2_id` sits in the matches SELECT policy — an opponent there would hand
+  them read access. The only other writer of `player2_id` is
+  `merge_program_players`, which re-points ids inside one roster. So the glyph
+  cannot flip through either channel.
+  `task-completion-reviewer` — **`VERDICT: needs-work`**. This is the stage
+  that failed, on one criterion.
+- **why it failed:** criterion 4 asserts the column tracks are unchanged. They
+  are not: `…_150px_120px` became `…_162px_72px_84px`, a fifth track with the
+  fluid columns absorbing 46px. **The criterion is the thing at fault, not the
+  work** — criterion 2 requires a glyph, a score *and* a report affordance in a
+  cell that was 150px wide with no slot for the third, so 2 and 4 contradict
+  each other geometrically. The reviewer reached the same reading independently
+  ("very plausibly a necessary consequence of criterion 2") and correctly
+  declined to soften a stated criterion. Row height and every part of T4's
+  treatment — hover, inset, eyebrow, padding, no hairlines — are preserved and
+  were verified.
+- **what passed, and is worth keeping:** the attribution rule, which is the
+  dangerous part of this task. Roster id first, then a set `event_entry_id`
+  implying player1, then `null` and **no glyph at all** rather than a guess.
+  Both reviewers verified all three premises against the writers themselves
+  rather than against the reasoning, and confirmed title, sets and `won` all
+  key off one `side` value, so a flipped score cannot appear under an
+  unflipped name.
+- **one real inaccuracy to fix on the rerun:** the code comment claims only
+  `recordResult` writes `event_entry_id`. The upload wizard writes it too
+  (`useUploadMatchWizard.ts:1130`). The invariant holds — the wizard resolves
+  `player1_id` to the same roster pick a preset implies — but a comment that
+  overstates which writers exist is the comment someone later trusts instead of
+  re-checking.
+- **stash:** `a4ec547032a5e53b173763e39e88a9fb6da87c63` — the full T8 diff.
+  Recoverable; nothing discarded.

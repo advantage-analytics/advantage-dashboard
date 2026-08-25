@@ -221,7 +221,7 @@ ready).
   field removal, not a query change.
 
 ## T8 · Results in the Team Home rows
-- **status:** todo
+- **status:** blocked
 - **files:** `src/lib/data/team-home-server.ts`,
   `src/components/dashboard/team/match-rows.tsx` — a guess
 - **done when:**
