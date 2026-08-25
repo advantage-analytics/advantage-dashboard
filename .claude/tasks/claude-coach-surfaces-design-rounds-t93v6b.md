@@ -116,7 +116,7 @@ ready).
   and moving the shared pure functions into `lib/` would settle it.
 
 ## T4 · Round-44 row treatment on Team Home
-- **status:** blocked
+- **status:** next
 - **files:** `src/components/dashboard/team/match-rows.tsx`,
   `src/app/dashboard/team/page.tsx` — a guess
 - **done when:**
@@ -128,8 +128,26 @@ ready).
         resend from Roster, instead of pointing at `/dashboard/settings/team`
   - [ ] Row height and column grid are unchanged and `TeamMatchRow` is untouched
         — the diff is presentation only
+  - [ ] The card is headed the way the artboards head it: an `eyebrow` reading
+        exactly `Matches` with the row count beside it in `text-micro tabular`.
+        The single hairline sits under that header. Not "Recent matches" and
+        not any other wording — this is the design's own label
 - **notes:** 8a hover. Alert lists keep their hairlines — this rule is for
   result lists.
+  First attempt is stashed at `111732d2f04500cf1e820342e95b7ec1b8f76ce1` —
+  restore it and change only the header. Every other criterion passed its
+  review: the geometry is concentric (14px card radius − 6px list inset = the
+  row's 8px), `focus.css` already rings `a[href]` so no ring utility is needed,
+  the `ROW` constant and all four cell spans are byte-identical, the
+  `RosterProgress` import is type-only, and `roster.invited - roster.joined` is
+  genuinely `outstanding.length`. It failed only because it invented the header
+  copy; the artboards (45b/45c/45d) head this exact card `Matches` + count, so
+  the header itself was right and only the wording was not.
+  Optional, and only if it costs nothing: 45c and 45d also put an `All matches`
+  link at the right of that header, pointing at the matches list.
+  Out of scope but worth its own task later: `roster-table.tsx` still uses the
+  old full-bleed wash with between-row hairlines, and Roster is a result list
+  too.
 
 ## T5 · Team Home data surfaces (rounds 44a / 45c / 45d)
 - **status:** later
