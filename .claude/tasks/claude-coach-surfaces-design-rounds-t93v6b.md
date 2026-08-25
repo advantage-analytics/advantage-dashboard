@@ -122,20 +122,28 @@ ready).
 - **done when:**
   - [ ] Rows hover to a `--surface-muted` wash on a rounded rect inset from the
         card edge — corners visible inside the border, not a full-bleed wash
-  - [ ] The `border-t` hairline between rows is gone; one hairline sits above
-        the list only
+  - [ ] No hairlines inside the card at all: the `border-t` between rows is
+        gone, and no rule is added under the header either. The card's own
+        border is the only line — 45c/45d's Matches card is `surface-card` with
+        `padding:8px 24px` and nothing ruled inside it
   - [ ] The pending-invites line links to `/dashboard/team/roster` and says to
         resend from Roster, instead of pointing at `/dashboard/settings/team`
   - [ ] Row height and column grid are unchanged and `TeamMatchRow` is untouched
         — the diff is presentation only
-  - [ ] The card is headed the way the artboards head it: an `eyebrow` reading
-        exactly `Matches` with the row count beside it in `text-micro tabular`.
-        The single hairline sits under that header. Not "Recent matches" and
-        not any other wording — this is the design's own label
+  - [ ] The card is headed by an `eyebrow` reading exactly `Matches` — the
+        design's own label, not "Recent matches" and not any other wording. A
+        count beside it is optional; leave it out unless it falls out for free
 - **notes:** 8a hover. Alert lists keep their hairlines — this rule is for
   result lists.
   First attempt is stashed at `111732d2f04500cf1e820342e95b7ec1b8f76ce1` —
-  restore it and change only the header. Every other criterion passed its
+  restore it, then change the header wording and **remove the hairline it put
+  under that header**. The author has ruled the rule out explicitly, and the
+  artboards agree.
+  Row geometry in 45c/45d, for reference: `margin:0 -12px; padding:0 12px;
+  border-radius:var(--radius-element)`, hovering to `--surface-muted` — the
+  hover rect bleeds wider than the text column while staying inside the card's
+  24px padding. The stash reaches the same effect with a padded `<ul>`; either
+  is fine so long as the corners read as inset and the row grid is unchanged. Every other criterion passed its
   review: the geometry is concentric (14px card radius − 6px list inset = the
   row's 8px), `focus.css` already rings `a[href]` so no ring utility is needed,
   the `ROW` constant and all four cell spans are byte-identical, the
