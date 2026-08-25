@@ -442,7 +442,7 @@ ready).
 - **notes:** Found by `/pr-check`. The spark draws the last 8 observations while the headline and the change read the whole series, so a season that improved overall but dipped recently can show a falling spark next to a rising change — two claims about one number, on one tile.
 
 ## T18 · A bulk invite binds every pasted address to one managed profile
-- **status:** todo
+- **status:** done
 - **files:** `src/components/dashboard/team/roster-invite-dialog.tsx` (~lines 230-245)
 - **done when:**
   - [ ] The current behaviour is established first and recorded in the task log — whether a selected `target` is meant to apply to a whole pasted list, or only to a single-address invite

@@ -66,6 +66,11 @@ import type { SeatUsage } from "@/lib/data/team-roster-server";
  * — the target picker and the tripwire, both of which propose binding ONE login
  * to ONE roster row. Going the other way, a linked invitation keeps a plain
  * single-address field, because that is what it is. No mode, no counter.
+ *
+ * `linked` and `listed` are therefore never both true, and `submit` depends on
+ * it: a target belongs to at most one address per run. The refusal path that
+ * selects a row on the coach's behalf is held to the same rule — see the
+ * comment on it in `submit`, which is where it was once broken.
  */
 
 /** Whitespace, commas and semicolons all separate addresses in a pasted list. */
@@ -245,7 +250,27 @@ export function RosterInviteDialog({
         if (!result.ok) {
           // The tripwire named the row this should have attached to. Select it
           // and let the coach press send again, rather than making them find it.
-          if (result.linkTo) {
+          //
+          // Only where this send is ONE address, though — `!listed` is what
+          // keeps that true. This `pick()` is the only one not already behind
+          // that condition: the picker is unmounted while a list is in the
+          // field and the on-screen tripwire is suppressed with it, so calling
+          // it here on a pasted list is the one way to reach a state the
+          // dialog has no frame for — `linked` and `listed` both true, a
+          // footer offering "Send 12 invites" under a description that says
+          // this invitation binds one login to one profile. Pressing send
+          // there would carry that one `profileId` to all twelve, and nothing
+          // downstream refuses it: `create_program_invite`'s one-open-invite
+          // index is on the ADDRESS, so twelve open invitations may name the
+          // same roster row, and `accept_program_invite` then binds it to
+          // whoever clicks first and answers the other eleven with
+          // `already_claimed` — a wall none of them can do anything about,
+          // holding eleven seats.
+          //
+          // So against a list the refusal stays a refusal, and the coach's
+          // move is to take that address out and invite that player on their
+          // own. Which makes the address the thing the message has to name.
+          if (result.linkTo && !listed) {
             const match = managedPlayers.find(
               (p) => p.profileId === result.linkTo?.profileId
             );
@@ -254,9 +279,11 @@ export function RosterInviteDialog({
 
           // Nothing has gone out: keep the coach in the form, which is where
           // the answer is — the tripwire has just selected a row, and pressing
-          // send again is the next move.
+          // send again is the next move. With a list in the field nothing was
+          // selected, so the address is named instead: "already on this roster
+          // without an account" beside twelve chips does not say which one.
           if (delivered.length === 0 && problems.length === 0) {
-            setError(result.error);
+            setError(listed ? `${address} — ${result.error}` : result.error);
             return;
           }
 

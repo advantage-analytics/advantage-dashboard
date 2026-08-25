@@ -1013,3 +1013,74 @@ is the runner's. Newest entries at the bottom.
   confirmed the whole hunk sits inside one `/** */` block with no statement,
   filter or predicate changed, which mattered because that file holds every Team
   Home query and `programSide()`.
+
+## T18 · A bulk invite binds every pasted address to one managed profile — done
+- **gate:** 5a mechanical — `npm run lint` 0 errors / 38 pre-existing warnings;
+  `npx tsc --noEmit` exit 0; `npm test` 149 passed, no delta (see below). 5b
+  `task-completion-reviewer` — `VERDICT: pass`, dispatched ALONE and finished
+  before 5c. 5c BOTH guardrails ran, neither skipped:
+  `pipeline-guardrails-reviewer` (`src/components/dashboard/`) and
+  `rls-boundary-reviewer` (the write path it drives), both explicit no-findings
+  all-clears on the diff.
+- **the premise was real, by a path nobody had guessed.** This was the one task in
+  the batch whose premise I could not confirm when I wrote it, hence its
+  investigate-first criterion. Code-review implied the picker could be used
+  alongside a paste; that is not it. The dialog is deliberately built so `linked`
+  (a target selected) and `listed` (chips parsed) are mutually exclusive, and FOUR
+  of the five writers of `target` are gated behind `!listed`. The fifth is not:
+  `pick(match)` inside `submit()` itself, on the server's `link_player` tripwire.
+  Route: paste twelve addresses, press Send; if the FIRST address belongs to a
+  coach-managed unclaimed roster row, the RPC refuses, the dialog helpfully
+  selects that row, and the run takes an early return that does not clear
+  `emails`. The coach is left looking at a target AND twelve chips, footer reading
+  "Send 12 invites". The NEXT press binds all twelve to one profile. Only `i === 0`
+  leaks — every later iteration hits the receipt branch, which does clear them.
+- **changed:** `if (result.linkTo)` → `if (result.linkTo && !listed)`, so the fifth
+  writer catches up to the invariant the other four already obey. The "nothing has
+  gone out" error now names the offending address when a list is present, because
+  with auto-select suppressed a generic refusal gives a coach no way to tell which
+  of N chips caused it; single-address behaviour is byte-identical. One paragraph
+  added to the file's header comment. The sequential loop and its one-open-invite
+  race comment are untouched.
+- **proof re-walked, not accepted:** I asked 5b to verify the five-step
+  reachability argument against the source rather than take it, because if any
+  step were wrong the fix would be hardening a path nobody can take. Every step
+  held. It traced `linkTo.profileId` end to end — `program_players.id` →
+  `program_roster_full`'s `pp.id` → `team-roster-server.ts:357` →
+  `RosterMember.profileId` → `ManagedPlayer.profileId` — to establish the
+  `managedPlayers.find(...)` genuinely always hits, and confirmed the `i === 0`
+  confinement from the branch structure.
+- **the cost of suppressing the tripwire was judged, not assumed:** with the guard,
+  a list-mode refusal no longer auto-selects. The guardrails reviewer checked
+  whether that strands a coach and found it does not — the error reads
+  "coach@school.edu — P. Sharma is already on this roster without an account", the
+  chip is still on screen with its own remove button, and the next move is
+  directly executable. It also confirmed the true single-address flow (address
+  left in the draft field, never chipped) still auto-binds exactly as before, so
+  the guard suppresses only the case where auto-selecting WAS the bug.
+- **no test, and that is honest:** the change is a condition on a `pick()` call and
+  an error-string branch inside a `"use client"` submit handler awaiting a server
+  action. Nothing pure is reachable; `tests/` are Playwright-runner unit tests over
+  `src/lib` pure functions and this repo has no component-rendering setup.
+  Extracting `submit()` to test it would mean lifting the run loop, its
+  `useTransition` and five setters out of the component — a far bigger change than
+  this task warrants. I told the reviewer explicitly not to accept a faked or
+  trivial test as an alternative; it judged the omission honest.
+- **A DATABASE-SIDE GAP THIS FIX DOES NOT CLOSE — confirmed from the migrations,
+  queued as T21.** `create_program_invite` never checks whether another open
+  invite already names the same `p_player_id`: no lookup, no unique index, and the
+  upsert conflict target is `(program_id, lower(email)) where accepted_at is null`
+  — keyed on the ADDRESS. So N open invitations to N addresses may all carry one
+  `player_id`, and a crafted client call still can. `accept_program_invite` closes
+  the race correctly (`where claimed_by_user_id is null`, first clicker wins) but
+  every later invitee returns `already_claimed` BEFORE `accepted_at` is stamped —
+  so their row stays open, which is precisely the state the seat-reservation count
+  treats as reserved. The seat stays held with no path to release it short of the
+  coach deleting the row by hand. A client guard is not a security boundary and
+  was never claimed to be one; the new comment says so. Authorization itself is
+  sound: the RPC checks `is_program_staff` before any write and validates the
+  player belongs to the caller's program, so the gap is same-program only.
+- **adjacent bug, correctly NOT fixed here:** the footer's Cancel and Done call the
+  `onOpenChange` prop directly rather than the wrapper that calls `reset()`, so
+  closing by those two leaves dialog state — including a `target` — in place for
+  the next open. Escape, overlay click and the shell's X do reset. Separate task.
