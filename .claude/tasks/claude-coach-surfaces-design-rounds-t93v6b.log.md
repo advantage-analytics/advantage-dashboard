@@ -1426,3 +1426,28 @@ is the runner's. Newest entries at the bottom.
   `single-detail.tsx` were not touched — not named by the task, and
   tournament-entry visibility narrowing is a distinct question neither T34
   nor T38 addressed.
+
+## T20 · Give a program its own timezone — blocked
+
+- **gate:** not dispatched. Both this task's own notes and T21's require live-
+  database verification before writing a migration ("verify against the LIVE
+  database via the Supabase MCP... if execute_sql/list_tables are still
+  unavailable, say so and mark this blocked rather than writing a migration
+  against an unverified schema"). Checked via ToolSearch before dispatch: the
+  Supabase MCP in this session still exposes only `query_logs` — no
+  `execute_sql`, `list_tables`, or `apply_migration`. Per the task's own
+  instruction, marking `blocked` without spending a subagent on schema work
+  that cannot be verified.
+- **changed:** status line only. No code touched.
+- **unblocks when:** `execute_sql` or `list_tables` becomes available on the
+  Supabase MCP for this project — needs the user.
+
+## T21 · One managed profile can hold any number of open invitations — blocked
+
+- **gate:** not dispatched, same reason as T20 — this task's own notes direct
+  the identical fallback ("Schema work: only query_logs was exposed in this
+  session, so if execute_sql/list_tables are still unavailable, mark this
+  blocked rather than writing a migration against an unverified schema").
+  Same MCP check as T20, same result: only `query_logs` exposed.
+- **changed:** status line only. No code touched.
+- **unblocks when:** same as T20.

@@ -463,7 +463,7 @@ ready).
 - **notes:** Found by `/simplify` during `/pr-check` and deliberately deferred: `getScheduleRows` and `getEventDetail` are separately `cache()`d over one uncached inner function, so React's cache dedupes neither. Render cost went from 7 queries / 2 deep to 19 / 9 with a dual in range. Deferred at the time because rewriting a loader straight after per-task review would merge code no reviewer had seen — which is the reason it is a task rather than a fix.
 
 ## T20 · Give a program its own timezone
-- **status:** todo
+- **status:** blocked
 - **files:** a new migration under `supabase/migrations/`; `src/lib/data/team-home-server.ts` (`PROGRAM_TIME_ZONE`, `localDay`, `weekBounds`); wherever the program record is read into `getTeamHomeData`
 - **done when:**
   - [ ] `programs` carries a timezone column with a sane default, and the migration backfills existing rows rather than leaving them null
@@ -476,7 +476,7 @@ ready).
 - **notes:** Criteria corrected during `/pr-check`'s `/simplify` pass — as first written this task would have PASSED while leaving the bug in, because its `done when:` list named only `PROGRAM_TIME_ZONE`, `localDay` and `weekBounds`, and the invite countdown reaches the constant by a different route. The other half of T12, which pinned UTC explicitly and made the comments honest but left the bug: a Pacific program's weekend dual sheet still leaves Team Home around 17:00 PT Sunday, because midnight UTC rolls the week forward while the coach is still reading about Saturday's dual. T12 deliberately shaped `localDay`/`weekBounds` so this is a one-line change from a constant to a field. `programs.state` was considered as a substitute and rejected — Arizona keeps no DST and nine states straddle two zones. Schema work, so verify the live database via the Supabase MCP before writing the migration; note that in this session only `query_logs` was exposed, so if `execute_sql`/`list_tables` are still unavailable, say so and mark this `blocked` rather than writing a migration against an unverified schema.
 
 ## T21 · One managed profile can hold any number of open invitations
-- **status:** todo
+- **status:** blocked
 - **files:** a new migration under `supabase/migrations/`; possibly `src/components/dashboard/settings/team-actions.ts` for the error mapping
 - **done when:**
   - [ ] `create_program_invite` refuses a `p_player_id` that already has an open invitation on a different address, or a partial unique index makes it impossible — verify against the LIVE database before writing either, per CLAUDE.md
