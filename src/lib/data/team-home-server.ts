@@ -1743,7 +1743,7 @@ export async function getTeamHomeData(
   // The schedule page's own rows, off the schedule page's own mapping. The KPI
   // strip's dual record is `teamScore` on these, so "did we win that dual" is
   // one answer read twice rather than two answers that can drift.
-  const scheduleRows = scheduleRowsFrom(programSchedule);
+  const scheduleRows = scheduleRowsFrom(programSchedule, scope);
 
   // Still "the soonest event the program has not finished yet". `ends_on`, not
   // `starts_on`: a tournament that began on Thursday is still the next thing on

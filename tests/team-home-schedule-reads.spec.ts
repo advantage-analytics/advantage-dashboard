@@ -146,22 +146,28 @@ test.describe('scheduleRowsFrom · one mapping, two surfaces', () => {
       entry('a', { slot: 'S1', matches: [won('m1')] }),
       entry('b', { slot: 'S2', matches: [] }),
     ];
-    const [row] = scheduleRowsFrom({
-      events: [dualEvent()],
-      entriesByEvent: new Map([['ev', entries]]),
-    });
+    const [row] = scheduleRowsFrom(
+      {
+        events: [dualEvent()],
+        entriesByEvent: new Map([['ev', entries]]),
+      },
+      'program'
+    );
     expect(row.teamScore).toBeNull();
     expect(row.entryCount).toBe(2);
     expect(row.playedCount).toBe(1);
   });
 
   test('a tournament never carries a team score, however complete it is', () => {
-    const [row] = scheduleRowsFrom({
-      events: [{ ...dualEvent(), kind: 'tournament' }],
-      entriesByEvent: new Map([
-        ['ev', [entry('a', { matches: [won('m1')] })]],
-      ]),
-    });
+    const [row] = scheduleRowsFrom(
+      {
+        events: [{ ...dualEvent(), kind: 'tournament' }],
+        entriesByEvent: new Map([
+          ['ev', [entry('a', { matches: [won('m1')] })]],
+        ]),
+      },
+      'program'
+    );
     expect(row.teamScore).toBeNull();
     expect(row.playedCount).toBe(1);
   });
@@ -182,20 +188,23 @@ test.describe('scheduleRowsFrom · one mapping, two surfaces', () => {
         })
       ),
     ];
-    const [row] = scheduleRowsFrom({
-      events: [dualEvent()],
-      entriesByEvent: new Map([['ev', entries]]),
-    });
+    const [row] = scheduleRowsFrom(
+      {
+        events: [dualEvent()],
+        entriesByEvent: new Map([['ev', entries]]),
+      },
+      'program'
+    );
     // Four singles courts plus the doubles point.
     expect(row.teamScore).toEqual({ us: 5, them: 2 });
     expect(row.playedCount).toBe(9);
   });
 
   test('an event with no entries is a row, not a gap', () => {
-    const [row] = scheduleRowsFrom({
-      events: [dualEvent()],
-      entriesByEvent: new Map(),
-    });
+    const [row] = scheduleRowsFrom(
+      { events: [dualEvent()], entriesByEvent: new Map() },
+      'program'
+    );
     expect(row.entryCount).toBe(0);
     expect(row.playedCount).toBe(0);
     expect(row.teamScore).toBeNull();

@@ -668,7 +668,7 @@ ready).
 - **notes:** Found by `code-review` during `/pr-check`. `scheduleVariant` is `nextEvent ? "done" : "active"`, and `nextEvent` is upcoming-only by design. Combined with `FirstSteps` now rendering for all staff rather than only on an empty page, an established program's Team Home re-mounts the onboarding checklist every time the last scheduled event passes — telling a coach who has run a season to "Add your first event". The component's own header says "The row leaves once… nothing is left behind to explain where it went"; this is the case where it comes back.
 
 ## T38 · The schedule page has T34's bug on a second surface
-- **status:** todo
+- **status:** done
 - **files:** `src/lib/data/schedule-server.ts` (~256, the `dualScore` call); `src/components/dashboard/schedule/dual-detail.tsx` (~39); `src/lib/data/results-visibility.ts` (`resultsScope`, already exists)
 - **done when:**
   - [ ] A player on a `roster_visible = false` program is not shown a dual score on `/dashboard/team/schedule` or on an event's detail card, for the same reason T34 withheld it on Team Home

@@ -1382,3 +1382,47 @@ is the runner's. Newest entries at the bottom.
   gate can only ever withhold, so a stale reading costs a coach nothing and costs
   an entitled player a number they could have seen — the safe direction, but not a
   verified one.
+
+## T38 · The schedule page has T34's bug on a second surface
+
+- **verdict: pass.** 5a green — `npx tsc --noEmit` exit 0; `npm run lint` 0
+  errors / 38 warnings, all pre-existing, none in a touched file; `npm test`
+  **198 passed**, up from 196.
+- **both premises held.** Neither the schedule list nor the event detail route
+  is staff-gated for visibility — `canEdit`/`isProgramStaff(active)` gates only
+  the edit affordances, so both surfaces are confirmed player-reachable and
+  the task's presumption was correct.
+- **box 1 & 2 — gate reused, not forked.** `scheduleRowsFrom` and `DualDetail`
+  both take `scope: ResultsScope` as a required parameter and import
+  `resultsScope`/`ResultsScope` from T34's `results-visibility.ts` — no second
+  rule. Neither schedule route had `roster_visible` already in hand (unlike
+  Team Home's free ride off `getTeamSettings()`), so one minimal new read,
+  `programRosterVisible()`, was added — a single-column `programs` select,
+  matching `getRosterData`'s own precedent rather than pulling in the larger
+  `getTeamSettings()`. Fails closed the same way: `Boolean(data?.roster_visible)`.
+- **box 3 — verified in the diff, not the summary.** `DualDetail`'s `score` is
+  `scope === "program" ? dualScore(entries) : null`; every downstream read
+  (`anyPlayed`, `singlesScore`, `doublesScore`, the win/loss badge, the "final"
+  eyebrow) is null-guarded off it, and the withheld branch renders
+  `RESULTS_WITHHELD_SENTENCE` — the same sentence T34 used, not new copy.
+- **box 4 — confirmed by reading `line-row.tsx`, not by trusting the claim.**
+  `Action()`'s `state === "empty" && !canEdit → return null` already exists
+  and predates this task. `canEdit` is `isProgramStaff(active)` at both page
+  call sites — the identical predicate `resultsScope` gates staff on — so a
+  player never has `canEdit` and a withheld line already renders nothing
+  rather than "Not played", for every player-reachable case. No new field
+  needed; T38 correctly did not add one.
+- **test isolates the gate as the one variable.** The new
+  `scheduleRowsFrom` spec runs the identical 4–3 fixture through both scopes —
+  `{us:4, them:3}` on `PROGRAM`, `null` on `OWN` — the same shape as T34's own
+  "identical rows" tests.
+- **flagged, not actioned:** the implementer noted `ScheduleRow.playedCount`/
+  `workingCount` and the list's "N of 9 in"/"final" cell are also computed via
+  `entryPlayed`/`isWorking` over possibly-narrowed `entries` and can
+  under-report the same way — out of T38's named scope (which pointed at the
+  `dualScore` consumers specifically), not evaluated further here. Worth a
+  follow-up task if confirmed.
+- **also out of scope, correctly:** `tournament-detail.tsx` and
+  `single-detail.tsx` were not touched — not named by the task, and
+  tournament-entry visibility narrowing is a distinct question neither T34
+  nor T38 addressed.

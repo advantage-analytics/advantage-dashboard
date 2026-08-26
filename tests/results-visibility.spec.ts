@@ -6,6 +6,7 @@ import {
   type ResultsScope,
 } from '@/lib/data/results-visibility';
 import { buildWeekendDual, teamKpis } from '@/lib/data/team-home-server';
+import { scheduleRowsFrom } from '@/lib/data/schedule-server';
 import type { MatchAnalysis } from '@/lib/data/match-analysis';
 import type { DbSeasonMatch } from '@/lib/data/team-home-server';
 import type {
@@ -269,6 +270,46 @@ const JOBS = new Map<string, MatchAnalysis>(
   SEASON.map((row) => [row.id, ANALYZED])
 );
 const ROSTER = new Set(['ana-user']);
+
+// ---------------------------------------------------------------------------
+// The schedule list
+// ---------------------------------------------------------------------------
+
+/**
+ * `scheduleRowsFrom` off the same `dual()` fixture `buildWeekendDual` is
+ * tested against above — the schedule list's `teamScore` is `dualScore` over
+ * the same entries as the dual sheet's tally, so a read that narrows one
+ * narrows the other. `tests/team-home-schedule-reads.spec.ts` covers the
+ * arithmetic on a full read; this covers the refusal.
+ */
+test.describe('scheduleRowsFrom · the schedule list withholds the same score', () => {
+  test('a full read gets the team score', () => {
+    const detail = dual(null);
+    const [row] = scheduleRowsFrom(
+      {
+        events: [detail.event],
+        entriesByEvent: new Map([[detail.event.id, detail.entries]]),
+      },
+      PROGRAM
+    );
+    expect(row.teamScore).toEqual({ us: 4, them: 3 });
+  });
+
+  test('a player handed one line of nine gets no team score at all', () => {
+    // Same dual the program won 4–3; `dual('S3')` is the one line a restricted
+    // player's read comes back with. Uncounted, `dualScore` over what arrived
+    // would print 1–0 under the fixture's name.
+    const detail = dual('S3');
+    const [row] = scheduleRowsFrom(
+      {
+        events: [detail.event],
+        entriesByEvent: new Map([[detail.event.id, detail.entries]]),
+      },
+      OWN
+    );
+    expect(row.teamScore).toBeNull();
+  });
+});
 
 test.describe('teamKpis · the strip is the program or it is nothing', () => {
   test('a full read gets its tiles', () => {

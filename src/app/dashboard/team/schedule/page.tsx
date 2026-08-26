@@ -22,7 +22,7 @@ export default async function SchedulePage() {
   // empty schedule belonging to nobody.
   if (active.kind !== "team") redirect("/dashboard");
 
-  const rows = await getScheduleRows(active.id);
+  const rows = await getScheduleRows(active.id, active.role);
 
   return (
     <div className="w-full flex-1 bg-[var(--surface-card)]">
