@@ -184,7 +184,8 @@ test.describe('a match carrying the pre-claim user id', () => {
       NO_JOBS,
       NO_STATS,
       NO_SCHEDULE,
-      ROSTER_IDS
+      ROSTER_IDS,
+      'program'
     );
 
     const setsWon = tiles.find((tile) => tile.key === 'sets-won');
@@ -259,7 +260,8 @@ test.describe('which side, not merely whose match', () => {
       NO_JOBS,
       NO_STATS,
       NO_SCHEDULE,
-      ROSTER_IDS
+      ROSTER_IDS,
+      'program'
     ).find((tile) => tile.key === 'sets-won');
     expect(setsWon?.value).toBe('0%');
   });
@@ -291,7 +293,8 @@ test.describe('staff seats keep working exactly as they do now', () => {
       NO_JOBS,
       NO_STATS,
       NO_SCHEDULE,
-      ROSTER_IDS
+      ROSTER_IDS,
+      'program'
     ).find((tile) => tile.key === 'sets-won');
     expect(setsWon?.sample).toBe(1);
   });
@@ -318,7 +321,8 @@ test.describe('staff seats keep working exactly as they do now', () => {
         NO_JOBS,
         NO_STATS,
         NO_SCHEDULE,
-        ROSTER_IDS
+        ROSTER_IDS,
+        'program'
       ).find((tile) => tile.key === 'sets-won')
     ).toBeUndefined();
   });

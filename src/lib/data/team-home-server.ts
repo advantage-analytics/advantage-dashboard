@@ -29,6 +29,10 @@ import {
 import { meanOfPresent, pct, statKey } from "@/lib/data/aggregate";
 import { rosterMatchIds } from "@/lib/data/roster-ids";
 import {
+  resultsScope,
+  type ResultsScope,
+} from "@/lib/data/results-visibility";
+import {
   countTile,
   seriesTile,
   type TeamKpiObservation,
@@ -51,6 +55,7 @@ import {
 } from "@/lib/schedule/entry-state";
 import type { EventEntry, EventKind, EventSite } from "@/lib/schedule/types";
 import { INVITE_TTL_HOURS } from "@/lib/services/programs/tokens";
+import type { ProgramRole } from "@/lib/workspace/types";
 
 /**
  * What the program's home page reads.
@@ -282,6 +287,20 @@ export interface DualSheetLine {
   state: EntryState;
   /** The match to read a report on — set only where analysis produced one. */
   reportId: string | null;
+  /**
+   * May the viewer read this line's result at all?
+   *
+   * False only under a narrowed read (`resultsScope() === "own"`) on a line
+   * whose match did not come back. Under that read the two reasons a line can
+   * arrive empty — *nobody has played it* and *it is not ours to see* — are
+   * indistinguishable from the rows, so the card must claim neither: `state` is
+   * still `"empty"`, and this is what stops the sheet spelling that as **"Not
+   * played"**. It was very likely played.
+   *
+   * Always true for staff and on a roster-visible program, where an empty line
+   * really is an empty line.
+   */
+  readable: boolean;
 }
 
 /**
@@ -305,6 +324,33 @@ export interface WeekendDual {
   startsOn: string;
   /** Position order: S1–S6, then D1–D3. */
   lines: DualSheetLine[];
+  /**
+   * Where the dual stands — **or null when the viewer cannot read every line.**
+   *
+   * Null is not "nothing has happened yet"; it is *this reader is not the one
+   * who can be told*. A player on a program with `roster_visible` unset gets
+   * every entry (they are member-visible) and only their own match, so a tally
+   * counted off what came back would say **0–1 · S 0–1 · D 0–0** on a dual the
+   * team won 4–3. Every figure in here is derived from `matches` rows, so all
+   * of them fall together rather than a subset of them surviving — the S/D
+   * split, the clinch and "N of 9 in" are the same claim stated three more
+   * ways. `resultsScope()` decides; see `lib/data/results-visibility.ts`.
+   *
+   * The card renders the lines either way — the lineup is a fact the player is
+   * entitled to, and it is what the schedule page already shows them — and puts
+   * the Roster page's sentence where the score would be.
+   */
+  tally: DualTally | null;
+}
+
+/**
+ * A dual's score and everything that follows from it.
+ *
+ * One object rather than seven fields on `WeekendDual`, so "we cannot count
+ * this honestly" is a single null the type system makes the card handle,
+ * instead of seven zeroes that render as a result.
+ */
+export interface DualTally {
   /** Team points, from `dualScore` — six singles and one doubles point. */
   us: number;
   them: number;
@@ -619,7 +665,8 @@ function oursFirst(
 function dualLines(
   entries: EventEntry[],
   discipline: "singles" | "doubles",
-  prefix: "S" | "D"
+  prefix: "S" | "D",
+  scope: ResultsScope
 ): DualSheetLine[] {
   return entries
     .filter((entry) => entry.discipline === discipline)
@@ -646,6 +693,12 @@ function dualLines(
         // returns "ready" for exactly that — analysis ready AND video actually
         // sent — so a hand-scored line offers no link to a page of zeroes.
         reportId: state === "ready" && match ? match.id : null,
+        // A match in hand is a match we may read, whoever is asking. What the
+        // scope decides is what an EMPTY line means: on a full read it is a
+        // line nobody has played, and on a narrowed one it is that or a line
+        // RLS withheld, with nothing in the row to tell them apart. See
+        // `DualSheetLine.readable`.
+        readable: scope === "program" || match !== null,
       };
     });
 }
@@ -718,8 +771,16 @@ export function weekendDualRow<T extends { kind: string; startsOn: string }>(
  * `getEventDetail`, which is RLS-scoped and refuses another program's event —
  * both of which the read that produced `detail` has already done — at the cost
  * of reading the same three tables a second time in the same render.
+ *
+ * **Exported for `tests/results-visibility.spec.ts` only**, on the same terms as
+ * `weekendDualRow` above: the page reaches it through `getTeamHomeData`, and
+ * what is worth pinning is that a reader who cannot see every line is handed no
+ * tally and no line claiming to be unplayed. Nothing here performs I/O.
  */
-function buildWeekendDual(detail: EventDetail | null): WeekendDual | null {
+export function buildWeekendDual(
+  detail: EventDetail | null,
+  scope: ResultsScope
+): WeekendDual | null {
   // A dual with no lines is not a sheet with nothing in it — it is not a sheet.
   // `createDual` rolls the event back if its lines fail to write, so this is a
   // shape the product does not produce; it renders nothing rather than a header
@@ -727,6 +788,35 @@ function buildWeekendDual(detail: EventDetail | null): WeekendDual | null {
   if (!detail || detail.entries.length === 0) return null;
 
   const { event, entries } = detail;
+
+  return {
+    id: event.id,
+    opponent: event.name,
+    site: event.site,
+    surface: event.surface,
+    startsOn: event.startsOn,
+    lines: [
+      ...dualLines(entries, "singles", "S", scope),
+      ...dualLines(entries, "doubles", "D", scope),
+    ],
+    // Not counted at all under a narrowed read. Every function below —
+    // `dualScore`, `dualBreakdown`, `entryPlayed` — answers off the matches
+    // attached to these entries, and under `scope === "own"` that is one match
+    // out of nine with no marker on the other eight saying they existed. There
+    // is no honest number to compute, so none is: `null` reaches the card and
+    // the card says whose rule withheld it. See `WeekendDual.tally`.
+    tally: scope === "program" ? dualTally(entries) : null,
+  };
+}
+
+/**
+ * The tally, once we know it can be counted.
+ *
+ * Split out of `buildWeekendDual` so the arithmetic sits behind the one gate
+ * that decides whether it may run at all — a `dualScore()` computed and then
+ * discarded is a number waiting for somebody to notice it is already there.
+ */
+function dualTally(entries: EventEntry[]): DualTally {
   const score = dualScore(entries);
 
   // What this dual can award: one point per singles court, plus the single
@@ -748,15 +838,6 @@ function buildWeekendDual(detail: EventDetail | null): WeekendDual | null {
           : null;
 
   return {
-    id: event.id,
-    opponent: event.name,
-    site: event.site,
-    surface: event.surface,
-    startsOn: event.startsOn,
-    lines: [
-      ...dualLines(entries, "singles", "S"),
-      ...dualLines(entries, "doubles", "D"),
-    ],
     us: score.us,
     them: score.them,
     decided: score.decided,
@@ -1361,8 +1442,32 @@ export function teamKpis(
   jobs: Map<string, MatchAnalysis>,
   stats: DbTeamStat[],
   schedule: ScheduleRow[],
-  rosterIds: ReadonlySet<string>
+  rosterIds: ReadonlySet<string>,
+  scope: ResultsScope
 ): TeamKpiTile[] {
+  // **No strip at all on a narrowed read**, and `scope` is a required argument
+  // rather than an optional one so no caller can arrive without having asked.
+  //
+  // Every tile here is labelled as the program's — "Matches analyzed", "Sets
+  // won", "Team 1st serve", "Dual record" — and every one is computed over
+  // `rows`, which is `matches` as RLS handed it back. For a player on a program
+  // with `roster_visible` unset that is their own matches and nobody else's, so
+  // the four figures would be that one player's, printed under the team's name,
+  // with no arithmetic anywhere able to notice: three analyzed matches is a
+  // real count of a real set of rows. `sampleNote()` does not save it either —
+  // a player with five of their own analyzed matches clears `SMALL_SAMPLE_MIN`
+  // and gets no caveat at all.
+  //
+  // Withheld rather than relabelled, which is what the Roster page does with
+  // the same flag: "Dual record" has no per-player meaning to relabel it into,
+  // and a strip where some tiles mean the team and others mean you is a worse
+  // sentence than no strip. The player's own figures are the whole subject of
+  // `/dashboard` and `/dashboard/statistics`, correctly labelled, one rail item
+  // away. `dual-record` already failed closed here by accident — `decided`
+  // needs `entries.every(entryPlayed)`, which this reader can essentially never
+  // satisfy — and an accident is not a rule.
+  if (scope !== "program") return [];
+
   // Oldest first. The read arrives newest-first, like the list's, and every
   // series below is chronological by definition — a sparkline drawn backwards
   // is a trend reported in reverse.
@@ -1467,9 +1572,17 @@ export function teamKpis(
   return tiles;
 }
 
+/**
+ * @param viewerRole The caller's role in THIS program — `active.role` off the
+ *   workspace context. It is not decoration: with `programs.roster_visible` it
+ *   is what tells this loader whether the `matches` rows it is about to reduce
+ *   are the program's or one player's, which nothing about the rows themselves
+ *   will say. See `lib/data/results-visibility.ts`.
+ */
 export async function getTeamHomeData(
   programId: string,
-  billingMonth: string
+  billingMonth: string,
+  viewerRole: ProgramRole
 ): Promise<TeamHomeData> {
   const supabase = await createClient();
 
@@ -1549,6 +1662,20 @@ export async function getTeamHomeData(
       getProgramSchedule(programId),
     ]);
 
+  // **How much of this program the read above actually returned**, decided
+  // once, here, where both halves of the answer are in hand: the viewer's role
+  // and `programs.roster_visible` — which `getTeamSettings` has already
+  // fetched, so this costs no round trip. Everything below that reduces
+  // `matches` to a program-wide claim is gated on it.
+  //
+  // A missing `team` means the `programs` row did not come back, which should
+  // not happen (the row is publicly readable) but must fail closed if it does:
+  // `false` narrows the page rather than widening it.
+  const scope = resultsScope({
+    role: viewerRole,
+    rosterVisible: team?.program.rosterVisible ?? false,
+  });
+
   const season = (seasonRows ?? []) as DbSeasonMatch[];
   const seasonIds = season.map((row) => row.id);
   // One analysis read for both consumers. The list's six rows are a subset of
@@ -1627,7 +1754,7 @@ export async function getTeamHomeData(
   // `programSchedule` with its lines under it.
   const dualRow = weekendDualRow(upcoming, week, today);
   const weekendDual = dualRow
-    ? buildWeekendDual(eventDetailFrom(programSchedule, dualRow.id))
+    ? buildWeekendDual(eventDetailFrom(programSchedule, dualRow.id), scope)
     : null;
 
   // `people`, not `team?.members`: the seat list has no row for a
@@ -1644,7 +1771,7 @@ export async function getTeamHomeData(
   return {
     usage,
     matches,
-    kpis: teamKpis(season, jobs, stats, scheduleRows, rosterIds),
+    kpis: teamKpis(season, jobs, stats, scheduleRows, rosterIds, scope),
     // Same three inputs the strip is built from, and deliberately the same
     // `jobs` map: the checklist saying a report is back while the strip counts
     // no analyzed match would be two answers about one program, on one screen.

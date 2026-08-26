@@ -623,7 +623,7 @@ ready).
   Two shapes worth weighing. **Extract the decision** — the `linked`/`listed` derivation and "which `playerId` does address N get" are pure given the form's state, so lifting them into a testable function beside the component gets a real spec with no harness; T26 (make the bad state unrepresentable by deriving `target` from `listed`) would create exactly that seam, so doing T26 first may make this nearly free. **Or add the harness** — honest, larger, and it would serve `roster-table.tsx` and the wizard too, but it is a change to how this repo tests and should be decided on its own merits rather than smuggled in under a guard fix.
 
 ## T34 · Team Home shows a player RLS-subset data under program-wide labels
-- **status:** doing
+- **status:** done
 - **files:** `src/app/dashboard/team/page.tsx` (~232, ~262); `src/components/dashboard/team/dual-sheet.tsx`; `src/components/dashboard/team/kpi-strip.tsx`; `src/lib/data/team-home-server.ts` (`teamKpis`, `dualLines`); `src/lib/schedule/entry-state.ts` (`dualScore`, `entryPlayed`)
 - **done when:**
   - [ ] A player on a `roster_visible = false` program is never shown a dual score or a "Team" figure derived from rows RLS handed back for them alone — either the surface is withheld, or it says whose figures it is showing
@@ -666,3 +666,14 @@ ready).
   - [ ] `scheduleVariant` distinguishes "never had a schedule" from "has no UPCOMING event", which is what it keys on today
   - [ ] The row still leaves once and stays gone, which is the rule its own doc comment states
 - **notes:** Found by `code-review` during `/pr-check`. `scheduleVariant` is `nextEvent ? "done" : "active"`, and `nextEvent` is upcoming-only by design. Combined with `FirstSteps` now rendering for all staff rather than only on an empty page, an established program's Team Home re-mounts the onboarding checklist every time the last scheduled event passes — telling a coach who has run a season to "Add your first event". The component's own header says "The row leaves once… nothing is left behind to explain where it went"; this is the case where it comes back.
+
+## T38 · The schedule page has T34's bug on a second surface
+- **status:** todo
+- **files:** `src/lib/data/schedule-server.ts` (~256, the `dualScore` call); `src/components/dashboard/schedule/dual-detail.tsx` (~39); `src/lib/data/results-visibility.ts` (`resultsScope`, already exists)
+- **done when:**
+  - [ ] A player on a `roster_visible = false` program is not shown a dual score on `/dashboard/team/schedule` or on an event's detail card, for the same reason T34 withheld it on Team Home
+  - [ ] The gate is `resultsScope()` — the module T34 created — not a second rule. If either call site cannot reach the viewer's role and the program flag, thread them the way `getTeamHomeData` does rather than inventing a local answer
+  - [ ] A line the viewer cannot read does not render as played-or-unplayed on these surfaces either, consistent with `DualSheetLine.readable`
+  - [ ] A test covers a narrowed read on the schedule list the way `tests/results-visibility.spec.ts` covers the dual sheet
+- **notes:** Found while gating T34, by grepping every `dualScore()` call site rather than only the ones the task named. T34 fixed Team Home's dual sheet and KPI strip; `dualScore` has two more production callers and neither was in T34's scope: `schedule-server.ts:256` (`event.kind === "dual" ? dualScore(entries) : null`) and `dual-detail.tsx:39`. Both reduce entries to a team score with no knowledge of whether the read was narrowed, which is exactly the shape T34's notes describe — a confident, wrong, low score, `0–1` on a dual won `4–3`.
+  Unverified whether both surfaces are player-reachable; `program_events` is member-visible and the schedule page is on the player's rail, so the presumption is yes and that should be confirmed first. The mechanism is already built and tested, so this should be small — it is the same gate applied to two more call sites, not a new decision.

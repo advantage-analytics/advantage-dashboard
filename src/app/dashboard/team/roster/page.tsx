@@ -11,6 +11,8 @@ import { RowAction } from "@/components/dashboard/schedule/row-action";
 import {
   invitesPendingLabel,
   playersLabel,
+  resultsVisibilityPhrase,
+  resultsVisibilitySentence,
 } from "@/components/dashboard/team/roster-vocabulary";
 
 export const metadata = { title: "Roster" };
@@ -51,9 +53,10 @@ export default async function RosterPage() {
   const eyebrow = squad ? `${active.name} · ${squad}` : active.name;
 
   const playerCount = roster.members.filter((m) => m.role === "player").length;
-  const visibility = roster.rosterVisible
-    ? "visible to everyone on the team"
-    : "visible to coaches only";
+  // `programs.roster_visible`, in the roster's own words. Shared with Team
+  // Home's dual sheet, which withholds a tally it cannot compute honestly for a
+  // player on a closed program and says so in this same sentence.
+  const visibility = resultsVisibilityPhrase(roster.rosterVisible);
 
   // Assembled as text rather than as nested JSX: it is one sentence, and the
   // separators only read right when the empty clauses are gone before the join.
@@ -119,7 +122,7 @@ export default async function RosterPage() {
             <p className="text-body-sm tabular mt-1">
               {canManage
                 ? standing
-                : `Your coaching staff manage who is on the program and who can send video. Match results are ${visibility}.`}
+                : `Your coaching staff manage who is on the program and who can send video. ${resultsVisibilitySentence(roster.rosterVisible)}`}
             </p>
           </div>
 

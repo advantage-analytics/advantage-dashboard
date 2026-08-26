@@ -6,7 +6,15 @@ import { ScoreLine } from "@/components/dashboard/score-line";
 import { RowAction } from "@/components/dashboard/schedule/row-action";
 import { formatEventDay, siteTitle } from "@/lib/schedule/format";
 import { LINE_STATUS } from "@/lib/schedule/line-status";
-import type { DualSheetLine, WeekendDual } from "@/lib/data/team-home-server";
+import {
+  RESULTS_WITHHELD_LABEL,
+  RESULTS_WITHHELD_SENTENCE,
+} from "@/components/dashboard/team/roster-vocabulary";
+import type {
+  DualSheetLine,
+  DualTally,
+  WeekendDual,
+} from "@/lib/data/team-home-server";
 
 /**
  * 44a — this week's dual, as a sheet.
@@ -27,6 +35,16 @@ import type { DualSheetLine, WeekendDual } from "@/lib/data/team-home-server";
  * schedule list ask. This file draws them and adds no arithmetic of its own: a
  * dual score that disagrees with the lines printed under it is exactly the
  * failure a derived tally exists to prevent.
+ *
+ * **And nothing here is counted on a reader's behalf who cannot see it all.**
+ * The lineup is member-visible; the results are not. A player on a program with
+ * `programs.roster_visible` unset gets all nine lines and one match, so
+ * `team-home-server.ts` hands this card `tally: null` and marks the lines it
+ * could not read — the header prints the Roster page's sentence instead of a
+ * score, and an unreadable line says **"Coaches only"** rather than "Not
+ * played". Their own line still shows its score and its report link: it is
+ * theirs. What this file must never do is put those two states back together
+ * and average them into something confident.
  *
  * **Round 44's row treatment**, the same as the Matches card below it: rows
  * hover to a `--surface-muted` wash on a rounded rect inset from the card edge
@@ -64,11 +82,6 @@ const ROW_SURFACE =
   "rounded-[var(--radius-element)] transition-colors duration-150 hover:bg-[var(--surface-muted)] has-[:focus-visible]:bg-[var(--surface-muted)]";
 
 export function DualSheet({ dual }: { dual: WeekendDual }) {
-  // ink-300 until a point is actually on the board, which is `dual-detail.tsx`'s
-  // rule for the same number: a 0–0 in full ink reads as a result rather than
-  // as the absence of one.
-  const anyPoint = dual.us > 0 || dual.them > 0;
-
   return (
     <section className="rounded-[var(--radius-card)] border border-[var(--border-medium)]">
       <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-4 px-6 pt-4 pb-3">
@@ -106,9 +119,9 @@ export function DualSheet({ dual }: { dual: WeekendDual }) {
                 rather than implied, because "clinched" and "finished" are
                 different facts about a dual and a coach reads for the first
                 one while courts are still going. */}
-            {dual.clinchedBy ? (
+            {dual.tally?.clinchedBy ? (
               <Fact icon={Flag}>
-                {dual.clinchedBy === "us"
+                {dual.tally.clinchedBy === "us"
                   ? "Clinched"
                   : `${dual.opponent} clinched`}
               </Fact>
@@ -116,30 +129,19 @@ export function DualSheet({ dual }: { dual: WeekendDual }) {
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <span
-            className="text-score leading-none"
-            style={{ color: anyPoint ? "var(--ink-900)" : "var(--ink-300)" }}
-          >
-            {dual.us}–{dual.them}
-          </span>
-
-          {/* The two halves the tally is made of, and they add up to it: six
-              singles points and the one point three doubles courts produce.
-              Then where the card is up to — "final" only once every line is in,
-              which is the same word and the same rule the schedule list prints
-              a dual under. */}
-          <span className="text-micro tabular">
-            S {dual.singles.us}–{dual.singles.them} · D {dual.doubles.us}–
-            {dual.doubles.them} ·{" "}
-            {dual.decided ? (
-              "final"
-            ) : (
-              <>
-                {dual.playedLines} of {dual.lines.length} in
-              </>
-            )}
-          </span>
+        {/* Where the dual stands — or, for a reader who cannot see every line,
+            the reason there is no number here. Not a dimmed score, not a score
+            with a caveat under it: `tally` is null precisely because no honest
+            one exists, and the type is what makes that unrenderable rather
+            than merely discouraged. */}
+        <div className="flex max-w-[24ch] shrink-0 flex-col items-end gap-1.5">
+          {dual.tally ? (
+            <Tally tally={dual.tally} lines={dual.lines.length} />
+          ) : (
+            /* The Roster page's sentence, word for word — one flag, one
+               explanation, wherever a program surface has to give it. */
+            <p className="text-micro text-right">{RESULTS_WITHHELD_SENTENCE}</p>
+          )}
         </div>
       </div>
 
@@ -201,6 +203,49 @@ function Fact({
 }
 
 /**
+ * The team score and the two halves it is made of.
+ *
+ * Its own component because it is the half of the header that can be absent:
+ * a `tally` in hand is the whole precondition for every number in here, and
+ * taking it as a non-null prop is what keeps the absent case from being an
+ * `?.` chain that renders `undefined–undefined` the day somebody loosens it.
+ */
+function Tally({ tally, lines }: { tally: DualTally; lines: number }) {
+  // ink-300 until a point is actually on the board, which is `dual-detail.tsx`'s
+  // rule for the same number: a 0–0 in full ink reads as a result rather than
+  // as the absence of one.
+  const anyPoint = tally.us > 0 || tally.them > 0;
+
+  return (
+    <>
+      <span
+        className="text-score leading-none"
+        style={{ color: anyPoint ? "var(--ink-900)" : "var(--ink-300)" }}
+      >
+        {tally.us}–{tally.them}
+      </span>
+
+      {/* The two halves the tally is made of, and they add up to it: six
+          singles points and the one point three doubles courts produce.
+          Then where the card is up to — "final" only once every line is in,
+          which is the same word and the same rule the schedule list prints
+          a dual under. */}
+      <span className="text-micro tabular">
+        S {tally.singles.us}–{tally.singles.them} · D {tally.doubles.us}–
+        {tally.doubles.them} ·{" "}
+        {tally.decided ? (
+          "final"
+        ) : (
+          <>
+            {tally.playedLines} of {lines} in
+          </>
+        )}
+      </span>
+    </>
+  );
+}
+
+/**
  * The end of the line: where to read it, or what it is waiting for.
  *
  * The waiting states are not spelled here. Their words, tones and the pulse on
@@ -213,6 +258,14 @@ function Fact({
  * it, and the line's own page is one click away through the card's heading.
  */
 function Trailing({ line }: { line: DualSheetLine }) {
+  // Nothing about this line came back, and under a narrowed read that is not a
+  // fact about the court — see `DualSheetLine.readable`. It was very likely
+  // played; this reader is not the one who gets told. First, because every
+  // test below is a claim about a match we would have to be able to see.
+  if (!line.readable) {
+    return <StatusChip>{RESULTS_WITHHELD_LABEL}</StatusChip>;
+  }
+
   if (line.reportId) {
     return <RowAction href={`/dashboard/matches/${line.reportId}`}>Report</RowAction>;
   }

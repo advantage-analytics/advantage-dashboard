@@ -1329,3 +1329,56 @@ is the runner's. Newest entries at the bottom.
   auto-merge preserved it — the pair I had flagged as riskiest resolved correctly
   with no conflict). The other branch brought ZERO test files, verified two ways,
   so 183 is the correct target and not a shortfall.
+
+## T34 · Team Home shows a player RLS-subset data under program-wide labels
+
+- **verdict: pass.** 5a green — `npm run lint` 0 errors / 38 warnings, none in a
+  touched file; `npx tsc --noEmit` exit 0; `npm test` **196 passed**, up from 183.
+- **5b was run by me, not by `task-completion-reviewer`.** The reviewer subagent
+  was dispatched and ran for ~25 minutes, then **died silently without delivering
+  a report** — its transcript stopped growing at 250521 bytes, no completion
+  notification ever queued, and `TaskStop` returned "No task found". This is a new
+  failure mode for this queue and worth remembering: a subagent can disappear
+  without the gate noticing, so an unreturned reviewer must be treated as *no
+  verdict*, never as a pass. I re-ran all six `done when:` boxes by hand against
+  primary sources.
+- **box 2 verified against the migration, not the paraphrase.** `resultsScope()`'s
+  doc quotes `20260822090400_match_access_by_player_identity.sql`; the real policy
+  at lines 61-82 matches it structurally. `is_program_staff` is
+  `user_program_role in ('owner','coach','staff')`
+  (`20260817073930_program_members.sql:100`), and `resultsScope` returns
+  `"program"` for every role except `'player'` — the two agree exactly, no gap.
+- **box 1 fails closed and has one call site each.** `scope` is computed once in
+  `getTeamHomeData` from `viewerRole` + `team?.program.rosterVisible ?? false`.
+  `teamKpis` takes it as a **required** 6th parameter (so tsc, not review, is what
+  stops a caller arriving without one) and returns `[]` before any arithmetic.
+  `buildWeekendDual` gates `tally` on `scope === "program"`. Greps confirm exactly
+  one production caller of each, both passing it.
+- **box 3 is enforced by the type, not by a conditional.** The score moved into a
+  `Tally` component taking a non-null `DualTally`; a narrowed read renders the
+  sentence instead. That is stronger than the box asked for — it makes the wrong
+  render unwritable rather than merely un-taken.
+- **box 4 verified by ordering.** `Trailing()` tests `!line.readable` *before*
+  `reportId` and before every branch that assumes a match. `readable` is
+  `scope === "program" || match !== null`, so a player's OWN line stays readable.
+- **box 5 is byte-identical.** `resultsVisibilityPhrase` returns the same two
+  strings and `resultsVisibilitySentence` reproduces `Match results are ${…}.`
+  exactly; the Roster page's rendered copy is unchanged.
+- **off-list files are consequences, not creep.** `roster-vocabulary.tsx` and
+  `roster/page.tsx` are how box 5 gets one phrase instead of two.
+  `entry-state.ts` is genuinely doc-only — diff shows comment hunks only, both
+  function bodies untouched.
+- **tests assert behaviour.** The load-bearing one is *"a narrowed read gets none,
+  on identical rows"* — same fixture, same jobs, same roster, only `scope`
+  differs. That isolates the gate as the single variable rather than restating
+  the implementation.
+- **found while gating, queued as T38:** T34 named `dualScore` but fixed only
+  Team Home. Grepping every call site found two more production callers with the
+  identical shape — `schedule-server.ts:256` and `dual-detail.tsx:39` — neither in
+  T34's scope. The mechanism is built and tested, so applying it there is small.
+- **still unverified against production:** the Supabase MCP exposes only
+  `query_logs`, no `execute_sql`, so the RLS predicate above is read from
+  `supabase/migrations/`, which CLAUDE.md warns runs ~100 migrations behind. The
+  gate can only ever withhold, so a stale reading costs a coach nothing and costs
+  an entitled player a number they could have seen — the safe direction, but not a
+  verified one.

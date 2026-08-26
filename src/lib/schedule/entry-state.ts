@@ -88,7 +88,23 @@ export function matchWon(match: EntryMatch): boolean | null {
   return sets.us > sets.them;
 }
 
-/** Has this line been played at all — is there a decided match under it? */
+/**
+ * Has this line been played at all — is there a decided match under it?
+ *
+ * **Only ever an answer about the rows it was handed.** `program_event_entries`
+ * is visible to every member of a program, but the RESULT lives on `matches`,
+ * whose policy is stricter — so a player on a program with
+ * `programs.roster_visible` unset reads every line of a dual and receives one
+ * match. To this function, and to everything built on it, a line RLS withheld
+ * and a line nobody has played are the same line: `entry.matches` is empty
+ * either way, and there is nothing in the entry to tell them apart.
+ *
+ * That is not a defect to fix here — the distinction genuinely is not in the
+ * data — but it is a false `false` waiting for a caller who reduces a whole
+ * card to one figure. The caller has to establish which read it is looking at
+ * *before* asking, from the viewer's role and the program's flag:
+ * `resultsScope()` in `lib/data/results-visibility.ts`.
+ */
 export function entryPlayed(entry: EventEntry): boolean {
   return entry.matches.some((match) => matchWon(match) !== null);
 }
@@ -144,6 +160,13 @@ export function entryState(entry: EventEntry): EntryState {
  * ITA rules: six singles points, and ONE doubles point to whoever takes two of
  * the three doubles. Never stored — a stored team score is a number that stops
  * agreeing with the rows above it the first time a result is corrected.
+ *
+ * **Counted over the entries given, and it cannot tell that they are all of
+ * them.** Every branch here goes through `entryPlayed` / `entryWon`, so a read
+ * RLS narrowed produces a confident, wrong, low score: 0–1 on a dual won 4–3,
+ * with `decided` false and six played lines counted as unplayed. Do not call
+ * this on behalf of a reader who may not see every line — see `entryPlayed`
+ * above and `resultsScope()` in `lib/data/results-visibility.ts`.
  */
 export function dualScore(entries: EventEntry[]): {
   us: number;
