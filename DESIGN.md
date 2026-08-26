@@ -2,11 +2,16 @@
 
 > **v3 exists and is the current authority on component behaviour.** Claude
 > Design project `abcb65f6-4e66-44bc-b9de-b3b47f4313c1` — *Advantage Design
-> System v3*. It ships a larger library than v2 (adds `IconButton`, `DataTable`,
-> `Delta`, `Avatar`, `Notice`, `Radio`, `EntitySelect`, `ActivityTray`) plus
+> System v3*. It ships 30 primitives against v2's 21 — the 9 additions are
+> `DataTable`, `Delta`, `ResultMark`, `InsightCard` (+ `EngineChip`), `Notice`,
+> `Avatar` (+ `StatePill`), `Radio`, `EntitySelect`, `ActivityTray` — plus
 > `guidelines/*.card.html` and its own `SKILL.md`. This document still describes
 > the v2 import, which is what the repo's tokens came from; where v3 and v2
-> disagree about a component, **v3 wins**.
+> disagree about a component, **v3 wins**. The full round-by-round rule set
+> (icon-rail chrome, dark tooltip, table laws, new primitives) is transcribed
+> into [`.skills/advantage-analytics-design/SKILL.md`](.skills/advantage-analytics-design/SKILL.md)'s
+> practical sections rather than duplicated here — this file stays the token
+> ledger.
 >
 > Corrections already taken from v3:
 >

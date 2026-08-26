@@ -3,7 +3,13 @@
    component-internal only (label→input, toggle→label) — never between
    elements on a page.
 
-   IMPORTED VERBATIM. No name here collides with globals.css. */
+   IMPORTED VERBATIM. No name here collides with globals.css.
+
+   v3 addendum (Claude Design project `abcb65f6-4e66-44bc-b9de-b3b47f4313c1`):
+   five additive chrome-dimension tokens below. v3 changes no spacing or
+   radius VALUE above — it documents the icon-rail sidebar and header chrome
+   that shipped after v2 was imported, and these are the only new sizes it
+   introduces. See SKILL.md's "Icon Rail Sidebar" and "Header" sections. */
 :root{
   /* Component-internal half-steps — never layout */
   --space-0-5:2px;
@@ -32,4 +38,12 @@
   --pad-card:20px;
   --pad-page-x:32px;
   --pad-page-y:40px;
+  /* Chrome dims (v3, additive) — icon-rail sidebar + header. Two committed
+     rail widths (never a hover peek); rows and the icon column share one
+     size at both widths so only the edge travels when the rail toggles. */
+  --rail-width:64px;
+  --panel-width:232px;
+  --rail-row:40px;
+  --rail-icon-col:40px;
+  --header-h:44px;
 }

@@ -15,6 +15,21 @@ The canonical source of truth for all UI across the app. Read this before buildi
 > for the Advantage Intelligence job lifecycle. Both corrections are inline
 > below. Where the two disagree on anything else, `DESIGN.md` is newer.
 
+> **v3 note.** Claude Design project *Advantage Design System v3*
+> (`abcb65f6-4e66-44bc-b9de-b3b47f4313c1`) reverse-documents the icon-first
+> chrome that shipped after v2 — collapsible icon-rail sidebar, dark tooltips,
+> the activity tray, workspace switcher — plus locked rules for future work
+> (the Round 15 table laws, new data primitives). **It changes no existing
+> token value**; the only additions are five chrome-dimension tokens
+> (`--rail-width`, `--panel-width`, `--rail-row`, `--rail-icon-col`,
+> `--header-h`, in [`spacing.css`](../../src/styles/design-system/spacing.css))
+> and 9 new component primitives (`DataTable`, `Delta`, `ResultMark`,
+> `InsightCard`+`EngineChip`, `Notice`, `Avatar`+`StatePill`, `Radio`,
+> `EntitySelect`, `ActivityTray`). Rules folded in below are marked **(v3)**;
+> where a v3 rule contradicts a pattern printed elsewhere in this file (nav
+> active state, notably), **v3 wins** — the contradicted pattern has been
+> corrected in place, not left standing.
+
 ---
 
 ## Brand & Users
@@ -37,7 +52,7 @@ The canonical source of truth for all UI across the app. Read this before buildi
 4. **Pro-level exclusivity** — Design for the player who knows what second-serve percentage means. Density is acceptable when it serves understanding.
 5. **One accent, one purpose** — Blue (#3B82F6) = action/emphasis. Green (#5DB955) = winning/positive. Red (#E51837) = losing/negative. No other semantic colors. No decoration colors.
 
-**Banned**: Bounce/elastic animations, glassmorphism, neon accents, gradient-heavy surfaces, playful illustrations, gamification badges, warm/earthy tones, non-Inter fonts, non-Lucide icons.
+**Banned**: Bounce/elastic animations, glassmorphism, neon accents, gradient-heavy surfaces, playful illustrations, gamification badges, warm/earthy tones, non-Inter fonts, non-Lucide icons. **(v3)** Colored left-border stripes, nested cards, font weights 800+, hover-peek sidebars (the rail toggles, it never expands on hover), bare unlabeled icon buttons (every icon-only control needs an `aria-label` **and** a dark tooltip), invented ETAs or fake progress, center-aligned table cells, tinted/bannered result cells, filter chips (a filter cut reads as one sentence in a strip, never a chip row).
 
 ---
 
@@ -155,7 +170,11 @@ Use `tabular-nums` for all numeric data (stats, scores, percentages) to ensure a
 
 - Court fill: `#D6E4F9`
 - First serve dot: `rgba(59,130,246,0.5)`
-- Second serve dot: `rgba(129,140,248,0.5)`
+- Second serve dot: `rgba(129,140,248,0.5)` — **retired (v3, Round 14).** Second
+  serves wear `--viz-you-mid` (`#60A5FA`) everywhere, matching the you/opp
+  role-based palette instead of a one-off violet. `statistics/serve-placement-stats.tsx`
+  still carries the old value and needs the swap — not done as part of this
+  token sync, tracked separately.
 
 ### Match Detail Colors
 
@@ -205,6 +224,19 @@ Match detail and video sections use additional colors for multi-player different
 - List item vertical: `py-2.5` to `py-3`
 - Button: `px-3 py-1.5`
 - Card header: `h-14 px-5` or `px-6 py-4`
+
+### Chrome Dimensions (v3)
+
+Sidebar and header sizes, tokenized in `spacing.css`. No layout-grid value
+above changed — these are new, additive names for the icon-rail chrome.
+
+| Token | Value | Use |
+|---|---|---|
+| `--rail-width` | 64px | Collapsed sidebar width |
+| `--panel-width` | 232px | Expanded sidebar width |
+| `--rail-row` | 40px | Sidebar row height, both widths |
+| `--rail-icon-col` | 40px | Fixed icon column, both widths — only the edge travels on toggle |
+| `--header-h` | 44px | Sticky header height |
 
 ---
 
@@ -576,25 +608,99 @@ text-[#525252] font-medium
 
 ## Navigation Patterns
 
-### Sidebar Nav Item
+### Icon Rail Sidebar (v3)
+
+Two committed widths only — `--rail-width` (64px) ⇄ `--panel-width` (232px) —
+moved by a toggle row (`⌘\`), **never a hover peek**: charts must not resize
+under a reading cursor. `--rail-icon-col` (40px) holds a fixed column at
+*both* widths, so only the edge travels; labels fade in behind it (out 80ms,
+then the edge moves after an 80ms delay, in 120ms) so text never clips
+mid-word. Persisted per device; auto-collapses below 1280px without
+overwriting the saved preference. Rows are `--rail-row` (40px).
 
 ```
-h-9 rounded-lg text-[13px] whitespace-nowrap
-pl-[13px] pr-3.5 py-3 gap-3
+h-[var(--rail-row)] rounded-lg text-[13px] whitespace-nowrap
+// Resting / hover:
 text-[#8A8A8E] hover:text-[#3C3C43] hover:bg-[#F5F5F5]
 transition-colors duration-200
-// Active:
-bg-[#EBF2FD] text-[#3B82F6]
+// Active — surface-subtle wash + ink-900 glyph/label, NO stripe, NO blue.
+// Blue is reserved for actions; being where you already are is not one.
+bg-[var(--surface-subtle)] text-[var(--ink-900)]
 ```
 
-### Header
+`rail-item.tsx` is the live implementation of this rule — it predates this
+doc entry, so treat any other "active = blue" pattern elsewhere in the repo
+as drift to fix, not a second valid style. The one blue-soft row that
+survives is the *current* workspace inside the open workspace-switcher menu
+(a menu selection, not a location). Tabs are unaffected — they keep the 2px
+blue underline (`layoutId="activeTab"`): a tab is a choice, a nav row is a
+location.
+
+**Workspace row** heads the rail and doubles as the switcher: 26px mark
+(initials on a 6px-radius square — blue fill for personal, ink-900 for team),
+sub-label flips to "Switch workspace" on hover. Team workspaces swap the nav
+list entirely (Team Home · Roster · Compare — no team "Matches" until that
+page scopes itself).
+
+### Dark Tooltip (v3)
+
+The load-bearing primitive for icon-only chrome — every icon-only control
+must answer hover with one, plus a matching `aria-label`.
 
 ```
-sticky top-0 z-30 h-11 py-4 px-4 bg-white
+bg-[var(--ink-900)] text-white rounded-xl shadow-[var(--shadow-dropdown)]
+// No caret. 400ms reveal (the system's one deliberate-reveal duration —
+// instant re-show within the same cluster once open), 6px offset.
+label: 12px/500 white
+detail (optional 2nd line): 11px, white at 64% opacity
+shortcut (optional, mono): the keybinding, e.g. "⌘K"
+```
+
+Replaces v2's white floating box — v2's `label`+`content` API becomes
+`label`+`detail`. At 64px the icons ARE the interface, not a puzzle; the
+tooltip is how a collapsed rail keeps every label without keeping the space.
+
+### Activity Tray (v3)
+
+Header icon (Lucide `activity`, 15px) + 6px Signal-Blue dot at top-right —
+presence, not arithmetic: **no numeric badges anywhere in the chrome**, the
+count lives only in the tooltip ("2 in flight") and matching `aria-label`.
+Opens a 326px "Notifications" panel: unread-dot rows, 3px progress tracks
+(live sheen only while something is actually running), settled
+"Report ready — {match}" rows. No "mark all read" control — the badge counts
+moving work and clears itself when nothing is in flight. Only the upload
+shows a measured ETA; queued work says "In line" — never an invented number.
+Empty state: "Nothing in flight."
+
+### Header (v3)
+
+```
+sticky top-0 z-30 h-[var(--header-h)] px-4 bg-white
 border-b transition-colors duration-200
 // Default: border-transparent
 // Scrolled: border-[#EBEBEB]
 ```
+
+Right cluster (gap 6): breadcrumbs · page-status slot (11px ink-400, leads
+the cluster when a page has something to say, e.g. "Draft saved") · search ·
+activity · divider (1×14, `--border-medium`) · account.
+
+**Search trigger drops its keycap.** Ghost control, 28px height, radius 8,
+symmetric `0 8px` padding, 14px search icon (`--ink-500`) + "Search" 12px
+(`--ink-600`). `⌘K` (`⌃K` on Windows) stays bound but shows only in the dark
+tooltip — never as a visible keycap in the bar. A bare magnifier doesn't say
+what it searches; naming it does.
+
+**Account**: 26px initials avatar (the chrome's one circle — icon buttons
+elsewhere are 8px-radius squares) + 12px chevron rotating 180° on open, pill
+hover wash, 260px menu.
+
+**Workspace title** (Round 11g) — the header's leading slot on
+workspace-level pages: school 12px/500 ink-900 + sport `text-micro`,
+baseline-aligned, 8px gap, no dash/dot/divider ("Meridian State · Men's
+tennis" is wrong — no separator at all). Used when the leading slot IS the
+workspace itself (Team Home, empty states); flow pages keep breadcrumbs
+instead — never both on the same page.
 
 ### Breadcrumb
 
@@ -604,6 +710,25 @@ text-[11px] font-normal
 // Active: text-[#0D0D0D]
 // Separator: ChevronRight text-[#CCCCCC]
 ```
+
+---
+
+## Dialog (v3 — Round 11 anatomy)
+
+```
+w-[440px]           // forms — w-[520px] for compare dialogs
+rounded-[14px] shadow-[var(--shadow-dropdown)]
+bg-[rgba(13,13,13,0.4)]   // scrim
+top-anchored ~96px
+padding: 24px 24px 20px, 18px gaps between fields
+title: 16px/500 + one-line 12px ink-600 contract sentence below it
+close: 28px (h-7 w-7 modal-chrome pattern, see Chrome Icon Button above)
+```
+
+Footer grammar: quiet blue text action left (`footerLeft`, optional) ·
+Cancel + **one** primary right — never two primaries. Fields inside use the
+underline vocabulary; the active field's rule thickens to 2px blue (see
+Focus → "The underline opt-out").
 
 ---
 
@@ -623,6 +748,183 @@ transition-colors duration-100
 // Divider
 h-px bg-[#E5E5EA] mx-2 my-1
 ```
+
+**EntitySelect (v3)** — the "For" field, picking a person or someone new.
+Float menu radius 12, 6px padding; rows 38px (radius 8, hover surface-subtle,
+selected keeps the wash + a 13px ink-900 check). Person row = 22px avatar +
+12/500 name + 11px ink-500 middot-joined meta. "Someone new" is always first,
+above a hairline, dashed-ring avatar. Section labels are quiet sentence case
+(11px ink-400) — no uppercase eyebrows inside menus, no nested menus.
+
+---
+
+## Data Table (v3 — the Round 15 table laws)
+
+Governs **every** table in the product — Matches, Roster, Events, Schedule —
+not a page-specific treatment. Generalizes `matches/match-card-list.tsx` +
+`match-actions/match-actions-menu.tsx`.
+
+1. **Column order is a decision sequence, left to right: outcome → who →
+   measure → context → when.** Never fence a column with rules or washes to
+   signal importance — priority is position, not a border. Canonical orders:
+   Matches = Result · Opponent · Score · Event · Analysis · Date · chevron;
+   Roster = ResultMark · Opponent · Score · Date · Delta; Schedule = Date ·
+   Event · Site · State · Team score. Text and its header flush left;
+   numeric measures and headers flush right; scores flush left in one fixed
+   column (116px in Matches) at one precision, tabular. **Never
+   center-align anything.** Exactly one fluid cell per table (Analysis in
+   Matches, State in Schedule) — everything else fixed/bounded so scores and
+   dates start at the same x on every row.
+2. **The result cell has no container.** A tinted "banner" was built and
+   rejected. `Badge` stays bare tracked uppercase text (10/500, 2.5px
+   tracking, success/danger) — the word already carries the meaning, and a
+   tint makes the outcome louder than the Score beside it. If bare reads
+   faint: widen the Result column, or use `ResultMark`'s glyph instead in
+   headerless dense rows. Word under a labeled "Result" header, glyph in
+   headerless rows — **never both in one row, never a bare W/L letter** (it's
+   standings shorthand and doesn't translate).
+3. **The row end encodes behavior.** The 13px trailing column is never
+   empty: `chevron-right` (ink-300) when the row opens a destination;
+   `chevron-down` when it expands in place, rotating 180° on open (200ms).
+   Held resting AND hovered — it never moves or hides, so nothing shifts
+   between states.
+4. **Row state pills.** "New" joins Shared/Private as a grey 18px `StatePill`
+   (10/500 ink-700 on surface-subtle) beside the row's primary name.
+   **Unread is not a dot and not a column** — the dot-column pattern retired
+   from data tables (the 6px blue dot stays the activity tray's mark alone).
+   Mark the exception, not the norm. Max one state pill per row.
+5. **Row actions on hover:** surface-muted wash on the rounded
+   `radius-element` row, inset 8px from the card edge; the lifecycle cell
+   swaps for a `⋯` trigger (`MoreHorizontal`, stroke 1.75 — the one
+   exception to strokeWidth 1.5 in the product) in a 28px radius-element
+   square, opening a 12px-radius float menu with destructive last.
+6. **Filter panel + applied strip.** One panel, sectioned: facets about the
+   record first, facets about the counterparty below a hairline under an
+   "Opponent" heading. 2–3 options → segmented row with an "Any" default;
+   longer lists → checkboxes. Live match count in the footer beside a quiet
+   "Clear all". On apply the panel **closes** and a note strip states the cut
+   in words — plain sentence · middot · "N of M" · one quiet "Clear filter" —
+   **never chips, never a badge**. Engaged trigger uses the nav-active
+   grammar (surface-subtle wash + ink-900, no border/dot/count).
+7. **Table page states.** Day zero renders title, primary action and usage
+   footer identically to the populated page — the frame never moves; chips
+   and table are absent, not skeletoned; the middle carries one 24px light
+   line, one sentence, two quiet paths. The resting view is never
+   pre-filtered — it carries lifecycle chips (All · New · In progress ·
+   Estimates) **with counts inside the chip itself** (this is the one place
+   a count lives outside a tooltip — it's page content, not chrome), and the
+   long tail lives in the filter panel. A filtered view is its own screen,
+   never a mutation of the resting one — the resting frame must keep
+   showing its in-flight and estimate rows regardless of what's filtered.
+   Lifecycle cell copy:
+   "View report" when ready · `StatusChip` while running (no elapsed time —
+   the tray owns progress) · "Estimate · Review data" for low confidence
+   (grey fact + blue action, never yellow, never red).
+8. **8a is the default row treatment** — 52px fixed rows, hairline under the
+   header only, none between rows; hover = surface-muted wash on a rounded
+   radius-element row inset 8px. Eyebrow headers over 8a rows is the
+   sanctioned combination. *(Erratum, Aug 24 2026: an earlier v3 DataTable
+   spec called for hairlines between every row — 8a's site-wide lock above
+   supersedes that for every dense result list; the labeled Result-header
+   register survives only where a table keeps column headers at all.)*
+
+---
+
+## New Data Primitives (v3)
+
+**`Score`** — tiebreak scores are superscripts, never parentheses: `7-6⁴`,
+digit at 0.6em raised 1.05em, 0.5px off the score. Applies to any score
+anywhere, not a roster-page treatment.
+
+**`ResultMark`** — `CircleCheck`/`CircleX` at 14px stroke 1.5, the outcome
+pair (green/red). The glyph register for headerless dense rows, paired with
+`Badge`'s word register for labeled-column rows — see Data Table rule 2. The
+only green/red in a row besides form ticks; icon rather than a letter so it
+survives translation.
+
+**`Delta`** — compared-number changes color by direction: `↑` viz-good ·
+`↓` viz-bad · `→` ink-500. The numeral itself stays ink-900 — direction
+carries the color, not the number.
+
+**`InsightCard` + `EngineChip`** — the one AI-authored card format. Header:
+eyebrow "Focus" left + `EngineChip` right (20px ink-900 square, radius-button,
+white 12×8 logo swoosh via `brightness(0) invert(1)` — never Signal Blue,
+never a circle). Body: claim as a falsifiable ≤30ch sentence (text-title),
+evidence at 12px ink-700 with tabular numerals — computed, never invented.
+Footer: quiet blue text link + text-micro sample count ("from 12 analyzed
+matches"). Renders nothing without real numbers. The engine's name lives in
+the dark tooltip + `aria-label`, never as visible chrome text — icon-first
+rules apply to the chip too.
+
+**`Notice`** — two registers, both radius 8, no headings, no borders. Note
+strip: passive fact (seat counts, policy effects), surface-subtle, one 13px
+icon max, 11px text, optional quiet blue action — never buttons. Suggestion:
+the system proposes an action — blue-tint-08 wash, bold lead names the
+finding, body states the consequence, Accept (blue 500) + Decline (quiet,
+never red). A suggestion earns its tint by carrying an action; a passive fact
+never gets one.
+
+**`Avatar` + `StatePill`** — profile ≠ account, and the avatar says which:
+self-managed = unmarked initials (default, no chip); coach-managed = border
+ring + grey pill; invited = dashed ring (no person yet, only an email);
+"Claimed today" = a transition-receipt pill that decays after a session (a
+one-time acknowledgment, not a permanent state). State chips are 18px pill,
+10/500 ink-700 on surface-subtle — **never blue**. The avatar is the system's
+one circle everywhere except the account menu.
+
+**`Radio`** (check-dot) — single-choice selection is a solid Signal Blue 14px
+dot + white 9px check (stroke 2.5); unselected is a 1px ink-300 ring; disabled
+is a 1px ink-200 ring at 50% opacity. One glyph means "chosen" everywhere:
+dot for single-choice (`Radio`), 4px-radius square for multi-select
+(`Checkbox`). `card` variant renders the option as a full card; selection
+also sets border `--blue` + `--blue-tint-08` wash — the dot marks the
+selected item, it never appears on hover.
+
+---
+
+## Personal Home Recipes (v3, Round 13)
+
+Page-specific recipes from the Personal Home & Matches canvas — not general
+primitives, but locked patterns for that page's own cards.
+
+**Next fixture card** — the claimed player's one forward-looking object.
+Eyebrow middot-joins the stakes ("Next · B1G Conference" only when it's
+actually a conference dual, else plain "Next"); grey 18px countdown pill top
+right, computed ("in 3 days"), never blue, never invented; title is the
+opponent's proper name (the "at/vs" preposition retires — site gets its own
+row). One icon fact per row, 13px Lucide at ink-400: `calendar` date·time
+(tabular) · `map-pin` site · court mark surface · `swords` "Your line · S2
+singles" (mono line label) · `film` "tags itself". Fed by the team schedule
+— personal Home never grows a schedule of its own.
+
+**Serve placement quiet strip** — claim-led (the Focus grammar: eyebrow ·
+claim title · evidence bars). One bar per court (Deuce/Ad), 14px tall,
+radius-cell, 2px segment gaps; segments T · Body · Wide in `--viz-you` /
+`--viz-you-mid` / `--viz-you-light`; label rows tabular, serve counts
+right-aligned; the drawn court lives one click away on the expanded widget.
+
+**Home result row + in-flight row** — 8a base (rounded surface-muted hover,
+no dividers) + fixed columns: `ResultMark` 14px (`flex:0 0 14px`) ·
+opponent 170px ("def./l." at 400 ink-600, name at 500 ink-900) · score 110px
+scoreboard type with superscript tiebreaks · three right-aligned stat cells
+(eyebrow-sm nowrap over 12px tabular — 1st serve · winners · errors) ·
+chevron-right 13px closes every row. Rows: min-height 54px, padding 5px 12px,
+gap 16. In-flight row: `Loader2` spinning 1.2s linear in the mark column ·
+"vs {opponent}" · `StatusChip` Analyzing · chevron — **no elapsed time**, the
+tray owns progress. Event group headers: name 13px/500 over an icon-metadata
+row (calendar date · type mark — tournament icon / swords dual / `Target`
+practice, crosshair retired · court mark · verified), 13px glyphs.
+
+**Small locks** — personal-Home KPI strip defaults to the repo's five serve
+cards (1st serve · 1st serve won · 2nd serve won · service games won · break
+points saved), each with trend chip + sparkline; customize popover picks 4–5
+across Serve/Return/Other. Card-header counts retire — no bare numeral beside
+an eyebrow, no count inside an "All matches" link; counts live in sublines
+and tooltips only. Low-confidence path: "Estimate · Review data" — grey fact
++ blue action, never yellow (charts-only amber) or red (outcomes/form errors
+own the two reds). Cross-workspace scope is named out loud in greeting
+sublines ("Friday's dual is in your team workspace") and KPI subtexts
+("personal matches only").
 
 ---
 
@@ -847,4 +1149,21 @@ delete the only indicator a control has.
 ```
 
 Common sizes: `size-3` (12px), `size-3.5` (14px), `size-4` (16px), `size-5` (20px), `size-8` (32px empty states).
+
+### Glyph Registry (v3)
+
+From `nav.ts` + chrome. StrokeWidth 1.5 everywhere except the row-menu
+trigger's `MoreHorizontal` (1.75, the one exception).
+
+| Glyph | Use | Size |
+|---|---|---|
+| `Home`, `Video`, `BarChart3`, `MessageSquare`, `Users`, `Swords`, `Settings`, `HelpCircle` | Nav — Home / Matches (both workspaces) / Statistics / Ask / Roster / Compare / Settings / Help | 16px (`size-4`) |
+| `PanelLeftClose`/`PanelLeftOpen`, `ChevronsUpDown`, `Activity`, `Search`, `ChevronDown`/`ChevronRight`, `Check`, `Plus`, `Loader2` | Chrome — rail toggle, workspace switcher, tray, search, menus | 15px header, 14px inline |
+| `MoreHorizontal`, `Pencil`, `Trash2` | Row actions | 14px / 1.75 stroke on `MoreHorizontal` |
+| `SlidersHorizontal`, `Timer`, `CircleHelp`, `LogOut` | Profile menu — Preferences / Usage / Help / Sign out | 13px |
+| `CircleCheck`, `CircleX` | `ResultMark` — match outcome ONLY, never repurposed for analysis lifecycle (that's `StatusChip`'s dot + text) | 14px |
+| `Calendar`, `MapPin`, `Swords`, `Film`, `Target` | Fixture/event metadata (`Target` = practice; the crosshair icon it replaced is retired) | 13px, `--ink-400` |
+
+`Video` covers Matches in **both** workspaces; `Calendar` belongs only to the
+fixtures list (Schedule/Events) — the two must not swap.
 
