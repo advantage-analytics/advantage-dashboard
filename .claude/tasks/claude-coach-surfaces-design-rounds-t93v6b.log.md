@@ -1451,3 +1451,30 @@ is the runner's. Newest entries at the bottom.
   Same MCP check as T20, same result: only `query_logs` exposed.
 - **changed:** status line only. No code touched.
 - **unblocks when:** same as T20.
+
+## T22 · Cancel and Done leave the invite dialog's state behind — done
+
+- **gate:** 5a green — `npx tsc --noEmit` exit 0; `npm run lint` 0 errors /
+  38 warnings, all pre-existing, none in the touched file; `npm test` 198
+  passed, no delta (no new spec — see below). 5b: verified directly against
+  the diff rather than by narrative — `onOpenChange(false)` now appears in
+  exactly one place (`close()`), and `close()` is wired to all four routes:
+  the `RosterDialog` wrapper's `onOpenChange`, Cancel, and Done. 5c: diff
+  touches only `src/components/dashboard/team/` — `pipeline-guardrails-reviewer`
+  ran and returned clean (the wizard's three misattribution inputs are
+  untouched; the stale-`target` carry-over the task's notes warned about is
+  confirmed fixed, since `reset()` clears `target` before `onOpenChange` fires
+  and is wired to every close route). `rls-boundary-reviewer` correctly
+  skipped — no `src/lib/data/`, `src/lib/supabase/`, `src/app/api/`, or
+  migration touched.
+- **changed:** `src/components/dashboard/team/roster-invite-dialog.tsx` only.
+  Extracted `close()` (`reset(); onOpenChange(false);`); routed the
+  `RosterDialog` wrapper, Cancel, and Done through it instead of each calling
+  `onOpenChange` directly.
+- **no test added**, matching the bar T18 set: this is state-machine logic
+  living inside a `"use client"` component alongside its own hooks, and the
+  repo's specs are pure-logic-over-library-code with no component-rendering
+  harness. Verified instead by direct trace of every `onOpenChange`/`close`
+  call site and confirming Done's refresh (`revalidatePath` inside
+  `inviteMember()`) already runs during `submit()`, not attached to the Done
+  click, so nothing was stripped.

@@ -197,6 +197,18 @@ export function RosterInviteDialog({
   }
 
   /**
+   * The one close path. Escape, the overlay click and the shell's own X all
+   * reach this through `RosterDialog`'s `onOpenChange`; Cancel and Done call
+   * it directly so there is exactly one place that resets — not four callers
+   * each remembering to. Reset before telling the parent, so nothing renders
+   * an in-between frame with the dialog still mounted and already cleared.
+   */
+  function close() {
+    reset();
+    onOpenChange(false);
+  }
+
+  /**
    * Pull every complete address out of what was typed or pasted and leave the
    * rest in the field. Deduped against the chips already there AND within the
    * paste itself — a roster copied out of a spreadsheet routinely carries the
@@ -343,10 +355,7 @@ export function RosterInviteDialog({
   return (
     <RosterDialog
       open={open}
-      onOpenChange={(next) => {
-        if (!next) reset();
-        onOpenChange(next);
-      }}
+      onOpenChange={(next) => (next ? onOpenChange(next) : close())}
       title={`Invite to ${active.name}`}
       description="Link the invite to a player you've added, or start fresh."
       footer={
@@ -356,7 +365,7 @@ export function RosterInviteDialog({
             <button
               type="button"
               className={advButton("primary")}
-              onClick={() => onOpenChange(false)}
+              onClick={close}
             >
               Done
             </button>
@@ -368,7 +377,7 @@ export function RosterInviteDialog({
             <button
               type="button"
               className={advButton("outline")}
-              onClick={() => onOpenChange(false)}
+              onClick={close}
             >
               Cancel
             </button>
