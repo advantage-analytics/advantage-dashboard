@@ -62,6 +62,7 @@ export function UnderlineSelect({
       value={value}
       disabled={disabled}
       onChange={(event) => onChange(event.target.value)}
+      data-focus-ring="none" /* the border-b above carries focus */
       className="h-[34px] cursor-pointer appearance-none border-b border-[var(--border-field)] bg-transparent text-[13px] text-[var(--ink-900)] outline-none transition-colors focus:border-[var(--blue)] disabled:cursor-not-allowed disabled:opacity-50"
     >
       {children}

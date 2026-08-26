@@ -345,6 +345,7 @@ function ProfileSelect({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        data-focus-ring="none" /* the border-b above carries focus */
         className={cn(
           "h-[34px] cursor-pointer border-b border-[var(--border-field)] bg-transparent text-[13px] outline-none transition-colors focus:border-[var(--blue)]",
           value === "" ? "text-[var(--ink-400)]" : "text-[var(--ink-900)]"

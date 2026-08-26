@@ -28,13 +28,33 @@
    `--focus-ring`. The split is keyed on tag name, so Radix's `SelectTrigger`
    is a `<button>` and takes blue; only a native `<select>` gets the carve-out.
 
-   Two things this split must not do, both of which look fine on screen:
-   1. Resolve either branch to `none`. "No indicator" is the bug this file
-      exists to fix; recolour a ring, never delete one.
-   2. Flatten the underline-input pattern (auth's `form-field.tsx`, the schedule
-      lineup editor), where the rule under the field thickens to 2px blue on
-      focus. That blue is the field's own state vocabulary and stays; what the
-      split removes is the blue BOX that used to sit on top of it. */
+   One thing this split must not do: resolve either branch to `none`.
+   "No indicator" is the bug this file exists to fix — recolour a ring, never
+   delete the only one a control has.
+
+   ── The underline exception ──────────────────────────────────────────────────
+   That rule has one deliberate exception, and it is not a loophole in it: a
+   control whose own underline already changes on focus — thickens, recolours,
+   or both — needs no ring on top of it, because the underline change IS the
+   one visible indicator WCAG 2.4.7 (AA) asks for. The guidance is explicit that
+   a surrounding ring is not required when some other on-focus change is
+   clearly visible; requiring both is decoration, not compliance, and reads as
+   a stray box sitting on a field that already answered the question.
+
+   These fields opt out with the same `data-focus-ring="none"` the composite-
+   field case below uses — same attribute, same specificity-0 rule, different
+   reason for being safe: auth's `form-field.tsx`, the settings underline input
+   (`SettingsUnderlineInput`, `UnderlineSelect`, and `ProfileSelect`'s inline
+   copy of the same rule), the schedule lineup editor's `NameField`, and the
+   match-edit dialog's `UnderlineField` children and `PlayerRow` name input.
+
+   The opt-out is NOT safe merely because a field looks like an underline —
+   only because something visibly changes on it at focus. `schedule/
+   field-row.tsx`'s defaults row draws a hairline that never changes, so its
+   neutral ring stays: remove it there and the field goes from one indicator to
+   zero, which is exactly the bug this file exists to prevent. Check the
+   component for an actual on-focus change before adding the attribute
+   anywhere new. */
 :where(
   a[href],
   button,

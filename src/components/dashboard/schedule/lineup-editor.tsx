@@ -292,6 +292,7 @@ function NameField({
         event.preventDefault();
         onChange(dropped);
       }}
+      data-focus-ring="none" /* the border-b above carries focus */
       className="w-full min-w-0 bg-transparent text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-300)] focus:border-b focus:border-[var(--blue)]"
     />
   );

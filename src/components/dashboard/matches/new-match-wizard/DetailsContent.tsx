@@ -552,6 +552,7 @@ export function DetailsContent({
                     value={formData.playerName}
                     onChange={(e) => onInputChange("playerName", e.target.value)}
                     onBlur={() => setPlayerNameTouched(true)}
+                    data-focus-ring="none" /* the rule below carries focus */
                     /* Sized to its own text so the WON tag sits against the
                        name rather than at the far edge of the column. Falls
                        back to filling the row where field-sizing is missing,
@@ -647,6 +648,7 @@ export function DetailsContent({
                     value={formData.opponentName}
                     onChange={(e) => onInputChange("opponentName", e.target.value)}
                     onBlur={() => setOpponentNameTouched(true)}
+                    data-focus-ring="none" /* the rule below carries focus */
                     /* Sized to its own text so the WON tag sits against the
                        name rather than at the far edge of the column. Falls
                        back to filling the row where field-sizing is missing,

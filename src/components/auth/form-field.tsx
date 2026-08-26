@@ -76,6 +76,7 @@ export default function FormField({
           autoComplete={autoComplete}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? messageId : undefined}
+          data-focus-ring="none" /* the rule below carries focus */
           className="w-full bg-transparent text-[14px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)]"
         />
         {showPasswordToggle ? (
@@ -94,12 +95,18 @@ export default function FormField({
         ) : null}
       </div>
 
-      {/* The rule carries the state: hairline at rest, 2px blue on focus, red on error. */}
+      {/* The rule carries the state: hairline at rest, 2px blue on focus, red on
+          error. `!` on the focus-within colour: it and `group-hover`'s colour
+          have equal specificity, so without it whichever Tailwind happens to
+          emit last wins the cascade — and did, silently graying out the one
+          indicator this field has for the ordinary case of clicking into it
+          with a mouse (hover and focus true at once). Found verifying the
+          neutral ring's removal below; not cosmetic. */}
       <div
         className={
           error
             ? "h-[1px] w-full bg-[var(--error)]"
-            : "h-[1px] w-full bg-[var(--border-hairline)] transition-[height,background-color] duration-300 ease-[var(--ease-primary)] group-hover:bg-[var(--border-medium)] group-focus-within:h-[2px] group-focus-within:bg-[var(--blue)]"
+            : "h-[1px] w-full bg-[var(--border-hairline)] transition-[height,background-color] duration-300 ease-[var(--ease-primary)] group-hover:bg-[var(--border-medium)] group-focus-within:h-[2px] group-focus-within:!bg-[var(--blue)]"
         }
       />
 

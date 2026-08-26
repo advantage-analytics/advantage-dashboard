@@ -70,24 +70,26 @@
   --blue-ring-30:rgba(59,130,246,0.30); /* border hint — outline-button hover */
   --blue-ring-40:rgba(59,130,246,0.40); /* focus ring */
   --blue-glow:rgba(59,130,246,0.15);
-  /* Field focus ring — the neutral counterpart to --blue-ring-*, consumed by
-     --focus-ring-field in effects.css. Deliberately NOT --border-field: that
-     is the resting hairline, and a ring matching the rest state is not an
-     indicator.
+  /* Field focus ring, consumed by --focus-ring-field in effects.css.
 
-     WCAG 1.4.11 wants 3:1 against what the ring sits on, which here means both
-     white cards and the #F5F5F5 field fill — the value --surface-field
-     resolves to. --ink-500 is 3.54:1 / 3.25:1; the #E5E5E5 this replaced was
-     1.26:1 / 1.16:1 and failed. Reused rather than minted — a new grey between
-     400 and 600 is the near-twin this palette keeps merging away. The floor is
-     why --ink-500 cannot simply be lightened: it now has a non-text consumer.
+     Was the neutral counterpart to --blue-ring-* here — --ink-500, chosen for
+     a 3:1 WCAG 1.4.11 floor against both white cards and #F5F5F5
+     (--surface-field), replacing an #E5E5E5 that measured 1.26:1 / 1.16:1 and
+     failed. Reverted 2026-08-26, design owner's explicit call: fields reading
+     one flat grey read as "changed but not chosen," and the accent-
+     conservation argument (a six-field form "spending the blue" six times
+     over) mattered less than one consistent focus colour across every
+     control. Aliased straight to --blue-ring-*, not a new colour, so it
+     tracks the accent automatically if that ever changes.
 
-     Raise contrast on --field-ring, never on the -30 band: the band is the
-     soft outer edge, and at 30% alpha it cannot reach 3:1 whatever colour it
-     carries — pure black composites to ~2.1:1 — while today's --ink-500
-     measures 1.38:1. */
-  --field-ring:var(--ink-500);
-  --field-ring-30:color-mix(in srgb, var(--ink-500) 30%, transparent);
+     Still clears the same floor blue never had to earn specially: --blue
+     measures 3.68:1 on white (documented above) and 3.38:1 on #F5F5F5 — both
+     above 3:1, so no new measurement was owed by this change, unlike the
+     --ink-500 assignment it replaces. Deliberately NOT --border-field
+     either way: that is the resting hairline, and a ring matching the rest
+     state is not an indicator. */
+  --field-ring:var(--blue);
+  --field-ring-30:var(--blue-ring-30);
   /* Text-on-tint retired (review): informational capsules are neutral —
      surface-subtle bg + ink text. Aliases kept so nothing breaks. */
   --blue-ink-deep:var(--ink-900);
@@ -201,11 +203,13 @@
   --blue-ring-40:rgba(96,165,250,0.40);
   /* Re-declared, not inherited. A custom property substitutes at the element
      it is declared on, so the :root alias has already resolved to the light
-     --ink-500 by the time it inherits here — exactly like --ink-border and
+     --blue by the time it inherits here — exactly like --ink-border and
      --border-field above. Deleting these two lines silently reverts dark mode
-     to the light ring. */
-  --field-ring:var(--ink-500);
-  --field-ring-30:color-mix(in srgb, var(--ink-500) 30%, transparent);
+     to the light ring. Matches the 2026-08-26 reversion in the light block
+     above: aliased to this block's own --blue / --blue-ring-30 (#60A5FA),
+     not the light accent, so dark mode keeps its own already-tuned blue. */
+  --field-ring:var(--blue);
+  --field-ring-30:var(--blue-ring-30);
   --blue-ink-deep:var(--ink-900);
   --blue-ink-mid:var(--ink-700);
   --danger:#FF6478;

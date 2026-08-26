@@ -683,12 +683,15 @@ flex items-center gap-2.5
 ### Focus
 
 **Write nothing.** `src/styles/design-system/focus.css` is the entire focus
-treatment. It gives `<input>`, `<textarea>` and native `<select>` the neutral
-`--focus-ring-field`, and gives every other tabbable control — `a[href]`,
-`button`, `[role="button"]`, `summary`, `[tabindex]:not([tabindex="-1"])` — the blue
-`--focus-ring`. Text fields are the carve-out because a six-field form would
-otherwise spend the accent six times over. You add a focus class to nothing, and
-a hand-rolled `<input>` is covered as-is.
+treatment. It gives `<input>`, `<textarea>` and native `<select>`
+`--focus-ring-field` by tag, and gives every other tabbable control —
+`a[href]`, `button`, `[role="button"]`, `summary`,
+`[tabindex]:not([tabindex="-1"])` — `--focus-ring`. Two separate tokens, kept
+separate so fields and actionable controls *can* diverge later — not because
+they currently do: as of **2026-08-26 both resolve to the same blue** (see the
+table below). You add a focus class to nothing, and a hand-rolled `<input>` is
+covered as-is. Two families of field opt out of even this ring entirely — see
+"The wrapper-ring pattern" and "The underline opt-out" below.
 
 The two shipped rings, defined in `effects.css`:
 
@@ -697,15 +700,23 @@ The two shipped rings, defined in `effects.css`:
 | `--focus-ring` | `0 0 0 2px var(--blue-ring-40)` |
 | `--focus-ring-field` | `0 0 0 1px var(--field-ring), 0 0 0 2px var(--field-ring-30)` |
 
-The field ring is two layers on purpose. The 30% band alone composites to
-#DBDBDB on white — 1.38:1, present in devtools, invisible to a keyboard user.
-The opaque 1px layer is what you actually see; the band only softens its outer
-edge. `--field-ring` resolves to `--ink-500`, which now carries a **3:1 floor**
-(WCAG 1.4.11) against both the white card and the #F5F5F5 field fill. Do not
-lighten `--ink-500`: it is no longer only a text colour. Raise contrast on
-`--field-ring`, never on the `-30` band — at 30% alpha the band cannot reach 3:1
-whatever colour it carries, since even pure black composites to ~2.1:1. The
-measurements are in DESIGN.md → Focus.
+`--field-ring` aliases straight to `--blue-ring-*` (`colors.css`) as of
+2026-08-26. It sat on the neutral `--ink-500` for a while — a form that rang
+every field in blue "spent the accent" once per field, the argument went — and
+was reverted at the design owner's explicit call: one consistent focus colour
+across the whole product mattered more. Nothing about the reversion needed new
+contrast work — `--blue` already clears WCAG 1.4.11's 3:1 floor against both
+surfaces `--ink-500` was measured on: 3.68:1 on white, 3.38:1 on #F5F5F5
+(`--surface-field`), both independent of why it lives here now. Do not read
+this as license to swap `--field-ring` again casually — it is aliased rather
+than hard-coded specifically so the next change is a one-line edit here, not a
+grep-and-replace, but it is still a product decision, not a free variable.
+
+The field ring is two layers on purpose regardless of which colour occupies
+`--field-ring`: the 30% band alone composites too faint to read on its own —
+present in devtools, easy to miss for a keyboard user. The opaque 1px layer is
+what you actually see; the band only softens its outer edge. The measurements
+are in DESIGN.md → Focus.
 
 `focus.css` is imported outside any `@layer` while Tailwind utilities live in
 `@layer utilities`, and unlayered CSS wins regardless of specificity — so
@@ -731,7 +742,7 @@ CI, and the ESLint hook is non-blocking — so the rule below is the only thing
 standing between a new author and a silently inert focus treatment. Write no
 focus class.
 
-**The wrapper-ring pattern is the one exception to "write nothing."** When the
+**The wrapper-ring pattern is the first of two exceptions to "write nothing."** When the
 input sits inside a bordered box and the box is what reads as the field, the
 ring belongs on the box — otherwise it draws inset, floating inside the border.
 Put the ring on the wrapper and `data-focus-ring="none"` on the inner control so
@@ -753,12 +764,43 @@ two colours, the larger one on an element that was not focused. Keying on
 `focus-within`: its `<select>` is `opacity-0`, so there is no second ring to
 collide with and no opt-out to set.)
 
-`data-focus-ring="none"` is the opt-out, and it lives in `focus.css` scoped to
-`:focus-visible` rather than as an inline `style={{ boxShadow: "none" }}` on the
-input. Inline would suppress the focus ring **and** any shadow the component
-ever sets for its own reasons, unconditionally and invisibly to anyone grepping
-for focus. The attribute suppresses exactly one rule in exactly one state, and
-stays inside `:where()`, so it is still specificity 0.
+**The underline opt-out is the second exception to "write nothing."** A field
+whose own rule visibly changes on focus — thickens, recolours, or both — needs
+no ring at all: that change is already the one indicator WCAG 2.4.7 (AA) asks
+for, and the standard's own guidance is that a surrounding ring is not required
+once some other on-focus change is clearly visible. Stacking the neutral ring
+on top of a rule that already answers the question is redundant chrome, not a
+second layer of safety, and it reads on screen as a stray box sitting on a
+field that was already fine. Put `data-focus-ring="none"` directly on the
+input or select — there is no wrapper here, so nothing else to key the
+selector on:
+
+| Component | File |
+|---|---|
+| `FormField`'s input | `auth/form-field.tsx` |
+| `SettingsUnderlineInput` | `settings/settings-card.tsx` |
+| `UnderlineSelect` | `team/player-fields.tsx` |
+| `ProfileSelect`'s inline `<select>` | `settings/profile-form.tsx` |
+| `NameField` | `schedule/lineup-editor.tsx` |
+| `UnderlineField`'s children, `PlayerRow`'s name input | `matches/match-actions/edit-match-dialog.tsx` |
+| the player/opponent name inputs | `matches/new-match-wizard/DetailsContent.tsx` |
+
+The opt-out is earned by an actual on-focus change, never by looking like an
+underline. `schedule/field-row.tsx`'s defaults row draws a hairline that never
+changes — no thickening, no recolour, nothing — so it keeps the neutral ring:
+remove it there and the field drops from one indicator to zero, which is
+precisely the failure this file exists to prevent. Before adding this
+attribute anywhere new, find the actual `:focus`/`:focus-within` rule that
+changes the control and confirm it fires — do not assume a `border-b` alone
+qualifies.
+
+`data-focus-ring="none"` is the opt-out for both exceptions, and it lives in
+`focus.css` scoped to `:focus-visible` rather than as an inline
+`style={{ boxShadow: "none" }}` on the input. Inline would suppress the focus
+ring **and** any shadow the component ever sets for its own reasons,
+unconditionally and invisibly to anyone grepping for focus. The attribute
+suppresses exactly one rule in exactly one state, and stays inside `:where()`,
+so it is still specificity 0.
 
 Three gotchas, in the order you will actually hit them:
 
@@ -766,15 +808,18 @@ Three gotchas, in the order you will actually hit them:
   `input[type=radio]` take the **neutral** ring even though they are actionable
   controls the rest of the system rings in blue. Two live call sites today.
 - `border-color` is not part of the ring, so `focus:border-[var(--blue)]` still
-  turns a field blue. That is the deliberate underline vocabulary on auth
-  fields; on a boxed field it is a leak.
+  turns a field blue regardless of `data-focus-ring`. On an underline field
+  that recolour IS the indicator the opt-out relies on — pair the two, per the
+  table above. On a boxed field with no such opt-out set, the same recolour is
+  just a leak.
 - Radix's `SelectTrigger` is a `<button>`, so it takes the blue ring rather
   than the carve-out. Latent — that component has no call sites yet — but it
   will bite whoever adds the first one.
 
 The rule exists because the reset leaves `outline: none` on everything, which
 left keyboard users with no focus indicator at all (WCAG 2.4.7 AA). Recolour a
-ring; never delete one.
+ring, or delete it where a control already shows focus some other way — never
+delete the only indicator a control has.
 
 ### Disabled
 

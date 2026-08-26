@@ -188,6 +188,7 @@ export function SettingsUnderlineInput({
 }) {
   return (
     <input
+      data-focus-ring="none" /* the border-b above carries focus */
       className={cn(
         "h-[34px] bg-transparent text-[13px] text-[var(--ink-900)] outline-none transition-colors",
         "placeholder:text-[var(--ink-400)] focus:border-[var(--blue)]",

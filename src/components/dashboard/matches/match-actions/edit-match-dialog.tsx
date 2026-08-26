@@ -389,6 +389,7 @@ export function EditMatchDialog({ matchId, open, onOpenChange }: EditMatchDialog
                 <input
                   value={tournament}
                   onChange={(e) => setTournament(e.target.value)}
+                  data-focus-ring="none" /* the rule below carries focus */
                   className="w-full bg-transparent text-[18px] font-medium tracking-[-0.3px] text-[#0D0D0D] outline-none placeholder:text-[#AAAAAA] placeholder:font-normal pb-1.5"
                 />
               </UnderlineField>
@@ -578,6 +579,7 @@ export function EditMatchDialog({ matchId, open, onOpenChange }: EditMatchDialog
                     }}
                     required
                     aria-invalid={fieldErrors.date ? true : undefined}
+                    data-focus-ring="none" /* the rule below carries focus */
                     className="w-full appearance-none bg-transparent text-[14px] outline-none text-[#0D0D0D] pb-1.5"
                   />
                 </UnderlineField>
@@ -585,6 +587,7 @@ export function EditMatchDialog({ matchId, open, onOpenChange }: EditMatchDialog
                   <input
                     value={round}
                     onChange={(e) => setRound(e.target.value)}
+                    data-focus-ring="none" /* the rule below carries focus */
                     className="w-full bg-transparent text-[14px] outline-none text-[#0D0D0D] placeholder:text-[#AAAAAA] pb-1.5"
                   />
                 </UnderlineField>
@@ -592,6 +595,7 @@ export function EditMatchDialog({ matchId, open, onOpenChange }: EditMatchDialog
                   <select
                     value={matchType}
                     onChange={(e) => setMatchType(e.target.value)}
+                    data-focus-ring="none" /* the rule below carries focus */
                     className={cn(
                       "w-full appearance-none bg-transparent text-[14px] outline-none pb-1.5 cursor-pointer",
                       matchType ? "text-[#0D0D0D]" : "text-[#AAAAAA]"
@@ -609,6 +613,7 @@ export function EditMatchDialog({ matchId, open, onOpenChange }: EditMatchDialog
                   <select
                     value={courtType}
                     onChange={(e) => setCourtType(e.target.value)}
+                    data-focus-ring="none" /* the rule below carries focus */
                     className={cn(
                       "w-full appearance-none bg-transparent text-[14px] outline-none pb-1.5 cursor-pointer capitalize",
                       courtType ? "text-[#0D0D0D]" : "text-[#AAAAAA]"
@@ -799,6 +804,7 @@ function PlayerRow({
           aria-invalid={error ? true : undefined}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          data-focus-ring="none" /* the rule below carries focus */
           className="w-full bg-transparent text-[16px] font-normal tracking-[-0.4px] text-[#0D0D0D] outline-none placeholder:text-[#AAAAAA] placeholder:font-normal pb-1.5"
         />
         <div
