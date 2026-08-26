@@ -318,7 +318,7 @@ export function TeamSettingsForm({ data }: { data: TeamSettingsData }) {
                 Resend
               </button>
               <SettingsIconButton
-                label={`Withdraw the invite to ${invite.email}`}
+                label={`Revoke the invite to ${invite.email}`}
                 tone="danger"
                 disabled={isRosterBusy}
                 className="ml-3"

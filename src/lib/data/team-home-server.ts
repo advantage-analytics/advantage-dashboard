@@ -487,12 +487,6 @@ export interface TeamHomeData {
    * placeholder, no line explaining that there is no dual.
    */
   weekendDual: WeekendDual | null;
-  /**
-   * The program's upload permission, carried here because it decides whether a
-   * player sees a New match control at all. Read from the same row Settings ›
-   * Team writes — never a second copy of the setting.
-   */
-  playersCanUpload: boolean;
 }
 
 /**
@@ -1669,6 +1663,5 @@ export async function getTeamHomeData(
     rosterCard: rosterCard(team?.invites ?? [], people),
     attention: teamAttention(matches, progress, now.getTime()),
     weekendDual,
-    playersCanUpload: team?.program.playersCanUpload ?? false,
   };
 }

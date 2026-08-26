@@ -236,7 +236,7 @@ export async function revokeInvite(inviteId: string): Promise<ActionResult> {
   });
 
   if (error) {
-    return { ok: false, error: toMessage(error, "Couldn't withdraw that invite.") };
+    return { ok: false, error: toMessage(error, "Couldn't revoke that invite.") };
   }
 
   revalidatePath(SETTINGS_PATH);

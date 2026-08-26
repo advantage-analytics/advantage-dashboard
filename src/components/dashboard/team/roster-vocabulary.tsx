@@ -77,6 +77,18 @@ export function resendRole(role: MemberRole): Exclude<MemberRole, "owner"> {
  */
 export const RESEND_LABEL = "Resend";
 
+/**
+ * The other thing a coach can do to an open invitation.
+ *
+ * "Revoke", and the server action has said so all along — `revokeInvite` in
+ * `settings/team-actions.ts`. 9a renamed the Roster button to match it; the
+ * error that same action returns still said "withdraw", so pressing **Revoke**
+ * printed "Couldn't withdraw that invite", and Settings › Team called it
+ * "Withdraw" besides. One action, three words, across two screens. This is the
+ * word; the two strays were corrected alongside it.
+ */
+export const REVOKE_LABEL = "Revoke";
+
 export const RESEND_CLASS =
   "text-[11px] font-medium text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)] disabled:opacity-50";
 

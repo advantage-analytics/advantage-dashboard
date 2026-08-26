@@ -66,7 +66,6 @@ export default async function TeamHomePage() {
     attention,
     nextEvent,
     weekendDual,
-    playersCanUpload,
   } = await getTeamHomeData(active.id, billingMonth);
 
   // Roster facts and the setup checklist are staff business. A player reaches
@@ -145,7 +144,7 @@ export default async function TeamHomePage() {
                 {empty ? (
                   isStaff ? (
                     "Send a match and the analysis comes back to this page."
-                  ) : canUploadForProgram(active) ? (
+                  ) : canUpload ? (
                     "Your matches appear here — your coach sends them, and so can you."
                   ) : (
                     "Your matches appear here as your coach sends them."

@@ -31,6 +31,7 @@ import {
   InviteRing,
   RESEND_CLASS,
   RESEND_LABEL,
+  REVOKE_LABEL,
   invitedLine,
   resendRole,
 } from "@/components/dashboard/team/roster-vocabulary";
@@ -96,6 +97,27 @@ const COL = {
 const ROW = "flex items-center gap-3";
 
 /** 12/16 padding, pulled back 16px so the wash sits inside the card's 24px. */
+/**
+ * The wash a row paints on hover AND on focus.
+ *
+ * 9a is "6a's columns with 5a's `#` column and 8a's row treatment", and 8a's
+ * treatment is both halves: the pointer gets a wash, and so does the keyboard.
+ * The merge that brought this file to 9a carried the hover half inline and lost
+ * the focus half, which left the Roster table the one result list on the product
+ * where tabbing moves focus with nothing following it — `match-rows.tsx` and
+ * `dual-sheet.tsx` both highlight.
+ *
+ * `has-[:focus-visible]` rather than `focus-visible`, and the distinction is
+ * real: this compiles to `&:has(:focus-visible)`, which matches a DESCENDANT
+ * taking focus. That is right here, where the row is a container and the name
+ * link, Upload and the row menu are the things that focus — and it is wrong in
+ * `match-rows.tsx`, where the row itself is the anchor, which is why that file
+ * spells it `focus-visible:` instead. Same rule, two spellings, because the two
+ * rows are built differently.
+ */
+const ROW_WASH =
+  "transition-colors duration-150 hover:bg-[var(--surface-muted)] has-[:focus-visible]:bg-[var(--surface-muted)]";
+
 const ROW_INSET = "-mx-4 rounded-[var(--radius-element)] px-4 py-3";
 
 /** The trailing controls, so both read as one class of thing. */
@@ -406,7 +428,7 @@ function MemberRow({
   // The pill already says it in words.
   return (
     <li
-      className={`${ROW} ${ROW_INSET} relative transition-colors hover:bg-[var(--surface-muted)]`}
+      className={`${ROW} ${ROW_INSET} relative ${ROW_WASH}`}
     >
       <LineupSpot spot={member.lineupSpot} />
 
@@ -696,7 +718,7 @@ export function RosterTable({
                     onClick={() => run(() => revokeInvite(invite.id))}
                     className="text-[11px] text-[var(--ink-500)] transition-colors hover:text-[var(--danger)] disabled:opacity-50"
                   >
-                    Revoke
+                    {REVOKE_LABEL}
                   </button>
                 </span>
               </li>
