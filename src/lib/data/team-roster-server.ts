@@ -5,6 +5,7 @@ import {
   matchOutcome,
   shortDate,
   shortName,
+  zonedDayString,
   type MatchScore,
 } from "@/lib/data/match-utils";
 import { meanOfPresent, pct, statKey } from "@/lib/data/aggregate";
@@ -173,17 +174,22 @@ interface DbStatRow {
   first_serve_pct: string | number | null;
 }
 
-/** Whether a timestamp falls on the server's current calendar day. */
-function isToday(iso: string | null): boolean {
+/**
+ * Whether `iso` falls on the same calendar day as `now`, read in `timeZone`.
+ *
+ * Used to take neither argument: it read `new Date()` directly and compared
+ * with the `Date` object's own local getters, which is the SERVER's zone —
+ * UTC on Vercel — regardless of which program's "today" was being asked
+ * about. Team Home reads this through `claimedTodayNames()` below with the
+ * program's own zone and the one `now` its whole read is built on; a second
+ * clock here is exactly the failure `getTeamHomeData`'s single-clock comment
+ * exists to prevent. See `zonedDayString`.
+ */
+function isToday(iso: string | null, now: Date, timeZone: string): boolean {
   if (!iso) return false;
   const then = new Date(iso);
   if (Number.isNaN(then.getTime())) return false;
-  const now = new Date();
-  return (
-    then.getFullYear() === now.getFullYear() &&
-    then.getMonth() === now.getMonth() &&
-    then.getDate() === now.getDate()
-  );
+  return zonedDayString(then, timeZone) === zonedDayString(now, timeZone);
 }
 
 /** One match as it bears on one of the two people who played it. */
@@ -219,16 +225,24 @@ function fallbackName(email: string | null): string {
  * both surfaces, resolved on one clock, with one answer for a row whose name is
  * missing. A second definition of "today" is a pill that shows on one page and
  * not the other for the same person on the same afternoon.
+ *
+ * `now` and `timeZone` come from the caller rather than being read in here —
+ * `getTeamHomeData` hands over the one `now` its whole read is built on and
+ * the program's own zone, the same two arguments `localDay`/`weekBounds`
+ * already take, so the weekend dual sheet and this pill cannot disagree about
+ * what day it is.
  */
 export function claimedTodayNames(
   rows: {
     display_name: string | null;
     email: string | null;
     claimed_at: string | null;
-  }[]
+  }[],
+  now: Date,
+  timeZone: string
 ): string[] {
   return rows
-    .filter((row) => isToday(row.claimed_at))
+    .filter((row) => isToday(row.claimed_at, now, timeZone))
     .map((row) => row.display_name?.trim() || fallbackName(row.email));
 }
 
@@ -236,6 +250,10 @@ export const getRosterData = cache(async function getRosterData(
   programId: string
 ): Promise<RosterData> {
   const supabase = await createClient();
+
+  // The one clock this read's "claimed today" pill is computed on — see
+  // `isToday`.
+  const now = new Date();
 
   // Every one of these has to land before a single row renders, and no branch
   // depends on another — so they go together rather than in the sequence the
@@ -256,7 +274,7 @@ export const getRosterData = cache(async function getRosterData(
         .order("created_at", { ascending: false }),
       supabase
         .from("programs")
-        .select("players_can_upload, roster_visible")
+        .select("players_can_upload, roster_visible, time_zone")
         .eq("id", programId)
         .maybeSingle(),
       // First serve needs the match ids, so it cannot join the siblings above —
@@ -287,6 +305,12 @@ export const getRosterData = cache(async function getRosterData(
     ]);
 
   const { matches, stats } = matchesResult;
+
+  // The program's own zone for "claimed today" — the same column Team Home
+  // reads through `getTeamSettings`, ridden along on the select above rather
+  // than a second query. Falls back to the column's own default for a program
+  // whose row somehow did not come back.
+  const timeZone = programResult.data?.time_zone ?? "UTC";
 
   // Keyed on the view's natural key, the way every other reader of this table
   // does — one `set` per row rather than a read-modify-write of a pair.
@@ -352,7 +376,7 @@ export const getRosterData = cache(async function getRosterData(
       classYear: row.class_year,
       lineupSpot: row.lineup_spot,
       addedOn: shortDate(row.joined_at),
-      claimedToday: isToday(row.claimed_at),
+      claimedToday: isToday(row.claimed_at, now, timeZone),
       // Filled in below, once every row is known.
       duplicateOfPlayerId: null,
       matchesPlayed: results.length,

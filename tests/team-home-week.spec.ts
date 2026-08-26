@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { localDay, weekBounds } from '@/lib/data/team-home-server';
+import { localDay, weekBounds, weekendDualRow } from '@/lib/data/team-home-server';
 
 /**
  * Which day Team Home thinks it is.
@@ -76,5 +76,49 @@ test.describe('weekBounds', () => {
   test('Monday is the first day of its own week, not the last of the one before', () => {
     const week = weekBounds(new Date('2026-08-31T12:00:00.000Z'), 'UTC');
     expect(week.start).toBe('2026-08-31');
+  });
+});
+
+/**
+ * `programs.time_zone`, end to end — the case T12 documented as still broken.
+ *
+ * T12 fixed `localDay`/`weekBounds` to take a zone and pinned the constant
+ * they were fed to UTC, which made the comments honest but changed nothing a
+ * Pacific program actually saw: `getTeamHomeData` still passed `UTC` no
+ * matter what. T20 is the one-line change T12 shaped this for — a real
+ * `programs.time_zone` column threaded in instead of the constant — and this
+ * is the same failure the two tests above already prove exists under UTC,
+ * now proven fixed under a program's own zone: `today` and `week` computed
+ * the way `getTeamHomeData` computes them, fed to the same `weekendDualRow`
+ * the dual card calls, with a dual sitting on the Saturday the coach is
+ * still reading about.
+ */
+test.describe('a Pacific program, end to end', () => {
+  test('Sunday 18:00 Pacific still finds Saturday\'s dual on the weekend sheet', () => {
+    const today = localDay(SUNDAY_EVENING_PACIFIC, PACIFIC);
+    const week = weekBounds(SUNDAY_EVENING_PACIFIC, PACIFIC);
+
+    const events = [
+      { id: 'fri-dual', kind: 'dual' as const, startsOn: '2026-08-28' },
+      { id: 'sat-dual', kind: 'dual' as const, startsOn: '2026-08-29' },
+    ];
+
+    // Both fall inside the Monday-start week this Pacific instant is living
+    // in, and the sheet prefers the more recent of the two once both are
+    // behind `today`.
+    expect(weekendDualRow(events, week, today)?.id).toBe('sat-dual');
+  });
+
+  test('the same instant, read under the UTC fallback, has already rolled the dual out of range', () => {
+    // The regression this whole task exists to fix, stated as a contrast: a
+    // program with no `time_zone` set (`DEFAULT_TIME_ZONE`, which is what
+    // `getTeamHomeData` falls back to) still gets today's shipped UTC
+    // behavior — Saturday's dual has already dropped out of "this week".
+    const today = localDay(SUNDAY_EVENING_PACIFIC, 'UTC');
+    const week = weekBounds(SUNDAY_EVENING_PACIFIC, 'UTC');
+
+    const events = [{ id: 'sat-dual', kind: 'dual' as const, startsOn: '2026-08-29' }];
+
+    expect(weekendDualRow(events, week, today)).toBeNull();
   });
 });

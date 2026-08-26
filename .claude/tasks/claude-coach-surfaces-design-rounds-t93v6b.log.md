@@ -1503,3 +1503,45 @@ is the runner's. Newest entries at the bottom.
   read can reach it either way.
 - **Verdict: clean.** No guardrail or RLS violation found. T34 stands as
   committed at `7b8d3dd`.
+
+## T20 · Give a program its own timezone — done
+
+- **gate:** 5a green — `npx tsc --noEmit` exit 0; `npm run lint` 0 errors /
+  38 warnings, all pre-existing; `npm test` 200 passed (198 -> 200). 5b
+  (`task-completion-reviewer`): VERDICT pass, all 7 boxes met — flagged its
+  own tool set had no live-DB access, so boxes 1 and 6 (CHECK constraint
+  actually rejecting non-IANA values) were verified only by static reading.
+  Closed that gap myself with three live transactions against production
+  (`pouxujkhtbvkdwbzfvka`): `'Not/A_Zone'` and `'-08:00'` both raised `23514`
+  inside a rolled-back `BEGIN`/`ROLLBACK`; `'America/Los_Angeles'` accepted.
+  5c (`rls-boundary-reviewer`): clean — `is_iana_time_zone` is invoker-rights
+  (not `security definer`), reads only the public `pg_timezone_names`
+  catalog with no RLS implications; no policy on `programs` touched or
+  disturbed; both new reads stay on the RLS-scoped client, no
+  `admin.ts` in the diff; grepped every live `programs` writer in `src/` and
+  confirmed none sets `time_zone`, so no write path can trip the new CHECK
+  unexpectedly.
+- **changed:** new migration `supabase/migrations/20260826165916_programs_time_zone.sql`
+  — `programs.time_zone text not null default 'UTC'`, backfilled, CHECK-validated
+  against `pg_timezone_names` via `is_iana_time_zone()`. Already applied live
+  to production before this commit (via `apply_migration`), verified via
+  `execute_sql` independent of the file. `team-settings-server.ts` and
+  `team-roster-server.ts` ride the new column on their existing `programs`
+  selects. `team-home-server.ts`: `PROGRAM_TIME_ZONE` retired in favor of
+  `DEFAULT_TIME_ZONE` (fallback only); `getTeamHomeData` computes one
+  `timeZone` local that reaches the dual sheet's day/week math, the invite
+  countdown (`rosterProgress` -> `wholeDaysUntil`), and the roster card
+  (`rosterCard` -> `claimedTodayNames`) — confirmed by trace, same variable,
+  three consumers. `team-roster-server.ts`'s `isToday`/`claimedTodayNames`
+  no longer read `new Date()` internally; `getRosterData`'s own separate
+  `isToday` call site (Roster page, not Team Home) was updated too, forced
+  by the signature change, using the same ride-along column. New shared
+  `zonedDayString()` in `match-utils.ts` to avoid an import cycle between
+  the two `-server.ts` files. New test: a Pacific-Sunday-evening contrast
+  pair in `tests/team-home-week.spec.ts` proving the exact T12 regression
+  (UTC rolls the week forward mid-Sunday-evening Pacific) and its fix,
+  alongside the six pre-existing tests left untouched.
+- **operational note, not a gate failure**: this migration is live on
+  production ahead of this commit landing. Additive and backward-compatible
+  (`not null default 'UTC'`), so no live code broke in the interim; flagging
+  per both reviewers' notes so it's tracked rather than assumed silent.

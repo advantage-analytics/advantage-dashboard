@@ -221,6 +221,31 @@ export function formatDelta(delta: number): { label: string; color: string } {
   return { label: "→ 0", color: "var(--ink-500)" };
 }
 
+/**
+ * The calendar day an instant falls on in `timeZone`, as YYYY-MM-DD.
+ *
+ * Shared by every caller that has to answer "what day is it" — or "is this
+ * today" — in a zone that is not necessarily the server's own. Reading a
+ * `Date`'s local getters (`getFullYear()`/`getMonth()`/`getDate()`) answers
+ * that in the SERVER's zone, which on Vercel is UTC regardless of whose
+ * "today" is actually being asked about. `team-home-server.ts` (`localDay`)
+ * and `team-roster-server.ts` (`isToday`) both compute through here rather
+ * than each keeping its own copy — two definitions of "today" is how a
+ * claimed-profile pill ends up showing on one page and not the other for the
+ * same person on the same afternoon.
+ */
+export function zonedDayString(now: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((piece) => piece.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
 /** "2026-08-08T…" → "Aug 8". */
 export function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {

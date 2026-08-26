@@ -24,6 +24,7 @@ import {
   matchOutcome,
   setTally,
   shortDate,
+  zonedDayString,
   type MatchScore,
 } from "@/lib/data/match-utils";
 import { meanOfPresent, pct, statKey } from "@/lib/data/aggregate";
@@ -87,26 +88,22 @@ const EXPIRING_SOON_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * The zone Team Home does its calendar arithmetic in.
+ * The zone Team Home falls back to when a program has none of its own.
  *
- * Pinned, not inherited from the process. `usage-format.ts` and
- * `active-workspace-server.ts` both pass `timeZone: "UTC"` for this reason: a
- * day computed in whatever zone the runtime happens to sit in is one answer on
- * a laptop and a different one on Vercel, and nothing on screen says which you
- * are looking at.
+ * Every program has a real zone now — `programs.time_zone`, `not null
+ * default 'UTC'`, read through `getTeamSettings()` alongside the rest of the
+ * program row — so this is no longer THE zone the page computes in, only the
+ * one it uses when `team` itself did not come back (the `programs` row is
+ * publicly readable, so that should not happen, but `getTeamHomeData` fails
+ * closed rather than crash on it, the same posture `resultsScope()` takes for
+ * `rosterVisible` a few lines below).
  *
- * UTC is the honest constant here, NOT the right answer. The week turns over at
- * midnight UTC, which is Sunday afternoon on the West Coast, so a Pacific
- * program's weekend sheet still leaves the page while Sunday evening is going
- * on — the same failure the Monday-start rule below exists to prevent, moved a
- * few hours rather than fixed. Fixing it needs the PROGRAM's zone, and there is
- * no `programs.timezone` column to read one from. `programs.state` is not a
- * substitute: Arizona keeps no DST and nine states are split across two zones,
- * so a state-to-zone table would be a guess wearing a schema's clothes. When
- * that column lands, this constant becomes that field and both getters below
- * already take it as an argument.
+ * `programs.state` was considered and rejected as a substitute for a real
+ * zone column: Arizona keeps no DST and nine states are split across two
+ * zones, so a state-to-zone table would be a guess wearing a schema's
+ * clothes.
  */
-const PROGRAM_TIME_ZONE = "UTC";
+const DEFAULT_TIME_ZONE = "UTC";
 
 /**
  * The day `now` falls on in `timeZone`, as YYYY-MM-DD.
@@ -123,18 +120,13 @@ const PROGRAM_TIME_ZONE = "UTC";
  * answer belongs to whoever the caller names and a test can name one.
  *
  * Exported for `tests/team-home-week.spec.ts` only — the page reads it through
- * `getTeamHomeData` below.
+ * `getTeamHomeData` below. A thin re-export of `zonedDayString`
+ * (`match-utils.ts`), which `team-roster-server.ts`'s `isToday` reads through
+ * too — one implementation, kept under this name here because it is what the
+ * spec imports.
  */
 export function localDay(now: Date, timeZone: string): string {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(now);
-  const part = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((piece) => piece.type === type)?.value ?? "";
-  return `${part("year")}-${part("month")}-${part("day")}`;
+  return zonedDayString(now, timeZone);
 }
 
 /**
@@ -148,8 +140,9 @@ export function localDay(now: Date, timeZone: string): string {
  * side of the boundary, which is what makes "this weekend" a single object.
  *
  * Which instant "the moment Sunday begins" names is the zone's business, not
- * the server's — see `PROGRAM_TIME_ZONE`, whose comment says what today's
- * pinned value costs.
+ * the server's — `getTeamHomeData` passes the program's own `time_zone`, not
+ * a pinned constant, and `DEFAULT_TIME_ZONE` is only what a program with none
+ * set falls back to.
  *
  * Both ends are YYYY-MM-DD because `program_events.starts_on` is a date, not an
  * instant — the same reason `localDay` exists.
@@ -919,7 +912,8 @@ function playerCount(rosterRows: { role: string }[]): number {
 export function rosterProgress(
   rosterRows: { role: string }[],
   invites: { role: string; createdAt: string }[],
-  now: number
+  now: number,
+  timeZone: string = DEFAULT_TIME_ZONE
 ): RosterProgress {
   const players = playerCount(rosterRows);
   const outstanding = invites.filter((invite) => invite.role === "player");
@@ -953,7 +947,8 @@ export function rosterProgress(
     players,
     outstanding: outstanding.length,
     expiringSoon: soon.length,
-    expiringInDays: soon.length > 0 ? wholeDaysUntil(soon[0], now) : null,
+    expiringInDays:
+      soon.length > 0 ? wholeDaysUntil(soon[0], now, timeZone) : null,
   };
 }
 
@@ -965,8 +960,14 @@ export function rosterProgress(
  * are about the calendar, not about a duration. Elapsed thirds of a day put an
  * invitation dying at 10am on Tuesday inside "today" when a coach reads the
  * page at 11pm on Monday — eleven hours away, and on a day that is not today.
- * Anchoring both ends to their day in `PROGRAM_TIME_ZONE` makes the two words
- * mean what they say.
+ * Anchoring both ends to their day in `timeZone` makes the two words mean
+ * what they say.
+ *
+ * `timeZone` is the program's own zone now, threaded in from `rosterProgress`
+ * — this used to reach for the module constant directly, which is exactly the
+ * bug this file's single-clock comment warns about: the weekend sheet honoring
+ * the program's zone while "One invite expires tomorrow" stayed on UTC, one
+ * page, two zones.
  *
  * Both anchors are UTC midnights built from a zoned calendar day, so the
  * subtraction never walks through a DST transition — the same construction, and
@@ -976,9 +977,9 @@ export function rosterProgress(
  * return a negative and there is nothing to clamp: `expiry > now` puts the
  * expiry on `now`'s day or a later one.
  */
-function wholeDaysUntil(expiry: number, now: number): number {
+function wholeDaysUntil(expiry: number, now: number, timeZone: string): number {
   const midnight = (ms: number) =>
-    Date.parse(`${localDay(new Date(ms), PROGRAM_TIME_ZONE)}T00:00:00.000Z`);
+    Date.parse(`${localDay(new Date(ms), timeZone)}T00:00:00.000Z`);
   return Math.round((midnight(expiry) - midnight(now)) / DAY_MS);
 }
 
@@ -991,6 +992,10 @@ function wholeDaysUntil(expiry: number, now: number): number {
  * invitations are mapped exactly as `getRosterData` maps them, into the same
  * `RosterInvite`, because the Roster page is where these rows have their
  * vocabulary and this is that same list seen from the home page.
+ *
+ * `now`/`timeZone` are the read's one clock and the program's own zone,
+ * passed straight through to `claimedTodayNames` — see that function for why
+ * a second clock here is the bug this arrangement exists to avoid.
  */
 function rosterCard(
   invites: TeamInvite[],
@@ -999,13 +1004,15 @@ function rosterCard(
     display_name: string | null;
     email: string | null;
     claimed_at: string | null;
-  }[]
+  }[],
+  now: Date,
+  timeZone: string
 ): TeamRosterCard | null {
   // The Roster page's own count, off the same RPC and the same predicate — see
   // `TeamRosterCard.players` for why this and the checklist's receipt have to
   // be one number rather than two.
   const players = playerCount(rosterRows);
-  const claimedToday = claimedTodayNames(rosterRows);
+  const claimedToday = claimedTodayNames(rosterRows, now, timeZone);
   const open: RosterInvite[] = invites.map((invite) => ({
     id: invite.id,
     email: invite.email,
@@ -1586,16 +1593,12 @@ export async function getTeamHomeData(
 ): Promise<TeamHomeData> {
   const supabase = await createClient();
 
-  // One clock AND one zone for the whole read. The greeting, the schedule
-  // window, the dual sheet and the invite expiry below all have to agree about
-  // what day it is: a request that straddles midnight would otherwise answer
-  // two different questions, and a day read in one zone against a week read in
-  // another would put "this weekend" outside "this week". `now` is the single
-  // instant, `PROGRAM_TIME_ZONE` the single zone it is read in — neither is
-  // taken from the process.
+  // One clock for the whole read. The greeting, the schedule window, the dual
+  // sheet and the invite expiry below all have to agree about what day it is:
+  // a request that straddles midnight would otherwise answer two different
+  // questions. `now` is the single instant — taken here, once, rather than
+  // from the process, and never re-read below.
   const now = new Date();
-  const today = localDay(now, PROGRAM_TIME_ZONE);
-  const week = weekBounds(now, PROGRAM_TIME_ZONE);
 
   const [
     usage,
@@ -1675,6 +1678,20 @@ export async function getTeamHomeData(
     role: viewerRole,
     rosterVisible: team?.program.rosterVisible ?? false,
   });
+
+  // **The single zone the rest of this read's calendar arithmetic runs in** —
+  // the program's own (`programs.time_zone`, already fetched above by
+  // `getTeamSettings`, so this costs no round trip), falling back to
+  // `DEFAULT_TIME_ZONE` on the same missing-`team` posture `scope` just took.
+  // The schedule window, the dual sheet and the invite countdown all have to
+  // agree about what zone they are reading in, for the same reason they have
+  // to agree about `now`: a day read in one zone against a week read in
+  // another would put "this weekend" outside "this week", and a coach reading
+  // the dual sheet in their own zone while the invite alert still spoke UTC
+  // was exactly this bug.
+  const timeZone = team?.program.timeZone ?? DEFAULT_TIME_ZONE;
+  const today = localDay(now, timeZone);
+  const week = weekBounds(now, timeZone);
 
   const season = (seasonRows ?? []) as DbSeasonMatch[];
   const seasonIds = season.map((row) => row.id);
@@ -1763,10 +1780,16 @@ export async function getTeamHomeData(
   // same rows `rosterIds` and the roster card above are built from — one read,
   // one answer to who is on this team.
   //
-  // `now`, not a second `Date.now()`: the invite clock, the greeting, the
-  // schedule window and the dual sheet are all answered on this read's one
-  // clock, and the alert list below reads the expiry this returns.
-  const progress = rosterProgress(people, team?.invites ?? [], now.getTime());
+  // `now` and `timeZone`, not a second clock or a second zone: the invite
+  // countdown, the greeting, the schedule window and the dual sheet are all
+  // answered on this read's one clock and one zone, and the alert list below
+  // reads the expiry this returns.
+  const progress = rosterProgress(
+    people,
+    team?.invites ?? [],
+    now.getTime(),
+    timeZone
+  );
 
   return {
     usage,
@@ -1787,7 +1810,7 @@ export async function getTeamHomeData(
           startsOn: nextEventRow.startsOn,
         }
       : null,
-    rosterCard: rosterCard(team?.invites ?? [], people),
+    rosterCard: rosterCard(team?.invites ?? [], people, now, timeZone),
     attention: teamAttention(matches, progress, now.getTime()),
     weekendDual,
   };

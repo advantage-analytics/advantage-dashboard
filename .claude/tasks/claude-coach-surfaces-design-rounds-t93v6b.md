@@ -463,7 +463,7 @@ ready).
 - **notes:** Found by `/simplify` during `/pr-check` and deliberately deferred: `getScheduleRows` and `getEventDetail` are separately `cache()`d over one uncached inner function, so React's cache dedupes neither. Render cost went from 7 queries / 2 deep to 19 / 9 with a dual in range. Deferred at the time because rewriting a loader straight after per-task review would merge code no reviewer had seen — which is the reason it is a task rather than a fix.
 
 ## T20 · Give a program its own timezone
-- **status:** todo
+- **status:** done
 - **files:** a new migration under `supabase/migrations/`; `src/lib/data/team-home-server.ts` (`PROGRAM_TIME_ZONE`, `localDay`, `weekBounds`); wherever the program record is read into `getTeamHomeData`
 - **done when:**
   - [ ] `programs` carries a timezone column with a sane default, and the migration backfills existing rows rather than leaving them null

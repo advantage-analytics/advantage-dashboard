@@ -36,6 +36,14 @@ export interface TeamIdentity {
   season: string | null;
   rosterVisible: boolean;
   playersCanUpload: boolean;
+  /**
+   * IANA zone name (`America/Los_Angeles`, `UTC`, …) the program's calendar
+   * arithmetic runs in — Team Home's weekend dual sheet, invite countdown and
+   * claimed-today roster pill. Never null: the `programs.time_zone` column is
+   * `not null default 'UTC'`, so a program that has never set one still reads
+   * as a real zone rather than a caller having to invent a fallback.
+   */
+  timeZone: string;
 }
 
 export interface TeamSettingsData {
@@ -54,7 +62,7 @@ export async function getTeamSettings(
     supabase
       .from("programs")
       .select(
-        "id, school_name, team, conference, home_venue, default_surface, season, roster_visible, players_can_upload"
+        "id, school_name, team, conference, home_venue, default_surface, season, roster_visible, players_can_upload, time_zone"
       )
       .eq("id", programId)
       .maybeSingle(),
@@ -120,6 +128,7 @@ export async function getTeamSettings(
       season: row.season,
       rosterVisible: row.roster_visible,
       playersCanUpload: row.players_can_upload,
+      timeZone: row.time_zone,
     },
     members,
     invites,
