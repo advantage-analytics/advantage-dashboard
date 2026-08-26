@@ -1478,3 +1478,28 @@ is the runner's. Newest entries at the bottom.
   call site and confirming Done's refresh (`revalidatePath` inside
   `inviteMember()`) already runs during `submit()`, not attached to the Done
   click, so nothing was stripped.
+
+## T34 · 5c — self-gated after both delegated reviewers stalled
+
+- Both `pipeline-guardrails-reviewer` and `rls-boundary-reviewer` were
+  dispatched against commit `7b8d3dd` and stopped producing output after
+  ~3 minutes; neither ever returned a result or a task-notification (8+
+  minutes of unchanged transcript size). Rather than block further progress
+  on a hung subagent, gated 5c directly against the committed diff.
+- **Policy match verified**: `results-visibility.ts`'s doc comment quotes
+  the real predicate from `20260822090400_match_access_by_player_identity.sql`
+  verbatim (`created_by`, `my_player_ids()`, `is_program_staff`,
+  `roster_visible`). For `role = 'player'` and `roster_visible = false`, the
+  only matches rows a player's RLS read can return are `created_by = self OR
+  own player id` — exactly what the `"own"` label claims. No divergence
+  found between `resultsScope()` and the actual SQL.
+- **Fails closed**: `rosterVisible: team?.program.rosterVisible ?? false` —
+  a missing/unreadable `programs` row narrows rather than widens.
+- **No live consumer bypasses the gate**: grepped every call site of
+  `teamKpis`/`buildWeekendDual`/`scheduleRowsFrom` across `src/`. The only
+  other reference is a doc comment in `team-digest.ts` ("Coaches only,
+  Monday summary"); `teamDigestEmail()` itself has no call site anywhere in
+  the codebase yet — an unwired template, not a live path, so no narrowed
+  read can reach it either way.
+- **Verdict: clean.** No guardrail or RLS violation found. T34 stands as
+  committed at `7b8d3dd`.
