@@ -623,7 +623,7 @@ ready).
   Two shapes worth weighing. **Extract the decision** — the `linked`/`listed` derivation and "which `playerId` does address N get" are pure given the form's state, so lifting them into a testable function beside the component gets a real spec with no harness; T26 (make the bad state unrepresentable by deriving `target` from `listed`) would create exactly that seam, so doing T26 first may make this nearly free. **Or add the harness** — honest, larger, and it would serve `roster-table.tsx` and the wizard too, but it is a change to how this repo tests and should be decided on its own merits rather than smuggled in under a guard fix.
 
 ## T34 · Team Home shows a player RLS-subset data under program-wide labels
-- **status:** next
+- **status:** doing
 - **files:** `src/app/dashboard/team/page.tsx` (~232, ~262); `src/components/dashboard/team/dual-sheet.tsx`; `src/components/dashboard/team/kpi-strip.tsx`; `src/lib/data/team-home-server.ts` (`teamKpis`, `dualLines`); `src/lib/schedule/entry-state.ts` (`dualScore`, `entryPlayed`)
 - **done when:**
   - [ ] A player on a `roster_visible = false` program is never shown a dual score or a "Team" figure derived from rows RLS handed back for them alone — either the surface is withheld, or it says whose figures it is showing
