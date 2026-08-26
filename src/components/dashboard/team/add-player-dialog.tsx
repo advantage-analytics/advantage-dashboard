@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from "react";
 import { GitMerge, Loader2, Upload, Users } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import type { RosterMember } from "@/lib/data/team-roster-server";
 import {
   SettingsField,
@@ -17,6 +16,14 @@ import {
   DialogProblem,
   RosterDialog,
 } from "@/components/dashboard/team/dialog-shell";
+import {
+  CLASS_YEARS,
+  LINEUP_SPOTS,
+  RosterNote,
+  UnderlineSelect,
+  spotHeldNote,
+  spotHolders,
+} from "@/components/dashboard/team/player-fields";
 
 /**
  * Design 6c — put a player on the roster now.
@@ -52,13 +59,13 @@ import {
  * is red, `role="alert"`, and reserved for what `add_program_player` actually
  * refused; these are quiet lines in neutral ink, the same "question, not an
  * alarm" register as the roster table's Possible duplicate chip. Neither
- * carries a live-region role — see `RosterNote` for where the announcing
- * happens and why it cannot happen on the visible node.
+ * carries a live-region role — see `RosterNote` in `player-fields.tsx` for
+ * where the announcing happens and why it cannot happen on the visible node.
  *
- * *The taken lineup spot.* A spot is deliberately not unique per program (see
- * the `length: 9` comment below), so picking one somebody already holds is
- * legal and often correct — a coach mid-reshuffle enters the new line before
- * clearing the old one. The note says whose line it is and nothing else.
+ * *The taken lineup spot.* `spotHeldNote` and the fields it reads now live in
+ * `player-fields.tsx`, because Edit player raises the same note against the
+ * same rule and two copies of "a shared spot is allowed" could disagree about
+ * whether it is.
  *
  * *The name already on the roster.* Two athletes can genuinely share a name,
  * and a coach adding the same freshman twice looks identical from here — so
@@ -80,47 +87,12 @@ function emailNote(person: RosterMember): string {
 }
 
 /**
- * The quiet line under a field: an icon and a sentence, no fill, neutral ink.
+ * The add path's own sentence, built where the file's other prose helpers live.
  *
- * Deliberately not `DialogProblem`. That row is red and `role="alert"`, and it
- * is reserved for what `add_program_player` refused; these are observations a
- * coach is free to ignore — the register the roster table's "Possible
- * duplicate" chip already uses for the same kind of question. One component
- * rather than two copies, so the spacing the two share cannot drift.
- *
- * Visual only, deliberately, and `aria-hidden` to say so. A live region that
- * arrives already populated is one assistive tech never announces — it reports
- * *changes* to a region it was already watching — and both notes are mounted
- * with their text rather than filled in later. So the announcing is done by
- * the always-mounted `sr-only` regions below, the same split
- * `performance-tracker` uses, and hiding the visible copy keeps each sentence
- * from being read twice.
- */
-function RosterNote({
-  icon: Icon,
-  children,
-}: {
-  icon: LucideIcon;
-  /** A prepared sentence, not nodes: the live region has to say the same one. */
-  children: string;
-}) {
-  return (
-    <p
-      aria-hidden
-      className="-mt-1 flex items-start gap-2 text-[11px] leading-[1.6] text-[var(--ink-600)]"
-    >
-      <Icon className="mt-[3px] size-3.5 shrink-0" strokeWidth={1.5} aria-hidden />
-      <span>{children}</span>
-    </p>
-  );
-}
-
-/**
- * The two sentences, built where the file's other prose helpers live.
- *
- * Returned as strings, not JSX, because each one is said twice — once on
- * screen and once in the live region — and two renderings of one sentence is
- * two things that can drift.
+ * Returned as a string, not JSX, because it is said twice — once on screen and
+ * once in the live region — and two renderings of one sentence is two things
+ * that can drift. Its lineup-spot counterpart is `spotHeldNote`, shared with
+ * Edit player from `player-fields.tsx`.
  */
 function duplicateNameNote(matches: RosterMember[]): string {
   const who =
@@ -130,57 +102,6 @@ function duplicateNameNote(matches: RosterMember[]): string {
   return `${who} — ${matches
     .map(emailNote)
     .join(", ")}. If this is somebody else, you can still add them.`;
-}
-
-function spotHeldNote(names: string[], spot: string): string {
-  const holds = names.length === 1 ? "already holds" : "already hold";
-  return `${nameList(names)} ${holds} #${spot}. Spots can be shared while you reshuffle — you can still use this one.`;
-}
-
-/** "Maya Chen" · "Maya Chen and Alex Ruiz" · "Maya Chen and 2 others". */
-function nameList(names: string[]): string {
-  if (names.length === 1) return names[0];
-  if (names.length === 2) return `${names[0]} and ${names[1]}`;
-  return `${names[0]} and ${names.length - 1} others`;
-}
-
-/** Four years and the fifth that redshirts and grad transfers actually use. */
-const CLASS_YEARS = [
-  "Freshman",
-  "Sophomore",
-  "Junior",
-  "Senior",
-  "Graduate",
-] as const;
-
-/**
- * The underline `<select>`, matching `SettingsUnderlineInput`'s rule.
- *
- * Native, deliberately, for the reason `settings-inline-select.tsx` records: on
- * a phone the platform picker is better than anything we would build, and this
- * is a form somebody fills in once per athlete.
- */
-function UnderlineSelect({
-  value,
-  onChange,
-  children,
-  ariaLabel,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  children: React.ReactNode;
-  ariaLabel: string;
-}) {
-  return (
-    <select
-      aria-label={ariaLabel}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      className="h-[34px] cursor-pointer appearance-none border-b border-[var(--border-field)] bg-transparent text-[13px] text-[var(--ink-900)] outline-none transition-colors focus:border-[var(--blue)]"
-    >
-      {children}
-    </select>
-  );
 }
 
 export function AddPlayerDialog({
@@ -289,16 +210,10 @@ export function AddPlayerDialog({
       ? roster
       : roster.filter((person) => person.profileId !== createdProfileId);
 
-  // "Not set" is `""`, which `Number("")` would turn into 0 and match nothing —
-  // but the empty check says so outright rather than relying on that. A member
-  // with no line has `null`, which is never equal to a number, so the same
-  // filter covers the whole roster.
-  const spotTakenBy =
-    lineupSpot === ""
-      ? []
-      : others
-          .filter((person) => person.lineupSpot === Number(lineupSpot))
-          .map((person) => person.name);
+  // The exclusion is passed rather than pre-filtered so the shared helper —
+  // which Edit player uses to keep the note off the row it is editing — is the
+  // one place that decides what "somebody else" means.
+  const spotTakenBy = spotHolders(roster, lineupSpot, createdProfileId);
 
   // Half a name matches every Maya on the squad, which is a warning about
   // nothing while somebody is still typing — so this stays empty until both
@@ -380,7 +295,7 @@ export function AddPlayerDialog({
         else close();
       }}
       title="Add a player"
-      description="Creates their roster row now. You can upload their matches straight away — they do not need an account."
+      description="A coach-managed profile — no login needed. You upload their matches; Advantage builds their stats the same."
       footer={
         <>
           <div className="flex-1" />
@@ -428,18 +343,14 @@ export function AddPlayerDialog({
           kind it announces. `sr-only` is absolutely positioned, so it is out
           of flow and adds nothing to the dialog's 18px rhythm, which is what
           lets it sit here in reading order rather than being hoisted somewhere
-          it would be read out of context. One region per note: `aria-atomic`
-          re-reads a region whole, so a shared one would repeat the name
-          sentence on every change of lineup spot. */}
-      <div aria-live="polite" aria-atomic="true" className="sr-only">
-        {nameNote ?? ""}
-      </div>
-      {/* Directly under the pair of fields it is about, and full width for the
+          it would be read out of context.
+
+          Directly under the pair of fields it is about, and full width for the
           same reason as the spot note below: an address in a 212px cell wraps
           to three lines and shoves everything under it around as the coach
           types. GitMerge rather than a person glyph — it is the mark the
           roster row already carries for this exact question. */}
-      {nameNote && <RosterNote icon={GitMerge}>{nameNote}</RosterNote>}
+      <RosterNote icon={GitMerge} note={nameNote} />
 
       <div className="grid grid-cols-2 gap-4">
         <SettingsField label="Class year">
@@ -463,10 +374,7 @@ export function AddPlayerDialog({
             onChange={setLineupSpot}
           >
             <option value="">Not set</option>
-            {/* Nine, because a dual line-up is six singles and three doubles.
-                Not unique per program on purpose: a coach mid-reshuffle would
-                be blocked by a constraint, and there is no swap control. */}
-            {Array.from({ length: 9 }, (_, i) => i + 1).map((spot) => (
+            {LINEUP_SPOTS.map((spot) => (
               <option key={spot} value={String(spot)}>
                 #{spot}
               </option>
@@ -475,13 +383,10 @@ export function AddPlayerDialog({
         </SettingsField>
       </div>
 
-      <div aria-live="polite" aria-atomic="true" className="sr-only">
-        {spotNote ?? ""}
-      </div>
       {/* Full width rather than in the field's hint slot: the cell is half of a
           440px dialog, and a name wrapped over three lines would shove the
           email field down every time a coach changed the spot. */}
-      {spotNote && <RosterNote icon={Users}>{spotNote}</RosterNote>}
+      <RosterNote icon={Users} note={spotNote} />
 
       <SettingsField
         label="Email · optional"

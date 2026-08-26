@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { ChevronRight, GitMerge, MoreHorizontal, Upload } from "lucide-react";
+import {
+  ArrowUp,
+  ChevronRight,
+  GitMerge,
+  MoreHorizontal,
+  Upload,
+} from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AdvSwitch } from "@/components/ui/adv-switch";
 import { capitalize } from "@/lib/utils";
@@ -18,6 +24,7 @@ import {
   type InviteResult,
 } from "@/components/dashboard/settings/team-actions";
 import type { ActionResult } from "@/components/dashboard/settings/actions";
+import { EditPlayerDialog } from "@/components/dashboard/team/edit-player-dialog";
 import { MergeProfilesDialog } from "@/components/dashboard/team/merge-profiles-dialog";
 import {
   ClaimedTodayPill,
@@ -35,7 +42,7 @@ import type {
 /**
  * Everyone on the program, and how each of them is playing.
  *
- * Design 6a. Two audiences on one component, because they are looking at the
+ * Design 9a. Two audiences on one component, because they are looking at the
  * same list. Staff get the controls; a player gets the list, and the database
  * has already decided what they see — `program_roster_full` carries the
  * membership check, and the match policy gives a player the squad's results
@@ -49,9 +56,14 @@ import type {
  * since there is nobody to sign in and spend it.
  *
  * ── The columns ─────────────────────────────────────────────────────────────
- * Player, form, last match, first serve. No match count: it belongs on the
- * profile, and a coach scanning the roster is asking who is playing well, not
- * how many times.
+ * Lineup #, player, form, last match, first serve. No match count: it belongs
+ * on the profile, and a coach scanning the roster is asking who is playing
+ * well, not how many times.
+ *
+ * The leading # is a label for an order the list is already in — `getRosterData`
+ * sorts staff first, then players by lineup spot — not a sort this table
+ * applies. The header's arrow says which way that reads; nothing here reorders
+ * anything, so the column costs one field already on the row and no query.
  *
  * "Can send" lives in the row's overflow menu rather than as a column. It is a
  * permission — consulted rarely, changed more rarely still — and this page is
@@ -59,12 +71,14 @@ import type {
  * simply go.
  *
  * ── Widths ──────────────────────────────────────────────────────────────────
- * Fixed, and the whole grid scrolls sideways under ~840px rather than
+ * Fixed, and the whole grid scrolls sideways under ~880px rather than
  * reflowing. A run of form ticks and a set score stop meaning anything once
  * they wrap, so a narrow screen gets the same table moved, not a different one.
  */
 
 const COL = {
+  /** Just wide enough for a two-digit line and the em dash that replaces it. */
+  spot: "w-6 shrink-0",
   player: "w-[220px] shrink-0",
   form: "w-[80px] shrink-0",
   last: "min-w-0 flex-1",
@@ -72,37 +86,17 @@ const COL = {
   actions: "w-[64px] shrink-0",
 } as const;
 
-const HEAD =
-  "text-[10px] font-medium tracking-[1.5px] text-[var(--ink-500)] uppercase";
-
-/** The columns themselves, shared by the header row and every row under it. */
-const COLUMNS = "flex items-center gap-3";
-
 /**
- * A row's own padding — 18px, not the card's 24px, because the remaining 6px is
- * the inset `ROW_SURFACE` adds back as a margin. 18 + 6 is what the column
- * header pads by on its own, so every cell still starts under the word that
- * names it. The two numbers have to keep summing to 24 or the table drifts out
- * of line with its own header.
+ * Horizontal padding belongs to the CARD, and each row pulls its own back out
+ * again with a negative margin (design 9a, row treatment from 8a). That is what
+ * makes a hover a rounded panel inset from the card's edge rather than a band
+ * running wall to wall — which is also why the rows need no hairline between
+ * them: the wash itself is the row boundary.
  */
-const ROW = `${COLUMNS} px-[18px]`;
+const ROW = "flex items-center gap-3";
 
-/**
- * The rect a row's hover paints.
- *
- * Round 44's rule for a result list: the wash is a rounded rect inset from the
- * card edge rather than a band running edge to edge, so the corners stay
- * visible inside the border and the highlight reads as *this row*. The inset is
- * 6px against the card's 14px radius, which leaves the row's own 8px exactly
- * concentric with it. Nothing is ruled between rows either — the card's border
- * and the single rule under the column header are the only lines here.
- *
- * Keyboard gets what the mouse gets. The name link stretches over the row via
- * `after:inset-0`, but Upload and the overflow menu are focusable too, so this
- * keys on any descendant taking focus rather than on that one link.
- */
-const ROW_SURFACE =
-  "mx-1.5 rounded-[var(--radius-element)] transition-colors duration-150 hover:bg-[var(--surface-muted)] has-[:focus-visible]:bg-[var(--surface-muted)]";
+/** 12/16 padding, pulled back 16px so the wash sits inside the card's 24px. */
+const ROW_INSET = "-mx-4 rounded-[var(--radius-element)] px-4 py-3";
 
 /** The trailing controls, so both read as one class of thing. */
 const ROW_ICON =
@@ -159,6 +153,26 @@ function Avatar({ name }: { name: string }) {
 }
 
 /**
+ * Where this person sits in the lineup, or an em dash where nobody has said.
+ *
+ * Rendering only. `getRosterData` already orders the list by this field, so the
+ * column names an order the rows arrive in — it does not impose one, and there
+ * is nothing to click. A null is "we have not decided", not "line zero", and it
+ * is one tier quieter than a real line so a run of dashes does not read as data.
+ */
+function LineupSpot({ spot }: { spot: number | null }) {
+  return (
+    <span
+      className={`${COL.spot} mono tabular text-[11px] ${
+        spot === null ? "text-[var(--ink-400)]" : "text-[var(--ink-500)]"
+      }`}
+    >
+      {spot ?? "—"}
+    </span>
+  );
+}
+
+/**
  * The last five results as a strip, oldest at the left.
  *
  * Colour alone would carry this to a red/green-blind reader, so the strip has
@@ -190,9 +204,9 @@ function FormTicks({ form }: { form: RosterMember["form"] }) {
 }
 
 /**
- * The per-row menu: the permission, and the way off the roster.
+ * The per-row menu: the permission, the correction, and the way off the roster.
  *
- * Neither is something to put a click away from a row a coach is scanning.
+ * None of them is something to put a click away from a row a coach is scanning.
  * Owners are absent from the removal case: ownership moves by transfer, and a
  * roster screen is not where a program should be able to lose the only person
  * who runs it.
@@ -200,36 +214,65 @@ function FormTicks({ form }: { form: RosterMember["form"] }) {
 function RowMenu({
   member,
   isViewer,
+  onEdit,
   onError,
   run,
   pending,
 }: {
   member: RosterMember;
   isViewer: boolean;
+  onEdit: () => void;
   onError: (message: string | null) => void;
   run: (action: () => Promise<ActionResult | InviteResult>) => void;
   pending: boolean;
 }) {
   const [enabled, setEnabled] = useState(member.uploadEnabled);
   const [sending, startSend] = useTransition();
+  /**
+   * Controlled so Edit can close the menu itself.
+   *
+   * Both the popover and the dialog trap focus, so the two must not overlap.
+   * Left uncontrolled, the popover only closes when the click outside it lands
+   * — which, for a click on its own item, is never — and the dialog would open
+   * inside a live focus trap. Setting this false in the same event as `onEdit`
+   * puts both in one commit: the popover unmounts and returns focus, then the
+   * dialog mounts and takes it.
+   */
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  // The owner always may. Offering a switch that the RPC would honour but that
-  // would lock a program's only owner out of its own budget is a control with
-  // one useful position. A coach-managed player has no account to grant it to.
-  const canToggleSend = member.userId !== null && member.role !== "owner";
+  // Players only, and not merely the owner. `canUploadForProgram()` answers
+  // for owner, coach and staff before it reads `upload_enabled`, so on a staff
+  // row this switch would move, write, and change nothing anyone could
+  // observe — the position it appears to set is not a position the upload page
+  // has. Staff are exempt on purpose: a program's own coaches must not be
+  // lockable out of its budget by a switch. A coach-managed player has no
+  // account to grant it to.
+  const canToggleSend = member.userId !== null && member.role === "player";
   const canRemove = member.role !== "owner" && !isViewer;
+  // Gated on there being a profile row to write, and on nothing else. A coach
+  // and a claimed player both have one; staff seats do not, because
+  // `program_roster_full` only fills `profile_id` from `program_players`. Role
+  // is the wrong test: it would either drop the claimed players — the rows most
+  // likely to carry a stale spot — or offer the item on a coach whose name
+  // lives in `users` and which this dialog cannot write.
+  const canEdit = member.profileId !== null;
+  // Whether anything renders in the grant slot at all. Both arms of it are
+  // player-only — the switch, and the "no account yet" note — so a coach or
+  // staff row fills nothing, and the divider below would open the popover with
+  // a rule drawn across the top of nothing.
+  const grantSlotFilled = canToggleSend || member.role === "player";
 
-  // An owner has neither control, but the slot still has to exist. Returning
+  // An owner has none of the three, but the slot still has to exist. Returning
   // null let the upload icon slide right into the space where the menu would
   // be, so the one row without a menu had its icon a step out of line with
   // every other row's. A column of icons that does not line up reads as a
   // rendering fault.
-  if (!canToggleSend && !canRemove) {
+  if (!canToggleSend && !canRemove && !canEdit) {
     return <span aria-hidden className="size-6 shrink-0" />;
   }
 
   return (
-    <Popover>
+    <Popover open={menuOpen} onOpenChange={setMenuOpen}>
       <PopoverTrigger
         aria-label={`Options for ${member.name}`}
         title="Options"
@@ -285,29 +328,50 @@ function RowMenu({
           )
         )}
 
+        {/* One rule, above the action group rather than inside Remove: with
+            Edit player present there are two actions under it, and a divider
+            owned by Remove would draw a second one between them. */}
+        {grantSlotFilled && (canEdit || canRemove) && (
+          <span className="my-1 block h-px bg-[var(--border-hairline)]" />
+        )}
+
+        {canEdit && (
+          <button
+            type="button"
+            onClick={() => {
+              // Close first. See `menuOpen` above for why the two cannot
+              // overlap — and no `run()` here, because this opens a dialog
+              // rather than performing a write.
+              setMenuOpen(false);
+              onError(null);
+              onEdit();
+            }}
+            className="block w-full rounded-[var(--radius-element)] px-2 py-2 text-left text-[12px] text-[var(--ink-700)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]"
+          >
+            Edit player
+          </button>
+        )}
+
         {canRemove && (
-          <>
-            <span className="my-1 block h-px bg-[var(--border-hairline)]" />
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() =>
-                run(() =>
-                  // A coach-managed player has no membership row to remove, so
-                  // the profile is archived instead — which also keeps their
-                  // matches attributable. Archiving releases the seat when the
-                  // profile had been claimed, so the claimed case goes the same
-                  // way rather than through `removeMember`.
-                  member.profileId
-                    ? archiveProgramPlayer(member.profileId)
-                    : removeMember(member.userId as string)
-                )
-              }
-              className="block w-full rounded-[var(--radius-element)] px-2 py-2 text-left text-[12px] text-[var(--ink-700)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--danger)] disabled:opacity-50"
-            >
-              Remove from roster
-            </button>
-          </>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() =>
+              run(() =>
+                // A coach-managed player has no membership row to remove, so
+                // the profile is archived instead — which also keeps their
+                // matches attributable. Archiving releases the seat when the
+                // profile had been claimed, so the claimed case goes the same
+                // way rather than through `removeMember`.
+                member.profileId
+                  ? archiveProgramPlayer(member.profileId)
+                  : removeMember(member.userId as string)
+              )
+            }
+            className="block w-full rounded-[var(--radius-element)] px-2 py-2 text-left text-[12px] text-[var(--ink-700)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--danger)] disabled:opacity-50"
+          >
+            Remove from roster
+          </button>
         )}
       </PopoverContent>
     </Popover>
@@ -318,6 +382,7 @@ function MemberRow({
   member,
   canManage,
   isViewer,
+  onEdit,
   onError,
   onMerge,
   run,
@@ -326,6 +391,7 @@ function MemberRow({
   member: RosterMember;
   canManage: boolean;
   isViewer: boolean;
+  onEdit: (member: RosterMember) => void;
   onError: (message: string | null) => void;
   onMerge: (member: RosterMember) => void;
   run: (action: () => Promise<ActionResult | InviteResult>) => void;
@@ -339,147 +405,150 @@ function MemberRow({
   // moused-over, and a row that looks stuck is a bug report, not a highlight.
   // The pill already says it in words.
   return (
-    <li className={`relative ${ROW_SURFACE}`}>
-      <div className={`${ROW} py-[13px]`}>
-        <span className={`${COL.player} flex items-center gap-2.5`}>
-          <Avatar name={member.name} />
-          <span className="min-w-0">
-            <span className="block truncate text-[13px] font-medium text-[var(--ink-900)]">
-              {/* Stretched rather than wrapping the row: the trailing cell holds
-                  controls, and a link around a button is not a thing a keyboard
-                  or a screen reader can take apart. */}
-              <Link
-                href={`/dashboard/team/roster/${member.playerId}`}
-                className="rounded-[var(--radius-cell)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none after:absolute after:inset-0 after:content-['']"
-              >
-                {member.name}
-              </Link>
-              {/* ink-500, the same tier as every other piece of metadata on
-                  the row. At ink-400 it was the faintest thing on the page —
-                  the one row a person scans for first, whispering. */}
-              {isViewer && (
-                <span className="ml-1.5 text-[11px] font-normal text-[var(--ink-500)]">
-                  you
-                </span>
-              )}
-            </span>
-            {/* Titled as well as truncated. When two rows are duplicates of
-                each other the address is the ONLY thing that tells them apart,
-                and 220px is not always enough of it. */}
-            <span
-              title={memberLine(member)}
-              className="block truncate text-[11px] text-[var(--ink-500)]"
+    <li
+      className={`${ROW} ${ROW_INSET} relative transition-colors hover:bg-[var(--surface-muted)]`}
+    >
+      <LineupSpot spot={member.lineupSpot} />
+
+      <span className={`${COL.player} flex items-center gap-2.5`}>
+        <Avatar name={member.name} />
+        <span className="min-w-0">
+          <span className="block truncate text-[13px] font-medium text-[var(--ink-900)]">
+            {/* Stretched rather than wrapping the row: the trailing cell holds
+                controls, and a link around a button is not a thing a keyboard
+                or a screen reader can take apart. */}
+            <Link
+              href={`/dashboard/team/roster/${member.playerId}`}
+              className="rounded-[var(--radius-cell)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none after:absolute after:inset-0 after:content-['']"
             >
-              {memberLine(member)}
-            </span>
+              {member.name}
+            </Link>
+            {/* ink-500, the same tier as every other piece of metadata on
+                the row. At ink-400 it was the faintest thing on the page —
+                the one row a person scans for first, whispering. */}
+            {isViewer && (
+              <span className="ml-1.5 text-[11px] font-normal text-[var(--ink-500)]">
+                you
+              </span>
+            )}
+          </span>
+          {/* Titled as well as truncated. When two rows are duplicates of
+              each other the address is the ONLY thing that tells them apart,
+              and 220px is not always enough of it. */}
+          <span
+            title={memberLine(member)}
+            className="block truncate text-[11px] text-[var(--ink-500)]"
+          >
+            {memberLine(member)}
           </span>
         </span>
+      </span>
 
-        <span className={`${COL.form} flex items-center`}>
-          <FormTicks form={member.form} />
-        </span>
+      <span className={`${COL.form} flex items-center`}>
+        <FormTicks form={member.form} />
+      </span>
 
-        <span className={`${COL.last} flex items-center gap-2.5`}>
-          {/* The merge repair is entered from the row, not from a menu a coach
-              would have to know about: a duplicate is found by looking at the
-              list. Quiet, because it is a question and not an alarm — and here
-              rather than beside the name, where it was squeezing out the very
-              address that tells the two rows apart. */}
-          {canManage && member.duplicateOfPlayerId && (
-            <button
-              type="button"
-              onClick={() => onMerge(member)}
-              className="relative z-10 inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-2 py-0.5 text-[10px] font-medium text-[var(--ink-600)] transition-colors hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-            >
-              <GitMerge className="size-2.5" strokeWidth={1.5} aria-hidden />
-              Possible duplicate
-            </button>
-          )}
-          {lastMatch ? (
-            <>
-              <span
-                aria-hidden
-                className="w-4 shrink-0 text-center text-[11px] font-medium"
-                style={{ color: outcomeColor(lastMatch.won) }}
-              >
-                {outcomeLetter(lastMatch.won)}
-              </span>
-              <span className="sr-only">
-                {lastMatch.won === null
-                  ? "Result unrecorded against"
-                  : lastMatch.won
-                    ? "Won against"
-                    : "Lost to"}
-              </span>
-              <span className="w-[92px] shrink-0 truncate text-[12px] text-[var(--ink-700)]">
-                {lastMatch.opponent}
-              </span>
-              <span className="text-scoreboard-sm tabular shrink-0">
-                {lastMatch.score}
-              </span>
-              {member.claimedToday && <ClaimedTodayPill />}
-              <span className="text-micro tabular ml-auto shrink-0">
-                {lastMatch.date}
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="text-[12px] text-[var(--ink-400)]">
-                No matches yet
-              </span>
-              {member.claimedToday && <ClaimedTodayPill />}
-            </>
-          )}
-        </span>
-
-        <span className={`${COL.serve} tabular text-[13px] text-[var(--ink-900)]`}>
-          {firstServePct === null ? (
-            <span className="text-[var(--ink-400)]">—</span>
-          ) : (
-            <>
-              {firstServePct}%{" "}
-              {firstServeDelta !== null && (
-                <span
-                  className="text-[11px]"
-                  style={{ color: formatDelta(firstServeDelta).color }}
-                >
-                  {formatDelta(firstServeDelta).label}
-                </span>
-              )}
-            </>
-          )}
-        </span>
-
-        <span
-          className={`${COL.actions} relative z-10 flex items-center justify-end gap-1`}
-        >
-          {canManage ? (
-            <>
-              <Link
-                href={`/dashboard/team/upload?player=${member.playerId}`}
-                aria-label={`Upload a match for ${member.name}`}
-                title="Upload a match for this player"
-                className={ROW_ICON}
-              >
-                <Upload className="size-3.5" strokeWidth={1.5} aria-hidden />
-              </Link>
-              <RowMenu
-                member={member}
-                isViewer={isViewer}
-                onError={onError}
-                run={run}
-                pending={pending}
-              />
-            </>
-          ) : (
-            <ChevronRight
-              className="size-3.5 text-[var(--ink-300)]"
-              strokeWidth={1.5}
+      <span className={`${COL.last} flex items-center gap-2.5`}>
+        {/* The merge repair is entered from the row, not from a menu a coach
+            would have to know about: a duplicate is found by looking at the
+            list. Quiet, because it is a question and not an alarm — and here
+            rather than beside the name, where it was squeezing out the very
+            address that tells the two rows apart. */}
+        {canManage && member.duplicateOfPlayerId && (
+          <button
+            type="button"
+            onClick={() => onMerge(member)}
+            className="relative z-10 inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-2 py-0.5 text-[10px] font-medium text-[var(--ink-600)] transition-colors hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+          >
+            <GitMerge className="size-2.5" strokeWidth={1.5} aria-hidden />
+            Possible duplicate
+          </button>
+        )}
+        {lastMatch ? (
+          <>
+            <span
               aria-hidden
+              className="w-4 shrink-0 text-center text-[11px] font-medium"
+              style={{ color: outcomeColor(lastMatch.won) }}
+            >
+              {outcomeLetter(lastMatch.won)}
+            </span>
+            <span className="sr-only">
+              {lastMatch.won === null
+                ? "Result unrecorded against"
+                : lastMatch.won
+                  ? "Won against"
+                  : "Lost to"}
+            </span>
+            <span className="w-[92px] shrink-0 truncate text-[12px] text-[var(--ink-700)]">
+              {lastMatch.opponent}
+            </span>
+            <span className="text-scoreboard-sm tabular shrink-0">
+              {lastMatch.score}
+            </span>
+            {member.claimedToday && <ClaimedTodayPill />}
+            <span className="text-micro tabular ml-auto shrink-0">
+              {lastMatch.date}
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="text-[12px] text-[var(--ink-400)]">
+              No matches yet
+            </span>
+            {member.claimedToday && <ClaimedTodayPill />}
+          </>
+        )}
+      </span>
+
+      <span className={`${COL.serve} tabular text-[13px] text-[var(--ink-900)]`}>
+        {firstServePct === null ? (
+          <span className="text-[var(--ink-400)]">—</span>
+        ) : (
+          <>
+            {firstServePct}%{" "}
+            {firstServeDelta !== null && (
+              <span
+                className="text-[11px]"
+                style={{ color: formatDelta(firstServeDelta).color }}
+              >
+                {formatDelta(firstServeDelta).label}
+              </span>
+            )}
+          </>
+        )}
+      </span>
+
+      <span
+        className={`${COL.actions} relative z-10 flex items-center justify-end gap-1`}
+      >
+        {canManage ? (
+          <>
+            <Link
+              href={`/dashboard/team/upload?player=${member.playerId}`}
+              aria-label={`Upload a match for ${member.name}`}
+              title="Upload a match for this player"
+              className={ROW_ICON}
+            >
+              <Upload className="size-3.5" strokeWidth={1.5} aria-hidden />
+            </Link>
+            <RowMenu
+              member={member}
+              isViewer={isViewer}
+              onEdit={() => onEdit(member)}
+              onError={onError}
+              run={run}
+              pending={pending}
             />
-          )}
-        </span>
-      </div>
+          </>
+        ) : (
+          <ChevronRight
+            className="size-3.5 text-[var(--ink-300)]"
+            strokeWidth={1.5}
+            aria-hidden
+          />
+        )}
+      </span>
     </li>
   );
 }
@@ -500,6 +569,14 @@ export function RosterTable({
   const [merging, setMerging] = useState<[RosterMember, RosterMember] | null>(
     null
   );
+  /**
+   * The row whose editor is open, held here rather than in the row.
+   *
+   * Same reason as `merging`: one dialog for the whole table, so the popover it
+   * was opened from can unmount without taking it with it, and dropping the
+   * member on close is what resets the form.
+   */
+  const [editing, setEditing] = useState<RosterMember | null>(null);
   const [pending, start] = useTransition();
 
   /**
@@ -520,24 +597,30 @@ export function RosterTable({
     <div className="flex flex-col gap-4">
       <Problem message={error} />
 
-      {/* Horizontal padding lives on the rows, not here — the rows are inset
-          from the card by a margin of their own, and paying for that inset out
-          of their padding rather than out of the card's is what keeps their
-          columns under the un-inset column header. */}
+      {/* 9a: the card carries the horizontal padding and every row pulls its
+          own back out again, which is what makes a hover a rounded panel inset
+          from the card's edge rather than a band running wall to wall. */}
       <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-medium)] bg-[var(--surface-card)]">
-        <div className="min-w-[840px] pt-1.5 pb-2.5">
-          {/* The one rule left inside the card. It heads a table — four
-              columns that have to be named — rather than following an eyebrow,
-              which is the shape round 44 ruled out. `COLUMNS` without `ROW`'s
-              padding: this row is not inset, so it pads by the card's own 24px
-              and lands on the same tracks. */}
+        <div className="min-w-[880px] px-6 pt-0.5 pb-1.5">
           <div
-            className={`${COLUMNS} border-b border-[var(--border-hairline)] px-6 pt-3 pb-2.5`}
+            className={`${ROW} border-b border-[var(--border-hairline)] pt-3 pb-2.5`}
           >
-            <span className={`${COL.player} ${HEAD}`}>Player</span>
-            <span className={`${COL.form} ${HEAD}`}>Form</span>
-            <span className={`${COL.last} ${HEAD}`}>Last match</span>
-            <span className={`${COL.serve} ${HEAD}`}>1st serve</span>
+            {/* The one hairline on the card, and the one arrow: the list is
+                already in lineup order, so the header says which way it reads
+                rather than offering a sort that does not exist. */}
+            <span className={`${COL.spot} inline-flex items-center gap-[3px]`}>
+              <span className="eyebrow-sm">#</span>
+              <ArrowUp
+                className="size-2.5 text-[var(--ink-700)]"
+                strokeWidth={1.5}
+                aria-hidden
+              />
+              <span className="sr-only">Lineup order, lowest first</span>
+            </span>
+            <span className={`${COL.player} eyebrow-sm`}>Player</span>
+            <span className={`${COL.form} eyebrow-sm`}>Form</span>
+            <span className={`${COL.last} eyebrow-sm`}>Last match</span>
+            <span className={`${COL.serve} eyebrow-sm`}>1st serve</span>
             <span className={COL.actions} />
           </div>
 
@@ -548,6 +631,7 @@ export function RosterTable({
                 member={member}
                 canManage={canManage}
                 isViewer={member.userId === viewerId}
+                onEdit={setEditing}
                 onError={setError}
                 onMerge={(row) => {
                   const other = members.find(
@@ -565,10 +649,12 @@ export function RosterTable({
                 concerned; a second table below the first makes them look like
                 a different kind of thing. */}
             {invites.map((invite) => (
-              <li
-                key={invite.id}
-                className={`${ROW} ${ROW_SURFACE} py-[13px]`}
-              >
+              <li key={invite.id} className={`${ROW} ${ROW_INSET}`}>
+                {/* No lineup line to give somebody who has not arrived, and no
+                    hairline above the first of them either: an invitation is
+                    another row in this list, not a second section. */}
+                <LineupSpot spot={null} />
+
                 <span className={`${COL.player} flex items-center gap-2.5`}>
                   <InviteRing />
                   <span className="min-w-0 truncate text-[12px] text-[var(--ink-500)]">
@@ -578,38 +664,57 @@ export function RosterTable({
                 <span className={`${COL.last} text-[11px] text-[var(--ink-500)]`}>
                   {invitedLine(invite.invitedOn, invite.role)}
                 </span>
-                {/* Resend is the same call as invite: `create_program_invite`
-                    upserts on the one-open-invite index, so it refreshes the
-                    row and mints a fresh token rather than leaving two live
-                    links into one program. */}
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() =>
-                    run(() =>
-                      inviteMember({
-                        email: invite.email,
-                        role: resendRole(invite.role),
-                      })
-                    )
-                  }
-                  className={RESEND_CLASS}
-                >
-                  {RESEND_LABEL}
-                </button>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => run(() => revokeInvite(invite.id))}
-                  className="text-[11px] text-[var(--ink-500)] transition-colors hover:text-[var(--danger)] disabled:opacity-50"
-                >
-                  Withdraw
-                </button>
+                {/* The pair reads as one control: send it again, or take it
+                    back. Resend is the same call as invite —
+                    `create_program_invite` upserts on the one-open-invite
+                    index, so it refreshes the row and mints a fresh token
+                    rather than leaving two live links into one program. */}
+                <span className="flex shrink-0 items-center gap-3.5">
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() =>
+                      run(() =>
+                        inviteMember({
+                          email: invite.email,
+                          role: resendRole(invite.role),
+                        })
+                      )
+                    }
+                    className={RESEND_CLASS}
+                  >
+                    {RESEND_LABEL}
+                  </button>
+                  {/* Revoke hovers to `--danger`, not to the `--ink-900` that
+                      9a's markup draws. Deliberate divergence: this is the one
+                      destructive action in the row, and the tint is the only
+                      thing distinguishing it from Resend beside it. Do not
+                      "restore" it to ink on a later fidelity pass. */}
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => run(() => revokeInvite(invite.id))}
+                    className="text-[11px] text-[var(--ink-500)] transition-colors hover:text-[var(--danger)] disabled:opacity-50"
+                  >
+                    Revoke
+                  </button>
+                </span>
               </li>
             ))}
           </ul>
         </div>
       </div>
+
+      {/* `members` unfiltered, so the lineup-spot note can name whoever else
+          is on the line the coach picks. The dialog drops the edited row from
+          that list itself. */}
+      <EditPlayerDialog
+        member={editing}
+        roster={members}
+        onOpenChange={(open) => {
+          if (!open) setEditing(null);
+        }}
+      />
 
       <MergeProfilesDialog
         pair={merging}

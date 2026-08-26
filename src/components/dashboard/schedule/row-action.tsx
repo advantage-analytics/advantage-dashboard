@@ -32,18 +32,31 @@ export function RowAction({
   onClick,
   children,
   className,
+  ariaLabel,
 }: {
   /** Given a href it renders a link; otherwise a button. */
   href?: string;
   onClick?: () => void;
   children: React.ReactNode;
   className?: string;
+  /**
+   * Overrides the accessible name where the visible label repeats down a list
+   * and only its row says which one it means — "View profile" against six of
+   * them. Sighted users have the row for context; a screen reader reading the
+   * link list has only this.
+   */
+  ariaLabel?: string;
 }) {
   const style = { color: "var(--blue-text)" };
 
   if (href) {
     return (
-      <Link href={href} className={cn(ACTION_CLS, className)} style={style}>
+      <Link
+        href={href}
+        aria-label={ariaLabel}
+        className={cn(ACTION_CLS, className)}
+        style={style}
+      >
         {children}
       </Link>
     );
@@ -53,6 +66,7 @@ export function RowAction({
     <button
       type="button"
       onClick={onClick}
+      aria-label={ariaLabel}
       className={cn(ACTION_CLS, className)}
       style={style}
     >

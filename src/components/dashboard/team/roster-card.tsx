@@ -22,7 +22,7 @@ import type { TeamRosterCard } from "@/lib/data/team-home-server";
  * is the specific failure this card is written to avoid.
  *
  * What it deliberately leaves to the Roster page: form, last match, first
- * serve, the merge repair, Withdraw, and everyone who has already joined. This
+ * serve, the merge repair, Revoke, and everyone who has already joined. This
  * card is the *outstanding* half of the roster — who is new today, and who has
  * not answered — because that is the half with something to do about it. The
  * rest is a table, and a table does not fit here.

@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Calendar } from "lucide-react";
+import { Calendar, Upload } from "lucide-react";
 import { MatchMetadataRow } from "@/components/dashboard/matches/match-metadata-row";
 import { ShareMatchButton } from "@/components/dashboard/matches/match-detail/share-match-button";
 import { MatchActionsMenu } from "@/components/dashboard/matches/match-actions/match-actions-menu";
@@ -80,8 +80,8 @@ export function MatchDetailHero({ match }: MatchDetailHeroProps) {
             {heroTitle}
           </h1>
         </div>
-        {(match.date || match.matchType || match.courtType) && (
-          <div className="flex items-center gap-4">
+        {(match.date || match.matchType || match.courtType || match.uploadedBy) && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
             {match.date && (
               <div className="flex items-center gap-1">
                 <Calendar
@@ -100,6 +100,24 @@ export function MatchDetailHero({ match }: MatchDetailHeroProps) {
                 courtType={match.courtType}
                 showVerification={false}
               />
+            )}
+            {/* Where this match came from. Inside a program the uploader is
+                routinely not the athlete — a coach files for their squad, and
+                a player may file for a teammate — and `created_by` recorded
+                that all along without ever being shown. Rendered only when the
+                two are actually different people, so a personal match and a
+                self-filed team match look exactly as they did before. */}
+            {match.uploadedBy && (
+              <div className="flex items-center gap-1">
+                <Upload
+                  className="size-3.5 text-[var(--color-text-muted)]"
+                  strokeWidth={1.75}
+                  aria-hidden="true"
+                />
+                <span className="text-[10px] leading-4 text-[var(--color-text-muted)]">
+                  Uploaded by {match.uploadedBy}
+                </span>
+              </div>
             )}
           </div>
         )}

@@ -39,6 +39,16 @@ function personalWorkspace(viewer: Viewer): Workspace {
     role: 'owner',
     mark: viewer.initials,
     canSubmitVideo: true,
+    // A program-wide policy about *other* people, in a workspace whose only
+    // member is its owner. False is the honest value; `canUploadForProgram()`
+    // never consults it here because it answers on `kind` first.
+    playersCanUpload: false,
+    // The opposite default, for the opposite reason. There is no
+    // `program_members` row to read here and the viewer is the only person in
+    // this workspace, so false would not be cautious — it would assert that
+    // this person is barred from sending their own video, which nothing has
+    // ever said. `/dashboard/matches/new` has no such gate.
+    memberUploadEnabled: true,
   };
 }
 
@@ -65,7 +75,9 @@ async function listProgramWorkspaces(
 ): Promise<Workspace[]> {
   const { data, error } = await supabase
     .from('program_members')
-    .select('role, programs!inner(id, school_name, team, status)')
+    .select(
+      'role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload)'
+    )
     .eq('user_id', userId)
     .order('joined_at');
 
@@ -82,7 +94,13 @@ async function listProgramWorkspaces(
     const program = (
       Array.isArray(row.programs) ? row.programs[0] : row.programs
     ) as
-      | { id: string; school_name: string; team: string; status: string }
+      | {
+          id: string;
+          school_name: string;
+          team: string;
+          status: string;
+          players_can_upload: boolean;
+        }
       | undefined;
     if (!program) return [];
 
@@ -98,6 +116,18 @@ async function listProgramWorkspaces(
         // whose video submission waits — see /claim/review, which promises
         // exactly that.
         canSubmitVideo: program.status === 'active',
+        // The program's own answer to "anyone, or coaches?" from Team
+        // settings. Read here rather than at the page, so the upload page's
+        // gate and the switcher's `landingPath()` are looking at one value
+        // resolved once per request — see `Workspace.playersCanUpload`.
+        playersCanUpload: program.players_can_upload,
+        // This membership's own grant, from the row the join is already
+        // reading. `Boolean(...)` rather than `?? true`: the column is NOT
+        // NULL, so the coalesce would only ever fire when the select did not
+        // return what it asked for, and a permission that fails open on a
+        // broken read is the wrong way round. See
+        // `Workspace.memberUploadEnabled` for why staff never feel it.
+        memberUploadEnabled: Boolean(row.upload_enabled),
       },
     ];
   });

@@ -31,6 +31,10 @@ import {
 } from '@/lib/services/splitstep/video-url';
 import { releaseQuota, reserveQuota } from '@/lib/services/splitstep/quota';
 import { getWorkspaceContext } from '@/lib/workspace/active-workspace-server';
+import {
+  billingWorkspaceFor,
+  NO_BILLING_WORKSPACE_REFUSAL,
+} from '@/lib/workspace/types';
 
 export const runtime = 'nodejs';
 
@@ -337,15 +341,19 @@ export async function POST(request: NextRequest) {
   // Billed to the MATCH's workspace, not whichever one the caller happens to
   // have selected. A coach can switch workspaces between starting an upload and
   // submitting it, and the budget that pays for a match is the one the match
-  // belongs to.
+  // belongs to. `billingWorkspaceFor()` is that rule, lifted out of this file so
+  // `/api/splitstep/upload-url` asks its permission question about the same
+  // workspace this one charges — a check aimed at a different budget is a check
+  // that only looks enforced.
   const workspaceContext = await getWorkspaceContext();
-  const billingWorkspace = match.program_id
-    ? workspaceContext?.available.find((w) => w.id === match.program_id)
-    : workspaceContext?.available.find((w) => w.kind === 'personal');
+  const billingWorkspace = billingWorkspaceFor(
+    workspaceContext?.available ?? [],
+    match.program_id
+  );
 
   if (!billingWorkspace) {
     return NextResponse.json(
-      { error: 'You do not have access to the workspace this match belongs to.' },
+      { error: NO_BILLING_WORKSPACE_REFUSAL },
       { status: 403 }
     );
   }
@@ -359,18 +367,24 @@ export async function POST(request: NextRequest) {
   });
 
   if (!reservation.ok) {
-    console.log(`${LOG} refused — monthly cap`, {
-      jobId: job.id,
-      usedSeconds: reservation.usedSeconds,
-      capSeconds: reservation.capSeconds,
-    });
+    console.log(
+      `${LOG} refused — ${reservation.permission ? 'not permitted' : 'monthly cap'}`,
+      {
+        jobId: job.id,
+        usedSeconds: reservation.usedSeconds,
+        capSeconds: reservation.capSeconds,
+      }
+    );
     return NextResponse.json(
       {
         error: reservation.message,
         usedSeconds: reservation.usedSeconds,
         capSeconds: reservation.capSeconds,
       },
-      { status: 429 }
+      // 429 is what an exhausted allowance means and it keeps that meaning. A
+      // player the program has not authorised is a 403: nothing about waiting
+      // for the month to roll over changes the answer.
+      { status: reservation.permission ? 403 : 429 }
     );
   }
 

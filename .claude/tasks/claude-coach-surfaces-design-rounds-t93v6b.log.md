@@ -1266,3 +1266,66 @@ is the runner's. Newest entries at the bottom.
   the criterion names it. 5b confirmed the count, confirmed the disclosure
   accurate, and checked that none of the other seven both-ways tests share that
   property. Third task running where the implementer caught this class itself.
+
+## T32 · Merge splitstep-integration in and reconcile the roster surface — done
+- **gate:** 5a mechanical on the merge result — `npm run lint` 0 errors / 38
+  pre-existing warnings; `npx tsc --noEmit` exit 0; `npm test` 183 passed. 5b
+  `task-completion-reviewer` — `VERDICT: pass`, dispatched ALONE before 5c. 5c
+  BOTH guardrails ran: `pipeline-guardrails-reviewer` and
+  `rls-boundary-reviewer`, both explicit no-findings all-clears.
+- **THE QUESTION WAS WRONG, AND ESTABLISHING IT WAS THE TASK.** I framed this as
+  "which of two designs governs the roster surface — Coach Surfaces round 44 or
+  Team Roster section 07". Both branches were working from the SAME project,
+  `afde9116`, which holds one canvas per surface: `Coach Surfaces.dc.html` is
+  Team Home, `Team Roster.dc.html` is the Roster page, alongside `Events &
+  Lineups.dc.html` and `Header.dc.html`. And `abcb65f6` — the id in `DESIGN.md`
+  I flagged as a competing project — is the v3 DESIGN SYSTEM LIBRARY, components
+  and tokens, containing no roster table at all. It is the vocabulary a roster
+  table is drawn in. The `claude_design` MCP is not available in this session, so
+  this was settled from repo-internal evidence and every citation was
+  independently verified by 5b.
+- **the roster table has no artboard in Coach Surfaces, and this branch said so
+  at the time.** T4's own note filed it as "Out of scope but worth its own task
+  later: `roster-table.tsx` still uses the old full-bleed wash … and Roster is a
+  result list too." T6 then applied round 44's CROSS-CUTTING rule (8a, the
+  result-list row treatment) to it by extension, without an artboard.
+- **and the two never actually disagreed.** The other branch defines 9a as "6a's
+  columns with 5a's `#` column and **8a's row treatment**" — 8a being the exact
+  rule T6 applied. Resolving `roster-table.tsx` to 9a KEEPS round 44's row
+  treatment and adds the roster's own artboard on top. The single divergence is
+  one word on the invite row's trailing control: T6 kept "Withdraw", 9a says
+  "Revoke". Resolved to 9a.
+- **resolution, by file:** `roster-table.tsx` (6 hunks) to `MERGE_HEAD` wholesale,
+  then six vocabulary substitutions re-applied by hand — `ClaimedTodayPill`,
+  `InviteRing`, `invitedLine()`, `resendRole()`, `RESEND_CLASS`, `RESEND_LABEL` —
+  all byte-identical strings, so zero visual delta, done because
+  `roster-vocabulary.tsx` is also imported by Team Home's `roster-card.tsx` and a
+  local copy is the two-spellings-of-one-fact failure that module exists to
+  prevent. `roster/page.tsx` (2 hunks) both sides kept in full, both additive.
+  `roster-invite-dialog.tsx` (2 hunks) import unions, every symbol confirmed live.
+  `team/page.tsx` (1 hunk) ours' round-45 structure kept.
+- **one hand-edit beyond resolution, and it prevented silently deleting their
+  feature:** the other branch's only substantive change to `team/page.tsx` was
+  `playersCanUpload` → `canUploadForProgram(active)`, and it landed in copy round
+  45 had already deleted — so resolving to "ours" would have dropped their
+  per-member upload gate without a conflict marker. Carried across by hand to the
+  equivalent lines. Both reviewers confirmed `canUploadForProgram()` returns true
+  for all staff before reading either flag, so no staff behaviour changed.
+- **what the merge BRINGS that this branch wanted:** `matches_block_client_regraft`
+  (migration `20260824211820`), a DB-level trigger that re-derives membership and
+  closes the "regraft a match to a stranger's `player1_id`" hole. That is a
+  database backstop for the same attribution class T8, T27 and the guardrails doc
+  exist for. Merging gained protection rather than only costing reconciliation.
+- **T18 has NO SPEC, and that is now a known gap.** Verifying its `!listed` guard
+  survived took an ad-hoc TypeScript-compiler-API check by the implementer and an
+  independent byte-for-byte diff of `submit()` against `ORIG_HEAD` by 5b. It is a
+  `"use client"` dialog and this repo has no component-rendering harness. The
+  guard stops twelve pasted addresses binding to one athlete's profile; it will
+  need re-verifying by hand at every future merge until it has a test. Queued as
+  T33.
+- **verified surviving, by test not by reading:** T27 (`tests/team-roster-ids.spec.ts`,
+  13), T13 and T14 (`tests/team-roster-progress.spec.ts`, 15), T15's margin guard
+  and T3's `tiebreak` field removal (the `match-detail-server.ts`/`types.ts`
+  auto-merge preserved it — the pair I had flagged as riskiest resolved correctly
+  with no conflict). The other branch brought ZERO test files, verified two ways,
+  so 183 is the correct target and not a shortfall.

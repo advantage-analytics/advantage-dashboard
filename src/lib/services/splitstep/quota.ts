@@ -20,7 +20,11 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Workspace } from '@/lib/workspace/types';
+import {
+  explainVideoRefusal,
+  pendingReviewRefusal,
+  type Workspace,
+} from '@/lib/workspace/types';
 import {
   currentBillingMonth,
   getMonthlyCapSeconds,
@@ -46,7 +50,21 @@ export function accountTypeFor(workspace: Pick<Workspace, 'kind'>): AccountType 
 
 export type QuotaReservation =
   | { ok: true; usedSeconds: number; capSeconds: number }
-  | { ok: false; usedSeconds: number; capSeconds: number; message: string };
+  | {
+      ok: false;
+      usedSeconds: number;
+      capSeconds: number;
+      message: string;
+      /**
+       * Refused because of who is asking, not because of what is left.
+       *
+       * Set only by the upload-permission check below. A caller that turns a
+       * refusal into an HTTP status wants 403 for these and 429 for a real
+       * allowance refusal — the two are not the same answer and retrying next
+       * month does not help one of them.
+       */
+      permission?: boolean;
+    };
 
 /**
  * Reserve `seconds` against a user's monthly allowance.
@@ -76,9 +94,44 @@ export async function reserveQuota(params: {
       ok: false,
       usedSeconds: 0,
       capSeconds: 0,
-      message:
-        `${workspace.name} is still being confirmed. You can invite staff and ` +
-        `build your roster now; sending video opens as soon as that's done.`,
+      // The words moved to `workspace/types.ts` because
+      // `/api/splitstep/upload-url` says them too, before the browser is handed
+      // a write credential; a second copy here is a second copy to edit. The
+      // check did not move: this is the choke point, and it answers first so a
+      // program under review is refused on its claim state, never on a flag.
+      message: pendingReviewRefusal(workspace),
+    };
+  }
+
+  // The other half of the same argument, and the reason it is HERE.
+  //
+  // The two upload flags — `programs.players_can_upload` and this member's
+  // `program_members.upload_enabled` — were enforced in exactly one place: the
+  // route guard on `/dashboard/team/upload`. But `/dashboard/matches/new`
+  // renders the identical wizard with no guard at all, `useUploadMatchWizard`
+  // files under the active workspace whatever the viewer's role, and the "New
+  // match" button plus the global ⌘U reach that route from five surfaces. So a
+  // coach who switched a player's "Can send video" off got a switch that
+  // persisted, looked like it had worked, and stopped nothing.
+  //
+  // A guard on the second page would have closed that door and left the next
+  // one open. This line is the door: nothing spends a minute of anyone's
+  // allowance without passing through here, so it holds whichever page opened
+  // the wizard and whichever caller is added later.
+  //
+  // Personal uploads are untouched — `explainVideoRefusal()` answers on `kind`
+  // before it reads a flag, because `canUploadForProgram()` says false for a
+  // personal workspace and a bare call here would refuse every individual in
+  // the product. Staff are untouched for the same structural reason one level
+  // in. See both notes in `workspace/types.ts`.
+  const refusal = explainVideoRefusal(workspace);
+  if (refusal) {
+    return {
+      ok: false,
+      usedSeconds: 0,
+      capSeconds: 0,
+      message: refusal,
+      permission: true,
     };
   }
 

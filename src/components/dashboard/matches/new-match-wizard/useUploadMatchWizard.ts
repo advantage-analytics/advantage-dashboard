@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { capitalize } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -60,6 +61,45 @@ import {
   STORAGE_KEYS,
   MatchMetadata
 } from "./utils";
+
+/**
+ * Turn a refused write into a sentence the player can act on.
+ *
+ * `42501` is insufficient_privilege, and on `matches` it arrives from two very
+ * different places. The guard triggers — `matches_block_client_regraft` —
+ * raise it deliberately, with a written explanation of what they refused:
+ * filing under a program you do not belong to, attaching to a line you do not
+ * run, or naming somebody who is not on that program's roster. That text IS
+ * the answer, so it is shown as-is rather than buried under "Database error:",
+ * which is how a coach picking the wrong teammate used to be told about it.
+ *
+ * Postgres' own RLS wording ("new row violates row-level security policy for
+ * table \"matches\"") is not something to put in front of a player, so it
+ * keeps a plain sentence instead. Every other code falls through to the raw
+ * message, which is still the most useful thing to show for a failure nobody
+ * anticipated.
+ */
+function explainWriteFailure(error: {
+  code?: string;
+  message?: string;
+  details?: string;
+}): string {
+  const message = error.message?.trim() ?? "";
+
+  if (error.code === "42501") {
+    if (!message || message.toLowerCase().includes("row-level security")) {
+      return (
+        "You do not have permission to save this match here. If you were " +
+        "filing it for a teammate, pick them from the roster and try again."
+      );
+    }
+    // The triggers write lowercase sentences, the way an error message reads
+    // inside SQL. Give it a capital so it reads as UI copy.
+    return capitalize(message);
+  }
+
+  return `Database error: ${message || error.details || JSON.stringify(error)}`;
+}
 
 /**
  * The source a new match starts on.
@@ -1132,9 +1172,7 @@ export function useUploadMatchWizard({
 
       if (matchError) {
         console.error("Supabase insert error:", matchError);
-        throw new Error(
-          `Database error: ${matchError.message || matchError.details || JSON.stringify(matchError)}`
-        );
+        throw new Error(explainWriteFailure(matchError));
       }
 
       if (!written || written.length === 0) {

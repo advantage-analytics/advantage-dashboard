@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import { canUploadForProgram, isProgramStaff } from "@/lib/workspace/types";
 import { getTeamHomeData } from "@/lib/data/team-home-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { isAnalysisReady, isWorking } from "@/lib/data/match-analysis";
@@ -73,7 +74,10 @@ export default async function TeamHomePage() {
   // their own line — so without this the greeting would tell a player that "1
   // player has joined", and the checklist would send them to pages whose every
   // write the database refuses.
-  const isStaff = active.role !== "player";
+  // `isProgramStaff` rather than the same test spelled by hand — its own doc
+  // comment exists because the rail and this page once wrote the rule in
+  // opposite directions.
+  const isStaff = isProgramStaff(active);
   const empty = matches.length === 0;
 
   const now = new Date();
@@ -96,12 +100,15 @@ export default async function TeamHomePage() {
   const ready = matches.filter((match) => isAnalysisReady(match.status)).length;
 
   // Who may send video at all. A player only when the program has opened
-  // uploads to them — that is the rule the database enforces, so a player
-  // without it gets no button rather than a disabled one: it is not paused,
-  // it is not theirs to do. Staff whose claim is still being confirmed DO get
-  // the button, disabled, because for them it genuinely is paused and the slot
-  // it occupies is the one it will stay in.
-  const canUpload = isStaff || playersCanUpload;
+  // uploads to them AND their own row still allows it — that is the rule the
+  // database enforces (`enforce_member_upload_enabled`), so a player without
+  // it gets no button rather than a disabled one: it is not paused, it is not
+  // theirs to do. Staff whose claim is still being confirmed DO get the
+  // button, disabled, because for them it genuinely is paused and the slot it
+  // occupies is the one it will stay in — `canUploadForProgram()` answers
+  // staff before it reads either flag, so no arrangement of switches locks
+  // them out.
+  const canUpload = canUploadForProgram(active);
 
   // Whether there is a right column at all.
   //
@@ -138,7 +145,7 @@ export default async function TeamHomePage() {
                 {empty ? (
                   isStaff ? (
                     "Send a match and the analysis comes back to this page."
-                  ) : playersCanUpload ? (
+                  ) : canUploadForProgram(active) ? (
                     "Your matches appear here — your coach sends them, and so can you."
                   ) : (
                     "Your matches appear here as your coach sends them."

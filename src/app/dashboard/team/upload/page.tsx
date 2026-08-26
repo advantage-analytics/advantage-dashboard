@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { isProgramStaff } from "@/lib/workspace/types";
+import { canUploadForProgram, isProgramStaff } from "@/lib/workspace/types";
 import { getUploadQueue } from "@/lib/data/schedule-server";
 import { getTeamSingleMatch } from "@/lib/data/single-match-server";
 import { getLadder } from "@/lib/data/roster-server";
@@ -29,8 +29,9 @@ import type { EventPreset } from "@/components/dashboard/matches/new-match-wizar
  * is and leaves the rest of step 1 to be filled in — the coach knows the player
  * before they know the opponent, which is the order the roster puts them in.
  *
- * Without `?entry=` there is nothing to preset, so this offers the lines that
- * have no video and hands off to the pinned flow.
+ * Without `?entry=` there is nothing to preset, so staff get the lines that have
+ * no video and hand off to the pinned flow. A player gets the wizard itself —
+ * see `staff` below for why they are never offered a line.
  */
 export default async function TeamUploadPage({
   searchParams,
@@ -44,7 +45,59 @@ export default async function TeamUploadPage({
 
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard/matches/new");
-  if (!isProgramStaff(active)) redirect("/dashboard/team/schedule");
+  // Staff always; a player only where the program set `players_can_upload`
+  // AND their own `program_members.upload_enabled` is on — the roster row's
+  // "Can send video" switch. Two settings rather than one because a coach
+  // handing the budget to a single senior cannot say that program-wide.
+  //
+  // Not `isProgramStaff` — that turned every player away no matter what the
+  // program had chosen, which made the Team settings toggle a label rather
+  // than a setting. Not `players_can_upload` alone either, which made the
+  // roster switch the same kind of label. `canUploadForProgram` is the same
+  // predicate `landingPath()` reads, so a switch into this workspace lands
+  // here exactly when this line would admit the viewer.
+  //
+  // This is where a *player* is turned away and nowhere else: staff are
+  // answered before either flag is read, so no arrangement of switches can
+  // bounce a coach off their own program's upload page.
+  if (!canUploadForProgram(active)) redirect("/dashboard/team/schedule");
+
+  // Who may open this page and who may attach a match to a SCHEDULED LINE are
+  // two different questions, and only the second one is authorization. The
+  // database answers it: `matches_block_client_regraft` refuses any client
+  // INSERT that names an `event_entry_id` unless `is_program_staff`, with no
+  // `players_can_upload` exception — deliberately, because a player fabricating
+  // a result against their own program's dual is the finding that trigger was
+  // written for.
+  //
+  // The `?entry=` branch below builds precisely that insert: its preset carries
+  // `entryId`, which the wizard writes as `event_entry_id`. So a player offered
+  // a line would upload the whole video, answer every step, and only then be
+  // refused — at the last step, with the bytes already spent. The wizard's
+  // `explainWriteFailure()` renders that 42501 as the trigger's own sentence
+  // ("Only a program's staff can attach a match to a scheduled line.") instead
+  // of burying it under "Database error:", which makes the dead end legible
+  // without making it any less of a dead end. The queue is not theirs to pick
+  // from, so they are not shown it and a hand-typed `?entry=` is dropped rather
+  // than honoured.
+  //
+  // NOTE for anyone reading back to where that staff rule came from. The
+  // migration that first wrote it, `20260821232306`, justifies it with "only
+  // staff ever set it: /dashboard/team/upload redirects non-staff". That
+  // sentence is stale as of this line — the page now admits players wherever
+  // `programs.players_can_upload` is set. What keeps the rule's premise true is
+  // no longer the page's front door but this split — staff get the line picker,
+  // players get the wizard with no line — plus the trigger itself, which is
+  // still the thing actually enforcing it.
+  //
+  // The stale sentence survives only in that migration's file header. The
+  // deployed function is `20260824211820`'s (it kept the `event_entry_id` rule
+  // verbatim and added the `player1_id` roster bound), and its `comment on
+  // function` makes no claim about this page. Both migrations are applied and
+  // neither is edited in place, so the correction lives here, on the guard it
+  // is about.
+  const staff = isProgramStaff(active);
+  if (entryId && !staff) redirect("/dashboard/team/upload");
 
   // NOT hoisted above the `?match=` branch below. That branch never reads the
   // queue, and `getUploadQueue` is four serialized round trips over the whole
@@ -174,6 +227,19 @@ export default async function TeamUploadPage({
     // The id names a line that already has video, or one from another program.
     redirect("/dashboard/team/upload");
   }
+
+  // A player has no line to pick, so there is nothing to preset and the queue is
+  // not worth four round trips to render as a list of links they must not
+  // follow. This is the same wizard with no preset — the one
+  // `/dashboard/matches/new` renders — and in a team workspace it is not a
+  // personal upload: `useUploadMatchWizard` sets `programId` from the active
+  // workspace, so the match is filed under the program with `event_entry_id`
+  // null and `player1_id` the uploader's own id (`preset ? picked : userId`).
+  // That clears all three of `matches_block_client_regraft`'s INSERT checks for
+  // a member — their own program, no line, and a `player1_id` that is a
+  // `program_members` user of it — which is why this path works where the line
+  // picker's does not.
+  if (!staff) return <UploadMatchFlow />;
 
   return <LinePicker groups={await getUploadQueue(active.id)} />;
 }
