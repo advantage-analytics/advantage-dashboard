@@ -32,24 +32,26 @@ export function ContactOwnerForm({
   programKey,
   kind,
   ownerDisplay,
+  unclaimed = false,
   secondary,
   micro,
-  boxed = false,
 }: {
   programKey: string;
   kind: "request" | "object";
   /** "Elena V." — named so the confirmation can say who was told. */
   ownerDisplay?: string | null;
+  /**
+   * True only when nobody owns this program at all — not merely when
+   * `ownerDisplay` is empty, which also happens on a real, claimed program
+   * whose owner never filled in a name. Changes the "sent" confirmation from
+   * "they add you" (a real, if unnamed, person) to language that does not
+   * imply anyone is currently reading requests.
+   */
+  unclaimed?: boolean;
   /** The quiet link beside the button — "They no longer work here". */
   secondary?: React.ReactNode;
   /** The line beside the button — what sending does and does not do. */
   micro?: React.ReactNode;
-  /**
-   * F3.3's shape: the fields sit inside one hairline card rather than loose on
-   * the page, so the ask reads as a single object between the sentence above
-   * it and the button below.
-   */
-  boxed?: boolean;
 }) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -63,7 +65,9 @@ export function ContactOwnerForm({
       <div className="flex flex-col gap-5">
         <p className="text-body max-w-[62ch] rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-subtle)] px-5 py-4">
           {kind === "request"
-            ? `Sent${ownerDisplay ? ` to ${ownerDisplay}` : ""}. No account has been created for you, and nothing is queued — they add you when they're ready.`
+            ? unclaimed
+              ? "Filed. No account has been created for you — whoever sets this program up will see your request."
+              : `Sent${ownerDisplay ? ` to ${ownerDisplay}` : ""}. No account has been created for you, and nothing is queued — they add you when they're ready.`
             : "Thanks — we'll look into it. Nothing has been reversed automatically; a person checks first."}
         </p>
         <Link href="/claim/program" className={CLAIM_LINK}>
@@ -133,7 +137,7 @@ export function ContactOwnerForm({
           rows={3}
           placeholder={
             kind === "request"
-              ? "Hi — I'm the new volunteer assistant, I'd like access to the match reports."
+              ? "Add anything that helps them place you — your role, or when you joined."
               : "They left the program in June."
           }
           className={`${CLAIM_FIELD} h-auto resize-none py-2.5 leading-[1.55]`}
@@ -144,13 +148,7 @@ export function ContactOwnerForm({
 
   return (
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-5">
-      {boxed ? (
-        <div className="flex flex-col gap-3 rounded-[var(--radius-card)] border border-[var(--border-hairline)] px-5 py-[18px]">
-          {fields}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-5">{fields}</div>
-      )}
+      <div className="flex flex-col gap-5">{fields}</div>
 
       {error && (
         <p className="rounded-[var(--radius-button)] bg-[rgba(229,24,55,0.08)] px-3 py-2 text-[12px] text-[#E51837]">

@@ -36,27 +36,47 @@ export default async function RequestInvitePage({
     .filter(Boolean)
     .join(" · ");
 
+  // `status`, not `ownerDisplay`, is the signal for whether anyone owns this
+  // program — `ownerDisplay` can be empty on a real, claimed program whose
+  // owner never filled in a name (`program_public_status()` trims first/last
+  // name to '', which coalesces to null same as a genuinely absent owner).
+  // Conflating the two would tell a real owner's program "nobody has set this
+  // up yet", which is exactly the kind of wrong-but-plausible copy this page
+  // exists to avoid.
   const owner = program.ownerDisplay;
+  const unclaimed = program.status === "unclaimed";
 
   return (
     <ClaimShell width={720} gap={20} back={`/claim/${programKey}`}>
       <ClaimHeading
         gap={2}
         eyebrow={eyebrow}
-        title={owner ? `Ask ${owner} for access` : "Ask for access"}
+        title={
+          owner
+            ? `Ask ${owner} for access`
+            : unclaimed
+              ? "No one runs this yet"
+              : "Ask for access"
+        }
         titlePadTop={8}
       />
       <p className="text-body max-w-[58ch]">
         {owner
           ? `They manage Advantage for ${program.schoolName} and can add you with the right role.`
-          : `Whoever is setting up ${program.schoolName} can add you with the right role.`}
+          : unclaimed
+            ? `Nobody has set up Advantage for ${program.schoolName} yet. Leave your info and whoever does will see it.`
+            : `Someone manages Advantage for ${program.schoolName} and can add you with the right role.`}
       </p>
       <ContactOwnerForm
         programKey={programKey}
         kind="request"
-        boxed
         ownerDisplay={owner}
-        micro="No account is created for you, and nothing is queued — they add you when they're ready."
+        unclaimed={unclaimed}
+        micro={
+          unclaimed
+            ? "No account is created for you. Your request is on file for whoever sets this program up."
+            : "No account is created for you, and nothing is queued — they add you when they're ready."
+        }
       />
     </ClaimShell>
   );

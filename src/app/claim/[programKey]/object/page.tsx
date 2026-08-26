@@ -69,7 +69,6 @@ export default async function ObjectPage({
       <ContactOwnerForm
         programKey={programKey}
         kind="object"
-        boxed
         ownerDisplay={owner}
         micro={
           pending

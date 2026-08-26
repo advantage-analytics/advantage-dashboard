@@ -77,7 +77,6 @@ export default async function ProgramStatusPage({
         <ContactOwnerForm
           programKey={programKey}
           kind="request"
-          boxed
           ownerDisplay={program.ownerDisplay}
           secondary={
             <Link href={`/claim/${programKey}/object`} className={CLAIM_LINK}>
