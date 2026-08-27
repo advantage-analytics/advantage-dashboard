@@ -1,7 +1,8 @@
 ---
 name: task-next
-description: Run the next task from this branch's queue in .claude/tasks/ — one task, one subagent, gated, then committed. Use when working through a queued task file. Drain the whole queue with /loop /task-next.
+description: Run the next task from this branch's queue in .claude/tasks/ — one task, one subagent on the task's routed model, gated, then committed. Use when working through a queued task file. Drain by looping the plain-text wrapper documented inside.
 argument-hint: "[optional: a task id like T3, to run that one instead of the next]"
+disable-model-invocation: true
 ---
 
 # Run one task
@@ -26,7 +27,7 @@ fire after. It does not error; it just stops draining.
 Loop a plain-text instruction instead. Plain text is precisely what a scheduled
 fire *can* act on:
 
-> `/loop Read .claude/skills/task-next/SKILL.md and follow it exactly — run one task from this branch's queue, then stop.`
+> `/loop Read .claude/skills/task-next/SKILL.md and follow it exactly — run one task from this branch's queue; do not add, edit, or reorder tasks; then stop.`
 
 **Do not tidy that back into `/loop /task-next`.** It reads better and it does
 not work.
@@ -109,6 +110,11 @@ again.
 One task, one subagent — that is what gives each task a fresh context window,
 and it is why this skill does not do the work itself.
 
+Dispatch it on the task's routed model: pass the task's `- **model:**` value
+(`sonnet`, `opus`, or `fable`) as the Agent tool's `model` parameter. Missing
+or unrecognized means `sonnet` — routing above that tier is the `/task-add`
+planner's call, never this skill's.
+
 Give the subagent:
 
 - The task block verbatim, `done when:` list included.
@@ -120,7 +126,9 @@ Give the subagent:
   route before editing rather than picking by filename.
 
 Tell it: satisfy every `done when:` line, stay inside `files:` unless the work
-genuinely requires more, and **do not commit** — this skill owns committing.
+genuinely requires more, **do not commit** — this skill owns committing — and
+**never write to `.claude/tasks/`**: a follow-up idea it discovers is plain
+text for its final report, not a queue entry.
 If the task creates a new skill under `.claude/skills/`, also tell it to add a
 matching `!.claude/skills/<name>/` line to `.gitignore` — that directory is
 deny-by-default (see the comment block above the existing entries), so a new
@@ -134,10 +142,15 @@ is noise about code that does not compile.
 
 **a. Mechanical**
 
+Redirect each command to a scratch file so its output never lands in this
+session — the loop's context has to survive a whole drain. Success contributes
+nothing but the exit status; read a log only on failure, and only its tail:
+
 ```bash
-npm run lint
-npx tsc --noEmit
-npm test
+G=$(mktemp -d)
+npm run lint     > "$G/lint.log" 2>&1 || { echo "lint FAILED"; tail -40 "$G/lint.log"; }
+npx tsc --noEmit > "$G/tsc.log"  2>&1 || { echo "tsc FAILED";  tail -40 "$G/tsc.log"; }
+npm test         > "$G/test.log" 2>&1 || { echo "test FAILED"; tail -40 "$G/test.log"; }
 ```
 
 **One known false failure.** `tsconfig.json` pulls in `.next/types/**/*.ts`
@@ -151,10 +164,18 @@ that no longer exists, and `tsc` reports an error in code nobody wrote:
 ```
 
 If — and only if — **every** error path is under `.next/`, clear the stale
-output and run it again:
+output and run it again. Judge that from the whole log, not the tail:
 
 ```bash
-rm -rf .next/types .next/dev/types && npx tsc --noEmit
+grep 'error TS' "$G/tsc.log" | grep -v '^\.next/'
+```
+
+Empty output means every error is stale route types — clear and re-run, under
+the same redirect discipline:
+
+```bash
+rm -rf .next/types .next/dev/types
+npx tsc --noEmit > "$G/tsc.log" 2>&1 || { echo "tsc FAILED"; tail -40 "$G/tsc.log"; }
 ```
 
 **The re-run is the verdict, not the diagnosis.** One error under `src/` means
@@ -206,7 +227,10 @@ Set the task's `status:` to `done`. Append to `.claude/tasks/<slug>.log.md`:
 a heading naming the task id, title and status (`## T<n> · <title> — done`),
 then two fields — `**gate:**` (the verdict per stage, and which guardrails ran
 versus were skipped and why, matching step 7) and `**changed:**` (what
-changed, a line or short paragraph). Do **not** add a `**commit:**` field:
+changed, a line or short paragraph) — plus, only when the subagent's report
+surfaced follow-up ideas, a third: `**follow-ups:**`, numbered ideas kept for
+the author to triage through `/task-add` later. Ideas, not tasks — nothing
+here makes them eligible to run. Do **not** add a `**commit:**` field:
 write both **before** committing, because a commit can't record its own SHA
 inside its own content, so the log entry is never in a position to carry one —
 `git rev-parse HEAD` after the commit is where that comes from, for step 7's
@@ -285,6 +309,10 @@ more tasks are eligible. The loop re-enters for the next one.
 - Do not run more than one task per invocation.
 - Do not write anywhere in the queue file except a `status:` line. The user is
   typing in that file while you run.
+- Do not invoke `/task-add` — or any queue-writing skill — during a run, and
+  never append a `## T` block anywhere. A follow-up idea's only legal home is
+  the log entry's `**follow-ups:**` line; the queue grows only when a person
+  adds to it.
 - Do not hand-edit the log's history; append only.
 - Do not commit the task's code changes when any gate stage failed, however
   small the failure looks — stash them in 6b instead. 6b's bookkeeping commit
