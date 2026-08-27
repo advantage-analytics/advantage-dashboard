@@ -1,13 +1,19 @@
 ---
 name: task-add
-description: Draft a well-formed task from a one-line intent and append it to this branch's queue. Use when adding work to .claude/tasks/, especially by voice or from a phone.
-argument-hint: "<one-line description of the task>"
+description: Plan one intent — or a batch — into right-sized, model-routed tasks and append them to this branch's queue. Use when adding work to .claude/tasks/, especially by voice or from a phone.
+argument-hint: "<one or more one-line descriptions of work>"
 ---
 
-# Add one task
+# Add tasks
 
-Turn a one-line intent — often dictated from a phone — into a task the gate can
-actually judge, then append it to this branch's queue and commit.
+Turn an intent — or a batch of them, often dictated from a phone — into tasks
+the gate can actually judge, then append them to this branch's queue and
+commit.
+
+Planning is routed, not inlined: a Fable subagent shapes and drafts (step 2),
+and `/task-next` executes each task on the smallest model the work deserves.
+This session only resolves the queue, relays the draft for confirmation, and
+commits.
 
 `/task-next` skips any task whose `done when:` list is missing or empty, and
 logs it as malformed. Dictation never produces one. This skill is the bridge
@@ -48,7 +54,7 @@ name and a one-line scope:
 Run one with `/task-next`. To drain the file, loop a plain-text instruction —
 **not** `/loop /task-next`, which a scheduled fire cannot invoke:
 
-> `/loop Read .claude/skills/task-next/SKILL.md and follow it exactly — run one task from this branch's queue, then stop.`
+> `/loop Read .claude/skills/task-next/SKILL.md and follow it exactly — run one task from this branch's queue; do not add, edit, or reorder tasks; then stop.`
 
 Append freely while it runs: the queue is re-read at the start of every
 iteration, and the runner only ever rewrites a task's `status:` line.
@@ -73,10 +79,52 @@ is the runner's. Newest entries at the bottom.
 
 A new queue file must be confirmed tracked before you commit — see step 4.
 
-## 2. Draft
+## 2. Plan on Fable
 
-Produce a complete task block from the one-liner. Follow the drafting rules
-below; they are the part that must not drift.
+Do not draft in this session. Dispatch **one** planner subagent via the Agent
+tool with `model: "fable"` — shaping and routing is frontier-model work even
+when this session runs on something smaller. Hand it:
+
+- The intent(s) verbatim.
+- The **Drafting rules** section below, verbatim.
+- `MAP.md`, the current queue file (for duplicates and used ids), and the last
+  ~80 lines of `.claude/tasks/<slug>.log.md` if it exists — the log is where
+  blocked history lives.
+
+The planner returns finished task blocks as text. It must not write files or
+start the work. Its instructions, beyond the drafting rules:
+
+**Shape.** Split an intent that spans multiple surfaces, that would need more
+than five honest `done when:` criteria, or that mixes judgment work with
+mechanical work — split so the mechanical half can route to `sonnet`. Merge
+intents that touch the same file or surface and together still fit five
+criteria. Target: one task is one comfortable subagent context.
+
+**Route.** Assign each task a `- **model:**` line:
+
+- `sonnet` — mechanical and fully specified: copy changes, renames, config
+  edits, style tweaks, a single-component change with an exact spec, roughly
+  two files or fewer.
+- `opus` — standard feature work: multi-file, clear criteria, moderate
+  judgment.
+- `fable` — cross-cutting or architectural work, criteria that need
+  interpretation, security or RLS, migrations and data-model changes, or
+  edits to this task automation itself.
+
+When in doubt, route one tier up: a wrong-low route costs a failed gate, a
+stash and a re-run — more than the tier difference saves.
+
+**Escalation.** If the log shows the same work blocked before, propose one
+tier above the model that failed and flag the bump in the draft. Never
+escalate silently.
+
+The Refusal rule binds the planner too: an intent that cannot be made
+observable comes back as exactly one clarifying question, not a padded draft —
+and this session relays that question instead of writing anything.
+
+If the planner cannot be dispatched at all (no Agent tool, spend limit), say
+so and draft inline under the same rules rather than failing the add — the
+draft still goes through step 3's confirmation either way.
 
 ## Drafting rules
 
@@ -128,6 +176,7 @@ are exact — the runner parses them:
 ```markdown
 ## T<n> · <short imperative title>
 - **status:** todo
+- **model:** sonnet
 - **files:** <best guess>
 - **done when:**
   - [ ] <observable criterion>
@@ -136,9 +185,15 @@ are exact — the runner parses them:
 - **notes:** <context worth keeping, or omit the line>
 ```
 
+**`model:`** is the execution route — `sonnet`, `opus`, or `fable`. New drafts
+always carry the line so the routing decision is visible in the queue;
+`/task-next` treats an absent line (legacy tasks) as `sonnet`.
+
 ## 3. Confirm
 
-Show the drafted block and wait for a yes.
+Show the drafted block and wait for a yes. For a batch, lead with a compact
+routing table — `T<n> · title · model · split from / merged from` — above the
+full blocks, so the whole plan can be approved or amended at a glance.
 
 **One round trip in the happy case.** This is used from a phone; an interview
 defeats the purpose. The author may amend in the same reply — "drop the third
@@ -176,6 +231,9 @@ added afterwards would be lost — stop and fix the re-include before going on.
 ```bash
 git commit -m "task: add T<n> <title>"
 ```
+
+For a batch, one commit carries the whole append:
+`task: add T<n>–T<m> <summary>`.
 
 Committing is not optional. An uncommitted task gets swept into the next
 `/task-next` commit by its `git add -A`, and the dirty tree it leaves sends
