@@ -114,6 +114,12 @@ criteria. Target: one task is one comfortable subagent context.
 When in doubt, route one tier up: a wrong-low route costs a failed gate, a
 stash and a re-run — more than the tier difference saves.
 
+**Dependencies.** When one task builds on another's outcome — its criteria
+assume the other's change exists, or both rewrite the same code — give the
+dependent a `- **needs:** T<n>` line naming what must finish first
+(comma-separate several). Independent tasks carry no line; independence is
+what lets them run in any order. Point only at tasks that are not yet done.
+
 **Escalation.** If the log shows the same work blocked before, propose one
 tier above the model that failed and flag the bump in the draft. Never
 escalate silently.
@@ -177,6 +183,7 @@ are exact — the runner parses them:
 ## T<n> · <short imperative title>
 - **status:** todo
 - **model:** sonnet
+- **needs:** <T-ids that must finish first, or omit the line>
 - **files:** <best guess>
 - **done when:**
   - [ ] <observable criterion>
@@ -189,11 +196,16 @@ are exact — the runner parses them:
 always carry the line so the routing decision is visible in the queue;
 `/task-next` treats an absent line (legacy tasks) as `sonnet`.
 
+**`needs:`** names tasks that must be `done` before this one is eligible —
+`/task-next` passes over a task whose `needs:` are unmet. Omit the line for
+independent tasks.
+
 ## 3. Confirm
 
 Show the drafted block and wait for a yes. For a batch, lead with a compact
-routing table — `T<n> · title · model · split from / merged from` — above the
-full blocks, so the whole plan can be approved or amended at a glance.
+routing table — `T<n> · title · model · needs · split from / merged from` —
+above the full blocks, so the whole plan can be approved or amended at a
+glance.
 
 **One round trip in the happy case.** This is used from a phone; an interview
 defeats the purpose. The author may amend in the same reply — "drop the third

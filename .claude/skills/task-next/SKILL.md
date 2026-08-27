@@ -60,6 +60,13 @@ If the user passed a task id, use that one. Otherwise:
 deferred until someone promotes it to `todo` by hand. It is not malformed and
 is not skipped-and-logged; it is simply invisible to the picker.
 
+A task with a `- **needs:**` line is eligible only once every task it names
+is finished — `done` in the queue, or gone from the queue but recorded
+`— done` in the log. Anything else (`todo`, `doing`, `blocked`, an id that
+resolves to nothing anywhere) leaves it waiting: pass over it silently, like
+`later`, and keep scanning. Do not log it as skipped — waiting is normal, not
+malformed.
+
 Skip and log any task whose `done when:` list is missing or empty, then
 **keep scanning past it** to the next candidate in file order — a skip never
 ends the search. Log target is `.claude/tasks/<slug>.log.md`, the same file
@@ -301,7 +308,9 @@ the tree is clean for the next task while the work stays recoverable.
 
 Say which task ran, the verdict per gate stage — including which guardrails
 ran and which were skipped, and why, the same detail `/pr-check` Stage 4.3
-reports — and what landed: a commit SHA or a stash ref. Then stop, even if
+reports — and what landed: a commit SHA or a stash ref. If the scan passed
+over tasks waiting on unmet `needs:`, name them and what each waits on —
+the report is where a mistyped id gets noticed. Then stop, even if
 more tasks are eligible. The loop re-enters for the next one.
 
 ## Do not
