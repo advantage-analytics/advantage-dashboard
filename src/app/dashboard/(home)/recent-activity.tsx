@@ -10,6 +10,8 @@ import { useRouter } from "next/navigation";
 import RecentMatches from "@/components/dashboard/home/recent-matches";
 import { createClient } from "@/lib/supabase/client";
 import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
+import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
+import { isAnalysisFailed, isInFlight, type AnalysisStatus } from "@/lib/data/match-analysis";
 
 type ToastState =
   | { kind: "idle" }
@@ -98,9 +100,18 @@ export interface MatchRow {
   firstServePct: number | null;
   winners: number | null;
   errors: number | null;
-  breakpointsWon: number | null;
-  breakpointsTotal: number | null;
   opponentMeta?: string[];
+  /**
+   * Set while the match is still analyzing, or while analysis has failed —
+   * swaps the row for the loader/error + `StatusChip` treatment instead of a
+   * result. `isInFlight` alone used to gate this, which meant a `failed` or
+   * `derivation_failed` job fell through to the ordinary win/loss row: real
+   * score, dashes for every stat, nothing on screen saying the analysis never
+   * finished. `manual` doesn't need the same carve-out — it never resolves to
+   * a status here at all (no job row exists for it), so it already renders as
+   * the plain result row its dashes correctly describe.
+   */
+  analysisStatus?: AnalysisStatus;
 }
 
 function formatDisplayDate(isoDate: string): string {
@@ -147,7 +158,8 @@ function didUserWin(
 function groupMatchesIntoEvents(
   rows: DbMatch[],
   playerIds: readonly string[],
-  statsMap: Map<string, MatchStats>
+  statsMap: Map<string, MatchStats>,
+  analysisMap: Map<string, AnalysisStatus>
 ): EventGroup[] {
   const byKey = new Map<string, DbMatch[]>();
   for (const row of rows) {
@@ -178,6 +190,7 @@ function groupMatchesIntoEvents(
       );
       const opponent = isUserPlayer1 ? m.player2_name : m.player1_name;
       const stat = statsMap.get(m.id);
+      const status = analysisMap.get(m.id);
 
       mapped.push({
         id: m.id,
@@ -189,13 +202,9 @@ function groupMatchesIntoEvents(
         firstServePct: stat ? Math.round(parseFloat(stat.first_serve_pct ?? "0")) : null,
         winners: stat?.winners ?? null,
         errors: stat?.unforced_errors ?? null,
-        breakpointsWon: stat
-          ? (stat.break_points_converted ?? stat.break_points_saved ?? null)
-          : null,
-        breakpointsTotal: stat
-          ? (stat.break_point_opportunities ?? stat.break_points_faced ?? null)
-          : null,
         opponentMeta: formatOpponentMeta(m.opponent_hand, m.opponent_backhand),
+        analysisStatus:
+          status && (isInFlight(status) || isAnalysisFailed(status)) ? status : undefined,
       });
     }
 
@@ -248,7 +257,7 @@ function EventsList({
   }, [events, seenEventIdsRef]);
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col">
       {events.map((event) => (
         <RecentMatches
           key={event.id}
@@ -314,13 +323,19 @@ export default function RecentActivity({
       const list = (rows ?? []) as DbMatch[];
       const matchIds = list.map((m) => m.id);
 
-      // Fetch stats for these matches
-      const { data: stats } = await supabase
-        .from("match_stats_with_percentages")
-        .select(
-          "match_id, is_player1, first_serve_pct, winners, unforced_errors, break_points_saved, break_points_faced, break_point_opportunities, break_points_converted"
-        )
-        .in("match_id", matchIds);
+      // Stats and in-flight analysis state key off the same id set and neither
+      // reads the other's output, so they run together rather than in series.
+      const [{ data: stats }, analysis] = await Promise.all([
+        supabase
+          .from("match_stats_with_percentages")
+          .select(
+            "match_id, is_player1, first_serve_pct, winners, unforced_errors, break_points_saved, break_points_faced, break_point_opportunities, break_points_converted"
+          )
+          .in("match_id", matchIds),
+        loadMatchAnalysis(supabase, matchIds),
+      ]);
+      const analysisMap = new Map<string, AnalysisStatus>();
+      for (const [id, a] of analysis) analysisMap.set(id, a.status);
 
       const matchById = new Map(list.map((m) => [m.id, m]));
       const statsMap = new Map<string, MatchStats>();
@@ -337,7 +352,7 @@ export default function RecentActivity({
         }
       }
 
-      setEvents(groupMatchesIntoEvents(list, playerIds, statsMap));
+      setEvents(groupMatchesIntoEvents(list, playerIds, statsMap, analysisMap));
       hasLoadedRef.current = true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load matches");
@@ -477,24 +492,24 @@ export default function RecentActivity({
 
   return (
     <>
-    <div className="bg-white border border-[#F3F3F3] shadow-card-elevated rounded-[14px] overflow-hidden">
+    <div className="surface-card" style={{ padding: "8px 24px 12px" }}>
       {/* Header */}
-      <div className="flex items-center justify-between h-14 px-5">
-        <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
-          RECENT MATCHES
-        </p>
+      <div className="flex items-center gap-3" style={{ padding: "12px 0 2px" }}>
+        <span className="eyebrow">Recent matches</span>
+        <div className="flex-1" />
         <Link
           href="/dashboard/matches"
-          className="text-[10px] font-medium text-[#3B82F6] uppercase tracking-[2.5px] transition-colors duration-200 hover:text-[#2563EB] focus-visible:outline-none rounded-sm"
+          className="text-[11px] font-medium transition-colors duration-200 focus-visible:outline-none rounded-sm"
+          style={{ color: "var(--blue-text)" }}
         >
-          VIEW ALL
+          All matches
         </Link>
       </div>
 
       {/* Content */}
-      <div className="pb-5">
+      <div className="pb-2">
         {loading && (
-          <div className="flex flex-col gap-8 px-5 py-4">
+          <div className="flex flex-col gap-8 py-4">
             {[0, 1].map((i) => (
               <div key={i} className="flex flex-col gap-3">
                 <Skeleton className="h-5 w-40" />
