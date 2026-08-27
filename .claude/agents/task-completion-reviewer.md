@@ -62,7 +62,10 @@ expected; a redesign of an unrelated component is scope creep and fails.
 `.claude/tasks/<slug>.md` and `.claude/tasks/<slug>.log.md` are the runner's
 own bookkeeping — the `status: doing` line and the log entry `/task-next`
 writes around every dispatch — and are never scope creep, regardless of
-whether the task's `files:` field names them.
+whether the task's `files:` field names them. That cover extends to status
+lines and log entries only: a **new `## T` heading added to the queue file is
+always scope creep** — the queue grows only by a person's hand — and makes
+the verdict `needs-work` on its own.
 
 ## Output
 
