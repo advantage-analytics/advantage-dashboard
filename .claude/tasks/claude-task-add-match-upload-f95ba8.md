@@ -63,7 +63,7 @@ ready).
 - **notes:** Read docs/ui-revamp-guardrails.md first — player attribution is exactly the silent-failure class it warns about. Verify the correct match column for the subject player against the live DB (Supabase MCP), not supabase/migrations/. Workspace kind comes from `useWorkspace()`.
 
 ## T5 · Visible keep-tab-open warning during video upload
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/matches/new-match-wizard/UploadMatchFlow.tsx, src/lib/services/splitstep/submit-match-video.ts
 - **done when:**

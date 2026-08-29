@@ -14,7 +14,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Check, CircleX } from "lucide-react";
+import { AlertTriangle, Check, CircleX } from "lucide-react";
 import {
   Step,
   STEP_CONFIG,
@@ -255,6 +255,27 @@ function UploadMatchSuccess({
                 : "The video upload did not finish.")
             : "Sent for analysis. Results are added as soon as they're ready."}
         </p>
+
+        {/* Prominent keep-open warning — body-size text so it cannot be missed.
+            Only shown while at least one upload is actively transferring bytes.
+            The footnote below this block covers the navigation nuance for
+            readers who want the fine print. */}
+        {uploading.length > 0 && (
+          <div className="flex w-full max-w-[440px] items-start gap-2.5 rounded-[8px] border border-[#FEF3C7] bg-[#FFFBEB] px-3.5 py-3">
+            <AlertTriangle
+              className="mt-0.5 size-4 shrink-0 text-[#D97706]"
+              strokeWidth={1.5}
+            />
+            <p className="text-[13px] leading-[1.5] text-[#92400E]">
+              Keep this tab open —{" "}
+              {uploading.length > 1
+                ? "your videos are uploading"
+                : "your video is uploading"}
+              . You can navigate within the app, but closing this tab will
+              stop the upload.
+            </p>
+          </div>
+        )}
 
         {/* One row per transfer. Everything here comes from the browser's own
             XHR progress, so it moves continuously rather than at the
