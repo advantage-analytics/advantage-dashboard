@@ -84,6 +84,9 @@ export function RailItem({
 
   const className = cn(
     "group/row flex h-10 w-full items-center overflow-hidden rounded-[8px] text-left transition-colors duration-200 ease-[var(--ease-primary)] focus-visible:outline-none cursor-pointer",
+    // The press is the only transform in this component, and it sits out
+    // under reduced motion.
+    "active:scale-[0.998] motion-reduce:active:scale-100",
     active
       ? "bg-[var(--surface-subtle)] font-medium text-[var(--ink-900)]"
       : "text-[var(--nav-fg)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]"
@@ -96,9 +99,7 @@ export function RailItem({
         onClick={onClick}
         aria-label={label}
         aria-expanded={ariaExpanded}
-        // The press is the only transform in this component, and it sits out
-        // under reduced motion.
-        className={cn(className, "active:scale-[0.998] motion-reduce:active:scale-100")}
+        className={className}
       >
         {body}
       </button>
