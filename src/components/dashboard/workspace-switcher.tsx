@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { usePathname } from "next/navigation";
 import { Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
@@ -18,7 +17,6 @@ import { teamLabel, type Workspace } from "@/lib/workspace/types";
  */
 export function WorkspaceOptionList({ onSwitched }: { onSwitched?: () => void }) {
   const { active, available } = useWorkspace();
-  const pathname = usePathname();
   const [, startTransition] = useTransition();
   // One state, not two. `isPending` and a pending id answered the same question
   // and briefly disagreed, leaving every row disabled with no spinner anywhere.
@@ -36,7 +34,7 @@ export function WorkspaceOptionList({ onSwitched }: { onSwitched?: () => void })
         // signal rather than resolving — see `sidebar/workspace-row.tsx`. The
         // header survives the navigation, so the spinner and the open menu are
         // still this component's to clear.
-        await setActiveWorkspace(workspace.id, pathname);
+        await setActiveWorkspace(workspace.id);
       } finally {
         setPendingId(null);
         onSwitched?.();
