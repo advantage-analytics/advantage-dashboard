@@ -74,7 +74,7 @@ ready).
 - **notes:** A beforeunload handler and a footnote already exist; this task is about making the warning impossible to miss. Follow the design system for cautionary tone.
 
 ## T6 · "Upload another" opens a new tab
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T5
 - **files:** src/components/dashboard/matches/new-match-wizard/UploadMatchFlow.tsx
