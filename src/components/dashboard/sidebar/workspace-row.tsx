@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { Check, ChevronsUpDown, Plus, Loader2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -28,7 +27,6 @@ import { RailTooltip } from "./rail-tooltip";
  */
 export function WorkspaceRow({ expanded }: { expanded: boolean }) {
   const { active, available } = useWorkspace();
-  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [, startTransition] = useTransition();
@@ -51,7 +49,7 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
         // it. Only a refused switch comes back normally. Either way the
         // sidebar survives that navigation, so clearing the spinner and
         // closing the menu is this component's job.
-        await setActiveWorkspace(workspace.id, pathname);
+        await setActiveWorkspace(workspace.id);
       } finally {
         setPendingId(null);
         setOpen(false);
