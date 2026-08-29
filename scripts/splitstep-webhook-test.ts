@@ -503,6 +503,94 @@ async function main(): Promise<void> {
     );
   }
 
+  console.log('5b. structured error object lands in the error columns');
+  {
+    // The real failure shape, confirmed 2026-08-28: a top-level message with
+    // raw internals (never shown), and an error object whose message is the
+    // designated end-user string. The webhook must store the object's fields
+    // and prefer its message.
+    const structuredExtId = `test-structured-${Date.now()}`;
+    const structuredJob = await makeJob(structuredExtId);
+    const r = await post({
+      status: 'job_failed',
+      externalJobId: structuredExtId,
+      message: "Failed to download video: HTTPSConnectionPool(host='x'): Read timed out.",
+      error: {
+        code: 'VIDEO_UNREACHABLE',
+        category: 'video_access',
+        step: 'downloading_video',
+        message: 'We could not download your video.',
+        detail: "HTTPSConnectionPool(host='x'): Read timed out.",
+      },
+    });
+    check('returns 200', r.status === 200, r);
+    check('job moves to failed', (await jobStatus(structuredJob.id)) === 'failed');
+
+    const { data } = await supabase
+      .from('processing_jobs')
+      .select('error_code, error_category, error_step, error_message')
+      .eq('id', structuredJob.id)
+      .maybeSingle();
+    const row = data as {
+      error_code: string | null;
+      error_category: string | null;
+      error_step: string | null;
+      error_message: string | null;
+    } | null;
+    check('error_code recorded', row?.error_code === 'VIDEO_UNREACHABLE', row);
+    check('error_category recorded', row?.error_category === 'video_access');
+    check('error_step recorded', row?.error_step === 'downloading_video');
+    check(
+      "error_message is error.message, NOT the unparseable top-level one",
+      row?.error_message === 'We could not download your video.',
+      row?.error_message
+    );
+
+    // This failure class triggers the auto-resubmit attempt in after() — but
+    // the test job has no video_object_key, so resubmitJob must decline at
+    // the video check without creating a child row. A deployed webhook cannot
+    // be allowed to reach a real vendor from a test, which is why the
+    // SUCCESSFUL auto-resubmission is asserted in splitstep-resubmit-test.ts
+    // against a mocked vendor instead.
+    await new Promise((resolve) => setTimeout(resolve, 4_000));
+    const { count } = await supabase
+      .from('processing_jobs')
+      .select('id', { count: 'exact', head: true })
+      .eq('resubmitted_from_job_id', structuredJob.id);
+    check(
+      'declined auto-resubmit creates no child row',
+      (count ?? 0) === 0,
+      count
+    );
+  }
+
+  console.log('5c. a video-quality failure is never auto-resubmitted');
+  {
+    // VIDEO_RESOLUTION_TOO_LOW can never succeed on retry — the classifier
+    // must not even attempt one (no step match, no code match).
+    const qualityExtId = `test-quality-${Date.now()}`;
+    const qualityJob = await makeJob(qualityExtId);
+    const r = await post({
+      status: 'job_failed',
+      externalJobId: qualityExtId,
+      error: {
+        code: 'VIDEO_RESOLUTION_TOO_LOW',
+        category: 'video_quality',
+        step: 'validating_video',
+        message: 'The video resolution is too low to analyse.',
+      },
+    });
+    check('returns 200', r.status === 200, r);
+    check('job moves to failed', (await jobStatus(qualityJob.id)) === 'failed');
+
+    await new Promise((resolve) => setTimeout(resolve, 4_000));
+    const { count } = await supabase
+      .from('processing_jobs')
+      .select('id', { count: 'exact', head: true })
+      .eq('resubmitted_from_job_id', qualityJob.id);
+    check('no auto-resubmission row exists', (count ?? 0) === 0, count);
+  }
+
   console.log('6. unmatched delivery is kept, not dropped');
   {
     const r = await post({ status: 'queued', externalJobId: unknownExtId });
