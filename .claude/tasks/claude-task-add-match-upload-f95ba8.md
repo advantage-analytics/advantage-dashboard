@@ -51,7 +51,7 @@ ready).
 - **notes:** The listener only adds the action when `detail.matchId` is set, so the bug likely lives at the dispatch sites. Reproduce by dispatching the CustomEvent from the console before touching code.
 
 ## T4 · Ask whose match this is in team workspaces
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** src/components/dashboard/matches/new-match-wizard/UploadMatchFlow.tsx, src/components/dashboard/matches/new-match-wizard/DetailsContent.tsx, src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts, src/components/dashboard/matches/new-match-wizard/utils.ts
 - **done when:**

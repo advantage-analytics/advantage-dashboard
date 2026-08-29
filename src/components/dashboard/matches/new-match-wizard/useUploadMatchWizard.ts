@@ -215,6 +215,34 @@ export type {
   VideoUploadProgress,
 } from "@/lib/services/splitstep/submit-match-video";
 
+/**
+ * One roster row offered by the who-played picker.
+ *
+ * `playerId` is `program_players.id` — the id a roster player's matches carry,
+ * claimed or not (see `program_roster_full`). It is NOT a login id, and the two
+ * must never be swapped: `player1_id` is half the SELECT policy on `matches`.
+ */
+export interface RosterOption {
+  playerId: string;
+  /** The login that claimed this profile, when one has. Used only to drop the
+   * uploader's own row — "Myself" already stands for them. */
+  userId: string | null;
+  name: string;
+  ladderPosition: number | null;
+}
+
+/**
+ * WHOSE match a team upload records.
+ *
+ * `self` writes the uploader's own login id, exactly what the wizard always
+ * wrote — so a player uploading their own match is unchanged. `roster` writes
+ * the picked profile's id, which is what stops a coach's upload attributing an
+ * athlete's match to the coach.
+ */
+export type MatchSubject =
+  | { kind: "self" }
+  | { kind: "roster"; playerId: string; name: string };
+
 export interface UseUploadMatchWizardReturn {
   // State
   step: Step;
@@ -288,6 +316,25 @@ export interface UseUploadMatchWizardReturn {
    * field anyone fills in, and the personal wizard never needs it.
    */
   setPickedPlayerUserId: (userId: string | null) => void;
+  /**
+   * The "who played this match" question, asked ONLY in a team workspace with
+   * no preset. A personal workspace has exactly one candidate (the uploader),
+   * and a preset already answered it — the lineup for a line, the
+   * PinnedMatchContent roster picker for a single. Everywhere else `required`
+   * is false and nothing here renders.
+   */
+  whoPlayed: {
+    /** True in a team workspace with no preset — the wizard must ask. */
+    required: boolean;
+    /** The program's players, uploader excluded. Null while loading. */
+    roster: RosterOption[] | null;
+    /** The uploader's display name, for the "Myself" row. */
+    uploaderName: string | null;
+    /** The current answer. Null until chosen, which gates Continue. */
+    subject: MatchSubject | null;
+    /** Records the answer and pre-fills the player-name field from it. */
+    choose: (subject: MatchSubject) => void;
+  };
   handleScoreChange: (player: "player" | "opponent", index: number, value: string) => void;
   handleTiebreakChange: (player: "player" | "opponent", index: number, value: string) => void;
 
@@ -371,6 +418,21 @@ export function useUploadMatchWizard({
    * hand, because a typed name is not evidence of an account.
    */
   const [pickedPlayerUserId, setPickedPlayerUserId] = useState<string | null>(null);
+  /**
+   * Must step 1 ask WHO PLAYED? Only a team workspace with no preset: the
+   * personal wizard's uploader IS the player, and a preset arrives with the
+   * answer. When true, `matchSubject` gates Continue on the provider step —
+   * a match created without it belongs to nobody's season, or worse, to the
+   * wrong person's.
+   */
+  const askWhoPlayed = !preset && activeWorkspace.kind === "team";
+  const [matchSubject, setMatchSubject] = useState<MatchSubject | null>(null);
+  /** The program's players, for the who-played picker. Null while loading. */
+  const [teamRoster, setTeamRoster] = useState<RosterOption[] | null>(null);
+  /** The uploader's profile name and login, for the "Myself" row and for
+   * filtering their own roster profile out of the list. */
+  const [uploaderName, setUploaderName] = useState<string | null>(null);
+  const [uploaderId, setUploaderId] = useState<string | null>(null);
   // Set when Confirm asks Match to focus a specific detail field. DetailsContent
   // reads this on mount, focuses the matching cell, and clears the request.
   const [pendingDetailFocus, setPendingDetailFocus] = useState<DetailField | null>(null);
@@ -542,7 +604,13 @@ export function useUploadMatchWizard({
     // Resume past Provider when the user previously got that far — otherwise an
     // accidental close means a wasted click on reopen. Video flows resume on the
     // Video step: the File can't be persisted, so it has to be picked again.
-    if (resumedProvider && existingProvider) {
+    //
+    // NOT in a team workspace: the who-played answer lives only in memory, so a
+    // resumed draft that skipped the provider step would create a match with
+    // nobody chosen — or silently fall back to the uploader, which is exactly
+    // the attribution bug this question exists to prevent. The provider choice
+    // itself still resumes; only the step does not jump.
+    if (resumedProvider && existingProvider && !askWhoPlayed) {
       const resumedKind = getProviderKind(existingProvider as ProviderId);
       setProgressKind(resumedKind);
       setStep(STEP_ORDER_BY_KIND[resumedKind][1]);
@@ -560,6 +628,7 @@ export function useUploadMatchWizard({
         const { data: { user } } = await supabase.auth.getUser();
         if (cancelled || !user) return;
         cachedUserIdRef.current = user.id;
+        setUploaderId(user.id);
         const { data: profile } = await supabase
           .from("users")
           .select("first_name, last_name")
@@ -570,6 +639,9 @@ export function useUploadMatchWizard({
           .filter(Boolean)
           .join(" ")
           .trim();
+        // Kept regardless of whether the prefill below applies — the
+        // who-played picker's "Myself" row reads it back.
+        setUploaderName(fullName || null);
         if (!fullName) return;
         setFormData((prev) => (prev.playerName.trim() ? prev : { ...prev, playerName: fullName }));
       } catch {
@@ -579,7 +651,104 @@ export function useUploadMatchWizard({
     return () => {
       cancelled = true;
     };
-  }, [open, supabase, preset]);
+  }, [open, supabase, preset, askWhoPlayed]);
+
+  /**
+   * The roster behind the who-played picker.
+   *
+   * Fetched through the same SECURITY DEFINER RPC the ladder page uses
+   * (`program_roster_full`), which returns nothing to a non-member — so a
+   * stale workspace cannot leak another program's names. The mapping mirrors
+   * `getLadder()` in `lib/data/roster-server.ts`, which is server-only.
+   */
+  useEffect(() => {
+    if (!open || !askWhoPlayed) return;
+    let cancelled = false;
+
+    (async () => {
+      const { data } = await supabase.rpc("program_roster_full", {
+        p_program_id: activeWorkspace.id,
+      });
+      if (cancelled) return;
+
+      const rows = (data ?? []) as {
+        player_id: string;
+        user_id: string | null;
+        display_name: string | null;
+        email: string | null;
+        role: string;
+        lineup_spot: number | null;
+      }[];
+
+      setTeamRoster(
+        rows
+          .filter((row) => row.role === "player")
+          .map((row) => ({
+            playerId: row.player_id,
+            userId: row.user_id,
+            name:
+              row.display_name?.trim() ||
+              (row.email ?? "").split("@")[0] ||
+              "Unnamed player",
+            ladderPosition: row.lineup_spot,
+          }))
+          .sort((a, b) => {
+            if (a.ladderPosition === b.ladderPosition)
+              return a.name.localeCompare(b.name);
+            if (a.ladderPosition === null) return 1;
+            if (b.ladderPosition === null) return -1;
+            return a.ladderPosition - b.ladderPosition;
+          })
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, askWhoPlayed, supabase, activeWorkspace.id]);
+
+  // Reset the who-played answer when the workspace changes while the wizard is
+  // open — a stale matchSubject from workspace A would otherwise write that
+  // program's player1_id into workspace B's match row.
+  useEffect(() => {
+    if (!open) return;
+    setMatchSubject(null);
+    setTeamRoster(null);
+  }, [open, activeWorkspace.id]);
+
+  /**
+   * The picker's list: the roster minus the uploader's own claimed profile.
+   * "Myself" already stands for them, and offering both would be the same
+   * person twice under two different ids.
+   */
+  const whoPlayedRoster = useMemo(() => {
+    if (!teamRoster) return null;
+    return uploaderId
+      ? teamRoster.filter((row) => row.userId !== uploaderId)
+      : teamRoster;
+  }, [teamRoster, uploaderId]);
+
+  /**
+   * Record the answer AND pre-fill the player-name field from it, so the
+   * details step shows the name already settled instead of asking again.
+   *
+   * The id travels with the choice, never with the text: a name is not
+   * evidence of an identity, and `player1_id` is half the SELECT policy on
+   * `matches`. Choosing "Myself" resets the name to the uploader's own —
+   * keeping a previously picked teammate's name over a self attribution would
+   * be the silent mismatch this control exists to prevent.
+   */
+  const chooseMatchSubject = useCallback(
+    (subject: MatchSubject) => {
+      setMatchSubject(subject);
+      setFormData((prev) => ({
+        ...prev,
+        playerName:
+          subject.kind === "roster" ? subject.name : uploaderName ?? "",
+      }));
+    },
+    [uploaderName]
+  );
 
   // Step navigation handlers
   const handleProviderSelect = useCallback((providerId: string | null) => {
@@ -607,6 +776,10 @@ export function useUploadMatchWizard({
     // the one thing the workspace does not already know, and a match created
     // without it belongs to nobody's season.
     if (preset?.kind === "single" && !formData.playerName.trim()) return;
+    // Same rule for a team upload with no preset — the who-played question is
+    // this step's, and skipping it would fall back to attributing the match to
+    // whoever is uploading.
+    if (askWhoPlayed && !matchSubject) return;
     // Processing providers get a video step before the form; import providers
     // go straight to the merged file+details step.
     setProgressKind(providerKind);
@@ -618,6 +791,8 @@ export function useUploadMatchWizard({
     preset,
     formData.playerName,
     isProcessingProvider,
+    askWhoPlayed,
+    matchSubject,
   ]);
 
   const handleVideoContinue = useCallback(() => {
@@ -876,11 +1051,19 @@ export function useUploadMatchWizard({
              */
             const eventOwns = Boolean(preset);
             const eventScored = Boolean(preset?.score);
+            // The who-played picker owns the player name exactly the way an
+            // event does: the id travelled with the picked row, and a parsed
+            // export names the ACCOUNT HOLDER — usually the uploader, not the
+            // athlete the coach picked. Letting the file overwrite the name
+            // would leave `player1_id` pointing at one person and
+            // `player1_name` reading as another, with nothing on screen
+            // looking wrong.
+            const subjectOwnsName = eventOwns || (askWhoPlayed && matchSubject !== null);
 
             setFormData((prev) => ({
               ...prev,
               playerName:
-                eventOwns && prev.playerName.trim()
+                subjectOwnsName && prev.playerName.trim()
                   ? prev.playerName
                   : parseResult.data?.playerName || prev.playerName,
               opponentName:
@@ -946,8 +1129,10 @@ export function useUploadMatchWizard({
       }
     }
     // `preset` is read inside: with a preset the event's answers win over the
-    // parsed file, so a stale closure here would silently restore the overwrite.
-  }, [selectedProvider, preset]);
+    // parsed file, so a stale closure here would silently restore the
+    // overwrite. Same for the who-played answer, which owns the player name
+    // the same way.
+  }, [selectedProvider, preset, askWhoPlayed, matchSubject]);
 
   const handleDrop: React.DragEventHandler<HTMLDivElement> = useCallback(
     (e) => {
@@ -1076,14 +1261,24 @@ export function useUploadMatchWizard({
       );
       // WHOSE match this is, which in a team workspace is not the uploader.
       //
-      // No preset means the personal wizard, where the uploader IS the player.
       // With a preset the answer comes from the roster — and `null` when the
       // named player has no account is the correct answer, not a gap to fill
       // with `userId`. Falling back to the uploader is exactly the bug this
       // replaces: it attributes an athlete's match to their coach, and since
       // `player1_id` is half the `matches` SELECT policy, it also hands the
       // coach read access the athlete then loses.
-      const playerUserId = preset ? pickedPlayerUserId : userId;
+      //
+      // No preset in a TEAM workspace asks the same question via the
+      // who-played picker: a picked roster row carries that profile's id
+      // (`program_players.id`, the id `matches_block_client_regraft` checks
+      // against the roster), and "Myself" is the uploader — the wizard's
+      // original answer, unchanged. In a personal workspace the uploader IS
+      // the player and nothing here differs from before.
+      const playerUserId = preset
+        ? pickedPlayerUserId
+        : askWhoPlayed && matchSubject?.kind === "roster"
+          ? matchSubject.playerId
+          : userId;
 
       const { winner, loser } = determineWinner(
         adjustedPlayerScores,
@@ -1387,7 +1582,7 @@ export function useUploadMatchWizard({
     }
     // activeWorkspace is in here on purpose: a coach who switches workspaces
     // with the wizard open must not create the match against the one they left.
-  }, [formData, uploadedFile, selectedProvider, isProcessingProvider, supabase, isPrivateMatch, onOpenChange, onCreated, router, activeWorkspace.id, activeWorkspace.kind]);
+  }, [formData, uploadedFile, selectedProvider, isProcessingProvider, supabase, isPrivateMatch, onOpenChange, onCreated, router, activeWorkspace.id, activeWorkspace.kind, preset, pickedPlayerUserId, askWhoPlayed, matchSubject]);
 
   return {
     // State
@@ -1441,6 +1636,13 @@ export function useUploadMatchWizard({
     handleInputChange,
     /** Set together with `playerName` whenever a roster row is picked. */
     setPickedPlayerUserId,
+    whoPlayed: {
+      required: askWhoPlayed,
+      roster: whoPlayedRoster,
+      uploaderName,
+      subject: matchSubject,
+      choose: chooseMatchSubject,
+    },
     handleScoreChange,
     handleTiebreakChange,
 

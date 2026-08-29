@@ -24,6 +24,8 @@ import {
 } from "./types";
 import {
   useUploadMatchWizard,
+  type MatchSubject,
+  type RosterOption,
   type VideoUploadEvent,
   type VideoUploadProgress,
 } from "./useUploadMatchWizard";
@@ -432,6 +434,117 @@ function QuotaMeter({
 }
 
 /**
+ * Who played this match — a team workspace's one extra question on step 1,
+ * asked only when no preset already answered it.
+ *
+ * Every row carries its own id and the id travels with the CLICK, never the
+ * text: `matches.player1_id` is half the SELECT policy on `matches`, so a
+ * wrong id is not a mislabelled row — it hands read access to the wrong
+ * person and silently attributes every statistic to them. "Myself" writes the
+ * uploader's login id, which is exactly what the wizard wrote before this
+ * control existed; a roster row writes that profile's `program_players.id`,
+ * the same id the PinnedMatchContent picker hands the single-match rail.
+ */
+function WhoPlayedPicker({
+  roster,
+  uploaderName,
+  subject,
+  onChoose,
+}: {
+  roster: RosterOption[] | null;
+  uploaderName: string | null;
+  subject: MatchSubject | null;
+  onChoose: (subject: MatchSubject) => void;
+}) {
+  const rowCls = (chosen: boolean) =>
+    `flex w-full cursor-pointer items-center gap-2.5 rounded-[8px] border px-3.5 py-2.5 text-left transition-colors duration-150 ${
+      chosen
+        ? "border-[#3B82F6] bg-[rgba(59,130,246,0.06)]"
+        : "border-[#EAECF0] hover:bg-[#FAFAFA]"
+    }`;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div>
+        <h2 className="text-[13px] font-medium text-[#0D0D0D]">
+          Who played this match?
+        </h2>
+        <p className="mt-0.5 text-[12px] leading-[1.5] text-[#525252]">
+          Stats and season records follow the player, not whoever uploads.
+        </p>
+      </div>
+
+      <div
+        role="radiogroup"
+        aria-label="Who played this match"
+        className="flex max-h-[320px] flex-col gap-1.5 overflow-y-auto"
+      >
+        <button
+          type="button"
+          role="radio"
+          aria-checked={subject?.kind === "self"}
+          onClick={() => onChoose({ kind: "self" })}
+          className={rowCls(subject?.kind === "self")}
+        >
+          <span className="flex-1 text-[13px] text-[#0D0D0D]">
+            {uploaderName ? `Myself — ${uploaderName}` : "Myself"}
+          </span>
+          {subject?.kind === "self" && (
+            <Check className="size-3.5 shrink-0 text-[#3B82F6]" strokeWidth={2} />
+          )}
+        </button>
+
+        {roster === null ? (
+          <span className="px-3.5 py-2 text-[12px] text-[#888888]">
+            Loading the roster…
+          </span>
+        ) : roster.length === 0 ? (
+          <span className="px-3.5 py-2 text-[12px] text-[#888888]">
+            Nobody else is on this program&rsquo;s roster yet.
+          </span>
+        ) : (
+          roster.map((player) => {
+            const chosen =
+              subject?.kind === "roster" && subject.playerId === player.playerId;
+            return (
+              <button
+                key={player.playerId}
+                type="button"
+                role="radio"
+                aria-checked={chosen}
+                onClick={() =>
+                  onChoose({
+                    kind: "roster",
+                    playerId: player.playerId,
+                    name: player.name,
+                  })
+                }
+                className={rowCls(chosen)}
+              >
+                <span className="flex-1 text-[13px] text-[#0D0D0D]">
+                  {player.name}
+                </span>
+                {player.ladderPosition !== null && (
+                  <span className="text-[10px] uppercase tracking-[1px] text-[#888888]">
+                    S{player.ladderPosition}
+                  </span>
+                )}
+                {chosen && (
+                  <Check
+                    className="size-3.5 shrink-0 text-[#3B82F6]"
+                    strokeWidth={2}
+                  />
+                )}
+              </button>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Memoized, and not for tidiness.
  *
  * After "Upload another" this is the rendered branch while transfers are still
@@ -495,6 +608,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     handleRemoveFile,
     handleInputChange,
     setPickedPlayerUserId,
+    whoPlayed,
     handleScoreChange,
     handleTiebreakChange,
     handleCreateMatch,
@@ -608,7 +722,10 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     const labels: string[] = [];
     if (!formData.eventName.trim()) labels.push("name");
     if (isProcessingProvider) {
-      if (!formData.playerName.trim()) labels.push("your name");
+      if (!formData.playerName.trim())
+        labels.push(
+          whoPlayed.subject?.kind === "roster" ? "player name" : "your name"
+        );
       if (!formData.opponentName.trim()) labels.push("opponent");
       if (!hasAnySetScore) labels.push("score");
       if (formData.adScoring === undefined) labels.push("scoring");
@@ -630,12 +747,19 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     formData.initialTopPlayerIsPlayer1,
     hasAnySetScore,
     isProcessingProvider,
+    whoPlayed.subject,
   ]);
 
   // Work in progress, per step. Separate from `missing` because these are
   // states to wait out rather than fields to fill, and they read differently.
   const busyLabel: Record<Step, string | null> = {
-    provider: !selectedProvider ? "Make a selection" : null,
+    provider: !selectedProvider
+      ? "Make a selection"
+      : // The one team-workspace question. Continue is refused in the hook
+        // too; this is the sentence that says why.
+        whoPlayed.required && !whoPlayed.subject
+      ? "Choose who played this match"
+      : null,
     video: isProbing
       ? "Checking your video…"
       : !uploadedFile
@@ -826,6 +950,24 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
                   setPickedPlayerUserId(pickedUserId);
                 }}
               />
+            ) : whoPlayed.required ? (
+              // A team workspace with no preset gets the personal wizard's
+              // source question PLUS the one thing the workspace cannot infer:
+              // whose match this is. The preset flows never reach this branch —
+              // a line already knows, and the single rail asks via
+              // PinnedMatchContent above.
+              <div className="flex flex-col gap-9">
+                <ProviderContent
+                  selectedProvider={selectedProvider}
+                  onProviderSelect={handleProviderSelect}
+                />
+                <WhoPlayedPicker
+                  roster={whoPlayed.roster}
+                  uploaderName={whoPlayed.uploaderName}
+                  subject={whoPlayed.subject}
+                  onChoose={whoPlayed.choose}
+                />
+              </div>
             ) : (
               <ProviderContent
                 selectedProvider={selectedProvider}
@@ -878,6 +1020,11 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
               {uploadedFile && !parsingState.isParsing && (
                 <DetailsContent
                   formData={formData}
+                  playerNameLabel={
+                    whoPlayed.subject?.kind === "roster"
+                      ? "Player name"
+                      : undefined
+                  }
                   showOpponentProgram={workspaces.active.kind === "team"}
                   onInputChange={handleInputChange}
                   onScoreChange={handleScoreChange}

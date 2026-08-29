@@ -63,6 +63,13 @@ export interface DetailsContentProps {
   onInputChange: (field: keyof FormData, value: string | number | boolean | undefined) => void;
   onScoreChange: (player: "player" | "opponent", index: number, value: string) => void;
   onTiebreakChange?: (player: "player" | "opponent", index: number, value: string) => void;
+  /**
+   * Label and placeholder for the first name field. Defaults to "Your name".
+   * The team wizard passes "Player name" when the who-played picker chose a
+   * roster member — a coach uploading for an athlete is not entering *their*
+   * name, and the error copy follows the same distinction.
+   */
+  playerNameLabel?: string;
   /** Video provider — show the two camera answers in the grid. */
   isProcessingProvider?: boolean;
   /** Set when Confirm wants Match to focus a specific detail cell. */
@@ -241,6 +248,7 @@ export function DetailsContent({
   onInputChange,
   onScoreChange,
   onTiebreakChange,
+  playerNameLabel = "Your name",
   isProcessingProvider = false,
   pendingDetailFocus,
   onPendingDetailFocusConsumed,
@@ -554,8 +562,8 @@ export function DetailsContent({
               <div className="group/name flex min-w-0 max-w-[320px] flex-1 flex-col">
                 <div className="flex items-center gap-3 pb-1.5">
                   <input
-                    placeholder="Your name"
-                    aria-label="Your name"
+                    placeholder={playerNameLabel}
+                    aria-label={playerNameLabel}
                     aria-required="true"
                     aria-invalid={playerNameError || undefined}
                     value={formData.playerName}
@@ -586,7 +594,9 @@ export function DetailsContent({
                 <div className="mt-1 min-h-[12px]">
                   {playerNameError && (
                     <span className="text-[11px] leading-none text-[#E51837]">
-                      Add your name.
+                      {playerNameLabel === "Your name"
+                        ? "Add your name."
+                        : "Add the player's name."}
                     </span>
                   )}
                 </div>
