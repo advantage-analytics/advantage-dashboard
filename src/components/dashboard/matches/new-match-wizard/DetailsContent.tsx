@@ -63,6 +63,13 @@ export interface DetailsContentProps {
   onInputChange: (field: keyof FormData, value: string | number | boolean | undefined) => void;
   onScoreChange: (player: "player" | "opponent", index: number, value: string) => void;
   onTiebreakChange?: (player: "player" | "opponent", index: number, value: string) => void;
+  /**
+   * Label and placeholder for the first name field. Defaults to "Your name".
+   * The team wizard passes "Player name" when the who-played picker chose a
+   * roster member — a coach uploading for an athlete is not entering *their*
+   * name, and the error copy follows the same distinction.
+   */
+  playerNameLabel?: string;
   /** Video provider — show the two camera answers in the grid. */
   isProcessingProvider?: boolean;
   /** Set when Confirm wants Match to focus a specific detail cell. */
@@ -235,12 +242,21 @@ function DurationEditorCell({
   );
 }
 
+/**
+ * One const, because the string is both the prop's default AND what the error
+ * copy compares against to decide "your name" vs "the player's name" — a
+ * reworded default that missed the comparison would silently flip the error
+ * text for every self upload.
+ */
+const DEFAULT_PLAYER_NAME_LABEL = "Your name";
+
 export function DetailsContent({
   formData,
   showOpponentProgram = false,
   onInputChange,
   onScoreChange,
   onTiebreakChange,
+  playerNameLabel = DEFAULT_PLAYER_NAME_LABEL,
   isProcessingProvider = false,
   pendingDetailFocus,
   onPendingDetailFocusConsumed,
@@ -412,10 +428,19 @@ export function DetailsContent({
     () => deriveOutcome(playerNm, opponentNm, playerScores, opponentScores, bestOfNum),
     [playerNm, opponentNm, playerScores, opponentScores, bestOfNum]
   );
+  /**
+   * The last value this effect wrote. The suggestion may replace its OWN
+   * previous answer and nothing else: 6-4 4-6 suggests "Unfinished", and the
+   * third set that decides the match has to be able to correct it. A result the
+   * effect did not write is the user's pick — the plain `!formData.result`
+   * guard, widened by exactly that one case.
+   */
+  const suggestedResult = useRef<string | null>(null);
   useEffect(() => {
-    if (derivedOutcome && !formData.result) {
-      onInputChange("result", derivedOutcome);
-    }
+    if (!derivedOutcome || derivedOutcome === formData.result) return;
+    if (formData.result && formData.result !== suggestedResult.current) return;
+    suggestedResult.current = derivedOutcome;
+    onInputChange("result", derivedOutcome);
   }, [derivedOutcome, formData.result, onInputChange]);
 
   const setWinner = leadingOnSets(playerScores, opponentScores);
@@ -545,8 +570,8 @@ export function DetailsContent({
               <div className="group/name flex min-w-0 max-w-[320px] flex-1 flex-col">
                 <div className="flex items-center gap-3 pb-1.5">
                   <input
-                    placeholder="Your name"
-                    aria-label="Your name"
+                    placeholder={playerNameLabel}
+                    aria-label={playerNameLabel}
                     aria-required="true"
                     aria-invalid={playerNameError || undefined}
                     value={formData.playerName}
@@ -577,7 +602,9 @@ export function DetailsContent({
                 <div className="mt-1 min-h-[12px]">
                   {playerNameError && (
                     <span className="text-[11px] leading-none text-[#E51837]">
-                      Add your name.
+                      {playerNameLabel === DEFAULT_PLAYER_NAME_LABEL
+                        ? "Add your name."
+                        : "Add the player's name."}
                     </span>
                   )}
                 </div>
@@ -896,14 +923,14 @@ export function DetailsContent({
               hint="A tripod or a phone propped against the fence is fixed. Handheld or following the play is not."
             />
             <SelectCell
-              label="Your end at start"
+              label="Your position at video start"
               required
               placeholder="Choose"
               value={formData.initialTopPlayerIsPlayer1}
               options={END_OPTIONS}
               onChange={(v) => onInputChange("initialTopPlayerIsPlayer1", v)}
               menuWidth={260}
-              hint="Where you were standing when the video begins — not where you served from first. Ends change through the match; we only need the opening."
+              hint="Where you appear in the first frame of the video — top or bottom of the screen. This is about camera position, not who serves first. Players switch sides during the match; we only need where you start on screen."
             />
           </>
         )}

@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { reconcileBeforePageRead } from "@/lib/services/splitstep/reconcile";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { analysisFor, loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import {
@@ -80,7 +81,16 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
         opponentIds.length > 0
           ? supabase.from("users").select("id, hand, backhand").in("id", opponentIds)
           : Promise.resolve({ data: null }),
-        loadMatchAnalysis(supabase, data.map((r) => r.id), { reap: true }),
+        (async () => {
+          // Vendor-status reconciliation, sequenced before the analysis read
+          // so what the poll learns is what this list renders. Never fatal.
+          // Lives here and on the match detail page, not in
+          // loadMatchAnalysis — client components import that module, and the
+          // reconciler's admin/Azure dependencies must never enter a client
+          // module graph.
+          await reconcileBeforePageRead(data.map((r) => r.id), "matches");
+          return loadMatchAnalysis(supabase, data.map((r) => r.id), { reap: true });
+        })(),
       ]);
 
       const opponentMap = new Map<string, { hand: string | null; backhand: string | null }>();

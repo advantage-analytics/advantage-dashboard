@@ -39,6 +39,11 @@ import { accountTypeFor } from "@/lib/services/splitstep/quota";
 import { formatResetDate } from "@/lib/data/usage-format";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import {
+  rosterPlayerOptions,
+  type RosterFullRow,
+  type RosterPlayerOption,
+} from "@/lib/data/roster-shared";
+import {
   Step,
   FormData as MatchFormData,
   UploadedFile,
@@ -99,6 +104,64 @@ function explainWriteFailure(error: {
   }
 
   return `Database error: ${message || error.details || JSON.stringify(error)}`;
+}
+
+/**
+ * Undo the match row this wizard just created, and report what it left behind.
+ *
+ * Both rollback sites below delete the row and then announce the failure, and
+ * the announcement carries a link to that row — so the delete's outcome IS the
+ * answer to "is there still a match to open?". `.select("id")` is what makes
+ * that outcome legible: PostgREST returns `error: null` for a DELETE that RLS
+ * filtered down to nothing, so without the projection a refused rollback and a
+ * completed one are indistinguishable, and the toast would guess wrong in one
+ * direction or the other.
+ *
+ * Returns true when the row is confirmed gone.
+ */
+async function rollbackCreatedMatch(
+  supabase: ReturnType<typeof createClient>,
+  matchId: string
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("matches")
+    .delete()
+    .eq("id", matchId)
+    .select("id");
+
+  if (error) {
+    console.error("Match rollback failed:", error);
+    return false;
+  }
+  return (data?.length ?? 0) > 0;
+}
+
+/**
+ * The rollback-then-announce ritual both failure sites share: undo the match
+ * row (unless it predates this upload), then dispatch `match-upload-failed`
+ * with `matchId` attached ONLY if a viewable row survived. One function so
+ * the invariant the comments above describe — a dead link is worse than no
+ * link — cannot drift between the two catch blocks.
+ */
+async function rollbackAndAnnounceFailure(params: {
+  supabase: ReturnType<typeof createClient>;
+  matchId: string;
+  /** True when the row predates this upload and must never be deleted. */
+  reusingMatch: boolean;
+  error: string;
+}): Promise<void> {
+  const { supabase, matchId, reusingMatch, error } = params;
+  const matchIsViewable = reusingMatch
+    ? true
+    : !(await rollbackCreatedMatch(supabase, matchId));
+  window.dispatchEvent(
+    new CustomEvent("match-upload-failed", {
+      detail: {
+        ...(matchIsViewable ? { matchId } : {}),
+        error,
+      },
+    })
+  );
 }
 
 /**
@@ -185,6 +248,32 @@ export type {
   VideoUploadProgress,
 } from "@/lib/services/splitstep/submit-match-video";
 
+/**
+ * One roster row offered by the who-played picker.
+ *
+ * `playerId` is `program_players.id` — the id a roster player's matches carry,
+ * claimed or not (see `program_roster_full`). It is NOT a login id, and the two
+ * must never be swapped: `player1_id` is half the SELECT policy on `matches`.
+ * `userId` — the login that claimed this profile, when one has — is used only
+ * to drop the uploader's own row; "Myself" already stands for them.
+ *
+ * The shape (and the filter/name-fallback/sort that produces it) is
+ * `roster-shared.ts`'s, shared with `getLadder()`.
+ */
+export type RosterOption = RosterPlayerOption;
+
+/**
+ * WHOSE match a team upload records.
+ *
+ * `self` writes the uploader's own login id, exactly what the wizard always
+ * wrote — so a player uploading their own match is unchanged. `roster` writes
+ * the picked profile's id, which is what stops a coach's upload attributing an
+ * athlete's match to the coach.
+ */
+export type MatchSubject =
+  | { kind: "self" }
+  | { kind: "roster"; playerId: string; name: string };
+
 export interface UseUploadMatchWizardReturn {
   // State
   step: Step;
@@ -258,6 +347,25 @@ export interface UseUploadMatchWizardReturn {
    * field anyone fills in, and the personal wizard never needs it.
    */
   setPickedPlayerUserId: (userId: string | null) => void;
+  /**
+   * The "who played this match" question, asked ONLY in a team workspace with
+   * no preset. A personal workspace has exactly one candidate (the uploader),
+   * and a preset already answered it — the lineup for a line, the
+   * PinnedMatchContent roster picker for a single. Everywhere else `required`
+   * is false and nothing here renders.
+   */
+  whoPlayed: {
+    /** True in a team workspace with no preset — the wizard must ask. */
+    required: boolean;
+    /** The program's players, uploader excluded. Null while loading. */
+    roster: RosterOption[] | null;
+    /** The uploader's display name, for the "Myself" row. */
+    uploaderName: string | null;
+    /** The current answer. Null until chosen, which gates Continue. */
+    subject: MatchSubject | null;
+    /** Records the answer and pre-fills the player-name field from it. */
+    choose: (subject: MatchSubject) => void;
+  };
   handleScoreChange: (player: "player" | "opponent", index: number, value: string) => void;
   handleTiebreakChange: (player: "player" | "opponent", index: number, value: string) => void;
 
@@ -341,6 +449,21 @@ export function useUploadMatchWizard({
    * hand, because a typed name is not evidence of an account.
    */
   const [pickedPlayerUserId, setPickedPlayerUserId] = useState<string | null>(null);
+  /**
+   * Must step 1 ask WHO PLAYED? Only a team workspace with no preset: the
+   * personal wizard's uploader IS the player, and a preset arrives with the
+   * answer. When true, `matchSubject` gates Continue on the provider step —
+   * a match created without it belongs to nobody's season, or worse, to the
+   * wrong person's.
+   */
+  const askWhoPlayed = !preset && activeWorkspace.kind === "team";
+  const [matchSubject, setMatchSubject] = useState<MatchSubject | null>(null);
+  /** The program's players, for the who-played picker. Null while loading. */
+  const [teamRoster, setTeamRoster] = useState<RosterOption[] | null>(null);
+  /** The uploader's profile name and login, for the "Myself" row and for
+   * filtering their own roster profile out of the list. */
+  const [uploaderName, setUploaderName] = useState<string | null>(null);
+  const [uploaderId, setUploaderId] = useState<string | null>(null);
   // Set when Confirm asks Match to focus a specific detail field. DetailsContent
   // reads this on mount, focuses the matching cell, and clears the request.
   const [pendingDetailFocus, setPendingDetailFocus] = useState<DetailField | null>(null);
@@ -512,7 +635,13 @@ export function useUploadMatchWizard({
     // Resume past Provider when the user previously got that far — otherwise an
     // accidental close means a wasted click on reopen. Video flows resume on the
     // Video step: the File can't be persisted, so it has to be picked again.
-    if (resumedProvider && existingProvider) {
+    //
+    // NOT in a team workspace: the who-played answer lives only in memory, so a
+    // resumed draft that skipped the provider step would create a match with
+    // nobody chosen — or silently fall back to the uploader, which is exactly
+    // the attribution bug this question exists to prevent. The provider choice
+    // itself still resumes; only the step does not jump.
+    if (resumedProvider && existingProvider && !askWhoPlayed) {
       const resumedKind = getProviderKind(existingProvider as ProviderId);
       setProgressKind(resumedKind);
       setStep(STEP_ORDER_BY_KIND[resumedKind][1]);
@@ -530,6 +659,7 @@ export function useUploadMatchWizard({
         const { data: { user } } = await supabase.auth.getUser();
         if (cancelled || !user) return;
         cachedUserIdRef.current = user.id;
+        setUploaderId(user.id);
         const { data: profile } = await supabase
           .from("users")
           .select("first_name, last_name")
@@ -540,6 +670,9 @@ export function useUploadMatchWizard({
           .filter(Boolean)
           .join(" ")
           .trim();
+        // Kept regardless of whether the prefill below applies — the
+        // who-played picker's "Myself" row reads it back.
+        setUploaderName(fullName || null);
         if (!fullName) return;
         setFormData((prev) => (prev.playerName.trim() ? prev : { ...prev, playerName: fullName }));
       } catch {
@@ -549,7 +682,78 @@ export function useUploadMatchWizard({
     return () => {
       cancelled = true;
     };
-  }, [open, supabase, preset]);
+  }, [open, supabase, preset, askWhoPlayed]);
+
+  /**
+   * The roster behind the who-played picker.
+   *
+   * Fetched through the same SECURITY DEFINER RPC the ladder page uses
+   * (`program_roster_full`), which returns nothing to a non-member — so a
+   * stale workspace cannot leak another program's names. The filter, name
+   * fallback and ladder sort are `rosterPlayerOptions()` in
+   * `lib/data/roster-shared.ts`, shared with `getLadder()` so the two RPC
+   * consumers cannot drift.
+   */
+  useEffect(() => {
+    if (!open || !askWhoPlayed) return;
+    let cancelled = false;
+
+    (async () => {
+      const { data } = await supabase.rpc("program_roster_full", {
+        p_program_id: activeWorkspace.id,
+      });
+      if (cancelled) return;
+
+      setTeamRoster(rosterPlayerOptions((data ?? []) as RosterFullRow[]));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, askWhoPlayed, supabase, activeWorkspace.id]);
+
+  // Reset the who-played answer when the workspace changes while the wizard is
+  // open — a stale matchSubject from workspace A would otherwise write that
+  // program's player1_id into workspace B's match row.
+  useEffect(() => {
+    if (!open) return;
+    setMatchSubject(null);
+    setTeamRoster(null);
+  }, [open, activeWorkspace.id]);
+
+  /**
+   * The picker's list: the roster minus the uploader's own claimed profile.
+   * "Myself" already stands for them, and offering both would be the same
+   * person twice under two different ids.
+   */
+  const whoPlayedRoster = useMemo(() => {
+    if (!teamRoster) return null;
+    return uploaderId
+      ? teamRoster.filter((row) => row.userId !== uploaderId)
+      : teamRoster;
+  }, [teamRoster, uploaderId]);
+
+  /**
+   * Record the answer AND pre-fill the player-name field from it, so the
+   * details step shows the name already settled instead of asking again.
+   *
+   * The id travels with the choice, never with the text: a name is not
+   * evidence of an identity, and `player1_id` is half the SELECT policy on
+   * `matches`. Choosing "Myself" resets the name to the uploader's own —
+   * keeping a previously picked teammate's name over a self attribution would
+   * be the silent mismatch this control exists to prevent.
+   */
+  const chooseMatchSubject = useCallback(
+    (subject: MatchSubject) => {
+      setMatchSubject(subject);
+      setFormData((prev) => ({
+        ...prev,
+        playerName:
+          subject.kind === "roster" ? subject.name : uploaderName ?? "",
+      }));
+    },
+    [uploaderName]
+  );
 
   // Step navigation handlers
   const handleProviderSelect = useCallback((providerId: string | null) => {
@@ -577,6 +781,10 @@ export function useUploadMatchWizard({
     // the one thing the workspace does not already know, and a match created
     // without it belongs to nobody's season.
     if (preset?.kind === "single" && !formData.playerName.trim()) return;
+    // Same rule for a team upload with no preset — the who-played question is
+    // this step's, and skipping it would fall back to attributing the match to
+    // whoever is uploading.
+    if (askWhoPlayed && !matchSubject) return;
     // Processing providers get a video step before the form; import providers
     // go straight to the merged file+details step.
     setProgressKind(providerKind);
@@ -588,6 +796,8 @@ export function useUploadMatchWizard({
     preset,
     formData.playerName,
     isProcessingProvider,
+    askWhoPlayed,
+    matchSubject,
   ]);
 
   const handleVideoContinue = useCallback(() => {
@@ -846,11 +1056,19 @@ export function useUploadMatchWizard({
              */
             const eventOwns = Boolean(preset);
             const eventScored = Boolean(preset?.score);
+            // The who-played picker owns the player name exactly the way an
+            // event does: the id travelled with the picked row, and a parsed
+            // export names the ACCOUNT HOLDER — usually the uploader, not the
+            // athlete the coach picked. Letting the file overwrite the name
+            // would leave `player1_id` pointing at one person and
+            // `player1_name` reading as another, with nothing on screen
+            // looking wrong.
+            const subjectOwnsName = eventOwns || (askWhoPlayed && matchSubject !== null);
 
             setFormData((prev) => ({
               ...prev,
               playerName:
-                eventOwns && prev.playerName.trim()
+                subjectOwnsName && prev.playerName.trim()
                   ? prev.playerName
                   : parseResult.data?.playerName || prev.playerName,
               opponentName:
@@ -916,8 +1134,10 @@ export function useUploadMatchWizard({
       }
     }
     // `preset` is read inside: with a preset the event's answers win over the
-    // parsed file, so a stale closure here would silently restore the overwrite.
-  }, [selectedProvider, preset]);
+    // parsed file, so a stale closure here would silently restore the
+    // overwrite. Same for the who-played answer, which owns the player name
+    // the same way.
+  }, [selectedProvider, preset, askWhoPlayed, matchSubject]);
 
   const handleDrop: React.DragEventHandler<HTMLDivElement> = useCallback(
     (e) => {
@@ -1046,14 +1266,24 @@ export function useUploadMatchWizard({
       );
       // WHOSE match this is, which in a team workspace is not the uploader.
       //
-      // No preset means the personal wizard, where the uploader IS the player.
       // With a preset the answer comes from the roster — and `null` when the
       // named player has no account is the correct answer, not a gap to fill
       // with `userId`. Falling back to the uploader is exactly the bug this
       // replaces: it attributes an athlete's match to their coach, and since
       // `player1_id` is half the `matches` SELECT policy, it also hands the
       // coach read access the athlete then loses.
-      const playerUserId = preset ? pickedPlayerUserId : userId;
+      //
+      // No preset in a TEAM workspace asks the same question via the
+      // who-played picker: a picked roster row carries that profile's id
+      // (`program_players.id`, the id `matches_block_client_regraft` checks
+      // against the roster), and "Myself" is the uploader — the wizard's
+      // original answer, unchanged. In a personal workspace the uploader IS
+      // the player and nothing here differs from before.
+      const playerUserId = preset
+        ? pickedPlayerUserId
+        : askWhoPlayed && matchSubject?.kind === "roster"
+          ? matchSubject.playerId
+          : userId;
 
       const { winner, loser } = determineWinner(
         adjustedPlayerScores,
@@ -1244,20 +1474,18 @@ export function useUploadMatchWizard({
           // carry its video, so removing it is the clean retry; an event line's
           // match is a recorded result that predates this upload, and deleting
           // it would destroy a score somebody entered courtside.
-          if (!reusingMatch) {
-            await supabase.from("matches").delete().eq("id", matchId);
-          }
-          window.dispatchEvent(
-            new CustomEvent("match-upload-failed", {
-              detail: {
-                matchId,
-                error:
-                  jobErr instanceof Error
-                    ? jobErr.message
-                    : "Couldn't queue this match for analysis",
-              },
-            })
-          );
+          //
+          // `matchId` then rides on the failure event ONLY if that row survived
+          // — see the note at the transfer-failure dispatch below.
+          await rollbackAndAnnounceFailure({
+            supabase,
+            matchId,
+            reusingMatch,
+            error:
+              jobErr instanceof Error
+                ? jobErr.message
+                : "Couldn't queue this match for analysis",
+          });
           return;
         }
 
@@ -1275,6 +1503,21 @@ export function useUploadMatchWizard({
             },
             onEvent: (event) => onVideoUpload?.(event),
             onTransferFailed: (message) => {
+              /**
+               * THE RULE FOR `matchId` ON THIS EVENT, stated once here because
+               * all three dispatch sites answer to it:
+               *
+               * `matchId` is a PROMISE THAT THE MATCH IS THERE. The listener
+               * turns it into "Open the match" on the failure toast, so sending
+               * one for a row that is gone is worse than sending none — the
+               * person clicks the only thing the notice offers and lands on
+               * "Match not found", which reads as a second, unrelated fault.
+               *
+               * This site keeps it: the transfer is what failed, and the match
+               * row and its processing job are both still standing. The two
+               * rollback sites send it only when their delete left the row in
+               * place. Nothing else about the event changes.
+               */
               window.dispatchEvent(
                 new CustomEvent("match-upload-failed", {
                   detail: { matchId, error: message },
@@ -1307,17 +1550,16 @@ export function useUploadMatchWizard({
           // Roll back the phantom match row so the user has a clean retry path.
           // Same exemption as above: never delete a row that already carried a
           // result before this upload started.
-          if (!reusingMatch) {
-            await supabase.from("matches").delete().eq("id", matchId);
-          }
-          window.dispatchEvent(
-            new CustomEvent("match-upload-failed", {
-              detail: {
-                matchId,
-                error: err instanceof Error ? err.message : "Upload failed",
-              },
-            })
-          );
+          //
+          // And the same rule for the link: an import match with no file behind
+          // it is a row of zeroes, so once the rollback removes it there is
+          // nothing to offer.
+          await rollbackAndAnnounceFailure({
+            supabase,
+            matchId,
+            reusingMatch,
+            error: err instanceof Error ? err.message : "Upload failed",
+          });
         }
       })();
     } catch (e: any) {
@@ -1335,7 +1577,7 @@ export function useUploadMatchWizard({
     }
     // activeWorkspace is in here on purpose: a coach who switches workspaces
     // with the wizard open must not create the match against the one they left.
-  }, [formData, uploadedFile, selectedProvider, isProcessingProvider, supabase, isPrivateMatch, onOpenChange, onCreated, router, activeWorkspace.id, activeWorkspace.kind]);
+  }, [formData, uploadedFile, selectedProvider, isProcessingProvider, supabase, isPrivateMatch, onOpenChange, onCreated, router, activeWorkspace.id, activeWorkspace.kind, preset, pickedPlayerUserId, askWhoPlayed, matchSubject]);
 
   return {
     // State
@@ -1389,6 +1631,13 @@ export function useUploadMatchWizard({
     handleInputChange,
     /** Set together with `playerName` whenever a roster row is picked. */
     setPickedPlayerUserId,
+    whoPlayed: {
+      required: askWhoPlayed,
+      roster: whoPlayedRoster,
+      uploaderName,
+      subject: matchSubject,
+      choose: chooseMatchSubject,
+    },
     handleScoreChange,
     handleTiebreakChange,
 

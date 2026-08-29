@@ -14,7 +14,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Check, CircleX } from "lucide-react";
+import { AlertTriangle, Check, CircleX, ExternalLink } from "lucide-react";
 import {
   Step,
   STEP_CONFIG,
@@ -24,6 +24,8 @@ import {
 } from "./types";
 import {
   useUploadMatchWizard,
+  type MatchSubject,
+  type RosterOption,
   type VideoUploadEvent,
   type VideoUploadProgress,
 } from "./useUploadMatchWizard";
@@ -51,6 +53,15 @@ const PERSONAL_EXIT_HREF = "/dashboard/matches";
 
 /** The design's column: 780px of content inside 56px gutters. */
 const CONTENT_CLS = "mx-auto w-full max-w-[780px] px-14";
+
+/**
+ * The missing-field label for `initialTopPlayerIsPlayer1`, matching
+ * DetailsContent's field label. One const because the string is both pushed
+ * into the list and compared against — it has already been reworded once, and
+ * a rename that misses the comparison silently breaks the "only the camera
+ * answers are outstanding" sentence.
+ */
+const CAMERA_POSITION_LABEL = "your position at video start";
 
 /**
  * What one upload is doing, owned HERE rather than in the wizard hook.
@@ -216,6 +227,36 @@ function UploadMatchSuccess({
   );
   const busy = uploading.length > 0 || uploads.some((u) => u.phase === "done");
 
+  /**
+   * Where a second upload starts when the first one is still moving.
+   *
+   * The same-tab remount cannot be used while a transfer is live: this screen is
+   * the only thing holding the upload's progress and its cancel handle, so
+   * replacing it with the wizard would leave bytes moving with nothing to watch
+   * or stop them. A new tab keeps this one intact and starts a genuinely fresh
+   * wizard beside it.
+   *
+   * The current URL rather than a hardcoded `/dashboard/matches/new`, because a
+   * team upload's preset lives entirely in its own route and query string
+   * (`/dashboard/team/upload?entry=…`, `/dashboard/team/schedule/new/single?match=…`).
+   * Hardcoding the personal route would silently drop the pinned line.
+   *
+   * Read during render rather than through `usePathname`/`useSearchParams`:
+   * the latter would force a Suspense boundary on an otherwise static route,
+   * and this screen cannot hydrate-mismatch — `createdMatchId` starts null, so
+   * this branch is only ever reached after a click, never on the server.
+   *
+   * No localStorage collision to resolve: `handleCreateMatch` calls
+   * `clearStorageData()` before this screen ever renders, and this screen has no
+   * wizard mounted to write the keys back — so the new tab loads a blank draft,
+   * and `DashboardShell`'s "leaving the flow" clear is a no-op in a tab that is
+   * arriving at the flow rather than leaving it.
+   */
+  const newTabHref =
+    typeof window === "undefined"
+      ? "/dashboard/matches/new"
+      : window.location.pathname + window.location.search;
+
   return (
     <div className={`${CONTENT_CLS} pb-16 pt-10`}>
       <div className="animate-fadeIn flex flex-col items-center gap-3 rounded-[14px] border border-[#F3F3F3] bg-white px-10 py-12 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
@@ -253,6 +294,27 @@ function UploadMatchSuccess({
                 : "The video upload did not finish.")
             : "Sent for analysis. Results are added as soon as they're ready."}
         </p>
+
+        {/* Prominent keep-open warning — body-size text so it cannot be missed.
+            Only shown while at least one upload is actively transferring bytes.
+            The footnote below this block covers the navigation nuance for
+            readers who want the fine print. */}
+        {uploading.length > 0 && (
+          <div className="flex w-full max-w-[440px] items-start gap-2.5 rounded-[8px] border border-[#FEF3C7] bg-[#FFFBEB] px-3.5 py-3">
+            <AlertTriangle
+              className="mt-0.5 size-4 shrink-0 text-[#D97706]"
+              strokeWidth={1.5}
+            />
+            <p className="text-[13px] leading-[1.5] text-[#92400E]">
+              Keep this tab open —{" "}
+              {uploading.length > 1
+                ? "your videos are uploading"
+                : "your video is uploading"}
+              . You can navigate within the app, but closing this tab will
+              stop the upload.
+            </p>
+          </div>
+        )}
 
         {/* One row per transfer. Everything here comes from the browser's own
             XHR progress, so it moves continuously rather than at the
@@ -313,9 +375,32 @@ function UploadMatchSuccess({
         )}
 
         <div className="mt-2 flex gap-2">
-          <Button onClick={onUploadAnother} className={ghostBtnCls}>
-            Upload another
-          </Button>
+          {/* A real anchor, not `window.open`: it survives a popup blocker,
+              honours ⌘-click and middle-click, and announces the new tab to a
+              screen reader. Plain `<a>` rather than `<Link>` on purpose — the
+              new tab must be a full page load, which is what gives its wizard a
+              hook with no memory of this one. */}
+          {busy ? (
+            <Button asChild className={ghostBtnCls}>
+              <a
+                href={newTabHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Upload another match — opens in a new tab"
+              >
+                Upload another
+                <ExternalLink
+                  className="size-3.5 shrink-0"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+              </a>
+            </Button>
+          ) : (
+            <Button onClick={onUploadAnother} className={ghostBtnCls}>
+              Upload another
+            </Button>
+          )}
           <Button asChild className={primaryBtnCls}>
             <Link href={exitHref}>
               {preset?.kind === "single"
@@ -326,6 +411,25 @@ function UploadMatchSuccess({
             </Link>
           </Button>
         </div>
+
+        {/* Beside the button that causes it. The amber banner above says to keep
+            the tab open; this says why the button just handed them a second one,
+            so the two tabs don't read as an accident. The stop/leave nuance is
+            the footnote below — repeating it here would be the third telling. */}
+        {busy && (
+          <p className="max-w-[440px] text-center text-[11px] leading-[1.5] text-[#888888]">
+            &ldquo;Upload another&rdquo; opens a new tab. Don&rsquo;t close this
+            one —{" "}
+            {uploading.length === 0
+              ? // Bytes have landed; the vendor hand-off is still in flight, and
+                // it runs from this tab too.
+                "this upload is still finishing here"
+              : uploading.length > 1
+              ? "your videos are still uploading here"
+              : "your video is still uploading here"}
+            .
+          </p>
+        )}
 
         {/* Leaving is allowed but not free, and the browser's own dialog fires
             too late to read as a warning. */}
@@ -432,6 +536,117 @@ function QuotaMeter({
 }
 
 /**
+ * Who played this match — a team workspace's one extra question on step 1,
+ * asked only when no preset already answered it.
+ *
+ * Every row carries its own id and the id travels with the CLICK, never the
+ * text: `matches.player1_id` is half the SELECT policy on `matches`, so a
+ * wrong id is not a mislabelled row — it hands read access to the wrong
+ * person and silently attributes every statistic to them. "Myself" writes the
+ * uploader's login id, which is exactly what the wizard wrote before this
+ * control existed; a roster row writes that profile's `program_players.id`,
+ * the same id the PinnedMatchContent picker hands the single-match rail.
+ */
+function WhoPlayedPicker({
+  roster,
+  uploaderName,
+  subject,
+  onChoose,
+}: {
+  roster: RosterOption[] | null;
+  uploaderName: string | null;
+  subject: MatchSubject | null;
+  onChoose: (subject: MatchSubject) => void;
+}) {
+  const rowCls = (chosen: boolean) =>
+    `flex w-full cursor-pointer items-center gap-2.5 rounded-[8px] border px-3.5 py-2.5 text-left transition-colors duration-150 ${
+      chosen
+        ? "border-[#3B82F6] bg-[rgba(59,130,246,0.06)]"
+        : "border-[#EAECF0] hover:bg-[#FAFAFA]"
+    }`;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div>
+        <h2 className="text-[13px] font-medium text-[#0D0D0D]">
+          Who played this match?
+        </h2>
+        <p className="mt-0.5 text-[12px] leading-[1.5] text-[#525252]">
+          Stats and season records follow the player, not whoever uploads.
+        </p>
+      </div>
+
+      <div
+        role="radiogroup"
+        aria-label="Who played this match"
+        className="flex max-h-[320px] flex-col gap-1.5 overflow-y-auto"
+      >
+        <button
+          type="button"
+          role="radio"
+          aria-checked={subject?.kind === "self"}
+          onClick={() => onChoose({ kind: "self" })}
+          className={rowCls(subject?.kind === "self")}
+        >
+          <span className="flex-1 text-[13px] text-[#0D0D0D]">
+            {uploaderName ? `Myself — ${uploaderName}` : "Myself"}
+          </span>
+          {subject?.kind === "self" && (
+            <Check className="size-3.5 shrink-0 text-[#3B82F6]" strokeWidth={2} />
+          )}
+        </button>
+
+        {roster === null ? (
+          <span className="px-3.5 py-2 text-[12px] text-[#888888]">
+            Loading the roster…
+          </span>
+        ) : roster.length === 0 ? (
+          <span className="px-3.5 py-2 text-[12px] text-[#888888]">
+            Nobody else is on this program&rsquo;s roster yet.
+          </span>
+        ) : (
+          roster.map((player) => {
+            const chosen =
+              subject?.kind === "roster" && subject.playerId === player.playerId;
+            return (
+              <button
+                key={player.playerId}
+                type="button"
+                role="radio"
+                aria-checked={chosen}
+                onClick={() =>
+                  onChoose({
+                    kind: "roster",
+                    playerId: player.playerId,
+                    name: player.name,
+                  })
+                }
+                className={rowCls(chosen)}
+              >
+                <span className="flex-1 text-[13px] text-[#0D0D0D]">
+                  {player.name}
+                </span>
+                {player.ladderPosition !== null && (
+                  <span className="text-[10px] uppercase tracking-[1px] text-[#888888]">
+                    S{player.ladderPosition}
+                  </span>
+                )}
+                {chosen && (
+                  <Check
+                    className="size-3.5 shrink-0 text-[#3B82F6]"
+                    strokeWidth={2}
+                  />
+                )}
+              </button>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Memoized, and not for tidiness.
  *
  * After "Upload another" this is the rendered branch while transfers are still
@@ -495,6 +710,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     handleRemoveFile,
     handleInputChange,
     setPickedPlayerUserId,
+    whoPlayed,
     handleScoreChange,
     handleTiebreakChange,
     handleCreateMatch,
@@ -608,18 +824,21 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     const labels: string[] = [];
     if (!formData.eventName.trim()) labels.push("name");
     if (isProcessingProvider) {
-      if (!formData.playerName.trim()) labels.push("your name");
+      if (!formData.playerName.trim())
+        labels.push(
+          whoPlayed.subject?.kind === "roster" ? "player name" : "your name"
+        );
       if (!formData.opponentName.trim()) labels.push("opponent");
       if (!hasAnySetScore) labels.push("score");
       if (formData.adScoring === undefined) labels.push("scoring");
       if (formData.fixedCamera === undefined) labels.push("camera");
-      if (formData.initialTopPlayerIsPlayer1 === undefined) labels.push("your end");
+      if (formData.initialTopPlayerIsPlayer1 === undefined) labels.push(CAMERA_POSITION_LABEL);
     }
     // Confirm has its own sentence for the case where only the camera answers
     // are outstanding, so the shape is decided here beside the list rather than
     // re-derived from label strings three hundred lines away.
     const onlyVideoAnswers =
-      labels.length > 0 && labels.every((l) => l === "camera" || l === "your end");
+      labels.length > 0 && labels.every((l) => l === "camera" || l === CAMERA_POSITION_LABEL);
     return { labels, onlyVideoAnswers };
   }, [
     formData.eventName,
@@ -630,12 +849,19 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     formData.initialTopPlayerIsPlayer1,
     hasAnySetScore,
     isProcessingProvider,
+    whoPlayed.subject,
   ]);
 
   // Work in progress, per step. Separate from `missing` because these are
   // states to wait out rather than fields to fill, and they read differently.
   const busyLabel: Record<Step, string | null> = {
-    provider: !selectedProvider ? "Make a selection" : null,
+    provider: !selectedProvider
+      ? "Make a selection"
+      : // The one team-workspace question. Continue is refused in the hook
+        // too; this is the sentence that says why.
+        whoPlayed.required && !whoPlayed.subject
+      ? "Choose who played this match"
+      : null,
     video: isProbing
       ? "Checking your video…"
       : !uploadedFile
@@ -826,6 +1052,24 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
                   setPickedPlayerUserId(pickedUserId);
                 }}
               />
+            ) : whoPlayed.required ? (
+              // A team workspace with no preset gets the personal wizard's
+              // source question PLUS the one thing the workspace cannot infer:
+              // whose match this is. The preset flows never reach this branch —
+              // a line already knows, and the single rail asks via
+              // PinnedMatchContent above.
+              <div className="flex flex-col gap-9">
+                <ProviderContent
+                  selectedProvider={selectedProvider}
+                  onProviderSelect={handleProviderSelect}
+                />
+                <WhoPlayedPicker
+                  roster={whoPlayed.roster}
+                  uploaderName={whoPlayed.uploaderName}
+                  subject={whoPlayed.subject}
+                  onChoose={whoPlayed.choose}
+                />
+              </div>
             ) : (
               <ProviderContent
                 selectedProvider={selectedProvider}
@@ -878,6 +1122,11 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
               {uploadedFile && !parsingState.isParsing && (
                 <DetailsContent
                   formData={formData}
+                  playerNameLabel={
+                    whoPlayed.subject?.kind === "roster"
+                      ? "Player name"
+                      : undefined
+                  }
                   showOpponentProgram={workspaces.active.kind === "team"}
                   onInputChange={handleInputChange}
                   onScoreChange={handleScoreChange}

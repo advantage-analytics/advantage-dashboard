@@ -52,6 +52,10 @@ import {
   trimmedCopyStatus,
 } from '@/lib/services/splitstep/video-url';
 import { releaseQuota } from '@/lib/services/splitstep/quota';
+import {
+  isDownloadFailure,
+  resubmitJob,
+} from '@/lib/services/splitstep/resubmit-job';
 import { gradeResults } from '@/lib/services/splitstep/grade-results';
 import { deriveAndPublish } from '@/lib/services/splitstep/derive-and-publish';
 
@@ -283,6 +287,9 @@ export async function POST(request: NextRequest) {
       p_trimmed_video_url: payload.trimmedVideoUrl,
       p_error_message: payload.errorMessage,
       p_match_id: payload.matchId,
+      p_error_code: payload.errorCode,
+      p_error_category: payload.errorCategory,
+      p_error_step: payload.errorStep,
     })
     .single();
 
@@ -496,9 +503,52 @@ export async function POST(request: NextRequest) {
   // reconcileQuota() would mean inventing a number to pass it.
   if (payload.nextStatus === 'failed' && record.matched_job_id) {
     const failedJobId = record.matched_job_id;
+    // Read once outside after(): the auto-retry decision keys on THIS
+    // delivery's error fields, not on whatever the row says by the time the
+    // block runs. The classifier itself lives in resubmit-job.ts — one rule,
+    // shared with the reconciler's polled-failure path.
+    const retryable = isDownloadFailure(payload.errorCode, payload.errorStep);
+
     after(async () => {
+      // Release first: the child's reservation below is a fresh spend against
+      // the same budget, and holding both at once could refuse a retry the
+      // budget actually has room for.
       await releaseQuota(supabase, failedJobId);
       console.log(`${LOG} quota released for failed job`, { jobId: failedJobId });
+
+      // Auto-resubmit — this failure class and ONLY this class. A download
+      // failure with a valid SAS means the file, submission and metadata are
+      // all good, so retrying is nearly free and nearly always works. The one
+      // real occurrence arrived as code INTERNAL_ERROR with step
+      // 'downloading_video', which is why step outranks code here: a bare
+      // INTERNAL_ERROR anywhere else says "contact support", and
+      // video-quality rejections can never succeed on retry. Unknown codes
+      // are surfaced, never retried.
+      //
+      // resubmitJob() itself enforces the rest: one automatic attempt per
+      // chain, the 3-attempt ceiling, no non-terminal duplicate, and that the
+      // source blob still exists.
+      if (!retryable) return;
+
+      const result = await resubmitJob({
+        supabase,
+        jobId: failedJobId,
+        auto: true,
+      });
+
+      if (result.ok) {
+        console.log(`${LOG} auto-resubmitted after download failure`, {
+          failedJobId,
+          newJobId: result.jobId,
+          externalJobId: result.externalJobId,
+        });
+      } else {
+        console.warn(`${LOG} auto-resubmit declined — surfacing to the user`, {
+          failedJobId,
+          reason: result.reason,
+          message: result.message,
+        });
+      }
     });
   }
 

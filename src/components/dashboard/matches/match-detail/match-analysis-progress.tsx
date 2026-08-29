@@ -27,6 +27,7 @@ import {
 } from "@/lib/data/match-analysis";
 import { AnalysisProgressTrack } from "../analysis-progress-track";
 import { RetrySubmission } from "./retry-submission";
+import { RetryAnalysis } from "./retry-analysis";
 import {
   useLiveMatchAnalysis,
   withLiveAnalysis,
@@ -199,12 +200,26 @@ export function MatchAnalysisProgress({
               aria-hidden="true"
             />
             <div>
+              {/* `failNote` is error_message — for a provider failure that is
+                  the vendor's designated end-user string (error.message),
+                  never the raw internals, which stay in the delivery ledger. */}
               <p className="text-[13px] font-medium text-[#0D0D0D]">
                 {analysis.failNote ?? "Analysis stopped"}
               </p>
               <p className="mt-1 text-[12px] leading-[1.5] text-[#525252]">
-                Trim to a window where the camera stays fixed, or upload a new recording.
+                Retrying uses the video you already uploaded — nothing needs
+                uploading again. If it keeps failing, trim to a window where
+                the camera stays fixed, or upload a new recording.
               </p>
+              {/* Gated on the literal status, not the broader `failed` (which
+                  also covers derivation_failed): resubmitJob() refuses
+                  anything but a video-provider failure on purpose — a
+                  derivation failure already has its results and needs a
+                  derivation re-run, not a new video submission — so showing
+                  this button there would be a button that always 409s. */}
+              {analysis.jobId && analysis.status === "failed" && (
+                <RetryAnalysis jobId={analysis.jobId} />
+              )}
             </div>
           </div>
         ) : stalled ? (

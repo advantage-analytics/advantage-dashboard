@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { reconcileBeforePageRead } from "@/lib/services/splitstep/reconcile";
 
 import {
   getAdjacentMatchIds,
@@ -133,9 +134,32 @@ export default async function MatchDetailPage({ params }: PageProps) {
   const [data, adjacent, jobs, video] = await Promise.all([
     getMatchDetailData(matchId),
     getAdjacentMatchIds(matchId),
-    createClient().then((supabase) =>
-      loadMatchAnalysis(supabase, [matchId], { reap: true })
-    ),
+    createClient().then(async (supabase) => {
+      // Ask the vendor about jobs that look stuck BEFORE reading, so what the
+      // poll learns is what this page renders. Never fatal — and not inside
+      // loadMatchAnalysis, which client components import and the
+      // reconciler's admin/Azure dependencies must never reach.
+      //
+      // Gated on an RLS-scoped existence check first. reconcileBeforePageRead
+      // runs on the ADMIN client, which enforces no ownership of its own —
+      // without this check, this branch races getMatchDetailData's own RLS
+      // read rather than waiting for it, so a signed-in user who merely
+      // knows or guesses a matchId belonging to another account could force
+      // a vendor poll, a status write, and even an auto-resubmission —
+      // spending someone else's quota — before the page's 404 ever fires.
+      // This SELECT uses the same request-scoped, cookie-authenticated
+      // client as everything else here, so it answers exactly what the
+      // viewer's own RLS policy would: nothing, if they cannot see this row.
+      const { data: accessible } = await supabase
+        .from("matches")
+        .select("id")
+        .eq("id", matchId)
+        .maybeSingle();
+      if (accessible) {
+        await reconcileBeforePageRead([matchId], "match-detail");
+      }
+      return loadMatchAnalysis(supabase, [matchId], { reap: true });
+    }),
     getMatchVideo(matchId),
   ]);
 

@@ -42,6 +42,19 @@ export interface AdoptionResult {
   /** The job's status after replaying them, or null if nothing was adopted. */
   jobStatus: string | null;
   /**
+   * The classification of the LAST adopted delivery, present only when
+   * `jobStatus === 'failed'`. Deliberately NOT auto-resubmitted from inside
+   * this function — `resubmitJob()` lives in `resubmit-job.ts`, which already
+   * imports this module, so calling back in would be a circular import.
+   * Callers classify with `isDownloadFailure(errorCode, errorStep)` and call
+   * `resubmitJob({ auto: true })` themselves, exactly mirroring what the
+   * webhook's own `job_failed` branch does for a delivery that arrived on
+   * time — an orphan-adopted failure must not silently lose its shot at the
+   * same automatic recovery.
+   */
+  errorCode: string | null;
+  errorStep: string | null;
+  /**
    * True when an adopted delivery carried a results URL we never downloaded.
    *
    * Only reachable if a COMPLETION lost the race, which needs the vendor to
@@ -91,10 +104,18 @@ export async function adoptOrphanedDeliveries(params: {
 
   const orphans = (data ?? []) as OrphanRow[];
   if (orphans.length === 0) {
-    return { adopted: 0, jobStatus: null, owedResultsDownload: false };
+    return {
+      adopted: 0,
+      jobStatus: null,
+      errorCode: null,
+      errorStep: null,
+      owedResultsDownload: false,
+    };
   }
 
   let jobStatus: string | null = null;
+  let errorCode: string | null = null;
+  let errorStep: string | null = null;
   let owedResultsDownload = false;
   let adopted = 0;
 
@@ -120,6 +141,9 @@ export async function adoptOrphanedDeliveries(params: {
         p_trimmed_video_url: payload.trimmedVideoUrl,
         p_error_message: payload.errorMessage,
         p_match_id: payload.matchId,
+        p_error_code: payload.errorCode,
+        p_error_category: payload.errorCategory,
+        p_error_step: payload.errorStep,
       })
       .single();
 
@@ -147,9 +171,14 @@ export async function adoptOrphanedDeliveries(params: {
     if (record.matched_job_id) {
       adopted++;
       jobStatus = record.job_status;
+      // Newest replayed delivery's classification wins, same as jobStatus
+      // above — orphans replay oldest-first, so the last one is the most
+      // recent state, matching what a live-delivered job_failed would carry.
+      errorCode = payload.errorCode;
+      errorStep = payload.errorStep;
       if (payload.sasUrl && !record.already_stored) owedResultsDownload = true;
     }
   }
 
-  return { adopted, jobStatus, owedResultsDownload };
+  return { adopted, jobStatus, errorCode, errorStep, owedResultsDownload };
 }

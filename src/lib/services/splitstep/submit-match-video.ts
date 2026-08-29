@@ -113,6 +113,16 @@ export async function createProcessingJob({
     .single();
 
   if (error || !data) {
+    // 23505 on `processing_jobs_one_live_per_match`: this match already has a
+    // non-terminal job — a second upload attempt for the same existing match
+    // row (the `reusingMatch` / event-preset path) while the first is still
+    // running. Rare (the wizard closes on success), but a friendly message
+    // beats leaking the raw constraint-violation string to the error toast.
+    if (error?.code === "23505") {
+      throw new Error(
+        "An analysis is already in progress for this match."
+      );
+    }
     throw new Error(
       error?.message || "Couldn't queue this match for analysis"
     );

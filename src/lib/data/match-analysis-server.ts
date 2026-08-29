@@ -52,6 +52,14 @@ export async function loadMatchAnalysis(
   const out = new Map<string, MatchAnalysis>();
   if (matchIds.length === 0) return out;
 
+  // Vendor-status reconciliation does NOT live here, deliberately, though it
+  // fires at the same moments as `reap`. This module is imported by client
+  // components (new-reports-subline, recent-activity) despite the -server
+  // name, and the reconciler needs the admin client and @azure/storage-blob's
+  // dependents — code that must never enter a client module graph. The two
+  // Server Component pages that pass `reap: true` call
+  // services/splitstep/reconcile.ts themselves, right before this loader.
+
   // Retire stalled uploads before reading, so a job whose tab was closed shows
   // "Failed" rather than a progress bar frozen at whatever percent it reached.
   //
