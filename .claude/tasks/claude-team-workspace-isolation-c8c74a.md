@@ -29,7 +29,7 @@ ready).
 - **notes:** Verified live 2026-08-29: `matches` SELECT policy + `visible_match_ids()`/`visible_point_ids()` already isolate by program, and `/dashboard/matches` + statistics already scope app-side (team `eq(program_id)`, personal `created_by` + `program_id is null`) — so the deliverable is the executable proof, not a blind new policy. Live DB is the only schema source of truth; fixtures must be cleaned up or run on a disposable Supabase branch. Load supabase:supabase-postgres-best-practices before any SQL.
 
 ## T2 · Staff read path for pending join requests
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** src/lib/data/join-requests-server.ts (new — guess), src/lib/services/programs/claim-actions.ts (reference: `fileRequest()` writes the rows), supabase/migrations/ (only if the RLS-policy route is chosen)
 - **done when:**

@@ -1,0 +1,69 @@
+import { createClient } from "@/lib/supabase/server";
+
+/**
+ * Pending join requests — the people who clicked "Request an invite" on
+ * /claim/[programKey]/request and are waiting for someone on the program to
+ * notice.
+ *
+ * "Join request" here is `program_requests` kind `invite_request`. The word
+ * "invite" alone is already taken by the outbound direction —
+ * `create_program_invite` is staff mailing a player — and one word meaning
+ * both directions is how the wrong list gets wired to the wrong button.
+ *
+ * ── Access ──────────────────────────────────────────────────────────────────
+ * Nothing here filters on who may see what, and nothing here touches the
+ * admin client. `program_requests` has no policies and no anon/authenticated
+ * grants — deliberately, because the same table holds `ownership_dispute`
+ * rows that program staff must never read (migration 20260818041110, and the
+ * comment in 20260829222046). `program_join_requests` is SECURITY DEFINER,
+ * carries the owner/coach/staff check, and hard-codes the
+ * `kind = 'invite_request'` / `status = 'open'` slice in its own body. So a
+ * non-member, a player, and staff of some other program all get the same
+ * empty array a program with no requests gets — withheld and absent are
+ * deliberately indistinguishable.
+ */
+
+/** What `program_join_requests` returns, column for column. */
+interface DbJoinRequestRow {
+  id: string;
+  email: string;
+  name: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface JoinRequest {
+  id: string;
+  email: string;
+  /** They may not have given one — the form only requires the address. */
+  name: string | null;
+  note: string | null;
+  /** ISO timestamp — when they asked. Oldest first, queue order. */
+  createdAt: string;
+}
+
+export async function getPendingJoinRequests(
+  programId: string
+): Promise<JoinRequest[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("program_join_requests", {
+    p_program_id: programId,
+  });
+
+  if (error) {
+    // Never fatal: a roster page that cannot load this list should render
+    // without it rather than break — same posture as the workspace lookup.
+    console.error("[join-requests] could not load pending join requests", {
+      error: error.message,
+    });
+    return [];
+  }
+
+  return ((data ?? []) as DbJoinRequestRow[]).map((row) => ({
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    note: row.note,
+    createdAt: row.created_at,
+  }));
+}
