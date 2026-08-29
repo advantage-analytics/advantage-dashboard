@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { reconcileVendorJobs } from "@/lib/services/splitstep/reconcile";
 
 import {
   getAdjacentMatchIds,
@@ -133,9 +135,24 @@ export default async function MatchDetailPage({ params }: PageProps) {
   const [data, adjacent, jobs, video] = await Promise.all([
     getMatchDetailData(matchId),
     getAdjacentMatchIds(matchId),
-    createClient().then((supabase) =>
-      loadMatchAnalysis(supabase, [matchId], { reap: true })
-    ),
+    createClient().then(async (supabase) => {
+      // Ask the vendor about jobs that look stuck BEFORE reading, so what the
+      // poll learns is what this page renders. Sequential with the read on
+      // purpose; the no-stale-jobs case is one indexed select. Never fatal —
+      // and not inside loadMatchAnalysis, which client components import and
+      // the reconciler's admin/Azure dependencies must never reach.
+      try {
+        await reconcileVendorJobs({
+          supabase: createAdminClient(),
+          matchIds: [matchId],
+        });
+      } catch (err) {
+        console.warn("[match-detail] reconciliation failed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      return loadMatchAnalysis(supabase, [matchId], { reap: true });
+    }),
     getMatchVideo(matchId),
   ]);
 
