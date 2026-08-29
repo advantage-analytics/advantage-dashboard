@@ -357,8 +357,26 @@ export function validateSetScore(
 }
 
 /**
- * Derive the outcome string from completed sets, when the scores produce
- * a clean winner under best-of rules. Returns null if undecidable.
+ * Derive the outcome string from completed sets: a clean winner under best-of
+ * rules, or "Unfinished" for a score that has stopped without deciding the
+ * match — a retirement, a curfew, a practice set that ran out of court time.
+ * Returns null while the score is still mid-entry and says nothing yet.
+ *
+ * "Unfinished" is the same literal the Result menu offers and the SwingVision
+ * parser writes, so an entered score and an imported one land on one value.
+ *
+ * The three states, in order:
+ *
+ *  - decided — a side reached `setsToWin`. Unchanged, and checked first, so a
+ *    complete score can never come back as Unfinished.
+ *  - stopped — the entry is in a settled state (every set with anything in it
+ *    is a legal finished set) and either every rendered set is filled, or the
+ *    completed sets are LEVEL with at least two played. Level sets are the tell
+ *    that no further set is coming: 6-4 4-6 in a best-of-3 is a match that
+ *    stopped, not a match one set from being won.
+ *  - undecidable — anything else, including a half-typed set and the ordinary
+ *    lead a partial entry produces (6-4 with two empty boxes is someone typing,
+ *    not a walkover).
  */
 export function deriveOutcome(
   playerName: string,
@@ -370,14 +388,26 @@ export function deriveOutcome(
   const setsToWin = Math.ceil(bestOf / 2);
   let pSets = 0;
   let oSets = 0;
+  let completed = 0;
+  /** A rendered set carrying data that is not (yet) a legal finished set. */
+  let midEntry = false;
+  let allRenderedFilled = true;
   for (let i = 0; i < playerScores.length; i++) {
-    const v = validateSetScore(playerScores[i], opponentScores[i]);
-    if (v.kind !== "ok") continue;
-    if ((playerScores[i] ?? 0) > (opponentScores[i] ?? 0)) pSets++;
-    else oSets++;
+    const p = playerScores[i];
+    const o = opponentScores[i];
+    if (validateSetScore(p, o).kind === "ok") {
+      completed++;
+      if ((p ?? 0) > (o ?? 0)) pSets++;
+      else oSets++;
+      continue;
+    }
+    allRenderedFilled = false;
+    if (p !== null || o !== null) midEntry = true;
   }
   if (pSets >= setsToWin && pSets > oSets) return `${playerName} Wins`;
   if (oSets >= setsToWin && oSets > pSets) return `${opponentName} Wins`;
+  if (midEntry || completed === 0) return null;
+  if (allRenderedFilled || (completed >= 2 && pSets === oSets)) return "Unfinished";
   return null;
 }
 

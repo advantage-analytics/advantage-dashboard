@@ -18,7 +18,7 @@ straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Suggest Unfinished for incomplete scores
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/new-match-wizard/DetailsContent.tsx, src/components/dashboard/matches/new-match-wizard/utils.ts
 - **done when:**

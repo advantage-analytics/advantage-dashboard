@@ -412,10 +412,19 @@ export function DetailsContent({
     () => deriveOutcome(playerNm, opponentNm, playerScores, opponentScores, bestOfNum),
     [playerNm, opponentNm, playerScores, opponentScores, bestOfNum]
   );
+  /**
+   * The last value this effect wrote. The suggestion may replace its OWN
+   * previous answer and nothing else: 6-4 4-6 suggests "Unfinished", and the
+   * third set that decides the match has to be able to correct it. A result the
+   * effect did not write is the user's pick — the plain `!formData.result`
+   * guard, widened by exactly that one case.
+   */
+  const suggestedResult = useRef<string | null>(null);
   useEffect(() => {
-    if (derivedOutcome && !formData.result) {
-      onInputChange("result", derivedOutcome);
-    }
+    if (!derivedOutcome || derivedOutcome === formData.result) return;
+    if (formData.result && formData.result !== suggestedResult.current) return;
+    suggestedResult.current = derivedOutcome;
+    onInputChange("result", derivedOutcome);
   }, [derivedOutcome, formData.result, onInputChange]);
 
   const setWinner = leadingOnSets(playerScores, opponentScores);
