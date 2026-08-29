@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Clock, Mail, TriangleAlert, type LucideIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { TeamAlert } from "@/lib/data/team-home-server";
 
 /**
@@ -74,9 +75,10 @@ export function NeedsAttention({ alerts }: { alerts: TeamAlert[] }) {
                    border it would otherwise square off outside the corner.
                    Rounded here rather than clipped with `overflow-hidden` on
                    the card, which would take the focus ring with it. */
-                className={`flex items-start gap-2.5 px-5 py-3 transition-colors duration-150 hover:bg-[var(--surface-muted)] focus-visible:bg-[var(--surface-muted)] ${
-                  index === alerts.length - 1 ? "rounded-b-[13px]" : ""
-                }`}
+                className={cn(
+                  "flex items-start gap-2.5 px-5 py-3 transition-colors duration-150 hover:bg-[var(--surface-muted)] focus-visible:bg-[var(--surface-muted)]",
+                  index === alerts.length - 1 && "rounded-b-[13px]"
+                )}
               >
                 <Icon
                   className="mt-px size-[15px] shrink-0"

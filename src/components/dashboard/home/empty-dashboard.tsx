@@ -13,8 +13,8 @@ import { advButton, type AdvButtonVariant } from "@/lib/ui/adv-button";
  *
  * Surface follows artboard 20a exactly: the primary card gets `--border-medium`
  * + `--shadow-card` (elevated), the two secondary cards get `--border-hairline`
- * and no shadow (recessed). Emphasis travels two ways: the elevated frame on
- * card 1 and the blue primary button, both pointing at the same action.
+ * and no shadow (recessed). Both signals — the elevated frame and the blue
+ * button — point at the same action, derived from `variant === "primary"`.
  */
 const CARDS: ReadonlyArray<{
   eyebrow: string;
@@ -23,7 +23,6 @@ const CARDS: ReadonlyArray<{
   href: string;
   label: string;
   variant: AdvButtonVariant;
-  emphasized: boolean;
 }> = [
   {
     eyebrow: "First report",
@@ -32,7 +31,6 @@ const CARDS: ReadonlyArray<{
     href: "/dashboard/matches/new",
     label: "Send a match",
     variant: "primary",
-    emphasized: true,
   },
   {
     eyebrow: "SwingVision",
@@ -41,7 +39,6 @@ const CARDS: ReadonlyArray<{
     href: "/dashboard/matches/new",
     label: "Import",
     variant: "outline",
-    emphasized: false,
   },
   {
     eyebrow: "Your profile",
@@ -50,7 +47,6 @@ const CARDS: ReadonlyArray<{
     href: "/dashboard/settings/profile",
     label: "Open profile",
     variant: "outline",
-    emphasized: false,
   },
 ];
 
@@ -64,7 +60,7 @@ export default function EmptyDashboard() {
           key={card.title}
           className={BASE_CLASS}
           style={
-            card.emphasized
+            card.variant === "primary"
               ? {
                   borderColor: "var(--border-medium)",
                   boxShadow: "var(--shadow-card)",
@@ -82,7 +78,6 @@ export default function EmptyDashboard() {
           <Link
             href={card.href}
             className={advButton(card.variant, "md")}
-            style={{ marginTop: "auto" }}
           >
             {card.label}
           </Link>
