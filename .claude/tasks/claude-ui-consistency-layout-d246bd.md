@@ -52,7 +52,7 @@ ready).
 - **notes:** Mechanism: `<main>` currently doesn't grow inside its flex-column scroll parent; give it `flex flex-1 flex-col`, let the home page root keep `flex-1`, and push the footer with mt-auto down the chain. Team home already has its own `flex-1` wrapper — leave it alone in this task.
 
 ## T4 · Audit and fix the Needs Attention card on team home
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/team/needs-attention.tsx, src/app/dashboard/team/page.tsx (guess)
 - **done when:**
