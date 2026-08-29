@@ -29,7 +29,7 @@ ready).
 - **notes:** "Unfinished" already exists as a Result option; deriveOutcome currently returns null when no side clinches — extend that path rather than adding a parallel derivation. The Won tag beside player names is untouched.
 
 ## T2 · Reword "Your end at start"
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/matches/new-match-wizard/DetailsContent.tsx
 - **done when:**

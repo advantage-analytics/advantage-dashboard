@@ -613,13 +613,13 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
       if (!hasAnySetScore) labels.push("score");
       if (formData.adScoring === undefined) labels.push("scoring");
       if (formData.fixedCamera === undefined) labels.push("camera");
-      if (formData.initialTopPlayerIsPlayer1 === undefined) labels.push("your end");
+      if (formData.initialTopPlayerIsPlayer1 === undefined) labels.push("your position at video start");
     }
     // Confirm has its own sentence for the case where only the camera answers
     // are outstanding, so the shape is decided here beside the list rather than
     // re-derived from label strings three hundred lines away.
     const onlyVideoAnswers =
-      labels.length > 0 && labels.every((l) => l === "camera" || l === "your end");
+      labels.length > 0 && labels.every((l) => l === "camera" || l === "your position at video start");
     return { labels, onlyVideoAnswers };
   }, [
     formData.eventName,

@@ -905,14 +905,14 @@ export function DetailsContent({
               hint="A tripod or a phone propped against the fence is fixed. Handheld or following the play is not."
             />
             <SelectCell
-              label="Your end at start"
+              label="Your position at video start"
               required
               placeholder="Choose"
               value={formData.initialTopPlayerIsPlayer1}
               options={END_OPTIONS}
               onChange={(v) => onInputChange("initialTopPlayerIsPlayer1", v)}
               menuWidth={260}
-              hint="Where you were standing when the video begins — not where you served from first. Ends change through the match; we only need the opening."
+              hint="Where you appear in the first frame of the video — top or bottom of the screen. This is about camera position, not who serves first. Players switch sides during the match; we only need where you start on screen."
             />
           </>
         )}
