@@ -29,7 +29,7 @@ ready).
 - **notes:** Answering the "should I?" — yes: Ctrl+U is the browser's View Source shortcut on Windows/Linux, so hijacking it is hostile there; and the listener only mounts on pages that happen to render this button, so the shortcut silently doesn't work on most routes. Removing only the chip would leave an undiscoverable shortcut, worse than none.
 
 ## T2 · Redesign empty-state cards to match design artboard 20a
-- **status:** todo
+- **status:** blocked
 - **model:** opus
 - **files:** src/components/dashboard/home/empty-dashboard.tsx
 - **done when:**
