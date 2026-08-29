@@ -102,6 +102,36 @@ function explainWriteFailure(error: {
 }
 
 /**
+ * Undo the match row this wizard just created, and report what it left behind.
+ *
+ * Both rollback sites below delete the row and then announce the failure, and
+ * the announcement carries a link to that row — so the delete's outcome IS the
+ * answer to "is there still a match to open?". `.select("id")` is what makes
+ * that outcome legible: PostgREST returns `error: null` for a DELETE that RLS
+ * filtered down to nothing, so without the projection a refused rollback and a
+ * completed one are indistinguishable, and the toast would guess wrong in one
+ * direction or the other.
+ *
+ * Returns true when the row is confirmed gone.
+ */
+async function rollbackCreatedMatch(
+  supabase: ReturnType<typeof createClient>,
+  matchId: string
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("matches")
+    .delete()
+    .eq("id", matchId)
+    .select("id");
+
+  if (error) {
+    console.error("Match rollback failed:", error);
+    return false;
+  }
+  return (data?.length ?? 0) > 0;
+}
+
+/**
  * The source a new match starts on.
  *
  * Resolved from the registry by KIND rather than named, so the wizard stays
@@ -1244,13 +1274,16 @@ export function useUploadMatchWizard({
           // carry its video, so removing it is the clean retry; an event line's
           // match is a recorded result that predates this upload, and deleting
           // it would destroy a score somebody entered courtside.
-          if (!reusingMatch) {
-            await supabase.from("matches").delete().eq("id", matchId);
-          }
+          //
+          // `matchId` then rides on the failure event ONLY if that row survived
+          // — see the note at the transfer-failure dispatch below.
+          const matchIsViewable = reusingMatch
+            ? true
+            : !(await rollbackCreatedMatch(supabase, matchId));
           window.dispatchEvent(
             new CustomEvent("match-upload-failed", {
               detail: {
-                matchId,
+                ...(matchIsViewable ? { matchId } : {}),
                 error:
                   jobErr instanceof Error
                     ? jobErr.message
@@ -1275,6 +1308,21 @@ export function useUploadMatchWizard({
             },
             onEvent: (event) => onVideoUpload?.(event),
             onTransferFailed: (message) => {
+              /**
+               * THE RULE FOR `matchId` ON THIS EVENT, stated once here because
+               * all three dispatch sites answer to it:
+               *
+               * `matchId` is a PROMISE THAT THE MATCH IS THERE. The listener
+               * turns it into "Open the match" on the failure toast, so sending
+               * one for a row that is gone is worse than sending none — the
+               * person clicks the only thing the notice offers and lands on
+               * "Match not found", which reads as a second, unrelated fault.
+               *
+               * This site keeps it: the transfer is what failed, and the match
+               * row and its processing job are both still standing. The two
+               * rollback sites send it only when their delete left the row in
+               * place. Nothing else about the event changes.
+               */
               window.dispatchEvent(
                 new CustomEvent("match-upload-failed", {
                   detail: { matchId, error: message },
@@ -1307,13 +1355,17 @@ export function useUploadMatchWizard({
           // Roll back the phantom match row so the user has a clean retry path.
           // Same exemption as above: never delete a row that already carried a
           // result before this upload started.
-          if (!reusingMatch) {
-            await supabase.from("matches").delete().eq("id", matchId);
-          }
+          //
+          // And the same rule for the link: an import match with no file behind
+          // it is a row of zeroes, so once the rollback removes it there is
+          // nothing to offer.
+          const matchIsViewable = reusingMatch
+            ? true
+            : !(await rollbackCreatedMatch(supabase, matchId));
           window.dispatchEvent(
             new CustomEvent("match-upload-failed", {
               detail: {
-                matchId,
+                ...(matchIsViewable ? { matchId } : {}),
                 error: err instanceof Error ? err.message : "Upload failed",
               },
             })

@@ -40,7 +40,7 @@ ready).
 - **notes:** Copy-only task, but this field is one of the three guardrail-critical inputs — a flipped value silently attributes every stat to the wrong player. Wording may change freely; the boolean mapping may not.
 
 ## T3 · Fix failure toast's "Open the match" action
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/toast/upload-failure-listener.tsx, src/components/dashboard/toast/toast-provider.tsx, src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts
 - **done when:**

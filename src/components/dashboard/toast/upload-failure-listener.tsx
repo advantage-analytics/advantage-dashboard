@@ -15,9 +15,11 @@ import { useToast } from "./toast-provider";
  * Mounted in the dashboard shell rather than beside the wizard for exactly that
  * reason: the wizard has already unmounted when most of these fire.
  *
- * This deliberately does NOT touch `useUploadMatchWizard`. That file is under
- * active change on the events/lineups branch, and it already dispatches
- * everything needed — the defect was only ever the missing ear.
+ * `detail.matchId` is the wizard's promise that a match row is standing — two
+ * of those three sites roll their row back before they announce, and only send
+ * an id when the rollback left it in place. So the guard below is a contract,
+ * not a defensive `?.`: no id means no match to open, and the toast is the
+ * whole notice rather than a link to "Match not found".
  */
 export function UploadFailureListener() {
   const { push } = useToast();
