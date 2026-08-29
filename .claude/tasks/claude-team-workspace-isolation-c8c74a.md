@@ -18,7 +18,7 @@ straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Prove and lock cross-program match isolation
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** tests/rls-workspace-isolation.spec.ts (new — guess; a scripts/ harness or pgTAP SQL is equally acceptable), supabase/migrations/ (only if a gap is found)
 - **done when:**
