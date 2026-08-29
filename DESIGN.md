@@ -32,8 +32,9 @@
 > **Provenance.** Imported from the Claude Design project *Advantage Design
 > System v2* (`932d1406-360f-4a6e-8617-5a3c600ecb67`), which was rebuilt from
 > this codebase on the `splitstep-integration` branch. It replaces the previous
-> `DESIGN.md`/`DESIGN.json` — v2 deliberately did not source those, treating
-> them as outdated v1 documents.
+> v1 `DESIGN.md`/`DESIGN.json` — v2 deliberately did not source those, treating
+> them as outdated. `DESIGN.json` has since been deleted from the repo, and
+> `PRODUCT.md`'s non-duplicated sections were folded into the end of this file.
 >
 > Tokens live at [`src/styles/design-system/`](src/styles/design-system/) and are
 > imported by `globals.css`. Two of the four files are adapted rather than
@@ -178,3 +179,30 @@ pipeline depends on.
 Intelligence job lifecycle from `processing_jobs`. Treatment is a quiet inline
 dot + text, no container — chosen over chip/pill variants in review. The repo's
 current equivalent is the analysis column in `match-card-list.tsx`.
+
+## Product context — folded from the former `PRODUCT.md`
+
+**Users.** Competitive tennis players and their support network — college
+players, serious club players, coaches, parents tracking junior athletes. Not
+casual players: they are actively working to gain a competitive edge, and they
+come to the dashboard for confidence in their data.
+
+**Purpose.** Turn raw match data into actionable performance analytics. Success
+looks like a player checking the dashboard before practice and walking onto
+court knowing exactly which pattern to drill.
+
+Brand personality, anti-references and the one-accent rule are already this
+file's subject (see the header and Visual foundations). The one `PRODUCT.md`
+section with no counterpart here follows.
+
+## Accessibility & inclusion
+
+- **Target:** WCAG 2.1 AA.
+- **Contrast:** 4.5:1 for normal text, 3:1 for large text — the ink-scale notes
+  above encode which grays clear it.
+- **Focus indicators:** every interactive element rings automatically via
+  `design-system/focus.css` — see the Focus section above; components write no
+  focus class of their own.
+- **Motion:** respect `prefers-reduced-motion` — skip transforms, keep opacity.
+- **Keyboard:** all interactive elements reachable and operable via keyboard.
+- **Screen readers:** semantic HTML, ARIA labels on icons and custom controls.

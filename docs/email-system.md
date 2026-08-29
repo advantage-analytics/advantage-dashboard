@@ -145,6 +145,9 @@ Each of these exists because of a specific failure:
   sending — Resend otherwise accepts a suppressed recipient, returns an id, then
   drops the message — bounds itself to `SEND_TIMEOUT_MS`, and never throws. A
   retry loop or a `try`/`catch` around it is a misunderstanding of all three.
+  The suppression check **fails open** on purpose — a 429 or 5xx from the
+  suppression endpoint returns "not suppressed" and the send proceeds. It exists
+  to make a silent drop visible, not to become a new reason mail cannot leave.
 - **`tags` are ASCII letters, numbers, underscores and dashes only.** Anything
   else and Resend rejects the whole message.
 - **Format dates in UTC.** Expiries are compared against `now()` in Postgres.
@@ -152,6 +155,10 @@ Each of these exists because of a specific failure:
   and the day it disagrees is the day someone's link dies early.
 - **Build links with `siteUrl()`** from `@/lib/site-url`. It deliberately allows
   localhost: in development the person clicking is at the machine serving it.
+  Never derive an email link's origin from the request's `Host` header — an
+  attacker who can set `Host` gets invitation links pointing at their own host,
+  and the recipient hands over a valid token by clicking something that looks
+  legitimate. Email links come from configuration.
 
 ---
 
@@ -181,6 +188,31 @@ Every one is load-bearing — Outlook renders through Word, Gmail strips and
 discards. **Do not modernise them.** The reasoning is on the `shell.ts` header
 comment, beside the markup it explains; read it there before changing anything in
 that file.
+
+---
+
+## 8. Written but not yet wired
+
+Inherited from the pilot branch (merged in PR #131), each waiting on one call
+site or one decision:
+
+- **`analysisReadyEmail` / `analysisFailedEmail`** exist and nothing sends them.
+  The call belongs at the point a job becomes readable — the derivation publish
+  step on `splitstep-derivation`. The guards are already in place:
+  `user_preferences` treats absent rows as defaults (ready on, failed on,
+  digest off), and `sendEmail()` checks suppression. The templates take a
+  `statsPending` flag — with derivation's `timeline` status, that flag is what
+  distinguishes "your report is ready" from "processing finished, numbers to
+  follow".
+- **`teamDigestEmail` + `digestIsWorthSending`** exist and nothing schedules
+  them. Needs a Monday cron — and Vercel crons run in Production only.
+- **A separate sending subdomain.** `advantage-analytics.com` currently sends
+  both cold outreach to college staff and transactional pilot invitations, and
+  the suppression list already holds ~20 `.edu` addresses from the outreach.
+  Complaints against outreach damage the reputation the invitations depend on —
+  the one email that must arrive rides on the sender most likely to be marked
+  spam. The split is a Resend domain add, three DNS records, and one line in
+  `email/config.ts`.
 
 ---
 

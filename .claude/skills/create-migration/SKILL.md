@@ -32,9 +32,9 @@ The description says what the migration *does*, in the imperative:
 
 Before writing SQL:
 
-- `DATABASE_PRD.md` — the schema reference.
-- `mcp__supabase__list_tables` — what is actually deployed right now, which is
-  the thing that matters if the PRD has drifted.
+- `mcp__supabase__list_tables` — what is actually deployed right now. The live
+  database is the only schema reference; `supabase/migrations/` runs well
+  behind it.
 - For anything touching programs, members, claims or usage, read
   `src/lib/workspace/types.ts` first. Its comments explain why membership is a
   table and not `users.role`, and a migration that re-centralises it on

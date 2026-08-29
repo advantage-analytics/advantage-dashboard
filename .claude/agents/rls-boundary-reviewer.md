@@ -15,7 +15,9 @@ code still enforces it. Correctness, performance and style are out of scope.
 - `src/lib/supabase/middleware.ts` — read the header comment. It explains why
   route protection is NOT in `src/proxy.ts` and which layouts own it instead.
 - `src/lib/workspace/types.ts` — workspace and role semantics.
-- `DATABASE_PRD.md` — existing schema, when you need to know what a table is.
+- The live database, via the Supabase MCP (`list_tables`) — existing schema,
+  when you need to know what a table is. There is no schema doc; the live
+  database is the source of truth.
 
 ## The checks, in severity order
 

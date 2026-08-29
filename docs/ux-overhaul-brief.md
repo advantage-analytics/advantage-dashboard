@@ -1,7 +1,7 @@
 # Advantage Analytics — UX Overhaul Brief
 
 **Date:** 2026-08-06 · **Branch audited:** `splitstep-integration` · **Author:** UX audit (Claude Code) for handoff to Claude Design
-**Read alongside:** `PRODUCT.md`, `DESIGN.md`, `.skills/advantage-analytics-design/SKILL.md`, `docs/r2-and-webhook-overview.md`, `docs/splitstep-integration-spec.md`, `DATABASE_PRD.md`
+**Read alongside:** `DESIGN.md`, `.skills/advantage-analytics-design/SKILL.md`, `docs/r2-and-webhook-overview.md`, `docs/splitstep-integration-spec.md` (`PRODUCT.md` and `DATABASE_PRD.md`, cited when this was written, are since deleted — product context is folded into `DESIGN.md`; schema comes from the live database via the Supabase MCP)
 
 ---
 
@@ -94,7 +94,7 @@ Code-grounded: every claim below was verified by reading the route files and com
 ### 2.2 Broken or misleading (fix regardless of redesign)
 
 1. **`getMatchAnalysis` is a mock** (`src/lib/data/match-analysis.ts` — header says "MOCK. Nothing here reads Supabase."). Every SplitStep-provider match has a 3-in-5 chance of rendering a **fabricated** in-progress screen (fake filenames, fake percentages) or a fake failure ("Camera moved at 00:41:18") instead of its real state. This will burn the first real pilot user. Must read `processing_jobs` before any Advantage Intelligence launch.
-2. **`users.role` carries three incompatible vocabularies.** The profile form writes `player|coach|parent|academy`; the paywall and Stripe webhook read/write `founder` (`PRO_ROLE`, `src/app/dashboard/settings/subscription/page.tsx`); `DATABASE_PRD.md` documents "free/premium". `saveProfile()` (`src/components/dashboard/settings/actions.ts`) unconditionally overwrites the column — **saving your profile silently deletes your Pro entitlement.** Persona and entitlement must become separate columns before any team-role work begins.
+2. **`users.role` carries three incompatible vocabularies.** The profile form writes `player|coach|parent|academy`; the paywall and Stripe webhook read/write `founder` (`PRO_ROLE`, `src/app/dashboard/settings/subscription/page.tsx`); `DATABASE_PRD.md` (since deleted) documented "free/premium". `saveProfile()` (`src/components/dashboard/settings/actions.ts`) unconditionally overwrites the column — **saving your profile silently deletes your Pro entitlement.** Persona and entitlement must become separate columns before any team-role work begins.
 3. **CLAUDE.md describes a deleted app.** Match sub-routes (`insights/`, `performance/`, `statistics/`, `video/`, `visuals/`), the ToC sidebar, and the matches gallery/list toggle no longer exist. Breadcrumb code for the sub-routes survives, unreachable (`header.tsx`). Any agent or designer reading repo docs will design against ghosts.
 4. **Auth protection is uneven and there is no root `middleware.ts`.** `updateSession()` exists but is never imported. `/dashboard/matches` renders (empty) to anonymous users; `matches/[matchId]`, `matches/new`, `settings/*`, `help` have no server guard at all. Also documented in `docs/r2-and-webhook-overview.md` §14 (webhook reachability depends on this staying conscious, not accidental).
 5. **⌘U is documented as global but only works where `CreateMatchButton` mounts**; the help center still calls the upload flow a "modal."
@@ -240,7 +240,7 @@ Every stat label everywhere gets a hover/tap definition from the existing help g
 
 **7.4 Monetization surfaces.** Fix entitlement (§4.3) first. Then the natural upgrade moments: quota meter at submit, "priority processing" tier later (the `priority` column exists but **no tier UI ships** until the vendor confirms a priority parameter — spec Q6), program licensing as its own track. Pricing architecture is decision **D7**.
 
-**7.5 Accessibility & responsive.** WCAG 2.1 AA already stated in `PRODUCT.md` — keep. The open question is the **mobile posture (D2)**: *(rec)* replace the hard `MobileGate` with responsive read-first mobile (Home, Matches, Report altitudes 1–2, jobs status, Ask) while keeping upload/trim desktop-recommended. A courtside coach on a phone is a core team scenario; a hard 768px wall contradicts §3.
+**7.5 Accessibility & responsive.** WCAG 2.1 AA already stated in `DESIGN.md`'s accessibility section — keep. The open question is the **mobile posture (D2)**: *(rec)* replace the hard `MobileGate` with responsive read-first mobile (Home, Matches, Report altitudes 1–2, jobs status, Ask) while keeping upload/trim desktop-recommended. A courtside coach on a phone is a core team scenario; a hard 768px wall contradicts §3.
 
 ---
 

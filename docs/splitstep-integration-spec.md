@@ -26,16 +26,16 @@ Vendor docs: https://splitstep.ai/api-docs.html
 
 ## 0. Read this first
 
-This spec was written from a read of `main` and from `DATABASE_PRD.md` (dated February 2026). That document may have drifted from the live database. You have Supabase MCP access — **verify before you build**.
+This spec was written from a read of `main` and from `DATABASE_PRD.md` (dated February 2026; since deleted from the repo — it had drifted badly). The live database is the only schema reference. You have Supabase MCP access — **verify before you build**.
 
 ### Verification tasks (do these before writing any code)
 
 Run these against the live database and report every mismatch against this spec before proceeding:
 
-1. List all tables, columns, and types in `public`. Compare against `DATABASE_PRD.md`. Report drift.
+1. List all tables, columns, and types in `public`. Report every mismatch against this spec's assumptions.
 2. Dump the definition of the `calculate_match_stats` function. Confirm which columns on `points` and `shots` it reads. This spec assumes it depends on `points.won_by_player1`, `points.result_type`, `points.is_break_point`, `points.is_set_point`, `points.server_is_player1`, `shots.shot_type` (`'First Serve'` / `'Second Serve'`), and `shots.result` (`'In'`). Confirm or correct.
 3. Dump the CHECK constraint on `shots.zone`. This spec assumes `'T' | 'Body' | 'Wide'` for serves and `'Crosscourt' | 'Middle' | 'Down the Line'` for non-serves.
-4. Confirm the actual column list on `match_files` — this spec assumes `video_path` and `video_file_name` exist (they are referenced in `use-video-upload.ts` but absent from `DATABASE_PRD.md`).
+4. Confirm the actual column list on `match_files` — this spec assumes `video_path` and `video_file_name` exist (they are referenced in `use-video-upload.ts` but were absent from the schema doc of the time).
 5. Confirm all RLS policies on `matches`, `match_files`, `points`, `shots`, `match_stats`.
 6. Report the distinct values currently present in `points.result_type` and `shots.shot_type`. The derivation engine must emit values from these same sets.
 7. Check whether any rows exist with `source_provider` other than `'swing-vision'`.
@@ -44,7 +44,6 @@ Also read, in the repo:
 
 - `CLAUDE.md` — repo conventions
 - `.skills/advantage-analytics-design/SKILL.md` — design system. All UI in Phase 3 must conform. Lucide icons only, Inter, light mode only, blue `#3B82F6` for action.
-- `DATABASE_PRD.md`
 - `src/lib/services/upload/` — existing provider strategy pattern
 - `src/components/dashboard/matches/use-video-upload.ts` — existing video upload hook
 - `src/lib/video/compress.ts` — existing client-side compression
