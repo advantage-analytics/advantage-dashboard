@@ -26,14 +26,19 @@
  *
  * ── Quota ────────────────────────────────────────────────────────────────────
  * The parent's reservation was released when it failed, so the child reserves
- * again. The manual path runs the full `reserveQuota()` policy gauntlet
- * against the caller's billing workspace — a user is asking, so who-may-spend
- * applies. The auto path has no session and no user asking: it re-reserves
- * against the SAME account the parent's reservation named in
- * `processing_usage`, calling the atomic RPC directly. The permission question
- * was answered when the original submission passed `reserveQuota()`; an
- * automatic retry of already-permitted work re-asks only the arithmetic
- * (is there budget left), not the policy.
+ * again. Both paths run the full `reserveQuota()` policy gauntlet —
+ * `canSubmitVideo` and the upload-permission checks, not just the cap
+ * arithmetic. The auto path has no session, so it cannot ask
+ * `getWorkspaceContext()`; instead `resolveAutoRetryWorkspace()` re-derives an
+ * equivalent `Workspace` from `program_members`/`programs` AT RETRY TIME. That
+ * "at retry time" is load-bearing: an auto-retry fires on a later webhook or
+ * poll, arbitrarily after the original submission, and permission is not a
+ * fact fixed at submission — a program's claim can be rejected in that
+ * window, or a coach can flip a specific player's "Can send video" off
+ * (`program_members.upload_enabled`), exactly the bug `quota.ts`'s own
+ * comments describe fixing once already. Re-deriving fresh state, rather than
+ * trusting whatever the original submission's `processing_usage` row implies,
+ * is what keeps a revoked permission actually stopping the spend it revokes.
  *
  * ── The vendor POST fragment ─────────────────────────────────────────────────
  * Steps mint → POST → parse id → record queued mirror api/splitstep/jobs
@@ -48,8 +53,7 @@ import { buildSplitStepJobRequest } from './job-request';
 import { parseWebhookPayload } from './webhook-payload';
 import { resolveSplitstepDeploymentConfig } from './deployment-config';
 import { createVideoUrlStrategy, videoContainerClient } from './video-url';
-import { releaseQuota, reserveQuota, accountTypeFor } from './quota';
-import { currentBillingMonth, getMonthlyCapSeconds, type AccountType } from './config';
+import { releaseQuota, reserveQuota } from './quota';
 import { adoptOrphanedDeliveries } from './adopt-deliveries';
 import type { Workspace } from '@/lib/workspace/types';
 
@@ -205,23 +209,42 @@ export async function resubmitJob(params: {
     };
   }
 
+  // 3–5. Three independent reads — none depends on another's result, only on
+  // `parent` (already loaded) — run concurrently: the live-duplicate check,
+  // the Azure blob existence check, and the match metadata. This is the
+  // manual "Retry analysis" button's response time; three round trips
+  // (two Postgres, one Azure HEAD) run as one wait instead of three.
+  const [liveResult, blobResult, matchResult] = await Promise.all([
+    supabase
+      .from('processing_jobs')
+      .select('id, status')
+      .eq('match_id', parent.match_id)
+      .not('status', 'in', `(${TERMINAL_STATUSES.join(',')})`),
+    videoContainerClient()
+      .getBlockBlobClient(parent.video_object_key)
+      .exists()
+      .then((exists) => ({ ok: true as const, exists }))
+      .catch((err) => ({ ok: false as const, err })),
+    supabase
+      .from('matches')
+      .select(
+        'id, player1_name, player2_name, score, match_type, program_id, format, fixed_camera, initial_top_player_is_player1'
+      )
+      .eq('id', parent.match_id)
+      .maybeSingle(),
+  ]);
+
   // 3. No concurrent duplicates: nothing non-terminal may exist for this
   //    match. (Not just this chain — a fresh upload in flight for the same
   //    match also makes a retry of the old job wrong.)
-  const { data: liveRows, error: liveError } = await supabase
-    .from('processing_jobs')
-    .select('id, status')
-    .eq('match_id', parent.match_id)
-    .not('status', 'in', `(${TERMINAL_STATUSES.join(',')})`);
-
-  if (liveError) {
+  if (liveResult.error) {
     return {
       ok: false,
       reason: 'submit_failed',
       message: 'Could not check for an analysis already in progress.',
     };
   }
-  if ((liveRows ?? []).length > 0) {
+  if ((liveResult.data ?? []).length > 0) {
     return {
       ok: false,
       reason: 'in_flight_duplicate',
@@ -231,15 +254,10 @@ export async function resubmitJob(params: {
 
   // 4. The blob must still exist — see the header for why this is the whole
   //    video-recovery question.
-  let blobExists: boolean;
-  try {
-    blobExists = await videoContainerClient()
-      .getBlockBlobClient(parent.video_object_key)
-      .exists();
-  } catch (err) {
+  if (!blobResult.ok) {
     console.error(`${LOG} blob existence check failed`, {
       jobId,
-      error: err instanceof Error ? err.message : String(err),
+      error: blobResult.err instanceof Error ? blobResult.err.message : String(blobResult.err),
     });
     return {
       ok: false,
@@ -247,7 +265,7 @@ export async function resubmitJob(params: {
       message: 'Could not verify the video is still available. Try again later.',
     };
   }
-  if (!blobExists) {
+  if (!blobResult.exists) {
     return {
       ok: false,
       reason: 'video_unavailable',
@@ -258,14 +276,7 @@ export async function resubmitJob(params: {
   }
 
   // 5. Match metadata, for the request build and the answer fallbacks.
-  const { data: matchRow, error: matchError } = await supabase
-    .from('matches')
-    .select(
-      'id, player1_name, player2_name, score, match_type, program_id, format, fixed_camera, initial_top_player_is_player1'
-    )
-    .eq('id', parent.match_id)
-    .maybeSingle();
-
+  const { data: matchRow, error: matchError } = matchResult;
   if (matchError || !matchRow) {
     return {
       ok: false,
@@ -360,6 +371,18 @@ export async function resubmitJob(params: {
     .single();
 
   if (insertError || !childRow) {
+    // 23505 on `processing_jobs_one_live_per_match`: the read-then-insert
+    // check above raced another resubmission (the webhook's auto-retry and a
+    // user's own click, or two clicks) and lost. The database enforcing this
+    // is the actual guard; the read above is only the fast, friendly path in
+    // the common case.
+    if (insertError?.code === '23505') {
+      return {
+        ok: false,
+        reason: 'in_flight_duplicate',
+        message: 'An analysis for this match is already in progress.',
+      };
+    }
     return {
       ok: false,
       reason: 'submit_failed',
@@ -458,7 +481,35 @@ export async function resubmitJob(params: {
     // before external_job_id is written. Not inside the try's failure surface
     // conceptually, but a throw above has already been handled by then.
     try {
-      await adoptOrphanedDeliveries({ supabase, jobId: childId, externalJobId });
+      const adoption = await adoptOrphanedDeliveries({
+        supabase,
+        jobId: childId,
+        externalJobId,
+      });
+
+      // Same auto-retry the webhook's job_failed branch runs for a delivery
+      // that arrived on time — a self-recursive call (this IS resubmitJob),
+      // safe because every guard (chain length, one-auto-per-chain, blob
+      // existence) re-checks fresh state against `childId` as the new parent,
+      // not against any assumption carried over from this call.
+      if (
+        adoption.jobStatus === 'failed' &&
+        isDownloadFailure(adoption.errorCode, adoption.errorStep)
+      ) {
+        await releaseQuota(supabase, childId);
+        const retry = await resubmitJob({ supabase, jobId: childId, auto: true });
+        if (retry.ok) {
+          console.log(`${LOG} auto-resubmitted an orphan-adopted failure`, {
+            childId,
+            newJobId: retry.jobId,
+          });
+        } else {
+          console.warn(`${LOG} auto-resubmit of adopted failure declined`, {
+            childId,
+            reason: retry.reason,
+          });
+        }
+      }
     } catch (err) {
       console.error(`${LOG} could not adopt early deliveries`, {
         childId,
@@ -539,8 +590,9 @@ async function loadChain(
 }
 
 /**
- * Reserve the child's quota — full policy for a user, arithmetic-only against
- * the parent's account for the system. See the file header.
+ * Reserve the child's quota. Both paths funnel through `reserveQuota()` — the
+ * SAME policy gate a manual first submission uses — so an auto-retry cannot
+ * spend a cent that current permission would refuse. See the file header.
  */
 async function reserveForChild(params: {
   supabase: SupabaseClient;
@@ -553,66 +605,99 @@ async function reserveForChild(params: {
 }): Promise<{ ok: true } | { ok: false; message: string }> {
   const { supabase, auto, workspace, parent, childId, programId, seconds } = params;
 
-  if (!auto) {
-    if (!workspace) {
-      return {
-        ok: false,
-        message: 'A billing workspace is required to retry this analysis.',
-      };
-    }
-    const reservation = await reserveQuota({
-      supabase,
-      jobId: childId,
-      userId: parent.created_by,
-      workspace,
-      seconds,
-    });
-    return reservation.ok
-      ? { ok: true }
-      : { ok: false, message: reservation.message };
+  const effectiveWorkspace = auto
+    ? await resolveAutoRetryWorkspace({ supabase, programId, userId: parent.created_by })
+    : workspace;
+
+  if (!effectiveWorkspace) {
+    return {
+      ok: false,
+      message: auto
+        ? 'The uploader no longer has permission to submit video for this program.'
+        : 'A billing workspace is required to retry this analysis.',
+    };
   }
 
-  // Auto: bill the account the parent's reservation named. Fall back to the
-  // match's workspace shape (program → program account, else the uploader's
-  // personal one) for a parent whose usage row predates this feature.
-  const { data: usageRow } = await supabase
-    .from('processing_usage')
-    .select('account_id, account_type')
-    .eq('job_id', parent.id)
-    .order('created_at', { ascending: false })
-    .limit(1)
+  const reservation = await reserveQuota({
+    supabase,
+    jobId: childId,
+    userId: parent.created_by,
+    workspace: effectiveWorkspace,
+    seconds,
+  });
+  return reservation.ok
+    ? { ok: true }
+    : { ok: false, message: reservation.message };
+}
+
+/**
+ * Build a fresh, CURRENT-STATE `Workspace` for the auto-retry billing check —
+ * there is no session to ask `getWorkspaceContext()` of, because nobody is
+ * signed in when a webhook or the reconciler fires this. Re-derives exactly
+ * what that function would answer for `userId` right now, from
+ * `program_members`/`programs`, mirroring `listProgramWorkspaces()` in
+ * `workspace/active-workspace-server.ts` field-for-field so the two cannot
+ * silently diverge on what "may submit" means.
+ *
+ * Returns null when the uploader no longer belongs to the program at all
+ * (removed from `program_members` since the original submission) — refused,
+ * never defaulted to a permissive shape.
+ */
+async function resolveAutoRetryWorkspace(params: {
+  supabase: SupabaseClient;
+  programId: string | null;
+  userId: string;
+}): Promise<Workspace | null> {
+  const { supabase, programId, userId } = params;
+
+  if (programId === null) {
+    // Personal workspace: always permitted, matching personalWorkspace() —
+    // there is no membership row to consult and the viewer is the only
+    // member of their own workspace.
+    return {
+      id: userId,
+      kind: 'personal',
+      name: 'Personal',
+      team: null,
+      role: 'owner',
+      mark: '',
+      canSubmitVideo: true,
+      playersCanUpload: false,
+      memberUploadEnabled: true,
+    };
+  }
+
+  const { data, error } = await supabase
+    .from('program_members')
+    .select('role, upload_enabled, programs!inner(status, players_can_upload)')
+    .eq('program_id', programId)
+    .eq('user_id', userId)
     .maybeSingle();
 
-  const usage = usageRow as { account_id: string; account_type: string } | null;
-  const accountType: AccountType =
-    (usage?.account_type as AccountType | undefined) ??
-    (programId
-      ? 'program'
-      : accountTypeFor({ kind: 'personal' }));
-  const accountId = usage?.account_id ?? programId ?? parent.created_by;
+  if (error || !data) return null;
 
-  const capSeconds = getMonthlyCapSeconds(accountType);
-  const { data, error } = await supabase
-    .rpc('reserve_processing_quota', {
-      p_job_id: childId,
-      p_account_id: accountId,
-      p_account_type: accountType,
-      p_created_by: parent.created_by,
-      p_billing_month: currentBillingMonth(),
-      p_seconds: Math.ceil(seconds),
-      p_cap_seconds: capSeconds,
-    })
-    .single();
+  const row = data as {
+    role: string;
+    upload_enabled: boolean;
+    programs:
+      | { status: string; players_can_upload: boolean }
+      | { status: string; players_can_upload: boolean }[];
+  };
+  const program = Array.isArray(row.programs) ? row.programs[0] : row.programs;
+  if (!program) return null;
 
-  if (error || !data) {
-    return { ok: false, message: 'Could not reserve the processing allowance.' };
-  }
-  const row = data as { ok: boolean; used_seconds: number; cap_seconds: number };
-  return row.ok
-    ? { ok: true }
-    : {
-        ok: false,
-        message:
-          'The monthly analysis allowance does not have room for an automatic retry.',
-      };
+  return {
+    id: programId,
+    kind: 'team',
+    name: 'Program',
+    team: null,
+    role: row.role as Workspace['role'],
+    mark: '',
+    // Same rule listProgramWorkspaces() uses: 'active' means the claim
+    // settled. A claim rejected or paused since the original submission
+    // reads false here, exactly as it would for a fresh manual submission.
+    canSubmitVideo: program.status === 'active',
+    playersCanUpload: program.players_can_upload,
+    memberUploadEnabled: Boolean(row.upload_enabled),
+  };
 }

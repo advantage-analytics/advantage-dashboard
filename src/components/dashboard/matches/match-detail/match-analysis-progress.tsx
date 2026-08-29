@@ -211,7 +211,15 @@ export function MatchAnalysisProgress({
                 uploading again. If it keeps failing, trim to a window where
                 the camera stays fixed, or upload a new recording.
               </p>
-              {analysis.jobId && <RetryAnalysis jobId={analysis.jobId} />}
+              {/* Gated on the literal status, not the broader `failed` (which
+                  also covers derivation_failed): resubmitJob() refuses
+                  anything but a video-provider failure on purpose — a
+                  derivation failure already has its results and needs a
+                  derivation re-run, not a new video submission — so showing
+                  this button there would be a button that always 409s. */}
+              {analysis.jobId && analysis.status === "failed" && (
+                <RetryAnalysis jobId={analysis.jobId} />
+              )}
             </div>
           </div>
         ) : stalled ? (

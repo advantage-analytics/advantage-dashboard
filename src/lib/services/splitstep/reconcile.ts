@@ -28,7 +28,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { normaliseKey, parseWebhookPayload } from './webhook-payload';
 import { releaseQuota } from './quota';
 import { isDownloadFailure, resubmitJob } from './resubmit-job';
-import { resolveSplitstepDeploymentConfig } from './deployment-config';
+import { resolveSplitstepVendorApiConfig } from './deployment-config';
 
 const LOG = '[splitstep-reconcile]';
 
@@ -71,9 +71,11 @@ export async function reconcileVendorJobs(params: {
 
   // Unconfigured deployments (local dev without vendor keys) skip silently —
   // the same posture the submit route takes, minus the 503, because nobody
-  // asked for this call directly. The SAME resolver as every other vendor
-  // caller, so "configured" means one thing everywhere.
-  const config = resolveSplitstepDeploymentConfig();
+  // asked for this call directly. Only the vendor-API half of the deployment
+  // config: polling needs neither a webhook URL nor Azure storage, and
+  // requiring them (as the full resolver does) would silently stop
+  // reconciliation on a deployment where only those are incomplete.
+  const config = resolveSplitstepVendorApiConfig();
   if (!config.ok) return outcome;
   const { apiUrl, apiKey } = config;
 
@@ -186,9 +188,14 @@ export async function reconcileVendorJobs(params: {
       if (parsed.nextStatus === 'failed' || isStale) {
         return {
           jobId: job.id,
-          errorCode: parsed.errorCode ?? (isStale ? 'JOB_STALE' : null),
-          errorCategory: parsed.errorCategory ?? (isStale ? 'internal' : null),
-          errorStep: parsed.errorStep,
+          // isStale wins over whatever error object happened to be present —
+          // a status/state field matching /stale/i is definitive; a
+          // leftover, unrelated error.code (e.g. a stray VIDEO_UNREACHABLE
+          // from a different field) must never override that classification
+          // and risk isDownloadFailure() misreading a stale job as retryable.
+          errorCode: isStale ? 'JOB_STALE' : parsed.errorCode,
+          errorCategory: isStale ? 'internal' : parsed.errorCategory,
+          errorStep: isStale ? null : parsed.errorStep,
           errorMessage:
             parsed.errorMessage ??
             'The analysis could not be completed. You can retry it.',

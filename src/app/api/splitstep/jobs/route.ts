@@ -22,6 +22,10 @@ import { NextResponse, after, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { adoptOrphanedDeliveries } from '@/lib/services/splitstep/adopt-deliveries';
+import {
+  isDownloadFailure,
+  resubmitJob,
+} from '@/lib/services/splitstep/resubmit-job';
 import { buildSplitStepJobRequest } from '@/lib/services/splitstep/job-request';
 import { parseWebhookPayload } from '@/lib/services/splitstep/webhook-payload';
 import { resolveSplitstepDeploymentConfig } from '@/lib/services/splitstep/deployment-config';
@@ -462,6 +466,24 @@ export async function POST(request: NextRequest) {
         if (result.jobStatus === 'failed') {
           await releaseQuota(admin, job.id);
           console.log(`${LOG} quota released for adopted failure`, { jobId: job.id });
+
+          // Same auto-retry the webhook's own job_failed branch runs for a
+          // delivery that arrived on time — an orphan-adopted failure must not
+          // silently lose its shot at the identical automatic recovery.
+          if (isDownloadFailure(result.errorCode, result.errorStep)) {
+            const retry = await resubmitJob({ supabase: admin, jobId: job.id, auto: true });
+            if (retry.ok) {
+              console.log(`${LOG} auto-resubmitted an orphan-adopted failure`, {
+                jobId: job.id,
+                newJobId: retry.jobId,
+              });
+            } else {
+              console.warn(`${LOG} auto-resubmit of adopted failure declined`, {
+                jobId: job.id,
+                reason: retry.reason,
+              });
+            }
+          }
         }
 
         if (result.owedResultsDownload) {

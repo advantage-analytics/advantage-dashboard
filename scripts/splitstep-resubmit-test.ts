@@ -111,12 +111,20 @@ interface TestMatch {
   created_by: string;
 }
 
-/** A match with no live job, so the in-flight-duplicate guard sees only ours. */
+/**
+ * A PERSONAL match (no program) with no live job, so the in-flight-duplicate
+ * guard sees only ours, and the auto-retry billing check below has a
+ * deterministic answer: `resolveAutoRetryWorkspace()` re-derives the current
+ * account fresh rather than trusting a stale `processing_usage` row (see the
+ * security fix this test now asserts), and for a personal match that account
+ * is always the match's own `created_by` — no program membership to look up.
+ */
 async function findQuietMatch(): Promise<TestMatch> {
   const { data } = await supabase
     .from('matches')
     .select('id, created_by')
     .not('created_by', 'is', null)
+    .is('program_id', null)
     .limit(20);
   for (const row of (data ?? []) as TestMatch[]) {
     const { count } = await supabase
@@ -126,7 +134,7 @@ async function findQuietMatch(): Promise<TestMatch> {
       .not('status', 'in', '(failed,completed,derivation_failed)');
     if ((count ?? 0) === 0) return row;
   }
-  throw new Error('No match without a live processing job to attach tests to.');
+  throw new Error('No personal match without a live processing job to attach tests to.');
 }
 
 async function makeJob(
@@ -216,7 +224,6 @@ async function main(): Promise<void> {
   const { resolveAzureStorageConfig, videoContainerClient } = await import(
     '../src/lib/services/splitstep/video-url'
   );
-  const { currentBillingMonth } = await import('../src/lib/services/splitstep/config');
   type Workspace = import('../src/lib/workspace/types').Workspace;
 
   const azure = resolveAzureStorageConfig().ok;
@@ -293,17 +300,13 @@ async function main(): Promise<void> {
         ...failedFields,
         video_object_key: TEST_BLOB,
       });
-      // The parent's reservation names the throwaway account; the auto path
-      // must bill the same ledger.
-      await supabase.from('processing_usage').insert({
-        account_id: throwawayAccount,
-        account_type: 'individual',
-        billing_month: currentBillingMonth(),
-        job_id: parentId,
-        created_by: match.created_by,
-        reserved_seconds: 300,
-        released: true,
-      });
+      // Deliberately NO processing_usage row is seeded for the parent. The
+      // auto path used to trust whatever account a parent's usage row named
+      // — a security gap, since that account's permissions could have
+      // changed since the original submission. It now calls
+      // resolveAutoRetryWorkspace() to re-derive CURRENT state instead: for
+      // this personal (program_id null) match, that is always
+      // match.created_by, with no usage-row lookup involved at all.
 
       const r = await resubmitJob({ supabase, jobId: parentId, auto: true });
       check('resubmission succeeded', r.ok, r);
@@ -325,8 +328,8 @@ async function main(): Promise<void> {
       const u = usage as { released: boolean; account_id: string } | null;
       check('a fresh, unreleased reservation exists for the child',
         u !== null && u.released === false, u);
-      check('billed to the same account as the parent',
-        u?.account_id === throwawayAccount, u?.account_id);
+      check('billed to the uploader\'s own account, re-derived fresh — not a stale usage row',
+        u?.account_id === match.created_by, u?.account_id);
     }
 
     console.log('4. a second identical failure gets NO second automatic attempt');

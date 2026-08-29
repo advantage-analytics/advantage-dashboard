@@ -274,13 +274,26 @@ function findErrorObject(
 }
 
 /** A non-empty string field of the error object, or null. */
+/**
+ * A non-empty string field of the error object, matched by NORMALISED key —
+ * the same rule `findErrorObject` used to locate the object in the first
+ * place. An exact `obj[key]` lookup would find the container (normalised) but
+ * then miss `Code`/`Step`/`Category` against a lowercase key, silently
+ * turning errorCode/errorStep null for any differently-cased vendor payload
+ * and killing the one auto-retry class this feature exists for — with no
+ * error, no log, just a retry that quietly stops firing.
+ */
 function stringField(
   obj: Record<string, Json> | null,
   key: string
 ): string | null {
   if (!obj) return null;
-  const value = obj[key];
-  return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
+  const target = normaliseKey(key);
+  for (const [k, value] of Object.entries(obj)) {
+    if (normaliseKey(k) !== target) continue;
+    if (typeof value === 'string' && value.trim() !== '') return value.trim();
+  }
+  return null;
 }
 
 function asHttpUrl(value: string | null): string | null {

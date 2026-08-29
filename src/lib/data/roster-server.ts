@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
-import { rosterPlayerOptions } from "@/lib/data/roster-shared";
+import { rosterPlayerOptions, type RosterFullRow } from "@/lib/data/roster-shared";
 
 export interface LadderPlayer {
   /**
@@ -11,14 +11,6 @@ export interface LadderPlayer {
   name: string;
   /** Their rank, or null when the program has never set one. */
   ladderPosition: number | null;
-}
-
-interface DbRosterFullRow {
-  player_id: string;
-  display_name: string | null;
-  email: string | null;
-  role: string;
-  lineup_spot: number | null;
 }
 
 /**
@@ -51,7 +43,7 @@ export const getLadder = cache(async function getLadder(
   // drift. NOTE the field rename: this type's `userId` is the shared
   // `playerId` (a program_players.id) — historical naming, kept because the
   // lineup forms already read it.
-  return rosterPlayerOptions((data ?? []) as DbRosterFullRow[]).map((row) => ({
+  return rosterPlayerOptions((data ?? []) as RosterFullRow[]).map((row) => ({
     userId: row.playerId,
     name: row.name,
     ladderPosition: row.ladderPosition,
