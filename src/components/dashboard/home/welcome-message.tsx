@@ -1,25 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { CreateMatchButton } from "@/components/dashboard/matches/create-match-button";
 
 interface WelcomeMessageProps {
   name?: string;
   greeting: string;
+  /** Renders left of the date — either help copy or the "N new report" link. */
+  subline?: ReactNode;
 }
 
 function getFormattedDate(): string {
   const now = new Date();
-  return now
-    .toLocaleDateString("en-US", {
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-    })
-;
+  return now.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
 }
 
-export default function WelcomeMessage({ name, greeting }: WelcomeMessageProps) {
+export default function WelcomeMessage({ name, greeting, subline }: WelcomeMessageProps) {
   const trimmedName = name?.trim();
   const [dateText, setDateText] = useState("");
 
@@ -29,19 +29,23 @@ export default function WelcomeMessage({ name, greeting }: WelcomeMessageProps) 
   }, []);
 
   return (
-    <div className="flex items-end justify-between">
-      <div className="flex flex-col gap-3">
-        <p
-          aria-live="polite"
-          className={`text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] min-h-[15px] transition-opacity duration-300 ${dateText ? "opacity-100" : "opacity-0"}`}
-        >
-          {dateText || "\u00A0"}
-        </p>
-        <h1 className="font-light text-[30px] text-[#0D0D0D] tracking-[-0.6px] leading-[36px]">
-          {trimmedName ? `${greeting}, ${trimmedName}` : greeting}
+    <div className="flex items-end gap-4">
+      <div>
+        <h1 className="text-display">
+          {trimmedName ? `${greeting}, ${trimmedName}.` : `${greeting}.`}
         </h1>
+        <div className="mt-[9px] flex items-baseline gap-3">
+          {subline}
+          <span
+            aria-live="polite"
+            className={`text-micro tabular transition-opacity duration-300 ${dateText ? "opacity-100" : "opacity-0"}`}
+          >
+            {dateText || " "}
+          </span>
+        </div>
       </div>
-      <CreateMatchButton variant="blue" />
+      <div className="flex-1" />
+      <CreateMatchButton variant="blue" label="New match" />
     </div>
   );
 }

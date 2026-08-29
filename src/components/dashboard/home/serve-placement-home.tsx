@@ -1,16 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, RefreshCw, Target } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { createClient } from "@/lib/supabase/client";
 import { pickServeShot, pickReturnShot } from "@/lib/data/serve-return-shots";
 import {
-  ServePlacementWidget,
+  computeZoneStats,
   pointToServeDot,
   type ServeDot,
   type ServePointInput,
 } from "@/components/dashboard/matches/serve-placement/serve-placement-widget";
+import { ServePlacementQuietStrip } from "./serve-placement-quiet-strip";
 
 type ShotRow = {
   shot_number: number | null;
@@ -38,11 +38,6 @@ type ShotRow = {
 
 export default function ServePlacementHome({ userId }: { userId: string }) {
   const [dots, setDots] = useState<ServeDot[]>([]);
-  const [points, setPoints] = useState<ServePointInput[]>([]);
-  const [ctxData, setCtxData] = useState<{ player1Name: string; player2Name: string }>({
-    player1Name: "You",
-    player2Name: "Opponent",
-  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [matchCount, setMatchCount] = useState(0);
@@ -65,13 +60,6 @@ export default function ServePlacementHome({ userId }: { userId: string }) {
       }
 
       setMatchCount(matches.length);
-      // Home aggregates serves across the last N matches (many opponents), so a
-      // single match's names would mislabel the filter. Use generic aggregate
-      // labels: the player2 bucket holds every opponent, not one person.
-      setCtxData({
-        player1Name: "You",
-        player2Name: "Opponents",
-      });
       const matchIds = matches.map((m) => m.id);
 
       // Fetch every shot for these points (not just serves) so each point's
@@ -99,7 +87,6 @@ export default function ServePlacementHome({ userId }: { userId: string }) {
       }
 
       const nextDots: ServeDot[] = [];
-      const nextPoints: ServePointInput[] = [];
       for (const pointShots of shotsByPoint.values()) {
         const pt = pointShots[0].points;
         if (!pt) continue;
@@ -130,15 +117,13 @@ export default function ServePlacementHome({ userId }: { userId: string }) {
           secondShotResult: ret?.result ?? null,
           rallyLength: pt.rally_length ?? undefined,
         };
-        nextPoints.push(point);
-        // Preview dots match the fullscreen's initial state (Player 1 only) so
-        // the collapsed widget and the expanded view agree on first load.
+        // Only player-1 (the viewer's) serves feed the aggregate — an
+        // opponent's placement would answer a different question.
         if (!point.serverIsPlayer1) continue;
         const dot = pointToServeDot(point);
         if (dot) nextDots.push(dot);
       }
       setDots(nextDots);
-      setPoints(nextPoints);
     } catch {
       setError(true);
     } finally {
@@ -153,71 +138,37 @@ export default function ServePlacementHome({ userId }: { userId: string }) {
     return () => window.removeEventListener("match-processed", handler);
   }, [load]);
 
-  const contextLabel = matchCount === 1 ? "1 MATCH" : `LAST ${matchCount} MATCHES`;
+  const contextLabel = matchCount === 1 ? "1 match" : `last ${matchCount} matches`;
+  const zoneStats = useMemo(() => computeZoneStats(dots), [dots]);
 
-  const overlay = loading ? (
-    <LoadingOverlay />
-  ) : error ? (
-    <ErrorOverlay onRetry={load} />
-  ) : dots.length === 0 ? (
-    <EmptyOverlay />
-  ) : null;
-
-  return (
-    <ServePlacementWidget
-      dots={dots}
-      points={points}
-      contextLabel={contextLabel}
-      ctxData={ctxData}
-      overlay={overlay}
-    />
-  );
-}
-
-function LoadingOverlay() {
-  return (
-    <div aria-busy="true" className="flex flex-col items-center gap-2.5 bg-white rounded-lg px-4 py-3">
-      <div className="flex items-center gap-2">
-        <div className="size-1.5 rounded-full bg-[#3B82F6] animate-pulse motion-reduce:animate-none" />
-        <span className="text-[10px] font-medium text-[#525252] uppercase tracking-[2px]">
-          Loading serves
-        </span>
+  if (loading) {
+    return (
+      <div className="surface-card flex flex-col gap-3" style={{ padding: "18px 20px" }}>
+        <span className="eyebrow">Serve placement</span>
+        <div className="flex flex-col gap-2" aria-hidden>
+          <div className="h-3.5 w-full animate-pulse rounded-full bg-[#F3F3F3]" />
+          <div className="h-3.5 w-full animate-pulse rounded-full bg-[#F3F3F3]" />
+        </div>
       </div>
-      <span className="text-[10px] text-[#AAAAAA]">Fetching placement data</span>
-    </div>
-  );
-}
+    );
+  }
 
-function ErrorOverlay({ onRetry }: { onRetry: () => void }) {
-  return (
-    <div role="alert" className="flex flex-col items-center gap-2 bg-white rounded-lg px-5 py-4">
-      <AlertCircle className="text-[#E51837] size-5" aria-hidden />
-      <p className="text-[12px] font-medium text-[#0D0D0D]">Couldn&apos;t load serve data</p>
-      <p className="text-[11px] text-[#888888] max-w-[200px] text-center leading-[1.5]">
-        Check your connection and try again
-      </p>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="flex items-center gap-1.5 mt-1 px-3 py-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-medium uppercase tracking-[1.5px] rounded-[6px] transition-colors duration-200 focus-visible:outline-none"
-      >
-        <RefreshCw className="size-3" aria-hidden />
-        Retry
-      </button>
-    </div>
-  );
-}
-
-function EmptyOverlay() {
-  return (
-    <div className="flex flex-col items-center gap-2.5 bg-white rounded-lg px-5 py-4 text-center">
-      <div className="bg-[#F5F5F5] p-4 rounded-full">
-        <Target className="h-8 w-8 text-[#888888]" aria-hidden />
+  if (error) {
+    return (
+      <div className="surface-card flex flex-col gap-2" style={{ padding: "18px 20px" }} role="alert">
+        <span className="eyebrow">Serve placement</span>
+        <p className="text-body-sm">Couldn&apos;t load serve data.</p>
+        <button
+          type="button"
+          onClick={load}
+          className="self-start text-[11px] font-medium"
+          style={{ color: "var(--blue-text)" }}
+        >
+          Retry
+        </button>
       </div>
-      <p className="text-[12px] font-medium text-[#0D0D0D]">No serve data yet</p>
-      <p className="text-[12px] text-[#888888] max-w-[220px] leading-[1.5]">
-        Upload a match to see where your serves land
-      </p>
-    </div>
-  );
+    );
+  }
+
+  return <ServePlacementQuietStrip zoneStats={zoneStats} contextLabel={contextLabel} />;
 }

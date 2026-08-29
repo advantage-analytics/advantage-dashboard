@@ -2,31 +2,28 @@
 
 import { memo, useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
+import { Loader2, TriangleAlert, ChevronRight } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
+import { cn } from "@/lib/utils";
 import { MatchMetadataRow } from "@/components/dashboard/matches/match-metadata-row";
 import { ScoreLine } from "@/components/dashboard/score-line";
+import { ResultMark } from "@/components/dashboard/result-mark";
+import { StatusChip } from "@/components/ui/status-chip";
+import {
+  ANALYSIS_LABEL,
+  isAnalysisFailed,
+  isWorking,
+  type AnalysisStatus,
+} from "@/lib/data/match-analysis";
 import { formatScoreText } from "@/lib/ui/score-format";
 import type { EventGroup, MatchRow } from "@/app/dashboard/(home)/recent-activity";
 
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
-const STAT_COLUMNS: Array<{ label: string; format: (m: MatchRow) => string }> = [
-  {
-    label: "FIRST SERVE",
-    format: (m) => (m.firstServePct != null ? `${m.firstServePct}%` : "—"),
-  },
-  {
-    label: "WINNERS / ERRORS",
-    format: (m) =>
-      m.winners != null && m.errors != null ? `${m.winners}/${m.errors}` : "—",
-  },
-  {
-    label: "BREAKPOINTS",
-    format: (m) =>
-      m.breakpointsWon != null && m.breakpointsTotal != null
-        ? `${m.breakpointsWon}/${m.breakpointsTotal}`
-        : "—",
-  },
+const STAT_CELLS: Array<{ label: string; width: string; format: (m: MatchRow) => string }> = [
+  { label: "1st serve", width: "76px", format: (m) => (m.firstServePct != null ? `${m.firstServePct}%` : "—") },
+  { label: "Winners", width: "68px", format: (m) => (m.winners != null ? `${m.winners}` : "—") },
+  { label: "Errors", width: "58px", format: (m) => (m.errors != null ? `${m.errors}` : "—") },
 ];
 
 interface RecentMatchesProps {
@@ -34,61 +31,87 @@ interface RecentMatchesProps {
   isNewEvent?: boolean;
 }
 
+function StatCell({ label, width, value }: { label: string; width: string; value: string }) {
+  return (
+    <span className="flex shrink-0 flex-col items-end gap-[3px]" style={{ width }}>
+      <span className="eyebrow-sm whitespace-nowrap">{label}</span>
+      <span className="tabular text-[12px] text-[var(--ink-900)]">{value}</span>
+    </span>
+  );
+}
+
 function MatchLink({ match }: { match: MatchRow }) {
   return (
     <Link
       href={`/dashboard/matches/${match.id}`}
       aria-label={`${match.won ? "Win" : "Loss"} vs ${match.opponentName}, ${formatScoreText(match.score)}`}
-      className="flex items-center justify-between rounded-lg px-2 py-2.5 -mx-2 transition-[background-color,transform] duration-200 ease-out hover:bg-[#FAFAFA] active:scale-[0.998] focus-visible:outline-none"
+      className="-mx-3 flex min-h-[54px] items-center gap-4 rounded-[var(--radius-element)] px-3 py-[5px] transition-colors duration-200 hover:bg-[var(--surface-muted)] focus-visible:outline-none"
     >
-      <div className="flex gap-3 items-center">
-        <div
-          className={`w-px h-10 rounded-full shrink-0 ${
-            match.won ? "bg-[#5DB955]" : "bg-[#E51837]"
-          }`}
-        />
-        <div className="flex flex-col gap-2 flex-1 min-w-0 overflow-hidden">
-          <div className="flex items-center gap-3 overflow-hidden whitespace-nowrap leading-normal">
-            <span className="text-[14px] font-normal text-[#0D0D0D]">
-              {match.opponentName}
-            </span>
-            <ScoreLine
-              sets={match.score}
-              className="text-[12px] font-normal text-[#888888] tracking-[0.3px]"
-            />
-            <span
-              className={`text-[10px] leading-[16px] font-medium uppercase tracking-[2.5px] ${
-                match.won ? "text-[#5DB955]" : "text-[#E51837]"
-              }`}
-            >
-              {match.won ? "Won" : "Lost"}
-            </span>
-          </div>
-          {match.opponentMeta && match.opponentMeta.length > 0 && (
-            <div className="flex items-start gap-2 text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2.5px] leading-[13.5px] overflow-hidden whitespace-nowrap">
-              {match.opponentMeta.map((meta, i) => (
-                <span key={i} className="shrink-0">
-                  {i > 0 && <span className="mr-2">·</span>}
-                  {meta}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+      <ResultMark won={match.won} className="shrink-0" />
 
-      <div className="hidden md:flex items-center gap-4">
-        {STAT_COLUMNS.map(({ label, format }) => (
-          <div key={label} className="flex flex-col gap-2 items-end shrink-0">
-            <span className="text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2.5px] leading-[13.5px]">
-              {label}
-            </span>
-            <span className="text-[13px] font-light text-[#0D0D0D] tabular-nums">
-              {format(match)}
-            </span>
-          </div>
+      <span className="w-[170px] shrink-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
+        <span className="font-normal text-[var(--ink-600)]">{match.won ? "def. " : "l. "}</span>
+        {match.opponentName}
+      </span>
+
+      <ScoreLine
+        sets={match.score}
+        className="text-scoreboard-sm w-[110px] shrink-0"
+      />
+
+      <div className="flex-1" />
+
+      <div className="hidden items-center gap-4 md:flex">
+        {STAT_CELLS.map((cell) => (
+          <StatCell key={cell.label} label={cell.label} width={cell.width} value={cell.format(match)} />
         ))}
       </div>
+
+      <ChevronRight className="size-[13px] shrink-0 text-[var(--ink-300)]" strokeWidth={1.5} aria-hidden="true" />
+    </Link>
+  );
+}
+
+function InFlightLink({ match }: { match: MatchRow }) {
+  const status = match.analysisStatus as AnalysisStatus;
+  const failed = isAnalysisFailed(status);
+
+  return (
+    <Link
+      href={`/dashboard/matches/${match.id}`}
+      aria-label={`vs ${match.opponentName}, ${ANALYSIS_LABEL[status]}`}
+      className="-mx-3 flex min-h-[54px] items-center gap-4 rounded-[var(--radius-element)] px-3 py-[5px] transition-colors duration-200 hover:bg-[var(--surface-muted)] focus-visible:outline-none"
+    >
+      <span className="flex w-3.5 shrink-0 items-center justify-center">
+        {failed ? (
+          /* Not `CircleX` — that shape is `ResultMark`'s alone (won/lost),
+             and reusing it here would say this match was *lost* rather than
+             *unanalyzed*. `TriangleAlert` is the team page's own glyph for
+             this exact state (`needs-attention.tsx`'s "match-failed"). */
+          <TriangleAlert className="size-3.5 text-[var(--danger)]" strokeWidth={1.5} aria-hidden="true" />
+        ) : (
+          <Loader2
+            className={cn(
+              "size-3.5 text-[var(--ink-400)]",
+              // Same question `StatusChip`'s `live` prop answers below — a
+              // spinner turning for `uploaded` or `processed` claims work is
+              // happening when nothing is; both are idle until something
+              // outside the pipeline moves them.
+              isWorking(status) && "animate-spin"
+            )}
+            strokeWidth={1.5}
+            aria-hidden="true"
+          />
+        )}
+      </span>
+      <span className="w-[170px] shrink-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
+        vs {match.opponentName}
+      </span>
+      <div className="flex-1" />
+      <StatusChip tone={failed ? "loss" : "blue"} live={!failed && isWorking(status)}>
+        {ANALYSIS_LABEL[status]}
+      </StatusChip>
+      <ChevronRight className="size-[13px] shrink-0 text-[var(--ink-300)]" strokeWidth={1.5} aria-hidden="true" />
     </Link>
   );
 }
@@ -105,10 +128,10 @@ const MatchRowItem = memo(function MatchRowItem({
   baseDelay?: number;
 }) {
   const shouldReduceMotion = useReducedMotion();
+  const inFlight = !!match.analysisStatus;
+  const link = inFlight ? <InFlightLink match={match} /> : <MatchLink match={match} />;
 
-  if (!isNew) {
-    return <MatchLink match={match} />;
-  }
+  if (!isNew) return link;
 
   const tint = match.won ? "rgba(93,185,85,0.06)" : "rgba(229,24,55,0.06)";
   const delay = baseDelay + newIndex * 0.08;
@@ -133,10 +156,10 @@ const MatchRowItem = memo(function MatchRowItem({
         delay,
         backgroundColor: { duration: 1.2, ease: EASE_OUT, delay },
       }}
-      style={{ backgroundColor: tint }}
-      className="rounded-lg origin-top"
+      style={{ backgroundColor: inFlight ? "transparent" : tint }}
+      className="origin-top rounded-lg"
     >
-      <MatchLink match={match} />
+      {link}
     </motion.div>
   );
 });
@@ -146,20 +169,8 @@ export default function RecentMatches({ event, isNewEvent = false }: RecentMatch
   const seenIdsRef = useRef<Set<string> | null>(null);
   const shouldReduceMotion = useReducedMotion();
 
-  // Which rows arrived since the last commit, so they can animate in once.
-  //
-  // This deliberately reads a ref during render (react-hooks/refs). The value
-  // needed is the set as of the PREVIOUS commit, and it must survive into the
-  // render that is actually committed. React's "adjust state during render"
-  // pattern cannot express that: calling a setter during render discards the
-  // in-progress output, so the re-render would already see the updated set and
-  // the highlight would never appear. Moving the diff into an effect instead
-  // costs an extra render and shifts when the animation starts.
-  //
-  // Safe in practice because seenIdsRef only changes when event.matches
-  // changes (see the effect below), so repeat renders in between are
-  // idempotent. Revisit if this component is ever put under Suspense or
-  // offscreen rendering.
+  // Which rows arrived since the last commit, so they can animate in once. See
+  // the identical pattern (and its rationale) in recent-activity.tsx.
   const newIds = new Set<string>();
   if (seenIdsRef.current === null) {
     if (isNewEvent) {
@@ -167,7 +178,7 @@ export default function RecentMatches({ event, isNewEvent = false }: RecentMatch
     }
   } else {
     for (const m of event.matches) {
-      // eslint-disable-next-line react-hooks/refs -- see note above
+      // eslint-disable-next-line react-hooks/refs -- see recent-activity.tsx
       if (!seenIdsRef.current.has(m.id)) newIds.add(m.id);
     }
   }
@@ -194,16 +205,14 @@ export default function RecentMatches({ event, isNewEvent = false }: RecentMatch
   let newIndex = 0;
 
   return (
-    <div className="flex flex-col gap-3 px-5">
+    <div className="flex flex-col gap-1 border-t border-[var(--border-hairline)] pt-3.5 first:border-t-0">
       <motion.div
-        className="flex flex-col gap-2"
+        className="flex flex-col gap-1.5 pb-1"
         initial={isNewEvent && !shouldReduceMotion ? { opacity: 0, y: 8 } : false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: EASE_OUT }}
       >
-        <p className="text-[16px] font-normal text-[#0D0D0D] tracking-[-0.4px] leading-[24px]">
-          {event.tournamentName}
-        </p>
+        <p className="text-[13px] font-medium text-[var(--ink-900)]">{event.tournamentName}</p>
         <MatchMetadataRow
           date={event.date}
           matchType={event.matchType ?? undefined}
@@ -213,7 +222,7 @@ export default function RecentMatches({ event, isNewEvent = false }: RecentMatch
       </motion.div>
 
       <div
-        className="flex flex-col gap-3"
+        className="flex flex-col"
         onKeyDown={handleArrowNav}
         ref={listRef}
         role="list"

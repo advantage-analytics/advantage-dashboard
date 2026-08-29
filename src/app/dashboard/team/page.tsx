@@ -6,7 +6,7 @@ import { getTeamHomeData } from "@/lib/data/team-home-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { isAnalysisReady, isWorking } from "@/lib/data/match-analysis";
 import { advButton } from "@/lib/ui/adv-button";
-import { UsageFooter } from "@/components/dashboard/team/usage-footer";
+import { UsageFooter } from "@/components/dashboard/shared/usage-footer";
 import { FirstSteps } from "@/components/dashboard/team/first-steps";
 import { DualSheet } from "@/components/dashboard/team/dual-sheet";
 import { KpiStrip } from "@/components/dashboard/team/kpi-strip";
@@ -309,6 +309,7 @@ export default async function TeamHomePage() {
           usedSeconds={usage.usedSeconds}
           capSeconds={usage.capSeconds}
           billingMonth={usage.billingMonth}
+          note="free through Dec 31, 2026"
         />
       </div>
     </div>

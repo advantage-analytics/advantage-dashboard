@@ -8,7 +8,7 @@ import {
   transformDbMatch,
 } from "@/lib/data/matches-list-types";
 import { MatchesPageContent } from "@/components/dashboard/matches/matches-page-content";
-import { CreateMatchButton } from "@/components/dashboard/matches/create-match-button";
+import { MatchesTitleRow } from "@/components/dashboard/matches/matches-title-row";
 import { MatchesSkeleton } from "@/components/dashboard/matches/matches-skeleton";
 
 /**
@@ -112,23 +112,12 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
   return (
     <div className="flex-1 w-full bg-white">
       <div className="mx-auto max-w-screen-2xl px-6 sm:px-8 py-8 sm:py-10">
-        {/* Header */}
-        <div className="flex items-end justify-between">
-          <div className="flex flex-col gap-3">
-            {matches.length > 0 && (
-              <p className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]">
-                {matches.length} {matches.length === 1 ? "MATCH" : "MATCHES"}{" "}
-                {isTeam ? "ON THE PROGRAM" : "RECORDED"}
-              </p>
-            )}
-            <h1 className="font-light text-[30px] text-[#0D0D0D] tracking-[-0.6px] leading-[36px]">
-              Matches
-            </h1>
-          </div>
-          {matches.length > 0 && <CreateMatchButton variant="blue" />}
-        </div>
+        <MatchesTitleRow
+          scope={isTeam ? "team" : "personal"}
+          readyMatches={matches.map((m) => ({ id: m.id, status: m.analysis?.status }))}
+        />
 
-        <div className="mt-10">
+        <div className="mt-8">
           <Suspense fallback={<MatchesSkeleton />}>
             {/* userId drives the realtime subscription's server-side filter, so
                 a busy account never receives other people's job rows. See the

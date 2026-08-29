@@ -1,156 +1,64 @@
-"use client";
-
-import { BarChart3, Target, Brain, HelpCircle } from "lucide-react";
-import { motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
-import { CreateMatchButton } from "@/components/dashboard/matches/create-match-button";
+import { advButton } from "@/lib/ui/adv-button";
 
-const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
-
-const FEATURES = [
+/**
+ * Day zero — the recommended next step is always exactly one card. Sending a
+ * match (video) is first because it's how most personal matches arrive;
+ * SwingVision import and the profile card are secondary, equal-weight paths.
+ */
+const CARDS = [
   {
-    icon: BarChart3,
-    title: "Statistics",
-    description: "Track every metric that shapes your game, match by match",
+    eyebrow: "First report",
+    title: "Send your first match",
+    body: "Singles, 1080p or better.",
+    href: "/dashboard/matches/new",
+    label: "Send a match",
+    emphasized: true,
   },
   {
-    icon: Target,
-    title: "Serve Placement",
-    description: "See exactly where your serves land on the court",
+    eyebrow: "SwingVision",
+    title: "Import a session",
+    body: "Stats and video land already synced — no re-typing the score.",
+    href: "/dashboard/matches/new",
+    label: "Import",
+    emphasized: false,
   },
   {
-    icon: Brain,
-    title: "AI Analysis",
-    description: "Surface patterns you can't spot from the baseline",
+    eyebrow: "Your profile",
+    title: "Set hand and backhand",
+    body: "Analysis orients every stat around how you play.",
+    href: "/dashboard/settings/profile",
+    label: "Open profile",
+    emphasized: false,
   },
-];
-
-const HEADING_WORDS = ["See", "where", "your", "game", "stands"];
-
-// ── Timeline constants (seconds) ────────────────────────────
-const T = {
-  HEADING_START: 0.15,
-  HEADING_STAGGER: 0.09,
-  DESCRIPTION: 0.7,
-  CTA: 0.9,
-  HELP_LINK: 1.05,
-  FEATURES_LABEL: 1.1,
-  FEATURES_START: 1.2,
-  FEATURES_STAGGER: 0.07,
-} as const;
+] as const;
 
 export default function EmptyDashboard() {
-  // `skip` feeds motion `initial` props, which React only consults when an
-  // element mounts. A previous version also OR'd in a `hasAnimated` ref, but
-  // that ref is always false at mount (its effect runs afterwards), so it never
-  // changed what rendered — it only truncated an in-flight entrance if the
-  // component happened to re-render mid-animation. Reading a ref during render
-  // is also unsafe under concurrent rendering (react-hooks/refs).
-  const shouldReduceMotion = useReducedMotion();
-  const skip = shouldReduceMotion;
-
   return (
-    <div className="flex flex-col items-center text-center pt-10 pb-16 px-6 max-w-[600px] mx-auto">
-      {/* Hero heading — word-by-word reveal */}
-      <h2 className="text-[30px] font-light text-[#0D0D0D] tracking-[-0.6px] leading-[36px] mb-3">
-        {HEADING_WORDS.map((word, i) => (
-          <motion.span
-            key={word}
-            className="inline-block"
-            initial={skip ? false : { opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{
-              duration: 0.35,
-              ease: EASE_CURVE,
-              delay: T.HEADING_START + i * T.HEADING_STAGGER,
-            }}
-          >
-            {word}
-            {i < HEADING_WORDS.length - 1 && "\u00A0"}
-          </motion.span>
-        ))}
-      </h2>
-
-      {/* Description */}
-      <motion.p
-        className="text-[13px] font-normal text-[#888888] leading-[1.6] max-w-[380px]"
-        initial={skip ? false : { opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: EASE_CURVE, delay: T.DESCRIPTION }}
-      >
-        Upload a match from SwingVision (iOS match recorder)
-        and get a full breakdown of your performance — every serve, every rally.
-      </motion.p>
-
-      {/* CTA + secondary link */}
-      <div className="mt-10 mb-14 flex flex-col items-center gap-4">
-        <motion.div
-          initial={skip ? false : { opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.35, ease: EASE_CURVE, delay: T.CTA }}
-        >
-          <CreateMatchButton variant="blue" />
-        </motion.div>
-        <motion.div
-          initial={skip ? false : { opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.3, ease: EASE_CURVE, delay: T.HELP_LINK }}
-        >
-          <Link
-            href="/dashboard/help"
-            className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#888888] uppercase tracking-[1.5px] transition-colors duration-200 hover:text-[#525252] focus-visible:outline-none rounded-sm"
-          >
-            <HelpCircle className="w-3 h-3" strokeWidth={1.5} aria-hidden />
-            How to export from SwingVision
-          </Link>
-        </motion.div>
-      </div>
-
-      {/* Feature preview — cascading entrance */}
-      <div className="w-full">
-        <motion.p
-          className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] mb-3 text-left"
-          initial={skip ? false : { opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{
-            duration: 0.3,
-            ease: EASE_CURVE,
-            delay: T.FEATURES_LABEL,
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {CARDS.map((card) => (
+        <div
+          key={card.title}
+          className="flex flex-col gap-3 rounded-[var(--radius-card)] p-6"
+          style={{
+            border: `1px solid var(${card.emphasized ? "--border-medium" : "--border-hairline"})`,
+            boxShadow: card.emphasized ? "var(--shadow-card)" : undefined,
           }}
         >
-          What you&apos;ll unlock
-        </motion.p>
-
-        <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">
-          {FEATURES.map((feature, i) => (
-            <motion.div
-              key={feature.title}
-              initial={skip ? false : { opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{
-                duration: 0.35,
-                ease: EASE_CURVE,
-                delay: T.FEATURES_START + i * T.FEATURES_STAGGER,
-              }}
-              className="flex-1 flex flex-col gap-2.5 text-left pt-3.5 border-t border-[#F3F3F3]"
-            >
-              <div className="flex items-center gap-2">
-                <feature.icon
-                  className="size-3.5 text-[#525252]"
-                  strokeWidth={1.5}
-                  aria-hidden
-                />
-                <p className="text-[11px] font-semibold text-[#0D0D0D] uppercase tracking-[1.5px]">
-                  {feature.title}
-                </p>
-              </div>
-              <p className="text-[11px] font-normal text-[#888888] leading-[1.6]">
-                {feature.description}
-              </p>
-            </motion.div>
-          ))}
+          <span className="eyebrow">{card.eyebrow}</span>
+          <span className="text-title">{card.title}</span>
+          <span className="text-body-sm flex-1" style={{ maxWidth: "34ch" }}>
+            {card.body}
+          </span>
+          <Link
+            href={card.href}
+            className={advButton(card.emphasized ? "primary" : "outline", "md")}
+            style={{ marginTop: "auto" }}
+          >
+            {card.label}
+          </Link>
         </div>
-      </div>
+      ))}
     </div>
   );
 }

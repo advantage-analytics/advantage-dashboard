@@ -1,6 +1,7 @@
 import { meanOfPresent, num, pct, presentPairs } from "./aggregate";
 import { createClient } from "@/lib/supabase/server";
 import { getMyPlayerIds } from "@/lib/data/player-identity-server";
+import { viewerSide } from "./viewer-side";
 
 interface WinLossView {
   wins: number;
@@ -172,20 +173,6 @@ const DEFAULT_PERFORMANCE: OverallPerformanceData = {
  * were populated: the uploader is the only evidence of whose match it is. It is
  * deliberately last, so an id always wins when there is one.
  */
-function viewerSide(
-  match: { player1_id: string | null; player2_id?: string | null },
-  playerIds: readonly string[],
-  viewerId: string,
-  createdBy?: string | null
-): "player1" | "player2" | null {
-  if (match.player1_id && playerIds.includes(match.player1_id)) return "player1";
-  if (match.player2_id && playerIds.includes(match.player2_id)) return "player2";
-  if (!match.player1_id && !match.player2_id && (createdBy ?? viewerId) === viewerId) {
-    return "player1";
-  }
-  return null;
-}
-
 function calculateWinLoss(
   matches: DbMatch[],
   playerIds: readonly string[],

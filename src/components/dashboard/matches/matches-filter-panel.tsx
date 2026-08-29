@@ -1,144 +1,243 @@
 "use client";
 
-import { Check, ListFilter } from "lucide-react";
+import { useState } from "react";
+import { Check, ChevronDown, ChevronUp } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 /**
- * One Filter button for every category, in place of a chip per category.
+ * Design 18a's sectioned panel + 18c's chrome (trigger, applied-filter strip
+ * lives in the caller) for the Matches list.
  *
- * Five chips ran the width of the toolbar and each one cost a click to learn
- * it held nothing — the values are drawn from the matches themselves, so a
- * player with only hard-court matches still saw a Court chip. A single button
- * carries the whole filter count in one badge and puts every category behind
- * one press, which also leaves the toolbar's left side quiet enough for the
- * result count to be read at a glance.
+ * Two facet shapes, not one:
  *
- * The design supplies the trigger but never draws the panel open, so the panel
- * below is ours: grouped checkboxes in the same visual language as the
- * dropdowns already in this toolbar. It sits on the shared Popover primitive —
- * the one video-filter-bar and the row action menu already use — which owns
- * dismissal, Escape, and focus return, and animates on CSS rather than on
- * animation frames that a background tab would freeze.
+ * - **Segmented** — a fixed 2-option question with a neutral default ("All",
+ *   "Any"), rendered as an equal-width pill row. Result gets a section of its
+ *   own; Hand and Backhand share one "Opponent" section, each on its own row
+ *   under a smaller sub-label. Single-select by construction — clicking a
+ *   pill replaces whatever was active for that key, it never toggles, so a
+ *   facet like Result can never end up filtered to "Won AND Lost" (which the
+ *   shared filter reducer ANDs into zero rows).
+ * - **Checklist** — an open, data-driven value set (Match type, Court,
+ *   Source, Analysis, Player), unbounded in size, so it stays a list of
+ *   checkbox rows. Multi-select, unchanged from before this design pass.
+ *
+ * The trigger carries no count badge — 18a and 18c both put the "how many
+ * does this leave" answer in the panel's own footer and the applied-filter
+ * strip below the toolbar, never on the button itself. Matches SKILL.md's
+ * retired-badge rule elsewhere on this page ("no bare numeral beside an
+ * eyebrow, no count inside a link").
  */
 
-export interface FilterGroup<K extends string> {
-  key: K;
+export interface FilterOption {
+  /** `null` is the neutral option — selecting it clears this facet. */
+  value: string | null;
   label: string;
+}
+
+export interface SegmentedFacet<K extends string> {
+  key: K;
+  /** A sub-label above the pill row, for a facet sharing a section with siblings (Hand/Backhand under Opponent). Omitted when the facet IS the section (Result). */
+  rowLabel?: string;
+  /** First entry must be the neutral option. */
+  options: FilterOption[];
+}
+
+export interface ChecklistFacet<K extends string> {
+  key: K;
   values: string[];
   displayValue?: (value: string) => string;
 }
 
+export interface FilterPanelSection<K extends string> {
+  label: string;
+  checklist?: ChecklistFacet<K>;
+  segmented?: SegmentedFacet<K>[];
+}
+
 interface MatchesFilterPanelProps<K extends string> {
-  groups: FilterGroup<K>[];
-  /** Every active (key, value) pair, across all groups. */
-  activeCount: number;
-  isActive: (key: K, value: string) => boolean;
-  onToggle: (key: K, value: string) => void;
+  sections: FilterPanelSection<K>[];
+  hasActive: boolean;
+  isChecklistActive: (key: K, value: string) => boolean;
+  onToggleChecklist: (key: K, value: string) => void;
+  segmentedValue: (key: K) => string | null;
+  onSelectSegment: (key: K, value: string | null) => void;
   onClear: () => void;
+  /** For the footer's "N of M matches" — the live count this panel's own selection leaves. */
+  resultCount: number;
+  totalCount: number;
+}
+
+const SEGMENT_ROW =
+  "flex flex-1 items-center justify-center rounded-[var(--radius-button)] text-[11px] cursor-pointer";
+
+function Segmented<K extends string>({
+  facet,
+  value,
+  onSelect,
+}: {
+  facet: SegmentedFacet<K>;
+  value: string | null;
+  onSelect: (v: string | null) => void;
+}) {
+  return (
+    <div role="radiogroup" aria-label={facet.rowLabel} className="flex gap-1 px-2 pb-2">
+      {facet.options.map((opt) => {
+        const active = opt.value === value;
+        return (
+          <button
+            key={opt.label}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onSelect(opt.value)}
+            className={cn(
+              SEGMENT_ROW,
+              "h-[26px] border",
+              active
+                ? "border-[var(--border-medium)] font-medium"
+                : "border-[var(--border-hairline)] font-normal"
+            )}
+            style={{
+              background: active ? "var(--surface-subtle)" : "transparent",
+              color: active ? "var(--ink-900)" : "var(--ink-600)",
+            }}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 export function MatchesFilterPanel<K extends string>({
-  groups,
-  activeCount,
-  isActive,
-  onToggle,
+  sections,
+  hasActive,
+  isChecklistActive,
+  onToggleChecklist,
+  segmentedValue,
+  onSelectSegment,
   onClear,
+  resultCount,
+  totalCount,
 }: MatchesFilterPanelProps<K>): React.JSX.Element | null {
+  const [open, setOpen] = useState(false);
   // A panel with nothing in it is a button that does nothing when pressed.
-  const populated = groups.filter((g) => g.values.length > 0);
-  if (populated.length === 0) return null;
-
-  const hasActive = activeCount > 0;
+  if (sections.length === 0) return null;
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
+          type="button"
           title="Filter matches"
-          className={`flex h-8 items-center gap-[7px] rounded-full px-3.5 text-xs font-medium ring-1 ring-inset transition-[color,background-color,box-shadow] duration-200 ${
-            hasActive
-              ? "bg-[#EBF2FD] text-[#3B82F6] ring-[#3B82F6]"
-              : "bg-white text-[#525252] ring-[#EAECF0] hover:bg-[#F5F5F5]"
-          }`}
+          aria-expanded={open}
+          className={cn(
+            "flex h-7 items-center gap-1.5 rounded-[var(--radius-element)] px-2 text-[12px] transition-colors duration-150",
+            open ? "" : "hover:bg-[var(--surface-subtle)]"
+          )}
+          style={{
+            background: open ? "var(--surface-subtle)" : undefined,
+            color: "var(--ink-900)",
+          }}
         >
-          <ListFilter
-            className={`size-[13px] ${hasActive ? "text-[#3B82F6]" : "text-[#888888]"}`}
-            strokeWidth={1.5}
-            aria-hidden="true"
-          />
-          Filter
-          {hasActive && (
-            <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#3B82F6] px-1 text-[10px] font-semibold text-white tabular-nums">
-              {activeCount}
-            </span>
+          Filters
+          {open ? (
+            <ChevronUp className="size-3" strokeWidth={1.5} style={{ color: "var(--ink-500)" }} aria-hidden="true" />
+          ) : (
+            <ChevronDown className="size-3" strokeWidth={1.5} style={{ color: "var(--ink-500)" }} aria-hidden="true" />
           )}
         </button>
       </PopoverTrigger>
 
       <PopoverContent
         sideOffset={6}
+        align="start"
         aria-label="Filter matches"
-        className="max-h-[calc(100vh-180px)] w-[372px] overflow-y-auto rounded-xl border-[#E5E5EA] p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]"
+        className="flex max-h-[calc(100vh-180px)] w-[272px] flex-col overflow-y-auto rounded-xl border-[var(--border-medium)] p-1.5 shadow-[var(--shadow-dropdown)]"
       >
-        {/* Two balanced columns. In one column the five categories run past
-            600px and the last of them — Analysis, the reason this panel
-            exists — sits below the fold. Multi-column balances the groups
-            on its own, so the whole filter set is visible on open.
-            Column flow is visual only; tab order still follows the DOM. */}
-        <div className="columns-2 gap-x-2">
-          {populated.map((group) => (
-            <div
-              key={group.key}
-              role="group"
-              aria-label={group.label}
-              className="mb-1 break-inside-avoid"
+        {sections.map((section, i) => (
+          <div key={section.label}>
+            {i > 0 && section.checklist === undefined && section.segmented !== undefined && sections[i - 1]?.checklist !== undefined && (
+              // The one divider in 18a — ahead of Opponent, the first
+              // segmented section after a run of checklists. Sections never
+              // rule themselves off from a same-kind neighbour.
+              <div className="mx-2 my-0.5 h-px" style={{ background: "var(--border-hairline)" }} />
+            )}
+            <p
+              className="px-2 pb-1 pt-2 text-[11px]"
+              style={{ color: "var(--ink-400)" }}
             >
-              <p className="px-2.5 pb-1 pt-2 text-[9px] font-medium uppercase tracking-[1.5px] text-[#AAAAAA]">
-                {group.label}
-              </p>
-              {group.values.map((value) => {
-                const active = isActive(group.key, value);
-                return (
-                  <button
-                    key={value}
-                    role="checkbox"
-                    aria-checked={active}
-                    onClick={() => onToggle(group.key, value)}
-                    className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-[background-color,color] duration-200 ${
-                      active
-                        ? "bg-[#EBF2FD] font-medium text-[#3B82F6]"
-                        : "text-[#525252] hover:bg-[#F5F5F5]"
-                    }`}
-                  >
-                    <span
-                      className={`flex size-3.5 shrink-0 items-center justify-center rounded-[4px] border ${
-                        active ? "border-[#3B82F6] bg-[#3B82F6]" : "border-[#EAECF0]"
-                      }`}
-                    >
-                      {active && (
-                        <Check className="size-2.5 text-white" strokeWidth={3} aria-hidden="true" />
-                      )}
-                    </span>
-                    <span className="min-w-0 truncate">
-                      {group.displayValue ? group.displayValue(value) : value}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-        </div>
+              {section.label}
+            </p>
 
-        {hasActive && (
-          <div className="mt-1 border-t border-[#F3F3F3] pt-1">
-            <button
-              onClick={onClear}
-              className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-[#888888] transition-[background-color,color] duration-200 hover:bg-[#F5F5F5] hover:text-[#525252]"
-            >
-              Clear all filters
-            </button>
+            {section.checklist && (
+              <div className="flex flex-col pb-1.5">
+                {section.checklist.values.map((value) => {
+                  const active = isChecklistActive(section.checklist!.key, value);
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      role="checkbox"
+                      aria-checked={active}
+                      onClick={() => onToggleChecklist(section.checklist!.key, value)}
+                      className="flex h-8 items-center gap-[9px] rounded-[var(--radius-element)] px-2 text-left transition-colors duration-150 hover:bg-[var(--surface-subtle)]"
+                    >
+                      <span
+                        className={cn(
+                          "flex size-3.5 shrink-0 items-center justify-center rounded-[var(--radius-cell)] border",
+                          active ? "border-[var(--blue)] bg-[var(--blue)]" : "border-[var(--ink-300)]"
+                        )}
+                      >
+                        {active && <Check className="size-2.5 text-white" strokeWidth={3} aria-hidden="true" />}
+                      </span>
+                      <span className="min-w-0 truncate text-[12px]" style={{ color: "var(--ink-900)" }}>
+                        {section.checklist!.displayValue ? section.checklist!.displayValue(value) : value}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {section.segmented?.map((facet) => (
+              <div key={facet.key}>
+                {facet.rowLabel && (
+                  <p className="px-2 pb-1 text-[10px]" style={{ color: "var(--ink-500)" }}>
+                    {facet.rowLabel}
+                  </p>
+                )}
+                <Segmented
+                  facet={facet}
+                  value={segmentedValue(facet.key)}
+                  onSelect={(v) => onSelectSegment(facet.key, v)}
+                />
+              </div>
+            ))}
           </div>
-        )}
+        ))}
+
+        {/* Footer — the only place a count lives; the trigger carries none. */}
+        <div
+          className="mt-0.5 flex items-center gap-2 px-2 pb-1 pt-2"
+          style={{ borderTop: "1px solid var(--border-hairline)" }}
+        >
+          <button
+            type="button"
+            onClick={onClear}
+            disabled={!hasActive}
+            className="text-[11px] font-medium disabled:cursor-default"
+            style={{ color: hasActive ? "var(--blue)" : "var(--ink-300)" }}
+          >
+            Clear all
+          </button>
+          <div className="flex-1" />
+          <span className="text-micro tabular">
+            {resultCount} of {totalCount} {totalCount === 1 ? "match" : "matches"}
+          </span>
+        </div>
       </PopoverContent>
     </Popover>
   );

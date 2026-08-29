@@ -8,6 +8,7 @@ import {
   Swords,
   Settings,
   HelpCircle,
+  Video,
 } from "lucide-react";
 
 /**
@@ -32,7 +33,7 @@ export type NavLink = {
 
 export const PERSONAL_NAV: readonly NavLink[] = [
   { name: "Home", href: "/dashboard", icon: Home },
-  { name: "Matches", href: "/dashboard/matches", icon: Calendar },
+  { name: "Matches", href: "/dashboard/matches", icon: Video },
   { name: "Statistics", href: "/dashboard/statistics", icon: BarChart3 },
   { name: "Ask", href: "/dashboard/ask", icon: MessageSquare },
 ];
@@ -60,8 +61,9 @@ export const PERSONAL_NAV: readonly NavLink[] = [
  * collision and shipped it anyway — which left the rail with two identical
  * glyphs side by side and made the label the only thing telling them apart.
  * Schedule takes `ClipboardList`: what a coach fills in before anyone plays.
- * Matches keeps `Calendar`, the glyph `PERSONAL_NAV` already gives it, so one
- * destination does not change shape when the workspace switcher moves.
+ * Matches takes `Video` — one glyph per noun, film rather than a date — the
+ * same icon `PERSONAL_NAV` already gives it, so one destination does not
+ * change shape when the workspace switcher moves.
  *
  * Opponents took Compare's slot and its `Swords`. Compare answered "which of my
  * two players is holding serve better" and nothing replaces it — that was
@@ -74,7 +76,7 @@ export const PERSONAL_NAV: readonly NavLink[] = [
 export const TEAM_NAV: readonly NavLink[] = [
   { name: "Team Home", href: "/dashboard/team", icon: Home },
   { name: "Schedule", href: "/dashboard/team/schedule", icon: ClipboardList },
-  { name: "Matches", href: "/dashboard/matches", icon: Calendar },
+  { name: "Matches", href: "/dashboard/matches", icon: Video },
   { name: "Roster", href: "/dashboard/team/roster", icon: Users },
   { name: "Opponents", href: "/dashboard/opponents", icon: Swords },
 ];

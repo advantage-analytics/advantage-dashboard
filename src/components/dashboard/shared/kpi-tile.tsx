@@ -222,7 +222,6 @@ export function KpiTile({
       ? "text-[#5DB955]"
       : "text-[#E51837]";
   const arrow = !trend ? "" : isNeutral ? "→" : trend.change > 0 ? "↑" : "↓";
-  const sign = !trend || isNeutral ? "" : trend.change > 0 ? "+" : "";
 
   const sharedMotion = {
     initial: skipAnimation ? false : { opacity: 0, y: 8 },
@@ -285,8 +284,7 @@ export function KpiTile({
             className={`text-[11px] font-medium inline-block ${trendColor}`}
             delay={0.1}
           >
-            {sign}
-            {trend.change}
+            {Math.abs(trend.change)}
           </ValueTransition>
           <span className="text-[10px] font-normal text-[var(--color-text-muted)]">
             {trend.changeLabel}

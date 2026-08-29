@@ -13,6 +13,7 @@ import {
 } from "@/lib/data/match-analysis";
 import { analysisFor, loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import { MatchAnalysisProgress } from "@/components/dashboard/matches/match-detail/match-analysis-progress";
+import { MarkReportSeen } from "@/components/dashboard/matches/match-detail/mark-report-seen";
 import { UnpublishedStatsNotice } from "@/components/dashboard/matches/match-detail/unpublished-stats-notice";
 import { DerivedStatsNotice } from "@/components/dashboard/matches/match-detail/derived-stats-notice";
 
@@ -275,6 +276,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
   return (
     <div className="flex-1 w-full bg-white">
       <div className="mx-auto max-w-screen-2xl px-6 sm:px-8 py-8 sm:py-10">
+        <MarkReportSeen matchId={matchId} />
         <SectionsStagger className="flex flex-col">
         <MatchDetailHero
           match={match}

@@ -14,20 +14,22 @@ interface MatchesGridProps {
   sortDir: SortDir;
   onSort: (field: SortField) => void;
   newMatchId?: string | null;
+  /** Match ids never opened on this device — draws the "New" `StatePill`. */
+  unseenIds?: Set<string>;
 }
 
 /**
- * One header per row column. Score and Analysis carry no sort: there is no
- * ordering of a set score that a player would ask for, and analysis state is a
- * filter concern, not a sort. Date has no column but is still sortable from the
- * toolbar's sort control, which is where the remaining fields live too.
+ * One header per row column, in the same order as `LIST_GRID_COLS`. Score
+ * carries no sort — there is no ordering of a set score a player would ask
+ * for — and Analysis is a filter concern, not a sort.
  */
 const COLUMNS: { label: string; field?: SortField }[] = [
-  { label: "Event", field: "event" },
   { label: "Result", field: "result" },
-  { label: "Score" },
   { label: "Opponent", field: "opponent" },
+  { label: "Score" },
+  { label: "Event", field: "event" },
   { label: "Analysis" },
+  { label: "Date", field: "date" },
   { label: "" },
 ];
 
@@ -43,6 +45,7 @@ export function MatchesGrid({
   sortDir,
   onSort,
   newMatchId,
+  unseenIds,
 }: MatchesGridProps): React.JSX.Element {
   /* Which layout shows is a width question, so Tailwind answers it rather than
      React. Held in state it could only be read after mount, so the server — which
@@ -69,22 +72,20 @@ export function MatchesGrid({
           {COLUMNS.map((col, i) => (
             <div
               key={col.label || `col-${i}`}
-              className="min-w-0"
+              className={`min-w-0 ${col.label === "Date" ? "text-right" : ""}`}
               role="columnheader"
               aria-sort={col.field === sortField ? (sortDir === "asc" ? "ascending" : "descending") : undefined}
             >
               {col.field ? (
                 <button
                   onClick={() => onSort(col.field!)}
-                  className="inline-flex items-center gap-0.5 text-[9px] font-medium text-[#AAAAAA] uppercase tracking-[1.5px] hover:text-[#525252] hover:underline underline-offset-2 cursor-pointer transition-[color] duration-200"
+                  className="eyebrow-sm inline-flex items-center gap-0.5 hover:text-[#525252] hover:underline underline-offset-2 cursor-pointer transition-[color] duration-200"
                 >
                   {col.label}
                   <SortIcon field={col.field} sortField={sortField} sortDir={sortDir} />
                 </button>
               ) : (
-                <span className="text-[9px] font-medium text-[#AAAAAA] uppercase tracking-[1.5px]">
-                  {col.label}
-                </span>
+                <span className="eyebrow-sm">{col.label}</span>
               )}
             </div>
           ))}
@@ -94,7 +95,12 @@ export function MatchesGrid({
             the route-level entrance. */}
         <div className="border-t border-[#F3F3F3]">
           {matches.map((match) => (
-            <MatchCardList key={match.id} match={match} isNew={match.id === newMatchId} />
+            <MatchCardList
+              key={match.id}
+              match={match}
+              isNew={match.id === newMatchId}
+              unseen={unseenIds?.has(match.id)}
+            />
           ))}
         </div>
       </div>

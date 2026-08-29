@@ -1,18 +1,13 @@
 import { redirect } from "next/navigation";
 import HomeContent from "./home-content";
 import KpiCards from "@/components/dashboard/home/kpi-cards";
-import { AiInsightCard } from "@/components/dashboard/ai-insight-card";
-import HomeAiInsight from "@/components/dashboard/home/home-ai-insight";
-
-import MatchHeatmap from "@/components/dashboard/home/match-heatmap";
-import ActivityFeed from "@/components/dashboard/home/activity-feed";
 import { createClient } from "@/lib/supabase/server";
 import { getMyPlayerIds } from "@/lib/data/player-identity-server";
-import {
-  getOverallPerformance,
-  getTopKpiMovers,
-} from "@/lib/data/performance-server";
+import { getOverallPerformance } from "@/lib/data/performance-server";
 import type { KpiCardData } from "@/lib/data/performance-server";
+import { getPersonalUsage } from "@/lib/data/usage-server";
+import { currentBillingMonth } from "@/lib/services/splitstep/config";
+import { buildInsightEvidence } from "@/lib/ui/insight-evidence";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -22,9 +17,9 @@ export default async function Home() {
     redirect("/login");
   }
 
-  // Fetch user profile and performance data in parallel
   const userId = data.claims.sub;
-  const [{ data: user }, performanceData, myPlayerIds] = await Promise.all([
+  const billingMonth = currentBillingMonth();
+  const [{ data: user }, performanceData, myPlayerIds, usage] = await Promise.all([
     supabase
       .from("users")
       .select("first_name, last_name")
@@ -34,6 +29,7 @@ export default async function Home() {
     // Which ids mean "me" on a match row. `cache()`d, so the several readers on
     // this page share one round trip.
     getMyPlayerIds(),
+    getPersonalUsage(userId, billingMonth),
   ]);
 
   // Real name only — when absent, the greeting drops the name rather than
@@ -42,10 +38,7 @@ export default async function Home() {
     .filter(Boolean)
     .join(" ");
 
-  const { kpiCards, winRate, form, matchCount, heatmap, views } =
-    performanceData;
-
-  const overallView = views[0];
+  const { kpiCards, winRate, form, matchCount } = performanceData;
   const hasMatches = matchCount > 0;
 
   const allKpiCards: KpiCardData[] = [
@@ -62,9 +55,12 @@ export default async function Home() {
     },
   ];
 
-  // Deterministic evidence chips for the AI insight — the same top movers the
-  // insight prompt narrates, sourced from real computed stats (never LLM text).
-  const insightStats = getTopKpiMovers(kpiCards, 2);
+  // The Focus card's evidence line, composed here from the same computed KPI
+  // movers the strip above it renders. The model never sees this sentence and
+  // never writes a figure — it supplies only the claim above it. `null` when
+  // there is no movement to report, which is what keeps the card off the page
+  // entirely rather than letting it reach for something to say.
+  const insightEvidence = buildInsightEvidence(kpiCards, matchCount);
 
   // Signature of the data the insight is built from. When a new match is uploaded
   // (and processed), these change, busting the client-side insight cache so the
@@ -85,24 +81,10 @@ export default async function Home() {
           userId={userId}
           playerIds={myPlayerIds}
           kpiStrip={allKpiCards.length > 0 ? <KpiCards cards={allKpiCards} matchCount={matchCount} /> : undefined}
-          sidebar={hasMatches ? (
-            <>
-              <AiInsightCard storageKey="advantage-ai-insight-dismissed">
-                <HomeAiInsight
-                  supportingStats={insightStats}
-                  cacheSignature={insightSignature}
-                />
-              </AiInsightCard>
-              <MatchHeatmap
-                heatmap={heatmap}
-                matchCount={matchCount}
-                wins={overallView.wins}
-                losses={overallView.losses}
-                form={form}
-              />
-              <ActivityFeed userId={userId} playerIds={myPlayerIds} />
-            </>
-          ) : undefined}
+          usage={usage}
+          matchCount={matchCount}
+          insightEvidence={insightEvidence}
+          insightSignature={insightSignature}
         />
       </div>
     </div>

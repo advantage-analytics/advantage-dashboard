@@ -3,26 +3,20 @@ import { Gauge } from "lucide-react";
 import { formatResetDate } from "@/lib/data/usage-format";
 
 /**
- * The program's budget, as the last line on the page.
+ * The workspace's budget, as the last line on a Home page.
  *
  * It used to be a card beside the greeting, sized and worded by whether the
  * page had matches in it yet. Round 45's rule is that the frame never moves,
  * and a block that is a headline on day zero and a sidebar a week later is the
- * frame moving. Usage is a standing fact about the program, not news about
- * this visit, so it reads as a footer: present every time, in the same place,
- * saying the same thing in different numbers.
+ * frame moving. Usage is a standing fact, not news about this visit, so it
+ * reads as a footer: present every time, in the same place, saying the same
+ * thing in different numbers.
  *
  * Hours **remaining**, not hours spent. The meter this replaces led with the
  * used number because a bar has to fill from somewhere; a sentence does not,
- * and the question a coach actually asks before sending a match is how much is
- * left. There is no bar — with the number stated in words, a 4%-full track was
- * decoration competing with it.
- *
- * The free-through clause moved here too, and no longer depends on the page
- * being empty. Two surfaces stating usage differently is how they start
- * disagreeing; this is now the only place on the page that states it at all,
- * and Settings › Usage — one click away through the link — is where the
- * per-person breakdown lives.
+ * and the question a person actually asks before sending a match is how much
+ * is left. There is no bar — with the number stated in words, a 4%-full track
+ * was decoration competing with it.
  */
 
 /**
@@ -41,6 +35,7 @@ export function UsageFooter({
   usedSeconds,
   capSeconds,
   billingMonth,
+  note,
 }: {
   usedSeconds: number;
   capSeconds: number;
@@ -51,9 +46,11 @@ export function UsageFooter({
    * otherwise report last month's hours against next month's reset.
    */
   billingMonth: string;
+  /** A trailing clause, e.g. "free through Dec 31, 2026". Omitted when absent. */
+  note?: string;
 }) {
   // Clamped: an over-spend is a quota bug, and "-2 of 75 hours left" would
-  // report it to the coach as if it were their problem.
+  // report it to the viewer as if it were their problem.
   const leftSeconds = Math.max(0, capSeconds - usedSeconds);
 
   return (
@@ -67,7 +64,7 @@ export function UsageFooter({
       <p className="text-body-sm">
         <span className="tabular">{hours(leftSeconds)}</span> of{" "}
         <span className="tabular">{hours(capSeconds)}</span> hours left this
-        month · free through Dec 31, 2026
+        month{note ? ` · ${note}` : ""}
       </p>
 
       <span className="text-micro tabular ml-auto">
@@ -81,7 +78,8 @@ export function UsageFooter({
 
       <Link
         href="/dashboard/settings/usage"
-        className="text-micro transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)]"
+        className="text-[11px] font-medium transition-colors duration-200"
+        style={{ color: "var(--blue)" }}
       >
         Usage
       </Link>

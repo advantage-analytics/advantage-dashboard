@@ -50,20 +50,35 @@ const MATCHES_CRUMB = { label: "Matches", href: "/dashboard/matches" };
 
 /**
  * Pages whose leading slot is the workspace itself rather than a position
- * within a flow (design 9g).
+ * within a flow (design 9g, and 1a–1g for the personal pair).
  *
- * Team Home is about the program, so naming it "Team Home" spent the slot
- * restating the rail's highlighted row. The workspace name is the better thing
- * to spend it on — not the only thing that says it, though: the rail shows the
- * name whenever it is expanded and its trigger carries
- * `aria-label="Workspace: <name>. Switch workspace"` in every state. The two
- * treatments are alternatives, never both — a trail *and* a title in the same
- * slot reads as two competing answers to "where am I".
+ * The rule these three share: a top-level destination already names itself in
+ * display type in its own body, and the rail already highlights the row that
+ * got you here — so a crumb reading "Matches" above a page reading "Matches"
+ * spends the slot restating what two other things on screen say. The workspace
+ * is the one fact the page body never states. Not the only thing that says it,
+ * though: the rail shows the name whenever it is expanded and its trigger
+ * carries `aria-label="Workspace: <name>. Switch workspace"` in every state.
+ * The two treatments are alternatives, never both — a trail *and* a title in
+ * the same slot reads as two competing answers to "where am I".
  *
- * `/dashboard` is deliberately absent: its crumb list is empty today and stays
- * that way.
+ * Home was absent until 1a–1g, on the reasoning that its crumb list is empty so
+ * there was nothing to displace. That confused "no trail" with "nothing worth
+ * saying": every one of those seven frames draws "Personal · <name>" here, and
+ * on the page that greets you by first name it is the line that says *whose
+ * data* — the seam a claimed college player crosses with a second workspace one
+ * click away.
+ *
+ * Exact matches, so `/dashboard/matches/new` and `/dashboard/matches/[matchId]`
+ * keep their trails: those are positions within a flow, which is what a trail
+ * is for. Statistics, Ask and Help stay on crumbs — no design round has covered
+ * them, and their bodies do not all carry a display-type title to displace.
  */
-const WORKSPACE_TITLE_PATHS = new Set(["/dashboard/team"]);
+const WORKSPACE_TITLE_PATHS = new Set([
+  "/dashboard",
+  "/dashboard/matches",
+  "/dashboard/team",
+]);
 
 /**
  * The crumb for any page that is simply a navigation destination.
@@ -175,7 +190,7 @@ export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
   }, [matchId]);
 
   const title = WORKSPACE_TITLE_PATHS.has(pathname)
-    ? workspaceTitle(active)
+    ? workspaceTitle(active, viewer)
     : null;
 
   // A match detail page is one page. `matches/[matchId]/` has no
@@ -243,10 +258,11 @@ export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
             both. The collapse toggle moved into the sidebar's bottom group,
             where it never shifts relative to Settings and Help. */}
         <div className="flex min-w-0 flex-1 items-center">
-          {/* School first and heaviest; the squad trails it in micro type with
-              no dash or dot, because the pair reads as one name rather than
-              two facts. The qualifier is dropped entirely — not emptied —
-              where there is no squad, so `gap-2` has nothing to space. */}
+          {/* Workspace first and heaviest; the qualifier — the squad on a team,
+              the viewer's name on a personal one — trails it in micro type with
+              no dash or dot, because the pair reads as one name rather than two
+              facts. The qualifier is dropped entirely — not emptied — where
+              there is none, so `gap-2` has nothing to space. */}
           {title && (
             <span className="inline-flex items-baseline gap-2">
               {/* No screen-reader separator between the two spans, and none
@@ -260,11 +276,15 @@ export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
               </span>
               {title.qualifier && (
                 /* `text-micro` bakes in --ink-500, which colors.css reserves
-                   for decoration at 3.54:1 — and this qualifier is the only
-                   thing telling a school's men's and women's workspaces apart,
-                   so it has to be read. --ink-600 is the documented AA-gap
-                   token, 4.83:1. Inline because the DS class is unlayered and
-                   beats a Tailwind colour utility. */
+                   for decoration at 3.54:1 — and nothing in this slot is
+                   decoration. On a team it is the only thing telling a school's
+                   men's and women's workspaces apart; on a personal one it is
+                   the only thing telling you whose data you are looking at,
+                   since every personal workspace is called "Personal".
+                   --ink-600 is the documented AA-gap token, 4.83:1. One step
+                   darker than the frames draw it, deliberately: contrast is a
+                   floor, and one rule in one slot beats two. Inline because the
+                   DS class is unlayered and beats a Tailwind colour utility. */
                 <span className="text-micro" style={{ color: "var(--ink-600)" }}>
                   {title.qualifier}
                 </span>

@@ -11,6 +11,7 @@ const NEW_MATCH_HREF = "/dashboard/matches/new";
 
 interface CreateMatchButtonProps {
   variant?: "dark" | "blue";
+  label?: string;
 }
 
 const variantStyles = {
@@ -23,7 +24,10 @@ const iconStyles = {
   blue: "w-4 h-4",
 } as const;
 
-export function CreateMatchButton({ variant = "dark" }: CreateMatchButtonProps): React.JSX.Element {
+export function CreateMatchButton({
+  variant = "dark",
+  label = "Create Match",
+}: CreateMatchButtonProps): React.JSX.Element {
   const router = useRouter();
   const [isMac, setIsMac] = useState(true);
 
@@ -55,7 +59,7 @@ export function CreateMatchButton({ variant = "dark" }: CreateMatchButtonProps):
       )}
     >
       <Plus className={iconStyles[variant]} strokeWidth={2} aria-hidden="true" />
-      Create Match
+      {label}
       <kbd className="ml-1 text-[10px] font-medium leading-none px-1 py-0.5 rounded bg-white/20">
         {isMac ? "\u2318U" : "\u2303U"}
       </kbd>

@@ -321,22 +321,43 @@ export function teamLabel(team: Workspace['team']): string | null {
 
 /**
  * The header's leading slot on the pages whose subject is the workspace itself
- * rather than a position within a flow (design 9g).
+ * rather than a position within a flow (design 9g, and 1a–1g for personal).
  *
- * The school carries the weight and the squad is a quiet qualifier beside it,
- * so the two are returned separately rather than joined into one string: the
- * caller renders them as two spans in different type, and a workspace with no
- * squad to name — every personal one, and a program that fields a single team —
- * must render the name alone rather than an empty element and its gap.
+ * The workspace carries the weight and a quiet qualifier sits beside it, so the
+ * two are returned separately rather than joined into one string: the caller
+ * renders them as two spans in different type, and a workspace with nothing to
+ * qualify — a program that fields a single team — must render the name alone
+ * rather than an empty element and its gap.
  *
- * `teamLabel()` yields the possessive on its own because the switcher already
- * sits under the word "workspace"; a header naming nothing else has to say what
- * sport it is.
+ * What the qualifier *is* differs by kind, because the ambiguity differs:
+ *
+ * - **team** — the squad. Two workspaces at one school are called the same
+ *   thing, so this is the only thing telling them apart. `teamLabel()` yields
+ *   the possessive on its own because the switcher already sits under the word
+ *   "workspace"; a header naming nothing else has to say what sport it is.
+ * - **personal** — the viewer's name. Every personal workspace is called
+ *   "Personal", so alone it says which *kind* of workspace this is without
+ *   saying whose. That is the pairing 1a–1g draw ("Personal · Marcus Reid"),
+ *   and it is what makes the slot worth spending on a page whose body already
+ *   greets you by name: the greeting says who is reading, this says whose data
+ *   is on screen. Falls back to the email local part, since `Viewer.name`
+ *   already does — an unnamed account gets *something* it recognises here
+ *   rather than the bare word "Personal". That is the opposite call from the
+ *   Home greeting, which drops the name entirely when it is absent: a greeting
+ *   addressing "fluffybuddycj" is worse than one addressing nobody, but a
+ *   scope label reading "fluffybuddycj" is still a correct scope label.
  */
-export function workspaceTitle(workspace: Workspace): {
+export function workspaceTitle(
+  workspace: Workspace,
+  viewer: Viewer
+): {
   name: string;
   qualifier: string | null;
 } {
+  if (workspace.kind === 'personal') {
+    return { name: workspace.name, qualifier: viewer.name.trim() || null };
+  }
+
   const squad = teamLabel(workspace.team);
   return {
     name: workspace.name,

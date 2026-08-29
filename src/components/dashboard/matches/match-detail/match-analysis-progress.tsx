@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { CircleX, Info } from "lucide-react";
+import { TriangleAlert, Info } from "lucide-react";
 import {
   ANALYSIS_LABEL,
   PIPELINE_STAGES,
@@ -190,7 +190,10 @@ export function MatchAnalysisProgress({
             className="mt-6 flex items-start gap-2.5 rounded-[10px] border border-[rgba(229,24,55,0.2)] bg-[rgba(229,24,55,0.04)] px-3.5 py-3"
             role="alert"
           >
-            <CircleX
+            {/* Not `CircleX` — reserved for `ResultMark`'s won/lost glyph
+                elsewhere in the matches list. `TriangleAlert` matches
+                `needs-attention.tsx`'s own icon for a failed analysis job. */}
+            <TriangleAlert
               className="mt-0.5 size-[15px] shrink-0 text-[#E51837]"
               strokeWidth={1.5}
               aria-hidden="true"

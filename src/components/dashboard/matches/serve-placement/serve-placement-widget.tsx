@@ -298,7 +298,7 @@ function deriveZoneFromX(lx: number): string {
 
 /* ── Zone tooltip (preview + fullscreen) ──────────────────── */
 
-type ZoneKey = "deuce-wide" | "deuce-body" | "deuce-t" | "ad-t" | "ad-body" | "ad-wide";
+export type ZoneKey = "deuce-wide" | "deuce-body" | "deuce-t" | "ad-t" | "ad-body" | "ad-wide";
 
 const ZONES: { key: ZoneKey; label: string; x1: number; x2: number }[] = [
   { key: "deuce-wide", label: "Wide", x1: SINGLES_LEFT, x2: ZONE_LINES_X[0] },
@@ -315,7 +315,7 @@ function classifyZone(x: number): ZoneKey {
   return cx < CENTER_X ? "deuce-t" : "ad-t";
 }
 
-interface ZoneStats {
+export interface ZoneStats {
   count: number;
   pct: number;
   first: number;
@@ -331,7 +331,7 @@ function emptyZoneStats(): ZoneStats {
   return { count: 0, pct: 0, first: 0, second: 0, won: 0, lost: 0, ace: 0, doubleFault: 0, winPct: 0 };
 }
 
-function computeZoneStats(dots: ServeDot[]): Record<ZoneKey, ZoneStats> | null {
+export function computeZoneStats(dots: ServeDot[]): Record<ZoneKey, ZoneStats> | null {
   if (dots.length === 0) return null;
   const result: Record<ZoneKey, ZoneStats> = {
     "deuce-wide": emptyZoneStats(),

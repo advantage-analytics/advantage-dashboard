@@ -3,11 +3,12 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useSearchParams, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown, X } from "lucide-react";
+import { Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown, Filter as FilterIcon } from "lucide-react";
 import { EmptyMatches } from "./empty-matches";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import {
   isAnalysisFailed,
+  isAnalysisReady,
   isInFlight,
   isLiveUpdating,
 } from "@/lib/data/match-analysis";
@@ -17,8 +18,14 @@ import {
 } from "@/hooks/use-live-match-analysis";
 import { normalizedPersonName } from "@/lib/data/person-name";
 import { providers } from "@/lib/providers";
+import { useUnseenReportIds } from "@/lib/ui/seen-reports";
 import { MatchesGrid, type SortField, type SortDir } from "./matches-grid";
-import { MatchesFilterPanel, type FilterGroup } from "./matches-filter-panel";
+import {
+  MatchesFilterPanel,
+  type FilterOption,
+  type FilterPanelSection,
+} from "./matches-filter-panel";
+import { LifecycleChips, type LifecycleValue } from "./lifecycle-chips";
 
 function providerName(id: string): string {
   return providers.find((p) => p.id === id)?.name ?? id;
@@ -39,7 +46,10 @@ type FilterKey =
   | "source"
   | "analysis"
   /** Team scope only — see `FILTER_GROUPS`. */
-  | "player";
+  | "player"
+  /** A scouting axis (who you played), not a lifecycle one — grouped apart in the panel. */
+  | "hand"
+  | "backhand";
 
 /**
  * Whether a stored filter value and a chip mean the same thing.
@@ -67,6 +77,8 @@ const FILTER_KEYS: FilterKey[] = [
   "source",
   "analysis",
   "player",
+  "hand",
+  "backhand",
 ];
 
 /**
@@ -90,6 +102,66 @@ interface ActiveFilter {
   value: string;
 }
 
+/**
+ * Design 18a's three fixed 2-option facets — segmented, not checklists, so
+ * they're single-select by construction (see `matches-filter-panel.tsx`).
+ * `HAND_OPTIONS`/`BACKHAND_OPTIONS` also back `describeFilters`'s scouting
+ * sentence below, which needs the same value → phrase mapping.
+ */
+const RESULT_OPTIONS: FilterOption[] = [
+  { value: null, label: "All" },
+  { value: "Won", label: "Won" },
+  { value: "Loss", label: "Lost" },
+];
+const HAND_OPTIONS: FilterOption[] = [
+  { value: null, label: "Any" },
+  { value: "right", label: "Right" },
+  { value: "left", label: "Left" },
+];
+const BACKHAND_OPTIONS: FilterOption[] = [
+  { value: null, label: "Any" },
+  { value: "one-handed", label: "One-hand" },
+  { value: "two-handed", label: "Two-hand" },
+];
+
+/** For every facet's stored value → its human label, used uniformly by `describeFilters`. */
+function displayValueFor(key: FilterKey, value: string): string {
+  if (key === "result") return RESULT_OPTIONS.find((o) => o.value === value)?.label ?? value;
+  const group = FILTER_GROUPS.find((g) => g.key === key);
+  return group?.displayValue ? group.displayValue(value) : value;
+}
+
+/**
+ * The applied-filter strip's sentence. Hand + backhand together get the
+ * curated scouting phrase; anything else falls back to a plain joined list of
+ * each facet's own display label — honest, if less like a sentence, rather
+ * than a template guessing at combinations it was never written for.
+ */
+function describeFilters(filters: ActiveFilter[]): string {
+  const hand = filters.find((f) => f.key === "hand")?.value;
+  const backhand = filters.find((f) => f.key === "backhand")?.value;
+  const rest = filters.filter((f) => f.key !== "hand" && f.key !== "backhand");
+  const parts: string[] = [];
+
+  if (hand && backhand) {
+    parts.push(
+      `${hand === "left" ? "Left" : "Right"}-handed opponents with a ${backhand === "one-handed" ? "one" : "two"}-handed backhand`
+    );
+  } else if (hand) {
+    parts.push(`${hand === "left" ? "Left" : "Right"}-handed opponents`);
+  } else if (backhand) {
+    parts.push(`Opponents with a ${backhand === "one-handed" ? "one" : "two"}-handed backhand`);
+  }
+
+  parts.push(...rest.map((f) => displayValueFor(f.key, f.value)));
+  return parts.join(" · ");
+}
+
+/**
+ * The open, data-driven checklist facets only — Result/Hand/Backhand moved to
+ * the fixed segmented constants above, since a segmented control needs a
+ * known-ahead-of-time option list, not one read off the matches.
+ */
 const FILTER_GROUPS: {
   key: FilterKey;
   label: string;
@@ -124,11 +196,6 @@ const FILTER_GROUPS: {
         normalizedPersonName(a).localeCompare(normalizedPersonName(b))
       );
     },
-  },
-  {
-    key: "result",
-    label: "Result",
-    getValues: () => ["Won", "Loss"],
   },
   {
     key: "matchType",
@@ -366,6 +433,15 @@ export function MatchesPageContent({
     }
     return result;
   });
+  const [lifecycle, setLifecycle] = useState<LifecycleValue>(() => {
+    const v = searchParams.get("lifecycle");
+    return v === "new" || v === "in-progress" ? v : "all";
+  });
+  const readyMatchIds = useMemo(
+    () => matches.filter((m) => !m.analysis || isAnalysisReady(m.analysis.status)).map((m) => m.id),
+    [matches]
+  );
+  const unseenIds = useUnseenReportIds(readyMatchIds);
   const [page, setPage] = useState(() => Number(searchParams.get("page")) || 1);
   const [pageSize, setPageSize] = useState<number>(() => {
     const ps = Number(searchParams.get("pageSize"));
@@ -491,6 +567,10 @@ export function MatchesPageContent({
             return m.sourceProvider === filter.value;
           case "analysis":
             return analysisGroup(m) === filter.value;
+          case "hand":
+            return m.player2Hand === filter.value;
+          case "backhand":
+            return m.player2Backhand === filter.value;
           case "player":
             return (
               normalizedPersonName(m.player1.name) ===
@@ -502,8 +582,17 @@ export function MatchesPageContent({
       });
     }
 
+    // Lifecycle — independent of the panel (v3's Data Table law 6): chips
+    // answer "what's the state of this match", the panel answers everything
+    // else, and the two never gate on the same predicate.
+    if (lifecycle === "new") {
+      result = result.filter((m) => unseenIds.has(m.id));
+    } else if (lifecycle === "in-progress") {
+      result = result.filter((m) => !!m.analysis && isInFlight(m.analysis.status));
+    }
+
     return result;
-  }, [matches, search, filters]);
+  }, [matches, search, filters, lifecycle, unseenIds]);
 
   // Sort matches
   const sorted = useMemo(() => {
@@ -542,10 +631,10 @@ export function MatchesPageContent({
   const rangeStart = sorted.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
   const rangeEnd = Math.min(safePage * pageSize, sorted.length);
 
-  // Reset page when filters/search change
+  // Reset page when filters/search/lifecycle change
   useEffect(() => {
     setPage(1);
-  }, [search, filters, pageSize]);
+  }, [search, filters, lifecycle, pageSize]);
 
   // Sync state to URL
   const isInitialMount = useRef(true);
@@ -560,10 +649,11 @@ export function MatchesPageContent({
     if (sortDir !== "desc") params.set("dir", sortDir);
     if (page > 1) params.set("page", String(page));
     if (pageSize !== 10) params.set("pageSize", String(pageSize));
+    if (lifecycle !== "all") params.set("lifecycle", lifecycle);
     for (const f of filters) params.append(f.key, f.value);
     const query = params.toString();
     window.history.replaceState(null, "", `${pathname}${query ? `?${query}` : ""}`);
-  }, [search, sortField, sortDir, page, pageSize, filters, pathname]);
+  }, [search, sortField, sortDir, page, pageSize, filters, lifecycle, pathname]);
 
   function toggleSort(field: SortField) {
     if (sortField === field) {
@@ -584,6 +674,23 @@ export function MatchesPageContent({
     });
   }, []);
 
+  /**
+   * A segmented facet's click always replaces, never toggles — that's what
+   * keeps Result/Hand/Backhand single-select. Selecting the neutral option
+   * ("All"/"Any", `value === null`) just clears the key.
+   */
+  const selectSegment = useCallback((key: FilterKey, value: string | null) => {
+    setFilters((prev) => {
+      const withoutKey = prev.filter((f) => f.key !== key);
+      return value === null ? withoutKey : [...withoutKey, { key, value }];
+    });
+  }, []);
+
+  const segmentedValue = useCallback(
+    (key: FilterKey) => filters.find((f) => f.key === key)?.value ?? null,
+    [filters]
+  );
+
   const clearFilters = useCallback(() => setFilters([]), []);
 
   const isFilterActive = useCallback(
@@ -593,18 +700,65 @@ export function MatchesPageContent({
   );
 
   // Values are read off the matches, so a category with nothing to offer drops
-  // out of the panel rather than opening onto an empty list.
-  const filterGroups: FilterGroup<FilterKey>[] = useMemo(
-    () =>
-      FILTER_GROUPS.filter((group) => !group.teamOnly || scope === "team").map(
-        (group) => ({
-          key: group.key,
-          label: group.label,
-          values: group.getValues(matches),
-          displayValue: group.displayValue,
-        })
-      ),
-    [matches, scope]
+  // out of the panel rather than opening onto an empty list. Order matches
+  // design 18a: Player (team scope) → Result → the data-driven checklists →
+  // Analysis → Opponent last, behind its own divider.
+  const filterSections: FilterPanelSection<FilterKey>[] = useMemo(() => {
+    const checklistSection = (
+      group: (typeof FILTER_GROUPS)[number]
+    ): FilterPanelSection<FilterKey> | null => {
+      if (group.teamOnly && scope !== "team") return null;
+      const values = group.getValues(matches);
+      if (values.length === 0) return null;
+      return {
+        label: group.label,
+        checklist: { key: group.key, values, displayValue: group.displayValue },
+      };
+    };
+
+    const byKey = new Map(FILTER_GROUPS.map((g) => [g.key, g]));
+    const sections: FilterPanelSection<FilterKey>[] = [];
+
+    const playerSection = checklistSection(byKey.get("player")!);
+    if (playerSection) sections.push(playerSection);
+
+    sections.push({
+      label: "Result",
+      segmented: [{ key: "result", options: RESULT_OPTIONS }],
+    });
+
+    for (const key of ["matchType", "courtType", "source"] as const) {
+      const section = checklistSection(byKey.get(key)!);
+      if (section) sections.push(section);
+    }
+
+    const analysisSection = checklistSection(byKey.get("analysis")!);
+    if (analysisSection) sections.push(analysisSection);
+
+    const handHasData = matches.some((m) => m.player2Hand);
+    const backhandHasData = matches.some((m) => m.player2Backhand);
+    if (handHasData || backhandHasData) {
+      sections.push({
+        label: "Opponent",
+        segmented: [
+          ...(handHasData ? [{ key: "hand" as FilterKey, rowLabel: "Hand", options: HAND_OPTIONS }] : []),
+          ...(backhandHasData
+            ? [{ key: "backhand" as FilterKey, rowLabel: "Backhand", options: BACKHAND_OPTIONS }]
+            : []),
+        ],
+      });
+    }
+
+    return sections;
+  }, [matches, scope]);
+
+  const lifecycleCounts = useMemo(
+    () => ({
+      all: matches.length,
+      new: unseenIds.size,
+      inProgress: matches.filter((m) => !!m.analysis && isInFlight(m.analysis.status)).length,
+    }),
+    [matches, unseenIds]
   );
 
   if (matches.length === 0) {
@@ -613,36 +767,24 @@ export function MatchesPageContent({
 
   return (
     <div>
-      {/* Toolbar: filter, search, sort — wraps on medium screens */}
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-5">
-        {/* Left: one filter button for every category */}
+      {/* Toolbar: lifecycle chips, filters, search, sort — wraps on medium screens */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <LifecycleChips active={lifecycle} counts={lifecycleCounts} onSelect={setLifecycle} />
+
+        {/* Right: filters, search, sort */}
         <div className="flex items-center gap-2">
           <MatchesFilterPanel
-            groups={filterGroups}
-            activeCount={filters.length}
-            isActive={isFilterActive}
-            onToggle={toggleFilter}
+            sections={filterSections}
+            hasActive={filters.length > 0}
+            isChecklistActive={isFilterActive}
+            onToggleChecklist={toggleFilter}
+            segmentedValue={segmentedValue}
+            onSelectSegment={selectSegment}
             onClear={clearFilters}
+            resultCount={sorted.length}
+            totalCount={matches.length}
           />
 
-          {/* Clear all filters + results count */}
-          {filters.length > 0 && (
-            <button
-              onClick={clearFilters}
-              className="text-xs text-[#888888] hover:text-[#525252] transition-[color] duration-200 ml-1"
-            >
-              Clear filters
-            </button>
-          )}
-          {(search || filters.length > 0) && (
-            <p className="text-xs text-[#AAAAAA] ml-1" aria-live="polite">
-              {sorted.length} {sorted.length === 1 ? "match" : "matches"}
-            </p>
-          )}
-        </div>
-
-        {/* Right: search, sort */}
-        <div className="flex items-center gap-2">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#CCCCCC]" />
             <input
@@ -665,34 +807,51 @@ export function MatchesPageContent({
         </div>
       </div>
 
+      {/* Applied-filter strip — the panel closes on apply, this states the cut
+          in words. Never chips, never a badge (v3's Data Table law 6). */}
+      {filters.length > 0 && (
+        <div
+          className="mb-4 flex flex-wrap items-center gap-2 rounded-[var(--radius-element)] px-3.5 py-2.5"
+          style={{ background: "var(--surface-subtle)" }}
+        >
+          <FilterIcon className="size-[13px] shrink-0" strokeWidth={1.5} style={{ color: "var(--ink-500)" }} aria-hidden="true" />
+          <span className="text-[11px]" style={{ color: "var(--ink-700)" }}>
+            {describeFilters(filters)}
+          </span>
+          <span className="size-[3px] rounded-full" style={{ background: "var(--ink-300)" }} aria-hidden="true" />
+          <span className="text-micro tabular">
+            {sorted.length} of {matches.length}
+          </span>
+          <div className="flex-1" />
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="whitespace-nowrap text-[11px] font-medium"
+            style={{ color: "var(--blue)" }}
+          >
+            Clear filter
+          </button>
+        </div>
+      )}
+
       {/* Table / Grid */}
       {sorted.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16">
           <Search className="h-8 w-8 text-[#D9D9D9] mb-3" />
           <p className="text-[14px] font-medium text-[#0D0D0D] mb-1">No matches found</p>
-          {(filters.length > 0 || search) && (
-            <div className="flex flex-col items-center gap-2 mt-1">
-              <div className="flex items-center gap-1.5 flex-wrap justify-center">
-                {search && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#F5F5F5] text-[11px] text-[#525252]">
-                    &ldquo;{search}&rdquo;
-                  </span>
-                )}
-                {filters.map((f) => (
-                  <span key={`${f.key}-${f.value}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#EBF2FD] text-[11px] text-[#3B82F6]">
-                    {f.value}
-                    <button
-                      onClick={() => toggleFilter(f.key, f.value)}
-                      className="hover:text-[#1D4ED8] transition-[color] duration-200"
-                      aria-label={`Remove ${f.value} filter`}
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
+          {(filters.length > 0 || search || lifecycle !== "all") && (
+            <div className="mt-1 flex flex-col items-center gap-2">
+              {search && (
+                <span className="text-[11px]" style={{ color: "var(--ink-600)" }}>
+                  &ldquo;{search}&rdquo;
+                </span>
+              )}
               <button
-                onClick={clearFilters}
+                onClick={() => {
+                  clearFilters();
+                  setSearch("");
+                  setLifecycle("all");
+                }}
                 className="text-xs text-[#888888] hover:text-[#3B82F6] underline underline-offset-2 transition-[color] duration-200"
               >
                 Clear all filters
@@ -707,6 +866,7 @@ export function MatchesPageContent({
           sortDir={sortDir}
           onSort={toggleSort}
           newMatchId={newMatchId}
+          unseenIds={unseenIds}
         />
       )}
 
