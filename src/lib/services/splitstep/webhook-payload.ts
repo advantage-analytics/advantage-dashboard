@@ -45,10 +45,23 @@ export interface ParsedWebhook {
    */
   trimmedVideoUrl: string | null;
   /**
-   * Vendor error text. Free-form, with raw underlying errors in it — store and
-   * log, never parse for control flow (handoff §7 Q7).
+   * The vendor's `error.message` — the string their docs designate for
+   * end-user display. NOT the top-level `message`, which prefixes raw
+   * internals (HTTPSConnectionPool strings and the like) and which the docs
+   * say must not be parsed or shown. Falls back to the old free-form search
+   * only when no structured error object exists.
    */
   errorMessage: string | null;
+  /**
+   * The structured error object's machine-readable fields, confirmed against
+   * the first real job_failed delivery (2026-08-28):
+   * { code: 'INTERNAL_ERROR', category: 'internal', step: 'downloading_video' }.
+   * The retry classifier branches on code and step; category is the fallback
+   * axis for codes we have never seen.
+   */
+  errorCode: string | null;
+  errorCategory: string | null;
+  errorStep: string | null;
   /** The `MatchID` we sent, echoed back. Fallback link to a job row. */
   matchId: string | null;
 }
@@ -179,11 +192,20 @@ export function parseWebhookPayload(body: unknown): ParsedWebhook {
   const nextStatus =
     mapToNextStatus(event) ?? mapToNextStatus(findFirst(body, ['status', 'state']));
 
-  // Only surface an error string on a delivery that actually failed. `message`
+  // Only surface error fields on a delivery that actually failed. `message`
   // is a common key for benign human-readable text, and storing "Job accepted"
   // in error_message would be worse than storing nothing.
+  //
+  // The structured object leads. Its `message` is the one string the vendor
+  // designates for end users; the free-form findFirst search is the fallback
+  // for a failure payload that carries no `error` object — and ERROR_KEYS
+  // starts with `message`, whose top-level value the docs say not to parse,
+  // so the fallback is a last resort, not an equal.
+  const errObj = nextStatus === 'failed' ? findErrorObject(body) : null;
   const errorMessage =
-    nextStatus === 'failed' ? findFirst(body, ERROR_KEYS) : null;
+    nextStatus === 'failed'
+      ? stringField(errObj, 'message') ?? findFirst(body, ERROR_KEYS)
+      : null;
 
   return {
     externalJobId: findFirst(body, JOB_ID_KEYS),
@@ -194,9 +216,67 @@ export function parseWebhookPayload(body: unknown): ParsedWebhook {
     sasUrl: asHttpUrl(findFirst(body, SAS_URL_KEYS)),
     trimmedVideoUrl: asHttpUrl(findFirst(body, TRIMMED_VIDEO_URL_KEYS)),
     errorMessage,
+    errorCode: stringField(errObj, 'code'),
+    errorCategory: stringField(errObj, 'category'),
+    errorStep: stringField(errObj, 'step'),
     // Guarded: the fallback lookup passes this straight into a uuid column.
     matchId: matchId && UUID_RE.test(matchId) ? matchId : null,
   };
+}
+
+/**
+ * Locate the vendor's structured error object: the first value under a key
+ * normalising to `error` that is a plain object. Same bounded depth-first walk
+ * as findFirst, for the same reason — the fields matter more than the path.
+ *
+ * Bare `code`/`step` are never searched for globally: they are far too generic
+ * as top-level keys, and a wrong match here feeds the retry classifier.
+ */
+function findErrorObject(
+  value: Json,
+  depth = 0
+): Record<string, Json> | null {
+  if (depth > 8 || value == null) return null;
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const found = findErrorObject(entry, depth + 1);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+
+  if (typeof value !== 'object') return null;
+
+  const record = value as Record<string, Json>;
+
+  for (const [key, entry] of Object.entries(record)) {
+    if (
+      normaliseKey(key) === 'error' &&
+      entry !== null &&
+      typeof entry === 'object' &&
+      !Array.isArray(entry)
+    ) {
+      return entry as Record<string, Json>;
+    }
+  }
+
+  for (const entry of Object.values(record)) {
+    const found = findErrorObject(entry, depth + 1);
+    if (found !== null) return found;
+  }
+
+  return null;
+}
+
+/** A non-empty string field of the error object, or null. */
+function stringField(
+  obj: Record<string, Json> | null,
+  key: string
+): string | null {
+  if (!obj) return null;
+  const value = obj[key];
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
 }
 
 function asHttpUrl(value: string | null): string | null {

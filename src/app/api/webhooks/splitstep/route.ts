@@ -283,6 +283,9 @@ export async function POST(request: NextRequest) {
       p_trimmed_video_url: payload.trimmedVideoUrl,
       p_error_message: payload.errorMessage,
       p_match_id: payload.matchId,
+      p_error_code: payload.errorCode,
+      p_error_category: payload.errorCategory,
+      p_error_step: payload.errorStep,
     })
     .single();
 
