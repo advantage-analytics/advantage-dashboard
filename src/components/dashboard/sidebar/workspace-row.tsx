@@ -7,6 +7,7 @@ import { Check, ChevronsUpDown, Plus, Loader2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { setActiveWorkspace } from "@/lib/workspace/actions";
 import { teamLabel, workspaceSubtitle, type Workspace } from "@/lib/workspace/types";
 import { PANEL_WIDTH } from "./sidebar-state";
@@ -21,8 +22,9 @@ import { RailTooltip } from "./rail-tooltip";
  * the row admits it is a control rather than a heading. No border, no shadow,
  * no blue on the row itself.
  *
- * The open menu carries the single blue-soft row in the whole sidebar — the
- * current workspace. That is the only chroma the sidebar spends.
+ * In the open menu the current workspace sits on a bare row — no wash, no
+ * hover — with a blue check as its only mark. The check is the one chroma the
+ * sidebar spends.
  */
 export function WorkspaceRow({ expanded }: { expanded: boolean }) {
   const { active, available } = useWorkspace();
@@ -128,7 +130,7 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
         // rail it was opened from; beside it, the icons stay visible.
         side={expanded ? "bottom" : "right"}
         align="start"
-        sideOffset={8}
+        sideOffset={expanded ? 6 : 8}
         style={{ width: PANEL_WIDTH }}
         className="rounded-[12px] border-[var(--border-medium)] p-1.5"
       >
@@ -136,57 +138,72 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
             the same height and the list reads as a list.
 
             The squad stays because it is the only thing separating two rows
-            that both say "Meridian State". The role goes: it is the same word
-            on both of a coach's rows, so it never decides which one to click,
-            and carrying it cost a stacked second line on team rows only —
-            "ZZ Test Program · Men's" over "Coach" standing visibly taller
-            than "Personal". Condensing it onto the line was the other option
-            and is worse: 232px leaves about 149px for text here, roughly 24
-            characters, and a third `·` segment would truncate the squad to
-            pay for a word that disambiguates nothing. Role is a fact about a
-            workspace you are already in — the Team pages state it. */}
+            that both say "Meridian State". The role moves to the row's dark
+            tooltip: it is the same word on both of a coach's rows, so it
+            never decides which one to click, and carrying it inline cost a
+            stacked second line on team rows only. The tooltip is where a row
+            says the rest of its story — "Men's team · Coach" — without
+            spending a line on it. */}
         {available.map((workspace) => {
           const isActive = workspace.id === active.id;
           const squadLabel = teamLabel(workspace.team);
+          const roleWord =
+            workspace.role.charAt(0).toUpperCase() + workspace.role.slice(1);
+          const tipDetail =
+            workspace.kind === "team"
+              ? [squadLabel && `${squadLabel} team`, roleWord]
+                  .filter(Boolean)
+                  .join(" · ")
+              : "Personal workspace";
           return (
-            <button
+            <ChromeTooltip
               key={workspace.id}
-              type="button"
-              disabled={pendingId !== null}
-              onClick={() => switchTo(workspace)}
-              className={cn(
-                "flex w-full items-center gap-2.5 rounded-[8px] px-2 py-2 text-left transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer",
-                // The single blue-soft row in the sidebar.
-                isActive
-                  ? "bg-[var(--blue-soft)]"
-                  : "hover:bg-[var(--surface-subtle)]"
-              )}
+              label={
+                squadLabel ? `${workspace.name} · ${squadLabel}` : workspace.name
+              }
+              detail={tipDetail}
+              side="right"
+              align="start"
+              sideOffset={8}
             >
-              <span
-                aria-hidden="true"
+              <button
+                type="button"
+                disabled={pendingId !== null}
+                onClick={() => switchTo(workspace)}
                 className={cn(
-                  "flex size-[22px] shrink-0 items-center justify-center rounded-[6px] text-[10px] font-medium text-white",
-                  workspace.kind === "team"
-                    ? "bg-[var(--ink-900)]"
-                    : "bg-[var(--blue)]"
+                  "flex w-full items-center gap-2.5 rounded-[8px] px-2 py-2 text-left transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer",
+                  // The current workspace sits bare — no wash, even on hover.
+                  // The blue check is its whole mark.
+                  !isActive &&
+                    "hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)]"
                 )}
               >
-                {workspace.mark}
-              </span>
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "flex size-[22px] shrink-0 items-center justify-center rounded-[6px] text-[10px] font-medium text-white",
+                    workspace.kind === "team"
+                      ? "bg-[var(--ink-900)]"
+                      : "bg-[var(--blue)]"
+                  )}
+                >
+                  {workspace.mark}
+                </span>
 
-              <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink-900)]">
-                {workspace.name}
-                {squadLabel && (
-                  <span className="text-[var(--ink-500)]"> · {squadLabel}</span>
-                )}
-              </span>
+                <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink-900)]">
+                  {workspace.name}
+                  {squadLabel && (
+                    <span className="text-[var(--ink-500)]"> · {squadLabel}</span>
+                  )}
+                </span>
 
-              {pendingId === workspace.id ? (
-                <Loader2 className="size-3 shrink-0 animate-spin text-[var(--ink-400)]" aria-hidden="true" />
-              ) : isActive ? (
-                <Check className="size-[13px] shrink-0 text-[var(--blue)]" strokeWidth={2} aria-hidden="true" />
-              ) : null}
-            </button>
+                {pendingId === workspace.id ? (
+                  <Loader2 className="size-3 shrink-0 animate-spin text-[var(--ink-400)]" aria-hidden="true" />
+                ) : isActive ? (
+                  <Check className="size-[13px] shrink-0 text-[var(--blue)]" strokeWidth={2} aria-hidden="true" />
+                ) : null}
+              </button>
+            </ChromeTooltip>
           );
         })}
 
@@ -194,7 +211,7 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
 
         <Link
           href="/claim"
-          className="flex w-full items-center gap-2.5 rounded-[8px] px-2 py-2 text-[12px] text-[var(--ink-700)] transition-colors duration-150 hover:bg-[var(--surface-subtle)]"
+          className="flex w-full items-center gap-2.5 rounded-[8px] px-2 py-2 text-[12px] text-[var(--ink-700)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)]"
         >
           <span className="flex size-[22px] shrink-0 items-center justify-center">
             <Plus className="size-3.5 text-[var(--ink-500)]" strokeWidth={1.5} aria-hidden="true" />

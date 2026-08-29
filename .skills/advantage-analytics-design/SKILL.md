@@ -630,9 +630,10 @@ bg-[var(--surface-subtle)] text-[var(--ink-900)]
 
 `rail-item.tsx` is the live implementation of this rule — it predates this
 doc entry, so treat any other "active = blue" pattern elsewhere in the repo
-as drift to fix, not a second valid style. The one blue-soft row that
-survives is the *current* workspace inside the open workspace-switcher menu
-(a menu selection, not a location). Tabs are unaffected — they keep the 2px
+as drift to fix, not a second valid style. The workspace-switcher menu's
+*current* row is bare — no wash, no hover — marked only by a blue check
+(per the v3 `SidebarNav` bundle, which retired the earlier blue-soft wash
+there; the check is the one chroma the sidebar spends). Tabs are unaffected — they keep the 2px
 blue underline (`layoutId="activeTab"`): a tab is a choice, a nav row is a
 location.
 
