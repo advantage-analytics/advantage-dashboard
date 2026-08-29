@@ -574,10 +574,10 @@ ordering, and match-deletion cleanup. What remains is almost entirely vendor-sid
 
 **Blocking, on the vendor:**
 
-- **`SPLITSTEP_API_URL` and `SPLITSTEP_API_KEY` are not yet in hand.** The key and the
-  webhook secret are being sent in separate emails, the link valid two days and
-  single-use. Nothing has been submitted end-to-end; everything downstream of submission
-  has only been exercised against the local harness.
+- ~~**`SPLITSTEP_API_URL` and `SPLITSTEP_API_KEY` are not yet in hand.**~~ In hand, and
+  set on Vercel for **Preview only** — Production submissions 503 and the reclaim cron
+  never fires there. A real 86-minute match has since gone end-to-end
+  (browser → Azure → vendor → signed webhook → results + trimmed video).
 - **The 8,000,000,000-byte size limit is unconfirmed for our account.** Their docs mark
   it "Enforced"; an earlier call put it at 10–12 GB. `MAX_VIDEO_SIZE_BYTES` takes the
   documented number, because rejecting at the file picker is recoverable and having the
@@ -589,10 +589,19 @@ ordering, and match-deletion cleanup. What remains is almost entirely vendor-sid
 - **~~Nothing calls `POST /api/splitstep/jobs`.~~** Closed. The wizard submits automatically
   once the upload finishes, and a submit failure leaves the job at `status: 'uploaded'`
   rather than marking it failed, so a retry needs nothing re-uploaded.
-- **Playback is not wired.** We now keep the vendor's trimmed video (§3), but nothing
-  renders it: `MatchVideoPanel` is orphaned and built for the upload flow, and the
-  `matches/[matchId]/video/` route CLAUDE.md describes does not exist. The asset is
-  secured; showing it is a separate piece of work.
+- ~~**Playback is not wired.**~~ Closed on the pilot branch (merged in PR #131):
+  `mintPlaybackSas()` (read-only, 30 minutes) plus `MatchVideoCard` on the match page
+  stream the trimmed video direct from Azure — proxying breaks range requests. The
+  orphaned `match-video-panel.tsx` was deleted with it. This is what makes the
+  R2-egress bullet below live rather than hypothetical.
+- **Retry after a vendor `job_failed` is a budget decision, not code.** The submit
+  route handles the cheap case — a job stuck at `uploaded`, no vendor job, bytes
+  already in Azure — and refuses when `external_job_id` is set, because retrying a
+  vendor-failed job means re-reserving quota and paying for a second vendor job on one
+  match. Whether a re-run may cost a program's 75 hours twice should be answered
+  before it is coded. A genuinely stalled job
+  (`85518306-2baf-427e-ad6c-79555041a523`) is waiting to be the retry path's first
+  real test on a Preview deploy.
 - **Trimmed videos are in Azure, and R2 would be cheaper.** Egress is the whole argument:
   ~$0.087/GB against R2's $0, with storage a wash. Azure won on the deadline, not on
   merit — a SAS expires and Azure→Azure copy is one server-side call, while Azure→R2
@@ -655,7 +664,7 @@ branch. The three that block Phase 2 are **Q8** (what `in` means on a serve), **
 | `NEXT_PUBLIC_SITE_URL` | Vercel, **per environment** | builds the vendor's WebhookUrl. One value shared across Production and Preview means a preview hands them the production origin, where the route does not exist |
 | `SPLITSTEP_WEBHOOK_SECRET` | Vercel | HMAC key, **issued by the vendor**. Unset = unsigned mode, which accepts anything |
 | `SPLITSTEP_WEBHOOK_REQUIRE_SIGNATURE` | Vercel | `true` = fail-closed on a missing signature. **Set this once a real delivery confirms `X-HMAC-Signature`** |
-| `SPLITSTEP_API_URL`, `SPLITSTEP_API_KEY` | Vercel | key issued by the vendor; still in transit |
+| `SPLITSTEP_API_URL`, `SPLITSTEP_API_KEY` | Vercel, **Preview only today** | key issued by the vendor. Production submissions 503 until set there |
 | `CRON_SECRET` | Vercel | any long random string. Vercel sends it as `Authorization: Bearer <secret>` to `/api/cron/reclaim-videos`. **Unset = the reclaim never runs** and source videos accumulate |
 | `R2_*` | — | **retired.** Still in `.env.example` until the R2 code is deleted; nothing reads them |
 

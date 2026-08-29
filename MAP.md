@@ -103,8 +103,8 @@ which exists four separate times.
 - **Statistics are computed twice by design:** `statistics-server.ts` for the
   initial server load, `statistics-client.ts` for recomputation when filters
   change. Both produce the same shape.
-- **Schema:** verify against the live database, not `supabase/migrations/` —
-  the folder runs well behind. `DATABASE_PRD.md` is point-in-time.
+- **Schema:** verify against the live database via the Supabase MCP, not
+  `supabase/migrations/` — the folder runs well behind.
 
 ## Docs
 

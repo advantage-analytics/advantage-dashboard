@@ -71,10 +71,9 @@ Server-side loaders live in `src/lib/data/*-server.ts`; their client-side counte
 `*-client.ts`. Key tables: `matches`, `match_stats`, `points`, `shots`, `users`,
 `programs`, `program_members`, `program_claims`, `program_events`, `processing_jobs`,
 `processing_usage`. The `match_stats_with_percentages` view adds computed percentages.
-Schema reference: [`DATABASE_PRD.md`](DATABASE_PRD.md) — **point-in-time, stamped
-February 2026.** `supabase/migrations/` runs roughly 100 migrations behind the
-live database, so neither is a source of truth. Verify schema against the live
-database via the Supabase MCP before relying on either.
+Schema: the **live database is the only source of truth** — verify via the
+Supabase MCP (`list_tables`, `execute_sql`). `supabase/migrations/` runs roughly
+100 migrations behind it.
 
 Edge functions in `supabase/functions/`: `process-match` (parses uploaded .xlsx
 asynchronously — upload returns immediately), `generate-insights`, `upload-video-r2`,

@@ -35,7 +35,11 @@ ready).
 - **notes:** Untouched since 2025-09-06. It is the repo's front door.
 
 ## T2 · Reconcile DATABASE_PRD.md with the live schema
-- **status:** todo
+- **status:** later
+- **superseded:** DATABASE_PRD.md was deleted on `claude/markdown-docs-cleanup-280d5a`
+  (2026-08-28) rather than reconciled — the live database via the Supabase MCP is
+  the only schema reference now, and CLAUDE.md/MAP.md say so. Delete this task
+  unless a written schema doc is wanted back.
 - **files:** DATABASE_PRD.md
 - **done when:**
   - [ ] Every table it documents is verified against the live database via the

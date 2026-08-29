@@ -271,8 +271,9 @@ the start of the match and the ambiguity disappears.
   `mintPlaybackSas()` (read-only, 30 minutes) plus `MatchVideoCard` on the match
   page, streamed direct from Azure because proxying breaks range requests. The
   R2 question it raised is now live rather than hypothetical: egress is $0 there
-  against Azure's ~$0.087/GB, and video is being served. See
-  [`pilot-branch-handoff.md`](pilot-branch-handoff.md).
+  against Azure's ~$0.087/GB, and video is being served. That branch merged to
+  `main` in PR #131; its handoff doc is retired, with the leftovers folded into
+  `r2-and-webhook-overview.md` §10 and `email-system.md` §8.
 
 ---
 
