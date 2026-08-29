@@ -41,7 +41,7 @@ ready).
 - **notes:** Prior spec aimed at border/shadow parity only; user direction now anchors the full layout to artboard 20a. Runner: read the canvas via DesignSync before implementing.
 
 ## T3 · Pin the usage footer to the bottom of short home pages
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/dashboard-shell.tsx, src/app/dashboard/(home)/home-content.tsx
 - **done when:**

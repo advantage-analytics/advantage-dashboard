@@ -61,7 +61,7 @@ export default function HomeContent({
   }, []);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-1 flex-col gap-6">
       <WelcomeMessage
         name={displayName}
         greeting={greeting}
@@ -115,11 +115,18 @@ export default function HomeContent({
         </>
       )}
 
-      <UsageFooter
-        usedSeconds={usage.usedSeconds}
-        capSeconds={usage.capSeconds}
-        billingMonth={usage.billingMonth}
-      />
+      {/* `mt-auto` eats the leftover column height, so on a short page — the
+          empty state especially — the footer lands on the bottom edge instead
+          of hanging directly under the cards. On a page taller than the
+          viewport there is no leftover height and the margin resolves to zero,
+          leaving the footer in normal flow after the content. */}
+      <div className="mt-auto">
+        <UsageFooter
+          usedSeconds={usage.usedSeconds}
+          capSeconds={usage.capSeconds}
+          billingMonth={usage.billingMonth}
+        />
+      </div>
     </div>
   );
 }

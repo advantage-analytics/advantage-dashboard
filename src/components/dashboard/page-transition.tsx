@@ -42,7 +42,10 @@ export function PageTransition({ children }: PageTransitionProps) {
   return (
     <div
       key={animationKey}
-      className="animate-page-enter"
+      /* Passes the shell's full height through to the page rather than
+         collapsing to its content — every dashboard page root already sets
+         `flex-1`, so this is what lets one of them fill the viewport. */
+      className="animate-page-enter flex flex-1 flex-col"
     >
       {children}
     </div>

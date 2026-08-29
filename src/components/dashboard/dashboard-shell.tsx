@@ -64,7 +64,13 @@ export function DashboardShell({
               <AppSidebar />
               <div className="flex min-w-0 flex-1 flex-col overflow-y-auto scroll-smooth motion-reduce:scroll-auto">
                 <Header activitySlot={activitySlot} />
-                <main>
+                {/* Grows to fill whatever the header leaves, so a page shorter
+                    than the viewport can still push its own footer to the
+                    bottom edge instead of leaving it hanging under the cards.
+                    Content taller than the viewport is unaffected — `flex-1`
+                    cannot shrink a flex item below its min-content height, so
+                    tall pages keep scrolling in normal flow. */}
+                <main className="flex flex-1 flex-col">
                   <PageTransition>{children}</PageTransition>
                 </main>
               </div>
