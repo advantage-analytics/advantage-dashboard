@@ -1,7 +1,6 @@
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { reconcileVendorJobs } from "@/lib/services/splitstep/reconcile";
+import { reconcileBeforePageRead } from "@/lib/services/splitstep/reconcile";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { analysisFor, loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import {
@@ -89,16 +88,7 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
           // loadMatchAnalysis — client components import that module, and the
           // reconciler's admin/Azure dependencies must never enter a client
           // module graph.
-          try {
-            await reconcileVendorJobs({
-              supabase: createAdminClient(),
-              matchIds: data.map((r) => r.id),
-            });
-          } catch (err) {
-            console.warn("[matches] reconciliation failed", {
-              error: err instanceof Error ? err.message : String(err),
-            });
-          }
+          await reconcileBeforePageRead(data.map((r) => r.id), "matches");
           return loadMatchAnalysis(supabase, data.map((r) => r.id), { reap: true });
         })(),
       ]);

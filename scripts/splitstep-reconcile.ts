@@ -18,24 +18,11 @@
  * have changed and the stamp is shared.
  */
 import { createClient } from "@supabase/supabase-js";
-import { readFileSync } from "node:fs";
 
+import { loadEnvLocal } from "./lib/env";
 import { reconcileVendorJobs } from "../src/lib/services/splitstep/reconcile";
 
-// Minimal .env.local loader (no dotenv dependency).
-try {
-  const raw = readFileSync(".env.local", "utf8");
-  for (const line of raw.split("\n")) {
-    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-    if (!m) continue;
-    const [, k, v] = m;
-    if (process.env[k] === undefined) {
-      process.env[k] = v.replace(/^["'](.*)["']$/, "$1");
-    }
-  }
-} catch {
-  // ignore — env may come from shell
-}
+loadEnvLocal();
 
 async function main(): Promise<void> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

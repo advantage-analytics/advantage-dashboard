@@ -66,8 +66,12 @@ export interface ParsedWebhook {
   matchId: string | null;
 }
 
-/** Lowercase and drop non-alphanumerics, so `sas_url` === `sasUrl`. */
-function normaliseKey(key: string): string {
+/**
+ * Lowercase and drop non-alphanumerics, so `sas_url` === `sasUrl`.
+ * Exported so reconcile.ts reads status fields under the same rule — two
+ * copies of the normalisation is how one call site silently diverges.
+ */
+export function normaliseKey(key: string): string {
   return key.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 

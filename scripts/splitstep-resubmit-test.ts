@@ -24,21 +24,12 @@
 
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { loadEnvLocal } from './lib/env';
 
 /* ─── env, BEFORE the service imports read it ─── */
 
-try {
-  for (const line of readFileSync('.env.local', 'utf8').split('\n')) {
-    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)$/);
-    if (m && process.env[m[1]] === undefined) {
-      process.env[m[1]] = m[2].trim().replace(/^["'](.*)["']$/, '$1');
-    }
-  }
-} catch {
-  /* fall through to the required() checks */
-}
+loadEnvLocal();
 
 // The deployment-config preflight refuses a localhost site url; the webhook
 // url only ever lands in the mock's request body, so a placeholder is honest.

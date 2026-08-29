@@ -242,13 +242,21 @@ function DurationEditorCell({
   );
 }
 
+/**
+ * One const, because the string is both the prop's default AND what the error
+ * copy compares against to decide "your name" vs "the player's name" — a
+ * reworded default that missed the comparison would silently flip the error
+ * text for every self upload.
+ */
+const DEFAULT_PLAYER_NAME_LABEL = "Your name";
+
 export function DetailsContent({
   formData,
   showOpponentProgram = false,
   onInputChange,
   onScoreChange,
   onTiebreakChange,
-  playerNameLabel = "Your name",
+  playerNameLabel = DEFAULT_PLAYER_NAME_LABEL,
   isProcessingProvider = false,
   pendingDetailFocus,
   onPendingDetailFocusConsumed,
@@ -594,7 +602,7 @@ export function DetailsContent({
                 <div className="mt-1 min-h-[12px]">
                   {playerNameError && (
                     <span className="text-[11px] leading-none text-[#E51837]">
-                      {playerNameLabel === "Your name"
+                      {playerNameLabel === DEFAULT_PLAYER_NAME_LABEL
                         ? "Add your name."
                         : "Add the player's name."}
                     </span>

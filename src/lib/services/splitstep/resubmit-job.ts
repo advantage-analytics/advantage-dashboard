@@ -61,6 +61,25 @@ export const MAX_TOTAL_ATTEMPTS = 3;
 /** Statuses that mean "this row will never move again on its own". */
 const TERMINAL_STATUSES = ['failed', 'completed', 'derivation_failed'];
 
+/**
+ * The ONE failure class the system retries on its own.
+ *
+ * A download failure with a valid SAS means the file, submission and metadata
+ * are all good — retrying is nearly free and nearly always works. Step
+ * outranks code because the one real failure arrived as INTERNAL_ERROR at
+ * step 'downloading_video'; a bare INTERNAL_ERROR elsewhere says "contact
+ * support", video-quality rejections can never succeed on retry, and unknown
+ * codes surface without retrying. Exported so the webhook route and the
+ * reconciler classify with the same rule — this is the load-bearing line,
+ * and two copies of it is how one site silently widens the retry class.
+ */
+export function isDownloadFailure(
+  errorCode: string | null,
+  errorStep: string | null
+): boolean {
+  return errorStep === 'downloading_video' || errorCode === 'VIDEO_UNREACHABLE';
+}
+
 export type ResubmitRefusalReason =
   | 'not_found'
   | 'not_failed'

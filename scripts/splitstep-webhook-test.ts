@@ -29,9 +29,9 @@
  * and that now includes a blob in the real videos container.
  */
 
-import { readFileSync } from 'node:fs';
 import { createHmac } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { loadEnvLocal } from './lib/env';
 import { RESULTS_BUCKET } from '../src/lib/services/splitstep/config';
 import {
   resultsObjectKey,
@@ -46,19 +46,7 @@ import {
 
 /* ─── env ─── */
 
-// Guarded: on a fresh checkout or a CI box there is no .env.local, and an
-// unhandled ENOENT here would replace the readable "Missing X" messages below
-// with a raw stack trace.
-try {
-  for (const line of readFileSync('.env.local', 'utf8').split('\n')) {
-    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)$/);
-    if (m && process.env[m[1]] === undefined) {
-      process.env[m[1]] = m[2].trim().replace(/^["'](.*)["']$/, '$1');
-    }
-  }
-} catch {
-  /* fall through to the required() checks, which explain what is missing */
-}
+loadEnvLocal();
 
 function flag(name: string): string | undefined {
   const i = process.argv.indexOf(name);

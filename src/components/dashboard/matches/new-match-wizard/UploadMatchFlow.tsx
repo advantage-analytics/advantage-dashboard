@@ -55,6 +55,15 @@ const PERSONAL_EXIT_HREF = "/dashboard/matches";
 const CONTENT_CLS = "mx-auto w-full max-w-[780px] px-14";
 
 /**
+ * The missing-field label for `initialTopPlayerIsPlayer1`, matching
+ * DetailsContent's field label. One const because the string is both pushed
+ * into the list and compared against — it has already been reworded once, and
+ * a rename that misses the comparison silently breaks the "only the camera
+ * answers are outstanding" sentence.
+ */
+const CAMERA_POSITION_LABEL = "your position at video start";
+
+/**
  * What one upload is doing, owned HERE rather than in the wizard hook.
  *
  * The wizard unmounts the instant a match is created, but its upload closure
@@ -823,13 +832,13 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
       if (!hasAnySetScore) labels.push("score");
       if (formData.adScoring === undefined) labels.push("scoring");
       if (formData.fixedCamera === undefined) labels.push("camera");
-      if (formData.initialTopPlayerIsPlayer1 === undefined) labels.push("your position at video start");
+      if (formData.initialTopPlayerIsPlayer1 === undefined) labels.push(CAMERA_POSITION_LABEL);
     }
     // Confirm has its own sentence for the case where only the camera answers
     // are outstanding, so the shape is decided here beside the list rather than
     // re-derived from label strings three hundred lines away.
     const onlyVideoAnswers =
-      labels.length > 0 && labels.every((l) => l === "camera" || l === "your position at video start");
+      labels.length > 0 && labels.every((l) => l === "camera" || l === CAMERA_POSITION_LABEL);
     return { labels, onlyVideoAnswers };
   }, [
     formData.eventName,

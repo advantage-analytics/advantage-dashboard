@@ -25,9 +25,10 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { parseWebhookPayload } from './webhook-payload';
+import { normaliseKey, parseWebhookPayload } from './webhook-payload';
 import { releaseQuota } from './quota';
-import { resubmitJob } from './resubmit-job';
+import { isDownloadFailure, resubmitJob } from './resubmit-job';
+import { resolveSplitstepDeploymentConfig } from './deployment-config';
 
 const LOG = '[splitstep-reconcile]';
 
@@ -68,14 +69,13 @@ export async function reconcileVendorJobs(params: {
   const { supabase, matchIds, cap = DEFAULT_CAP, now = new Date() } = params;
   const outcome: ReconcileOutcome = { polled: 0, transitioned: 0 };
 
-  const apiUrl = process.env.SPLITSTEP_API_URL;
-  const apiKey = process.env.SPLITSTEP_API_KEY;
   // Unconfigured deployments (local dev without vendor keys) skip silently —
   // the same posture the submit route takes, minus the 503, because nobody
-  // asked for this call directly.
-  if (!apiUrl || apiUrl.includes('api.example.com') || !apiKey) {
-    return outcome;
-  }
+  // asked for this call directly. The SAME resolver as every other vendor
+  // caller, so "configured" means one thing everywhere.
+  const config = resolveSplitstepDeploymentConfig();
+  if (!config.ok) return outcome;
+  const { apiUrl, apiKey } = config;
 
   const staleBefore = new Date(now.getTime() - STALE_AFTER_MS).toISOString();
   const polledBefore = new Date(now.getTime() - POLL_GAP_MS).toISOString();
@@ -109,109 +109,154 @@ export async function reconcileVendorJobs(params: {
     status: string;
   }[];
 
-  for (const job of jobs) {
-    // Stamp FIRST, unconditionally. If everything after this throws, the row
-    // still records that an attempt happened, and the 10-minute gap holds.
-    await supabase
-      .from('processing_jobs')
-      .update({ last_polled_at: now.toISOString() })
-      .eq('id', job.id);
-    outcome.polled += 1;
+  if (jobs.length === 0) return outcome;
 
-    let raw: string;
-    let httpStatus: number;
-    try {
-      const response = await fetch(
-        `${apiUrl.replace(/\/$/, '')}/${encodeURIComponent(job.external_job_id)}`,
-        {
-          headers: { 'X-Api-Key': apiKey },
-          signal: AbortSignal.timeout(POLL_TIMEOUT_MS),
-        }
-      );
-      httpStatus = response.status;
-      raw = await response.text();
-    } catch (err) {
-      console.warn(`${LOG} poll failed — leaving the job untouched`, {
-        jobId: job.id,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      continue;
-    }
+  // Stamp FIRST, unconditionally, in ONE write for the whole batch. If
+  // everything after this throws, the rows still record that an attempt
+  // happened and the 10-minute gap holds — and one UPDATE beats one per job
+  // on a path that runs inside a page render.
+  await supabase
+    .from('processing_jobs')
+    .update({ last_polled_at: now.toISOString() })
+    .in('id', jobs.map((j) => j.id));
+  outcome.polled = jobs.length;
 
-    let parsedJson: unknown = null;
-    try {
-      parsedJson = raw.trim() === '' ? null : JSON.parse(raw);
-    } catch {
-      /* handled below as unparseable */
-    }
+  // The FETCHES run concurrently — they target different jobs, they don't
+  // read each other, and serial polls would put cap × POLL_TIMEOUT_MS of
+  // worst-case wall clock in front of a render. The failure WRITES below run
+  // sequentially on purpose: they can end in resubmitJob(), whose
+  // no-concurrent-duplicate guard is a read-then-insert, and two failures for
+  // the same match applied in parallel could both pass it.
+  const polls = await Promise.all(
+    jobs.map(async (job): Promise<PolledFailure | null> => {
+      let raw: string;
+      let httpStatus: number;
+      try {
+        const response = await fetch(
+          `${apiUrl.replace(/\/$/, '')}/${encodeURIComponent(job.external_job_id)}`,
+          {
+            headers: { 'X-Api-Key': apiKey },
+            signal: AbortSignal.timeout(POLL_TIMEOUT_MS),
+          }
+        );
+        httpStatus = response.status;
+        raw = await response.text();
+      } catch (err) {
+        console.warn(`${LOG} poll failed — leaving the job untouched`, {
+          jobId: job.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return null;
+      }
 
-    // The status endpoint's own error shape (JOB_NOT_FOUND, STATUS_UNAVAILABLE)
-    // arrives as a non-2xx with an error body. None of it may move the job:
-    // JOB_NOT_FOUND could be their id churn, STATUS_UNAVAILABLE is their
-    // outage, and both are polling problems, not job outcomes.
-    if (httpStatus < 200 || httpStatus >= 300 || parsedJson === null) {
-      console.warn(`${LOG} status endpoint gave no usable answer`, {
-        jobId: job.id,
-        httpStatus,
-        body: raw.slice(0, 300),
-      });
-      continue;
-    }
+      let parsedJson: unknown = null;
+      try {
+        parsedJson = raw.trim() === '' ? null : JSON.parse(raw);
+      } catch {
+        /* handled below as unparseable */
+      }
 
-    // Same defensive read the webhook and submit paths use — one parser, one
-    // set of guesses about the vendor's field naming.
-    const parsed = parseWebhookPayload(parsedJson);
+      // The status endpoint's own error shape (JOB_NOT_FOUND,
+      // STATUS_UNAVAILABLE) arrives as a non-2xx with an error body. None of
+      // it may move the job: JOB_NOT_FOUND could be their id churn,
+      // STATUS_UNAVAILABLE is their outage, and both are polling problems,
+      // not job outcomes.
+      if (httpStatus < 200 || httpStatus >= 300 || parsedJson === null) {
+        console.warn(`${LOG} status endpoint gave no usable answer`, {
+          jobId: job.id,
+          httpStatus,
+          body: raw.slice(0, 300),
+        });
+        return null;
+      }
 
-    // JOB_STALE never arrives as a webhook and may not phrase itself as a
-    // failed status; recognise it by code, or by the status/state field
-    // itself. Only those fields — a "stale" appearing in a message or a
-    // filename must not fail a job.
-    const statusText = statusFieldOf(parsedJson);
-    const isStale =
-      parsed.errorCode === 'JOB_STALE' ||
-      (statusText !== null && /stale/i.test(statusText));
+      // Same defensive read the webhook and submit paths use — one parser,
+      // one set of guesses about the vendor's field naming.
+      const parsed = parseWebhookPayload(parsedJson);
 
-    if (parsed.nextStatus === 'failed' || isStale) {
-      const transitioned = await applyPolledFailure({
-        supabase,
-        jobId: job.id,
-        errorCode: parsed.errorCode ?? (isStale ? 'JOB_STALE' : null),
-        errorCategory: parsed.errorCategory ?? (isStale ? 'internal' : null),
-        errorStep: parsed.errorStep,
-        errorMessage:
-          parsed.errorMessage ??
-          'The analysis could not be completed. You can retry it.',
-      });
-      if (transitioned) outcome.transitioned += 1;
-      continue;
-    }
+      // JOB_STALE never arrives as a webhook and may not phrase itself as a
+      // failed status; recognise it by code, or by the status/state field
+      // itself. Only those fields — a "stale" appearing in a message or a
+      // filename must not fail a job.
+      const statusText = statusFieldOf(parsedJson);
+      const isStale =
+        parsed.errorCode === 'JOB_STALE' ||
+        (statusText !== null && /stale/i.test(statusText));
 
-    if (parsed.nextStatus === 'completed') {
-      // Their half finished but our row never heard: the delivery is lost, and
-      // with it the results SAS — the status response cannot hand it back. Do
-      // not pretend otherwise: the only path to statistics is a new
-      // submission, so this surfaces as a failed state whose message says
-      // exactly that, wired to the manual resubmit path.
-      const transitioned = await applyPolledFailure({
-        supabase,
-        jobId: job.id,
-        // OUR code, not a vendor one — vendor codes come from their error
-        // object, and this failure is the delivery's, not the job's.
-        errorCode: 'RESULTS_DELIVERY_LOST',
-        errorCategory: 'internal',
-        errorStep: null,
-        errorMessage:
-          'The analysis finished, but its results never arrived. Retry the analysis.',
-      });
-      if (transitioned) outcome.transitioned += 1;
-      continue;
-    }
+      if (parsed.nextStatus === 'failed' || isStale) {
+        return {
+          jobId: job.id,
+          errorCode: parsed.errorCode ?? (isStale ? 'JOB_STALE' : null),
+          errorCategory: parsed.errorCategory ?? (isStale ? 'internal' : null),
+          errorStep: parsed.errorStep,
+          errorMessage:
+            parsed.errorMessage ??
+            'The analysis could not be completed. You can retry it.',
+        };
+      }
 
-    // queued/processing or anything unrecognised: their answer matches (or
-    // does not contradict) ours. The stamp is the only write.
+      if (parsed.nextStatus === 'completed') {
+        // Their half finished but our row never heard: the delivery is lost,
+        // and with it the results SAS — the status response cannot hand it
+        // back. Do not pretend otherwise: the only path to statistics is a
+        // new submission, so this surfaces as a failed state whose message
+        // says exactly that, wired to the manual resubmit path.
+        return {
+          jobId: job.id,
+          // OUR code, not a vendor one — vendor codes come from their error
+          // object, and this failure is the delivery's, not the job's.
+          errorCode: 'RESULTS_DELIVERY_LOST',
+          errorCategory: 'internal',
+          errorStep: null,
+          errorMessage:
+            'The analysis finished, but its results never arrived. Retry the analysis.',
+        };
+      }
+
+      // queued/processing or anything unrecognised: their answer matches (or
+      // does not contradict) ours. The stamp is the only write.
+      return null;
+    })
+  );
+
+  for (const failure of polls) {
+    if (failure === null) continue;
+    const transitioned = await applyPolledFailure({ supabase, ...failure });
+    if (transitioned) outcome.transitioned += 1;
   }
 
   return outcome;
+}
+
+interface PolledFailure {
+  jobId: string;
+  errorCode: string | null;
+  errorCategory: string | null;
+  errorStep: string | null;
+  errorMessage: string;
+}
+
+/**
+ * The render-path entry point: reconcile, but never fatally.
+ *
+ * Owns the admin client and the try/catch so the two Server Component pages
+ * that call this (matches list, match detail) share one copy of the
+ * "log and carry on" policy instead of each maintaining its own. Server-only
+ * by dependency — nothing under a client module graph may import this file.
+ */
+export async function reconcileBeforePageRead(
+  matchIds: string[],
+  pageTag: string
+): Promise<void> {
+  try {
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    await reconcileVendorJobs({ supabase: createAdminClient(), matchIds });
+  } catch (err) {
+    // Never fatal — the page is more useful slightly stale than not at all.
+    console.warn(`[${pageTag}] reconciliation failed`, {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 /** The top-level `status`/`state` string of a parsed body, if one exists. */
@@ -220,7 +265,7 @@ function statusFieldOf(body: unknown): string | null {
     return null;
   }
   for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
-    const normalised = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const normalised = normaliseKey(key);
     if ((normalised === 'status' || normalised === 'state') && typeof value === 'string') {
       return value;
     }
@@ -279,9 +324,7 @@ async function applyPolledFailure(params: {
   // before anything might reserve again.
   await releaseQuota(supabase, jobId);
 
-  const isDownloadFailure =
-    errorStep === 'downloading_video' || errorCode === 'VIDEO_UNREACHABLE';
-  if (isDownloadFailure) {
+  if (isDownloadFailure(errorCode, errorStep)) {
     const result = await resubmitJob({ supabase, jobId, auto: true });
     if (result.ok) {
       console.log(`${LOG} auto-resubmitted after polled download failure`, {

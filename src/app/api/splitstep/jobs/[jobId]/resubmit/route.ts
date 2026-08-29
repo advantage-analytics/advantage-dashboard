@@ -81,14 +81,17 @@ export async function POST(
 
   // Billing: the MATCH's workspace, exactly as the submit route charges it —
   // a coach can switch workspaces between the failure and the retry, and the
-  // budget that pays for a match is the one the match belongs to.
-  const { data: matchRow } = await admin
-    .from('matches')
-    .select('program_id')
-    .eq('id', (jobRow as { match_id: string }).match_id)
-    .maybeSingle();
-
-  const workspaceContext = await getWorkspaceContext();
+  // budget that pays for a match is the one the match belongs to. The two
+  // reads are independent (one hits matches, one resolves the session), so
+  // they share a round trip.
+  const [{ data: matchRow }, workspaceContext] = await Promise.all([
+    admin
+      .from('matches')
+      .select('program_id')
+      .eq('id', (jobRow as { match_id: string }).match_id)
+      .maybeSingle(),
+    getWorkspaceContext(),
+  ]);
   const billingWorkspace = billingWorkspaceFor(
     workspaceContext?.available ?? [],
     (matchRow as { program_id: string | null } | null)?.program_id ?? null

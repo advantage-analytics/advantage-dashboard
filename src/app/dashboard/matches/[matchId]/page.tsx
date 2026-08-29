@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { reconcileVendorJobs } from "@/lib/services/splitstep/reconcile";
+import { reconcileBeforePageRead } from "@/lib/services/splitstep/reconcile";
 
 import {
   getAdjacentMatchIds,
@@ -141,16 +140,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
       // purpose; the no-stale-jobs case is one indexed select. Never fatal —
       // and not inside loadMatchAnalysis, which client components import and
       // the reconciler's admin/Azure dependencies must never reach.
-      try {
-        await reconcileVendorJobs({
-          supabase: createAdminClient(),
-          matchIds: [matchId],
-        });
-      } catch (err) {
-        console.warn("[match-detail] reconciliation failed", {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
+      await reconcileBeforePageRead([matchId], "match-detail");
       return loadMatchAnalysis(supabase, [matchId], { reap: true });
     }),
     getMatchVideo(matchId),

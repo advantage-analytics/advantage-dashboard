@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { rosterPlayerOptions } from "@/lib/data/roster-shared";
 
 export interface LadderPlayer {
   /**
@@ -45,20 +46,14 @@ export const getLadder = cache(async function getLadder(
     p_program_id: programId,
   });
 
-  return ((data ?? []) as DbRosterFullRow[])
-    .filter((row) => row.role === "player")
-    .map((row) => ({
-      userId: row.player_id,
-      // `program_players` requires both names, so a player row always has one.
-      // The fallback covers only the safety arm — a seat-holding player with no
-      // profile row yet, who may never have filled in a profile either.
-      name: row.display_name?.trim() || (row.email ?? "").split("@")[0] || "Unnamed player",
-      ladderPosition: row.lineup_spot,
-    }))
-    .sort((a, b) => {
-      if (a.ladderPosition === b.ladderPosition) return a.name.localeCompare(b.name);
-      if (a.ladderPosition === null) return 1;
-      if (b.ladderPosition === null) return -1;
-      return a.ladderPosition - b.ladderPosition;
-    });
+  // The filter/name-fallback/sort rules live in roster-shared.ts, shared with
+  // the upload wizard's who-played picker so the two RPC consumers cannot
+  // drift. NOTE the field rename: this type's `userId` is the shared
+  // `playerId` (a program_players.id) — historical naming, kept because the
+  // lineup forms already read it.
+  return rosterPlayerOptions((data ?? []) as DbRosterFullRow[]).map((row) => ({
+    userId: row.playerId,
+    name: row.name,
+    ladderPosition: row.ladderPosition,
+  }));
 });

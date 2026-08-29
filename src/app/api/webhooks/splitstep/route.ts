@@ -52,7 +52,10 @@ import {
   trimmedCopyStatus,
 } from '@/lib/services/splitstep/video-url';
 import { releaseQuota } from '@/lib/services/splitstep/quota';
-import { resubmitJob } from '@/lib/services/splitstep/resubmit-job';
+import {
+  isDownloadFailure,
+  resubmitJob,
+} from '@/lib/services/splitstep/resubmit-job';
 import { gradeResults } from '@/lib/services/splitstep/grade-results';
 import { deriveAndPublish } from '@/lib/services/splitstep/derive-and-publish';
 
@@ -502,10 +505,9 @@ export async function POST(request: NextRequest) {
     const failedJobId = record.matched_job_id;
     // Read once outside after(): the auto-retry decision keys on THIS
     // delivery's error fields, not on whatever the row says by the time the
-    // block runs.
-    const isDownloadFailure =
-      payload.errorStep === 'downloading_video' ||
-      payload.errorCode === 'VIDEO_UNREACHABLE';
+    // block runs. The classifier itself lives in resubmit-job.ts — one rule,
+    // shared with the reconciler's polled-failure path.
+    const retryable = isDownloadFailure(payload.errorCode, payload.errorStep);
 
     after(async () => {
       // Release first: the child's reservation below is a fresh spend against
@@ -526,7 +528,7 @@ export async function POST(request: NextRequest) {
       // resubmitJob() itself enforces the rest: one automatic attempt per
       // chain, the 3-attempt ceiling, no non-terminal duplicate, and that the
       // source blob still exists.
-      if (!isDownloadFailure) return;
+      if (!retryable) return;
 
       const result = await resubmitJob({
         supabase,

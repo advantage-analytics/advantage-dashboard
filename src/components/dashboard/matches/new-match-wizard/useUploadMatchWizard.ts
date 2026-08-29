@@ -39,6 +39,11 @@ import { accountTypeFor } from "@/lib/services/splitstep/quota";
 import { formatResetDate } from "@/lib/data/usage-format";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import {
+  rosterPlayerOptions,
+  type RosterFullRow,
+  type RosterPlayerOption,
+} from "@/lib/data/roster-shared";
+import {
   Step,
   FormData as MatchFormData,
   UploadedFile,
@@ -132,6 +137,34 @@ async function rollbackCreatedMatch(
 }
 
 /**
+ * The rollback-then-announce ritual both failure sites share: undo the match
+ * row (unless it predates this upload), then dispatch `match-upload-failed`
+ * with `matchId` attached ONLY if a viewable row survived. One function so
+ * the invariant the comments above describe — a dead link is worse than no
+ * link — cannot drift between the two catch blocks.
+ */
+async function rollbackAndAnnounceFailure(params: {
+  supabase: ReturnType<typeof createClient>;
+  matchId: string;
+  /** True when the row predates this upload and must never be deleted. */
+  reusingMatch: boolean;
+  error: string;
+}): Promise<void> {
+  const { supabase, matchId, reusingMatch, error } = params;
+  const matchIsViewable = reusingMatch
+    ? true
+    : !(await rollbackCreatedMatch(supabase, matchId));
+  window.dispatchEvent(
+    new CustomEvent("match-upload-failed", {
+      detail: {
+        ...(matchIsViewable ? { matchId } : {}),
+        error,
+      },
+    })
+  );
+}
+
+/**
  * The source a new match starts on.
  *
  * Resolved from the registry by KIND rather than named, so the wizard stays
@@ -221,15 +254,13 @@ export type {
  * `playerId` is `program_players.id` — the id a roster player's matches carry,
  * claimed or not (see `program_roster_full`). It is NOT a login id, and the two
  * must never be swapped: `player1_id` is half the SELECT policy on `matches`.
+ * `userId` — the login that claimed this profile, when one has — is used only
+ * to drop the uploader's own row; "Myself" already stands for them.
+ *
+ * The shape (and the filter/name-fallback/sort that produces it) is
+ * `roster-shared.ts`'s, shared with `getLadder()`.
  */
-export interface RosterOption {
-  playerId: string;
-  /** The login that claimed this profile, when one has. Used only to drop the
-   * uploader's own row — "Myself" already stands for them. */
-  userId: string | null;
-  name: string;
-  ladderPosition: number | null;
-}
+export type RosterOption = RosterPlayerOption;
 
 /**
  * WHOSE match a team upload records.
@@ -658,8 +689,10 @@ export function useUploadMatchWizard({
    *
    * Fetched through the same SECURITY DEFINER RPC the ladder page uses
    * (`program_roster_full`), which returns nothing to a non-member — so a
-   * stale workspace cannot leak another program's names. The mapping mirrors
-   * `getLadder()` in `lib/data/roster-server.ts`, which is server-only.
+   * stale workspace cannot leak another program's names. The filter, name
+   * fallback and ladder sort are `rosterPlayerOptions()` in
+   * `lib/data/roster-shared.ts`, shared with `getLadder()` so the two RPC
+   * consumers cannot drift.
    */
   useEffect(() => {
     if (!open || !askWhoPlayed) return;
@@ -671,35 +704,7 @@ export function useUploadMatchWizard({
       });
       if (cancelled) return;
 
-      const rows = (data ?? []) as {
-        player_id: string;
-        user_id: string | null;
-        display_name: string | null;
-        email: string | null;
-        role: string;
-        lineup_spot: number | null;
-      }[];
-
-      setTeamRoster(
-        rows
-          .filter((row) => row.role === "player")
-          .map((row) => ({
-            playerId: row.player_id,
-            userId: row.user_id,
-            name:
-              row.display_name?.trim() ||
-              (row.email ?? "").split("@")[0] ||
-              "Unnamed player",
-            ladderPosition: row.lineup_spot,
-          }))
-          .sort((a, b) => {
-            if (a.ladderPosition === b.ladderPosition)
-              return a.name.localeCompare(b.name);
-            if (a.ladderPosition === null) return 1;
-            if (b.ladderPosition === null) return -1;
-            return a.ladderPosition - b.ladderPosition;
-          })
-      );
+      setTeamRoster(rosterPlayerOptions((data ?? []) as RosterFullRow[]));
     })();
 
     return () => {
@@ -1472,20 +1477,15 @@ export function useUploadMatchWizard({
           //
           // `matchId` then rides on the failure event ONLY if that row survived
           // — see the note at the transfer-failure dispatch below.
-          const matchIsViewable = reusingMatch
-            ? true
-            : !(await rollbackCreatedMatch(supabase, matchId));
-          window.dispatchEvent(
-            new CustomEvent("match-upload-failed", {
-              detail: {
-                ...(matchIsViewable ? { matchId } : {}),
-                error:
-                  jobErr instanceof Error
-                    ? jobErr.message
-                    : "Couldn't queue this match for analysis",
-              },
-            })
-          );
+          await rollbackAndAnnounceFailure({
+            supabase,
+            matchId,
+            reusingMatch,
+            error:
+              jobErr instanceof Error
+                ? jobErr.message
+                : "Couldn't queue this match for analysis",
+          });
           return;
         }
 
@@ -1554,17 +1554,12 @@ export function useUploadMatchWizard({
           // And the same rule for the link: an import match with no file behind
           // it is a row of zeroes, so once the rollback removes it there is
           // nothing to offer.
-          const matchIsViewable = reusingMatch
-            ? true
-            : !(await rollbackCreatedMatch(supabase, matchId));
-          window.dispatchEvent(
-            new CustomEvent("match-upload-failed", {
-              detail: {
-                ...(matchIsViewable ? { matchId } : {}),
-                error: err instanceof Error ? err.message : "Upload failed",
-              },
-            })
-          );
+          await rollbackAndAnnounceFailure({
+            supabase,
+            matchId,
+            reusingMatch,
+            error: err instanceof Error ? err.message : "Upload failed",
+          });
         }
       })();
     } catch (e: any) {
