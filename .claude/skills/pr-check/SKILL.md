@@ -2,7 +2,7 @@
 name: pr-check
 description: Run the full pre-merge gate on the current branch — lint, typecheck, tests, then quality and safety review via /simplify, the vercel-react-best-practices skill, and this project's guardrail subagents. Use before opening a PR or merging to main. There is no CI in this repo, so this is the only gate.
 disable-model-invocation: true
-argument-hint: "[optional: scope, e.g. 'ui only']"
+argument-hint: "[optional: 'full' to force every reviewer at full effort, or a scope like 'ui only']"
 ---
 
 # Pre-merge check
@@ -10,6 +10,12 @@ argument-hint: "[optional: scope, e.g. 'ui only']"
 **This repo has no `.github/` workflows.** Nothing runs on push, nothing runs
 on a PR. Every check is this one. Do not skip a stage because the diff "looks
 small" — the failure modes this catches are the silent kind.
+
+**`/pr-check full` is the paranoid mode.** It turns the economies below back
+off: guardrail reviewers run even over an all-task-gated range, and
+`code-review` runs at `high`. Use it at the merge-to-`main` moment, or when
+the branch carries hand-made commits you want swept twice. The default run
+trusts the per-task gates it can verify, and spends accordingly.
 
 ## What to review — read this before stage 1
 
@@ -69,18 +75,15 @@ is deployed and is not the merge target until the whole branch lands.
 
 ## Stage 1 — mechanical gates
 
-Run all three. Report actual output, not a summary of it.
+Run all three, each redirected to a scratch file so green output never lands
+in the session. Report actual output, not a summary of it, **for anything
+that failed**; a pass reports as its exit status alone:
 
 ```bash
-npm run lint
-```
-
-```bash
-npx tsc --noEmit
-```
-
-```bash
-npm test
+G=$(mktemp -d)
+npm run lint     > "$G/lint.log" 2>&1 || { echo "lint FAILED"; tail -40 "$G/lint.log"; }
+npx tsc --noEmit > "$G/tsc.log"  2>&1 || { echo "tsc FAILED";  tail -40 "$G/tsc.log"; }
+npm test         > "$G/test.log" 2>&1 || { echo "test FAILED"; tail -40 "$G/test.log"; }
 ```
 
 Note on `npm test`: Playwright is the runner but most specs are pure logic
@@ -98,10 +101,18 @@ that no longer exists, and `tsc` reports an error in code nobody wrote:
 ```
 
 If — and only if — **every** error path is under `.next/`, clear the stale
-output and run it again:
+output and run it again. Judge that from the whole log, not the tail:
 
 ```bash
-rm -rf .next/types .next/dev/types && npx tsc --noEmit
+grep 'error TS' "$G/tsc.log" | grep -v '^\.next/'
+```
+
+Empty output means every error is stale route types — clear and re-run, under
+the same redirect discipline:
+
+```bash
+rm -rf .next/types .next/dev/types
+npx tsc --noEmit > "$G/tsc.log" 2>&1 || { echo "tsc FAILED"; tail -40 "$G/tsc.log"; }
 ```
 
 **The re-run is the verdict, not the diagnosis.** One error under `src/` means
@@ -118,21 +129,49 @@ Invoke the `simplify` skill. It reviews the changed code for reuse,
 simplification, efficiency and altitude, and applies the fixes. It does not
 hunt for bugs — that is stage 3.
 
-If the diff touches `.tsx` under `src/app` or `src/components`, also load the
-`vercel-react-best-practices` skill and check the changed components against
-it: Server vs Client Component boundaries, data fetching, and what got pulled
-into the client bundle. This project is React 19 on Next 16 — a `"use client"`
-added without cause is the most common regression, and it costs bundle size on
-every dashboard page.
+Load the `vercel-react-best-practices` skill only when the diff shows one of
+the things it checks — not merely because a `.tsx` file changed:
+
+- a `"use client"` line **added** anywhere in the range
+  (`git diff "$base"...HEAD -- 'src/**/*.tsx' | grep -c '^+.*"use client"'`),
+- a **new** component file
+  (`git diff "$base"...HEAD --diff-filter=A --name-only -- 'src/**/*.tsx'`), or
+- a visible change to data fetching inside a component.
+
+None of the three → skip it and say so in stage 4. This project is React 19 on
+Next 16 — a `"use client"` added without cause is the most common regression,
+it costs bundle size on every dashboard page, and the first check is exactly
+the one that catches it.
 
 ## Stage 3 — correctness and safety
 
 Run the general review:
 
-- The `code-review` skill for correctness bugs in the diff.
+- The `code-review` skill at **`medium`** effort — invoke it as
+  `code-review medium`, never bare. With no level it silently reuses the last
+  level anyone typed, so one old `high` run would make every later `/pr-check`
+  expensive forever. Medium — fewer, high-confidence findings — is the right
+  calibration for a second net behind the per-task gates. `full` mode raises
+  it to `high` deliberately.
 
-Then run the project-specific reviewers, **in parallel**, for whichever
-surfaces the diff touches:
+Then decide whether the project reviewers need to run at all. Check whether
+the whole range already went through the per-task gate:
+
+```bash
+git log "$base"..HEAD --format=%s | grep -vE '^(T[0-9]+:|task: add |task: route |skip: )' \
+  || echo "all task-gated"
+```
+
+`all task-gated` means every commit is a `/task-next` commit or its
+bookkeeping — both guardrail reviewers already ran on each task's own diff
+before it was committed. Do not dispatch them again: report them in stage 4
+as **covered per-task**, citing the `T<n>` entries in
+`.claude/tasks/<slug>.log.md`. Any other subject in the range — a hand-made
+commit, a merge — means part of it never faced the gate: run the reviewers
+over the whole range, fail-closed. `full` mode always runs them.
+
+When they do run, run the project-specific reviewers **in parallel**, for
+whichever surfaces the diff touches:
 
 - **`pipeline-guardrails-reviewer`** — if anything under
   `src/app/dashboard/`, `src/components/dashboard/`, or the upload wizard
@@ -165,7 +204,9 @@ Give the user:
 1. Pass/fail per mechanical gate, with real output for anything that failed.
 2. What `simplify` changed, if anything.
 3. Findings from each reviewer that ran, worst first — and which reviewers you
-   skipped, with the reason.
+   skipped, with the reason. **Covered per-task** (guardrails on an
+   all-task-gated range, with the `T<n>` log entries cited) is a distinct
+   reason from **surface not touched** — name which.
 4. A plain verdict: ready to merge, or the specific list of what is not.
 
 Do not soften a failure into "mostly passing". If it is not ready, say what
