@@ -1,12 +1,7 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/** The upload wizard's own route. Kept here so the shortcut and the link agree. */
 const NEW_MATCH_HREF = "/dashboard/matches/new";
 
 interface CreateMatchButtonProps {
@@ -28,28 +23,6 @@ export function CreateMatchButton({
   variant = "dark",
   label = "Create Match",
 }: CreateMatchButtonProps): React.JSX.Element {
-  const router = useRouter();
-  const [isMac, setIsMac] = useState(true);
-
-  useEffect(() => {
-    const platform =
-      (navigator as Navigator & { userAgentData?: { platform: string } })
-        .userAgentData?.platform ?? navigator.platform;
-    setIsMac(/mac/i.test(platform));
-  }, []);
-
-  // Listen for global keyboard shortcut (Cmd+U / Ctrl+U)
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === "u") {
-        e.preventDefault();
-        router.push(NEW_MATCH_HREF);
-      }
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [router]);
-
   return (
     <Link
       href={NEW_MATCH_HREF}
@@ -60,9 +33,6 @@ export function CreateMatchButton({
     >
       <Plus className={iconStyles[variant]} strokeWidth={2} aria-hidden="true" />
       {label}
-      <kbd className="ml-1 text-[10px] font-medium leading-none px-1 py-0.5 rounded bg-white/20">
-        {isMac ? "\u2318U" : "\u2303U"}
-      </kbd>
     </Link>
   );
 }

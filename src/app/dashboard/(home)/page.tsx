@@ -72,8 +72,11 @@ export default async function Home() {
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
   return (
-    <div className="flex-1 w-full bg-white">
-      <div className="mx-auto max-w-screen-2xl px-6 sm:px-8 py-8 sm:py-10">
+    <div className="flex flex-1 w-full flex-col bg-white">
+      {/* `w-full` alongside `mx-auto`: auto side margins on a column flex item
+          switch off the stretch that would otherwise size it, so without an
+          explicit width the container would shrink to fit its content. */}
+      <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-6 sm:px-8 py-8 sm:py-10">
         <HomeContent
           displayName={displayName}
           greeting={greeting}

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Clock, Mail, TriangleAlert, type LucideIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { TeamAlert } from "@/lib/data/team-home-server";
 
 /**
@@ -34,6 +35,16 @@ const MARK: Record<TeamAlert["kind"], { icon: LucideIcon; color: string }> = {
 };
 
 export function NeedsAttention({ alerts }: { alerts: TeamAlert[] }) {
+  // Audited and kept. The suspicion was that this card shifts the empty-state
+  // layout and styles itself off-system; neither held. Its border, radius and
+  // absence of a shadow are `NextEventCard`'s and `RosterCard`'s exactly, its
+  // row wash is the `duration-150` + `--surface-muted` one `match-rows`,
+  // `dual-sheet` and `roster-table` all use, and returning null costs the page
+  // nothing: `showRail` on the team page already tests `attention.length > 0`,
+  // so an empty list means this card and its `gap-6` are both absent from the
+  // column rather than reserving space in it. What was genuinely off-system is
+  // fixed below — the focus half of the wash, and a full-bleed wash squaring
+  // off past the card's own corner.
   if (alerts.length === 0) return null;
 
   return (
@@ -56,7 +67,18 @@ export function NeedsAttention({ alerts }: { alerts: TeamAlert[] }) {
             >
               <Link
                 href={alert.href}
-                className="flex items-start gap-2.5 px-5 py-3 transition-colors duration-150 hover:bg-[var(--surface-muted)]"
+                /* Keyboard gets what the mouse gets — `focus-visible:` rather
+                   than `has-[:focus-visible]:` because the row IS the anchor,
+                   the same spelling and for the same reason as `match-rows`.
+                   And the last row rounds its bottom to 13px: this wash runs
+                   edge to edge, so against the card's 14px radius less its 1px
+                   border it would otherwise square off outside the corner.
+                   Rounded here rather than clipped with `overflow-hidden` on
+                   the card, which would take the focus ring with it. */
+                className={cn(
+                  "flex items-start gap-2.5 px-5 py-3 transition-colors duration-150 hover:bg-[var(--surface-muted)] focus-visible:bg-[var(--surface-muted)]",
+                  index === alerts.length - 1 && "rounded-b-[13px]"
+                )}
               >
                 <Icon
                   className="mt-px size-[15px] shrink-0"
