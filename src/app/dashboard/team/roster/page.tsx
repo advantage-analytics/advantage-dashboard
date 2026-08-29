@@ -3,10 +3,13 @@ import { UserCheck } from "lucide-react";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { teamLabel } from "@/lib/workspace/types";
 import { getRosterData } from "@/lib/data/team-roster-server";
+import { getPendingJoinRequests } from "@/lib/data/join-requests-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { formatResetDate } from "@/lib/data/usage-format";
+import { shortDate } from "@/lib/data/match-utils";
 import { RosterTable } from "@/components/dashboard/team/roster-table";
 import { RosterHeaderButtons } from "@/components/dashboard/team/roster-header-buttons";
+import { JoinRequestsCard } from "@/components/dashboard/team/join-requests-card";
 import { RowAction } from "@/components/dashboard/schedule/row-action";
 import {
   invitesPendingLabel,
@@ -40,11 +43,32 @@ export default async function RosterPage() {
   // empty roster belonging to nobody.
   if (active.kind !== "team") redirect("/dashboard");
 
-  const roster = await getRosterData(active.id);
-
   // A hidden control is not authorization — every write behind these re-checks
   // `is_program_staff` in SQL. This only decides what is worth rendering.
   const canManage = active.role !== "player";
+
+  // Two independent reads, so they go together rather than one after the other.
+  //
+  // The join-request queue is staff-only, and BOTH halves of that are settled
+  // before the request is made: the redirect above is the workspace half — a
+  // personal workspace never reaches this line, so the section cannot exist
+  // there — and `canManage` is the role half. Neither is the guard.
+  // `program_join_requests` is SECURITY DEFINER and hands a player the same
+  // empty array it hands a stranger; this just declines to ask for a queue the
+  // database would refuse to fill.
+  const [roster, pendingRequests] = await Promise.all([
+    getRosterData(active.id),
+    canManage ? getPendingJoinRequests(active.id) : Promise.resolve([]),
+  ]);
+
+  // Dated here rather than in the card: `toLocaleDateString` reads the
+  // runtime's own time zone, and a client component formatting an ISO string
+  // renders one date on the server and can render its neighbour in the
+  // browser. Same reason `getRosterData` formats `invitedOn` itself.
+  const joinRequests = pendingRequests.map((request) => ({
+    ...request,
+    requestedOn: shortDate(request.createdAt),
+  }));
 
   // The eyebrow names the workspace this roster belongs to. A coach running
   // both squads holds two of these, and "Roster" alone would not say which one
@@ -196,6 +220,28 @@ export default async function RosterPage() {
               View profile
             </RowAction>
           </div>
+        )}
+
+        {/* Who has asked to come in — above the table, because it is the one
+            thing on this page waiting on somebody, and below the claim receipt,
+            which is about a person already on the roster. Requests filed before
+            the program was claimed have been sitting in `program_requests` all
+            along; this is where they surface.
+
+            Gated twice on purpose. `canManage` is the role half of the rule the
+            fetch above already applied, repeated at the render site so the
+            condition is legible where the element is; the length test is what
+            keeps an empty queue from mounting a client component at all. The
+            card itself also returns nothing when its list empties, which is the
+            case this test cannot see — a dismiss that has not round-tripped
+            yet. No card, no empty state, no gap. */}
+        {canManage && joinRequests.length > 0 && (
+          <JoinRequestsCard
+            requests={joinRequests}
+            managedPlayers={managedPlayers}
+            seats={roster.seats}
+            playersCanUpload={roster.playersCanUpload}
+          />
         )}
 
         <RosterTable

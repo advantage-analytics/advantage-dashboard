@@ -41,7 +41,7 @@ ready).
 - **notes:** Verified live 2026-08-29: `program_requests` has NO RLS policies and revoked public grants — deliberately server-only (migration 20260818041110). It also holds `ownership_dispute` rows about the program; those must stay admin-only (surfacing a dispute to current staff could tip off a squatter). `/claim/[programKey]/request` files these rows today and only `/admin/claims` reads them.
 
 ## T3 · Roster page: pending join requests section
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** src/app/dashboard/team/roster/page.tsx, src/components/dashboard/team/join-requests-card.tsx (new — guess), src/components/dashboard/team/roster-invite-dialog.tsx

@@ -18,3 +18,11 @@ is the runner's. Newest entries at the bottom.
 1. T3 (already queued) consumes `getPendingJoinRequests` + `resolveJoinRequest` directly.
 2. A "dismissed" outcome distinct from "resolved" could be added to the RPC if staff need reject-without-inviting.
 3. Resolving a request could chain into `create_program_invite` so one click both resolves and invites.
+
+## T3 · Roster page: pending join requests section — done
+**gate:** mechanical pass (lint, tsc, full Playwright suite incl. 7 new pure tests); task-completion-reviewer VERDICT: pass (all five criteria verified in code, spec re-run 7/7, tsc/lint/build re-verified); pipeline-guardrails-reviewer clear (explicit no-findings — wizard/attribution paths untouched, dialog change additive with existing caller unaffected, provider naming clean); rls-boundary-reviewer clear (explicit no-findings — fetch gated on `canManage` before any PII enters the RSC payload, type-only imports keep server modules out of the client bundle, no admin client, no new queries/policies).
+**changed:** Pending join requests now surface on the team roster page for staff. New `src/components/dashboard/team/join-requests-card.tsx` (client) renders requester name (email local part when unnamed, via `requesterName()` added to `roster-vocabulary.tsx`), email, clamped note, and request date; Invite opens the existing `RosterInviteDialog` (new additive `initialEmail` prop, keyed remount per request) prefilled; Dismiss calls T2's `resolveJoinRequest` with optimistic removal and `role="alert"` error restore. `roster/page.tsx` fetches via `getPendingJoinRequests` only when `canManage`, renders the section only when requests exist — zero requests mounts nothing; players and personal workspaces never see it (fetch-gate + render-gate + DB gate). 7 pure tests in `tests/join-request-name.spec.ts`.
+**follow-ups:**
+1. Team Home's `NeedsAttention` has no alert kind for pending join requests — a coach living on that page won't learn a request exists until opening Roster; worth a `TeamAlert` kind.
+2. Nobody is emailed when a request is filed, though `src/lib/services/email/templates/invite-request.ts` exists.
+3. `fileRequest` accepts an unbounded `note` from an unauthenticated form — clamp at insert rather than only at render.

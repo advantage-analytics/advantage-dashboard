@@ -100,6 +100,20 @@ export function RosterInviteDialog({
   playersCanUpload,
   /** Preselect a row, e.g. from a roster row's "invite to claim" affordance. */
   initialTarget = null,
+  /**
+   * Prefill the address without preselecting a profile — the Join requests
+   * card's "Invite", where the address is all that exists of the person yet.
+   *
+   * Deliberately not a fourth kind of invitation: it seeds the same field a
+   * coach would have typed into, and everything downstream — the tripwire, the
+   * seat note, the refusal that offers to link a matching profile — behaves as
+   * though they had. `initialTarget` still wins, because an address that came
+   * off a profile is the more specific fact about the same field.
+   *
+   * The dialog reads it once, on mount. A caller that reuses one instance for
+   * two different addresses must remount it (`key`) rather than swap the prop.
+   */
+  initialEmail = "",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -112,10 +126,11 @@ export function RosterInviteDialog({
    */
   playersCanUpload: boolean;
   initialTarget?: ManagedPlayer | null;
+  initialEmail?: string;
 }) {
   const [target, setTarget] = useState<ManagedPlayer | null>(initialTarget);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [email, setEmail] = useState(initialTarget?.email ?? "");
+  const [email, setEmail] = useState(initialTarget?.email ?? initialEmail);
   /**
    * Addresses that have already parsed, held apart from the one being typed.
    * Anything that did NOT parse stays in the field instead — a typo'd roster
@@ -186,7 +201,7 @@ export function RosterInviteDialog({
   function reset() {
     setTarget(initialTarget);
     setPickerOpen(false);
-    setEmail(initialTarget?.email ?? "");
+    setEmail(initialTarget?.email ?? initialEmail);
     setEmails([]);
     setEmailEdited(false);
     setRole("player");

@@ -92,6 +92,32 @@ export const REVOKE_LABEL = "Revoke";
 export const RESEND_CLASS =
   "text-[11px] font-medium text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)] disabled:opacity-50";
 
+/**
+ * What to call somebody who has asked to join and given only an address.
+ *
+ * The public request form requires the email and nothing else, so a pending
+ * `invite_request` routinely carries a null name. The local part is what a
+ * person reads out of an address anyway, and it is printed **verbatim** —
+ * never title-cased, never split on dots into a First Last. "jsharma" prettied
+ * into "Jsharma" invents a name nobody has, and this list is the first thing a
+ * coach sees of a stranger; a wrong name read as a real one is worse than a
+ * mail handle read as a mail handle.
+ *
+ * Here rather than in `join-requests-card.tsx` so it can be tested without
+ * loading a dialog: the fallback is a rule about what this program calls a
+ * person, which is what this file is for.
+ */
+export function requesterName(request: {
+  name: string | null;
+  email: string;
+}): string {
+  const given = request.name?.trim();
+  if (given) return given;
+  // An address with no local part is not a thing the form can file, but a
+  // blank name is worse than a whole address, so the address is the floor.
+  return request.email.split("@")[0] || request.email;
+}
+
 /** "8 players" — the first clause of the Roster page's standing line. */
 export function playersLabel(count: number): string {
   return `${count} ${count === 1 ? "player" : "players"}`;
