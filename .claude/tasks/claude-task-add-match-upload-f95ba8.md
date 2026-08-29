@@ -86,7 +86,7 @@ ready).
 - **notes:** STORAGE_KEYS draft persistence is shared across tabs; DashboardShell clears upload localStorage when the path leaves /dashboard/matches/new. If the localStorage collision cannot be resolved cleanly, stop and flag it rather than shipping cross-tab state corruption.
 
 ## T7 · Investigate vendor Azure blob read timeout
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** src/app/api/splitstep/upload-url/route.ts, src/lib/services/splitstep/config.ts, src/lib/services/splitstep/video-url/azure-sas.ts, src/lib/services/splitstep/webhook-payload.ts
 - **done when:**
@@ -95,3 +95,17 @@ ready).
   - [ ] If the cause is in-repo, the fix is applied and the changed value is visible in the diff
   - [ ] If the cause is vendor-side, no speculative code change is made; instead a concrete recommendation is recorded in this task's notes in the queue file
 - **notes:** The error is Python `requests` phrasing — a read timeout mid-body usually means a slow/stalled stream, not an expired SAS (that would be a 403). config.ts discusses expiry rationale.
+
+  **Investigation result (2026-08-29) — vendor-side, no code change.**
+
+  SAS URL is minted at `src/lib/services/splitstep/video-url/azure-sas.ts:341–387` (`AzureSasVideoUrlStrategy.mint()`), signed via `signBlobUrl()` at line 148–171, injected into the job body at `src/app/api/splitstep/jobs/route.ts:424`. Permissions: read-only (`'r'`). Expiry: 14 days (`VENDOR_URL_TTL_SECONDS`, `config.ts:97`), with a 5-minute clock-skew backdate and HTTPS-only restriction.
+
+  The recorded error on job `e6e8dea4` is verbatim Python `urllib3` `ReadTimeoutError` phrasing. Failure webhook landed 19 minutes after SAS issue with 13.99 days of validity remaining — the SAS was valid, Azure accepted the GET and started streaming, and the vendor's socket read timeout fired mid-body on a multi-GB (~117-minute) video. An expired SAS returns an immediate HTTP 403; this did not.
+
+  **Recommendation to send the vendor (contact: Christian):**
+  The download client needs to tolerate a multi-GB streaming body. Two options:
+  1. **Preferred:** use the `azure-storage-blob` Python SDK — `BlobClient.from_blob_url(sas_url).download_blob()` does chunked, ranged GETs with per-chunk retries automatically.
+  2. Or keep `requests` but use `stream=True` with a generous read timeout (e.g. `timeout=(10, 300)`), and on `ReadTimeout` / `ChunkedEncodingError` resume via an HTTP `Range` header from the last byte received. Azure Blob fully supports range requests.
+  In either case: retry the whole download at least once before marking the job failed — the SAS stays valid for 14 days, so a retry costs nothing.
+
+  **Optional future work (product decision, not part of this fix):** the webhook handler could treat an `error_message` matching a download failure pattern as retryable (the SAS is still valid), rather than landing the job in `failed` with no recovery path.
