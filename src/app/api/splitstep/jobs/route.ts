@@ -24,11 +24,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { adoptOrphanedDeliveries } from '@/lib/services/splitstep/adopt-deliveries';
 import { buildSplitStepJobRequest } from '@/lib/services/splitstep/job-request';
 import { parseWebhookPayload } from '@/lib/services/splitstep/webhook-payload';
-import { resolveWebhookUrl } from '@/lib/services/splitstep/config';
-import {
-  createVideoUrlStrategy,
-  resolveAzureStorageConfig,
-} from '@/lib/services/splitstep/video-url';
+import { resolveSplitstepDeploymentConfig } from '@/lib/services/splitstep/deployment-config';
+import { createVideoUrlStrategy } from '@/lib/services/splitstep/video-url';
 import { releaseQuota, reserveQuota } from '@/lib/services/splitstep/quota';
 import { getWorkspaceContext } from '@/lib/workspace/active-workspace-server';
 import {
@@ -70,46 +67,6 @@ interface SubmitBody {
   fixedCamera?: boolean;
 }
 
-/**
- * Everything this deployment needs before a submission can possibly succeed.
- *
- * Checked once, up front, rather than at the three depths these used to sit
- * at — webhook URL after two lookups, vendor credentials after quota was
- * already reserved, Worker URL deeper still inside mint(). On a deployment
- * missing any of them (which is the current state until Vercel is configured)
- * every attempt burned a job lookup, a match lookup, and a full
- * reserve-then-release cycle before discovering it could never have worked.
- */
-function resolveDeploymentConfig():
-  | { ok: true; webhookUrl: string; apiUrl: string; apiKey: string }
-  | { ok: false; missing: string } {
-  const webhookUrl = resolveWebhookUrl();
-  if (!webhookUrl) {
-    return { ok: false, missing: 'NEXT_PUBLIC_SITE_URL (absent, or points at localhost)' };
-  }
-
-  const apiUrl = process.env.SPLITSTEP_API_URL;
-  const apiKey = process.env.SPLITSTEP_API_KEY;
-
-  // The published vendor client still points at api.example.com; refuse rather
-  // than POST a real job at a placeholder host.
-  if (!apiUrl || apiUrl.includes('api.example.com')) {
-    return { ok: false, missing: 'SPLITSTEP_API_URL (absent, or still the placeholder)' };
-  }
-  if (!apiKey) {
-    return { ok: false, missing: 'SPLITSTEP_API_KEY' };
-  }
-  // createVideoUrlStrategy() throws on incomplete storage config —
-  // synchronously, deep inside the submit path. Catch it here where it can
-  // still be a clean 503.
-  const storage = resolveAzureStorageConfig();
-  if (!storage.ok) {
-    return { ok: false, missing: storage.missing };
-  }
-
-  return { ok: true, webhookUrl, apiUrl, apiKey };
-}
-
 export async function POST(request: NextRequest) {
   // 1. Who is calling.
   const supabase = await createClient();
@@ -142,7 +99,7 @@ export async function POST(request: NextRequest) {
 
   // Before touching the database or an allowance: can this deployment finish
   // the job at all?
-  const config = resolveDeploymentConfig();
+  const config = resolveSplitstepDeploymentConfig();
   if (!config.ok) {
     console.error(`${LOG} refusing — deployment not configured`, {
       missing: config.missing,
@@ -409,9 +366,10 @@ export async function POST(request: NextRequest) {
       })
       .eq('id', job.id);
 
-    // 7. Mint the vendor URL. Points at our Worker, not R2 — the Worker's
-    //    download log is the processing-started signal the vendor declined to
-    //    send.
+    // 7. Mint the vendor URL — a read-only SAS on our Azure blob. (An earlier
+    //    revision pointed at a Cloudflare Worker whose download log doubled as
+    //    the processing-started signal; the Worker is retired and that signal
+    //    no longer exists.)
     const vendorUrl = await createVideoUrlStrategy(admin).mint({
       jobId: job.id,
       objectKey: job.video_object_key,
