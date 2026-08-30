@@ -25,7 +25,7 @@ export function NextEventCard({ event }: { event: TeamNextEvent | null }) {
   if (!event) return null;
 
   return (
-    <section className="rounded-[var(--radius-card)] border border-[var(--border-medium)] px-5 pt-4 pb-[18px]">
+    <section className="rounded-[var(--radius-card)] border border-[var(--border-medium)] px-5 pt-4 pb-[18px] shadow-[var(--shadow-card)]">
       <h2 className="eyebrow">Next</h2>
 
       {/* A dual's `program_events.name` is the opponent school, so it reads as

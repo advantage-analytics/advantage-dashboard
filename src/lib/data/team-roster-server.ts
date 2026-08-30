@@ -1,7 +1,6 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import {
-  buildScoreString,
   matchOutcome,
   shortDate,
   shortName,
@@ -11,6 +10,9 @@ import {
 import { meanOfPresent, pct, statKey } from "@/lib/data/aggregate";
 import { canonicalRosterIds } from "@/lib/data/roster-ids";
 import { normalizedPersonName } from "@/lib/data/person-name";
+import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
+import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
+import { isWorking } from "@/lib/data/match-analysis";
 import type { MemberRole } from "@/lib/data/team-settings-server";
 
 /**
@@ -50,10 +52,24 @@ import type { MemberRole } from "@/lib/data/team-settings-server";
 export interface RosterMatch {
   /** Already shortened for the cell: "Ana Castillo" → "A. Castillo". */
   opponent: string;
-  /** From this member's perspective, e.g. "6-4, 6-2". */
-  score: string;
+  /**
+   * The set scores, oriented so `player1` is this member — `<ScoreLine>` draws
+   * them with superscript tiebreaks. Usually present even while `analyzing` is
+   * true: the score is a wizard input entered at upload time, so it is known
+   * long before the stats are — the cell just shows the "Analyzing" chip in the
+   * score's place until analysis settles. Empty only for a match stored with no
+   * score at all.
+   */
+  sets: ScoreLineSet[];
   /** Null when the score is missing or the sets are level. */
   won: boolean | null;
+  /**
+   * Their most recent match is still in analysis — a video the coach uploaded
+   * that has not come back. The cell trades the outcome mark and score for a
+   * live "Analyzing" chip, on the same status vocabulary the matches list uses
+   * (`isWorking`), so one job never reads two ways across two screens.
+   */
+  analyzing: boolean;
   /** "Aug 8". */
   date: string;
 }
@@ -352,6 +368,17 @@ export const getRosterData = cache(async function getRosterData(
     }
   }
 
+  // The newest match a member has may still be analyzing — a video the coach
+  // uploaded that has not come back. One batched read of `processing_jobs`,
+  // keyed on those latest match ids, so the "Last match" cell can carry a live
+  // "Analyzing" chip instead of an empty result. A match with no job row (a file
+  // import, a hand-scored line) is absent from the map and reads as settled —
+  // exactly the fallback `loadMatchAnalysis` documents.
+  const latestMatchIds = rows
+    .map((row) => resultsByMember.get(row.player_id)?.[0]?.match.id)
+    .filter((id): id is string => Boolean(id));
+  const analysisByMatch = await loadMatchAnalysis(supabase, latestMatchIds);
+
   const members: RosterMember[] = rows.map((row) => {
     const results = resultsByMember.get(row.player_id) ?? [];
 
@@ -363,6 +390,7 @@ export const getRosterData = cache(async function getRosterData(
     const earlierServe = meanOfPresent(serves.slice(FORM_WINDOW), 0);
 
     const latest = results[0];
+    const latestJob = latest ? analysisByMatch.get(latest.match.id) : undefined;
 
     return {
       playerId: row.player_id,
@@ -392,8 +420,12 @@ export const getRosterData = cache(async function getRosterData(
               (latest.isPlayer1 ? latest.match.player2_name : latest.match.player1_name) ??
                 "Unknown"
             ),
-            score: buildScoreString(latest.match.score, latest.isPlayer1),
+            // `swap` when this member is stored as player2, so the games and the
+            // tiebreak digits flip together — the perspective rule
+            // `buildScoreString` used to carry, now shared with `<ScoreLine>`.
+            sets: scoreSetsFrom(latest.match.score, { swap: !latest.isPlayer1 }),
             won: latest.won,
+            analyzing: latestJob ? isWorking(latestJob.status) : false,
             date: latest.match.date ? shortDate(latest.match.date) : "",
           }
         : null,

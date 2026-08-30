@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import {
-  ArrowUp,
   ChevronRight,
   GitMerge,
   MoreHorizontal,
@@ -11,6 +10,9 @@ import {
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AdvSwitch } from "@/components/ui/adv-switch";
+import { StatusChip } from "@/components/ui/status-chip";
+import { ResultMark } from "@/components/dashboard/result-mark";
+import { ScoreLine } from "@/components/dashboard/score-line";
 import { capitalize } from "@/lib/utils";
 import { formatDelta, getInitials } from "@/lib/data/match-utils";
 import {
@@ -120,9 +122,16 @@ const ROW_WASH =
 
 const ROW_INSET = "-mx-4 rounded-[var(--radius-element)] px-4 py-3";
 
-/** The trailing controls, so both read as one class of thing. */
-const ROW_ICON =
-  "flex size-6 items-center justify-center rounded-[var(--radius-button)] text-[var(--ink-400)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none";
+/**
+ * The trailing controls, so both read as one class of thing — bar their resting
+ * ink. Design 9a draws the upload glyph one step darker (`--ink-500`) than the
+ * quieter menu trigger (`--ink-400`); everything else is shared, and both wake to
+ * `--ink-700` on hover.
+ */
+const ROW_ICON_BASE =
+  "flex size-6 items-center justify-center rounded-[var(--radius-button)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none";
+const ROW_ICON = `${ROW_ICON_BASE} text-[var(--ink-400)]`;
+const UPLOAD_ICON = `${ROW_ICON_BASE} text-[var(--ink-500)]`;
 
 /**
  * The identifying line under a name.
@@ -141,17 +150,6 @@ function memberLine(member: RosterMember): string {
   if (parts.length > 0) return parts.join(" · ");
 
   return member.email ?? "No email on file";
-}
-
-/** "W" / "L" / an en-dash for a match nobody scored. */
-function outcomeLetter(won: boolean | null): string {
-  if (won === null) return "–";
-  return won ? "W" : "L";
-}
-
-function outcomeColor(won: boolean | null): string {
-  if (won === null) return "var(--ink-400)";
-  return won ? "var(--viz-good)" : "var(--viz-bad)";
 }
 
 function Problem({ message }: { message: string | null }) {
@@ -487,32 +485,66 @@ function MemberRow({
           </button>
         )}
         {lastMatch ? (
-          <>
-            <span
-              aria-hidden
-              className="w-4 shrink-0 text-center text-[11px] font-medium"
-              style={{ color: outcomeColor(lastMatch.won) }}
-            >
-              {outcomeLetter(lastMatch.won)}
-            </span>
-            <span className="sr-only">
-              {lastMatch.won === null
-                ? "Result unrecorded against"
-                : lastMatch.won
-                  ? "Won against"
-                  : "Lost to"}
-            </span>
-            <span className="w-[92px] shrink-0 truncate text-[12px] text-[var(--ink-700)]">
-              {lastMatch.opponent}
-            </span>
-            <span className="text-scoreboard-sm tabular shrink-0">
-              {lastMatch.score}
-            </span>
-            {member.claimedToday && <ClaimedTodayPill />}
-            <span className="text-micro tabular ml-auto shrink-0">
-              {lastMatch.date}
-            </span>
-          </>
+          lastMatch.analyzing ? (
+            /* Their newest match is a video still in analysis. The mark slot
+               keeps a quiet placeholder so the opponent stays on the same x as
+               the settled rows, and the live chip — the matches list's own
+               "Analyzing", same status vocabulary — carries the state where the
+               score would be. */
+            <>
+              <span
+                aria-hidden
+                className="flex w-4 shrink-0 items-center justify-center"
+              >
+                <span className="size-[5px] rounded-full bg-[var(--ink-300)]" />
+              </span>
+              <span className="w-[92px] shrink-0 truncate text-[12px] text-[var(--ink-700)]">
+                {lastMatch.opponent}
+              </span>
+              <StatusChip tone="blue" live className="shrink-0">
+                Analyzing
+              </StatusChip>
+              {member.claimedToday && <ClaimedTodayPill />}
+              <span className="text-micro tabular ml-auto shrink-0">
+                {lastMatch.date}
+              </span>
+            </>
+          ) : (
+            <>
+              {/* The outcome as a glyph, not a "W"/"L" letter: the Round 15
+                  table law bans the bare letter (standings shorthand that does
+                  not translate), and `ResultMark` is the same green/red pair
+                  the matches list draws. An unscored settled match keeps the em
+                  dash — right opponent, nothing claiming a result. */}
+              {lastMatch.won === null ? (
+                <>
+                  <span
+                    aria-hidden
+                    className="w-4 shrink-0 text-center text-[11px] text-[var(--ink-400)]"
+                  >
+                    –
+                  </span>
+                  <span className="sr-only">Result unrecorded against</span>
+                </>
+              ) : (
+                <ResultMark
+                  won={lastMatch.won}
+                  className="w-4 shrink-0 justify-center"
+                />
+              )}
+              <span className="w-[92px] shrink-0 truncate text-[12px] text-[var(--ink-700)]">
+                {lastMatch.opponent}
+              </span>
+              <ScoreLine
+                sets={lastMatch.sets}
+                className="text-scoreboard-sm shrink-0"
+              />
+              {member.claimedToday && <ClaimedTodayPill />}
+              <span className="text-micro tabular ml-auto shrink-0">
+                {lastMatch.date}
+              </span>
+            </>
+          )
         ) : (
           <>
             <span className="text-[12px] text-[var(--ink-400)]">
@@ -550,7 +582,7 @@ function MemberRow({
               href={`/dashboard/team/upload?player=${member.playerId}`}
               aria-label={`Upload a match for ${member.name}`}
               title="Upload a match for this player"
-              className={ROW_ICON}
+              className={UPLOAD_ICON}
             >
               <Upload className="size-3.5" strokeWidth={1.5} aria-hidden />
             </Link>
@@ -622,21 +654,16 @@ export function RosterTable({
       {/* 9a: the card carries the horizontal padding and every row pulls its
           own back out again, which is what makes a hover a rounded panel inset
           from the card's edge rather than a band running wall to wall. */}
-      <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-medium)] bg-[var(--surface-card)]">
+      <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-medium)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
         <div className="min-w-[880px] px-6 pt-0.5 pb-1.5">
           <div
             className={`${ROW} border-b border-[var(--border-hairline)] pt-3 pb-2.5`}
           >
-            {/* The one hairline on the card, and the one arrow: the list is
-                already in lineup order, so the header says which way it reads
-                rather than offering a sort that does not exist. */}
-            <span className={`${COL.spot} inline-flex items-center gap-[3px]`}>
+            {/* The list is already in lineup order; the header just names the
+                column. No sort arrow — there is no sort to offer, and the glyph
+                read as an affordance that did nothing. */}
+            <span className={`${COL.spot} inline-flex items-center`}>
               <span className="eyebrow-sm">#</span>
-              <ArrowUp
-                className="size-2.5 text-[var(--ink-700)]"
-                strokeWidth={1.5}
-                aria-hidden
-              />
               <span className="sr-only">Lineup order, lowest first</span>
             </span>
             <span className={`${COL.player} eyebrow-sm`}>Player</span>

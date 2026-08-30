@@ -192,7 +192,7 @@ export function KpiStrip({ tiles }: { tiles: TeamKpiTile[] }) {
       /* Nothing is ruled between the tiles — round 44's rule for every card on
          this page. The card's own border is the only line it draws, and the
          padding inside each tile is what separates them. */
-      className="flex flex-wrap rounded-[var(--radius-card)] border border-[var(--border-medium)] sm:flex-nowrap"
+      className="flex flex-wrap rounded-[var(--radius-card)] border border-[var(--border-medium)] shadow-[var(--shadow-card)] sm:flex-nowrap"
     >
       {tiles.map((tile) => (
         <Tile key={tile.key} tile={tile} />

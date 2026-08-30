@@ -99,7 +99,7 @@ function dotColor(status: AnalysisStatus): string {
 
 export function MatchRows({ matches }: { matches: TeamMatchRow[] }) {
   return (
-    <section className="rounded-[var(--radius-card)] border border-[var(--border-medium)]">
+    <section className="rounded-[var(--radius-card)] border border-[var(--border-medium)] shadow-[var(--shadow-card)]">
       {/* The card's own word for itself. Its horizontal padding is the row's
           18px plus the list's 6px inset, so the label sits directly over the
           column it heads. Nothing rules it off from the list — whitespace is

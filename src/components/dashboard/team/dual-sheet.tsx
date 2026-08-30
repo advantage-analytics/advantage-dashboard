@@ -83,7 +83,7 @@ const ROW_SURFACE =
 
 export function DualSheet({ dual }: { dual: WeekendDual }) {
   return (
-    <section className="rounded-[var(--radius-card)] border border-[var(--border-medium)]">
+    <section className="rounded-[var(--radius-card)] border border-[var(--border-medium)] shadow-[var(--shadow-card)]">
       <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-4 px-6 pt-4 pb-3">
         <div className="flex min-w-0 flex-col gap-2">
           {/* The card's name for itself, and it does not change with the day.

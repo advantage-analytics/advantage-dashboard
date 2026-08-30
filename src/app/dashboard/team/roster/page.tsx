@@ -176,9 +176,9 @@ export default async function RosterPage() {
             no element and no gap, because `gap-5` on the column would
             otherwise reserve space for an empty box every other day. */}
         {claimant && (
-          <div className="flex items-start gap-2.5 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3.5 py-3">
+          <div className="flex items-center gap-2.5 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3.5 py-3">
             <UserCheck
-              className="mt-0.5 size-3.5 shrink-0 text-[var(--ink-600)]"
+              className="size-3.5 shrink-0 text-[var(--ink-600)]"
               strokeWidth={1.5}
               aria-hidden
             />
@@ -205,7 +205,7 @@ export default async function RosterPage() {
             <RowAction
               href={`/dashboard/team/roster/${claimant.playerId}`}
               ariaLabel={`View ${claimant.name}'s profile`}
-              className="mt-px ml-auto shrink-0 whitespace-nowrap"
+              className="ml-auto shrink-0 whitespace-nowrap"
             >
               View profile
             </RowAction>
@@ -228,9 +228,12 @@ export default async function RosterPage() {
         {canManage && joinRequests.length > 0 && (
           <JoinRequestsCard
             requests={joinRequests}
-            managedPlayers={managedPlayers}
             seats={roster.seats}
-            playersCanUpload={roster.playersCanUpload}
+            programName={active.name}
+            /* The program's own open invites, so a request whose address we have
+               already emailed reads "Matches your invite" rather than repeating
+               the outreach — the same array the table lists as pending rows. */
+            openInviteEmails={roster.invites.map((invite) => invite.email)}
           />
         )}
 
