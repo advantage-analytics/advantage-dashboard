@@ -21,17 +21,19 @@ export type OnboardingChoice = "coach" | "junior" | "college" | "solo";
  * settings can refine it to `academy` later. Persona only — entitlement lives
  * in `users.plan` and is never touched here.
  *
- * Destinations are interim where a dedicated flow does not exist yet: a coach
- * goes to the program claim (T3 re-points this), a junior's guardian to the
- * dashboard (T5). A college player keeps `intent=join`, which keeps them on
- * the program search but off the "Set up this program" action — see
- * `claim/role-choice.tsx` for why that routing matters.
+ * A coach lands on the team-workspace fork (`/claim/team`, screen 5.1), where
+ * college-vs-other is decided; the earlier interim `/claim/program` skipped
+ * that junction and sent every coach down the collegiate claim. A junior's
+ * guardian goes to the dashboard (interim, T5). A college player keeps
+ * `intent=join`, which keeps them on the program search but off the "Set up
+ * this program" action — see `claim/role-choice.tsx` for why that routing
+ * matters.
  */
 const RESOLUTION: Record<
   OnboardingChoice,
   { role: "player" | "coach" | "parent"; destination: string }
 > = {
-  coach: { role: "coach", destination: "/claim/program" },
+  coach: { role: "coach", destination: "/claim/team" },
   junior: { role: "parent", destination: "/dashboard" },
   college: { role: "player", destination: "/claim/program?intent=join" },
   solo: { role: "player", destination: "/dashboard" },

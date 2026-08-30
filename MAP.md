@@ -33,6 +33,9 @@ markers is hand-written — edit it as things move.
 | `/claim/program/referral` | [`src/app/claim/program/referral/page.tsx`](src/app/claim/program/referral/page.tsx) |
 | `/claim/ready` | [`src/app/claim/ready/page.tsx`](src/app/claim/ready/page.tsx) |
 | `/claim/review` | [`src/app/claim/review/page.tsx`](src/app/claim/review/page.tsx) |
+| `/claim/team` | [`src/app/claim/team/page.tsx`](src/app/claim/team/page.tsx) |
+| `/claim/team/setup` | [`src/app/claim/team/setup/page.tsx`](src/app/claim/team/setup/page.tsx) |
+| `/claim/team/type` | [`src/app/claim/team/type/page.tsx`](src/app/claim/team/type/page.tsx) |
 | `/claim/verify/failed` | [`src/app/claim/verify/failed/page.tsx`](src/app/claim/verify/failed/page.tsx) |
 | `/dashboard` | [`src/app/dashboard/(home)/page.tsx`](src/app/dashboard/(home)/page.tsx) |
 | `/dashboard/ask` | [`src/app/dashboard/ask/page.tsx`](src/app/dashboard/ask/page.tsx) |

@@ -42,7 +42,7 @@ ready).
 - **notes:** Design: Stage 7 rationale — "no external record to verify against, so the creator simply owns it." Decide row-vs-new-table in the task (adding org_type to programs and relaxing constraints is the likely shape since program_members/budgets/RLS all hang off programs). Verify schema against the live DB, not supabase/migrations/ (repo is ~100 behind). Budget: same 75h shared default per design 7.2/7.3.
 
 ## T3 · Team-workspace fork screens and entry re-points
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1, T2
 - **files:** src/app/claim/ or src/app/onboarding/ (fork + org screens, new), src/components/dashboard/sidebar/workspace-row.tsx, src/components/claim/ (guess)
