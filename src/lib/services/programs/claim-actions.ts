@@ -36,6 +36,27 @@ interface PendingClaim {
 }
 
 /**
+ * The one call to Supabase that actually mails a link, shared by `startClaim`
+ * and `resendClaim` so "reuses the OTP send path" is literally true rather
+ * than two copies that quietly drift apart.
+ */
+async function sendClaimOtp(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  email: string
+) {
+  return supabase.auth.signInWithOtp({
+    email,
+    options: {
+      // The claimant becomes the owner, so they need the account either way.
+      shouldCreateUser: true,
+      // `/confirm` already exchanges the code and creates the `users` profile
+      // row; this rides that rather than adding a second callback.
+      emailRedirectTo: `${siteUrl()}/confirm?next=/claim/verify`,
+    },
+  });
+}
+
+/**
  * Begin a claim. Creates no CLAIM, and touches no program.
  *
  * That distinction is the entire point. This action is reachable without an
@@ -82,16 +103,7 @@ export async function startClaim(input: {
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: {
-      // The claimant becomes the owner, so they need the account either way.
-      shouldCreateUser: true,
-      // `/confirm` already exchanges the code and creates the `users` profile
-      // row; this rides that rather than adding a second callback.
-      emailRedirectTo: `${siteUrl()}/confirm?next=/claim/verify`,
-    },
-  });
+  const { error } = await sendClaimOtp(supabase, email);
 
   if (error) {
     console.error("[claim] could not send the link", { error: error.message });
@@ -136,6 +148,104 @@ export async function startClaim(input: {
   // Opportunistic sweep. There is no scheduled job on this project, and this is
   // the only path that creates these rows, so it is the natural place.
   await db.from("pending_claims").delete().lt("expires_at", new Date().toISOString());
+
+  return { ok: true };
+}
+
+/**
+ * Re-send the link for a claim `startClaim` already began.
+ *
+ * Reachable the same way `startClaim` is — no session, no account, just
+ * whatever the check-email URL carries (`to` and `program`) — so it gets the
+ * same treatment: read before mailing, mail before writing.
+ *
+ * The one thing it must NOT do is answer "does this address have a claim
+ * pending on this program". The check-email page is a plain GET reachable
+ * for any `to`/`program` pair without ever having submitted the setup form,
+ * so unlike the program lookup below — whose status is already public on the
+ * program's own status page — a row match here is per-address information
+ * nothing else in the flow reveals.
+ *
+ * That is why the OTP send below runs UNCONDITIONALLY once the program
+ * itself checks out, whether or not a matching `pending_claims` row exists.
+ * A response that only mails — and only pays the latency of an outbound
+ * call to Supabase Auth — on a genuine match would leak the same fact two
+ * ways at once: a different result AND a slower one. Mailing unconditionally
+ * closes both, and it is not new exposure: `startClaim` already sends a bare
+ * OTP link to any address paired with any program key, no session required
+ * (see the `pending_claims` migration's own note that this is inherent to
+ * magic links).
+ *
+ * The row itself stays conditional on a genuine match — but that condition
+ * is expressed as ONE `UPDATE ... WHERE email = $1 AND program_key = $2 AND
+ * expires_at >= now()`, issued every time, never skipped by a branch. There
+ * is deliberately no separate `pending_claims` read before it: a lookup
+ * followed by "run the write, or don't" reopens exactly the timing gap the
+ * unconditional send above closed, just one query cheaper. Letting the
+ * WHERE clause alone decide what it touches — one row, or none — costs the
+ * same either way, so the two outcomes are indistinguishable again.
+ */
+export async function resendClaim(input: {
+  programKey: string;
+  email: string;
+}): Promise<ActionOutcome> {
+  const email = input.email.trim().toLowerCase();
+  if (!email) return { ok: false, error: "Add an email address." };
+  if (!input.programKey) return { ok: false, error: "We could not find that program." };
+
+  // Read-only, same as startClaim's own program check, and for the same
+  // reason: don't mail a link into a claim that can no longer be finished.
+  // This is safe to answer plainly regardless of the address — the program's
+  // status is already visible on /claim/[programKey].
+  const db = createAdminClient();
+  const { data: program } = await db
+    .from("programs")
+    .select("status")
+    .eq("program_key", input.programKey)
+    .maybeSingle();
+
+  if (!program) return { ok: false, error: "We could not find that program." };
+  if (program.status !== "unclaimed") {
+    return { ok: false, error: "Someone has already started setting up this program." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await sendClaimOtp(supabase, email);
+
+  if (error) {
+    console.error("[claim] could not resend the link", { error: error.message });
+    // Same shape as startClaim's own failure: plain, actionable, and not
+    // pretending the countdown succeeded when it did not.
+    return {
+      ok: false,
+      error: "We could not send the link. Check the address, or try again in a minute.",
+    };
+  }
+
+  // AFTER the send, same ordering as startClaim: the row's life only extends
+  // once mail has actually gone out. Unconditional, single-statement update
+  // — see the doc comment above for why there is no preceding read. A miss
+  // (wrong program, expired, or no row at all) simply affects zero rows;
+  // single-use semantics for the eventual completion are unaffected either
+  // way, since completeClaim still deletes the row exactly once regardless
+  // of how many times the link inside it was re-sent.
+  const expiresAt = new Date(Date.now() + PENDING_CLAIM_TTL_HOURS * 60 * 60 * 1000);
+  const { error: pendingError } = await db
+    .from("pending_claims")
+    .update({ expires_at: expiresAt.toISOString() })
+    .eq("email", email)
+    .eq("program_key", input.programKey)
+    .gte("expires_at", new Date().toISOString());
+
+  if (pendingError) {
+    console.error("[claim] could not extend the pending claim", {
+      error: pendingError.message,
+    });
+    return {
+      ok: false,
+      error: "We could not start that setup. Try again in a moment.",
+    };
+  }
 
   return { ok: true };
 }

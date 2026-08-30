@@ -101,7 +101,7 @@ ready).
 - **notes:** Design 6.4: "a request that arrives with a name and a reason gets answered." Name is already required; only the structured role is missing (today the note placeholder asks for it in prose).
 
 ## T8 · Wire the claim check-email resend button
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/claim/resend-timer.tsx, src/lib/services/programs/claim-actions.ts
 - **done when:**
