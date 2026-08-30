@@ -126,3 +126,16 @@ supabase/.temp/
 # version of either is ever meant to be shared.
 AGENTS.md
 .codex/
+
+# analysis output
+#
+# `analysis/data/*.csv` is derived, not authored: `scripts/splitstep_json_to_csv.py`
+# reproduces all three byte-for-byte from `tests/fixtures/splitstep/*.json`, both
+# of which ARE committed, using nothing outside the Python standard library.
+#
+#   python3 scripts/splitstep_json_to_csv.py tests/fixtures/splitstep/*.json -o analysis/data
+#
+# That is ~1.1 MB of regenerable stroke data that would otherwise sit in a public
+# repository's history forever. The notebook documents the same command in its
+# first cell, so a fresh clone is one line away from running it.
+analysis/data/
