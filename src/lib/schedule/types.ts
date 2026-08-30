@@ -85,6 +85,19 @@ export interface EventEntry {
   playerLabels: string[];
   opponentLabels: string[];
   opponentSchool: string | null;
+  /**
+   * Which side forfeited this line.
+   *
+   * `'ours'` — our player forfeited; the point goes to THEM.
+   * `'theirs'` — opponent forfeited; the point goes to US.
+   * `null` — normal line, not forfeited.
+   *
+   * A forfeited line must never mint a match, enter the analysis pipeline,
+   * or carry an invented set score. Getting the side wrong silently awards the
+   * point to the wrong team with nothing on screen looking broken — the same
+   * class of silent corruption `docs/ui-revamp-guardrails.md` exists to prevent.
+   */
+  forfeit: "ours" | "theirs" | null;
   /** 0..1 for a dual line; 0..n for a tournament entry — that is its run. */
   matches: EntryMatch[];
 }

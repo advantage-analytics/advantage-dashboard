@@ -544,8 +544,7 @@ test.describe('teamKpis — day zero', () => {
       jobs,
       [stat('m-1', true, 61), stat('m-2', false, 58), stat('m-3', true, 64)],
       [dual('e-1', week(0), { us: 5, them: 2 }), dual('e-2', week(1), { us: 3, them: 4 })],
-      ROSTER,
-      'program'
+      ROSTER
     );
 
     // Not "four tiles of zeroes", not "a strip of em dashes". Nothing.
@@ -582,8 +581,7 @@ test.describe('teamKpis — analyzed matches, no decided dual', () => {
         // contribute to a DUAL record even if a score somehow reached it.
         { ...dual('e-tourney', week(2), { us: 6, them: 1 }), kind: 'tournament' },
       ],
-      ROSTER,
-      'program'
+      ROSTER
     );
 
     expect(keysOf(tiles)).toEqual(['sets-won', 'first-serve', 'matches-analyzed']);
@@ -614,8 +612,7 @@ test.describe('teamKpis — below the sample threshold', () => {
       new Map(),
       season.map((row) => stat(row.id, true, 57)),
       season.map((row, index) => dual(`e-${index}`, row.date, { us: 5, them: 2 })),
-      ROSTER,
-      'program'
+      ROSTER
     );
 
     expect(keysOf(tiles)).toEqual([
@@ -677,8 +674,7 @@ test.describe('teamKpis — mid-season', () => {
       season.map((row, index) =>
         dual(`e-${index}`, row.date, index < 6 ? { us: 5, them: 2 } : { us: 2, them: 5 })
       ),
-      ROSTER,
-      'program'
+      ROSTER
     );
 
     expect(keysOf(tiles)).toEqual([

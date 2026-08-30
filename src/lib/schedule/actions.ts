@@ -12,6 +12,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { headToHeadRows } from "@/lib/data/opponents-server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { isProgramStaff } from "@/lib/workspace/types";
 import type { Discipline, EventSite } from "./types";
@@ -25,6 +26,35 @@ export interface LineupLineInput {
   playerUserIds: string[];
   playerLabels: string[];
   opponentLabels: string[];
+  forfeit?: "ours" | "theirs" | null;
+}
+
+/**
+ * The opponent's program id from the directory key the picker handed over.
+ *
+ * **Null when it resolves to nothing, and null when it resolves to us.** A
+ * program does not play itself, and the directory contains the caller's own
+ * row — the picker can offer it — so the self-check is part of resolving, not
+ * a thing each caller remembers to add afterwards. It was written out three
+ * times before this existed, which made forgetting it in a fourth the path of
+ * least resistance.
+ *
+ * `programs` is world-readable and `program_key` is unique across all 1,940
+ * rows, so this is a lookup rather than a search.
+ */
+async function resolveOpponentProgramId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  programKey: string,
+  ourProgramId: string
+): Promise<string | null> {
+  const { data: program } = await supabase
+    .from("programs")
+    .select("id")
+    .eq("program_key", programKey)
+    .maybeSingle();
+
+  const id = (program as { id: string } | null)?.id ?? null;
+  return id === ourProgramId ? null : id;
 }
 
 export interface CreateDualInput {
@@ -116,18 +146,13 @@ export async function createDual(
   // a lookup rather than a search. A key that resolves to nothing leaves the
   // dual pointing at free text, which is the same state every dual was in
   // before this column existed — degraded, never blocked.
-  let opponentProgramId: string | null = null;
-  if (input.opponentProgramKey) {
-    const { data: program } = await supabase
-      .from("programs")
-      .select("id")
-      .eq("program_key", input.opponentProgramKey)
-      .maybeSingle();
-    const id = (program as { id: string } | null)?.id ?? null;
-    // A program does not play itself. The directory contains the caller's own
-    // row, so the picker can offer it.
-    opponentProgramId = id === auth.programId ? null : id;
-  }
+  const opponentProgramId = input.opponentProgramKey
+    ? await resolveOpponentProgramId(
+        supabase,
+        input.opponentProgramKey,
+        auth.programId
+      )
+    : null;
 
   const { data: event, error: eventError } = await supabase
     .from("program_events")
@@ -163,6 +188,7 @@ export async function createDual(
       player_labels: line.playerLabels,
       opponent_labels: line.opponentLabels,
       opponent_program_id: opponentProgramId,
+      forfeit: line.forfeit ?? null,
     }))
   );
 
@@ -291,7 +317,7 @@ export async function recordResult(
   const { data: entry, error: entryError } = await supabase
     .from("program_event_entries")
     .select(
-      "id, event_id, program_id, slot, player_labels, player_user_ids, discipline"
+      "id, event_id, program_id, slot, player_labels, player_user_ids, discipline, forfeit"
     )
     .eq("id", input.entryId)
     .single();
@@ -299,6 +325,13 @@ export async function recordResult(
   if (entryError || !entry) return { error: "That line no longer exists." };
   if (entry.program_id !== auth.programId) {
     return { error: "That line belongs to another program." };
+  }
+  // A forfeited line must never mint a match. The forfeit is the outcome —
+  // recording a score under it would be a second answer about a line that is
+  // already decided, and the two would disagree everywhere one of them is
+  // counted. Clear the forfeit first if the line was actually played.
+  if (entry.forfeit) {
+    return { error: "This line is forfeited. Clear the forfeit before adding a score." };
   }
 
   const { data: event } = await supabase
@@ -360,14 +393,17 @@ export async function recordResult(
    * it is half of the `matches` SELECT policy:
    *
    *   auth.uid() in (created_by, player1_id, player2_id)
-   *     or is_program_staff(program_id)
-   *     or (user_program_role(program_id) = 'player' and <program>.roster_visible)
+   *     or (program_id is not null and user_program_role(program_id) is not null)
    *
    * Leaving it null used to mean a player could not read their own recorded
-   * match. `created_by` is the coach, staff they are not, and `roster_visible`
-   * DEFAULTS TO FALSE — so every clause failed and the line rendered with a
-   * blank score on the player's own schedule. It also kept the pair out of
-   * Compare, which counts only non-null ids.
+   * match: under the older policy the program clause required staff, or a
+   * player on a program with `roster_visible` set — a column that defaulted to
+   * false — so every clause failed and the line rendered with a blank score on
+   * the player's own schedule. `20260830120000_matches_visible_to_members`
+   * widened the program clause to any member, which covers that case now. The
+   * id still matters: it is what keeps the pair in Compare, which counts only
+   * non-null ids, and it is the only clause that survives a player leaving the
+   * program.
    *
    * Singles slots map one entry to one account. A doubles line has two
    * accounts and one column, so there is no non-arbitrary choice and null is
@@ -473,4 +509,230 @@ export async function recordResult(
   revalidatePath("/dashboard/team/schedule");
   revalidatePath(`/dashboard/team/schedule/${entry.event_id}`);
   return { matchId };
+}
+
+/**
+ * One row the add-opponent popover can offer against a typed name.
+ *
+ * `name` is the pooled roster's exact spelling, and it is what a pick WRITES
+ * into the line — the popover may match loosely to *suggest*, but resolving a
+ * line means adopting this string verbatim, so the submit-time
+ * `contribute_opponent_player` call converges on the same row instead of
+ * minting a near-duplicate (`roster-match.ts` states the exact-write rule).
+ */
+export interface OpponentRosterCandidate {
+  playerId: string;
+  name: string;
+  lineupSpot: number | null;
+  /** This program's matches against them — `headToHeadRows`' count, so a
+   *  match attributed to somebody else can never inflate it. Usually 0 or 1. */
+  priorMeetings: number;
+}
+
+/**
+ * The pooled roster behind the dual's current opponent, for the lineup
+ * popover's saved-name dedupe.
+ *
+ * A read in a file headed "writing to the schedule", on purpose: it exists
+ * solely so the popover can stop a coach from writing a second copy of a name
+ * the pool already holds, it is gated by the same staff check as every write
+ * here, and its one caller is the dual builder those writes serve. The heavy
+ * lifting is `opponents-server.ts`'s — `pooled_roster` for the rows,
+ * `headToHeadRows` for the meeting counts.
+ *
+ * `opponent_player_id` is selected for counting meetings and nothing else —
+ * never a policy, never a join that widens access (20260823090000's rule).
+ */
+export async function opponentRosterForDual(
+  opponentProgramKey: string
+): Promise<{ candidates: OpponentRosterCandidate[] } | ActionError> {
+  const auth = await requireStaff();
+  if (isError(auth)) return auth;
+
+  const supabase = await createClient();
+
+  const opponentProgramId = await resolveOpponentProgramId(
+    supabase,
+    opponentProgramKey,
+    auth.programId
+  );
+  // A key that resolves to nothing, or to ourselves, has no roster to offer.
+  // Same non-answer as an opted-out pool: an empty list, never an error.
+  if (!opponentProgramId) return { candidates: [] };
+
+  const [{ data: rosterRows }, { data: matchRows }] = await Promise.all([
+    supabase.rpc("pooled_roster", { p_program_id: opponentProgramId }),
+    supabase
+      .from("matches")
+      .select("id, player2_name, opponent_player_id")
+      .eq("program_id", auth.programId),
+  ]);
+
+  const matches = (matchRows ?? []) as {
+    id: string;
+    player2_name: string | null;
+    opponent_player_id: string | null;
+  }[];
+
+  const candidates = (
+    (rosterRows ?? []) as {
+      id: string;
+      first_name: string;
+      last_name: string;
+      lineup_spot: number | null;
+    }[]
+  )
+    .map((row) => {
+      const name = `${row.first_name} ${row.last_name}`.trim();
+      return {
+        playerId: row.id,
+        name,
+        lineupSpot: row.lineup_spot,
+        // A one-player roster, so identity-or-exact-name attribution — and its
+        // refusal to let two blanks match — stays `headToHeadRows`' one rule.
+        priorMeetings: headToHeadRows(matches, [{ id: row.id, name }]).length,
+      };
+    })
+    // Lineup order, unranked last — the same sort the Opponents page uses, so
+    // "#2" here is the same #2 a coach sees there.
+    .sort((a, b) => {
+      if (a.lineupSpot === b.lineupSpot) return a.name.localeCompare(b.name);
+      if (a.lineupSpot === null) return 1;
+      if (b.lineupSpot === null) return -1;
+      return a.lineupSpot - b.lineupSpot;
+    });
+
+  return { candidates };
+}
+
+/**
+ * The popover's "save as a different player" — `contribute_opponent_player`,
+ * best-effort, with `createDual`'s refusal handling: every arm of the RPC can
+ * legitimately refuse (most often "that program manages its own roster"), and
+ * a refusal costs the pool an identity, never the coach their typed name.
+ *
+ * Returns whether a row actually exists on that roster afterwards, because the
+ * caller shows "Saved to {school} roster" and must not claim a save that did
+ * not happen. `{ saved: false }` is a total answer, not an error — the line
+ * keeps its plain label either way.
+ */
+export async function saveOpponentPlayer(input: {
+  opponentProgramKey: string;
+  name: string;
+}): Promise<{ saved: boolean }> {
+  const auth = await requireStaff();
+  if (isError(auth)) return { saved: false };
+
+  // Both names or nothing — the RPC requires them, and a single-token name
+  // ("Kim") is not an identity anyone else would converge on.
+  const parts = input.name.trim().split(/\s+/);
+  if (parts.length < 2) return { saved: false };
+
+  const supabase = await createClient();
+
+  const opponentProgramId = await resolveOpponentProgramId(
+    supabase,
+    input.opponentProgramKey,
+    auth.programId
+  );
+  if (!opponentProgramId) return { saved: false };
+
+  try {
+    const { data: contributed, error } = await supabase.rpc(
+      "contribute_opponent_player",
+      {
+        p_program_id: auth.programId,
+        p_opponent_program_id: opponentProgramId,
+        p_first_name: parts.slice(0, -1).join(" "),
+        p_last_name: parts[parts.length - 1],
+      }
+    );
+    return { saved: !error && Boolean(contributed) };
+  } catch {
+    // See createDual's contribute loop: an identity is an enrichment, never a
+    // precondition, and never worth an error the coach has to read.
+    return { saved: false };
+  }
+}
+
+/**
+ * Mark a line as forfeited, or clear a forfeit.
+ *
+ * `side` is `'ours'` or `'theirs'` — which side forfeited, determining who
+ * gets the point. Getting the side wrong silently awards the point to the wrong
+ * team. `null` clears the forfeit and returns the line to normal.
+ *
+ * A line that already has a match cannot be forfeited: a forfeit is the
+ * alternative to a played match, not a second outcome on top of one. The
+ * coach must delete the match first if they want to forfeit a played line.
+ */
+export async function setForfeit(
+  entryId: string,
+  side: "ours" | "theirs" | null
+): Promise<{ ok: true } | ActionError> {
+  const auth = await requireStaff();
+  if (isError(auth)) return auth;
+
+  const supabase = await createClient();
+
+  const { data: entry, error: entryError } = await supabase
+    .from("program_event_entries")
+    .select("id, event_id, program_id")
+    .eq("id", entryId)
+    .single();
+
+  if (entryError || !entry) return { error: "That line no longer exists." };
+  if (entry.program_id !== auth.programId) {
+    return { error: "That line belongs to another program." };
+  }
+
+  // A forfeit is a DUAL LINE's outcome, and the column is at that grain: one
+  // entry, one court, one point. A tournament entry is a whole run of matches,
+  // so a forfeit on one would stamp "Forfeited" across every round, blank
+  // every round's score and offer "Clear forfeit" once per round — the same
+  // one-answer-for-many-rounds failure `matchState` documents. There is no
+  // round-level forfeit to fall back on, so refuse rather than half-support it.
+  // Guarded on SETTING only. Clearing has to work on any event kind, or a row
+  // that reached this state some other way — a direct write, a future bulk
+  // insert — would be unrepairable through the UI, and the guard would be the
+  // reason. Refuse to create the state; never refuse to undo it.
+  if (side !== null) {
+    const { data: event } = await supabase
+      .from("program_events")
+      .select("kind")
+      .eq("id", entry.event_id)
+      .maybeSingle();
+
+    if (event?.kind !== "dual") {
+      return { error: "Only a dual line can be forfeited." };
+    }
+  }
+
+  // Setting a forfeit on a line that already has a match is a contradiction:
+  // the match says the line was played, the forfeit says it was not. Only
+  // allow clearing (side === null) on a line with matches.
+  if (side !== null) {
+    const { data: existingMatches } = await supabase
+      .from("matches")
+      .select("id")
+      .eq("event_entry_id", entryId)
+      .limit(1);
+
+    if (existingMatches && existingMatches.length > 0) {
+      return {
+        error: "This line already has a match recorded. Remove it before forfeiting.",
+      };
+    }
+  }
+
+  const { error: updateError } = await supabase
+    .from("program_event_entries")
+    .update({ forfeit: side, updated_at: new Date().toISOString() })
+    .eq("id", entryId);
+
+  if (updateError) return { error: updateError.message };
+
+  revalidatePath("/dashboard/team/schedule");
+  revalidatePath(`/dashboard/team/schedule/${entry.event_id}`);
+  return { ok: true };
 }

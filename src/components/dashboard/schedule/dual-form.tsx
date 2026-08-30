@@ -1,24 +1,30 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
 import { advButton } from "@/lib/ui/adv-button";
 import { EventShell } from "@/components/dashboard/schedule/event-shell";
-import { OpponentPicker } from "@/components/dashboard/schedule/opponent-picker";
+import { OpponentRail } from "@/components/dashboard/schedule/opponent-rail";
+import { SchoolSearch } from "@/components/dashboard/schedule/school-search";
 import {
   LineupEditor,
   type LineupLine,
 } from "@/components/dashboard/schedule/lineup-editor";
+import type { OpponentTarget } from "@/components/dashboard/schedule/opponent-name-cell";
 import {
   FieldRow,
   FieldCellSelect,
   FieldCellText,
 } from "@/components/dashboard/schedule/field-row";
-import { createDual } from "@/lib/schedule/actions";
+import {
+  createDual,
+  opponentRosterForDual,
+  type OpponentRosterCandidate,
+} from "@/lib/schedule/actions";
 import { splitNames } from "@/lib/schedule/format";
 import { benchFromLines } from "@/lib/schedule/roster-match";
-import { programDisplayName } from "@/lib/data/programs-server";
+import { programDisplayName, programSubtitle } from "@/lib/data/programs-server";
 // `teamLabel` exists twice under two signatures. This is the workspace one,
 // which takes a nullable squad and answers null for null. The programs-server
 // twin takes a plain string and answers "Men's" to anything that is not
@@ -27,6 +33,7 @@ import { programDisplayName } from "@/lib/data/programs-server";
 import { teamLabel, type Workspace } from "@/lib/workspace/types";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
+import type { OpponentDualHistory } from "@/lib/schedule/opponent-history";
 import type { EventSite } from "@/lib/schedule/types";
 
 const SINGLES_SLOTS = ["S1", "S2", "S3", "S4", "S5", "S6"];
@@ -50,7 +57,17 @@ const FORMATS = [
 ];
 
 /**
- * 25b — the new dual.
+ * 2b/2c — the new dual: find the school, then build the fixture beside it.
+ *
+ * Step one asks which school and nothing else (screen 2c, `school-search.tsx`);
+ * step two is 2b's master–detail builder. The opponent rail stays on the left
+ * — the conference always in view, the directory a keystroke away — and
+ * clicking a different school there re-targets the dual in place: the name and
+ * the directory row change through `takeOpponent`, and the date, the site, the
+ * surface, the format and our own lineup stay exactly as the coach left them —
+ * answers about the fixture, not about the opponent. The opposing names are
+ * the opposite: typed against one school, they must not ride along to another,
+ * so a re-target clears them (`takeOpponent` says why that is load-bearing).
  *
  * Creating this writes nine LINES, not nine matches. The design's footer says
  * "creates 9 matches"; taken literally that puts nine scoreless rows into
@@ -64,6 +81,11 @@ export function DualForm({
   ourTeam,
   ladder,
   defaultSurface,
+  ourConference,
+  ourDivision,
+  ourProgramKey,
+  conferencePrograms,
+  historyEntries,
 }: {
   ourName: string;
   /** The active workspace's squad, so a men's coach who picks the women's row
@@ -71,10 +93,21 @@ export function DualForm({
   ourTeam: Workspace["team"];
   ladder: LadderPlayer[];
   defaultSurface: string | null;
+  /** Step one's props — see `SchoolSearch`. The rail shares them. */
+  ourConference: string | null;
+  ourDivision: string | null;
+  ourProgramKey: string | null;
+  conferencePrograms: ProgramSearchResult[];
+  historyEntries: [string, OpponentDualHistory][];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  // Which of the two steps is on screen. Explicit rather than derived from
+  // `opponent`, so a coach who re-targets in step two never gets thrown back
+  // to a screen they already answered.
+  const [step, setStep] = useState<"school" | "details">("school");
 
   const [opponent, setOpponent] = useState("");
   // The directory row behind the name, when the coach picked one rather than
@@ -82,7 +115,8 @@ export function DualForm({
   // missed has no row — and the line is still recorded, just without a rival
   // to aggregate it under.
   // Only its key is sent. The rest of the row is here to be compared against
-  // our own squad, which `createDual` has no field to carry and no reason to.
+  // our own squad, which `createDual` has no field to carry and no reason to,
+  // and to give the rail and the header the school's own name and subline.
   const [opponentProgram, setOpponentProgram] =
     useState<ProgramSearchResult | null>(null);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -97,14 +131,65 @@ export function DualForm({
   // is back on the bench without a second piece of state to keep in step.
   const bench = useMemo(() => benchFromLines(lines, ladder), [lines, ladder]);
 
-  // A line counts once BOTH sides are named. Half a line has nobody to play.
+  // The opponent's pooled roster, for the lineup popovers' saved-name dedupe.
+  // Stored WITH the key it was fetched for and read back only while that key
+  // is still the target, so a re-target empties the suggestions in the same
+  // render that changes the school — not an effect later. `takeOpponent`
+  // explains why nothing typed or suggested may outlive the school it was
+  // typed against.
+  const [fetchedRoster, setFetchedRoster] = useState<{
+    forKey: string;
+    list: OpponentRosterCandidate[];
+  } | null>(null);
+  const opponentKey = opponentProgram?.programKey ?? null;
+
+  useEffect(() => {
+    if (!opponentKey) return;
+    let stale = false;
+    void opponentRosterForDual(opponentKey).then((result) => {
+      // The cleanup marks a superseded fetch stale, so School A's roster can
+      // never land after a re-target and pose as School B's.
+      if (stale || "error" in result) return;
+      setFetchedRoster({ forKey: opponentKey, list: result.candidates });
+    });
+    return () => {
+      stale = true;
+    };
+  }, [opponentKey]);
+
+  const opponentTarget = useMemo<OpponentTarget>(
+    () => ({
+      key: opponentProgram ? `program:${opponentProgram.programKey}` : `text:${opponent}`,
+      schoolName: opponentProgram?.schoolName ?? null,
+      programKey: opponentProgram?.programKey ?? null,
+      // Only an unclaimed directory row may be saved to —
+      // `contribute_opponent_player` refuses a program with members, and the
+      // popover must not offer a save it knows will be refused.
+      canSave: opponentProgram?.status === "unclaimed",
+      candidates:
+        opponentKey !== null && fetchedRoster?.forKey === opponentKey
+          ? fetchedRoster.list
+          : [],
+    }),
+    [opponentProgram, opponent, opponentKey, fetchedRoster]
+  );
+
+  // A line counts once OUR side is named. The opposing names are optional —
+  // `createDual` stores a line with an empty opponent list, which is the state
+  // most duals are entered in: the other school's lineup lands the night
+  // before, long after the fixture went on the schedule.
+  //
+  // A forfeited line counts too, with nobody named on either side. Dropping it
+  // for having no player would write eight lines under a dual that has nine
+  // points to give, and `dualScore` would then read a decided 4-3 as a 4-3 out
+  // of eight — the total quietly disagreeing with the sport.
   const filled = lines
     .map((line) => ({
       line,
       ours: splitNames(line.ourLabels.join(" / ")),
       theirs: splitNames(line.theirLabels.join(" / ")),
     }))
-    .filter((row) => row.ours.length > 0 && row.theirs.length > 0);
+    .filter((row) => row.ours.length > 0 || row.line.forfeit !== null);
 
   // Two squads at one school are two programs with two budgets, and the
   // directory returns both rows under the same school name. Picking the wrong
@@ -119,6 +204,62 @@ export function DualForm({
     opponentProgram.team !== ourTeam
       ? opponentProgram.team
       : null;
+
+  /** The one place the name and the directory row move together, so neither
+   *  step — nor the rail's re-target — can set one without the other. A
+   *  re-target keeps the date, the site, the surface, the format and OUR OWN
+   *  lineup — `ourIds` and `ourLabels` alike — exactly as entered: those are
+   *  answers about the fixture, not about the opponent. The opposing names
+   *  are the one thing that IS about the opponent, so an actual change of
+   *  target clears `theirLabels`. A name typed against School A must never be
+   *  submitted under School B's program id: `contribute_opponent_player`
+   *  matches on name WITHIN the target program, so a carried-over name does
+   *  not just create a stray row at School B — it can silently attach to a
+   *  real, different person there. Re-picking the current row (same
+   *  `programKey`, or same free-text name) is a no-op and clears nothing. */
+  function takeOpponent(name: string, program: ProgramSearchResult | null) {
+    const sameTarget =
+      program !== null && opponentProgram !== null
+        ? program.programKey === opponentProgram.programKey
+        : program === null && opponentProgram === null && name === opponent;
+    if (!sameTarget) {
+      setLines((previous) =>
+        previous.map((line) =>
+          line.theirLabels.length > 0 ? { ...line, theirLabels: [] } : line
+        )
+      );
+    }
+    setOpponent(name);
+    setOpponentProgram(program);
+  }
+
+  if (step === "school") {
+    return (
+      <SchoolSearch
+        ourConference={ourConference}
+        ourDivision={ourDivision}
+        ourProgramKey={ourProgramKey}
+        conferencePrograms={conferencePrograms}
+        historyEntries={historyEntries}
+        onChosen={(name, program) => {
+          takeOpponent(name, program);
+          setStep("details");
+        }}
+      />
+    );
+  }
+
+  // The school's own name for the header and the footer — `opponent` carries
+  // the squad by then ("Ridgeline University Men's Tennis"), which the rail's
+  // subline and the mismatch warning already say once.
+  const schoolDisplay = opponentProgram?.schoolName ?? opponent;
+  // `programSubtitle`, not a local join: this printed "Big Sky · D-I" while
+  // the four claim-flow call sites print "D-I · Big Sky" off the same two
+  // fields. Only a directory row knows either, so a free-text opponent renders
+  // no subline rather than an invented one.
+  const headerSubline = opponentProgram
+    ? programSubtitle(opponentProgram.division, opponentProgram.conference)
+    : "";
 
   function submit() {
     setError(null);
@@ -137,9 +278,13 @@ export function DualForm({
           discipline: row.line.discipline,
           slot: row.line.slot,
           position: index,
-          playerUserIds: row.line.ourIds,
-          playerLabels: row.ours,
-          opponentLabels: row.theirs,
+          // A forfeited line carries no player on either side. The editor
+          // already cleared both when the marker went on, so these are empty
+          // anyway — stated here so the write cannot drift from the row.
+          playerUserIds: row.line.forfeit === null ? row.line.ourIds : [],
+          playerLabels: row.line.forfeit === null ? row.ours : [],
+          opponentLabels: row.line.forfeit === null ? row.theirs : [],
+          forfeit: row.line.forfeit,
         })),
       });
 
@@ -154,6 +299,7 @@ export function DualForm({
   return (
     <EventShell
       crumb="New dual"
+      flush
       footer={
         <>
           <button
@@ -171,8 +317,7 @@ export function DualForm({
           ) : (
             <span className="text-[11px]" style={{ color: "var(--ink-600)" }}>
               Creates <span className="tabular">{filled.length}</span>{" "}
-              {filled.length === 1 ? "line" : "lines"}, every line named — video
-              comes later
+              {filled.length === 1 ? "line" : "lines"} vs {schoolDisplay}
             </span>
           )}
           <button
@@ -186,16 +331,46 @@ export function DualForm({
         </>
       }
     >
-      <div className="flex flex-col gap-5">
-        <div>
-          <span className="eyebrow">New dual · opponent</span>
-          <OpponentPicker
-            value={opponent}
-            onChange={(name, program) => {
-              setOpponent(name);
-              setOpponentProgram(program);
-            }}
-          />
+      <OpponentRail
+        ourConference={ourConference}
+        ourProgramKey={ourProgramKey}
+        conferencePrograms={conferencePrograms}
+        historyEntries={historyEntries}
+        currentName={opponent}
+        currentProgram={opponentProgram}
+        onPick={takeOpponent}
+      />
+
+      <div className="min-w-0 flex-1 overflow-y-auto px-8 pb-8 pt-6">
+        <div className="flex flex-col gap-[22px]">
+          <div className="flex items-end gap-3 border-b border-[var(--border-hairline)] pb-3">
+            <div className="min-w-0 flex-1">
+              <span className="eyebrow">Dual</span>
+              <div className="mt-1.5 flex items-baseline gap-2.5">
+                <span
+                  className="text-[30px] font-light leading-none tracking-[-0.6px]"
+                  style={{ color: "var(--ink-600)" }}
+                >
+                  vs
+                </span>
+                <span
+                  className="min-w-0 truncate text-[30px] font-light leading-none tracking-[-0.6px]"
+                  style={{ color: "var(--ink-900)" }}
+                >
+                  {schoolDisplay}
+                </span>
+              </div>
+            </div>
+            {headerSubline ? (
+              <span
+                className="text-micro shrink-0"
+                style={{ color: "var(--ink-500)" }}
+              >
+                {headerSubline}
+              </span>
+            ) : null}
+          </div>
+
           {mismatchedSquad !== null ? (
             // Advisory, and deliberately nothing more: Create stays enabled and
             // the payload is untouched. A men's program really can host the
@@ -203,7 +378,7 @@ export function DualForm({
             // be wrong more often than the coach is.
             <div
               role="status"
-              className="mt-3 flex items-start gap-2.5 rounded-[var(--radius-element)] border border-[var(--border-medium)] bg-[var(--surface-subtle)] px-3 py-2.5"
+              className="flex items-start gap-2.5 rounded-[var(--radius-element)] border border-[var(--border-medium)] bg-[var(--surface-subtle)] px-3 py-2.5"
             >
               <AlertTriangle
                 strokeWidth={1.5}
@@ -226,49 +401,53 @@ export function DualForm({
               </p>
             </div>
           ) : null}
-          <FieldRow>
-            <FieldCellText label="Date" value={date} onChange={setDate} type="date" mono />
-            <FieldCellSelect
-              label="Site"
-              value={site}
-              options={SITES}
-              onChange={(value) => setSite(value as EventSite)}
-            />
-            <FieldCellSelect
-              label="Surface"
-              value={surface}
-              options={SURFACES}
-              onChange={setSurface}
-            />
-            <FieldCellSelect
-              label="Format"
-              value={format}
-              options={FORMATS}
-              onChange={setFormat}
-            />
-          </FieldRow>
-          <p className="text-micro mt-3" style={{ color: "var(--ink-500)" }}>
-            Your program defaults for site, surface and format — edit any before
-            create.
-          </p>
-        </div>
 
-        <div>
-          <div className="flex items-baseline gap-2.5 border-b border-[var(--border-hairline)] pb-2.5">
-            <span className="eyebrow">Lineup · singles</span>
-            <span className="text-micro" style={{ color: "var(--ink-500)" }}>
-              {ladder.some((player) => player.ladderPosition !== null)
-                ? "filled from your ladder"
-                : "type a name on each court"}
-            </span>
+          <div>
+            <FieldRow>
+              <FieldCellText label="Date" value={date} onChange={setDate} type="date" mono />
+              <FieldCellSelect
+                label="Site"
+                value={site}
+                options={SITES}
+                onChange={(value) => setSite(value as EventSite)}
+              />
+              <FieldCellSelect
+                label="Surface"
+                value={surface}
+                options={SURFACES}
+                onChange={setSurface}
+              />
+              <FieldCellSelect
+                label="Format"
+                value={format}
+                options={FORMATS}
+                onChange={setFormat}
+              />
+            </FieldRow>
+            <p className="text-micro mt-3" style={{ color: "var(--ink-500)" }}>
+              Your program defaults for site, surface and format — edit any
+              before create.
+            </p>
           </div>
-          <LineupEditor
-            lines={lines}
-            bench={bench}
-            onChange={setLines}
-            ourName={ourName}
-            theirName={opponent}
-          />
+
+          <div>
+            <div className="flex items-baseline gap-2.5 border-b border-[var(--border-hairline)] pb-2.5">
+              <span className="eyebrow">Lineup · singles</span>
+              <span className="text-micro" style={{ color: "var(--ink-500)" }}>
+                {ladder.some((player) => player.ladderPosition !== null)
+                  ? "six required · from your ladder"
+                  : "six required · type a name on each court"}
+              </span>
+            </div>
+            <LineupEditor
+              lines={lines}
+              bench={bench}
+              onChange={setLines}
+              ourName={ourName}
+              theirName={opponent}
+              opponentTarget={opponentTarget}
+            />
+          </div>
         </div>
       </div>
     </EventShell>
@@ -292,6 +471,7 @@ function seedLineup(ladder: LadderPlayer[]): LineupLine[] {
       ourIds: player ? [player.userId] : [],
       ourLabels: player ? [player.name] : [],
       theirLabels: [],
+      forfeit: null,
     };
   });
 
@@ -304,6 +484,7 @@ function seedLineup(ladder: LadderPlayer[]): LineupLine[] {
       ourIds: pair.map((player) => player.userId),
       ourLabels: pair.map((player) => player.name),
       theirLabels: [],
+      forfeit: null,
     };
   });
 

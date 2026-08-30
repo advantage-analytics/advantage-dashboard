@@ -50,7 +50,6 @@ interface IdentityDraft {
   homeVenue: string;
   defaultSurface: Surface | "";
   season: string;
-  rosterVisible: boolean;
   playersCanUpload: boolean;
 }
 
@@ -62,7 +61,6 @@ function toDraft(data: TeamSettingsData): IdentityDraft {
     homeVenue: data.program.homeVenue ?? "",
     defaultSurface: (data.program.defaultSurface as Surface | null) ?? "",
     season: data.program.season ?? "",
-    rosterVisible: data.program.rosterVisible,
     playersCanUpload: data.program.playersCanUpload,
   };
 }
@@ -102,7 +100,6 @@ export function TeamSettingsForm({ data }: { data: TeamSettingsData }) {
         homeVenue: draft.homeVenue,
         defaultSurface: draft.defaultSurface === "" ? null : draft.defaultSurface,
         season: draft.season,
-        rosterVisible: draft.rosterVisible,
         playersCanUpload: draft.playersCanUpload,
       });
       if (result.ok) setSaved(draft);
@@ -371,23 +368,6 @@ export function TeamSettingsForm({ data }: { data: TeamSettingsData }) {
                 { value: "anyone", label: "Anyone on the team" },
               ]}
               onChange={(value) => set("playersCanUpload", value === "anyone")}
-            />
-          }
-        />
-
-        <SettingsCardRow
-          align="start"
-          label="Roster visibility"
-          description="Profiles are read-only mirrors either way; players always see their own."
-          control={
-            <SettingsRadioGroup
-              label="Roster visibility"
-              value={draft.rosterVisible ? "everyone" : "coaches"}
-              options={[
-                { value: "everyone", label: "Everyone on the team" },
-                { value: "coaches", label: "Coaches only" },
-              ]}
-              onChange={(value) => set("rosterVisible", value === "everyone")}
             />
           }
         />

@@ -17,7 +17,7 @@ import {
  *
  * The scenario this locks: one athlete rostered in program A *and* program B,
  * with a match filed under `program_id = A`. Nothing about B — not its staff,
- * not a rostered player on a `roster_visible` program, not the shared athlete
+ * not a rostered player on another program, not the shared athlete
  * in the middle — may pull that A-filed match into B's view. The policies that
  * enforce it are the `matches` SELECT policy and the `visible_match_ids()` /
  * `visible_point_ids()` helpers that `match_stats`, `points` and `shots`
@@ -58,7 +58,7 @@ test.describe('cross-program match isolation (live RLS)', () => {
   let aOwner: Session; // owner of program A; files the match
   let athlete: Session; // player in A and in B; player1 of the match
   let bStaff: Session; // coach in B only
-  let bPlayer: Session; // player in B only, with B.roster_visible = true
+  let bPlayer: Session; // player in B only
 
   const authUserIds: string[] = [];
   const programIds: string[] = [];
@@ -79,8 +79,7 @@ test.describe('cross-program match isolation (live RLS)', () => {
       { mark: MARK, password: PASSWORD, authUserIds }
     );
 
-    // Two programs. B is deliberately the permissive one — roster_visible on —
-    // because the assertion is that even B's widest read stops at B's edge.
+    // Two programs. The assertion is that B's read stops at B's edge.
     const programs = await admin
       .from('programs')
       .insert([
@@ -91,14 +90,12 @@ test.describe('cross-program match isolation (live RLS)', () => {
           school_group: `${MARK}-a`,
           school_name: `RLS Test School A ${MARK}`,
           team: 'mens',
-          roster_visible: false,
         },
         {
           program_key: `${MARK}-b`,
           school_group: `${MARK}-b`,
           school_name: `RLS Test School B ${MARK}`,
           team: 'mens',
-          roster_visible: true,
         },
       ])
       .select('id, program_key');
@@ -210,7 +207,7 @@ test.describe('cross-program match isolation (live RLS)', () => {
 
   for (const [who, session] of [
     ['B staff (coach)', () => bStaff],
-    ['B player on a roster_visible program', () => bPlayer],
+    ['B player', () => bPlayer],
   ] as const) {
     test(`${who} reads zero rows for the A-filed match`, async () => {
       const c = session().client;

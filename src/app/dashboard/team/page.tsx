@@ -66,7 +66,7 @@ export default async function TeamHomePage() {
     attention,
     nextEvent,
     weekendDual,
-  } = await getTeamHomeData(active.id, billingMonth, active.role);
+  } = await getTeamHomeData(active.id, billingMonth);
 
   // Roster facts and the setup checklist are staff business. A player reaches
   // this page from the same rail item, and `program_roster` returns them only
@@ -231,17 +231,13 @@ export default async function TeamHomePage() {
                 computed honestly; `teamKpis()` says which and when.
 
                 Not staff-only, and not player-blind either. Every figure here
-                is labelled as the program's, and on a program with
-                `roster_visible` set that is exactly what a player gets — the
-                same numbers their coach reads. With the flag unset, RLS hands
-                that player their OWN matches and nobody else's, and the strip
-                would print one player's season under the team's name with
-                nothing on screen looking wrong. `teamKpis()` is told which read
-                it is looking at and returns no tiles at all for the narrow one:
-                the decision is made where the rows are, because by the time
-                four `TeamKpiTile`s arrive here there is nothing left in them
-                that says how many matches RLS withheld. See
-                `lib/data/results-visibility.ts`. */}
+                is labelled as the program's, and that is exactly what a player
+                gets — the same numbers their coach reads. This used to depend
+                on a flag: with it unset, RLS handed a player their OWN matches
+                and nobody else's, and the strip would print one player's season
+                under the team's name with nothing on screen looking wrong.
+                `20260830120000_matches_visible_to_members` removed that read
+                entirely, so there is no longer a narrow one to detect. */}
             <KpiStrip tiles={kpis} />
 
             {/* The middle — the only thing empty → populated changes.
@@ -273,13 +269,12 @@ export default async function TeamHomePage() {
 
                 Not staff-only: a player's lines are on this card, and the same
                 `program_events` policy that lets them read the schedule page is
-                what put it there. That policy governs the LINEUP, though, and
-                the results hang off `matches`, which has a stricter one — so a
-                player on a program with `roster_visible` unset reads all nine
-                lines and gets back exactly one match. The card is built for
-                that: `WeekendDual.tally` is null for such a reader and the
-                header says whose rule withheld it, rather than printing a team
-                score counted from one line out of nine. */}
+                what put it there. The lineup and the results used to come from
+                policies of different widths — a player read all nine lines and
+                got back exactly one match, so `WeekendDual.tally` was withheld
+                rather than printing a team score counted from one line out of
+                nine. Since `20260830120000_matches_visible_to_members` the two
+                widths match, and the tally is simply always counted. */}
             {weekendDual && <DualSheet dual={weekendDual} />}
 
             {!empty && <MatchRows matches={matches} />}

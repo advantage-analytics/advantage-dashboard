@@ -13,11 +13,6 @@ import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import { isWorking } from "@/lib/data/match-analysis";
 import { dualScore, entryPlayed } from "@/lib/schedule/entry-state";
 import { roundRank } from "@/lib/schedule/format";
-import {
-  resultsScope,
-  type ResultsScope,
-} from "@/lib/data/results-visibility";
-import type { ProgramRole } from "@/lib/workspace/types";
 import type {
   EntryMatch,
   EventDetail,
@@ -33,7 +28,7 @@ const EVENT_COLUMNS =
   "id, program_id, kind, name, starts_on, ends_on, site, surface, host, format";
 
 const ENTRY_COLUMNS =
-  "id, event_id, discipline, slot, position, draw, seed, player_user_ids, player_labels, opponent_labels, opponent_school";
+  "id, event_id, discipline, slot, position, draw, seed, player_user_ids, player_labels, opponent_labels, opponent_school, forfeit";
 
 const MATCH_COLUMNS =
   "id, event_entry_id, round, score, player2_name, source_provider";
@@ -63,6 +58,7 @@ interface DbEntry {
   player_labels: string[] | null;
   opponent_labels: string[] | null;
   opponent_school: string | null;
+  forfeit: string | null;
 }
 
 interface DbEntryMatch {
@@ -204,6 +200,7 @@ async function readSchedule(
       playerLabels: row.player_labels ?? [],
       opponentLabels: row.opponent_labels ?? [],
       opponentSchool: row.opponent_school,
+      forfeit: (row.forfeit as EventEntry["forfeit"]) ?? null,
       // Sorted by the round ladder: `matches` has no created_at, so without
       // this a tournament run renders in whatever order Postgres returned.
       matches: (matchesByEntry.get(row.id) ?? []).sort(
@@ -229,7 +226,7 @@ async function readSchedule(
  * functions below instead is what made a Team Home render with a dual in range
  * cost 19 round trips where it now costs 14.
  *
- * `getScheduleRows` and `getUploadQueue` are therefore plain async functions —
+ * `getUploadQueue` is therefore a plain async function —
  * pure mapping over this one await. A second `cache()` layer over a shared one
  * only invites the question of which is doing the work.
  */
@@ -244,18 +241,9 @@ export const getProgramSchedule = cache(async function getProgramSchedule(
  *
  * Pure, over a schedule already read, so a caller holding one can have the rows
  * without a second trip — and so this mapping can be tested without a database.
- *
- * `scope` is required for the same reason it is on `teamKpis` and
- * `buildWeekendDual`: no caller may arrive without having asked
- * `resultsScope()`. A dual's `teamScore` is `dualScore(entries)`, and under a
- * narrowed read `entries` carries every line's names with at most one line's
- * match attached — so counted without the gate it is a confident, wrong, low
- * score under the program's name, the same failure those two withhold. See
- * `lib/data/results-visibility.ts`.
  */
 export function scheduleRowsFrom(
-  { events, entriesByEvent }: ProgramSchedule,
-  scope: ResultsScope
+  { events, entriesByEvent }: ProgramSchedule
 ): ScheduleRow[] {
   return events.map((event) => {
     const entries = entriesByEvent.get(event.id) ?? [];
@@ -266,8 +254,7 @@ export function scheduleRowsFrom(
       0
     );
 
-    const score =
-      scope === "program" && event.kind === "dual" ? dualScore(entries) : null;
+    const score = event.kind === "dual" ? dualScore(entries) : null;
 
     return {
       id: event.id,
@@ -284,60 +271,6 @@ export function scheduleRowsFrom(
       teamScore: score?.decided ? { us: score.us, them: score.them } : null,
     };
   });
-}
-
-/**
- * `programs.roster_visible`, read fresh for a caller with no other read that
- * already carries it.
- *
- * `getTeamHomeData` gets the flag for free off `getTeamSettings()`, which it
- * reads for the program's identity anyway. Neither schedule route has such a
- * read to piggyback on, so this is `getRosterData`'s own precedent
- * (`team-roster-server.ts`) — the smallest possible select for one boolean,
- * not a second `getTeamSettings()` call built for a page that wants far more
- * than this one flag.
- */
-async function programRosterVisible(programId: string): Promise<boolean> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("programs")
-    .select("roster_visible")
-    .eq("id", programId)
-    .maybeSingle();
-  // Fails closed, same as `getTeamHomeData`: an unreadable `programs` row
-  // narrows the page rather than widening it.
-  return Boolean(data?.roster_visible);
-}
-
-/**
- * How much of this program's results the viewer may be shown —
- * `resultsScope()`, resolved for a caller that has to fetch the flag itself.
- * Both schedule routes ask this before reducing any line list to a score.
- */
-export async function getProgramResultsScope(
-  programId: string,
-  viewerRole: ProgramRole
-): Promise<ResultsScope> {
-  const rosterVisible = await programRosterVisible(programId);
-  return resultsScope({ role: viewerRole, rosterVisible });
-}
-
-/**
- * The schedule page's rows, newest event first.
- *
- * @param viewerRole The caller's role in this program — `active.role` off the
- *   workspace context. See `scheduleRowsFrom` for why a dual's score cannot be
- *   counted without it.
- */
-export async function getScheduleRows(
-  programId: string,
-  viewerRole: ProgramRole
-): Promise<ScheduleRow[]> {
-  const [schedule, scope] = await Promise.all([
-    getProgramSchedule(programId),
-    getProgramResultsScope(programId, viewerRole),
-  ]);
-  return scheduleRowsFrom(schedule, scope);
 }
 
 /** Did this entry produce any match at all? Distinguishes "unplayed" from "filmed". */
@@ -398,20 +331,24 @@ export async function getUploadQueue(
       // Filtered per MATCH, not per entry. A tournament entry is a whole run,
       // so dropping the entry as soon as any one round had video hid the other
       // rounds entirely — a coach who filmed R32 could no longer reach Q1.
-      const waiting = all
+      // A forfeited line has no match to film, so it is out of the queue and
+      // out of both counts. Filtered once, up here, rather than twice: the
+      // waiting list and the totals have to be about the same set of lines,
+      // and two filters are two chances for them to stop being.
+      const nonForfeited = all.filter((entry) => entry.forfeit === null);
+
+      const waiting = nonForfeited
         .map((entry) => ({
           ...entry,
           matches: entry.matches.filter((match) => !match.hasVideo),
         }))
-        // An entry with no matches at all is still uploadable: the wizard
-        // collects the score on the way through.
         .filter((entry) => entry.matches.length > 0 || !hasAnyMatch(all, entry.id));
 
-      const withVideo = all.reduce(
+      const withVideo = nonForfeited.reduce(
         (count, entry) => count + entry.matches.filter((m) => m.hasVideo).length,
         0
       );
-      const total = all.reduce(
+      const total = nonForfeited.reduce(
         (count, entry) => count + Math.max(1, entry.matches.length),
         0
       );

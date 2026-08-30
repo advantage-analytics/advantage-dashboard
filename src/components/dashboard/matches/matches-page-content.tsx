@@ -172,9 +172,9 @@ const FILTER_GROUPS: {
 }[] = [
   {
     // First, because inside a program "who" is the question asked before any
-    // other. The list shows the whole squad — staff see every match, and a
-    // player sees the roster's too wherever `programs.roster_visible` is on —
-    // and until now the only way to read one person's season was to scroll.
+    // other. The list shows the whole squad — every member reads the program's
+    // matches, staff and player alike — and until now the only way to read one
+    // person's season was to scroll.
     // It reads `player1` because that is always the program's side of the row:
     // `recordResult` and the upload wizard both put the opponent in `player2`.
     key: "player",

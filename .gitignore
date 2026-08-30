@@ -114,3 +114,15 @@ figma/design-refs/
 # including ones a gate subagent runs, so it turns up mid-run in a tree that
 # has to be clean before a task commits. Regenerated on demand.
 supabase/.temp/
+
+# codex
+#
+# `AGENTS.md` and `.codex/` are the Codex mirror of this repo's Claude setup —
+# the same repo guidance and the same three reviewer subagents, in Codex's own
+# file conventions. A Codex session writes them into whatever worktree it runs
+# in, so they turn up mid-run in a tree that has to be clean before a task
+# commits, and `/task-next`'s `git add -A` would otherwise sweep them into an
+# unrelated task's commit. Ignored rather than tracked: use `git add -f` if a
+# version of either is ever meant to be shared.
+AGENTS.md
+.codex/
