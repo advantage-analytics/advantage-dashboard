@@ -18,7 +18,7 @@ straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Build the New event chooser page (design 3b)
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** `src/app/dashboard/team/schedule/new/page.tsx` (new — guess), `MAP.md` (regenerated)
 - **done when:**
