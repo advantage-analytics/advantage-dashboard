@@ -92,7 +92,7 @@ ready).
 - **notes:** Read `docs/ui-revamp-guardrails.md` — this screen feeds the three wizard inputs that silently misattribute statistics when wrong. Design: DesignSync `afde9116…`, screen `2b`. `dual-form.tsx`'s own doc comment ("creates 9 LINES, not 9 matches") is the footer vocabulary rule. **Author's ruling after this blocked once:** re-targeting clears the opponent's typed names. `contribute_opponent_player` matches on `lower(btrim(first_name))`/`lower(btrim(last_name))` WITHIN the target program and returns the existing row's id when it hits — so a name carried from School A does not merely create a stray row at School B, it can attach to a real, different person there, and returns a uuid like success. Clearing removes that path outright. The same gap exists on the old `OpponentPicker` "Change" link, so fixing it here fixes both. Start from stash `acdb7e28` (`git stash apply acdb7e28`) — every criterion is already met there; this is the one addition.
 
 ## T7 · Add-opponent popover with saved-name dedupe (design 2d/2e)
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T6
 - **files:** `src/components/dashboard/schedule/lineup-editor.tsx`, new popover component (guess), reading `src/lib/data/opponents-server.ts`, `src/lib/schedule/actions.ts`

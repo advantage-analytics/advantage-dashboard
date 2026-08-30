@@ -12,6 +12,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { headToHeadRows } from "@/lib/data/opponents-server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { isProgramStaff } from "@/lib/workspace/types";
 import type { Discipline, EventSite } from "./types";
@@ -473,4 +474,156 @@ export async function recordResult(
   revalidatePath("/dashboard/team/schedule");
   revalidatePath(`/dashboard/team/schedule/${entry.event_id}`);
   return { matchId };
+}
+
+/**
+ * One row the add-opponent popover can offer against a typed name.
+ *
+ * `name` is the pooled roster's exact spelling, and it is what a pick WRITES
+ * into the line — the popover may match loosely to *suggest*, but resolving a
+ * line means adopting this string verbatim, so the submit-time
+ * `contribute_opponent_player` call converges on the same row instead of
+ * minting a near-duplicate (`roster-match.ts` states the exact-write rule).
+ */
+export interface OpponentRosterCandidate {
+  playerId: string;
+  name: string;
+  lineupSpot: number | null;
+  /** This program's matches against them — `headToHeadRows`' count, so a
+   *  match attributed to somebody else can never inflate it. Usually 0 or 1. */
+  priorMeetings: number;
+}
+
+/**
+ * The pooled roster behind the dual's current opponent, for the lineup
+ * popover's saved-name dedupe.
+ *
+ * A read in a file headed "writing to the schedule", on purpose: it exists
+ * solely so the popover can stop a coach from writing a second copy of a name
+ * the pool already holds, it is gated by the same staff check as every write
+ * here, and its one caller is the dual builder those writes serve. The heavy
+ * lifting is `opponents-server.ts`'s — `pooled_roster` for the rows,
+ * `headToHeadRows` for the meeting counts.
+ *
+ * `opponent_player_id` is selected for counting meetings and nothing else —
+ * never a policy, never a join that widens access (20260823090000's rule).
+ */
+export async function opponentRosterForDual(
+  opponentProgramKey: string
+): Promise<{ candidates: OpponentRosterCandidate[] } | ActionError> {
+  const auth = await requireStaff();
+  if (isError(auth)) return auth;
+
+  const supabase = await createClient();
+
+  const { data: program } = await supabase
+    .from("programs")
+    .select("id")
+    .eq("program_key", opponentProgramKey)
+    .maybeSingle();
+
+  const opponentProgramId = (program as { id: string } | null)?.id ?? null;
+  // A key that resolves to nothing, or to ourselves, has no roster to offer.
+  // Same non-answer as an opted-out pool: an empty list, never an error.
+  if (!opponentProgramId || opponentProgramId === auth.programId) {
+    return { candidates: [] };
+  }
+
+  const [{ data: rosterRows }, { data: matchRows }] = await Promise.all([
+    supabase.rpc("pooled_roster", { p_program_id: opponentProgramId }),
+    supabase
+      .from("matches")
+      .select("id, player2_name, opponent_player_id")
+      .eq("program_id", auth.programId),
+  ]);
+
+  const matches = (matchRows ?? []) as {
+    id: string;
+    player2_name: string | null;
+    opponent_player_id: string | null;
+  }[];
+
+  const candidates = (
+    (rosterRows ?? []) as {
+      id: string;
+      first_name: string;
+      last_name: string;
+      lineup_spot: number | null;
+    }[]
+  )
+    .map((row) => {
+      const name = `${row.first_name} ${row.last_name}`.trim();
+      return {
+        playerId: row.id,
+        name,
+        lineupSpot: row.lineup_spot,
+        // A one-player roster, so identity-or-exact-name attribution — and its
+        // refusal to let two blanks match — stays `headToHeadRows`' one rule.
+        priorMeetings: headToHeadRows(matches, [{ id: row.id, name }]).length,
+      };
+    })
+    // Lineup order, unranked last — the same sort the Opponents page uses, so
+    // "#2" here is the same #2 a coach sees there.
+    .sort((a, b) => {
+      if (a.lineupSpot === b.lineupSpot) return a.name.localeCompare(b.name);
+      if (a.lineupSpot === null) return 1;
+      if (b.lineupSpot === null) return -1;
+      return a.lineupSpot - b.lineupSpot;
+    });
+
+  return { candidates };
+}
+
+/**
+ * The popover's "save as a different player" — `contribute_opponent_player`,
+ * best-effort, with `createDual`'s refusal handling: every arm of the RPC can
+ * legitimately refuse (most often "that program manages its own roster"), and
+ * a refusal costs the pool an identity, never the coach their typed name.
+ *
+ * Returns whether a row actually exists on that roster afterwards, because the
+ * caller shows "Saved to {school} roster" and must not claim a save that did
+ * not happen. `{ saved: false }` is a total answer, not an error — the line
+ * keeps its plain label either way.
+ */
+export async function saveOpponentPlayer(input: {
+  opponentProgramKey: string;
+  name: string;
+}): Promise<{ saved: boolean }> {
+  const auth = await requireStaff();
+  if (isError(auth)) return { saved: false };
+
+  // Both names or nothing — the RPC requires them, and a single-token name
+  // ("Kim") is not an identity anyone else would converge on.
+  const parts = input.name.trim().split(/\s+/);
+  if (parts.length < 2) return { saved: false };
+
+  const supabase = await createClient();
+
+  const { data: program } = await supabase
+    .from("programs")
+    .select("id")
+    .eq("program_key", input.opponentProgramKey)
+    .maybeSingle();
+
+  const opponentProgramId = (program as { id: string } | null)?.id ?? null;
+  if (!opponentProgramId || opponentProgramId === auth.programId) {
+    return { saved: false };
+  }
+
+  try {
+    const { data: contributed, error } = await supabase.rpc(
+      "contribute_opponent_player",
+      {
+        p_program_id: auth.programId,
+        p_opponent_program_id: opponentProgramId,
+        p_first_name: parts.slice(0, -1).join(" "),
+        p_last_name: parts[parts.length - 1],
+      }
+    );
+    return { saved: !error && Boolean(contributed) };
+  } catch {
+    // See createDual's contribute loop: an identity is an enrichment, never a
+    // precondition, and never worth an error the coach has to read.
+    return { saved: false };
+  }
 }

@@ -3,6 +3,10 @@
 import { useState } from "react";
 import { GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  OpponentNameCell,
+  type OpponentTarget,
+} from "@/components/dashboard/schedule/opponent-name-cell";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 
 export interface LineupLine {
@@ -38,12 +42,16 @@ export function LineupEditor({
   onChange,
   ourName,
   theirName,
+  opponentTarget,
 }: {
   lines: LineupLine[];
   bench: LadderPlayer[];
   onChange: (lines: LineupLine[]) => void;
   ourName: string;
   theirName: string;
+  /** The current opponent as the name popovers see it — `dual-form` builds
+   *  it, and its `key` is what remounts every cell on a re-target. */
+  opponentTarget: OpponentTarget;
 }) {
   const [dragging, setDragging] = useState<{
     column: Column;
@@ -152,10 +160,15 @@ export function LineupEditor({
             }}
             onMove={(delta) => move(discipline, "theirs", index, index + delta)}
           />
-          <NameField
+          {/* Keyed on the opponent too: a re-target must remount the popover,
+              so no draft, suggestion highlight or pending "saved" toast typed
+              against the last school can survive into this one. */}
+          <OpponentNameCell
+            key={`${line.key}:${opponentTarget.key}`}
             value={line.theirLabels.join(" / ")}
-            placeholder={discipline === "doubles" ? "Name / Name" : "Name"}
-            onChange={(value) => setLabels(line.key, "theirs", value)}
+            discipline={line.discipline}
+            target={opponentTarget}
+            onCommit={(value) => setLabels(line.key, "theirs", value)}
           />
         </div>
       </div>
@@ -225,8 +238,8 @@ export function LineupEditor({
       ) : null}
 
       <p className="text-micro mt-2.5" style={{ color: "var(--ink-500)" }}>
-        All nine lines are expected — either column drags to reorder, and names
-        stay editable in place.
+        All nine lines are expected — either column drags to reorder. Your
+        names edit in place; opposing names go through the add-name popover.
       </p>
     </div>
   );

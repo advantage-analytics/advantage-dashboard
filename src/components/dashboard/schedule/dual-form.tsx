@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
 import { advButton } from "@/lib/ui/adv-button";
@@ -11,12 +11,17 @@ import {
   LineupEditor,
   type LineupLine,
 } from "@/components/dashboard/schedule/lineup-editor";
+import type { OpponentTarget } from "@/components/dashboard/schedule/opponent-name-cell";
 import {
   FieldRow,
   FieldCellSelect,
   FieldCellText,
 } from "@/components/dashboard/schedule/field-row";
-import { createDual } from "@/lib/schedule/actions";
+import {
+  createDual,
+  opponentRosterForDual,
+  type OpponentRosterCandidate,
+} from "@/lib/schedule/actions";
 import { splitNames } from "@/lib/schedule/format";
 import { benchFromLines } from "@/lib/schedule/roster-match";
 import { divisionLabel, programDisplayName } from "@/lib/data/programs-server";
@@ -125,6 +130,49 @@ export function DualForm({
   // from the lines rather than tracked separately, so a player dragged out of S4
   // is back on the bench without a second piece of state to keep in step.
   const bench = useMemo(() => benchFromLines(lines, ladder), [lines, ladder]);
+
+  // The opponent's pooled roster, for the lineup popovers' saved-name dedupe.
+  // Stored WITH the key it was fetched for and read back only while that key
+  // is still the target, so a re-target empties the suggestions in the same
+  // render that changes the school — not an effect later. `takeOpponent`
+  // explains why nothing typed or suggested may outlive the school it was
+  // typed against.
+  const [fetchedRoster, setFetchedRoster] = useState<{
+    forKey: string;
+    list: OpponentRosterCandidate[];
+  } | null>(null);
+  const opponentKey = opponentProgram?.programKey ?? null;
+
+  useEffect(() => {
+    if (!opponentKey) return;
+    let stale = false;
+    void opponentRosterForDual(opponentKey).then((result) => {
+      // The cleanup marks a superseded fetch stale, so School A's roster can
+      // never land after a re-target and pose as School B's.
+      if (stale || "error" in result) return;
+      setFetchedRoster({ forKey: opponentKey, list: result.candidates });
+    });
+    return () => {
+      stale = true;
+    };
+  }, [opponentKey]);
+
+  const opponentTarget = useMemo<OpponentTarget>(
+    () => ({
+      key: opponentProgram ? `program:${opponentProgram.programKey}` : `text:${opponent}`,
+      schoolName: opponentProgram?.schoolName ?? null,
+      programKey: opponentProgram?.programKey ?? null,
+      // Only an unclaimed directory row may be saved to —
+      // `contribute_opponent_player` refuses a program with members, and the
+      // popover must not offer a save it knows will be refused.
+      canSave: opponentProgram?.status === "unclaimed",
+      candidates:
+        opponentKey !== null && fetchedRoster?.forKey === opponentKey
+          ? fetchedRoster.list
+          : [],
+    }),
+    [opponentProgram, opponent, opponentKey, fetchedRoster]
+  );
 
   // A line counts once OUR side is named. The opposing names are optional —
   // `createDual` stores a line with an empty opponent list, which is the state
@@ -388,6 +436,7 @@ export function DualForm({
               onChange={setLines}
               ourName={ourName}
               theirName={opponent}
+              opponentTarget={opponentTarget}
             />
           </div>
         </div>

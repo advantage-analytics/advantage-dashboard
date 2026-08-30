@@ -55,7 +55,8 @@ export function OpponentRail({
   /**
    * Same contract as `SchoolSearch.onChosen`: the directory row rides
    * ALONGSIDE the name, null when the name was typed. The key on that row is
-   * what keeps a re-targeted dual aggregatable — see `opponent-picker.tsx`.
+   * what keeps a re-targeted dual aggregatable — `SchoolSearch.onChosen`'s
+   * doc comment states the rule.
    */
   onPick: (name: string, program: ProgramSearchResult | null) => void;
 }) {

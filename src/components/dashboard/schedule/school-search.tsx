@@ -67,10 +67,12 @@ export function SchoolSearch({
   /**
    * Carries the directory row ALONGSIDE the name, null when the name was typed.
    *
-   * The same contract `opponent-picker.tsx` states at length, and for the same
-   * reason: the key is what lets a recorded dual point at a directory row, and
-   * a step that returned only a string would silently make every opponent
-   * picked here unaggregatable with nothing looking broken.
+   * The name alone is what this flow used to return, and it is what made an
+   * opponent unaggregatable: "Stanford", "Stanford University" and "STAN" are
+   * three programs to a GROUP BY and one to a human. The key is what lets a
+   * recorded dual point at a directory row, and a step that returned only a
+   * string would silently make every opponent picked here unaggregatable with
+   * nothing looking broken.
    */
   onChosen: (name: string, program: ProgramSearchResult | null) => void;
 }) {
@@ -90,7 +92,7 @@ export function SchoolSearch({
     // synchronous setState in this effect cascades a render per keystroke.
     if (query.length < 2) return;
 
-    // Debounced and aborted on the next keystroke, matching `opponent-picker`:
+    // Debounced and aborted on the next keystroke, matching `opponent-rail`:
     // the route is cached for five minutes, but a request per character still
     // queues them.
     const controller = new AbortController();
