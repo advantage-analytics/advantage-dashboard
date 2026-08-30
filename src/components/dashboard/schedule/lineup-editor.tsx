@@ -182,9 +182,12 @@ export function LineupEditor({
 
       {renderGroup(singles, "singles")}
 
-      <div className="mt-[18px]">
-        <div className="flex items-baseline gap-2.5 border-b border-[var(--border-hairline)] pb-2">
-          <span className="eyebrow">Doubles</span>
+      <div className="mt-[22px]">
+        <div className="flex items-baseline gap-2.5 border-b border-[var(--border-hairline)] pb-2.5">
+          <span className="eyebrow">Lineup · doubles</span>
+          <span className="text-micro" style={{ color: "var(--ink-500)" }}>
+            three required · pairs carried from singles
+          </span>
         </div>
         {renderGroup(doubles, "doubles")}
       </div>
@@ -222,8 +225,8 @@ export function LineupEditor({
       ) : null}
 
       <p className="text-micro mt-2.5" style={{ color: "var(--ink-500)" }}>
-        Either column drags to reorder — your ladder or their lineup,
-        independently. Names stay editable in place.
+        All nine lines are expected — either column drags to reorder, and names
+        stay editable in place.
       </p>
     </div>
   );

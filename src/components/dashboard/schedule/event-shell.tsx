@@ -14,6 +14,7 @@ export function EventShell({
   trail,
   note,
   footer,
+  flush = false,
   children,
 }: {
   /** The last crumb — the page you are on. */
@@ -23,6 +24,12 @@ export function EventShell({
   /** Right-aligned in the crumb bar — "Created just now", "Draft saved". */
   note?: React.ReactNode;
   footer?: React.ReactNode;
+  /**
+   * The body owns its own panes and scrolling — 2b's master–detail, where a
+   * fixed rail and a scrolling pane split the space edge to edge. The default
+   * body is one padded, scrolling column.
+   */
+  flush?: boolean;
   children: React.ReactNode;
 }) {
   const crumbs = trail ?? [{ label: "Schedule", href: "/dashboard/team/schedule" }];
@@ -53,7 +60,13 @@ export function EventShell({
         ) : null}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-12 pb-8 pt-[26px]">
+      <div
+        className={
+          flush
+            ? "flex min-h-0 flex-1 overflow-hidden"
+            : "min-h-0 flex-1 overflow-y-auto px-12 pb-8 pt-[26px]"
+        }
+      >
         {children}
       </div>
 

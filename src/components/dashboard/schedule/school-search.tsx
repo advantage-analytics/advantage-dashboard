@@ -147,24 +147,6 @@ export function SchoolSearch({
   const listed = conferenceRows.length + searchRows.length;
   const chipsOn = conferenceOnly || divisionOnly;
 
-  /**
-   * This program's record against one school.
-   *
-   * Two lookups, because a dual records the opponent under whatever string was
-   * stored as its name: `programDisplayName()` when the coach picked a
-   * directory row — "Ridgeline University Men's Tennis" — and the bare typed
-   * text when they did not. Keying only on the school name would report "never
-   * played" for every dual ever entered through the picker.
-   */
-  function historyFor(program: ProgramSearchResult) {
-    const withSquad = opponentHistoryFor(
-      histories,
-      programDisplayName(program.schoolName, program.team)
-    );
-    if (withSquad.played > 0) return withSquad;
-    return opponentHistoryFor(histories, program.schoolName);
-  }
-
   function choose(program: ProgramSearchResult) {
     setPicked(program);
   }
@@ -323,7 +305,7 @@ export function SchoolSearch({
                 <SchoolRow
                   key={program.programKey}
                   program={program}
-                  history={historyFor(program)}
+                  history={historyForProgram(histories, program)}
                   selected={picked?.programKey === program.programKey}
                   onClick={() => choose(program)}
                 />
@@ -345,7 +327,7 @@ export function SchoolSearch({
                 <SchoolRow
                   key={program.programKey}
                   program={program}
-                  history={historyFor(program)}
+                  history={historyForProgram(histories, program)}
                   selected={picked?.programKey === program.programKey}
                   onClick={() => choose(program)}
                 />
@@ -418,10 +400,7 @@ function SchoolRow({
   selected: boolean;
   onClick: () => void;
 }) {
-  const where = program.conference ?? divisionLabel(program.division);
-  const subline = [teamLabel(program.team), where, formatOpponentRecord(history)]
-    .filter(Boolean)
-    .join(" · ");
+  const subline = schoolRowSubline(program, history);
 
   return (
     <button
@@ -489,4 +468,41 @@ function FilterPill({
       {label}
     </button>
   );
+}
+
+/**
+ * This program's record against one school row.
+ *
+ * Two lookups, because a dual records the opponent under whatever string was
+ * stored as its name: `programDisplayName()` when the coach picked a
+ * directory row — "Ridgeline University Men's Tennis" — and the bare typed
+ * text when they did not. Keying only on the school name would report "never
+ * played" for every dual ever entered through the picker.
+ *
+ * Exported because step one's list and the builder's opponent rail
+ * (`opponent-rail.tsx`) print the same rows; two copies of this lookup is how
+ * one of them ends up reporting "never played" against a school the other
+ * knows.
+ */
+export function historyForProgram(
+  histories: Map<string, OpponentDualHistory>,
+  program: ProgramSearchResult
+): OpponentDualHistory {
+  const withSquad = opponentHistoryFor(
+    histories,
+    programDisplayName(program.schoolName, program.team)
+  );
+  if (withSquad.played > 0) return withSquad;
+  return opponentHistoryFor(histories, program.schoolName);
+}
+
+/** "Men's · Big Ten · you lead 3–1" — the subline both opponent lists print. */
+export function schoolRowSubline(
+  program: ProgramSearchResult,
+  history: OpponentDualHistory
+): string {
+  const where = program.conference ?? divisionLabel(program.division);
+  return [teamLabel(program.team), where, formatOpponentRecord(history)]
+    .filter(Boolean)
+    .join(" · ");
 }
