@@ -18,7 +18,7 @@ straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Gate first login into two-question onboarding
-- **status:** blocked
+- **status:** done
 - **model:** fable
 - **files:** src/app/onboarding/ (new), src/app/dashboard/layout.tsx, src/components/claim/role-choice.tsx (copy source), supabase/migrations/ (new, applied to live DB), src/lib/services/programs/invite-acceptance.ts (guess)
 - **done when:**

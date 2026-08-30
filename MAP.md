@@ -64,6 +64,7 @@ markers is hand-written — edit it as things move.
 | `/dashboard/team/settings` | [`src/app/dashboard/team/settings/page.tsx`](src/app/dashboard/team/settings/page.tsx) |
 | `/dashboard/team/upload` | [`src/app/dashboard/team/upload/page.tsx`](src/app/dashboard/team/upload/page.tsx) |
 | `/join/[token]` | [`src/app/join/[token]/page.tsx`](src/app/join/[token]/page.tsx) |
+| `/onboarding` | [`src/app/onboarding/page.tsx`](src/app/onboarding/page.tsx) |
 | `/` | [`src/app/page.tsx`](src/app/page.tsx) |
 
 <!-- ROUTES:END -->

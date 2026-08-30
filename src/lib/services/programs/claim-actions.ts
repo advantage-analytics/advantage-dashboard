@@ -329,6 +329,7 @@ export async function completeClaim(): Promise<CompleteClaimResult> {
     .maybeSingle();
 
   if (!row) return { ok: false, reason: "no-pending" };
+
   if (new Date(row.expires_at as string) < new Date()) {
     await db.from("pending_claims").delete().eq("email", email);
     return { ok: false, reason: "expired" };
@@ -367,6 +368,33 @@ export async function completeClaim(): Promise<CompleteClaimResult> {
       return { ok: false, reason: "taken" };
     }
     return { ok: false, reason: "failed" };
+  }
+
+  // The OTP exchange that landed us here may have just created this account
+  // (`shouldCreateUser: true` in `sendClaimOtp`), and a claim that COMPLETED
+  // has answered first-run onboarding's questions. Stamp `users.onboarded_at`
+  // only now, after the RPC has actually made the claim — never on the
+  // early returns above. Stamping before those guards marked a claimant whose
+  // claim then failed (expired, unknown program, taken) as permanently
+  // onboarded: persona never captured, /onboarding unreachable, while the
+  // failure screen told them nothing was created. This still runs before the
+  // verify route's redirect (to /claim/ready or /claim/review), so a later
+  // visit to /dashboard cannot bounce a real owner into /onboarding. The
+  // write is a trusted server path holding the service role, scoped to the
+  // session's own row and only when still null; it must never ride in auth
+  // metadata, which any signUp() caller with the anon key can craft to
+  // pre-stamp itself.
+  const { error: stampError } = await db
+    .from("users")
+    .update({ onboarded_at: new Date().toISOString() })
+    .eq("id", user.id)
+    .is("onboarded_at", null);
+
+  if (stampError) {
+    // Best effort: a miss costs one redundant onboarding screen, not the claim.
+    console.error("[claim] could not mark the claimant onboarded", {
+      error: stampError.message,
+    });
   }
 
   // Single use. Leaving it would let a second click re-run the RPC, which is

@@ -142,6 +142,7 @@ function toViewer(
     plan: string | null;
     role: string | null;
     created_at: string | null;
+    onboarded_at: string | null;
   } | null
 ): Viewer {
   const firstName = row?.first_name ?? null;
@@ -169,6 +170,10 @@ function toViewer(
           timeZone: 'UTC',
         })
       : null,
+    // Null both for a genuinely un-onboarded account and for a missing profile
+    // row — either way the dashboard layout sends them to /onboarding, which
+    // is the screen that knows how to finish the setup.
+    onboardedAt: row?.onboarded_at ?? null,
   };
 }
 
@@ -186,7 +191,7 @@ export const getWorkspaceContext = cache(
     // select from here.
     const { data: row } = await supabase
       .from('users')
-      .select('first_name, last_name, plan, role, created_at')
+      .select('first_name, last_name, plan, role, created_at, onboarded_at')
       .eq('id', user.id)
       .single();
 

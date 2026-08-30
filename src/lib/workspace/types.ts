@@ -142,6 +142,15 @@ export interface Viewer {
   role: string | null;
   /** `users.created_at` as "Mon YYYY", or null for a row without one. */
   memberSince: string | null;
+  /**
+   * `users.onboarded_at` — when first-run onboarding completed. Null means the
+   * dashboard layout redirects this viewer to `/onboarding`. Accounts created
+   * by invite acceptance or a program claim are stamped by those flows' own
+   * server actions, with the admin client — never from auth metadata, which
+   * any signUp() caller can craft — so an account that already exists never
+   * re-onboards.
+   */
+  onboardedAt: string | null;
 }
 
 /**

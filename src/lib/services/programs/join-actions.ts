@@ -180,12 +180,14 @@ export async function createAccountAndAccept(
   const admin = createAdminClient();
   const fullName = [firstName, lastName].filter(Boolean).join(" ");
 
-  const { error: createError } = await admin.auth.admin.createUser({
+  const { data: created, error: createError } = await admin.auth.admin.createUser({
     email: state.email,
     password: input.password,
     email_confirm: true,
     // `handle_new_user` reads `full_name` to split the profile's first and last
-    // name. Anything else here is ignored by that trigger.
+    // name. Anything else here is ignored by that trigger — deliberately: it is
+    // SECURITY DEFINER, and GoTrue metadata is writable by any signUp() caller
+    // with the anon key, so nothing trust-bearing may ride in it.
     user_metadata: { full_name: fullName },
   });
 
@@ -214,6 +216,28 @@ export async function createAccountAndAccept(
 
   const outcome = await acceptWithSession(token, supabase);
   if (!outcome.ok) return { ok: false, error: describe(outcome) };
+
+  // A player whose acceptance JUST SUCCEEDED joined a program that answers
+  // both first-run questions, so bouncing them into /onboarding would ask what
+  // the invitation already settled. Stamp only now — after `acceptWithSession`
+  // confirmed the membership, never merely because `createUser` succeeded.
+  // Stamping earlier left an account whose accept then failed permanently
+  // marked onboarded with no membership behind it; a failed accept should
+  // leave /onboarding reachable. A trusted server path holding the service
+  // role, not auth metadata a crafted signup could imitate. Best effort: a
+  // miss costs one redundant onboarding screen, never the membership.
+  if (created?.user?.id) {
+    const { error: stampError } = await admin
+      .from("users")
+      .update({ onboarded_at: new Date().toISOString() })
+      .eq("id", created.user.id)
+      .is("onboarded_at", null);
+    if (stampError) {
+      console.error("[join] could not mark the account onboarded", {
+        message: stampError.message,
+      });
+    }
+  }
 
   await activate(outcome.programId);
   redirect("/dashboard/team");
