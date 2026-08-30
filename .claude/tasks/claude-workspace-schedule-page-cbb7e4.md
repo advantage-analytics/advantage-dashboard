@@ -128,3 +128,26 @@ ready).
   - [ ] A forfeited line renders as forfeited everywhere a line's outcome is drawn — T2's detail-pane dot strip and row, `line-row.tsx`, and Team Home's dual sheet — never as an unplayed line and never carrying an invented set score
   - [ ] A forfeited line mints no match and never enters the analysis pipeline: nothing can upload against it and it contributes no statistics
 - **notes:** The author's rationale — a forfeit happens when a team can't field enough players, so it is a real scheduling scenario, not a design flourish. `supabase/migrations/` runs ~100 migrations behind the live database, so verify the current shape of `program_event_entries` via the Supabase MCP before writing DDL. Read `docs/ui-revamp-guardrails.md`: a forfeit scored for the wrong side is exactly the silent-wrongness class this repo guards against — the team score would be confidently wrong with nothing looking broken.
+
+## T10 · Make team match results visible to everyone by default
+- **status:** todo
+- **model:** opus
+- **files:** a new `supabase/migrations/*_results_visible_default.sql` (guess), `src/lib/data/results-visibility.ts` (doc comment only)
+- **done when:**
+  - [ ] A migration sets `programs.roster_visible` to `default true` and backfills every existing row to `true`, committed AND applied to the live database — the flag is inert for the ~1,939 directory programs that have no members, and `true` is the intended meaning for every program that has a team
+  - [ ] A player on a program nobody has touched since sees their teammates' match results: `resultsScope({ role: "player", rosterVisible })` returns `"program"` without anyone changing a setting
+  - [ ] A coach can still choose "Coaches only" and a program set that way withholds exactly as before — the default moves, the capability does not
+  - [ ] `results-visibility.ts`'s doc comment no longer calls the narrow read "the ordinary case, not an edge" — true before this change, false after, and that sentence is the one a later reader would trust
+- **notes:** Author's ruling: a player on a team workspace seeing everyone's matches is the point of the product, so it is the default. Verify `programs`' current shape via the Supabase MCP before writing DDL — `supabase/migrations/` runs ~100 behind live. Does NOT invalidate T2's criterion 5: a coach can still set coaches-only, so the withholding branch stays reachable and must stay correct. Routed `opus` rather than `fable` because no design decision is left open, and above `sonnet` because it writes DDL to the live database and backfills 1,940 rows.
+
+## T11 · Rename roster_visible to what it actually gates
+- **status:** todo
+- **model:** fable
+- **needs:** T10
+- **files:** a new `supabase/migrations/*_rename_results_visible.sql` (guess), `src/lib/data/results-visibility.ts`, `src/components/dashboard/settings/team-settings-form.tsx`, `src/components/dashboard/settings/team-actions.ts`, `src/components/dashboard/team/roster-vocabulary.tsx`
+- **done when:**
+  - [ ] `programs.roster_visible` is renamed to `results_visible` and `update_program_settings`'s `p_roster_visible` parameter follows, applied to the live database — Postgres refuses to rename an input parameter through `CREATE OR REPLACE FUNCTION`, so this is a drop-and-recreate of that 9-argument function and the migration must leave no window where the settings page's named-argument call resolves to nothing
+  - [ ] Every TypeScript call site follows the rename (`rosterVisible` → `resultsVisible`, `p_roster_visible` → `p_results_visible`) and `npx tsc --noEmit` is clean — the client calls the RPC with NAMED arguments, so a missed one fails at runtime rather than at compile time
+  - [ ] The settings row stops being labelled "Roster visibility" and names match results instead, since this flag has never gated the roster — `program_players` is member-visible with no reference to it
+  - [ ] A player on a "coaches only" program still sees the roster and still sees all nine lines of a dual with both sides' names, and still cannot see results — proving the rename moved a name and nothing else
+- **notes:** The `matches` SELECT policy is the ONLY policy referencing this column; `program_players`, `program_event_entries` and `program_events` are all member-visible unconditionally. The current label is therefore actively misleading — it reads as gating the roster while gating results, and `roster-vocabulary.tsx` already tells the true story ("Match results are visible to coaches only"), so two screens describe one flag differently. Split from T10 because that one is a default plus a backfill, while this is a column rename under a live RLS policy and a function signature the UI depends on.
