@@ -33,6 +33,9 @@ export function ContactOwnerForm({
   kind,
   ownerDisplay,
   unclaimed = false,
+  defaultName = "",
+  nameNote,
+  terms,
   secondary,
   micro,
 }: {
@@ -48,13 +51,26 @@ export function ContactOwnerForm({
    * imply anyone is currently reading requests.
    */
   unclaimed?: boolean;
+  /**
+   * The signed-in requester's name, read from their profile server-side.
+   *
+   * A starting value, not a fixed one — the field stays an ordinary editable
+   * input, because the name on a profile is not always the name a coach knows
+   * someone by. Empty for a signed-out visitor, which is the same form this
+   * screen has always shown.
+   */
+  defaultName?: string;
+  /** The line under the name field — where the prefilled value came from. */
+  nameNote?: React.ReactNode;
+  /** What entering this program does, between the fields and the button. */
+  terms?: React.ReactNode;
   /** The quiet link beside the button — "They no longer work here". */
   secondary?: React.ReactNode;
   /** The line beside the button — what sending does and does not do. */
   micro?: React.ReactNode;
 }) {
   const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
+  const [name, setName] = useState(defaultName);
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
@@ -97,7 +113,7 @@ export function ContactOwnerForm({
         {kind === "request" && (
           <div>
             <label htmlFor="name" className={CLAIM_LABEL}>
-              Your name
+              Your name — sent with the request
             </label>
             <input
               id="name"
@@ -106,6 +122,9 @@ export function ContactOwnerForm({
               autoComplete="name"
               className={CLAIM_FIELD}
             />
+            {nameNote && (
+              <span className={`${CLAIM_MICRO} mt-2 block`}>{nameNote}</span>
+            )}
           </div>
         )}
 
@@ -149,6 +168,10 @@ export function ContactOwnerForm({
   return (
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-5">
       <div className="flex flex-col gap-5">{fields}</div>
+
+      {/* Between the fields and the button, deliberately: what joining does is
+          read on the way to the action, not after it. */}
+      {terms}
 
       {error && (
         <p className="rounded-[var(--radius-button)] bg-[rgba(229,24,55,0.08)] px-3 py-2 text-[12px] text-[#E51837]">

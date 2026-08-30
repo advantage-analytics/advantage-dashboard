@@ -30,6 +30,7 @@ markers is hand-written — edit it as things move.
 | `/claim` | [`src/app/claim/page.tsx`](src/app/claim/page.tsx) |
 | `/claim/program/new` | [`src/app/claim/program/new/page.tsx`](src/app/claim/program/new/page.tsx) |
 | `/claim/program` | [`src/app/claim/program/page.tsx`](src/app/claim/program/page.tsx) |
+| `/claim/program/referral` | [`src/app/claim/program/referral/page.tsx`](src/app/claim/program/referral/page.tsx) |
 | `/claim/ready` | [`src/app/claim/ready/page.tsx`](src/app/claim/ready/page.tsx) |
 | `/claim/review` | [`src/app/claim/review/page.tsx`](src/app/claim/review/page.tsx) |
 | `/claim/verify/failed` | [`src/app/claim/verify/failed/page.tsx`](src/app/claim/verify/failed/page.tsx) |

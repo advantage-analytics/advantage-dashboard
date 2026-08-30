@@ -4,8 +4,22 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Search, Loader2 } from "lucide-react";
-import type { ProgramSearchResult } from "@/lib/data/programs-server";
+import type {
+  ProgramSearchResult,
+  PlayerProgramRow,
+} from "@/lib/data/programs-server";
 import { teamLabel, programSubtitle } from "@/lib/data/programs-server";
+
+/**
+ * One row, in whichever of its two shapes the endpoint sent.
+ *
+ * The coach intent gets the owner and the claim state; the player intent gets a
+ * single `onAdvantage` boolean and nothing else (see `redactForPlayer`). They
+ * are a union rather than one optional-everything type so that reading
+ * `ownerDisplay` on a player row does not type-check — the redaction is then a
+ * property of the code, not of a habit.
+ */
+type ProgramRow = ProgramSearchResult | PlayerProgramRow;
 
 /** Long enough to stop typing, short enough not to feel laggy. */
 const DEBOUNCE_MS = 180;
@@ -40,7 +54,7 @@ export type SearchIntent = "claim" | "join";
 export function ProgramSearch({ intent = "claim" }: { intent?: SearchIntent }) {
   const router = useRouter();
   const [term, setTerm] = useState("");
-  const [results, setResults] = useState<ProgramSearchResult[]>([]);
+  const [results, setResults] = useState<ProgramRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
@@ -66,10 +80,14 @@ export function ProgramSearch({ intent = "claim" }: { intent?: SearchIntent }) {
     const id = ++latest.current;
     const timer = setTimeout(async () => {
       try {
+        // The intent travels with the request, because it decides what the
+        // ROUTE is allowed to send back — not merely what this list draws.
         const res = await fetch(
-          `/api/programs/search?q=${encodeURIComponent(query)}`
+          `/api/programs/search?q=${encodeURIComponent(query)}${
+            intent === "join" ? "&intent=join" : ""
+          }`
         );
-        const body = (await res.json()) as { results: ProgramSearchResult[] };
+        const body = (await res.json()) as { results: ProgramRow[] };
         if (id !== latest.current) return;
         setResults(body.results ?? []);
         setSearched(true);
@@ -81,7 +99,7 @@ export function ProgramSearch({ intent = "claim" }: { intent?: SearchIntent }) {
     }, DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [query, active]);
+  }, [query, active, intent]);
 
   return (
     <div className="flex flex-col gap-5">
@@ -115,7 +133,15 @@ export function ProgramSearch({ intent = "claim" }: { intent?: SearchIntent }) {
       {active && visible.length > 0 && (
         <ul className="overflow-hidden rounded-[var(--radius-element)] border border-[var(--border-medium)] bg-[var(--surface-card)]">
           {visible.map((program) => {
-            const taken = program.status !== "unclaimed";
+            // The player intent gets one word or none. "On Advantage" says the
+            // program is here without saying who brought it, and an unclaimed
+            // program says nothing at all — a blank cell reveals nothing, where
+            // even "no one yet" would confirm the program is unowned to anyone
+            // willing to type a school name.
+            const redacted = "onAdvantage" in program;
+            const taken = redacted
+              ? program.onAdvantage
+              : program.status !== "unclaimed";
             return (
               <li
                 key={program.programKey}
@@ -142,13 +168,16 @@ export function ProgramSearch({ intent = "claim" }: { intent?: SearchIntent }) {
                     {programSubtitle(program.division, program.conference)}
                   </span>
 
-                  {/* The whole point of the list: it says which programs are
-                      already claimed before anyone commits to a row. */}
+                  {/* For a coach, the whole point of the list: it says which
+                      programs are already claimed, and by whom, before anyone
+                      commits to a row. For a player, design 4.1's one word. */}
                   <span className="text-micro truncate sm:text-right">
-                    {taken
-                      ? (program.ownerDisplay ?? "Set up")
-                      : intent === "join"
-                        ? "no one yet"
+                    {redacted
+                      ? taken
+                        ? "On Advantage"
+                        : null
+                      : taken
+                        ? (program.ownerDisplay ?? "Set up")
                         : "not set up"}
                   </span>
                 </button>
@@ -163,17 +192,40 @@ export function ProgramSearch({ intent = "claim" }: { intent?: SearchIntent }) {
       )}
 
       {/* Persistent, not a last resort at the bottom of an empty result. It
-          must never feel like an error when it happens. */}
-      <p className="text-micro">
-        Can&#39;t find it?{" "}
-        <Link
-          href="/claim/program/new"
-          className="text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-        >
-          Tell us the program
-        </Link>{" "}
-        and we&#39;ll add it.
-      </p>
+          must never feel like an error when it happens.
+
+          The two intents need different exits, because the two people can do
+          different things about a missing program. A coach can vouch for one,
+          so they get the form that files it. A player cannot verify their own
+          program, so a form would only collect a request nobody can action —
+          design 4.3 sends them to a link they can paste to their coach
+          instead. The typed term rides along so that screen can name the
+          school rather than say "your program". */}
+      {intent === "join" ? (
+        <p className="text-micro">
+          <Link
+            href={
+              query
+                ? `/claim/program/referral?school=${encodeURIComponent(query)}`
+                : "/claim/program/referral"
+            }
+            className="text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+          >
+            My school isn&#39;t listed
+          </Link>
+        </p>
+      ) : (
+        <p className="text-micro">
+          Can&#39;t find it?{" "}
+          <Link
+            href="/claim/program/new"
+            className="text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+          >
+            Tell us the program
+          </Link>{" "}
+          and we&#39;ll add it.
+        </p>
+      )}
     </div>
   );
 }

@@ -79,7 +79,7 @@ ready).
 - **notes:** Design: screen 3.1 — consent upfront because a guardian acting for a minor is the compliance case that shouldn't be progressive. Keep the model minimal (columns on users or one small table — decide in-task); the full "hand the account to the player later" transfer is out of scope. Academy staff take the same path per the design caption.
 
 ## T6 · Player join-intent polish — redacted status, sharing rows, referral exit
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/claim/program-search.tsx, src/components/claim/contact-owner-form.tsx, src/app/claim/[programKey]/request/page.tsx, src/app/claim/ (referral screen, new) (guess)
 - **done when:**
