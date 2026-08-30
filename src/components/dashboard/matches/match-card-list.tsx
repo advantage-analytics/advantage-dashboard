@@ -128,7 +128,7 @@ export function MatchCardList({ match, isNew, unseen }: MatchCardListProps): Rea
             <Link
               href={action.href}
               className="relative z-10 whitespace-nowrap text-[11px] font-medium"
-              style={{ color: "var(--blue-text)" }}
+              style={{ color: "var(--blue)" }}
             >
               {action.label}
             </Link>

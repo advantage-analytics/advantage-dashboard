@@ -817,6 +817,11 @@ export function MatchesPageContent({
               title="Search by event, opponent, or round"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              // Opt out of focus.css's neutral field ring: the chip's own
+              // focus-within surface-subtle wash + width expansion is the visible
+              // on-focus indicator, so a ring on top is the "stray box" the DS
+              // underline-exception describes. WCAG-safe for the same reason.
+              data-focus-ring="none"
               className="w-[70px] bg-transparent text-[12px] transition-[width] duration-200 placeholder:text-[var(--ink-600)] focus:w-[168px] focus:outline-none"
               style={{ color: "var(--ink-900)" }}
             />

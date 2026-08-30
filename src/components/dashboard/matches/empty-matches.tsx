@@ -45,13 +45,13 @@ export function EmptyMatches({
           : "Upload video or import a SwingVision session. Every report lands here — searchable by opponent, event, and how the analysis went."}
       </motion.p>
       <motion.div className="mt-1.5 flex items-center gap-2.5" {...anim(0.18)}>
-        <Link href="/dashboard/matches/new" className="text-[12px] font-medium" style={{ color: "var(--blue-text)" }}>
+        <Link href="/dashboard/matches/new" className="text-[12px] font-medium" style={{ color: "var(--blue)" }}>
           Upload video
         </Link>
         <span className="text-[12px]" style={{ color: "var(--ink-300)" }}>
           ·
         </span>
-        <Link href="/dashboard/matches/new" className="text-[12px] font-medium" style={{ color: "var(--blue-text)" }}>
+        <Link href="/dashboard/matches/new" className="text-[12px] font-medium" style={{ color: "var(--blue)" }}>
           Import from SwingVision
         </Link>
       </motion.div>
