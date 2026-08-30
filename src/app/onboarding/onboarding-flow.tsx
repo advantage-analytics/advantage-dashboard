@@ -1,32 +1,52 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { Check, Shield, User, Users } from "lucide-react";
+import AuthCheckbox from "@/components/auth/auth-checkbox";
 import {
   ClaimActions,
   ClaimHeading,
   CLAIM_BUTTON,
+  CLAIM_FIELD,
+  CLAIM_LABEL,
   CLAIM_LINK,
   CLAIM_MICRO,
 } from "@/components/claim/claim-shell";
 import { cn } from "@/lib/utils";
-import { finishOnboarding, type OnboardingChoice } from "./actions";
+import {
+  finishGuardianOnboarding,
+  finishOnboarding,
+  type OnboardingChoice,
+} from "./actions";
+import { guardianClassYears } from "./guardian-options";
 
 /**
- * The two-question first run — Onboarding & Team Setup, Stage 1, screens 1.2
- * and 1.3. Full-screen panes with no dashboard chrome and, unlike the claim
- * flow's shell, no escape chrome either: there is no account-intact "leave
- * setup" here, because the account is already made and these two answers are
- * the setup. The one soft exit the design gives is step 2's Skip.
+ * The first run — Onboarding & Team Setup screens 1.2 and 1.3, plus the
+ * guardian branch's 3.1. Full-screen panes with no dashboard chrome and,
+ * unlike the claim flow's shell, no escape chrome either: there is no
+ * account-intact "leave setup" here, because the account is already made and
+ * these answers are the setup. The one soft exit the design gives is the
+ * college question's Skip; the guardian step has none, because consent is the
+ * one answer that can't be deferred.
  *
  * Step 1 reuses the claim flow's persona cards verbatim — one question
  * vocabulary product-wide (`claim/role-choice.tsx` carries the same copy).
  * The difference is what happens after: here the answer persists to
  * `users.role` and stamps `onboarded_at`, where /claim's copy only routes.
+ *
+ * The junior persona is the exception to "the answer persists": picking it
+ * writes nothing and only turns the page to 3.1. Everything — role, the
+ * player's details, consent, the stamp — lands together on the guardian
+ * screen's Continue, so bailing there leaves the account un-onboarded and the
+ * gate intact. See `finishGuardianOnboarding` in `actions.ts`.
  */
 
 type Persona = "play" | "coach" | "junior";
 type CollegeAnswer = "yes" | "no" | "not_yet";
+
+/** 1 = persona (1.2) · 2 = college question (1.3) · 3 = guardian step (3.1) */
+type Step = 1 | 2 | 3;
 
 const PERSONAS: {
   id: Persona;
@@ -74,6 +94,18 @@ const COLLEGE_OPTIONS: { id: CollegeAnswer; label: string; sub: string }[] = [
 ];
 
 /**
+ * Screen 3.1's three under-18 acknowledgment rows, verbatim. Everything the
+ * linked guardian terms formalize is stated here, so the checkbox below them
+ * is informed consent even if no one clicks the link — which is why these are
+ * rows on the screen and not a wall of terms behind it.
+ */
+const GUARDIAN_ACKNOWLEDGMENTS: readonly string[] = [
+  "You're their parent or legal guardian, and you consent to Advantage analyzing match video of them.",
+  "You'll manage what's uploaded and who it's shared with until you transfer the account.",
+  "Video of a minor is never used to train models or shown outside the people you share it with.",
+];
+
+/**
  * The design system's check-dot `Radio`: solid Signal Blue with a white check
  * when chosen, a 1px ink-300 ring otherwise. The dot marks the selected item —
  * it never appears on hover.
@@ -95,9 +127,12 @@ function RadioDot({ selected }: { selected: boolean }) {
 }
 
 export function OnboardingFlow() {
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<Step>(1);
   const [persona, setPersona] = useState<Persona | null>(null);
   const [college, setCollege] = useState<CollegeAnswer | null>(null);
+  const [playerName, setPlayerName] = useState("");
+  const [classYear, setClassYear] = useState("");
+  const [consent, setConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -113,12 +148,19 @@ export function OnboardingFlow() {
 
   const continueFromStep1 = () => {
     if (!persona) return;
+    setError(null);
+    // Both branches only turn a page: "play" to the college question, "junior"
+    // to the guardian step. Nothing is written until the branch's own submit,
+    // so a guardian who bails on 3.1 is still gated into onboarding next time.
     if (persona === "play") {
-      setError(null);
       setStep(2);
       return;
     }
-    submit(persona === "coach" ? "coach" : "junior");
+    if (persona === "junior") {
+      setStep(3);
+      return;
+    }
+    submit("coach");
   };
 
   const continueFromStep2 = () => {
@@ -126,13 +168,42 @@ export function OnboardingFlow() {
     submit(college === "yes" ? "college" : "solo");
   };
 
+  // The checkbox gates Continue, and so do the two fields the row above it
+  // names — the server refuses all three anyway; this just keeps the button
+  // honest about what a tap will do.
+  const guardianReady =
+    playerName.trim().length > 0 && classYear !== "" && consent;
+
+  const submitGuardian = () => {
+    if (!guardianReady) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await finishGuardianOnboarding({
+        playerName,
+        classYear,
+        consent,
+      });
+      if (result && !result.ok) setError(result.error);
+    });
+  };
+
+  // 3.1's consent sentence names the player ("I'm Sofia's parent or legal
+  // guardian…"), so the label follows the name field as it's typed.
+  const playerFirstName = playerName.trim().split(/\s+/)[0] ?? "";
+  const playerPossessive = playerFirstName
+    ? `${playerFirstName}'s`
+    : "the player's";
+
   return (
     <div className="flex min-h-screen items-center bg-[var(--surface-card)] px-6 py-24 sm:px-10">
       <div
         className="mx-auto w-full"
-        style={{ maxWidth: step === 1 ? 840 : 560 }}
+        style={{ maxWidth: step === 1 ? 840 : step === 2 ? 560 : 584 }}
       >
-        <div className="flex min-w-0 flex-col" style={{ gap: 28 }}>
+        <div
+          className="flex min-w-0 flex-col"
+          style={{ gap: step === 3 ? 20 : 28 }}
+        >
           {step === 1 ? (
             <>
               <ClaimHeading
@@ -197,7 +268,7 @@ export function OnboardingFlow() {
                 </span>
               </ClaimActions>
             </>
-          ) : (
+          ) : step === 2 ? (
             <>
               <ClaimHeading
                 gap={8}
@@ -259,6 +330,133 @@ export function OnboardingFlow() {
                   Skip
                 </button>
               </ClaimActions>
+            </>
+          ) : (
+            <>
+              {/* Screen 3.1 — the guardian acknowledgment. Unlike 1.2/1.3
+                  there is no step eyebrow and the title is `text-title`, not
+                  `text-title-lg`: the design draws this as the smaller pane
+                  where the account holder stops being the subject. */}
+              <div className="flex flex-col" style={{ gap: 6 }}>
+                <h1 className="text-title">Who&apos;s playing?</h1>
+                <p className="text-body-sm" style={{ maxWidth: "56ch" }}>
+                  Everything in Advantage will be about this player. You hold
+                  the account and can hand it to them later.
+                </p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-[1.4fr_1fr]">
+                <div>
+                  <label htmlFor="guardian-player-name" className={CLAIM_LABEL}>
+                    Player&apos;s name
+                  </label>
+                  <input
+                    id="guardian-player-name"
+                    value={playerName}
+                    onChange={(e) => setPlayerName(e.target.value)}
+                    // Off, deliberately: the browser's saved identity is the
+                    // adult holding the account, and the one name this field
+                    // must not autofill is theirs.
+                    autoComplete="off"
+                    className={CLAIM_FIELD}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="guardian-class-year" className={CLAIM_LABEL}>
+                    Graduating class
+                  </label>
+                  <select
+                    id="guardian-class-year"
+                    value={classYear}
+                    onChange={(e) => setClassYear(e.target.value)}
+                    className={cn(
+                      CLAIM_FIELD,
+                      "cursor-pointer",
+                      classYear === "" && "text-[var(--ink-400)]"
+                    )}
+                  >
+                    <option value="" disabled>
+                      Select year
+                    </option>
+                    {guardianClassYears().map((year) => (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 rounded-[var(--radius-element)] border border-[var(--border-hairline)] bg-[var(--surface-subtle)] px-[18px] py-4">
+                <span className="eyebrow">If the player is under 18</span>
+                {/* The design's honest rows: a 2px tick-bar, not a checkmark —
+                    these are facts being acknowledged, not features. */}
+                <div className="flex flex-col">
+                  {GUARDIAN_ACKNOWLEDGMENTS.map((row, index) => (
+                    <div
+                      key={row}
+                      className={cn(
+                        "flex gap-2.5",
+                        index === 0
+                          ? "pb-[9px]"
+                          : "border-t border-[var(--border-hairline)] py-[9px]",
+                        index === GUARDIAN_ACKNOWLEDGMENTS.length - 1 && "pb-0"
+                      )}
+                    >
+                      <span
+                        className="mt-1 h-3 w-[2px] shrink-0 bg-[var(--ink-300)]"
+                        aria-hidden="true"
+                      />
+                      <span className="text-body-sm">{row}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-start gap-2.5 border-t border-[var(--border-hairline)] pt-3">
+                  {/* AuthCheckbox is label-less by design: wrapping the copy
+                      in the control's own <label> would make the terms link
+                      toggle the box on the way out. Sibling text, bound with
+                      aria-describedby — same shape as the sign-up consent. */}
+                  <AuthCheckbox
+                    id="guardian-consent"
+                    checked={consent}
+                    onChange={setConsent}
+                    aria-label={`I'm ${playerPossessive} parent or legal guardian and I agree to the above`}
+                    aria-describedby="guardian-consent-copy"
+                  />
+                  <span
+                    id="guardian-consent-copy"
+                    className="text-body-sm"
+                    style={{ color: "var(--ink-900)", maxWidth: "52ch" }}
+                  >
+                    I&apos;m {playerPossessive} parent or legal guardian and I
+                    agree to the above.{" "}
+                    {/* The same terms target the sign-up consent line uses —
+                        no guardian-specific terms page exists yet, and two
+                        legal destinations would be one more than the product
+                        has documents for. */}
+                    <Link
+                      href="/legal/terms-and-conditions"
+                      className="rounded-sm text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]"
+                    >
+                      Read the guardian terms
+                    </Link>
+                    .
+                  </span>
+                </div>
+              </div>
+
+              {/* Alone in its row — 3.1 gives Continue no companion line and
+                  no Skip: consent has no soft exit. */}
+              <div>
+                <button
+                  type="button"
+                  disabled={!guardianReady || isPending}
+                  onClick={submitGuardian}
+                  className={CLAIM_BUTTON}
+                >
+                  Continue
+                </button>
+              </div>
             </>
           )}
 

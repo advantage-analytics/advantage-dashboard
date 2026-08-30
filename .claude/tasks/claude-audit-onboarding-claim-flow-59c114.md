@@ -67,7 +67,7 @@ ready).
 - **notes:** Today startClaim always calls signInWithOtp(shouldCreateUser:true); with onboarding (T1/T3) routing signed-in coaches into the claim flow, that would mint duplicate identities. Likely shape: record claimant_user_id on pending_claims for signed-in starts and verify mailbox ownership without exchanging the session — design the mechanism in-task. Security-sensitive: rls-boundary-reviewer should look at the diff.
 
 ## T5 · Guardian step for junior accounts
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1
 - **files:** src/app/onboarding/ (guardian screen, new), supabase/migrations/ (new, applied to live DB), src/components/dashboard/settings/profile-form.tsx (guess)
