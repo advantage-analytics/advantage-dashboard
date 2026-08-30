@@ -432,6 +432,10 @@ export function MatchesPageContent({
      as cards instead. That choice is made in CSS inside MatchesGrid, so it
      needs no state, no listener, and no URL parameter here. */
   const [search, setSearch] = useState(() => searchParams.get("q") || "");
+  // Whether the search input is expanded. At rest it collapses to a compact
+  // "Search" trigger that hugs its label (no dead field width in the toolbar);
+  // it opens on click or "/", and re-collapses on blur when empty.
+  const [searchOpen, setSearchOpen] = useState(false);
   const [sortField, setSortField] = useState<SortField>(() => (searchParams.get("sort") as SortField) || "date");
   const [sortDir, setSortDir] = useState<SortDir>(() => (searchParams.get("dir") as SortDir) || "desc");
   const [filters, setFilters] = useState<ActiveFilter[]>(() => {
@@ -518,7 +522,7 @@ export function MatchesPageContent({
     }
   }
 
-  // "/" shortcut to focus search
+  // "/" focuses search; the input's own onFocus animates the chip open.
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "/" && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement)) {
@@ -803,10 +807,17 @@ export function MatchesPageContent({
             totalCount={matches.length}
           />
 
-          {/* The canvas's quiet "Search" chip (14px icon + label, h-28 px-8,
-              radius-element, surface-subtle hover) — a real input that reads as
-              the trigger at rest and widens on focus so it stays typeable. */}
-          <div className="flex h-7 items-center gap-1.5 rounded-[var(--radius-element)] px-2 transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-within:bg-[var(--surface-subtle)]">
+          {/* The canvas's quiet "Search" chip. At rest the chip hugs its
+              "Search" label (76px, no dead field width in the toolbar). Focusing
+              it — by click or "/" — animates the width open into a full input,
+              easing back on blur when empty. `overflow-hidden` clips the input
+              while it slides; the collapse is disabled under reduced motion. */}
+          <label
+            className={`flex h-7 cursor-text items-center gap-1.5 overflow-hidden rounded-[var(--radius-element)] px-2 transition-[width,background-color] duration-200 ease-out motion-reduce:transition-none hover:bg-[var(--surface-subtle)] ${
+              searchOpen || search ? "w-[184px]" : "w-[76px]"
+            }`}
+            style={{ background: searchOpen || search ? "var(--surface-subtle)" : undefined }}
+          >
             <Search className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} style={{ color: "var(--ink-500)" }} />
             <input
               ref={searchRef}
@@ -817,15 +828,19 @@ export function MatchesPageContent({
               title="Search by event, opponent, or round"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onFocus={() => setSearchOpen(true)}
+              onBlur={() => {
+                if (!search) setSearchOpen(false);
+              }}
               // Opt out of focus.css's neutral field ring: the chip's own
-              // focus-within surface-subtle wash + width expansion is the visible
-              // on-focus indicator, so a ring on top is the "stray box" the DS
-              // underline-exception describes. WCAG-safe for the same reason.
+              // surface-subtle background is the visible active-field state, so a
+              // ring on top is the "stray box" the DS underline-exception
+              // describes. WCAG-safe for the same reason.
               data-focus-ring="none"
-              className="w-[70px] bg-transparent text-[12px] transition-[width] duration-200 placeholder:text-[var(--ink-600)] focus:w-[168px] focus:outline-none"
+              className="min-w-0 flex-1 bg-transparent text-[12px] placeholder:text-[var(--ink-600)] focus:outline-none"
               style={{ color: "var(--ink-900)" }}
             />
-          </div>
+          </label>
 
           <SortDropdown sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
         </div>
