@@ -182,6 +182,15 @@ function DualPane({
           <span className="tabular">{singles.length}</span> singles,{" "}
           <span className="tabular">{doubles.length}</span> doubles
         </span>
+
+        <div className="flex-1" />
+
+        <RowAction
+          href={`/dashboard/team/schedule/${event.id}`}
+          ariaLabel={`View event vs ${event.name}`}
+        >
+          View event
+        </RowAction>
       </div>
     </div>
   );
