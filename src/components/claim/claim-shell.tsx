@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, X } from "lucide-react";
+import { ArrowLeft, Check, X } from "lucide-react";
 import { advButton } from "@/lib/ui/adv-button";
 
 /**
@@ -282,3 +282,35 @@ export const CLAIM_LINK =
 
 /** The line that sits beside a button rather than under it. */
 export const CLAIM_MICRO = "text-micro";
+
+/**
+ * The design system's check-dot `Radio`: solid Signal Blue with a white check
+ * when chosen, a 1px ink-300 ring otherwise. The dot marks the selected item —
+ * it never appears on hover. Shared because the persona cards, the team-kind
+ * cards and the org-type rows all draw the same mark.
+ *
+ * `align` carries the one difference between callers: rows aligned to a line of
+ * text nudge down 1px (`mt-[1px]`, the default); a card header that centres the
+ * dot in a `justify-between` row passes `align=""`.
+ */
+export function RadioDot({
+  selected,
+  align = "mt-[1px]",
+}: {
+  selected: boolean;
+  align?: string;
+}) {
+  return selected ? (
+    <span
+      className={`${align} flex size-3.5 shrink-0 items-center justify-center rounded-full bg-[var(--blue)]`}
+      aria-hidden="true"
+    >
+      <Check className="size-[9px] text-white" strokeWidth={2.5} />
+    </span>
+  ) : (
+    <span
+      className={`${align} size-3.5 shrink-0 rounded-full border border-[var(--ink-300)]`}
+      aria-hidden="true"
+    />
+  );
+}

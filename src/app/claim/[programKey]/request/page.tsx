@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -7,6 +8,8 @@ import {
 } from "@/lib/data/programs-server";
 import { ClaimShell, ClaimHeading } from "@/components/claim/claim-shell";
 import { ContactOwnerForm } from "@/components/claim/contact-owner-form";
+import { JoinSharingRows } from "@/components/claim/sharing-rows";
+import { advButton } from "@/lib/ui/adv-button";
 
 export const metadata = { title: "Request an invite" };
 
@@ -27,6 +30,33 @@ export default async function RequestInvitePage({
   const program = await getProgramPublicStatus(supabase, programKey);
 
   if (!program) notFound();
+
+  // Design 4.2's one added field, and the reason it is added: the request
+  // should arrive as "Rafael Osei wants to join" rather than as an address a
+  // coach has to decode. Read here rather than in the form because a client
+  // component cannot see the session, and because `users` is RLS-scoped to the
+  // reader — this returns the visitor's own row or nothing at all.
+  //
+  // Signed-out is an ordinary case on this screen, not a failure: the whole
+  // flow runs before an account exists. No session means no prefill and no
+  // note, which is exactly the form this page has always shown.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  let profileName = "";
+  if (user) {
+    const { data: profile } = await supabase
+      .from("users")
+      .select("first_name, last_name")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    profileName = [profile?.first_name, profile?.last_name]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+  }
 
   const eyebrow = [
     program.schoolName,
@@ -72,6 +102,29 @@ export default async function RequestInvitePage({
         kind="request"
         ownerDisplay={owner}
         unclaimed={unclaimed}
+        defaultName={profileName}
+        nameNote={
+          // Whole sentences per branch, not a name slotted into one frame —
+          // the unnamed case takes a plural verb, and interpolating "They"
+          // into "… sees who's asking" is how that goes wrong quietly.
+          profileName
+            ? owner
+              ? `From your profile. ${owner} sees who's asking, not a bare email.`
+              : unclaimed
+                ? "From your profile. Whoever sets this program up sees who's asking, not a bare email."
+                : "From your profile. They see who's asking, not a bare email."
+            : undefined
+        }
+        terms={<JoinSharingRows />}
+        secondary={
+          // The way out that is not a dead end. A player who decides not to ask
+          // still has an account and their own matches — "Keep it personal" is
+          // a real second option here, not a cancel, so it is the design's
+          // ghost button beside the primary rather than a quiet link.
+          <Link href="/dashboard" className={advButton("ghost")}>
+            Keep it personal
+          </Link>
+        }
         micro={
           unclaimed
             ? "No account is created for you. Your request is on file for whoever sets this program up."

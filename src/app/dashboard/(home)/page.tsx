@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import HomeContent from "./home-content";
 import KpiCards from "@/components/dashboard/home/kpi-cards";
+import type { SetupProgress } from "@/components/dashboard/home/empty-dashboard";
 import { createClient } from "@/lib/supabase/server";
 import { getMyPlayerIds } from "@/lib/data/player-identity-server";
 import { getOverallPerformance } from "@/lib/data/performance-server";
@@ -20,10 +21,20 @@ export default async function Home() {
 
   const userId = data.claims.sub;
   const billingMonth = currentBillingMonth();
-  const [{ data: user }, performanceData, myPlayerIds, usage, activity] = await Promise.all([
+  const [
+    { data: user },
+    performanceData,
+    myPlayerIds,
+    usage,
+    { data: savedPreferences },
+    activity,
+  ] = await Promise.all([
+    // `hand` and `backhand` ride along on the row the greeting already needs —
+    // they are the checklist's first answer, and a second query for two columns
+    // of a row already in hand would be a round trip for nothing.
     supabase
       .from("users")
-      .select("first_name, last_name")
+      .select("first_name, last_name, hand, backhand")
       .eq("id", userId)
       .single(),
     getOverallPerformance(),
@@ -31,6 +42,19 @@ export default async function Home() {
     // this page share one round trip.
     getMyPlayerIds(),
     getPersonalUsage(userId, billingMonth),
+    // Has this account ever saved Settings › Preferences?
+    //
+    // `user_preferences` carries a NOT NULL default on every column and has no
+    // row until the first save, so the row's existence IS the answer to "have
+    // you chosen how you're notified" — the values cannot answer it, because
+    // the defaults a saver kept are byte-identical to the defaults a stranger
+    // never saw. RLS on this table is own-row only in all three directions;
+    // the filter states that rather than leaning on it.
+    supabase
+      .from("user_preferences")
+      .select("user_id")
+      .eq("user_id", userId)
+      .maybeSingle(),
     // 52-week match-day heatmap for the Activity widget. Personal scope only
     // (created_by = me AND program_id IS NULL), matching the Matches list.
     getPersonalActivity(userId),
@@ -71,6 +95,19 @@ export default async function Home() {
   // card regenerates instead of showing the stale session-cached text.
   const insightSignature = `${matchCount}:${winRate.value}:${form.join("")}`;
 
+  // The getting-set-up checklist's three answers, each a persisted fact rather
+  // than a local flag — so the list is right on a second device, and a step
+  // stays done after a sign-out.
+  const setup: SetupProgress = {
+    // Both, not either: a hand without a backhand orients half the analysis,
+    // and the row asks for the pair.
+    playingProfile: Boolean(user?.hand && user?.backhand),
+    // False everywhere the empty state actually renders — it renders only when
+    // this is false. Passed anyway; see `SetupProgress`.
+    firstMatch: hasMatches,
+    notifications: Boolean(savedPreferences),
+  };
+
   // Compute greeting server-side to avoid hydration flash
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -93,6 +130,7 @@ export default async function Home() {
           insightEvidence={insightEvidence}
           insightSignature={insightSignature}
           activity={activity}
+          setup={setup}
         />
       </div>
     </div>

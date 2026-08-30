@@ -21,6 +21,22 @@ export type ProgramRole = 'owner' | 'coach' | 'staff' | 'player';
 
 export type WorkspaceKind = 'personal' | 'team';
 
+/**
+ * `programs.org_type` — what kind of organization backs a team workspace.
+ *
+ * 'college' rows come from the seeded ITA directory and enter ownership
+ * through the claim flow's verification; every other value is a self-serve
+ * org whose creator simply owns it (`create_custom_program`). The distinction
+ * is entitlement-bearing: only verified collegiate programs draw the program
+ * processing tier — see `quotaTierFor()` in `services/splitstep/quota.ts`.
+ */
+export type ProgramOrgType =
+  | 'college'
+  | 'club'
+  | 'high_school'
+  | 'academy'
+  | 'other';
+
 export interface Workspace {
   /**
    * The account this workspace bills and scopes against — the user's id for a
@@ -32,8 +48,21 @@ export interface Workspace {
   kind: WorkspaceKind;
   /** "Personal", or the school name for a program. */
   name: string;
-  /** Which squad, where a school fields both. Null for personal workspaces. */
+  /**
+   * Which squad, where a school fields both. Null for personal workspaces —
+   * and for team workspaces backed by a custom org (club / high school /
+   * academy; `programs.org_type` other than 'college'), which field no squad.
+   */
   team: 'mens' | 'womens' | null;
+  /**
+   * The backing program's `org_type` for a team workspace; null for personal.
+   *
+   * Rides on the workspace for the same reason `playersCanUpload` does: the
+   * quota tier has to be answerable with only a `Workspace` in hand, at the
+   * spend (`reserveQuota`), in the wizard's meter, and on Settings › Usage —
+   * three surfaces that must all name the same allowance.
+   */
+  orgType: ProgramOrgType | null;
   /** The viewer's role here — drives what the workspace is allowed to show. */
   role: ProgramRole;
   /** One or two characters for the switcher's mark. */
@@ -142,6 +171,15 @@ export interface Viewer {
   role: string | null;
   /** `users.created_at` as "Mon YYYY", or null for a row without one. */
   memberSince: string | null;
+  /**
+   * `users.onboarded_at` — when first-run onboarding completed. Null means the
+   * dashboard layout redirects this viewer to `/onboarding`. Accounts created
+   * by invite acceptance or a program claim are stamped by those flows' own
+   * server actions, with the admin client — never from auth metadata, which
+   * any signUp() caller can craft — so an account that already exists never
+   * re-onboards.
+   */
+  onboardedAt: string | null;
 }
 
 /**

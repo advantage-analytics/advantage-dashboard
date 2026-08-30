@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { programDisplayName } from "@/lib/data/programs-server";
+import type { ProgramOrgType } from "@/lib/workspace/types";
 import { hashToken } from "./tokens";
 
 /**
@@ -21,10 +22,25 @@ import { hashToken } from "./tokens";
 /** Mirrors `program_invites_role_check`. Owner moves by transfer, not invite. */
 export type JoinRole = "coach" | "staff" | "player";
 
+/**
+ * The coach behind the invitation, as far as a screen is allowed to say it.
+ *
+ * A name and nothing else. 8.3a has to promise a specific person was not
+ * notified and 9.2a has to name who can send another, and "a coach on the
+ * program" does neither — but the inviter's ADDRESS never leaves the server.
+ * The name is not a disclosure: `programInviteEmail` already prints it in the
+ * mail this token arrived in, so anybody holding the token has read it.
+ *
+ * Null is ordinary, not an error. `program_invites.invited_by` is `on delete
+ * set null`, so a coach who left the product takes the name with them and every
+ * screen below falls back to a sentence that does not need one.
+ */
+export type InviterName = string | null;
+
 export type JoinState =
   /** No invitation with that token. Revoked, mistyped, or never existed. */
   | { kind: "not_found" }
-  | { kind: "expired"; programName: string }
+  | { kind: "expired"; programName: string; inviterName: InviterName }
   | { kind: "already_used"; programName: string }
   /**
    * A session exists, but for a different address than the one invited.
@@ -40,7 +56,14 @@ export type JoinState =
       signedInAs: string;
     }
   /** Signed in as the invited address. One button between them and the roster. */
-  | { kind: "ready"; programName: string; role: JoinRole; email: string }
+  | {
+      kind: "ready";
+      programName: string;
+      programOrgType: ProgramOrgType;
+      role: JoinRole;
+      email: string;
+      inviterName: InviterName;
+    }
   /**
    * An account already exists for the invited address, and nobody is signed in.
    *
@@ -48,18 +71,49 @@ export type JoinState =
    * new one — see `createAccountAndAccept` for why that distinction is the
    * most important line in this feature.
    */
-  | { kind: "sign_in"; programName: string; role: JoinRole; email: string }
+  | {
+      kind: "sign_in";
+      programName: string;
+      programOrgType: ProgramOrgType;
+      role: JoinRole;
+      email: string;
+      inviterName: InviterName;
+    }
   /** No account yet. Name and password, and they are in. */
-  | { kind: "sign_up"; programName: string; role: JoinRole; email: string };
+  | {
+      kind: "sign_up";
+      programName: string;
+      programOrgType: ProgramOrgType;
+      role: JoinRole;
+      email: string;
+      inviterName: InviterName;
+    };
 
 export interface InviteRecord {
   id: string;
   programId: string;
   programName: string;
+  /**
+   * `programs.org_type`. The terms screens (8.2's footer) quote the program's
+   * monthly analysis allowance, and a custom org's is the reduced tier — see
+   * `quotaTierFor()` — so the invite has to say which kind of program it is
+   * for the promised number to be the enforced one. Falls back to 'college'
+   * when the program row went missing, alongside `programName`'s own fallback.
+   */
+  programOrgType: ProgramOrgType;
   email: string;
   role: JoinRole;
   expiresAt: string;
   acceptedAt: string | null;
+  /**
+   * `program_invites.invited_by`. SERVER ONLY, and deliberately not on
+   * `JoinState`: it is what `requestFreshInvite()` resolves an address from, and
+   * the one guarantee that makes that action safe is that the recipient is read
+   * off this row rather than named by whoever holds the token.
+   */
+  invitedBy: string | null;
+  /** The same person, as much of them as a screen may print. See `InviterName`. */
+  inviterName: InviterName;
 }
 
 /**
@@ -78,17 +132,31 @@ export async function loadInvite(token: string): Promise<InviteRecord | null> {
 
   const { data: invite } = await admin
     .from("program_invites")
-    .select("id, program_id, email, role, expires_at, accepted_at")
+    .select("id, program_id, email, role, expires_at, accepted_at, invited_by")
     .eq("token_hash", hashToken(trimmed))
     .maybeSingle();
 
   if (!invite) return null;
 
-  const { data: program } = await admin
-    .from("programs")
-    .select("school_name, team")
-    .eq("id", invite.program_id as string)
-    .maybeSingle();
+  const invitedBy = (invite.invited_by as string | null) ?? null;
+
+  // Both by id, both against this one row, so neither can be steered by the
+  // caller. In parallel because they do not depend on each other and this runs
+  // on the render path of every state the link opens.
+  const [{ data: program }, { data: inviter }] = await Promise.all([
+    admin
+      .from("programs")
+      .select("school_name, team, org_type")
+      .eq("id", invite.program_id as string)
+      .maybeSingle(),
+    invitedBy
+      ? admin
+          .from("users")
+          .select("first_name, last_name")
+          .eq("id", invitedBy)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
 
   return {
     id: invite.id as string,
@@ -99,11 +167,36 @@ export async function loadInvite(token: string): Promise<InviteRecord | null> {
           program.team as string | null
         )
       : "your program",
+    programOrgType: program
+      ? (program.org_type as ProgramOrgType)
+      : "college",
     email: (invite.email as string).toLowerCase(),
     role: invite.role as JoinRole,
     expiresAt: invite.expires_at as string,
     acceptedAt: invite.accepted_at as string | null,
+    invitedBy,
+    inviterName: inviter
+      ? displayName(
+          (inviter.first_name as string | null) ?? null,
+          (inviter.last_name as string | null) ?? null
+        )
+      : null,
   };
+}
+
+/**
+ * "Elena Vasquez", "Elena", or null.
+ *
+ * Null rather than a placeholder, because every screen that prints this has a
+ * second sentence written for not knowing. "Coach wasn't notified" is worse
+ * than "Nobody was notified" — it reads as a bug, and it is one.
+ */
+function displayName(first: string | null, last: string | null): InviterName {
+  const name = [first, last]
+    .map((part) => part?.trim() ?? "")
+    .filter(Boolean)
+    .join(" ");
+  return name || null;
 }
 
 /**
@@ -138,14 +231,14 @@ export async function resolveJoinState(token: string): Promise<JoinState> {
   const invite = await loadInvite(token);
   if (!invite) return { kind: "not_found" };
 
-  const { programName, role, email } = invite;
+  const { programName, programOrgType, role, email, inviterName } = invite;
 
   // Same order as `accept_program_invite`, and for the same reason: "you
   // already did this" is more use to someone than "it expired" when both are
   // true, because only one of them has an action attached.
   if (invite.acceptedAt) return { kind: "already_used", programName };
   if (Date.parse(invite.expiresAt) <= Date.now()) {
-    return { kind: "expired", programName };
+    return { kind: "expired", programName, inviterName };
   }
 
   const supabase = await createClient();
@@ -156,7 +249,14 @@ export async function resolveJoinState(token: string): Promise<JoinState> {
   if (user) {
     const signedInAs = (user.email ?? "").toLowerCase();
     if (signedInAs === email) {
-      return { kind: "ready", programName, role, email };
+      return {
+        kind: "ready",
+        programName,
+        programOrgType,
+        role,
+        email,
+        inviterName,
+      };
     }
     return {
       kind: "wrong_account",
@@ -169,8 +269,10 @@ export async function resolveJoinState(token: string): Promise<JoinState> {
   return {
     kind: (await accountExists(email)) ? "sign_in" : "sign_up",
     programName,
+    programOrgType,
     role,
     email,
+    inviterName,
   };
 }
 

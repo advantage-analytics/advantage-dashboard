@@ -21,6 +21,7 @@ export default async function CheckEmailPage({
 }) {
   const { to, program } = await searchParams;
   const email = to?.trim() || "your address";
+  const programKey = program?.trim() ?? "";
   const backHref = program ? `/claim/${program}/setup` : "/claim/program";
 
   return (
@@ -47,7 +48,7 @@ export default async function CheckEmailPage({
       {/* The two things you can do about a link that hasn't arrived, on one
           line above a rule — not stacked as though either were a next step. */}
       <div className="flex w-full flex-wrap items-center gap-4 border-t border-[var(--border-hairline)] pt-3.5">
-        <ResendTimer email={email} />
+        <ResendTimer email={email} programKey={programKey} />
         <Link href={backHref} className={CLAIM_LINK}>
           Use a different address
         </Link>

@@ -10,20 +10,13 @@ import {
   type ClaimProgram,
 } from "@/lib/services/programs/domain-match";
 import { startClaim } from "@/lib/services/programs/claim-actions";
+import { CLAIM_ROLES } from "@/lib/services/programs/claim-roles";
 import {
   AsidePanel,
   CLAIM_BUTTON,
   CLAIM_FIELD,
   CLAIM_LABEL,
 } from "./claim-shell";
-
-const ROLES = [
-  { value: "head_coach", label: "Head coach" },
-  { value: "assistant_coach", label: "Assistant coach" },
-  { value: "director_of_tennis", label: "Director of tennis" },
-  { value: "operations", label: "Operations" },
-  { value: "other", label: "Other" },
-];
 
 /**
  * F4 and F4.1 are the same screen in two states, and the state is the address.
@@ -122,7 +115,7 @@ export function SetupForm({
   const router = useRouter();
   const { email, setEmail } = useContext(EmailContext);
   const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState(ROLES[0].value);
+  const [role, setRole] = useState<string>(CLAIM_ROLES[0].value);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -181,7 +174,7 @@ export function SetupForm({
           onChange={(e) => setRole(e.target.value)}
           className={`${CLAIM_FIELD} cursor-pointer`}
         >
-          {ROLES.map((r) => (
+          {CLAIM_ROLES.map((r) => (
             <option key={r.value} value={r.value}>
               {r.label}
             </option>

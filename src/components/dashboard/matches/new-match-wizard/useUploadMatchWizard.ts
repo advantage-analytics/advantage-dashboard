@@ -31,11 +31,11 @@ import {
   uploadAndSubmitVideo,
   type VideoUploadEvent,
 } from "@/lib/services/splitstep/submit-match-video";
+import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import {
-  currentBillingMonth,
-  getMonthlyCapSeconds,
-} from "@/lib/services/splitstep/config";
-import { accountTypeFor } from "@/lib/services/splitstep/quota";
+  accountTypeFor,
+  monthlyCapSecondsFor,
+} from "@/lib/services/splitstep/quota";
 import { formatResetDate } from "@/lib/data/usage-format";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import {
@@ -505,7 +505,10 @@ export function useUploadMatchWizard({
    * a 75-hour budget.
    */
   const quotaAccountType = accountTypeFor(activeWorkspace);
-  const quotaCapSeconds = getMonthlyCapSeconds(quotaAccountType);
+  // Cap by tier, not by ledger: a custom org files under the program ledger
+  // (`quotaAccountType` above, which the remaining-quota read filters on) but
+  // draws the individual figure until a paid plan raises it — quotaTierFor().
+  const quotaCapSeconds = monthlyCapSecondsFor(activeWorkspace);
   // "Sep 1". Settings › Usage already answers "when does this come back" from
   // the same billing-month key, so the wizard asks it rather than re-deriving.
   const quotaResetsOn = formatResetDate(currentBillingMonth());

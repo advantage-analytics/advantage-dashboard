@@ -34,6 +34,16 @@ export default async function Layout({
   // started, so a logged-out request pays for nothing it will discard.
   if (!workspace) redirect("/login");
 
+  // First run: the two-question onboarding owns the first dashboard visit.
+  // Here rather than in `src/proxy.ts` for the same reason the login gate is —
+  // route protection lives beside the workspace lookup it depends on, and the
+  // proxy deliberately does session refresh only. Rides the users-row select
+  // `getWorkspaceContext()` already makes, so the gate costs no extra query.
+  // Accounts created by invite acceptance or a program claim are stamped by
+  // those flows' own server actions before any redirect that could land here,
+  // so they never bounce.
+  if (!workspace.viewer.onboardedAt) redirect("/onboarding");
+
   return (
     <WorkspaceProvider value={workspace}>
       {/* Wraps the shell rather than sitting inside a page, because the thing

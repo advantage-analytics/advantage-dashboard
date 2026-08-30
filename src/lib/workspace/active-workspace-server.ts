@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { getInitials } from '@/lib/data/match-utils';
 import type {
+  ProgramOrgType,
   ProgramRole,
   Viewer,
   Workspace,
@@ -36,6 +37,7 @@ function personalWorkspace(viewer: Viewer): Workspace {
     kind: 'personal',
     name: 'Personal',
     team: null,
+    orgType: null,
     role: 'owner',
     mark: viewer.initials,
     canSubmitVideo: true,
@@ -76,7 +78,7 @@ async function listProgramWorkspaces(
   const { data, error } = await supabase
     .from('program_members')
     .select(
-      'role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload)'
+      'role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload, org_type)'
     )
     .eq('user_id', userId)
     .order('joined_at');
@@ -97,9 +99,10 @@ async function listProgramWorkspaces(
       | {
           id: string;
           school_name: string;
-          team: string;
+          team: string | null;
           status: string;
           players_can_upload: boolean;
+          org_type: string;
         }
       | undefined;
     if (!program) return [];
@@ -109,7 +112,19 @@ async function listProgramWorkspaces(
         id: program.id,
         kind: 'team' as const,
         name: program.school_name,
-        team: program.team === 'womens' ? ('womens' as const) : ('mens' as const),
+        // Null for a custom org (club/high school/academy), which fields no
+        // squad — `teamLabel(null)` then renders the name alone rather than
+        // inventing "Men's" for a workspace that never chose one.
+        team:
+          program.team === 'womens'
+            ? ('womens' as const)
+            : program.team === 'mens'
+              ? ('mens' as const)
+              : null,
+        // NOT NULL with default 'college' in the schema, and the CHECK pins
+        // the value set, so the cast is a naming ceremony rather than a guess.
+        // The quota tier hangs off this — see `quotaTierFor()`.
+        orgType: program.org_type as ProgramOrgType,
         role: row.role as ProgramRole,
         mark: program.school_name.trim().charAt(0).toUpperCase(),
         // 'active' means the claim settled. 'claim_pending' is a live workspace
@@ -142,6 +157,7 @@ function toViewer(
     plan: string | null;
     role: string | null;
     created_at: string | null;
+    onboarded_at: string | null;
   } | null
 ): Viewer {
   const firstName = row?.first_name ?? null;
@@ -169,6 +185,10 @@ function toViewer(
           timeZone: 'UTC',
         })
       : null,
+    // Null both for a genuinely un-onboarded account and for a missing profile
+    // row — either way the dashboard layout sends them to /onboarding, which
+    // is the screen that knows how to finish the setup.
+    onboardedAt: row?.onboarded_at ?? null,
   };
 }
 
@@ -186,7 +206,7 @@ export const getWorkspaceContext = cache(
     // select from here.
     const { data: row } = await supabase
       .from('users')
-      .select('first_name, last_name, plan, role, created_at')
+      .select('first_name, last_name, plan, role, created_at, onboarded_at')
       .eq('id', user.id)
       .single();
 

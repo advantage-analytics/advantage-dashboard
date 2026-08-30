@@ -659,6 +659,7 @@ async function resolveAutoRetryWorkspace(params: {
       kind: 'personal',
       name: 'Personal',
       team: null,
+      orgType: null,
       role: 'owner',
       mark: '',
       canSubmitVideo: true,
@@ -669,7 +670,9 @@ async function resolveAutoRetryWorkspace(params: {
 
   const { data, error } = await supabase
     .from('program_members')
-    .select('role, upload_enabled, programs!inner(status, players_can_upload)')
+    .select(
+      'role, upload_enabled, programs!inner(status, players_can_upload, org_type)'
+    )
     .eq('program_id', programId)
     .eq('user_id', userId)
     .maybeSingle();
@@ -680,8 +683,8 @@ async function resolveAutoRetryWorkspace(params: {
     role: string;
     upload_enabled: boolean;
     programs:
-      | { status: string; players_can_upload: boolean }
-      | { status: string; players_can_upload: boolean }[];
+      | { status: string; players_can_upload: boolean; org_type: string }
+      | { status: string; players_can_upload: boolean; org_type: string }[];
   };
   const program = Array.isArray(row.programs) ? row.programs[0] : row.programs;
   if (!program) return null;
@@ -691,6 +694,10 @@ async function resolveAutoRetryWorkspace(params: {
     kind: 'team',
     name: 'Program',
     team: null,
+    // The real value, not a guess: this workspace goes straight into
+    // `reserveQuota()`, and a custom org auto-retrying must draw its reduced
+    // tier exactly as a fresh manual submission would — see `quotaTierFor()`.
+    orgType: program.org_type as Workspace['orgType'],
     role: row.role as Workspace['role'],
     mark: '',
     // Same rule listProgramWorkspaces() uses: 'active' means the claim

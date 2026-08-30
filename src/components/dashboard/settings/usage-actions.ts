@@ -25,5 +25,9 @@ export async function loadProgramUsage(
   if (!workspace || workspace.active.kind !== "team") {
     return emptyProgramUsage(billingMonth);
   }
-  return getProgramUsage(workspace.active.id, billingMonth);
+  return getProgramUsage(
+    workspace.active.id,
+    billingMonth,
+    workspace.active.orgType
+  );
 }

@@ -1,15 +1,24 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import {
   CLAIM_BUTTON,
   CLAIM_FIELD,
   CLAIM_LABEL,
+  CLAIM_LINK,
   ClaimActions,
 } from "@/components/claim/claim-shell";
+import { advButton } from "@/lib/ui/adv-button";
+import {
+  JoinQuotaFooter,
+  JoinSharingTerms,
+  NotNowLink,
+} from "@/components/join/join-terms";
 import {
   acceptInvite,
   createAccountAndAccept,
+  requestFreshInvite,
   signInAndAccept,
   signOutForInvite,
 } from "@/lib/services/programs/join-actions";
@@ -48,16 +57,33 @@ function Problem({ message }: { message: string | null }) {
   );
 }
 
+/**
+ * What the three accepting screens share.
+ *
+ * The sharing terms and the quota line are the same on all three, and the
+ * design's whole argument for 8.2 is that nobody reaches a Join button without
+ * passing them. Threading the same two props through each form rather than
+ * letting each one decide is what keeps that true when a fourth is added.
+ */
+interface JoinTermsProps {
+  /** The program's real monthly allowance, in hours. See `JoinQuotaNote`. */
+  programHours: number;
+  /** The personal allowance the same person already has. */
+  personalHours: number;
+}
+
 /** Signed in as the invited address. One button. */
 export function JoinReady({
   token,
   programName,
   role,
+  programHours,
+  personalHours,
 }: {
   token: string;
   programName: string;
   role: JoinRole;
-}) {
+} & JoinTermsProps) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -66,6 +92,7 @@ export function JoinReady({
       <p className="text-body">
         You&apos;ll join {programName} as {ROLE_NOUN[role]}.
       </p>
+      <JoinSharingTerms />
       <Problem message={error} />
       <ClaimActions>
         <button
@@ -84,6 +111,11 @@ export function JoinReady({
         >
           {pending ? "Joining…" : `Join ${programName}`}
         </button>
+        <NotNowLink token={token} />
+        <JoinQuotaFooter
+          programHours={programHours}
+          personalHours={personalHours}
+        />
       </ClaimActions>
     </div>
   );
@@ -95,12 +127,14 @@ export function JoinSignIn({
   programName,
   role,
   email,
+  programHours,
+  personalHours,
 }: {
   token: string;
   programName: string;
   role: JoinRole;
   email: string;
-}) {
+} & JoinTermsProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -108,7 +142,11 @@ export function JoinSignIn({
   return (
     <form
       noValidate
-      className="flex max-w-[380px] flex-col gap-4"
+      // The 380px cap moved off the form and onto the field below it. A
+      // password box is 380px because that is a comfortable length to read a
+      // masked value in; the sharing terms are two columns and need the pane.
+      // Capping the form capped both, and folded 8.2 into one narrow list.
+      className="flex flex-col gap-4"
       onSubmit={(event) => {
         event.preventDefault();
         start(async () => {
@@ -118,13 +156,15 @@ export function JoinSignIn({
         });
       }}
     >
-      <p className="text-body">
+      <p className="text-body max-w-[58ch]">
         You already have an Advantage account for{" "}
         <span className="text-[var(--ink-900)]">{email}</span>. Sign in and
         you&apos;ll join {programName} as {ROLE_NOUN[role]}.
       </p>
 
-      <div>
+      <JoinSharingTerms />
+
+      <div className="max-w-[380px]">
         <label className={CLAIM_LABEL} htmlFor="join-password">
           Password
         </label>
@@ -144,6 +184,7 @@ export function JoinSignIn({
         <button type="submit" disabled={pending} className={CLAIM_BUTTON}>
           {pending ? "Joining…" : "Sign in and join"}
         </button>
+        <NotNowLink token={token} />
         {/* The way out for someone who has forgotten it. Resetting a password
             is a different proof of the same mailbox, and it is the only path
             that may change an existing account's password — never this one. */}
@@ -153,6 +194,10 @@ export function JoinSignIn({
         >
           Forgot your password?
         </a>
+        <JoinQuotaFooter
+          programHours={programHours}
+          personalHours={personalHours}
+        />
       </ClaimActions>
     </form>
   );
@@ -164,12 +209,14 @@ export function JoinSignUp({
   programName,
   role,
   email,
+  programHours,
+  personalHours,
 }: {
   token: string;
   programName: string;
   role: JoinRole;
   email: string;
-}) {
+} & JoinTermsProps) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [password, setPassword] = useState("");
@@ -179,7 +226,9 @@ export function JoinSignUp({
   return (
     <form
       noValidate
-      className="flex max-w-[380px] flex-col gap-4"
+      // Same reason as the sign-in form: the cap belongs on the fields, not on
+      // the block of terms above them.
+      className="flex flex-col gap-4"
       onSubmit={(event) => {
         event.preventDefault();
         start(async () => {
@@ -193,13 +242,15 @@ export function JoinSignUp({
         });
       }}
     >
-      <p className="text-body">
+      <p className="text-body max-w-[58ch]">
         Set up your account and you&apos;ll join {programName} as{" "}
         {ROLE_NOUN[role]}. Your account uses{" "}
         <span className="text-[var(--ink-900)]">{email}</span>.
       </p>
 
-      <div className="flex gap-3">
+      <JoinSharingTerms />
+
+      <div className="flex max-w-[380px] gap-3">
         <div className="min-w-0 flex-1">
           <label className={CLAIM_LABEL} htmlFor="join-first">
             First name
@@ -226,7 +277,7 @@ export function JoinSignUp({
         </div>
       </div>
 
-      <div>
+      <div className="max-w-[380px]">
         <label className={CLAIM_LABEL} htmlFor="join-new-password">
           Password
         </label>
@@ -257,8 +308,77 @@ export function JoinSignUp({
         <button type="submit" disabled={pending} className={CLAIM_BUTTON}>
           {pending ? "Joining…" : `Join ${programName}`}
         </button>
+        <NotNowLink token={token} />
+        <JoinQuotaFooter
+          programHours={programHours}
+          personalHours={personalHours}
+        />
       </ClaimActions>
     </form>
+  );
+}
+
+/**
+ * Screen 9.2a — the expired link, and the one click that is left on it.
+ *
+ * The screen this replaces was a dead end wearing a "Go to sign in" button: it
+ * told someone their invitation had lapsed and then asked them to go and find a
+ * coach themselves, out of band, using contact details it declined to give
+ * them. Stage 9's rule is that none of these states may end the conversation,
+ * and this is the one where the product knows exactly who to ask.
+ *
+ * The confirmation replaces the button rather than sitting beside it, because
+ * the only thing a second press could add is a second mail, and
+ * `requestFreshInvite` refuses to send one. A button that stays live and
+ * quietly does nothing teaches people to press it harder.
+ */
+export function JoinAskAgain({
+  token,
+  inviterName,
+}: {
+  token: string;
+  inviterName: string | null;
+}) {
+  const [asked, setAsked] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+
+  if (asked) {
+    return (
+      <p className="text-body max-w-[56ch]" role="status">
+        Your request is in.{" "}
+        {inviterName
+          ? `If ${inviterName} sends a new invite`
+          : "If a new invite is sent"}
+        , it will arrive at the same address this one did.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Problem message={error} />
+      <ClaimActions>
+        <button
+          type="button"
+          disabled={pending}
+          className={advButton("outline", "sm")}
+          onClick={() =>
+            start(async () => {
+              setError(null);
+              const result = await requestFreshInvite(token);
+              if (result.ok) setAsked(true);
+              else setError(result.error);
+            })
+          }
+        >
+          {pending ? "Asking…" : "Ask for a new invite"}
+        </button>
+        <Link href="/login" className={CLAIM_LINK}>
+          Go to sign in
+        </Link>
+      </ClaimActions>
+    </div>
   );
 }
 

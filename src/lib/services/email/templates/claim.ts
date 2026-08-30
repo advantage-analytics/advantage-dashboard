@@ -3,7 +3,7 @@ import { renderEmail, renderText, type EmailContent } from "../shell";
 import type { EmailMessage } from "../send";
 
 /**
- * The three emails a program claim produces.
+ * The four emails a program claim produces.
  *
  * None of them is preference-driven, and none carries a "turn this off" line.
  * Each is the direct consequence of something a person did — claiming a
@@ -21,6 +21,59 @@ import type { EmailMessage } from "../send";
  *     email of its own — nothing changes for the coach, who has been working
  *     in the program the whole time.
  */
+
+export interface ClaimVerifyAddressInput {
+  /** The school address being proven — the only inbox this link is any use in. */
+  to: string;
+  programName: string;
+  /** The login address of the signed-in account that started the claim. */
+  accountEmail: string;
+  /** The raw verification token. Exists here and nowhere else — the database keeps only its hash. */
+  token: string;
+}
+
+/**
+ * The mailbox gate for a claim started while SIGNED IN.
+ *
+ * A signed-out claimant proves the school address by signing in as it (the
+ * Supabase magic link). A signed-in coach keeps the account they already have,
+ * so the proof is this link instead: opening it — in a session belonging to
+ * the account named below — is what finishes the setup. The copy therefore
+ * has to carry two facts a reader might not expect: the program will NOT live
+ * on this school address, and the link does nothing in anyone else's hands.
+ */
+export function claimVerifyAddressEmail(
+  input: ClaimVerifyAddressInput
+): EmailMessage {
+  const { to, programName, accountEmail, token } = input;
+
+  const content: EmailContent = {
+    preheader: `One click confirms your school address — ${programName} stays on your existing account.`,
+    eyebrow: "Confirm your address",
+    heading: `Confirm this address for ${programName}`,
+    body: [
+      `You asked to set up ${programName} on Advantage Analytics while signed in as ${accountEmail}. Opening the link below confirms you can receive mail at this address — that's the whole check.`,
+      "The program stays on the account you're signed in with. This address is only how we tie you to the school.",
+    ],
+    facts: [
+      { label: "Program", value: programName },
+      { label: "Managed by", value: accountEmail },
+    ],
+    cta: {
+      label: "Confirm and finish setup",
+      url: `${siteUrl()}/claim/verify?token=${encodeURIComponent(token)}`,
+    },
+    note: `The link lasts 24 hours, works once, and only finishes setup for ${accountEmail} — forwarded on, it does nothing. Didn't ask for this? Ignore it; nothing happens without you.`,
+  };
+
+  return {
+    to,
+    subject: `Confirm your address for ${programName}`,
+    html: renderEmail(content),
+    text: renderText(content),
+    tags: { type: "claim_verify_address" },
+  };
+}
 
 export interface ClaimApprovedInput {
   to: string;
@@ -50,7 +103,13 @@ export function claimApprovedEmail(input: ClaimApprovedInput): EmailMessage {
     // Said plainly rather than hidden. The window is real, someone at the
     // school can still contest it, and a coach who first hears about that when
     // a colleague objects has been kept in the dark by omission.
-    note: `We've let the program's listed contacts know. If nobody raises a concern by ${windowClosesOn}, the claim settles for good — there's nothing for you to do either way.`,
+    //
+    // It does NOT say we told the program's contacts, because we don't: the
+    // announced claim — mail to every scraped contact whenever a program was
+    // claimed — was cut before launch (see the /admin/claims header), and
+    // `claimObjectionNoticeEmail` below has no caller. An email that claims a
+    // notice nobody received is worse than one that stays quiet about it.
+    note: `Someone at the program can still contest this. If nobody raises a concern by ${windowClosesOn}, the claim settles for good — there's nothing for you to do either way.`,
   };
 
   return {

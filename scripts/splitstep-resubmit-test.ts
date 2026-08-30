@@ -234,6 +234,7 @@ async function main(): Promise<void> {
     kind: 'personal',
     name: 'Resubmit test',
     team: null,
+    orgType: null,
     role: 'owner',
     mark: 'T',
     canSubmitVideo: true,

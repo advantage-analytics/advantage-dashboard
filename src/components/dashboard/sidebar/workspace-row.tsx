@@ -207,8 +207,12 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
 
         <div className="-mx-1.5 my-1.5 h-px bg-[var(--border-hairline)]" />
 
+        {/* Straight to the fork (5.1). The viewer is signed in and their
+            persona is already known, so re-asking "how do you use Advantage?"
+            at /claim would be a question they've answered — the fork is the
+            right first screen for someone adding a team from here. */}
         <Link
-          href="/claim"
+          href="/claim/team"
           className="flex w-full items-center gap-2.5 rounded-[8px] px-2 py-2 text-[12px] text-[var(--ink-700)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)]"
         >
           <span className="flex size-[22px] shrink-0 items-center justify-center">

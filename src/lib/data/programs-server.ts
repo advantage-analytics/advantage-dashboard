@@ -10,20 +10,60 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-/** Enough to render one row of the F3 result list. */
-export interface ProgramSearchResult {
+/**
+ * The published facts about a program — the columns every result row carries,
+ * whoever is looking. School, squad and where it plays are on the ITA website.
+ */
+export interface ProgramDirectoryRow {
   programKey: string;
   schoolName: string;
   team: 'mens' | 'womens';
   division: string | null;
   conference: string | null;
   state: string | null;
+}
+
+/** Enough to render one row of the F3 result list, for the COACH intent. */
+export interface ProgramSearchResult extends ProgramDirectoryRow {
   status: ProgramStatus;
   /** "Coach D. Wu" on a claimed row, null otherwise. */
   ownerDisplay: string | null;
 }
 
+/**
+ * The same row as a PLAYER is allowed to see it (design 4.1).
+ *
+ * "'On Advantage' is the only status a player is allowed to see about a program
+ * they don't belong to" — so the owner's name is gone and the four-valued claim
+ * state has collapsed to one boolean. A player searching for a school they have
+ * no relationship with must not learn who runs it, nor that a claim on it is
+ * currently pending or suspended.
+ */
+export interface PlayerProgramRow extends ProgramDirectoryRow {
+  onAdvantage: boolean;
+}
+
 export type ProgramStatus = 'unclaimed' | 'claim_pending' | 'active' | 'suspended';
+
+/**
+ * Drop everything a player is not allowed to see, before it is serialized.
+ *
+ * Built field by field rather than by spreading and deleting: a spread would
+ * silently carry any column a future `toResult()` starts returning straight
+ * out to the browser, which is precisely the failure this function exists to
+ * make impossible. Adding a field here has to be a deliberate act.
+ */
+export function redactForPlayer(row: ProgramSearchResult): PlayerProgramRow {
+  return {
+    programKey: row.programKey,
+    schoolName: row.schoolName,
+    team: row.team,
+    division: row.division,
+    conference: row.conference,
+    state: row.state,
+    onAdvantage: row.status !== 'unclaimed',
+  };
+}
 
 export interface ProgramPublicStatus extends ProgramSearchResult {
   claimedAt: string | null;

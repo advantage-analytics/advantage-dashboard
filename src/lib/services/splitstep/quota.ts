@@ -12,11 +12,15 @@
  * 20260807070337_splitstep_processing_quota_functions.sql.
  *
  * ── On `program` ─────────────────────────────────────────────────────────────
- * Only `individual` is reachable today. `public.users` has `plan` and `role`
- * but nothing tying a user to a program, so there is no membership to read and
- * inventing one would silently give every user a 75-hour allowance. The tier
- * exists in the ledger and in getMonthlyCapSeconds(); it needs a membership
- * model before accountTypeFor() can ever return it.
+ * The membership model this section once said was missing exists now
+ * (`program_members`), and `accountTypeFor()` reads it via the workspace. Two
+ * different questions hang off it, split across two functions below: which
+ * LEDGER a submission files under (`accountTypeFor` — every team workspace is
+ * `'program'`, keyed by program id) and which FIGURE caps it (`quotaTierFor` —
+ * only a verified collegiate program draws the 75 hours; a self-serve custom
+ * org draws the individual figure). Collapsing them into one answer is exactly
+ * how a custom org would either vanish from Settings › Usage or mint a
+ * 75-hour allowance, depending on which half won.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -46,6 +50,48 @@ import {
  */
 export function accountTypeFor(workspace: Pick<Workspace, 'kind'>): AccountType {
   return workspace.kind === 'team' ? 'program' : 'individual';
+}
+
+/**
+ * Which monthly FIGURE that allowance is capped at — a different question from
+ * `accountTypeFor()`, and deliberately a separate function.
+ *
+ * `accountTypeFor()` names the ledger: every team workspace files under
+ * `account_type = 'program'` keyed by program id, because that is the row
+ * shape `program_usage_total()`, Settings › Usage, and the wizard's
+ * remaining-quota read all filter on. That stays true for a custom org.
+ *
+ * The cap does not. Only a VERIFIED collegiate program — org_type 'college',
+ * entered through the claim flow's review — draws the 75-hour program figure.
+ * A self-serve custom org (club / high school / academy / other) has no
+ * verification behind it and `create_custom_program` will mint one for any
+ * signed-in account, so handing each the program figure would let one account
+ * stack 75-hour allowances against the paid vendor. Custom orgs therefore
+ * start on the INDIVIDUAL figure.
+ *
+ * NOTE: this supersedes the Stage 7 design's "same 75h" line — author
+ * decision on the T2 re-run. PAID-PLAN MARKER: when the pricing-tier plan
+ * lands (see memory: Pro gating intentionally unenforced today), a paid
+ * custom org's tier is raised HERE, from whatever entitlement that plan
+ * records — this function is the single seam.
+ */
+export function quotaTierFor(
+  workspace: Pick<Workspace, 'kind' | 'orgType'>
+): AccountType {
+  if (workspace.kind !== 'team') return 'individual';
+  return workspace.orgType === 'college' ? 'program' : 'individual';
+}
+
+/**
+ * The monthly cap for a workspace, in seconds. The one spelling of
+ * `getMonthlyCapSeconds(quotaTierFor(…))`, because the three surfaces that
+ * show a cap (the wizard meter, Settings › Usage, Team home) and the one that
+ * enforces it (`reserveQuota`) must all name the same number.
+ */
+export function monthlyCapSecondsFor(
+  workspace: Pick<Workspace, 'kind' | 'orgType'>
+): number {
+  return getMonthlyCapSeconds(quotaTierFor(workspace));
 }
 
 export type QuotaReservation =
@@ -136,7 +182,9 @@ export async function reserveQuota(params: {
   }
 
   const accountType = accountTypeFor(workspace);
-  const capSeconds = getMonthlyCapSeconds(accountType);
+  // The cap is tiered by verification, not by ledger: a custom org files under
+  // the program ledger but draws the individual figure. See quotaTierFor().
+  const capSeconds = monthlyCapSecondsFor(workspace);
 
   const { data, error } = await supabase
     .rpc('reserve_processing_quota', {

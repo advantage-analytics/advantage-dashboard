@@ -66,7 +66,7 @@ export default async function TeamHomePage() {
     attention,
     nextEvent,
     weekendDual,
-  } = await getTeamHomeData(active.id, billingMonth);
+  } = await getTeamHomeData(active.id, billingMonth, active.orgType);
 
   // Roster facts and the setup checklist are staff business. A player reaches
   // this page from the same rail item, and `program_roster` returns them only
