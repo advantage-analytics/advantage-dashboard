@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CircleCheck, TriangleAlert, Clock, VideoOff, ChevronRight } from "lucide-react";
+import { CircleCheck, TriangleAlert, Clock, VideoOff } from "lucide-react";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import {
   ANALYSIS_LABEL,
@@ -189,15 +189,10 @@ export function MatchCardList({ match, isNew, unseen }: MatchCardListProps): Rea
         {formatShortDate(match.date)}
       </span>
 
-      {/* Chevron marks the row-end at rest; on hover it fades so the ⋯ actions
-          trigger takes its place instead of stacking on top of it. */}
-      <div
-        aria-hidden
-        className="flex items-center justify-end transition-opacity duration-200 md:group-hover:opacity-0 md:group-focus-within:opacity-0"
-      >
-        <ChevronRight className="size-[13px] text-[var(--ink-300)]" strokeWidth={1.5} />
-      </div>
-
+      {/* No chevron: the row opens the report on click via the full-row link
+          above. The trailing 13px grid track (last entry in LIST_GRID_COLS)
+          stays as the actions lane — empty at rest, the ⋯ trigger fills it on
+          hover, clear of the right-aligned Date. */}
       <div className="absolute right-1.5 top-1/2 z-10 -translate-y-1/2 transition-opacity duration-200 md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100">
         <MatchActionsMenu matchId={match.id} matchLabel={match.tournamentName} />
       </div>
