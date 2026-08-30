@@ -105,7 +105,7 @@ ready).
 - **notes:** Read `docs/ui-revamp-guardrails.md` §2 first — opponent identity is the misattribution surface. The best-effort contribute pattern already exists at `src/lib/schedule/actions.ts:180` and `useUploadMatchWizard.ts:1301`; reuse its refusal handling. `matches.opponent_player_id` must never enter a policy or a select that widens access (see `20260823090000_matches_opponent_player.sql`).
 
 ## T8 · Tournament creation master-detail (design 3c)
-- **status:** todo
+- **status:** blocked
 - **model:** opus
 - **files:** `src/components/dashboard/schedule/tournament-form.tsx`, `src/components/dashboard/schedule/entry-editor.tsx`, `src/app/dashboard/team/schedule/new/tournament/page.tsx`
 - **done when:**
