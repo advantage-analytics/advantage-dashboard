@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { shortDate } from "@/lib/data/match-utils";
 
 /**
  * Pending join requests — the people who clicked "Request an invite" on
@@ -23,8 +24,9 @@ import { createClient } from "@/lib/supabase/server";
  * deliberately indistinguishable.
  */
 
-/** What `program_join_requests` returns, column for column. */
-interface DbJoinRequestRow {
+/** What `program_join_requests` returns, column for column. Exported so the
+ *  live-DB spec asserts against this same declaration — one place to drift. */
+export interface DbJoinRequestRow {
   id: string;
   email: string;
   name: string | null;
@@ -38,8 +40,17 @@ export interface JoinRequest {
   /** They may not have given one — the form only requires the address. */
   name: string | null;
   note: string | null;
-  /** ISO timestamp — when they asked. Oldest first, queue order. */
-  createdAt: string;
+  /**
+   * When they asked, as "Aug 29". Rows arrive oldest first, queue order.
+   *
+   * Formatted here rather than in the card, the way `getRosterData` formats
+   * `invitedOn`: `toLocaleDateString` reads the runtime's own time zone, so a
+   * client component formatting an ISO string renders one date on the server
+   * and can render its neighbour in the browser. The raw timestamp deliberately
+   * stays out of this type — a client-crossing ISO field is an invitation to
+   * re-format it in the browser.
+   */
+  requestedOn: string;
 }
 
 export async function getPendingJoinRequests(
@@ -64,6 +75,6 @@ export async function getPendingJoinRequests(
     email: row.email,
     name: row.name,
     note: row.note,
-    createdAt: row.created_at,
+    requestedOn: shortDate(row.created_at),
   }));
 }

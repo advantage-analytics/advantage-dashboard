@@ -1,9 +1,16 @@
-import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import * as path from 'node:path';
-
 import { expect, test } from '@playwright/test';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { type SupabaseClient } from '@supabase/supabase-js';
+
+import {
+  HAVE_ENV,
+  INSUFFICIENT_PRIVILEGE,
+  SKIP_REASON,
+  type Session,
+  createAdminClient,
+  createLogins,
+  deleteAuthUsers,
+  runMarker,
+} from './fixtures/live-db';
 
 /**
  * Cross-program match isolation, proven against the live database.
@@ -21,80 +28,28 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
  *
  * This spec talks to the real Supabase project named in `.env.local` — the
  * live DB is this repo's only schema source of truth, so an isolation proof
- * against anything else would prove nothing. Every fixture row is created by
- * the service-role client in `beforeAll` under a per-run unique prefix and
- * deleted in `afterAll` (match first — `matches.created_by` has no cascade —
- * then programs, then the auth users, which cascade to `public.users` and
- * `program_members`). Without the three Supabase env vars the whole file
- * skips instead of failing, so the suite still passes in a keyless checkout.
+ * against anything else would prove nothing. Session plumbing (env loading,
+ * skip guard, logins, auth-user cleanup) comes from `fixtures/live-db`; every
+ * fixture row is created by the service-role client in `beforeAll` under a
+ * per-run unique prefix and deleted in `afterAll` (match first —
+ * `matches.created_by` has no cascade — then programs, then the auth users).
  *
  * Run on demand:  npx playwright test tests/rls-workspace-isolation.spec.ts
  * (or the full suite via `npm run test`).
  */
 
 // ---------------------------------------------------------------------------
-// Environment — Playwright does not load .env.local; do it by hand.
-// ---------------------------------------------------------------------------
-
-function loadEnvLocal(): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const dir of [process.cwd(), path.resolve(__dirname, '..')]) {
-    try {
-      const raw = readFileSync(path.join(dir, '.env.local'), 'utf8');
-      for (const line of raw.split('\n')) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) continue;
-        const eq = trimmed.indexOf('=');
-        if (eq === -1) continue;
-        const key = trimmed.slice(0, eq).trim();
-        let value = trimmed.slice(eq + 1).trim();
-        if (
-          (value.startsWith('"') && value.endsWith('"')) ||
-          (value.startsWith("'") && value.endsWith("'"))
-        ) {
-          value = value.slice(1, -1);
-        }
-        if (!(key in out)) out[key] = value;
-      }
-      break; // first .env.local found wins
-    } catch {
-      // keep looking
-    }
-  }
-  return out;
-}
-
-const fileEnv = loadEnvLocal();
-const env = (key: string): string | undefined =>
-  process.env[key] ?? fileEnv[key];
-
-const SUPABASE_URL = env('NEXT_PUBLIC_SUPABASE_URL');
-const ANON_KEY = env('NEXT_PUBLIC_SUPABASE_ANON_KEY');
-const SERVICE_ROLE_KEY = env('SUPABASE_SERVICE_ROLE_KEY');
-const HAVE_ENV = Boolean(SUPABASE_URL && ANON_KEY && SERVICE_ROLE_KEY);
-
-// ---------------------------------------------------------------------------
 // Fixture — two programs, four logins, one A-filed match with a full subtree.
 // ---------------------------------------------------------------------------
 
-/** Everything this run creates carries this marker, so a crashed run is
- *  findable by hand: `select * from programs where program_key like 'rls-iso-%'`. */
-const RUN_ID = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
-const MARK = `rls-iso-${RUN_ID}`;
-const PASSWORD = `Rls-Iso-${randomUUID()}`;
-
-type Session = { client: SupabaseClient; userId: string };
-
-/** The regraft trigger's errcode, surfaced by PostgREST as `error.code`. */
-const INSUFFICIENT_PRIVILEGE = '42501';
+/** A crashed run is findable by hand:
+ *  `select * from programs where program_key like 'rls-iso-%'`. */
+const { mark: MARK, password: PASSWORD } = runMarker('rls-iso');
 
 test.describe('cross-program match isolation (live RLS)', () => {
   // One worker, in order: every test reads the beforeAll fixture.
   test.describe.configure({ mode: 'serial', timeout: 60_000 });
-  test.skip(
-    !HAVE_ENV,
-    'NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY not set'
-  );
+  test.skip(!HAVE_ENV, SKIP_REASON);
 
   let admin: SupabaseClient;
 
@@ -113,41 +68,16 @@ test.describe('cross-program match isolation (live RLS)', () => {
   let matchId: string;
   let pointId: string;
 
-  async function createLogin(label: string): Promise<Session> {
-    const { data, error } = await admin.auth.admin.createUser({
-      email: `${MARK}-${label}@example.com`,
-      password: PASSWORD,
-      email_confirm: true,
-    });
-    if (error || !data.user) {
-      throw new Error(`createUser(${label}): ${error?.message}`);
-    }
-    authUserIds.push(data.user.id);
-
-    const client = createClient(SUPABASE_URL!, ANON_KEY!, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const signIn = await client.auth.signInWithPassword({
-      email: `${MARK}-${label}@example.com`,
-      password: PASSWORD,
-    });
-    if (signIn.error) {
-      throw new Error(`signIn(${label}): ${signIn.error.message}`);
-    }
-    return { client, userId: data.user.id };
-  }
-
   test.beforeAll(async () => {
     test.setTimeout(180_000);
 
-    admin = createClient(SUPABASE_URL!, SERVICE_ROLE_KEY!, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+    admin = createAdminClient();
 
-    aOwner = await createLogin('a-owner');
-    athlete = await createLogin('athlete');
-    bStaff = await createLogin('b-staff');
-    bPlayer = await createLogin('b-player');
+    [aOwner, athlete, bStaff, bPlayer] = await createLogins(
+      admin,
+      ['a-owner', 'athlete', 'b-staff', 'b-player'],
+      { mark: MARK, password: PASSWORD, authUserIds }
+    );
 
     // Two programs. B is deliberately the permissive one — roster_visible on —
     // because the assertion is that even B's widest read stops at B's edge.
@@ -159,14 +89,14 @@ test.describe('cross-program match isolation (live RLS)', () => {
         {
           program_key: `${MARK}-a`,
           school_group: `${MARK}-a`,
-          school_name: `RLS Test School A ${RUN_ID}`,
+          school_name: `RLS Test School A ${MARK}`,
           team: 'mens',
           roster_visible: false,
         },
         {
           program_key: `${MARK}-b`,
           school_group: `${MARK}-b`,
-          school_name: `RLS Test School B ${RUN_ID}`,
+          school_name: `RLS Test School B ${MARK}`,
           team: 'mens',
           roster_visible: true,
         },
@@ -202,25 +132,20 @@ test.describe('cross-program match isolation (live RLS)', () => {
     if (match.error) throw new Error(`match: ${match.error.message}`);
     matchId = match.data.id;
 
-    const point = await admin
-      .from('points')
-      .insert({
-        match_id: matchId,
-        point_number: 1,
-        set_number: 1,
-        game_number: 1,
-        server_is_player1: true,
-        won_by_player1: true,
-      })
-      .select('id')
-      .single();
-    if (point.error) throw new Error(`point: ${point.error.message}`);
-    pointId = point.data.id;
-
-    const rest = await Promise.all([
+    // Only shots needs the point id — stats and files hang off the match.
+    const [point, stats, files] = await Promise.all([
       admin
-        .from('shots')
-        .insert({ point_id: pointId, shot_number: 1, is_player1: true }),
+        .from('points')
+        .insert({
+          match_id: matchId,
+          point_number: 1,
+          set_number: 1,
+          game_number: 1,
+          server_is_player1: true,
+          won_by_player1: true,
+        })
+        .select('id')
+        .single(),
       admin.from('match_stats').insert({ match_id: matchId, is_player1: true }),
       admin.from('match_files').insert({
         match_id: matchId,
@@ -228,9 +153,15 @@ test.describe('cross-program match isolation (live RLS)', () => {
         provider_id: 'swingvision',
       }),
     ]);
-    for (const r of rest) {
-      if (r.error) throw new Error(`match subtree: ${r.error.message}`);
-    }
+    if (point.error) throw new Error(`point: ${point.error.message}`);
+    if (stats.error) throw new Error(`match_stats: ${stats.error.message}`);
+    if (files.error) throw new Error(`match_files: ${files.error.message}`);
+    pointId = point.data.id;
+
+    const shots = await admin
+      .from('shots')
+      .insert({ point_id: pointId, shot_number: 1, is_player1: true });
+    if (shots.error) throw new Error(`shots: ${shots.error.message}`);
   });
 
   test.afterAll(async () => {
@@ -245,10 +176,7 @@ test.describe('cross-program match isolation (live RLS)', () => {
     if (programIds.length > 0) {
       await admin.from('programs').delete().in('id', programIds);
     }
-    // Auth deletion cascades public.users and program_members.
-    for (const id of authUserIds) {
-      await admin.auth.admin.deleteUser(id).catch(() => {});
-    }
+    await deleteAuthUsers(admin, authUserIds);
   });
 
   // -------------------------------------------------------------------------

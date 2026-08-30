@@ -1,9 +1,20 @@
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import * as path from 'node:path';
 
 import { expect, test } from '@playwright/test';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { type SupabaseClient } from '@supabase/supabase-js';
+
+import {
+  HAVE_ENV,
+  INSUFFICIENT_PRIVILEGE,
+  NO_DATA_FOUND,
+  SKIP_REASON,
+  type Session,
+  createAdminClient,
+  createLogins,
+  deleteAuthUsers,
+  runMarker,
+} from './fixtures/live-db';
+import type { DbJoinRequestRow } from '@/lib/data/join-requests-server';
 
 /**
  * Staff read path for pending join requests, proven against the live database.
@@ -26,87 +37,29 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
  * exercising them with real signed-in sessions here IS exercising the
  * loader's and the action's access mechanism.
  *
- * Fixtures follow tests/rls-workspace-isolation.spec.ts: every row is created
- * by the service-role client in `beforeAll` under a per-run marker
+ * Session plumbing (env loading, skip guard, logins, auth-user cleanup) comes
+ * from `fixtures/live-db`: every row is created by the service-role client in
+ * `beforeAll` under a per-run marker
  * (`select * from programs where program_key like 'jr-req-%'` finds a crashed
- * run) and deleted in `afterAll`. Without the three Supabase env vars the
- * file skips instead of failing.
+ * run) and deleted in `afterAll`.
  *
  * Run on demand:  npx playwright test tests/join-requests-staff-read.spec.ts
  * (or the full suite via `npm run test`).
  */
 
 // ---------------------------------------------------------------------------
-// Environment — Playwright does not load .env.local; do it by hand.
-// ---------------------------------------------------------------------------
-
-function loadEnvLocal(): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const dir of [process.cwd(), path.resolve(__dirname, '..')]) {
-    try {
-      const raw = readFileSync(path.join(dir, '.env.local'), 'utf8');
-      for (const line of raw.split('\n')) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) continue;
-        const eq = trimmed.indexOf('=');
-        if (eq === -1) continue;
-        const key = trimmed.slice(0, eq).trim();
-        let value = trimmed.slice(eq + 1).trim();
-        if (
-          (value.startsWith('"') && value.endsWith('"')) ||
-          (value.startsWith("'") && value.endsWith("'"))
-        ) {
-          value = value.slice(1, -1);
-        }
-        if (!(key in out)) out[key] = value;
-      }
-      break; // first .env.local found wins
-    } catch {
-      // keep looking
-    }
-  }
-  return out;
-}
-
-const fileEnv = loadEnvLocal();
-const env = (key: string): string | undefined =>
-  process.env[key] ?? fileEnv[key];
-
-const SUPABASE_URL = env('NEXT_PUBLIC_SUPABASE_URL');
-const ANON_KEY = env('NEXT_PUBLIC_SUPABASE_ANON_KEY');
-const SERVICE_ROLE_KEY = env('SUPABASE_SERVICE_ROLE_KEY');
-const HAVE_ENV = Boolean(SUPABASE_URL && ANON_KEY && SERVICE_ROLE_KEY);
-
-// ---------------------------------------------------------------------------
 // Fixture — two programs, four logins, five program_requests rows.
 // ---------------------------------------------------------------------------
 
-const RUN_ID = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
-const MARK = `jr-req-${RUN_ID}`;
-const PASSWORD = `Jr-Req-${randomUUID()}`;
+const { mark: MARK, password: PASSWORD } = runMarker('jr-req');
 
-type Session = { client: SupabaseClient; userId: string };
-
-/** Both refusals surface through PostgREST as `error.code`. */
-const INSUFFICIENT_PRIVILEGE = '42501';
-const NO_DATA_FOUND = 'P0002';
-
-/** The row shape `program_join_requests` returns. */
-interface JoinRequestRow {
-  id: string;
-  email: string;
-  name: string | null;
-  note: string | null;
-  created_at: string;
-}
+// The RPC's row shape is the loader's `DbJoinRequestRow`, imported type-only
+// above — one declaration, so a column change cannot drift the two apart.
 
 test.describe('staff read path for pending join requests (live DB)', () => {
   // One worker, in order: the resolve tests mutate the beforeAll fixture.
   test.describe.configure({ mode: 'serial', timeout: 60_000 });
-  test.skip(
-    !HAVE_ENV,
-    'NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY not set'
-  );
+  test.skip(!HAVE_ENV, SKIP_REASON);
 
   let admin: SupabaseClient;
 
@@ -129,41 +82,16 @@ test.describe('staff read path for pending join requests (live DB)', () => {
   let resolvedA: string; // invite_request, A, already resolved
   let inviteB: string; // invite_request, B, open — B's, not A's
 
-  async function createLogin(label: string): Promise<Session> {
-    const { data, error } = await admin.auth.admin.createUser({
-      email: `${MARK}-${label}@example.com`,
-      password: PASSWORD,
-      email_confirm: true,
-    });
-    if (error || !data.user) {
-      throw new Error(`createUser(${label}): ${error?.message}`);
-    }
-    authUserIds.push(data.user.id);
-
-    const client = createClient(SUPABASE_URL!, ANON_KEY!, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const signIn = await client.auth.signInWithPassword({
-      email: `${MARK}-${label}@example.com`,
-      password: PASSWORD,
-    });
-    if (signIn.error) {
-      throw new Error(`signIn(${label}): ${signIn.error.message}`);
-    }
-    return { client, userId: data.user.id };
-  }
-
   test.beforeAll(async () => {
     test.setTimeout(180_000);
 
-    admin = createClient(SUPABASE_URL!, SERVICE_ROLE_KEY!, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+    admin = createAdminClient();
 
-    aStaff = await createLogin('a-staff');
-    aPlayer = await createLogin('a-player');
-    bStaff = await createLogin('b-staff');
-    outsider = await createLogin('outsider');
+    [aStaff, aPlayer, bStaff, outsider] = await createLogins(
+      admin,
+      ['a-staff', 'a-player', 'b-staff', 'outsider'],
+      { mark: MARK, password: PASSWORD, authUserIds }
+    );
 
     const programs = await admin
       .from('programs')
@@ -173,13 +101,13 @@ test.describe('staff read path for pending join requests (live DB)', () => {
         {
           program_key: `${MARK}-a`,
           school_group: `${MARK}-a`,
-          school_name: `JR Test School A ${RUN_ID}`,
+          school_name: `JR Test School A ${MARK}`,
           team: 'mens',
         },
         {
           program_key: `${MARK}-b`,
           school_group: `${MARK}-b`,
-          school_name: `JR Test School B ${RUN_ID}`,
+          school_name: `JR Test School B ${MARK}`,
           team: 'mens',
         },
       ])
@@ -246,8 +174,13 @@ test.describe('staff read path for pending join requests (live DB)', () => {
     if (requests.error) throw new Error(`requests: ${requests.error.message}`);
     requestIds.push(...requests.data.map((r) => r.id));
 
-    const byEmail = (needle: string) =>
-      requests.data.find((r) => (r.email as string).includes(needle))!.id;
+    // Exact equality, never a substring probe: MARK ends in a random hex
+    // slice, and a run whose slice ends in "b" makes `…b-walk-on-1@…` contain
+    // "b-walk-on" — an intermittent red that reads as a cross-program leak.
+    const byEmail = (localPart: string) =>
+      requests.data.find(
+        (r) => r.email === `${MARK}-${localPart}@example.com`
+      )!.id;
     inviteA1 = byEmail('walk-on-1');
     inviteA2 = byEmail('walk-on-2');
     disputeA = byEmail('disputer');
@@ -267,10 +200,7 @@ test.describe('staff read path for pending join requests (live DB)', () => {
     if (programIds.length > 0) {
       await admin.from('programs').delete().in('id', programIds);
     }
-    // Auth deletion cascades public.users and program_members.
-    for (const id of authUserIds) {
-      await admin.auth.admin.deleteUser(id).catch(() => {});
-    }
+    await deleteAuthUsers(admin, authUserIds);
   });
 
   // -------------------------------------------------------------------------
@@ -283,7 +213,7 @@ test.describe('staff read path for pending join requests (live DB)', () => {
     });
     expect(error).toBeNull();
 
-    const rows = (data ?? []) as JoinRequestRow[];
+    const rows = (data ?? []) as DbJoinRequestRow[];
     expect(rows.map((r) => r.id).sort()).toEqual([inviteA1, inviteA2].sort());
 
     // The fields the roster section will render, present and real.
@@ -352,7 +282,7 @@ test.describe('staff read path for pending join requests (live DB)', () => {
     const { data } = await aStaff.client.rpc('program_join_requests', {
       p_program_id: programA,
     });
-    expect(((data ?? []) as JoinRequestRow[]).map((r) => r.id)).toEqual([
+    expect(((data ?? []) as DbJoinRequestRow[]).map((r) => r.id)).toEqual([
       inviteA2,
     ]);
   });

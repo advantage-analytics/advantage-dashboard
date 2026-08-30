@@ -6,7 +6,6 @@ import { getRosterData } from "@/lib/data/team-roster-server";
 import { getPendingJoinRequests } from "@/lib/data/join-requests-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { formatResetDate } from "@/lib/data/usage-format";
-import { shortDate } from "@/lib/data/match-utils";
 import { RosterTable } from "@/components/dashboard/team/roster-table";
 import { RosterHeaderButtons } from "@/components/dashboard/team/roster-header-buttons";
 import { JoinRequestsCard } from "@/components/dashboard/team/join-requests-card";
@@ -56,19 +55,10 @@ export default async function RosterPage() {
   // `program_join_requests` is SECURITY DEFINER and hands a player the same
   // empty array it hands a stranger; this just declines to ask for a queue the
   // database would refuse to fill.
-  const [roster, pendingRequests] = await Promise.all([
+  const [roster, joinRequests] = await Promise.all([
     getRosterData(active.id),
     canManage ? getPendingJoinRequests(active.id) : Promise.resolve([]),
   ]);
-
-  // Dated here rather than in the card: `toLocaleDateString` reads the
-  // runtime's own time zone, and a client component formatting an ISO string
-  // renders one date on the server and can render its neighbour in the
-  // browser. Same reason `getRosterData` formats `invitedOn` itself.
-  const joinRequests = pendingRequests.map((request) => ({
-    ...request,
-    requestedOn: shortDate(request.createdAt),
-  }));
 
   // The eyebrow names the workspace this roster belongs to. A coach running
   // both squads holds two of these, and "Roster" alone would not say which one

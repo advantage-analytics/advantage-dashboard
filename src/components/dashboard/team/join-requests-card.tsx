@@ -53,26 +53,14 @@ import type { SeatUsage } from "@/lib/data/team-roster-server";
  * guessed at.
  */
 
-/** A pending request, with its date already formatted by the server. */
-export type PendingJoinRequest = JoinRequest & {
-  /**
-   * `createdAt` as "Aug 29".
-   *
-   * Formatted in the page rather than here, the way `getRosterData` formats
-   * `invitedOn`: `toLocaleDateString` reads the runtime's own time zone, so a
-   * client component formatting an ISO string renders one date on the server
-   * and can render its neighbour in the browser.
-   */
-  requestedOn: string;
-};
-
 export function JoinRequestsCard({
   requests,
   managedPlayers,
   seats,
   playersCanUpload,
 }: {
-  requests: PendingJoinRequest[];
+  /** `requestedOn` arrives pre-formatted — the loader owns the timezone rule. */
+  requests: JoinRequest[];
   /** Passed straight through to the invite dialog — see below. */
   managedPlayers: ManagedPlayer[];
   seats: SeatUsage;
@@ -87,20 +75,28 @@ export function JoinRequestsCard({
    * refuses, which is the case the error line below explains.
    */
   const [dismissed, setDismissed] = useState<string[]>([]);
-  const [inviting, setInviting] = useState<PendingJoinRequest | null>(null);
+  const [inviting, setInviting] = useState<JoinRequest | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, start] = useTransition();
 
   const visible = requests.filter((request) => !dismissed.includes(request.id));
 
-  function dismiss(request: PendingJoinRequest) {
+  function dismiss(request: JoinRequest) {
     setError(null);
     setDismissed((current) => [...current, request.id]);
     start(async () => {
-      const result = await resolveJoinRequest(request.id);
-      if (!result.ok) {
+      const restore = (message: string) => {
         setDismissed((current) => current.filter((id) => id !== request.id));
-        setError(result.error);
+        setError(message);
+      };
+      try {
+        const result = await resolveJoinRequest(request.id);
+        if (!result.ok) restore(result.error);
+      } catch {
+        // A rejected action — network drop, redeploy skew — is re-thrown by
+        // the transition on the next render, and this route has no error
+        // boundary: without this catch, one dismiss is a full-page crash.
+        restore("Couldn't reach the server — the request is still open. Try again.");
       }
     });
   }

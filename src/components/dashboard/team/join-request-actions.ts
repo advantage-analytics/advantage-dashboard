@@ -52,7 +52,7 @@ export async function resolveJoinRequest(
       error.code === "P0002"
         ? "That request has already been handled."
         : "Couldn't resolve that request.";
-    return { ok: false, error: raw && raw.length > 0 ? raw : fallback };
+    return { ok: false, error: raw || fallback };
   }
 
   revalidatePath(ROSTER_PATH);
