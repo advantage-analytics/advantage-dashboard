@@ -66,7 +66,7 @@ ready).
 - **notes:** Consumed by T5/T6's opponent lists. Duals are matched by `event.name` (the opponent school string on a dual event); note in a doc comment that `opponent_program_id` on entries is the stronger key when both sides carry it, but name is what every event has. Callers are staff-only builder screens, so `resultsScope` is `program` there — say so rather than re-gating.
 
 ## T5 · Find-the-school step for a new dual (design 2c)
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4
 - **files:** `src/components/dashboard/schedule/dual-form.tsx`, `src/app/dashboard/team/schedule/new/dual/page.tsx`, possibly a new `school-search.tsx` (guess)

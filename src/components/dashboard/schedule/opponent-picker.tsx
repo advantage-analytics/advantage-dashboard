@@ -28,16 +28,27 @@ import { programDisplayName, teamLabel } from "@/lib/data/programs-server";
  */
 export function OpponentPicker({
   value,
+  searchSeed,
   onChange,
 }: {
   value: string;
+  /**
+   * The bare school name behind `value`, when the caller already has it.
+   *
+   * Only ever a seed for the search box — the contract below is untouched by
+   * it. It exists because this picker is now mounted with a school already
+   * chosen (step one, `school-search.tsx`), and mounting it with
+   * `value = "Louisiana State University Men's Tennis"` would seed "Change"
+   * with the one string the directory cannot answer. See `term`.
+   */
+  searchSeed?: string;
   onChange: (name: string, program: ProgramSearchResult | null) => void;
 }) {
   // Holds the bare school name once a row is picked, so "Change" reopens on a
   // term the directory can answer. `value` carries the squad by then —
   // "Louisiana State University Men's Tennis" — and searching for that finds
   // nothing, which is why the box is never seeded from it.
-  const [term, setTerm] = useState(value);
+  const [term, setTerm] = useState(searchSeed ?? value);
   const [results, setResults] = useState<ProgramSearchResult[]>([]);
   const [editing, setEditing] = useState(value === "");
   const inputRef = useRef<HTMLInputElement>(null);

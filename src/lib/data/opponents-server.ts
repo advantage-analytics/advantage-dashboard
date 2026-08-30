@@ -5,6 +5,7 @@ import { meanOfPresent, pct } from "@/lib/data/aggregate";
 import { normalizedPersonName } from "@/lib/data/person-name";
 import { buildScoreString, matchOutcome, shortDate, type MatchScore } from "@/lib/data/match-utils";
 import { programDisplayName, teamLabel } from "@/lib/data/programs-server";
+import type { ProgramStatus } from "@/lib/data/programs-server";
 
 /**
  * Who a program is about to play, and what is known about them.
@@ -37,10 +38,34 @@ import { programDisplayName, teamLabel } from "@/lib/data/programs-server";
 
 export interface ConferenceProgram {
   id: string;
+  /**
+   * `programs.program_key` — the directory key, unique across all 1,940 rows
+   * and the one thing that makes an opponent aggregatable across duals.
+   *
+   * `id` above is the row's uuid, which is what this page navigates by;
+   * `createDual` resolves an opponent by KEY, not by uuid, so a screen that
+   * offers a conference row as an opponent needs this one too. A name alone is
+   * what used to be recorded, and it is why "Stanford", "Stanford University"
+   * and "STAN" were three rivals to a GROUP BY.
+   */
+  programKey: string;
   schoolName: string;
   team: string;
+  /**
+   * The raw dataset squad — `team` above is its label.
+   *
+   * Both, because the two are wanted in different places: the label is what a
+   * row prints, and the key is what `ProgramSearchResult.team` and the
+   * men's/women's mismatch warning on the dual builder compare against. A
+   * consumer deriving one from the other would be un-labelling a string this
+   * file deliberately normalized.
+   */
+  teamKey: 'mens' | 'womens';
   division: string | null;
   state: string | null;
+  /** Claimed or not — carried so a conference row can be handed on as a
+   *  `ProgramSearchResult` without a second read. */
+  status: ProgramStatus;
   /** True for the viewer's own program, which sorts first and is not a rival. */
   isSelf: boolean;
 }
@@ -111,24 +136,29 @@ export interface OpponentPlayerProfile {
 
 interface DbProgramRow {
   id: string;
+  program_key: string;
   school_name: string;
   team: string;
   division: string | null;
   state: string | null;
   conference: string | null;
+  status: string;
 }
 
 function toProgram(row: DbProgramRow, selfId: string): ConferenceProgram {
   return {
     id: row.id,
+    programKey: row.program_key,
     schoolName: row.school_name,
     // Normalized HERE, at the one boundary that reads the column, rather than
     // at each of the three places it renders. `programs.team` stores the
     // dataset key — `mens` — and `teamLabel`'s own comment is the rule: the UI
     // never shows it raw.
     team: teamLabel(row.team),
+    teamKey: row.team === 'womens' ? 'womens' : 'mens',
     division: row.division,
     state: row.state,
+    status: row.status as ProgramStatus,
     isSelf: row.id === selfId,
   };
 }
@@ -228,7 +258,7 @@ export const getConferenceTable = cache(async function getConferenceTable(
 
   const { data } = await supabase
     .from("programs")
-    .select("id, school_name, team, division, state, conference")
+    .select("id, program_key, school_name, team, division, state, conference, status")
     .eq("conference", conference)
     .order("school_name", { ascending: true });
 
@@ -269,7 +299,7 @@ export const getOpponentsPlayed = cache(async function getOpponentsPlayed(
 
   const { data } = await supabase
     .from("programs")
-    .select("id, school_name, team, division, state, conference")
+    .select("id, program_key, school_name, team, division, state, conference, status")
     .in("id", ids)
     .order("school_name", { ascending: true });
 
@@ -292,7 +322,7 @@ export const getOpponentDetail = cache(async function getOpponentDetail(
 
   const { data: programRow } = await supabase
     .from("programs")
-    .select("id, school_name, team, division, state, conference")
+    .select("id, program_key, school_name, team, division, state, conference, status")
     .eq("id", opponentProgramId)
     .maybeSingle();
 

@@ -6,6 +6,7 @@ import { AlertTriangle } from "lucide-react";
 import { advButton } from "@/lib/ui/adv-button";
 import { EventShell } from "@/components/dashboard/schedule/event-shell";
 import { OpponentPicker } from "@/components/dashboard/schedule/opponent-picker";
+import { SchoolSearch } from "@/components/dashboard/schedule/school-search";
 import {
   LineupEditor,
   type LineupLine,
@@ -27,6 +28,7 @@ import { programDisplayName } from "@/lib/data/programs-server";
 import { teamLabel, type Workspace } from "@/lib/workspace/types";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
+import type { OpponentDualHistory } from "@/lib/schedule/opponent-history";
 import type { EventSite } from "@/lib/schedule/types";
 
 const SINGLES_SLOTS = ["S1", "S2", "S3", "S4", "S5", "S6"];
@@ -50,7 +52,13 @@ const FORMATS = [
 ];
 
 /**
- * 25b — the new dual.
+ * 25b/2c — the new dual, in two steps.
+ *
+ * Step one asks which school and nothing else (screen 2c, `school-search.tsx`);
+ * step two is this form. Everything below — the date, the site, the surface,
+ * the format and nine courts of names — is an answer about a fixture, and a
+ * fixture nobody has named yet has nothing to answer about. T6 rebuilds step
+ * two into 2b's two-pane builder; until then it is the body it always was.
  *
  * Creating this writes nine LINES, not nine matches. The design's footer says
  * "creates 9 matches"; taken literally that puts nine scoreless rows into
@@ -64,6 +72,11 @@ export function DualForm({
   ourTeam,
   ladder,
   defaultSurface,
+  ourConference,
+  ourDivision,
+  ourProgramKey,
+  conferencePrograms,
+  historyEntries,
 }: {
   ourName: string;
   /** The active workspace's squad, so a men's coach who picks the women's row
@@ -71,10 +84,21 @@ export function DualForm({
   ourTeam: Workspace["team"];
   ladder: LadderPlayer[];
   defaultSurface: string | null;
+  /** Step one's props — see `SchoolSearch`. */
+  ourConference: string | null;
+  ourDivision: string | null;
+  ourProgramKey: string | null;
+  conferencePrograms: ProgramSearchResult[];
+  historyEntries: [string, OpponentDualHistory][];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  // Which of the two steps is on screen. Explicit rather than derived from
+  // `opponent`, so a coach who reopens the picker in step two and clears it
+  // does not get thrown back to a screen they already answered.
+  const [step, setStep] = useState<"school" | "details">("school");
 
   const [opponent, setOpponent] = useState("");
   // The directory row behind the name, when the coach picked one rather than
@@ -85,6 +109,10 @@ export function DualForm({
   // our own squad, which `createDual` has no field to carry and no reason to.
   const [opponentProgram, setOpponentProgram] =
     useState<ProgramSearchResult | null>(null);
+  // The bare school name behind `opponent`, which by then reads "Ridgeline
+  // University Men's Tennis". It is what the picker's "Change" has to reopen
+  // on: the directory answers the school, never the squad-qualified string.
+  const [opponentSeed, setOpponentSeed] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [site, setSite] = useState<EventSite>("home");
   const [surface, setSurface] = useState(defaultSurface || "Hard");
@@ -119,6 +147,30 @@ export function DualForm({
     opponentProgram.team !== ourTeam
       ? opponentProgram.team
       : null;
+
+  /** The one place the name, the directory row and the search seed move
+   *  together, so neither step can set two of the three. */
+  function takeOpponent(name: string, program: ProgramSearchResult | null) {
+    setOpponent(name);
+    setOpponentProgram(program);
+    setOpponentSeed(program ? program.schoolName : name);
+  }
+
+  if (step === "school") {
+    return (
+      <SchoolSearch
+        ourConference={ourConference}
+        ourDivision={ourDivision}
+        ourProgramKey={ourProgramKey}
+        conferencePrograms={conferencePrograms}
+        historyEntries={historyEntries}
+        onChosen={(name, program) => {
+          takeOpponent(name, program);
+          setStep("details");
+        }}
+      />
+    );
+  }
 
   function submit() {
     setError(null);
@@ -191,10 +243,8 @@ export function DualForm({
           <span className="eyebrow">New dual · opponent</span>
           <OpponentPicker
             value={opponent}
-            onChange={(name, program) => {
-              setOpponent(name);
-              setOpponentProgram(program);
-            }}
+            searchSeed={opponentSeed}
+            onChange={takeOpponent}
           />
           {mismatchedSquad !== null ? (
             // Advisory, and deliberately nothing more: Create stays enabled and
