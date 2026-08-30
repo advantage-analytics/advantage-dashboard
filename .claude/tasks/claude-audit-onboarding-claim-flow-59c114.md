@@ -111,7 +111,7 @@ ready).
 - **notes:** Known defect: resend-timer.tsx's button only calls setLeft(60) today. The action needs program key + email context the page already has in its URL params.
 
 ## T9 · Wire the claim lifecycle emails
-- **status:** todo
+- **status:** blocked
 - **model:** opus
 - **files:** src/lib/services/programs/admin-actions.ts, src/lib/services/programs/claim-actions.ts, src/lib/services/email/index.ts, src/lib/services/email/templates/claim.ts, src/lib/services/email/templates/invite-request.ts
 - **done when:**
