@@ -21,7 +21,7 @@ export const metadata = { title: "We couldn't finish this" };
  */
 const COPY: Record<
   ClaimFailure,
-  { heading: string; sub: string; restart: boolean }
+  { heading: string; sub: string; restart: boolean; signIn?: boolean }
 > = {
   "no-session": {
     heading: "Open the link from your email",
@@ -61,11 +61,13 @@ const COPY: Record<
     heading: "Sign in, then open the link again",
     sub: "This link finishes a setup you started while signed in, so it only works once you are. Sign in with that account — any device works — then open the link from your email again.",
     restart: false,
+    signIn: true,
   },
   "wrong-account": {
     heading: "That link belongs to a different account",
     sub: "The setup this link finishes was started from another account. Sign in with the account that started it and open the link again — or start fresh from this one, and we'll send a link of its own.",
     restart: false,
+    signIn: true,
   },
 };
 
@@ -80,7 +82,22 @@ export default async function ClaimFailedPage({
   return (
     <ClaimShell width={720} gap={20} back="/claim/program">
       <ClaimHeading gap={6} title={copy.heading} body={copy.sub} bodyMax="58ch" />
-      {copy.restart ? (
+      {copy.signIn ? (
+        <>
+          <ClaimActions>
+            <Link href="/login" className={CLAIM_BUTTON}>
+              Sign in
+            </Link>
+            <Link href="/claim/program" className={CLAIM_LINK}>
+              Choose a different program
+            </Link>
+          </ClaimActions>
+          <span className={CLAIM_MICRO}>
+            Once you&apos;re signed in with the right account, open the link from
+            your email again to finish.
+          </span>
+        </>
+      ) : copy.restart ? (
         <>
           <ClaimActions>
             <Link href="/claim/program" className={CLAIM_BUTTON}>
