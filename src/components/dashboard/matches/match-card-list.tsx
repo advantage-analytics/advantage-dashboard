@@ -189,7 +189,12 @@ export function MatchCardList({ match, isNew, unseen }: MatchCardListProps): Rea
         {formatShortDate(match.date)}
       </span>
 
-      <div aria-hidden className="flex items-center justify-end">
+      {/* Chevron marks the row-end at rest; on hover it fades so the ⋯ actions
+          trigger takes its place instead of stacking on top of it. */}
+      <div
+        aria-hidden
+        className="flex items-center justify-end transition-opacity duration-200 md:group-hover:opacity-0 md:group-focus-within:opacity-0"
+      >
         <ChevronRight className="size-[13px] text-[var(--ink-300)]" strokeWidth={1.5} />
       </div>
 
