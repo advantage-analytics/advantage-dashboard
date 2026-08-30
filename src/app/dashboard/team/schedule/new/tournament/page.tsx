@@ -5,7 +5,11 @@ import { getLadder } from "@/lib/data/roster-server";
 import { getTeamSettings } from "@/lib/data/team-settings-server";
 import { TournamentForm } from "@/components/dashboard/schedule/tournament-form";
 
-/** 25e — the new tournament: facts plus who's going. */
+/**
+ * 3c — the new tournament, master and detail: the ladder on the left is what
+ * the field is built from, so the roster fetch is not decoration here. Without
+ * it the right pane has nothing to enter.
+ */
 export default async function NewTournamentPage() {
   const workspace = await getWorkspaceContext();
   if (!workspace) redirect("/login");
