@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ChevronDown, ChevronUp } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
@@ -139,15 +139,17 @@ export function MatchesFilterPanel<K extends string>({
           )}
           style={{
             background: open ? "var(--surface-subtle)" : undefined,
-            color: "var(--ink-900)",
+            color: open ? "var(--ink-900)" : "var(--ink-600)",
+            fontWeight: open ? 500 : 400,
           }}
         >
           Filters
-          {open ? (
-            <ChevronUp className="size-3" strokeWidth={1.5} style={{ color: "var(--ink-500)" }} aria-hidden="true" />
-          ) : (
-            <ChevronDown className="size-3" strokeWidth={1.5} style={{ color: "var(--ink-500)" }} aria-hidden="true" />
-          )}
+          <ChevronDown
+            className="size-3"
+            strokeWidth={1.5}
+            style={{ color: open ? "var(--ink-500)" : "var(--ink-400)" }}
+            aria-hidden="true"
+          />
         </button>
       </PopoverTrigger>
 

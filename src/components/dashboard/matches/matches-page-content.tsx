@@ -326,13 +326,14 @@ function SortDropdown({
         style={{
           background: open ? "var(--surface-subtle)" : undefined,
           color: open ? "var(--ink-900)" : "var(--ink-600)",
+          fontWeight: open ? 500 : 400,
         }}
       >
         {sortPhrase}
         <ChevronDown
-          className={`w-3 h-3 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          className="h-3 w-3"
           strokeWidth={1.5}
-          style={{ color: "var(--ink-400)" }}
+          style={{ color: open ? "var(--ink-500)" : "var(--ink-400)" }}
         />
       </button>
 
@@ -802,12 +803,11 @@ export function MatchesPageContent({
             totalCount={matches.length}
           />
 
-          <div className="relative">
-            <Search
-              className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2"
-              strokeWidth={1.5}
-              style={{ color: "var(--ink-500)" }}
-            />
+          {/* The canvas's quiet "Search" chip (14px icon + label, h-28 px-8,
+              radius-element, surface-subtle hover) — a real input that reads as
+              the trigger at rest and widens on focus so it stays typeable. */}
+          <div className="flex h-7 items-center gap-1.5 rounded-[var(--radius-element)] px-2 transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-within:bg-[var(--surface-subtle)]">
+            <Search className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} style={{ color: "var(--ink-500)" }} />
             <input
               ref={searchRef}
               type="text"
@@ -817,17 +817,9 @@ export function MatchesPageContent({
               title="Search by event, opponent, or round"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-7 w-[200px] rounded-[var(--radius-element)] bg-transparent pl-[30px] pr-7 text-[12px] transition-colors duration-150 placeholder:text-[var(--ink-400)] hover:bg-[var(--surface-subtle)] focus:bg-[var(--surface-subtle)] focus:outline-none"
+              className="w-[70px] bg-transparent text-[12px] transition-[width] duration-200 placeholder:text-[var(--ink-600)] focus:w-[168px] focus:outline-none"
               style={{ color: "var(--ink-900)" }}
             />
-            {!search && (
-              <kbd
-                className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-medium"
-                style={{ color: "var(--ink-400)" }}
-              >
-                /
-              </kbd>
-            )}
           </div>
 
           <SortDropdown sortField={sortField} sortDir={sortDir} onSort={toggleSort} />

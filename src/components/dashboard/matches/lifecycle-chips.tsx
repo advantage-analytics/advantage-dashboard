@@ -31,10 +31,16 @@ export function LifecycleChips({
             type="button"
             aria-pressed={isActive}
             onClick={() => onSelect(chip.value)}
-            className="flex h-[26px] items-center rounded-[var(--radius-pill)] px-[11px] text-[12px] transition-colors duration-200"
+            className={`flex h-[26px] items-center rounded-[var(--radius-pill)] px-[11px] text-[12px] transition-colors duration-200 ${
+              isActive ? "" : "hover:bg-[var(--surface-subtle)]"
+            }`}
             style={{
               border: `1px solid var(${isActive ? "--border-medium" : "--border-hairline"})`,
-              background: isActive ? "var(--surface-subtle)" : "transparent",
+              // Only the active chip pins a background inline; rest chips leave it
+              // unset so the hover class can paint the surface-subtle wash (an
+              // inline `transparent` would beat the class and kill the hover —
+              // the design's rest chips wash on hover, `style-hover` in 1e).
+              background: isActive ? "var(--surface-subtle)" : undefined,
               color: isActive ? "var(--ink-900)" : "var(--ink-600)",
               fontWeight: isActive ? 500 : 400,
             }}
