@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import {
-  ArrowUp,
   ChevronRight,
   GitMerge,
   MoreHorizontal,
@@ -123,9 +122,16 @@ const ROW_WASH =
 
 const ROW_INSET = "-mx-4 rounded-[var(--radius-element)] px-4 py-3";
 
-/** The trailing controls, so both read as one class of thing. */
-const ROW_ICON =
-  "flex size-6 items-center justify-center rounded-[var(--radius-button)] text-[var(--ink-400)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none";
+/**
+ * The trailing controls, so both read as one class of thing — bar their resting
+ * ink. Design 9a draws the upload glyph one step darker (`--ink-500`) than the
+ * quieter menu trigger (`--ink-400`); everything else is shared, and both wake to
+ * `--ink-700` on hover.
+ */
+const ROW_ICON_BASE =
+  "flex size-6 items-center justify-center rounded-[var(--radius-button)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none";
+const ROW_ICON = `${ROW_ICON_BASE} text-[var(--ink-400)]`;
+const UPLOAD_ICON = `${ROW_ICON_BASE} text-[var(--ink-500)]`;
 
 /**
  * The identifying line under a name.
@@ -576,7 +582,7 @@ function MemberRow({
               href={`/dashboard/team/upload?player=${member.playerId}`}
               aria-label={`Upload a match for ${member.name}`}
               title="Upload a match for this player"
-              className={ROW_ICON}
+              className={UPLOAD_ICON}
             >
               <Upload className="size-3.5" strokeWidth={1.5} aria-hidden />
             </Link>
@@ -653,16 +659,11 @@ export function RosterTable({
           <div
             className={`${ROW} border-b border-[var(--border-hairline)] pt-3 pb-2.5`}
           >
-            {/* The one hairline on the card, and the one arrow: the list is
-                already in lineup order, so the header says which way it reads
-                rather than offering a sort that does not exist. */}
-            <span className={`${COL.spot} inline-flex items-center gap-[3px]`}>
+            {/* The list is already in lineup order; the header just names the
+                column. No sort arrow — there is no sort to offer, and the glyph
+                read as an affordance that did nothing. */}
+            <span className={`${COL.spot} inline-flex items-center`}>
               <span className="eyebrow-sm">#</span>
-              <ArrowUp
-                className="size-2.5 text-[var(--ink-700)]"
-                strokeWidth={1.5}
-                aria-hidden
-              />
               <span className="sr-only">Lineup order, lowest first</span>
             </span>
             <span className={`${COL.player} eyebrow-sm`}>Player</span>

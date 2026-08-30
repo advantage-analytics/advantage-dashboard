@@ -4,11 +4,17 @@ import { cn } from "@/lib/utils";
 /**
  * The inline action at the end of a row — "Add score", "Add video", "Report".
  *
- * One component rather than the same three classes copied into five files,
- * because all three of this element's problems were identical everywhere:
+ * One component rather than the same classes copied into five files, because
+ * this element's problems were identical everywhere:
  *
- *   contrast   `--blue` is 3.68:1 on white and these are 11px, which fails
- *              WCAG 1.4.3 AA. `--blue-text` is the same family at 5.17:1.
+ *   colour     Signal Blue (`--blue`), so a row action reads as the same accent
+ *              as every other link on the page. It once used the darker
+ *              `--blue-text` (#2563EB) for contrast — `--blue` is 3.68:1 on
+ *              white, under WCAG 1.4.3 AA for 11px text — but that darker blue
+ *              read as a second, off tone beside the regular blue everywhere
+ *              else, so the design owner reverted it to `--blue`. If AA on these
+ *              11px links matters, raise their size rather than resplitting the
+ *              accent.
  *   focus      the app's reset leaves `outline: none` and nothing replaced it,
  *              so a keyboard user tabbing a dual saw no indicator at all on the
  *              only interactive element in each row (WCAG 2.4.7).
@@ -47,7 +53,7 @@ export function RowAction({
    */
   ariaLabel?: string;
 }) {
-  const style = { color: "var(--blue-text)" };
+  const style = { color: "var(--blue)" };
 
   if (href) {
     return (
