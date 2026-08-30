@@ -1,88 +1,68 @@
 /**
- * How much of a program's match data the viewer is actually being handed.
+ * How much of a program's match data the viewer is being handed.
  *
- * Every program surface reads `matches` through RLS, and the policy has two
- * different answers for two different readers
- * (`20260822090400_match_access_by_player_identity.sql`):
+ * Every program surface reads `matches` through RLS, and since
+ * `20260830120000_matches_visible_to_members.sql` the policy has one answer
+ * for every member of a program:
  *
  * ```sql
  * (select auth.uid()) = created_by
  * or player1_id in (select public.my_player_ids())
  * or player2_id in (select public.my_player_ids())
- * or (program_id is not null and (
- *       public.is_program_staff(program_id)
- *       or (public.user_program_role(program_id) = 'player'
- *           and exists (select 1 from public.programs p
- *                        where p.id = program_id and p.roster_visible))))
+ * or (program_id is not null
+ *     and public.user_program_role(program_id) is not null)
  * ```
  *
- * Staff get the program. A player gets the program only where
- * `programs.roster_visible` is set — and it is `not null default false`
- * (`20260817073914_programs.sql:83`), so the narrow read is the ordinary case,
- * not an edge. Everything else a player gets is **their own rows**: the matches
- * they played, arriving through `my_player_ids()`.
+ * Any member — staff and player alike — reads the program's matches. A player
+ * seeing their teammates' results is the point of a team workspace, so it is
+ * not a setting: the `roster_visible` gate that used to narrow a player's
+ * program read is gone, and with it the coaches-only option.
+ * (`programs.roster_visible` still exists as a column; it no longer gates the
+ * match read.)
  *
- * ── Why this has to be asked here, and not downstream ────────────────────────
- * A narrowed read does not announce itself. `program_event_entries` is visible
- * to every member of a program, so a player reads all nine lines of a dual with
- * names and opponents on them; the RESULT lives on `matches`, so exactly one of
- * those lines comes back with a match attached. Nothing about the shape of that
- * answer says "there were eight more" — `entryPlayed()` reads *"no match row I
- * can see"* and *"nobody has played this yet"* identically, because from a row's
- * point of view they are identical. A component handed the survivors cannot
- * recover the difference, and an aggregate computed over them is a confidently
- * wrong number under a program-wide label.
- *
- * So the question is answered where the two inputs are: the viewer's role and
- * the program's flag, the same two the policy itself reads. This is the same
- * rule as the database's, spelled once in TypeScript, and nothing derived from
- * a program read should be labelled as the program's until it has been asked.
- *
- * The Roster page has always gated on the same flag — *"Match results are
- * visible to coaches only"* — which is the sentence the surfaces that withhold
- * should say. It lives in `components/dashboard/team/roster-vocabulary.tsx`
- * with the rest of the roster's words, for the reason `line-status.ts` gives:
- * the rule is one file, the wording is another, and both are shared.
+ * That leaves this module answering a question that now has one answer.
+ * `resultsScope()` returns `"program"` for every member, `isNarrowedToViewer()`
+ * is never true, and the `"own"` scope is no longer produced. The vocabulary
+ * survives because surfaces still branch on it — Team Home, the schedule
+ * pages, and the withheld wording in `roster-vocabulary.tsx`. Retiring the
+ * branches and this module's narrow-read language is its own sweep.
  */
 
 import type { ProgramRole } from "@/lib/workspace/types";
 
 export type ResultsScope =
-  /** Every match the program recorded. Staff, or a roster-visible program. */
+  /** Every match the program recorded. Every member gets this. */
   | "program"
   /**
    * The viewer's own matches and nothing else.
    *
-   * A figure computed over this read describes one player. It must not be
-   * printed under a program-wide label, and a line that came back empty must
-   * not be reported as unplayed — it may simply not be ours to read.
+   * No longer produced: the membership-only read policy hands every member
+   * the program scope. The variant remains only because call sites still
+   * branch on it.
    */
   | "own";
 
 /**
- * Which of the two a reader is getting.
+ * Which scope a reader is getting: `"program"`, for every member.
  *
- * `rosterVisible` is `programs.roster_visible`. Both callers already hold it:
- * Team Home through `getTeamSettings()`, the Roster page through
- * `getRosterData()`. Neither has to add a read to ask this.
- *
- * Defaults are deliberately the closed ones — an unreadable `programs` row
- * should narrow the page, never widen it — so callers pass `false` when they
- * could not establish the flag.
+ * The parameters are the two inputs the retired gate used to read. They are
+ * kept so call sites — Team Home through `getTeamSettings()`, the schedule
+ * loaders through `getRosterData()` and their own fetches — compile unchanged
+ * until the scope branching is removed with the rest of this vocabulary.
  */
-export function resultsScope(viewer: {
+export function resultsScope(_viewer: {
   role: ProgramRole;
   rosterVisible: boolean;
 }): ResultsScope {
-  if (viewer.role !== "player") return "program";
-  return viewer.rosterVisible ? "program" : "own";
+  return "program";
 }
 
 /**
  * Is this read a subset of the program, with no way to tell what is missing?
  *
  * The negative spelling of `resultsScope`, so call sites read as the refusal
- * they are performing rather than as a string comparison.
+ * they are performing rather than as a string comparison. Never true under
+ * the membership-only policy.
  */
 export function isNarrowedToViewer(scope: ResultsScope): boolean {
   return scope === "own";

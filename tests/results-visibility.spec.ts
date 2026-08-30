@@ -33,6 +33,12 @@ import type {
  * Every assertion below is about the loader refusing, because the loader is the
  * only place that can: by the time a `WeekendDual` or a `TeamKpiTile[]` reaches
  * a component there is nothing left in it that says how many rows RLS withheld.
+ *
+ * Since `20260830120000_matches_visible_to_members.sql` the `matches` read is
+ * membership-only, so `resultsScope()` answers `"program"` for every member
+ * and the narrowed read no longer occurs in production. The `OWN` fixtures
+ * below keep exercising the refusal machinery directly until the sweep that
+ * removes it.
  */
 
 const PROGRAM: ResultsScope = 'program';
@@ -40,23 +46,20 @@ const OWN: ResultsScope = 'own';
 
 test.describe('resultsScope · which read the caller is holding', () => {
   test('staff always read the program', () => {
-    // Three spellings of staff, because `program_members.role` has three and
-    // the policy's `is_program_staff` covers all of them. A rule written as
-    // `role === 'coach'` would narrow an owner's page.
+    // Three spellings of staff, because `program_members.role` has three. A
+    // rule written as `role === 'coach'` would narrow an owner's page.
     for (const role of ['owner', 'coach', 'staff'] as const) {
       expect(resultsScope({ role, rosterVisible: false })).toBe(PROGRAM);
       expect(resultsScope({ role, rosterVisible: true })).toBe(PROGRAM);
     }
   });
 
-  test('a player reads the program only where the flag opens it', () => {
+  test('a player reads the program regardless of the flag', () => {
+    // Membership-only read (20260830120000_matches_visible_to_members.sql):
+    // a player seeing their teammates' results is the point of a team
+    // workspace, so it is not a setting and `roster_visible` narrows nobody.
     expect(resultsScope({ role: 'player', rosterVisible: true })).toBe(PROGRAM);
-  });
-
-  test('a player on a closed program reads their own rows and nothing else', () => {
-    // The default case, not the edge: `roster_visible boolean not null default
-    // false` (`20260817073914_programs.sql:83`). Every program starts here.
-    expect(resultsScope({ role: 'player', rosterVisible: false })).toBe(OWN);
+    expect(resultsScope({ role: 'player', rosterVisible: false })).toBe(PROGRAM);
   });
 
   test('isNarrowedToViewer names the one scope that cannot be reported', () => {

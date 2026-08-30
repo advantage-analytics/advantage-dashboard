@@ -130,7 +130,7 @@ ready).
 - **notes:** The author's rationale — a forfeit happens when a team can't field enough players, so it is a real scheduling scenario, not a design flourish. `supabase/migrations/` runs ~100 migrations behind the live database, so verify the current shape of `program_event_entries` via the Supabase MCP before writing DDL. Read `docs/ui-revamp-guardrails.md`: a forfeit scored for the wrong side is exactly the silent-wrongness class this repo guards against — the team score would be confidently wrong with nothing looking broken.
 
 ## T10 · Team match results are always visible to team members
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** a new `supabase/migrations/*_matches_visible_to_members.sql` (guess), `src/lib/data/results-visibility.ts`
 - **done when:**
