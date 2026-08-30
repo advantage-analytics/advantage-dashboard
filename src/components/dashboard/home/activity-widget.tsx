@@ -1,4 +1,5 @@
 import type { PersonalActivity } from "@/lib/data/personal-activity-server";
+import { ActivityHeatmap } from "@/components/dashboard/home/activity-heatmap";
 
 /**
  * The personal-Home "Activity" widget — a 52-week × 7-day contribution heatmap
@@ -9,20 +10,10 @@ import type { PersonalActivity } from "@/lib/data/personal-activity-server";
  * Gradient"), the sanctioned density ramp — not the KPI you/opp blues. The grid
  * fills column-major (`grid-auto-flow: column` over 7 rows), so `days` arrives
  * already in that order from `getPersonalActivity`.
+ *
+ * This shell stays a server component; the grid and its dark hover tooltip live
+ * in the client `ActivityHeatmap` so only that leaf carries interactivity.
  */
-
-const MONTHS_LONG = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-
-/** "Aug 12, 2025" from a `YYYY-MM-DD` key, without re-parsing through a tz. */
-function cellTitle(date: string, count: number): string {
-  const [y, m, d] = date.split("-").map(Number);
-  const label = `${MONTHS_LONG[(m ?? 1) - 1]?.slice(0, 3)} ${d}, ${y}`;
-  if (count <= 0) return `No matches on ${label}`;
-  return `${count} ${count === 1 ? "match" : "matches"} on ${label}`;
-}
 
 export function ActivityWidget({ activity }: { activity: PersonalActivity }) {
   const { days, sessionCount, monthLabels } = activity;
@@ -48,29 +39,7 @@ export function ActivityWidget({ activity }: { activity: PersonalActivity }) {
         ))}
       </div>
 
-      <div
-        role="img"
-        aria-label={`Match activity over the last 12 months: ${sessionCount} active ${sessionCount === 1 ? "day" : "days"}`}
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(52, 1fr)",
-          gridTemplateRows: "repeat(7, 1fr)",
-          gridAutoFlow: "column",
-          gap: "2px",
-        }}
-      >
-        {days.map((day, i) => (
-          <div
-            key={i}
-            title={cellTitle(day.date, day.count)}
-            style={{
-              aspectRatio: "1",
-              borderRadius: "1px",
-              background: `var(--viz-heatmap-${day.level})`,
-            }}
-          />
-        ))}
-      </div>
+      <ActivityHeatmap days={days} sessionCount={sessionCount} />
     </div>
   );
 }
