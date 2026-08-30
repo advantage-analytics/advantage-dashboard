@@ -5,14 +5,17 @@ import {
   ClaimHeading,
   ClaimActions,
   CLAIM_BUTTON,
+  CLAIM_LINK,
 } from "@/components/claim/claim-shell";
 import {
+  JoinAskAgain,
   JoinReady,
   JoinSignIn,
   JoinSignUp,
   JoinWrongAccount,
 } from "@/components/join/join-forms";
 import { resolveJoinState } from "@/lib/services/programs/invite-acceptance";
+import { getMonthlyCapSeconds } from "@/lib/services/splitstep/config";
 
 export const metadata = { title: "Join your program" };
 
@@ -25,9 +28,12 @@ export const metadata = { title: "Join your program" };
  * would never hear anything — and could not have accepted if they had.
  *
  * Seven states, and every one of them is a real thing that happens rather than
- * a defensive branch. Three carry a form; four are dead ends with a way out,
- * and those are the ones worth designing, because an invitation that fails is
- * the moment somebody decides whether this product is worth the trouble.
+ * a defensive branch. Three carry a form; four are ends with a way out, and
+ * those are the ones worth designing, because an invitation that fails is the
+ * moment somebody decides whether this product is worth the trouble. Two of
+ * them are no longer dead: an expired link can ask the coach who sent it for
+ * another (9.2a), and the three form states can be declined without spending
+ * anything (8.3a) — `?not-now=1`, an eighth render of the same seven states.
  *
  * ── Deliberately not a route handler ────────────────────────────────────────
  * A GET that accepted the invitation on sight would be simpler, and wrong:
@@ -70,13 +76,86 @@ function JoinPane({
   );
 }
 
+/**
+ * The two allowances 8.2's footer compares, in hours.
+ *
+ * Read here, on the server, from the function `reserveQuota()` asks when it
+ * decides whether a submission is refused — so the number a player is shown at
+ * the moment they agree to join is the number that will actually be enforced.
+ * The page hands the forms two plain numbers rather than letting them import
+ * this: `splitstep/config` also carries the vendor's internal name, and none of
+ * that belongs in a client bundle.
+ */
+function quotaHours(): { programHours: number; personalHours: number } {
+  return {
+    programHours: getMonthlyCapSeconds("program") / 3600,
+    personalHours: getMonthlyCapSeconds("individual") / 3600,
+  };
+}
+
+/**
+ * 8.3a — declined, and kept open.
+ *
+ * Reached by a link, so there is nothing to undo: no row was written, the token
+ * is unspent, and the coach who sent it has not been told. That last one is the
+ * promise the screen makes out loud, and it is only worth making because the
+ * route that renders it cannot write anything.
+ */
+function NothingSent({
+  token,
+  programName,
+  inviterName,
+}: {
+  token: string;
+  programName: string;
+  inviterName: string | null;
+}) {
+  return (
+    <JoinPane
+      width={440}
+      eyebrow={programName}
+      title="Nothing was sent"
+      body={
+        <>
+          {inviterName ? `${inviterName} wasn't` : "Nobody was"} notified. The
+          invitation stays open until you use it or it expires.
+        </>
+      }
+    >
+      <div className="flex items-center gap-3 border-t border-[var(--border-hairline)] pt-4">
+        <span
+          aria-hidden="true"
+          className="flex size-8 shrink-0 items-center justify-center rounded-[var(--radius-element)] bg-[var(--surface-subtle)] text-[12px] font-medium text-[var(--ink-700)]"
+        >
+          {programName.trim().charAt(0).toUpperCase()}
+        </span>
+        <span className="text-body-sm min-w-0 flex-1 truncate">
+          Join {programName}
+        </span>
+        <Link href={`/join/${encodeURIComponent(token)}`} className={CLAIM_LINK}>
+          Review
+        </Link>
+      </div>
+    </JoinPane>
+  );
+}
+
 export default async function JoinPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ token: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { token } = await params;
+  const query = await searchParams;
   const state = await resolveJoinState(decodeURIComponent(token));
+  const { programHours, personalHours } = quotaHours();
+
+  // "Not now" is a query flag and nothing else — see `NotNowLink`. It only
+  // means anything on the three screens that were offering a Join button;
+  // everywhere else the state itself is the answer.
+  const declined = query["not-now"] === "1";
 
   switch (state.kind) {
     // Revoked, mistyped, or never real. One message for all three, because
@@ -98,19 +177,22 @@ export default async function JoinPage({
         </JoinPane>
       );
 
+    // 9.2a. Not a dead end: the product knows exactly who sent this and can
+    // ask them, which is more than the person reading it can do with the
+    // information this page is willing to give them.
     case "expired":
       return (
         <JoinPane
           width={440}
           eyebrow={state.programName}
           title="That invitation has expired"
-          body="Invitations last two weeks. Ask a coach on the program to send you a new one — it takes them a click."
+          body={
+            state.inviterName
+              ? `Invitations last two weeks. Ask ${state.inviterName} for another, or we can nudge them for you.`
+              : "Invitations last two weeks. Ask a coach on the program for another, or we can nudge them for you."
+          }
         >
-          <ClaimActions>
-            <Link href="/login" className={CLAIM_BUTTON}>
-              Go to sign in
-            </Link>
-          </ClaimActions>
+          <JoinAskAgain token={token} inviterName={state.inviterName} />
         </JoinPane>
       );
 
@@ -148,17 +230,37 @@ export default async function JoinPage({
       );
 
     case "ready":
+      if (declined) {
+        return (
+          <NothingSent
+            token={token}
+            programName={state.programName}
+            inviterName={state.inviterName}
+          />
+        );
+      }
       return (
         <JoinPane eyebrow={state.programName} title="Join your program">
           <JoinReady
             token={token}
             programName={state.programName}
             role={state.role}
+            programHours={programHours}
+            personalHours={personalHours}
           />
         </JoinPane>
       );
 
     case "sign_in":
+      if (declined) {
+        return (
+          <NothingSent
+            token={token}
+            programName={state.programName}
+            inviterName={state.inviterName}
+          />
+        );
+      }
       return (
         <JoinPane eyebrow={state.programName} title="Sign in to join">
           <JoinSignIn
@@ -166,11 +268,22 @@ export default async function JoinPage({
             programName={state.programName}
             role={state.role}
             email={state.email}
+            programHours={programHours}
+            personalHours={personalHours}
           />
         </JoinPane>
       );
 
     case "sign_up":
+      if (declined) {
+        return (
+          <NothingSent
+            token={token}
+            programName={state.programName}
+            inviterName={state.inviterName}
+          />
+        );
+      }
       return (
         <JoinPane eyebrow={state.programName} title="Set up your account">
           <JoinSignUp
@@ -178,6 +291,8 @@ export default async function JoinPage({
             programName={state.programName}
             role={state.role}
             email={state.email}
+            programHours={programHours}
+            personalHours={personalHours}
           />
         </JoinPane>
       );

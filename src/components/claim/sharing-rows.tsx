@@ -3,13 +3,20 @@ import { ArrowRight } from "lucide-react";
 /**
  * What joining a program does to what you already have.
  *
- * Three rows, in this order, on both screens that ask someone to enter a
- * program: 4.2, where a player asks a coach to add them, and 8.2, where an
- * invited player accepts. The design's own note on 4.2 is that they are "the
- * same ones the invited player reads in 8.2, in the same order" — which is a
- * promise about consistency that only survives if there is one copy of the
- * sentences. Two files that happened to agree on the day they were written
- * would not be the same rows; they would be a coincidence waiting to end.
+ * Three rows, in this order, on 4.2 — where a player asks a coach to add them.
+ *
+ * ── The 8.2 caption, and why these rows are not on it ───────────────────────
+ * The design's note on 4.2 says they are "the same ones the invited player
+ * reads in 8.2, in the same order", and building 8.2 is what established that
+ * the note describes an intention rather than the frames. 8.2 draws six rows in
+ * two headed columns — "Your coaches will see" and "Stays yours" — and shares
+ * no sentence with these three. Sharing a constant between the two would mean
+ * making one screen wrong to keep a caption right, so 8.2 carries its own copy
+ * in `components/join/join-terms.tsx`, which explains the split from its end.
+ *
+ * That is not a licence to let the two drift on meaning. They answer the same
+ * question at two different moments — asking, and accepting — and a change to
+ * what this product does with a player's matches has to land in both files.
  *
  * The order is load-bearing and is not alphabetical or arbitrary: the first
  * row answers "does this commit me to anything" (no), the second answers "what

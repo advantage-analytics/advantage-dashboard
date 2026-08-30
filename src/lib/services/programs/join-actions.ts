@@ -7,12 +7,14 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { validatePassword } from "@/lib/auth/error-messages";
 import { WORKSPACE_COOKIE } from "@/lib/workspace/active-workspace-server";
+import { expiredInviteNudgeEmail, sendEmail } from "@/lib/services/email";
 import {
   acceptWithSession,
   accountExists,
   loadInvite,
   resolveJoinState,
   type AcceptOutcome,
+  type InviteRecord,
 } from "./invite-acceptance";
 
 /**
@@ -32,6 +34,10 @@ import {
  * sent to a sign-in field and nowhere else. Password resets have their own
  * flow, which proves control of the mailbox at the moment of the reset rather
  * than up to fourteen days earlier.
+ *
+ * One action here accepts nothing: `requestFreshInvite` asks the coach who sent
+ * an expired invitation to send another. It is the only one reachable without a
+ * session, and its own header says what that costs it.
  */
 
 export type JoinActionResult = { ok: false; error: string };
@@ -211,6 +217,119 @@ export async function createAccountAndAccept(
 
   await activate(outcome.programId);
   redirect("/dashboard/team");
+}
+
+// ---------------------------------------------------------------------------
+// 9.2a — "or we can nudge her for you"
+// ---------------------------------------------------------------------------
+
+export type NudgeResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * An expired link asks the coach who sent it for a replacement.
+ *
+ * The only action on this page reachable without a session, which is what
+ * shapes every decision in it:
+ *
+ * **The recipient is never named by the caller.** It is read off
+ * `program_invites.invited_by` for the row this token hashes to. There is no
+ * input to this function but the token, so there is no address a caller can
+ * substitute — the endpoint can mail exactly one person, the one who already
+ * chose to mail them.
+ *
+ * **It mails at most once.** The durable half is a `program_requests` row, and
+ * `program_requests_open_unique` — `(kind, program_id, lower(email))` where the
+ * row is still open — is what makes that true: the second click loses the
+ * insert, so the send under it never runs. Without that, a link anyone in a
+ * forwarded mail thread can open would be a button that mails a coach on every
+ * press. The row is also the fallback when the send fails: an invite request in
+ * the review queue is a person a human can still reach.
+ *
+ * **It answers the same way every time.** Whether the invitation has an inviter
+ * left on it, whether the mail was accepted, suppressed or refused, and whether
+ * this is the first ask or the fifth all return the same `{ ok: true }`. The
+ * only other answer is for a token that is not an expired invitation, which the
+ * page rendering that token already said out loud — so it tells a caller
+ * nothing the URL had not. (A repeat ask does return sooner, having no mail to
+ * wait on. That is a fact about the caller's own earlier click on their own
+ * token, not about any row they cannot see.)
+ *
+ * Nothing about the invitation moves: not `accepted_at`, not `expires_at`. A
+ * replacement is minted by the coach, from the roster, or not at all.
+ */
+export async function requestFreshInvite(
+  token: string
+): Promise<NudgeResult> {
+  const state = await resolveJoinState(token);
+  if (state.kind !== "expired") {
+    return { ok: false, error: "That link can't be used that way." };
+  }
+
+  const invite = await loadInvite(token);
+  if (!invite) return { ok: false, error: "That link can't be used that way." };
+
+  const db = createAdminClient();
+  const { error } = await db.from("program_requests").insert({
+    kind: "invite_request",
+    program_id: invite.programId,
+    // The invitation's own address, lowercased by `loadInvite`. It is both who
+    // the coach should re-invite and the key the unique index dedupes on.
+    email: invite.email,
+    note: "Opened an expired invitation and asked for a new one.",
+  });
+
+  if (error) {
+    // 23505 is the partial unique index: they have already asked, the queue
+    // already holds it, and the coach has already been mailed. Same answer, no
+    // second mail.
+    if (error.code !== "23505") {
+      console.error("[join] could not file an invite request", {
+        message: error.message,
+      });
+      return { ok: false, error: "We couldn't record that. Try again." };
+    }
+    return { ok: true };
+  }
+
+  await nudgeInviter(invite);
+  return { ok: true };
+}
+
+/**
+ * Tell the coach, best effort.
+ *
+ * Never fails the action, matching `inviteMember`: the request row is already
+ * written and is what a human recovers from. `sendEmail` does not throw, so
+ * there is nothing to catch — only a result worth a line in the log, without
+ * the address in it.
+ */
+async function nudgeInviter(invite: InviteRecord): Promise<void> {
+  // `invited_by` is `on delete set null`. A coach who left the product cannot
+  // be nudged, and the request row is the whole of what happens.
+  if (!invite.invitedBy) return;
+
+  const db = createAdminClient();
+  const { data } = await db
+    .from("users")
+    .select("email")
+    .eq("id", invite.invitedBy)
+    .maybeSingle();
+
+  const to = (data?.email as string | null)?.trim();
+  if (!to) return;
+
+  const sent = await sendEmail(
+    expiredInviteNudgeEmail({
+      to,
+      programName: invite.programName,
+      inviteeEmail: invite.email,
+      expiredOn: new Date(invite.expiresAt),
+    })
+  );
+
+  if (!sent.ok) {
+    console.warn("[join] invite nudge not delivered", { message: sent.error });
+  }
 }
 
 /** Sign out, so a link opened under the wrong account can be opened again. */

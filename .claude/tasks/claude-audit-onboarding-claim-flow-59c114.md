@@ -122,7 +122,7 @@ ready).
 - **notes:** Templates are written and reviewed; only trigger points are missing (the index.ts table names each one). Do NOT wire the "objection notice to each contact" row — the announced claim was deliberately cut (see /admin/claims page header). Resend key unset = console-print mode, fine for dev.
 
 ## T10 · Sharing terms and Not-now on invite acceptance
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/app/join/[token]/page.tsx, src/lib/services/programs/invite-acceptance.ts, src/lib/services/programs/join-actions.ts (guess)
 - **done when:**

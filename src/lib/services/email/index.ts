@@ -24,10 +24,11 @@
  * | Claim objection notice   | claim enters `objection_window`, to each contact |
  * | Invite request received  | `requestInvite()`                               |
  * | Invite request declined  | `resolveRequest()` with a decline                |
+ * | Expired-invite nudge     | `requestFreshInvite()` — WIRED                  |
  *
- * Only the first is wired. The rest are written, reviewed and ready — each one
- * needs its trigger point to call it, which is a change in the action or route
- * that owns that transition, not a change here.
+ * Only the two marked WIRED are called today. The rest are written, reviewed
+ * and ready — each one needs its trigger point to call it, which is a change in
+ * the action or route that owns that transition, not a change here.
  */
 
 export { sendEmail, type EmailMessage, type EmailResult } from "./send";
@@ -73,6 +74,8 @@ export {
 export {
   inviteRequestReceivedEmail,
   inviteRequestDeclinedEmail,
+  expiredInviteNudgeEmail,
   type InviteRequestReceivedInput,
   type InviteRequestDeclinedInput,
+  type ExpiredInviteNudgeInput,
 } from "./templates/invite-request";
