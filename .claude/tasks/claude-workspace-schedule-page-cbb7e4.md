@@ -55,7 +55,7 @@ ready).
 - **notes:** Read `docs/ui-revamp-guardrails.md`. Design: DesignSync `afde9116…`, screen `4c`. The removed filter pills carry deliberate a11y commentary in `schedule-list.tsx` — carry the intent (state in the accessibility tree) into row selection, and note the removal in the commit message. Keep `getScheduleRows`' scope gating for the completed-row scores (`scheduleRowsFrom` already withholds `teamScore`).
 
 ## T4 · Opponent dual-history helper
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** `src/lib/schedule/opponent-history.ts` (new — guess)
 - **done when:**
