@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check } from "lucide-react";
-import { CLAIM_BUTTON, ClaimActions } from "./claim-shell";
+import { CLAIM_BUTTON, ClaimActions, RadioDot } from "./claim-shell";
 import { cn } from "@/lib/utils";
 import type { CustomOrgType } from "@/lib/services/programs/create-actions";
 
@@ -42,21 +41,6 @@ const OPTIONS: { id: CustomOrgType; label: string; sub: string }[] = [
   },
 ];
 
-function RadioDot({ selected }: { selected: boolean }) {
-  return selected ? (
-    <span
-      className="mt-[1px] flex size-3.5 shrink-0 items-center justify-center rounded-full bg-[var(--blue)]"
-      aria-hidden="true"
-    >
-      <Check className="size-[9px] text-white" strokeWidth={2.5} />
-    </span>
-  ) : (
-    <span
-      className="mt-[1px] size-3.5 shrink-0 rounded-full border border-[var(--ink-300)]"
-      aria-hidden="true"
-    />
-  );
-}
 
 export function TeamTypeChoice() {
   const router = useRouter();

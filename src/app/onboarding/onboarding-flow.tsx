@@ -2,11 +2,12 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { Check, Shield, User, Users } from "lucide-react";
+import { Shield, User, Users } from "lucide-react";
 import AuthCheckbox from "@/components/auth/auth-checkbox";
 import {
   ClaimActions,
   ClaimHeading,
+  RadioDot,
   CLAIM_BUTTON,
   CLAIM_FIELD,
   CLAIM_LABEL,
@@ -104,27 +105,6 @@ const GUARDIAN_ACKNOWLEDGMENTS: readonly string[] = [
   "You'll manage what's uploaded and who it's shared with until you transfer the account.",
   "Video of a minor is never used to train models or shown outside the people you share it with.",
 ];
-
-/**
- * The design system's check-dot `Radio`: solid Signal Blue with a white check
- * when chosen, a 1px ink-300 ring otherwise. The dot marks the selected item —
- * it never appears on hover.
- */
-function RadioDot({ selected }: { selected: boolean }) {
-  return selected ? (
-    <span
-      className="mt-[1px] flex size-3.5 shrink-0 items-center justify-center rounded-full bg-[var(--blue)]"
-      aria-hidden="true"
-    >
-      <Check className="size-[9px] text-white" strokeWidth={2.5} />
-    </span>
-  ) : (
-    <span
-      className="mt-[1px] size-3.5 shrink-0 rounded-full border border-[var(--ink-300)]"
-      aria-hidden="true"
-    />
-  );
-}
 
 export function OnboardingFlow() {
   const [step, setStep] = useState<Step>(1);

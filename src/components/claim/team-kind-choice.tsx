@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Check, GraduationCap } from "lucide-react";
-import { CLAIM_BUTTON, ClaimActions } from "./claim-shell";
+import { Building2, GraduationCap } from "lucide-react";
+import { CLAIM_BUTTON, ClaimActions, RadioDot } from "./claim-shell";
 import { cn } from "@/lib/utils";
 
 /**
@@ -51,26 +51,6 @@ const OPTIONS: {
   },
 ];
 
-/**
- * The design system's check-dot `Radio`: solid Signal Blue with a white check
- * when chosen, a 1px ink-300 ring otherwise. The dot marks the selected card —
- * it never appears on hover. Same markup the onboarding flow uses.
- */
-function RadioDot({ selected }: { selected: boolean }) {
-  return selected ? (
-    <span
-      className="flex size-3.5 shrink-0 items-center justify-center rounded-full bg-[var(--blue)]"
-      aria-hidden="true"
-    >
-      <Check className="size-[9px] text-white" strokeWidth={2.5} />
-    </span>
-  ) : (
-    <span
-      className="size-3.5 shrink-0 rounded-full border border-[var(--ink-300)]"
-      aria-hidden="true"
-    />
-  );
-}
 
 export function TeamKindChoice() {
   const router = useRouter();
@@ -110,7 +90,7 @@ export function TeamKindChoice() {
                   strokeWidth={1.5}
                   aria-hidden="true"
                 />
-                <RadioDot selected={selected} />
+                <RadioDot selected={selected} align="" />
               </div>
               <div className="flex flex-col gap-1.5">
                 <span className="text-[16px] text-[var(--ink-900)]">
