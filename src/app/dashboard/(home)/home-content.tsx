@@ -4,7 +4,9 @@ import { useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import WelcomeMessage from "@/components/dashboard/home/welcome-message";
-import EmptyDashboard from "@/components/dashboard/home/empty-dashboard";
+import EmptyDashboard, {
+  type SetupProgress,
+} from "@/components/dashboard/home/empty-dashboard";
 import RecentActivity from "./recent-activity";
 import ServePlacementHome from "@/components/dashboard/home/serve-placement-home";
 import { FocusCard } from "@/components/dashboard/home/focus-card";
@@ -32,6 +34,13 @@ interface HomeContentProps {
   /** Computed evidence for the Focus card, or null when there is none to state. */
   insightEvidence: EvidencePart[] | null;
   insightSignature: string;
+  /**
+   * Persisted answers to the getting-set-up checklist, read on the server.
+   * Only the empty state renders them, but they are resolved alongside the
+   * rest of the page's data rather than fetched from inside it — the empty
+   * dashboard is reached through this client component and so cannot query.
+   */
+  setup: SetupProgress;
 }
 
 export default function HomeContent({
@@ -45,6 +54,7 @@ export default function HomeContent({
   matchCount,
   insightEvidence,
   insightSignature,
+  setup,
 }: HomeContentProps) {
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
@@ -77,7 +87,7 @@ export default function HomeContent({
       />
 
       {!hasMatches ? (
-        <EmptyDashboard />
+        <EmptyDashboard setup={setup} />
       ) : (
         <>
           {kpiStrip}

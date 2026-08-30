@@ -133,7 +133,7 @@ ready).
 - **notes:** Design calls 8.2 "the most important screen in the document" — today the join page shows zero sharing copy. The three "coaches will see" rows are the same trio as 4.2 (T6). Invite tokens are hashed and single-use; "Not now" must not touch accepted_at.
 
 ## T11 · Getting-set-up checklist on the personal home empty state
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/home/empty-dashboard.tsx, src/app/dashboard/(home)/home-content.tsx, src/components/dashboard/team/first-steps.tsx (pattern source)
 - **done when:**

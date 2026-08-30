@@ -31,6 +31,8 @@ import { cn } from "@/lib/utils";
  * authenticated its way to.
  */
 
+// In the order they are rendered, which is also the order `missing[0]` names
+// the next gap in.
 const FIELDS = [
   "firstName",
   "lastName",
@@ -38,6 +40,8 @@ const FIELDS = [
   "phone",
   "country",
   "state",
+  "hand",
+  "backhand",
   "role",
 ] as const;
 
@@ -50,6 +54,8 @@ const FIELD_LABELS: Record<FieldName, string> = {
   phone: "Phone number",
   country: "Country",
   state: "State / region",
+  hand: "Playing hand",
+  backhand: "Backhand",
   role: "Role",
 };
 
@@ -73,6 +79,22 @@ const COUNTRY_OPTIONS = [
   { value: "SE", label: "Sweden" },
   { value: "CZ", label: "Czech Republic" },
   { value: "OTHER", label: "Other" },
+];
+
+/**
+ * Stored values, not labels. `users.hand` / `users.backhand` are raw
+ * (`"right"`, `"two-handed"`); `formatPlayerStyle()` renders them and the
+ * match filters compare against them, so these are the two vocabularies the
+ * rest of the app already reads.
+ */
+const HAND_OPTIONS = [
+  { value: "right", label: "Right-handed" },
+  { value: "left", label: "Left-handed" },
+];
+
+const BACKHAND_OPTIONS = [
+  { value: "one-handed", label: "One-handed" },
+  { value: "two-handed", label: "Two-handed" },
 ];
 
 const ROLE_OPTIONS = [
@@ -224,6 +246,24 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
             value={draft.state}
             placeholder="California"
             onChange={(value) => set("state", value)}
+          />
+          {/* The two fields the home page's checklist asks for, in the section
+              that was already called "Tennis profile" without them. Analysis
+              orients forehand and backhand around these, and until now nothing
+              in the product could set them. */}
+          <ProfileSelect
+            label={FIELD_LABELS.hand}
+            value={draft.hand}
+            options={HAND_OPTIONS}
+            placeholder="Select hand"
+            onChange={(value) => set("hand", value)}
+          />
+          <ProfileSelect
+            label={FIELD_LABELS.backhand}
+            value={draft.backhand}
+            options={BACKHAND_OPTIONS}
+            placeholder="Select backhand"
+            onChange={(value) => set("backhand", value)}
           />
         </div>
 

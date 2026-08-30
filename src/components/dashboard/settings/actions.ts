@@ -18,6 +18,8 @@ export interface ProfileInput {
   country?: string;
   state?: string;
   role?: string;
+  hand?: string;
+  backhand?: string;
 }
 
 const emptyToNull = (v?: string): string | null => {
@@ -29,6 +31,14 @@ const emptyToNull = (v?: string): string | null => {
 // Personas the profile form may write to users.role (mirrors ROLE_OPTIONS on
 // the profile page). Paid entitlement lives in users.plan, never in role.
 const PERSONA_ROLES = new Set(["player", "coach", "parent", "academy"]);
+
+// The stored vocabulary for `users.hand` / `users.backhand`, which is not the
+// displayed one: `formatPlayerStyle()` turns these into "RIGHT HANDED" and
+// "2-HANDED BACKHAND" at read time, and the match filters on
+// `matches-page-content.tsx` match against these raw values. Writing a label
+// here would leave a row that every reader in the app silently drops.
+const PLAYING_HANDS = new Set(["right", "left"]);
+const BACKHAND_TYPES = new Set(["one-handed", "two-handed"]);
 
 export async function saveProfile(input: ProfileInput): Promise<ActionResult> {
   const supabase = await createClient();
@@ -46,6 +56,16 @@ export async function saveProfile(input: ProfileInput): Promise<ActionResult> {
     return { ok: false, error: "Invalid role selection." };
   }
 
+  const hand = emptyToNull(input.hand);
+  if (hand !== null && !PLAYING_HANDS.has(hand)) {
+    return { ok: false, error: "Invalid hand selection." };
+  }
+
+  const backhand = emptyToNull(input.backhand);
+  if (backhand !== null && !BACKHAND_TYPES.has(backhand)) {
+    return { ok: false, error: "Invalid backhand selection." };
+  }
+
   const { error } = await supabase
     .from("users")
     .update({
@@ -56,6 +76,8 @@ export async function saveProfile(input: ProfileInput): Promise<ActionResult> {
       country: emptyToNull(input.country),
       state: emptyToNull(input.state),
       role,
+      hand,
+      backhand,
     })
     .eq("id", user.id);
 

@@ -12,6 +12,8 @@ const EMPTY_DRAFT: ProfileDraft = {
   phone: "",
   country: "",
   state: "",
+  hand: "",
+  backhand: "",
   role: "",
 };
 
@@ -29,7 +31,7 @@ export default async function ProfilePage() {
   const supabase = await createClient();
   const { data } = await supabase
     .from("users")
-    .select("first_name, last_name, dob, phone, country, state, role")
+    .select("first_name, last_name, dob, phone, country, state, hand, backhand, role")
     .eq("id", workspace.viewer.id)
     .maybeSingle();
 
@@ -44,6 +46,8 @@ export default async function ProfilePage() {
               phone: data.phone ?? "",
               country: data.country ?? "",
               state: data.state ?? "",
+              hand: data.hand ?? "",
+              backhand: data.backhand ?? "",
               role: data.role ?? "",
             }
           : EMPTY_DRAFT
