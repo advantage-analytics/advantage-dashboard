@@ -1,14 +1,13 @@
 import {
   Home,
   Calendar,
-  ClipboardList,
+  GalleryHorizontalEnd,
   BarChart3,
   MessageSquare,
   Users,
-  Swords,
+  Brain,
   Settings,
   HelpCircle,
-  Video,
 } from "lucide-react";
 
 /**
@@ -33,7 +32,7 @@ export type NavLink = {
 
 export const PERSONAL_NAV: readonly NavLink[] = [
   { name: "Home", href: "/dashboard", icon: Home },
-  { name: "Matches", href: "/dashboard/matches", icon: Video },
+  { name: "Matches", href: "/dashboard/matches", icon: GalleryHorizontalEnd },
   { name: "Statistics", href: "/dashboard/statistics", icon: BarChart3 },
   { name: "Ask", href: "/dashboard/ask", icon: MessageSquare },
 ];
@@ -57,28 +56,39 @@ export const PERSONAL_NAV: readonly NavLink[] = [
  * back, and inside a program players have a route to a match list again.
  *
  * The two carry different icons because they are adjacent rows answering
- * different questions. Both shipped with `Calendar` — the design spec named the
- * collision and shipped it anyway — which left the rail with two identical
- * glyphs side by side and made the label the only thing telling them apart.
- * Schedule takes `ClipboardList`: what a coach fills in before anyone plays.
- * Matches takes `Video` — one glyph per noun, film rather than a date — the
- * same icon `PERSONAL_NAV` already gives it, so one destination does not
- * change shape when the workspace switcher moves.
+ * different questions — the design's own pairing: `calendar` for Schedule,
+ * `gallery-horizontal-end` for Matches. Matches keeps the same glyph
+ * `PERSONAL_NAV` gives it, so one destination does not change shape when the
+ * workspace switcher moves.
  *
- * Opponents took Compare's slot and its `Swords`. Compare answered "which of my
- * two players is holding serve better" and nothing replaces it — that was
- * weighed and decided, and the roster's player profile is now the only place a
- * single player's rates are read. Opponents sits outside `/dashboard/team`
- * because most of what it shows is not this program's: it reads the pooled
- * public-record views across every program, and only the private tier is
- * scoped to the viewer.
+ * Opponents took Compare's slot. Compare answered "which of my two players is
+ * holding serve better" and nothing replaces it — that was weighed and
+ * decided, and the roster's player profile is now the only place a single
+ * player's rates are read. What Opponents kept from Compare is the slot, not
+ * the icon: it now carries the design's own `brain`, not Compare's `Swords`.
+ * Opponents sits outside `/dashboard/team` because most of what it shows is
+ * not this program's: it reads the pooled public-record views across every
+ * program, and only the private tier is scoped to the viewer.
+ *
+ * Statistics and Ask are `/dashboard/team/statistics` and `/dashboard/team/ask`
+ * — separate routes from `PERSONAL_NAV`'s, not the same href reused. That is
+ * the "different page against a different scope" `statistics/page.tsx`'s own
+ * comment leaves as a placeholder for: the personal route intentionally shows
+ * the viewer's own matches from inside a team workspace, so a program-wide
+ * version needs a URL of its own rather than a branch inside that page. Both
+ * are `ComingSoonPage` stubs today and need no guard of their own —
+ * `team/layout.tsx` already redirects anyone here who is not in a team
+ * workspace, which is what "only work inside a team workspace" means until
+ * there is program data to scope.
  */
 export const TEAM_NAV: readonly NavLink[] = [
   { name: "Team Home", href: "/dashboard/team", icon: Home },
-  { name: "Schedule", href: "/dashboard/team/schedule", icon: ClipboardList },
-  { name: "Matches", href: "/dashboard/matches", icon: Video },
+  { name: "Schedule", href: "/dashboard/team/schedule", icon: Calendar },
+  { name: "Matches", href: "/dashboard/matches", icon: GalleryHorizontalEnd },
   { name: "Roster", href: "/dashboard/team/roster", icon: Users },
-  { name: "Opponents", href: "/dashboard/opponents", icon: Swords },
+  { name: "Opponents", href: "/dashboard/opponents", icon: Brain },
+  { name: "Statistics", href: "/dashboard/team/statistics", icon: BarChart3 },
+  { name: "Ask", href: "/dashboard/team/ask", icon: MessageSquare },
 ];
 
 export const PERSONAL_BOTTOM: readonly NavLink[] = [
