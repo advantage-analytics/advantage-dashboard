@@ -117,7 +117,7 @@ ready).
 - **notes:** Read `docs/ui-revamp-guardrails.md`. Design: DesignSync `afde9116…`, screen `3c`. Independent of the dual-flow tasks — can run in parallel with T5–T7. **Author's ruling after this blocked once:** restore both deleted capabilities. Doubles: the design's own qualified heading "Entries · singles" implies a sibling — screen 2b uses the same qualifier and draws both halves — and `DraftEntry.discipline` plus `createTournament` already accept `"doubles"`, so nothing but the UI affordance was missing. Free text: a coach must not be blocked on editing the roster to enter a walk-on. The narrowed draw list was correct and stays. Start from stash `391f3a02` (`git stash apply 391f3a02`) — every criterion is already met there; these two are additions, not rework.
 
 ## T9 · Forfeited lines — schema, scoring and the builder action
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2, T6
 - **files:** a new `supabase/migrations/*_event_entry_forfeit.sql` (guess), `src/lib/data/schedule-server.ts` (`dualScore`), `src/lib/schedule/entry-state.ts`, `src/components/dashboard/schedule/{dual-form,lineup-editor,line-row,event-detail-pane}.tsx`
@@ -141,7 +141,7 @@ ready).
 - **notes:** Author's ruling: a player seeing their teammates' results is the point of a team workspace, so it is not a setting. This supersedes the earlier "flip the default" framing — the gate goes, rather than its default moving. It also closes the coaches-only option, which is the intended consequence. `supabase/migrations/` runs ~100 behind live, so read the policy's current text via the Supabase MCP before writing DDL; it was captured on 2026-08-30 and the program clause is the last `OR` branch.
 
 ## T11 · Remove the results-visibility machinery now that nothing gates
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2, T10
 - **files:** a new `supabase/migrations/*_drop_roster_visible.sql` (guess), `src/lib/data/results-visibility.ts`, `src/components/dashboard/team/roster-vocabulary.tsx`, `src/components/dashboard/settings/team-settings-form.tsx`, `src/components/dashboard/settings/team-actions.ts`, `src/components/dashboard/team/dual-sheet.tsx`, `src/components/dashboard/schedule/dual-detail.tsx`, `src/components/dashboard/schedule/event-detail-pane.tsx`, `src/lib/data/team-home-server.ts`

@@ -26,6 +26,7 @@ export interface LineupLineInput {
   playerUserIds: string[];
   playerLabels: string[];
   opponentLabels: string[];
+  forfeit?: "ours" | "theirs" | null;
 }
 
 export interface CreateDualInput {
@@ -164,6 +165,7 @@ export async function createDual(
       player_labels: line.playerLabels,
       opponent_labels: line.opponentLabels,
       opponent_program_id: opponentProgramId,
+      forfeit: line.forfeit ?? null,
     }))
   );
 
@@ -292,7 +294,7 @@ export async function recordResult(
   const { data: entry, error: entryError } = await supabase
     .from("program_event_entries")
     .select(
-      "id, event_id, program_id, slot, player_labels, player_user_ids, discipline"
+      "id, event_id, program_id, slot, player_labels, player_user_ids, discipline, forfeit"
     )
     .eq("id", input.entryId)
     .single();
@@ -300,6 +302,13 @@ export async function recordResult(
   if (entryError || !entry) return { error: "That line no longer exists." };
   if (entry.program_id !== auth.programId) {
     return { error: "That line belongs to another program." };
+  }
+  // A forfeited line must never mint a match. The forfeit is the outcome —
+  // recording a score under it would be a second answer about a line that is
+  // already decided, and the two would disagree everywhere one of them is
+  // counted. Clear the forfeit first if the line was actually played.
+  if (entry.forfeit) {
+    return { error: "This line is forfeited. Clear the forfeit before adding a score." };
   }
 
   const { data: event } = await supabase
@@ -361,14 +370,17 @@ export async function recordResult(
    * it is half of the `matches` SELECT policy:
    *
    *   auth.uid() in (created_by, player1_id, player2_id)
-   *     or is_program_staff(program_id)
-   *     or (user_program_role(program_id) = 'player' and <program>.roster_visible)
+   *     or (program_id is not null and user_program_role(program_id) is not null)
    *
    * Leaving it null used to mean a player could not read their own recorded
-   * match. `created_by` is the coach, staff they are not, and `roster_visible`
-   * DEFAULTS TO FALSE — so every clause failed and the line rendered with a
-   * blank score on the player's own schedule. It also kept the pair out of
-   * Compare, which counts only non-null ids.
+   * match: under the older policy the program clause required staff, or a
+   * player on a program with `roster_visible` set — a column that defaulted to
+   * false — so every clause failed and the line rendered with a blank score on
+   * the player's own schedule. `20260830120000_matches_visible_to_members`
+   * widened the program clause to any member, which covers that case now. The
+   * id still matters: it is what keeps the pair in Compare, which counts only
+   * non-null ids, and it is the only clause that survives a player leaving the
+   * program.
    *
    * Singles slots map one entry to one account. A doubles line has two
    * accounts and one column, so there is no non-arbitrary choice and null is
@@ -626,4 +638,64 @@ export async function saveOpponentPlayer(input: {
     // precondition, and never worth an error the coach has to read.
     return { saved: false };
   }
+}
+
+/**
+ * Mark a line as forfeited, or clear a forfeit.
+ *
+ * `side` is `'ours'` or `'theirs'` — which side forfeited, determining who
+ * gets the point. Getting the side wrong silently awards the point to the wrong
+ * team. `null` clears the forfeit and returns the line to normal.
+ *
+ * A line that already has a match cannot be forfeited: a forfeit is the
+ * alternative to a played match, not a second outcome on top of one. The
+ * coach must delete the match first if they want to forfeit a played line.
+ */
+export async function setForfeit(
+  entryId: string,
+  side: "ours" | "theirs" | null
+): Promise<{ ok: true } | ActionError> {
+  const auth = await requireStaff();
+  if (isError(auth)) return auth;
+
+  const supabase = await createClient();
+
+  const { data: entry, error: entryError } = await supabase
+    .from("program_event_entries")
+    .select("id, event_id, program_id")
+    .eq("id", entryId)
+    .single();
+
+  if (entryError || !entry) return { error: "That line no longer exists." };
+  if (entry.program_id !== auth.programId) {
+    return { error: "That line belongs to another program." };
+  }
+
+  // Setting a forfeit on a line that already has a match is a contradiction:
+  // the match says the line was played, the forfeit says it was not. Only
+  // allow clearing (side === null) on a line with matches.
+  if (side !== null) {
+    const { data: existingMatches } = await supabase
+      .from("matches")
+      .select("id")
+      .eq("event_entry_id", entryId)
+      .limit(1);
+
+    if (existingMatches && existingMatches.length > 0) {
+      return {
+        error: "This line already has a match recorded. Remove it before forfeiting.",
+      };
+    }
+  }
+
+  const { error: updateError } = await supabase
+    .from("program_event_entries")
+    .update({ forfeit: side, updated_at: new Date().toISOString() })
+    .eq("id", entryId);
+
+  if (updateError) return { error: updateError.message };
+
+  revalidatePath("/dashboard/team/schedule");
+  revalidatePath(`/dashboard/team/schedule/${entry.event_id}`);
+  return { ok: true };
 }

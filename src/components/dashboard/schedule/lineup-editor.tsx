@@ -17,12 +17,26 @@ export interface LineupLine {
   ourIds: string[];
   ourLabels: string[];
   theirLabels: string[];
+  /**
+   * Which side forfeited this line, or null for a normal line.
+   *
+   * The builder can only ever set `"ours"`. A forfeit here means *we* cannot
+   * field a player — that is the only side knowable while writing our own
+   * lineup, and it is the one design 2b draws ("— no available player"). The
+   * opponent forfeiting is discovered on match day, so `line-row.tsx` on the
+   * event page carries the two-sided picker instead.
+   *
+   * `"ours"` awards the point to THEM. Getting that backwards would hand a
+   * team a point it did not win with nothing on screen looking broken.
+   */
+  forfeit: "ours" | null;
 }
 
 /** Which column a drag is happening in. The two reorder independently. */
 type Column = "ours" | "theirs";
 
-const GRID = "grid grid-cols-[18px_36px_1.15fr_22px_1fr] items-center gap-3";
+const GRID =
+  "grid grid-cols-[18px_36px_1.15fr_22px_1fr_70px] items-center gap-3";
 
 /**
  * 25b's lineup — six singles, three doubles, both sides editable.
@@ -66,6 +80,14 @@ export function LineupEditor({
    *
    * The slot is the court, not the player — dragging S3 above S2 means those
    * two players swap courts, so the labels move and `slot` stays where it is.
+   *
+   * **Forfeited rows are not courts and take no part in this.** They hold no
+   * occupant, they render as "— no available player" whatever is in state, and
+   * `dual-form` writes them empty — so letting one into the rotation would
+   * shuffle a real player into a row that shows nobody and then submit that
+   * player as nobody. The reorder runs over the playable rows only; a drop on
+   * a forfeited row, or an arrow key that would step onto one, carries past it
+   * to the next playable court in the direction of travel.
    */
   function move(
     discipline: LineupLine["discipline"],
@@ -76,21 +98,44 @@ export function LineupEditor({
     const group = lines.filter((line) => line.discipline === discipline);
     if (to < 0 || to >= group.length || from === to) return;
 
+    // Indices into `group` — which is what the rendered rows are numbered by,
+    // forfeited rows included — that can actually hold somebody.
+    const playable = group
+      .map((line, index) => (line.forfeit === null ? index : -1))
+      .filter((index) => index >= 0);
+
+    const fromPos = playable.indexOf(from);
+    if (fromPos < 0) return;
+
+    // A forfeited destination is stepped over, not refused: an arrow key that
+    // stops dead on the row above a forfeit reads as a broken key.
+    const step = to > from ? 1 : -1;
+    let target = to;
+    while (target >= 0 && target < group.length && group[target].forfeit !== null) {
+      target += step;
+    }
+    const toPos = playable.indexOf(target);
+    if (toPos < 0 || toPos === fromPos) return;
+
     const field = column === "ours" ? "ourLabels" : "theirLabels";
     const idField = column === "ours" ? "ourIds" : null;
 
-    const occupants = group.map((line) => ({
-      labels: line[field],
-      ids: idField ? line[idField] : [],
+    const occupants = playable.map((index) => ({
+      labels: group[index][field],
+      ids: idField ? group[index][idField] : [],
     }));
-    const [lifted] = occupants.splice(from, 1);
-    occupants.splice(to, 0, lifted);
+    const [lifted] = occupants.splice(fromPos, 1);
+    occupants.splice(toPos, 0, lifted);
 
-    const rewritten = group.map((line, index) => ({
-      ...line,
-      [field]: occupants[index].labels,
-      ...(idField ? { [idField]: occupants[index].ids } : {}),
-    }));
+    const rewritten = group.map((line, index) => {
+      const pos = playable.indexOf(index);
+      if (pos < 0) return line;
+      return {
+        ...line,
+        [field]: occupants[pos].labels,
+        ...(idField ? { [idField]: occupants[pos].ids } : {}),
+      };
+    });
 
     const byKey = new Map(rewritten.map((line) => [line.key, line]));
     onChange(lines.map((line) => byKey.get(line.key) ?? line));
@@ -116,13 +161,50 @@ export function LineupEditor({
     );
   }
 
+  /**
+   * Forfeit a line, or take the forfeit back.
+   *
+   * Forfeiting clears both sides of the row rather than hiding names that are
+   * still in state. Two reasons, and they point the same way: the row then
+   * says what it means — a forfeited line has nobody on it — and the player
+   * returns to the bench, which is where a late scratch belongs, since
+   * `benchFromLines` reads `ourLabels` alone. Nothing invisible is carried
+   * into `createDual`; what the row shows is what gets written.
+   *
+   * Taking the forfeit back leaves the row empty rather than restoring the
+   * name. The coach is choosing who plays that court either way, and a
+   * restored name would be the form guessing at one.
+   */
+  function setForfeited(key: string, forfeited: boolean) {
+    onChange(
+      lines.map((line) =>
+        line.key === key
+          ? {
+              ...line,
+              forfeit: forfeited ? "ours" : null,
+              ourIds: [],
+              ourLabels: [],
+              theirLabels: [],
+            }
+          : line
+      )
+    );
+  }
+
   function renderGroup(group: LineupLine[], discipline: LineupLine["discipline"]) {
-    return group.map((line, index) => (
+    return group.map((line, index) =>
+      line.forfeit !== null ? (
+        <ForfeitedRow
+          key={line.key}
+          line={line}
+          onClear={() => setForfeited(line.key, false)}
+        />
+      ) : (
       <div
         key={line.key}
         className={cn(
           GRID,
-          "py-2.5",
+          "group/line py-2.5",
           dragging?.index === index && "opacity-60"
         )}
       >
@@ -171,8 +253,21 @@ export function LineupEditor({
             onCommit={(value) => setLabels(line.key, "theirs", value)}
           />
         </div>
+
+        {/* Quiet until the row is hovered or the button is focused, as 2b
+            draws it — a destructive-ish action that should not compete with
+            the names for attention, but must still be reachable by keyboard. */}
+        <button
+          type="button"
+          onClick={() => setForfeited(line.key, true)}
+          className="text-micro rounded-[3px] text-right opacity-0 outline-none transition-opacity group-hover/line:opacity-100 focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)]"
+          style={{ color: "var(--blue)" }}
+        >
+          Forfeit
+        </button>
       </div>
-    ));
+      )
+    );
   }
 
   return (
@@ -191,6 +286,7 @@ export function LineupEditor({
             {theirName || "Opponent"}
           </span>
         </div>
+        <span />
       </div>
 
       {renderGroup(singles, "singles")}
@@ -238,9 +334,55 @@ export function LineupEditor({
       ) : null}
 
       <p className="text-micro mt-2.5" style={{ color: "var(--ink-500)" }}>
-        All nine lines are expected — either column drags to reorder. Your
-        names edit in place; opposing names go through the add-name popover.
+        All nine lines are expected — forfeit a line only when a team can&rsquo;t
+        field a player for it. Either column drags to reorder; your names edit
+        in place, opposing names go through the add-name popover.
       </p>
+    </div>
+  );
+}
+
+/**
+ * A forfeited line, as design 2b's S6 draws it.
+ *
+ * No grip, no name field, no opponent affordance and no score: a forfeited
+ * line is not a court anyone is standing on, and every control that implies
+ * otherwise is gone. `dualScore` still counts it — as a point for the other
+ * side — so the dual totals nine.
+ *
+ * The design draws "Forfeited" as plain text with no way back. It is a button
+ * here because the marker has to be clearable (a mis-click on a hover-revealed
+ * action is easy), and it keeps the design's exact type and colour so the row
+ * still reads as a statement rather than an offer.
+ */
+function ForfeitedRow({
+  line,
+  onClear,
+}: {
+  line: LineupLine;
+  onClear: () => void;
+}) {
+  return (
+    <div className={cn(GRID, "py-2.5")}>
+      <span />
+      <span className="mono text-[11px]" style={{ color: "var(--ink-600)" }}>
+        {line.slot}
+      </span>
+      <span className="text-[13px]" style={{ color: "var(--ink-500)" }}>
+        — no available player
+      </span>
+      <span />
+      <span />
+      <button
+        type="button"
+        onClick={onClear}
+        aria-label={`Clear the forfeit on ${line.slot}`}
+        title="Clear the forfeit"
+        className="text-micro rounded-[3px] text-right outline-none hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)]"
+        style={{ color: "var(--ink-500)" }}
+      >
+        Forfeited
+      </button>
     </div>
   );
 }

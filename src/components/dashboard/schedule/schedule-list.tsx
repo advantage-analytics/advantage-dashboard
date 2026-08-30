@@ -7,34 +7,30 @@ import { advButton } from "@/lib/ui/adv-button";
 import { EventDetailPane } from "@/components/dashboard/schedule/event-detail-pane";
 import { formatEventSpan, siteLabel } from "@/lib/schedule/format";
 import type { ScheduleRow, EventDetail } from "@/lib/schedule/types";
-import type { ResultsScope } from "@/lib/data/results-visibility";
-
 /**
  * 4c's master-detail schedule.
  *
  * The left pane is a grouped event list (Upcoming / Completed); clicking a row
  * selects it and the right pane renders T2's `EventDetailPane` for that event.
- * Selection is client-side only — no fetch — so the page can be served with a
+ * Selection is client-side only -- no fetch -- so the page can be served with a
  * single read.
  *
- * ── a11y note ────────────────────────────────────────────────────────────────
+ * -- a11y note --
  * The filter pills that lived here carried deliberate accessibility work:
  * `role="group"` with `aria-pressed` on each toggle, and invisible 44px touch
- * targets. The pills are removed, but their intent — that the user's position
- * in a list is conveyed to assistive tech — carries forward: the list uses
+ * targets. The pills are removed, but their intent -- that the user's position
+ * in a list is conveyed to assistive tech -- carries forward: the list uses
  * `role="listbox"` with `aria-selected` on each row, so a screen reader
  * announces which event is active rather than reading identical links.
  */
 export function ScheduleList({
   rows,
   details,
-  scope,
   eyebrow,
   canCreate,
 }: {
   rows: ScheduleRow[];
   details: Record<string, EventDetail>;
-  scope: ResultsScope;
   eyebrow: string;
   canCreate: boolean;
 }) {
@@ -123,7 +119,7 @@ export function ScheduleList({
       {selectedDetail && (
         <div className="min-w-0 flex-1 pt-1 lg:pt-0">
           <div className="rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] p-5 lg:sticky lg:top-6">
-            <EventDetailPane detail={selectedDetail} scope={scope} />
+            <EventDetailPane detail={selectedDetail} />
           </div>
         </div>
       )}

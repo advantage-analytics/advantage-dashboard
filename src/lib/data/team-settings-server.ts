@@ -34,7 +34,6 @@ export interface TeamIdentity {
   homeVenue: string | null;
   defaultSurface: string | null;
   season: string | null;
-  rosterVisible: boolean;
   playersCanUpload: boolean;
   /**
    * IANA zone name (`America/Los_Angeles`, `UTC`, …) the program's calendar
@@ -62,7 +61,7 @@ export async function getTeamSettings(
     supabase
       .from("programs")
       .select(
-        "id, school_name, team, conference, home_venue, default_surface, season, roster_visible, players_can_upload, time_zone"
+        "id, school_name, team, conference, home_venue, default_surface, season, players_can_upload, time_zone"
       )
       .eq("id", programId)
       .maybeSingle(),
@@ -126,7 +125,6 @@ export async function getTeamSettings(
       homeVenue: row.home_venue,
       defaultSurface: row.default_surface,
       season: row.season,
-      rosterVisible: row.roster_visible,
       playersCanUpload: row.players_can_upload,
       timeZone: row.time_zone,
     },

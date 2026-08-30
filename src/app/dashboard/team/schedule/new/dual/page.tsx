@@ -55,8 +55,8 @@ export default async function NewDualPage() {
     getTeamSettings(active.id),
     getConferenceTable(active.id),
     // Read for the head-to-head half of every subline on step one. Staff-only
-    // screen, so the `resultsScope` caveat `opponent-history.ts` documents does
-    // not apply — the guard above is what settles it.
+    // screen, and every member reads the program's matches in any case, so the
+    // partial-read caveat `opponent-history.ts` documents cannot bite here.
     getProgramSchedule(active.id),
   ]);
 

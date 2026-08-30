@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
@@ -10,11 +10,13 @@ import { ScoreEntry } from "@/components/dashboard/schedule/score-entry";
 import { RowAction } from "@/components/dashboard/schedule/row-action";
 import {
   entryState,
+  forfeitWon,
   matchState,
   matchWon,
   supportsVideo,
 } from "@/lib/schedule/entry-state";
 import { LINE_STATUS } from "@/lib/schedule/line-status";
+import { setForfeit } from "@/lib/schedule/actions";
 import type { EntryMatch, EventEntry } from "@/lib/schedule/types";
 
 /**
@@ -47,15 +49,32 @@ export function LineRow({
 }) {
   const [scoring, setScoring] = useState(false);
 
-  const ourLabel = entry.playerLabels.join(" / ");
+  const isForfeited = entry.forfeit !== null;
+
+  // A forfeited line with no player on our side renders "— no available
+  // player" rather than a bare em dash, because the forfeit explains why.
+  const ourLabel = isForfeited && entry.playerLabels.length === 0
+    ? "— no available player"
+    : entry.playerLabels.join(" / ");
   const theirLabel =
     match?.opponentLabels.join(" / ") || entry.opponentLabels.join(" / ");
-  const won = match ? matchWon(match) : null;
+
+  // A forfeit's outcome is on the entry, not on a match.
+  const won = isForfeited
+    ? forfeitWon(entry)
+    : match
+      ? matchWon(match)
+      : null;
+
   // This row's own match, not the entry's. A tournament entry renders one row
   // per round, and asking the entry gives every round the loudest round's
   // answer. `entryState` is still right for the matchless row, where there is
   // no match to ask.
-  const state = match ? matchState(match) : entryState(entry);
+  const state = isForfeited
+    ? ("forfeited" as const)
+    : match
+      ? matchState(match)
+      : entryState(entry);
 
   if (scoring) {
     return (
@@ -88,7 +107,7 @@ export function LineRow({
       <span className="min-w-0 truncate text-[13px] text-[var(--ink-900)]">
         {ourLabel || "—"}{" "}
         <span style={{ color: "var(--ink-600)" }}>
-          {won === null ? "vs" : won ? "d." : "f."}
+          {isForfeited ? "vs" : won === null ? "vs" : won ? "d." : "f."}
         </span>{" "}
         {theirLabel || "—"}
         {entry.opponentSchool ? (
@@ -96,8 +115,9 @@ export function LineRow({
         ) : null}
       </span>
 
+      {/* A forfeited line carries no set score — never an invented one. */}
       <ScoreLine
-        sets={match ? scoreSetsFrom(match.score) : []}
+        sets={isForfeited ? [] : match ? scoreSetsFrom(match.score) : []}
         className="tabular text-right text-[13px]"
         style={{ color: "var(--ink-900)" }}
       />
@@ -106,6 +126,7 @@ export function LineRow({
         <Action
           state={state}
           match={match}
+          entry={entry}
           entryId={entry.id}
           matchId={match?.id ?? null}
           videoAllowed={supportsVideo(entry)}
@@ -120,6 +141,7 @@ export function LineRow({
 function Action({
   state,
   match,
+  entry,
   entryId,
   matchId,
   videoAllowed,
@@ -128,6 +150,7 @@ function Action({
 }: {
   state: ReturnType<typeof entryState>;
   match: EntryMatch | null;
+  entry: EventEntry;
   entryId: string;
   /** Which of the entry's matches this row is. Null on an unplayed line. */
   matchId: string | null;
@@ -135,10 +158,76 @@ function Action({
   canEdit: boolean;
   onScore: () => void;
 }) {
+  const router = useRouter();
+  const [confirming, setConfirming] = useState<"ours" | "theirs" | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function handleForfeit(side: "ours" | "theirs") {
+    startTransition(async () => {
+      const result = await setForfeit(entryId, side);
+      if ("error" in result) return;
+      setConfirming(null);
+      router.refresh();
+    });
+  }
+
+  function handleClearForfeit() {
+    startTransition(async () => {
+      const result = await setForfeit(entryId, null);
+      if ("error" in result) return;
+      router.refresh();
+    });
+  }
+
+  // Forfeited: show status and a clear action for editors.
+  if (state === "forfeited") {
+    if (!canEdit) {
+      const status = LINE_STATUS.forfeited!;
+      return (
+        <StatusChip tone={status.tone}>
+          {status.label}
+        </StatusChip>
+      );
+    }
+    return (
+      <RowAction onClick={handleClearForfeit}>
+        {pending ? "Clearing…" : "Clear forfeit"}
+      </RowAction>
+    );
+  }
+
   if (state === "empty") {
     if (!canEdit) return null;
+
+    // Confirming which side forfeited — a small inline picker.
+    if (confirming !== null) {
+      return (
+        <span className="flex items-center gap-2 text-[11px]">
+          <RowAction onClick={() => handleForfeit("ours")}>
+            {pending ? "…" : "Ours"}
+          </RowAction>
+          <span style={{ color: "var(--ink-300)" }}>·</span>
+          <RowAction onClick={() => handleForfeit("theirs")}>
+            {pending ? "…" : "Theirs"}
+          </RowAction>
+          <span style={{ color: "var(--ink-300)" }}>·</span>
+          <button
+            type="button"
+            onClick={() => setConfirming(null)}
+            className="text-[11px] text-[var(--ink-500)] outline-none"
+          >
+            Cancel
+          </button>
+        </span>
+      );
+    }
+
     return (
-      <RowAction onClick={onScore}>Add score</RowAction>
+      <span className="flex items-center gap-2">
+        <RowAction onClick={onScore}>Add score</RowAction>
+        <span style={{ color: "var(--ink-300)" }}>·</span>
+        <RowAction onClick={() => setConfirming("ours")}>Forfeit</RowAction>
+      </span>
     );
   }
 

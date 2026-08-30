@@ -1,10 +1,5 @@
 import { expect, test } from '@playwright/test';
 
-import {
-  isNarrowedToViewer,
-  resultsScope,
-  type ResultsScope,
-} from '@/lib/data/results-visibility';
 import { buildWeekendDual, teamKpis } from '@/lib/data/team-home-server';
 import { scheduleRowsFrom } from '@/lib/data/schedule-server';
 import type { MatchAnalysis } from '@/lib/data/match-analysis';
@@ -17,60 +12,17 @@ import type {
 } from '@/lib/schedule/types';
 
 /**
- * Team Home's refusal to report a subset as if it were the program.
- *
- * The failure this guards is not an access breach — no teammate's row reaches
- * the wrong login. It is a **confidently wrong number**, which is worse to find
- * because nothing on the page looks broken while it happens:
- * `program_event_entries` is visible to every member, the RESULT lives on
- * `matches` under a stricter policy, and `programs.roster_visible` is
- * `not null default false`. So a player on an ordinary program reads all nine
- * lines of a dual and receives exactly one match — and `dualScore()` counted
- * over that answers **0–1** on a dual the team won 4–3, with six played lines
- * reported as "Not played" and the KPI strip printing that one player's season
- * under labels reading "Team".
- *
- * Every assertion below is about the loader refusing, because the loader is the
- * only place that can: by the time a `WeekendDual` or a `TeamKpiTile[]` reaches
- * a component there is nothing left in it that says how many rows RLS withheld.
+ * The dual sheet and the KPI strip, off a full read.
  *
  * Since `20260830120000_matches_visible_to_members.sql` the `matches` read is
- * membership-only, so `resultsScope()` answers `"program"` for every member
- * and the narrowed read no longer occurs in production. The `OWN` fixtures
- * below keep exercising the refusal machinery directly until the sweep that
- * removes it.
+ * membership-only: every program member sees every line of a dual, so there
+ * is no narrower read left to guard against and no `resultsScope()` left to
+ * hold. What remains worth pinning is the shape these two readers produce —
+ * `buildWeekendDual`'s tally arithmetic and line structure, and
+ * `scheduleRowsFrom` / `teamKpis` reading off the same entries — because nothing
+ * about a wrong tally looks broken on screen; the card renders full
+ * `--ink-900` numbers either way.
  */
-
-const PROGRAM: ResultsScope = 'program';
-const OWN: ResultsScope = 'own';
-
-test.describe('resultsScope · which read the caller is holding', () => {
-  test('staff always read the program', () => {
-    // Three spellings of staff, because `program_members.role` has three. A
-    // rule written as `role === 'coach'` would narrow an owner's page.
-    for (const role of ['owner', 'coach', 'staff'] as const) {
-      expect(resultsScope({ role, rosterVisible: false })).toBe(PROGRAM);
-      expect(resultsScope({ role, rosterVisible: true })).toBe(PROGRAM);
-    }
-  });
-
-  test('a player reads the program regardless of the flag', () => {
-    // Membership-only read (20260830120000_matches_visible_to_members.sql):
-    // a player seeing their teammates' results is the point of a team
-    // workspace, so it is not a setting and `roster_visible` narrows nobody.
-    expect(resultsScope({ role: 'player', rosterVisible: true })).toBe(PROGRAM);
-    expect(resultsScope({ role: 'player', rosterVisible: false })).toBe(PROGRAM);
-  });
-
-  test('isNarrowedToViewer names the one scope that cannot be reported', () => {
-    expect(isNarrowedToViewer(OWN)).toBe(true);
-    expect(isNarrowedToViewer(PROGRAM)).toBe(false);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// The dual sheet
-// ---------------------------------------------------------------------------
 
 const EVENT: ProgramEvent = {
   id: 'e-1',
@@ -120,20 +72,13 @@ function entry(
     playerLabels: [`Player ${slot}`],
     opponentLabels: ['Rival Player'],
     opponentSchool: 'Rival State',
+    forfeit: null,
     matches,
   };
 }
 
-/**
- * A finished dual the program won 4–3, and the ONE line a restricted player
- * gets back from it.
- *
- * `visible` is the slot whose match survives RLS. Every other entry arrives
- * with its lineup intact and an empty `matches` array — which is exactly what
- * an unplayed line looks like, and the whole reason the scope has to be
- * established before anything is counted.
- */
-function dual(visible: string | null): EventDetail {
+/** A finished dual the program won 4–3. */
+function dual(): EventDetail {
   // 4–3: S1, S3, S5 ours, S2, S4, S6 theirs, and the doubles point ours.
   const results: [string, 'us' | 'them'][] = [
     ['S1', 'us'],
@@ -154,7 +99,7 @@ function dual(visible: string | null): EventDetail {
         slot,
         slot.startsWith('S') ? 'singles' : 'doubles',
         index,
-        visible === null || visible === slot ? [match(`m-${slot}`, winner)] : []
+        [match(`m-${slot}`, winner)]
       )
     ),
   };
@@ -162,7 +107,7 @@ function dual(visible: string | null): EventDetail {
 
 test.describe('buildWeekendDual · a coach reading the whole card', () => {
   test('counts the dual the schedule counts it', () => {
-    const sheet = buildWeekendDual(dual(null), PROGRAM);
+    const sheet = buildWeekendDual(dual());
 
     // Six singles points and the one point three doubles courts fold into.
     expect(sheet?.tally).toMatchObject({
@@ -176,65 +121,22 @@ test.describe('buildWeekendDual · a coach reading the whole card', () => {
     });
   });
 
-  test('every line is readable, because every line came back', () => {
-    const sheet = buildWeekendDual(dual(null), PROGRAM);
-    expect(sheet?.lines.every((line) => line.readable)).toBe(true);
-  });
-
-  test('an unplayed line on a full read is still an unplayed line', () => {
-    // The scope must not turn "nobody has played this" into "you may not see
-    // it". A coach's empty S6 has always meant the court is waiting, and the
-    // sheet's "Not played" is the true thing to say about it.
-    const detail = dual(null);
+  test('an unplayed line is still an unplayed line', () => {
+    const detail = dual();
     detail.entries = detail.entries.map((e) =>
       e.slot === 'S6' ? { ...e, matches: [] } : e
     );
 
-    const sheet = buildWeekendDual(detail, PROGRAM);
-    expect(sheet?.lines.find((line) => line.slot === 'S6')?.readable).toBe(true);
+    const sheet = buildWeekendDual(detail);
+    expect(sheet?.lines.find((line) => line.slot === 'S6')?.state).toBe(
+      'empty'
+    );
     expect(sheet?.tally?.decided).toBe(false);
     expect(sheet?.tally?.playedLines).toBe(8);
   });
-});
 
-test.describe('buildWeekendDual · a player who was handed one line of nine', () => {
-  test('is given no tally at all rather than the one counted from their line', () => {
-    const sheet = buildWeekendDual(dual('S3'), OWN);
-
-    // The number that would otherwise render in full `--ink-900`: `dualScore`
-    // over this read returns 1–0, and `anyPoint` is true the moment either
-    // side is non-zero, so the card would print a confident score for a dual
-    // it can see one ninth of. Null is the only honest answer, and it is the
-    // type that makes it unrenderable rather than merely discouraged.
-    expect(sheet?.tally).toBeNull();
-  });
-
-  test('the line they played is theirs to read', () => {
-    const sheet = buildWeekendDual(dual('S3'), OWN);
-    const own = sheet?.lines.find((line) => line.slot === 'S3');
-
-    expect(own?.readable).toBe(true);
-    expect(own?.won).toBe(true);
-    expect(own?.sets.length).toBeGreaterThan(0);
-  });
-
-  test('the eight they cannot read make no claim about the court', () => {
-    const sheet = buildWeekendDual(dual('S3'), OWN);
-    const others = sheet?.lines.filter((line) => line.slot !== 'S3') ?? [];
-
-    expect(others).toHaveLength(8);
-    // Not "Not played" — that is a fact about the court, and this is a fact
-    // about the reader. `state` stays `empty` because the entry genuinely
-    // carries no match; `readable` is what stops the sheet spelling it.
-    expect(others.every((line) => line.readable)).toBe(false);
-    expect(others.every((line) => line.state === 'empty')).toBe(true);
-  });
-
-  test('still hands over the lineup, which is theirs to see', () => {
-    // `program_event_entries` is visible to every member and the schedule page
-    // already shows a player their lineup. Withholding the tally is not a
-    // reason to withhold the card.
-    const sheet = buildWeekendDual(dual('S3'), OWN);
+  test('the lineup and opponent come through with the tally', () => {
+    const sheet = buildWeekendDual(dual());
     expect(sheet?.lines).toHaveLength(9);
     expect(sheet?.lines.map((line) => line.slot)).toContain('S6');
     expect(sheet?.opponent).toBe('Rival State');
@@ -281,57 +183,28 @@ const ROSTER = new Set(['ana-user']);
 /**
  * `scheduleRowsFrom` off the same `dual()` fixture `buildWeekendDual` is
  * tested against above — the schedule list's `teamScore` is `dualScore` over
- * the same entries as the dual sheet's tally, so a read that narrows one
- * narrows the other. `tests/team-home-schedule-reads.spec.ts` covers the
- * arithmetic on a full read; this covers the refusal.
+ * the same entries as the dual sheet's tally, so this covers the same
+ * arithmetic from the other reader. `tests/team-home-schedule-reads.spec.ts`
+ * covers the rest of the mapping.
  */
-test.describe('scheduleRowsFrom · the schedule list withholds the same score', () => {
+test.describe('scheduleRowsFrom · the schedule list agrees with the dual sheet', () => {
   test('a full read gets the team score', () => {
-    const detail = dual(null);
-    const [row] = scheduleRowsFrom(
-      {
-        events: [detail.event],
-        entriesByEvent: new Map([[detail.event.id, detail.entries]]),
-      },
-      PROGRAM
-    );
+    const detail = dual();
+    const [row] = scheduleRowsFrom({
+      events: [detail.event],
+      entriesByEvent: new Map([[detail.event.id, detail.entries]]),
+    });
     expect(row.teamScore).toEqual({ us: 4, them: 3 });
-  });
-
-  test('a player handed one line of nine gets no team score at all', () => {
-    // Same dual the program won 4–3; `dual('S3')` is the one line a restricted
-    // player's read comes back with. Uncounted, `dualScore` over what arrived
-    // would print 1–0 under the fixture's name.
-    const detail = dual('S3');
-    const [row] = scheduleRowsFrom(
-      {
-        events: [detail.event],
-        entriesByEvent: new Map([[detail.event.id, detail.entries]]),
-      },
-      OWN
-    );
-    expect(row.teamScore).toBeNull();
   });
 });
 
-test.describe('teamKpis · the strip is the program or it is nothing', () => {
-  test('a full read gets its tiles', () => {
-    const tiles = teamKpis(SEASON, JOBS, [], [], ROSTER, PROGRAM);
+test.describe('teamKpis · the strip over a full read', () => {
+  test('gets its tiles', () => {
+    const tiles = teamKpis(SEASON, JOBS, [], [], ROSTER);
 
     expect(tiles.length).toBeGreaterThan(0);
     expect(tiles.find((tile) => tile.key === 'matches-analyzed')?.value).toBe(
       '3'
     );
-  });
-
-  test('a narrowed read gets none, on identical rows', () => {
-    // The same three rows, and they are real: three analyzed matches, three
-    // wins, a computable sets-won mean. Every figure would render, every one
-    // would be one player's, and every label would say the program's. There is
-    // no caveat that fixes that — `sampleNote()` fires only under
-    // `SMALL_SAMPLE_MIN`, so a player with five of their own matches gets no
-    // warning at all — so the strip is withheld, which is the answer the
-    // Roster page already gives to the same flag.
-    expect(teamKpis(SEASON, JOBS, [], [], ROSTER, OWN)).toEqual([]);
   });
 });

@@ -81,7 +81,6 @@ export interface TeamSettingsInput {
   homeVenue: string;
   defaultSurface: string | null;
   season: string;
-  rosterVisible: boolean;
   playersCanUpload: boolean;
 }
 
@@ -100,7 +99,6 @@ export async function saveTeamSettings(
     p_home_venue: input.homeVenue,
     p_default_surface: input.defaultSurface,
     p_season: input.season,
-    p_roster_visible: input.rosterVisible,
     p_players_can_upload: input.playersCanUpload,
   });
 
@@ -286,7 +284,7 @@ export async function setPlayersCanUpload(
   const { data: program, error: readError } = await supabase
     .from("programs")
     .select(
-      "school_name, team, conference, home_venue, default_surface, season, roster_visible"
+      "school_name, team, conference, home_venue, default_surface, season"
     )
     .eq("id", programId)
     .maybeSingle();
@@ -303,7 +301,6 @@ export async function setPlayersCanUpload(
     p_home_venue: program.home_venue ?? "",
     p_default_surface: program.default_surface,
     p_season: program.season ?? "",
-    p_roster_visible: program.roster_visible,
     p_players_can_upload: next,
   });
 

@@ -178,13 +178,18 @@ export function DualForm({
   // `createDual` stores a line with an empty opponent list, which is the state
   // most duals are entered in: the other school's lineup lands the night
   // before, long after the fixture went on the schedule.
+  //
+  // A forfeited line counts too, with nobody named on either side. Dropping it
+  // for having no player would write eight lines under a dual that has nine
+  // points to give, and `dualScore` would then read a decided 4-3 as a 4-3 out
+  // of eight — the total quietly disagreeing with the sport.
   const filled = lines
     .map((line) => ({
       line,
       ours: splitNames(line.ourLabels.join(" / ")),
       theirs: splitNames(line.theirLabels.join(" / ")),
     }))
-    .filter((row) => row.ours.length > 0);
+    .filter((row) => row.ours.length > 0 || row.line.forfeit !== null);
 
   // Two squads at one school are two programs with two budgets, and the
   // directory returns both rows under the same school name. Picking the wrong
@@ -273,9 +278,13 @@ export function DualForm({
           discipline: row.line.discipline,
           slot: row.line.slot,
           position: index,
-          playerUserIds: row.line.ourIds,
-          playerLabels: row.ours,
-          opponentLabels: row.theirs,
+          // A forfeited line carries no player on either side. The editor
+          // already cleared both when the marker went on, so these are empty
+          // anyway — stated here so the write cannot drift from the row.
+          playerUserIds: row.line.forfeit === null ? row.line.ourIds : [],
+          playerLabels: row.line.forfeit === null ? row.ours : [],
+          opponentLabels: row.line.forfeit === null ? row.theirs : [],
+          forfeit: row.line.forfeit,
         })),
       });
 
@@ -462,6 +471,7 @@ function seedLineup(ladder: LadderPlayer[]): LineupLine[] {
       ourIds: player ? [player.userId] : [],
       ourLabels: player ? [player.name] : [],
       theirLabels: [],
+      forfeit: null,
     };
   });
 
@@ -474,6 +484,7 @@ function seedLineup(ladder: LadderPlayer[]): LineupLine[] {
       ourIds: pair.map((player) => player.userId),
       ourLabels: pair.map((player) => player.name),
       theirLabels: [],
+      forfeit: null,
     };
   });
 

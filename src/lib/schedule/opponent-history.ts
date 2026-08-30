@@ -11,9 +11,9 @@
  *
  * A pure mapping over an already-read `ProgramSchedule`, same shape as
  * `roster-match.ts`: no Supabase client, no `"use client"`, testable without a
- * database. Callers here are staff-only builder screens, so `resultsScope` is
- * always `program` for them — there is no narrowed-read case to gate against,
- * unlike `scheduleRowsFrom`.
+ * database. It counts over the duals it was handed and cannot tell they are
+ * all of them — the same caveat `dualScore` carries — which no longer arises
+ * in practice, since every member of a program reads that program's matches.
  */
 
 import { dualScore } from "@/lib/schedule/entry-state";

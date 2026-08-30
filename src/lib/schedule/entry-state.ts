@@ -37,7 +37,15 @@ export type EntryState =
   | "working"
   /** There is a report to read. */
   | "ready"
-  | "failed";
+  | "failed"
+  /**
+   * One side forfeited — the line is decided without a match ever being played.
+   *
+   * `entry.forfeit` says WHICH side: `'ours'` awards the point to them,
+   * `'theirs'` awards it to us. A forfeited line must never mint a match, enter
+   * the analysis pipeline, or carry an invented set score.
+   */
+  | "forfeited";
 
 /**
  * Sets won by each side, from the game counts.
@@ -73,12 +81,14 @@ function setsWon(match: EntryMatch): { us: number; them: number } | null {
  * multi-gigabyte file. A doubles line can still take a SwingVision export —
  * that path parses numbers and never goes near the vision pipeline.
  *
+ * No, if it is forfeited. A forfeited line has no match to analyse.
+ *
  * The frames in round 22 draw a doubles video (`doubles2.mp4 → D2`) because
  * they were designed before the vendor's singles-only limit was known. This is
  * the correction.
  */
 export function supportsVideo(entry: EventEntry): boolean {
-  return entry.discipline === "singles";
+  return entry.discipline === "singles" && entry.forfeit === null;
 }
 
 /** Did we win this match? Null when it has no score, or the sets are level. */
@@ -89,28 +99,53 @@ export function matchWon(match: EntryMatch): boolean | null {
 }
 
 /**
+ * Did we win this line via forfeit?
+ *
+ * `'theirs'` = opponent forfeited = point to us = we won.
+ * `'ours'` = our side forfeited = point to them = we lost.
+ * Null when the line is not forfeited.
+ */
+export function forfeitWon(entry: EventEntry): boolean | null {
+  if (entry.forfeit === "theirs") return true;
+  if (entry.forfeit === "ours") return false;
+  return null;
+}
+
+/**
  * Has this line been played at all — is there a decided match under it?
  *
- * **Only ever an answer about the rows it was handed.** `program_event_entries`
- * is visible to every member of a program, but the RESULT lives on `matches`,
- * whose policy is stricter — so a player on a program with
- * `programs.roster_visible` unset reads every line of a dual and receives one
- * match. To this function, and to everything built on it, a line RLS withheld
- * and a line nobody has played are the same line: `entry.matches` is empty
- * either way, and there is nothing in the entry to tell them apart.
+ * A forfeited line counts as decided: the point is awarded, and the line is
+ * done. This is what makes `dualScore`'s `decided` turn true once every line
+ * is either played or forfeited.
  *
- * That is not a defect to fix here — the distinction genuinely is not in the
- * data — but it is a false `false` waiting for a caller who reduces a whole
- * card to one figure. The caller has to establish which read it is looking at
- * *before* asking, from the viewer's role and the program's flag:
- * `resultsScope()` in `lib/data/results-visibility.ts`.
+ * **Only ever an answer about the rows it was handed.** To this function, and
+ * to everything built on it, a line RLS withheld and a line nobody has played
+ * are the same line: `entry.matches` is empty either way, and there is nothing
+ * in the entry to tell them apart. That is not a defect to fix here — the
+ * distinction genuinely is not in the data — but it is a false `false` waiting
+ * for any caller that reduces a whole card to one figure.
+ *
+ * `program_event_entries` and `matches` used to be readable at different
+ * widths, which made that hazard real: a player read every line of a dual and
+ * received one match. `20260830120000_matches_visible_to_members` closed it at
+ * the policy level — every member of a program reads that program's matches —
+ * so the two now come back together and there is no narrowed read left to
+ * guard against. Widen `matches` no further than `program_event_entries`
+ * without re-reading this comment.
  */
 export function entryPlayed(entry: EventEntry): boolean {
+  if (entry.forfeit !== null) return true;
   return entry.matches.some((match) => matchWon(match) !== null);
 }
 
-/** Did our side take this line? A tournament entry is "won" if any match was. */
+/**
+ * Did our side take this line? A tournament entry is "won" if any match was.
+ *
+ * A forfeit where `entry.forfeit === 'theirs'` counts as a win for us.
+ */
 function entryWon(entry: EventEntry): boolean {
+  if (entry.forfeit === "theirs") return true;
+  if (entry.forfeit === "ours") return false;
   return entry.matches.some((match) => matchWon(match) === true);
 }
 
@@ -145,10 +180,14 @@ export function matchState(match: EntryMatch): EntryState {
  * ready, then waiting, and no-video when none of them apply. It is the right
  * answer for a summary (the schedule list, the upload queue) and the wrong one
  * for a single row — use `matchState` there.
+ *
+ * A forfeited entry shortcuts before match analysis: a forfeit is decided, and
+ * nothing about the matches underneath matters.
  */
 const STATE_PRECEDENCE = ["failed", "working", "ready", "waiting"] as const;
 
 export function entryState(entry: EventEntry): EntryState {
+  if (entry.forfeit !== null) return "forfeited";
   if (entry.matches.length === 0) return "empty";
   const states = entry.matches.map(matchState);
   return STATE_PRECEDENCE.find((s) => states.includes(s)) ?? "no-video";
@@ -161,12 +200,17 @@ export function entryState(entry: EventEntry): EntryState {
  * the three doubles. Never stored — a stored team score is a number that stops
  * agreeing with the rows above it the first time a result is corrected.
  *
+ * A forfeited line counts as a decided point for the non-forfeiting side, so a
+ * dual whose nine lines include forfeits still totals 9 and reads `decided`
+ * once every line is either played or forfeited.
+ *
  * **Counted over the entries given, and it cannot tell that they are all of
  * them.** Every branch here goes through `entryPlayed` / `entryWon`, so a read
- * RLS narrowed produces a confident, wrong, low score: 0–1 on a dual won 4–3,
- * with `decided` false and six played lines counted as unplayed. Do not call
- * this on behalf of a reader who may not see every line — see `entryPlayed`
- * above and `resultsScope()` in `lib/data/results-visibility.ts`.
+ * RLS narrowed would produce a confident, wrong, low score: 0–1 on a dual won
+ * 4–3, with `decided` false and six played lines counted as unplayed. No such
+ * read exists today — the `matches` policy is now as wide as the entries' —
+ * but do not call this on behalf of a reader who may not see every line. See
+ * `entryPlayed` above.
  */
 export function dualScore(entries: EventEntry[]): {
   us: number;

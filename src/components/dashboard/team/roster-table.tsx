@@ -48,8 +48,8 @@ import type {
  * Design 9a. Two audiences on one component, because they are looking at the
  * same list. Staff get the controls; a player gets the list, and the database
  * has already decided what they see — `program_roster_full` carries the
- * membership check, and the match policy gives a player the squad's results
- * only where the program has `roster_visible` set.
+ * membership check, and the match policy gives every member the squad's
+ * results.
  *
  * ── Two kinds of row, one shape ─────────────────────────────────────────────
  * A coach-managed player has no login and no seat. They are not a lesser row:

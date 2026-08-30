@@ -30,10 +30,10 @@ import { MatchesSkeleton } from "@/components/dashboard/matches/matches-skeleton
  * personal workspace.
  *
  * Team — `program_id = <active program>`, and nothing else. Who may see which
- * of those rows is already decided by `visible_match_ids()`: staff get every
- * match, a player gets their own plus the program's only when
- * `programs.roster_visible` is on. Repeating that rule here would be a second
- * answer that can drift from the one actually enforcing it.
+ * of those rows is already decided by `visible_match_ids()`: every member of
+ * the program reads that program's matches, staff and player alike. Repeating
+ * that rule here would be a second answer that can drift from the one actually
+ * enforcing it.
  *
  * ── A known limit, not an oversight ─────────────────────────────────────────
  * The realtime subscription filters `created_by=eq.<viewer>`, because

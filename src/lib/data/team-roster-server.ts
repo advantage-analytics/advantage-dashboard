@@ -28,9 +28,8 @@ import type { MemberRole } from "@/lib/data/team-settings-server";
  * ── Access ──────────────────────────────────────────────────────────────────
  * Nothing here filters on who may see what. `program_roster_full` is SECURITY
  * DEFINER and carries the membership check; `matches` is gated by a policy that
- * gives staff the whole program and gives a player either the whole program or
- * only their own rows, depending on `programs.roster_visible`. So a player's
- * roster is this same query returning fewer rows, not a second code path. A
+ * gives every member of the program the whole program's rows, staff and player
+ * alike. So a player's roster is this same query, not a second code path. A
  * rule restated in TypeScript is a second answer able to drift from the
  * enforced one.
  *
@@ -144,8 +143,6 @@ export interface RosterData {
   invites: RosterInvite[];
   /** Program-wide default. A member's own flag can still override it. */
   playersCanUpload: boolean;
-  /** Whether players see the whole squad's matches or only their own. */
-  rosterVisible: boolean;
   /** What the invite dialogs state about the program's account allowance. */
   seats: SeatUsage;
 }
@@ -290,7 +287,7 @@ export const getRosterData = cache(async function getRosterData(
         .order("created_at", { ascending: false }),
       supabase
         .from("programs")
-        .select("players_can_upload, roster_visible, time_zone")
+        .select("players_can_upload, time_zone")
         .eq("id", programId)
         .maybeSingle(),
       // First serve needs the match ids, so it cannot join the siblings above —
@@ -481,7 +478,6 @@ export const getRosterData = cache(async function getRosterData(
       invitedOn: shortDate(row.created_at as string),
     })),
     playersCanUpload: Boolean(programResult.data?.players_can_upload),
-    rosterVisible: Boolean(programResult.data?.roster_visible),
     // A row-returning function: PostgREST hands back an array of one.
     seats: (Array.isArray(seatResult.data) ? seatResult.data[0] : seatResult.data) ?? {
       seats: 0,

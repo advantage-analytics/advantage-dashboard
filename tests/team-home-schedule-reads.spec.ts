@@ -96,6 +96,7 @@ function entry(id: string, overrides: Partial<EventEntry> = {}): EventEntry {
     playerLabels: ['Reid'],
     opponentLabels: ['Blake'],
     opponentSchool: 'Rival State',
+    forfeit: null,
     matches: [],
     ...overrides,
   };
@@ -150,8 +151,7 @@ test.describe('scheduleRowsFrom · one mapping, two surfaces', () => {
       {
         events: [dualEvent()],
         entriesByEvent: new Map([['ev', entries]]),
-      },
-      'program'
+      }
     );
     expect(row.teamScore).toBeNull();
     expect(row.entryCount).toBe(2);
@@ -165,8 +165,7 @@ test.describe('scheduleRowsFrom · one mapping, two surfaces', () => {
         entriesByEvent: new Map([
           ['ev', [entry('a', { matches: [won('m1')] })]],
         ]),
-      },
-      'program'
+      }
     );
     expect(row.teamScore).toBeNull();
     expect(row.playedCount).toBe(1);
@@ -192,8 +191,7 @@ test.describe('scheduleRowsFrom · one mapping, two surfaces', () => {
       {
         events: [dualEvent()],
         entriesByEvent: new Map([['ev', entries]]),
-      },
-      'program'
+      }
     );
     // Four singles courts plus the doubles point.
     expect(row.teamScore).toEqual({ us: 5, them: 2 });
@@ -202,8 +200,7 @@ test.describe('scheduleRowsFrom · one mapping, two surfaces', () => {
 
   test('an event with no entries is a row, not a gap', () => {
     const [row] = scheduleRowsFrom(
-      { events: [dualEvent()], entriesByEvent: new Map() },
-      'program'
+      { events: [dualEvent()], entriesByEvent: new Map() }
     );
     expect(row.entryCount).toBe(0);
     expect(row.playedCount).toBe(0);
