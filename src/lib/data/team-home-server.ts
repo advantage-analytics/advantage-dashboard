@@ -56,7 +56,7 @@ import {
 } from "@/lib/schedule/entry-state";
 import type { EventEntry, EventKind, EventSite } from "@/lib/schedule/types";
 import { INVITE_TTL_HOURS } from "@/lib/services/programs/tokens";
-import type { ProgramRole } from "@/lib/workspace/types";
+import type { ProgramOrgType, ProgramRole } from "@/lib/workspace/types";
 
 /**
  * What the program's home page reads.
@@ -1589,7 +1589,13 @@ export function teamKpis(
 export async function getTeamHomeData(
   programId: string,
   billingMonth: string,
-  viewerRole: ProgramRole
+  viewerRole: ProgramRole,
+  /**
+   * The workspace's `programs.org_type`, for the budget meter's cap figure
+   * only — a custom org shows (and is enforced) the reduced tier, a verified
+   * collegiate program the 75h one. See `getProgramUsage()` / `quotaTierFor()`.
+   */
+  orgType: ProgramOrgType | null
 ): Promise<TeamHomeData> {
   const supabase = await createClient();
 
@@ -1608,7 +1614,7 @@ export async function getTeamHomeData(
     { data: seasonRows },
     programSchedule,
   ] = await Promise.all([
-      getProgramUsage(programId, billingMonth),
+      getProgramUsage(programId, billingMonth, orgType),
       getTeamSettings(programId),
       supabase
         .from("matches")

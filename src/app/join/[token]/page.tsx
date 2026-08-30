@@ -16,6 +16,8 @@ import {
 } from "@/components/join/join-forms";
 import { resolveJoinState } from "@/lib/services/programs/invite-acceptance";
 import { getMonthlyCapSeconds } from "@/lib/services/splitstep/config";
+import { monthlyCapSecondsFor } from "@/lib/services/splitstep/quota";
+import type { ProgramOrgType } from "@/lib/workspace/types";
 
 export const metadata = { title: "Join your program" };
 
@@ -82,13 +84,19 @@ function JoinPane({
  * Read here, on the server, from the function `reserveQuota()` asks when it
  * decides whether a submission is refused — so the number a player is shown at
  * the moment they agree to join is the number that will actually be enforced.
+ * Which is why it takes the program's org type: a custom org's allowance is
+ * the reduced tier (`quotaTierFor()`), and quoting a club's invitee the
+ * collegiate 75 hours would break exactly the promise this comment makes.
  * The page hands the forms two plain numbers rather than letting them import
  * this: `splitstep/config` also carries the vendor's internal name, and none of
  * that belongs in a client bundle.
  */
-function quotaHours(): { programHours: number; personalHours: number } {
+function quotaHours(orgType: ProgramOrgType): {
+  programHours: number;
+  personalHours: number;
+} {
   return {
-    programHours: getMonthlyCapSeconds("program") / 3600,
+    programHours: monthlyCapSecondsFor({ kind: "team", orgType }) / 3600,
     personalHours: getMonthlyCapSeconds("individual") / 3600,
   };
 }
@@ -150,7 +158,11 @@ export default async function JoinPage({
   const { token } = await params;
   const query = await searchParams;
   const state = await resolveJoinState(decodeURIComponent(token));
-  const { programHours, personalHours } = quotaHours();
+  // 'college' where the state carries no org type — those branches (not_found,
+  // expired, already_used, wrong_account) never render an allowance figure.
+  const { programHours, personalHours } = quotaHours(
+    "programOrgType" in state ? state.programOrgType : "college"
+  );
 
   // "Not now" is a query flag and nothing else — see `NotNowLink`. It only
   // means anything on the three screens that were offering a Join button;

@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { programDisplayName } from "@/lib/data/programs-server";
+import type { ProgramOrgType } from "@/lib/workspace/types";
 import { hashToken } from "./tokens";
 
 /**
@@ -58,6 +59,7 @@ export type JoinState =
   | {
       kind: "ready";
       programName: string;
+      programOrgType: ProgramOrgType;
       role: JoinRole;
       email: string;
       inviterName: InviterName;
@@ -72,6 +74,7 @@ export type JoinState =
   | {
       kind: "sign_in";
       programName: string;
+      programOrgType: ProgramOrgType;
       role: JoinRole;
       email: string;
       inviterName: InviterName;
@@ -80,6 +83,7 @@ export type JoinState =
   | {
       kind: "sign_up";
       programName: string;
+      programOrgType: ProgramOrgType;
       role: JoinRole;
       email: string;
       inviterName: InviterName;
@@ -89,6 +93,14 @@ export interface InviteRecord {
   id: string;
   programId: string;
   programName: string;
+  /**
+   * `programs.org_type`. The terms screens (8.2's footer) quote the program's
+   * monthly analysis allowance, and a custom org's is the reduced tier — see
+   * `quotaTierFor()` — so the invite has to say which kind of program it is
+   * for the promised number to be the enforced one. Falls back to 'college'
+   * when the program row went missing, alongside `programName`'s own fallback.
+   */
+  programOrgType: ProgramOrgType;
   email: string;
   role: JoinRole;
   expiresAt: string;
@@ -134,7 +146,7 @@ export async function loadInvite(token: string): Promise<InviteRecord | null> {
   const [{ data: program }, { data: inviter }] = await Promise.all([
     admin
       .from("programs")
-      .select("school_name, team")
+      .select("school_name, team, org_type")
       .eq("id", invite.program_id as string)
       .maybeSingle(),
     invitedBy
@@ -155,6 +167,9 @@ export async function loadInvite(token: string): Promise<InviteRecord | null> {
           program.team as string | null
         )
       : "your program",
+    programOrgType: program
+      ? (program.org_type as ProgramOrgType)
+      : "college",
     email: (invite.email as string).toLowerCase(),
     role: invite.role as JoinRole,
     expiresAt: invite.expires_at as string,
@@ -216,7 +231,7 @@ export async function resolveJoinState(token: string): Promise<JoinState> {
   const invite = await loadInvite(token);
   if (!invite) return { kind: "not_found" };
 
-  const { programName, role, email, inviterName } = invite;
+  const { programName, programOrgType, role, email, inviterName } = invite;
 
   // Same order as `accept_program_invite`, and for the same reason: "you
   // already did this" is more use to someone than "it expired" when both are
@@ -234,7 +249,14 @@ export async function resolveJoinState(token: string): Promise<JoinState> {
   if (user) {
     const signedInAs = (user.email ?? "").toLowerCase();
     if (signedInAs === email) {
-      return { kind: "ready", programName, role, email, inviterName };
+      return {
+        kind: "ready",
+        programName,
+        programOrgType,
+        role,
+        email,
+        inviterName,
+      };
     }
     return {
       kind: "wrong_account",
@@ -247,6 +269,7 @@ export async function resolveJoinState(token: string): Promise<JoinState> {
   return {
     kind: (await accountExists(email)) ? "sign_in" : "sign_up",
     programName,
+    programOrgType,
     role,
     email,
     inviterName,

@@ -34,7 +34,11 @@ export default async function UsagePage() {
   const [personal, program] = await Promise.all([
     getPersonalUsage(workspace.viewer.id, billingMonth),
     workspace.active.kind === "team"
-      ? getProgramUsage(workspace.active.id, billingMonth)
+      ? getProgramUsage(
+          workspace.active.id,
+          billingMonth,
+          workspace.active.orgType
+        )
       : null,
   ]);
 

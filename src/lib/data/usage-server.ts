@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getMonthlyCapSeconds } from "@/lib/services/splitstep/config";
+import { monthlyCapSecondsFor } from "@/lib/services/splitstep/quota";
+import type { ProgramOrgType } from "@/lib/workspace/types";
 
 /**
  * What Settings › Usage reads.
@@ -97,10 +99,24 @@ export function emptyProgramUsage(billingMonth: string): ProgramUsage {
  */
 export async function getProgramUsage(
   programId: string,
-  billingMonth: string
+  billingMonth: string,
+  /**
+   * The program's `org_type`, from the workspace the caller already resolved.
+   * Decides the cap FIGURE only — the ledger reads below are unchanged. A
+   * verified collegiate program shows the program tier; a custom org shows the
+   * individual figure `reserveQuota()` will actually enforce against it, per
+   * `quotaTierFor()` — a page showing 75 hours while the spend refuses at 2
+   * would be exactly the divergence this file's header forbids.
+   *
+   * Null is `Workspace.orgType`'s type-level "personal" case, which no caller
+   * here has: every team workspace resolves a NOT NULL `org_type`. If it ever
+   * arrives, `quotaTierFor()` maps it to the reduced figure — the fail-closed
+   * direction for a number that meters paid vendor spend.
+   */
+  orgType: ProgramOrgType | null
 ): Promise<ProgramUsage> {
   const supabase = await createClient();
-  const capSeconds = getMonthlyCapSeconds("program");
+  const capSeconds = monthlyCapSecondsFor({ kind: "team", orgType });
 
   const [totalResult, linesResult] = await Promise.all([
     supabase.rpc("program_usage_total", {
