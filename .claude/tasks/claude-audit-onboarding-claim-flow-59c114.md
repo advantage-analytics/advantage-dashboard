@@ -18,7 +18,7 @@ straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Gate first login into two-question onboarding
-- **status:** blocked
+- **status:** todo
 - **model:** fable
 - **files:** src/app/onboarding/ (new), src/app/dashboard/layout.tsx, src/components/claim/role-choice.tsx (copy source), supabase/migrations/ (new, applied to live DB), src/lib/services/programs/invite-acceptance.ts (guess)
 - **done when:**
@@ -30,7 +30,7 @@ ready).
 - **notes:** Design: Onboarding & Team Setup.dc.html Stage 1 (screens 1.2, 1.3 — 1.1 is explicitly out of scope). /claim's RoleChoice carries the exact card copy to reuse. `users.role` is persona-only (migration 20260806144035 split entitlement into users.plan) — do not touch plan. The junior→parent mapping is a judgment call; profile settings can refine to academy later. T3 re-points the coach route, T5 the junior route. Full-screen pane style per design (no dashboard chrome). Read .skills/advantage-analytics-design/SKILL.md first.
 
 ## T2 · Non-college team workspace: schema + creation action
-- **status:** blocked
+- **status:** todo
 - **model:** fable
 - **files:** supabase/migrations/ (new, applied to live DB), src/lib/services/programs/ (new create action), src/lib/workspace/active-workspace-server.ts, src/lib/workspace/types.ts (guess)
 - **done when:**
@@ -55,7 +55,7 @@ ready).
 - **notes:** Design: screens 5.0, 5.1, 7.1, 7.2 (7.3's empty home already exists as /dashboard/team's first-steps). Public /claim URLs stay reachable for signed-out coaches arriving via referral links — the fork is the signed-in front door, not a replacement. Read docs/ui-revamp-guardrails.md and the design skill before touching sidebar chrome.
 
 ## T4 · Bind program claims to the signed-in account
-- **status:** blocked
+- **status:** todo
 - **model:** fable
 - **files:** src/lib/services/programs/claim-actions.ts, src/app/claim/verify/route.ts, src/components/claim/setup-form.tsx (guess)
 - **done when:**
@@ -111,7 +111,7 @@ ready).
 - **notes:** Known defect: resend-timer.tsx's button only calls setLeft(60) today. The action needs program key + email context the page already has in its URL params.
 
 ## T9 · Wire the claim lifecycle emails
-- **status:** blocked
+- **status:** todo
 - **model:** opus
 - **files:** src/lib/services/programs/admin-actions.ts, src/lib/services/programs/claim-actions.ts, src/lib/services/email/index.ts, src/lib/services/email/templates/claim.ts, src/lib/services/email/templates/invite-request.ts
 - **done when:**
