@@ -79,7 +79,7 @@ export function MatchesGrid({
               {col.field ? (
                 <button
                   onClick={() => onSort(col.field!)}
-                  className="eyebrow-sm inline-flex items-center gap-0.5 hover:text-[#525252] hover:underline underline-offset-2 cursor-pointer transition-[color] duration-200"
+                  className="eyebrow-sm inline-flex items-center gap-0.5 hover:text-[var(--ink-700)] hover:underline underline-offset-2 cursor-pointer transition-[color] duration-200"
                 >
                   {col.label}
                   <SortIcon field={col.field} sortField={sortField} sortDir={sortDir} />
@@ -93,7 +93,7 @@ export function MatchesGrid({
         {/* Rows — no per-item entrance tween. Content must never depend on an
             animation frame to become visible; PageTransition already carries
             the route-level entrance. */}
-        <div className="border-t border-[#F3F3F3]">
+        <div className="border-t border-[var(--border-hairline)]">
           {matches.map((match) => (
             <MatchCardList
               key={match.id}

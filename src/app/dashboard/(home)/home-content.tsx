@@ -11,8 +11,10 @@ import { FocusCard } from "@/components/dashboard/home/focus-card";
 import HomeAiInsight from "@/components/dashboard/home/home-ai-insight";
 import { NewReportsSubline } from "@/components/dashboard/home/new-reports-subline";
 import { UsageFooter } from "@/components/dashboard/shared/usage-footer";
+import { ActivityWidget } from "@/components/dashboard/home/activity-widget";
 import type { EvidencePart } from "@/lib/ui/insight-evidence";
 import type { PersonalUsage } from "@/lib/data/usage-server";
+import type { PersonalActivity } from "@/lib/data/personal-activity-server";
 
 const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
 
@@ -32,6 +34,8 @@ interface HomeContentProps {
   /** Computed evidence for the Focus card, or null when there is none to state. */
   insightEvidence: EvidencePart[] | null;
   insightSignature: string;
+  /** 52-week match-day heatmap for the Activity widget. */
+  activity: PersonalActivity;
 }
 
 export default function HomeContent({
@@ -45,6 +49,7 @@ export default function HomeContent({
   matchCount,
   insightEvidence,
   insightSignature,
+  activity,
 }: HomeContentProps) {
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
@@ -87,9 +92,12 @@ export default function HomeContent({
               initial={skipAnimation ? false : { opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, ease: EASE_CURVE, delay: 0.15 }}
-              className="min-w-0"
+              className="flex min-w-0 flex-col gap-4"
             >
               <RecentActivity userId={userId} playerIds={playerIds} />
+              {/* Under the matches card in the main column — the design's
+                  default `activityUnderMatches` placement (artboard 1b). */}
+              <ActivityWidget activity={activity} />
             </motion.div>
 
             <motion.div

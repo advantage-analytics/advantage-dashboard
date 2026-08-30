@@ -54,7 +54,7 @@ export function MatchCardList({ match, isNew, unseen }: MatchCardListProps): Rea
 
   return (
     <div
-      className={`${LIST_ROW_FRAME} group relative h-[52px] border-b border-[#F3F3F3] transition-colors duration-200 hover:bg-[var(--surface-muted)]${
+      className={`${LIST_ROW_FRAME} group relative h-[52px] border-b border-[var(--border-hairline)] transition-colors duration-200 hover:bg-[var(--surface-muted)]${
         isNew ? " animate-[highlight-new-match_1.5s_ease-out_0.4s_both]" : ""
       }`}
       style={LIST_GRID_COLS}

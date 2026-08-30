@@ -6,6 +6,7 @@ import { getMyPlayerIds } from "@/lib/data/player-identity-server";
 import { getOverallPerformance } from "@/lib/data/performance-server";
 import type { KpiCardData } from "@/lib/data/performance-server";
 import { getPersonalUsage } from "@/lib/data/usage-server";
+import { getPersonalActivity } from "@/lib/data/personal-activity-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { buildInsightEvidence } from "@/lib/ui/insight-evidence";
 
@@ -19,7 +20,7 @@ export default async function Home() {
 
   const userId = data.claims.sub;
   const billingMonth = currentBillingMonth();
-  const [{ data: user }, performanceData, myPlayerIds, usage] = await Promise.all([
+  const [{ data: user }, performanceData, myPlayerIds, usage, activity] = await Promise.all([
     supabase
       .from("users")
       .select("first_name, last_name")
@@ -30,6 +31,9 @@ export default async function Home() {
     // this page share one round trip.
     getMyPlayerIds(),
     getPersonalUsage(userId, billingMonth),
+    // 52-week match-day heatmap for the Activity widget. Personal scope only
+    // (created_by = me AND program_id IS NULL), matching the Matches list.
+    getPersonalActivity(userId),
   ]);
 
   // Real name only — when absent, the greeting drops the name rather than
@@ -88,6 +92,7 @@ export default async function Home() {
           matchCount={matchCount}
           insightEvidence={insightEvidence}
           insightSignature={insightSignature}
+          activity={activity}
         />
       </div>
     </div>

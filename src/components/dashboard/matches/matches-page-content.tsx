@@ -3,7 +3,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useSearchParams, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, ArrowUpDown, ChevronLeft, ChevronRight, ChevronDown, Filter as FilterIcon } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, ChevronDown, Filter as FilterIcon } from "lucide-react";
 import { EmptyMatches } from "./empty-matches";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import {
@@ -307,6 +307,11 @@ function SortDropdown({
   const dirLabel = sortField === "date"
     ? (sortDir === "asc" ? "Oldest" : "Newest")
     : (sortDir === "asc" ? "A–Z" : "Z–A");
+  // One quiet phrase, the canvas register: "Newest first" for the default date
+  // sort, "{Field} A–Z" for the text fields.
+  const sortPhrase = sortField === "date"
+    ? (sortDir === "asc" ? "Oldest first" : "Newest first")
+    : `${activeLabel} ${dirLabel}`;
 
   return (
     <div className="relative" ref={ref} onKeyDown={handleContainerKeyDown}>
@@ -317,12 +322,18 @@ function SortDropdown({
         aria-haspopup="listbox"
         aria-controls={open ? listboxId : undefined}
         title={`Sorted by ${activeLabel}, ${dirLabel}`}
-        className="flex items-center gap-1.5 h-8 px-3.5 rounded-full ring-1 ring-inset ring-[#EAECF0] text-xs font-medium text-[#525252] bg-white hover:bg-[#EFF6FF] hover:ring-[#3B82F6]/30 hover:text-[#3B82F6] transition-[color,background-color] duration-200"
+        className={`flex h-7 items-center gap-1.5 rounded-[var(--radius-element)] px-2 text-[12px] transition-colors duration-150 ${open ? "" : "hover:bg-[var(--surface-subtle)]"}`}
+        style={{
+          background: open ? "var(--surface-subtle)" : undefined,
+          color: open ? "var(--ink-900)" : "var(--ink-600)",
+        }}
       >
-        <ArrowUpDown className="w-3.5 h-3.5" />
-        {activeLabel}
-        <span className="text-[10px] text-[#888888]">{dirLabel}</span>
-        <ChevronDown className={`w-3 h-3 text-[#888888] transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+        {sortPhrase}
+        <ChevronDown
+          className={`w-3 h-3 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          strokeWidth={1.5}
+          style={{ color: "var(--ink-400)" }}
+        />
       </button>
 
       <AnimatePresence>
@@ -335,7 +346,12 @@ function SortDropdown({
             id={listboxId}
             role="listbox"
             aria-label="Sort options"
-            className="absolute top-full right-0 mt-1.5 min-w-[160px] bg-white border border-[#E5E5EA] rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)] z-20 py-1.5 px-1.5"
+            className="absolute top-full right-0 z-20 mt-1.5 min-w-[160px] rounded-xl border px-1.5 py-1.5"
+            style={{
+              background: "var(--surface-card)",
+              borderColor: "var(--border-medium)",
+              boxShadow: "var(--shadow-dropdown)",
+            }}
           >
             {SORT_OPTIONS.map((opt, idx) => {
               const isActive = sortField === opt.field;
@@ -347,15 +363,16 @@ function SortDropdown({
                   aria-selected={isActive}
                   tabIndex={idx === focusIdx ? 0 : -1}
                   onClick={() => { onSort(opt.field); setOpen(false); }}
-                  className={`flex items-center justify-between w-full px-2.5 py-2 text-xs rounded-lg transition-[background-color,color] duration-200 ${
-                    isActive
-                      ? "bg-[#EBF2FD] text-[#3B82F6] font-medium"
-                      : "text-[#525252] hover:bg-[#F5F5F5]"
-                  }`}
+                  className={`flex w-full items-center justify-between rounded-[var(--radius-element)] px-2.5 py-2 text-xs transition-colors duration-150 ${isActive ? "" : "hover:bg-[var(--surface-subtle)]"}`}
+                  style={{
+                    background: isActive ? "var(--surface-subtle)" : undefined,
+                    color: isActive ? "var(--ink-900)" : "var(--ink-700)",
+                    fontWeight: isActive ? 500 : 400,
+                  }}
                 >
                   {opt.label}
                   {isActive && (
-                    <span className="text-[10px] text-[#3B82F6]">{sortDir === "asc" ? "↑" : "↓"}</span>
+                    <span className="text-[10px]" style={{ color: "var(--ink-500)" }}>{sortDir === "asc" ? "↑" : "↓"}</span>
                   )}
                 </button>
               );
@@ -786,7 +803,11 @@ export function MatchesPageContent({
           />
 
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#CCCCCC]" />
+            <Search
+              className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2"
+              strokeWidth={1.5}
+              style={{ color: "var(--ink-500)" }}
+            />
             <input
               ref={searchRef}
               type="text"
@@ -796,10 +817,16 @@ export function MatchesPageContent({
               title="Search by event, opponent, or round"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-8 w-[216px] pl-8 pr-8 rounded-full ring-1 ring-inset ring-[#EAECF0] text-xs text-[#0D0D0D] placeholder:text-[#CCCCCC] focus:outline-none transition-[color,background-color] duration-200 bg-white"
+              className="h-7 w-[200px] rounded-[var(--radius-element)] bg-transparent pl-[30px] pr-7 text-[12px] transition-colors duration-150 placeholder:text-[var(--ink-400)] hover:bg-[var(--surface-subtle)] focus:bg-[var(--surface-subtle)] focus:outline-none"
+              style={{ color: "var(--ink-900)" }}
             />
             {!search && (
-              <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-medium text-[#CCCCCC] pointer-events-none">/</kbd>
+              <kbd
+                className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-medium"
+                style={{ color: "var(--ink-400)" }}
+              >
+                /
+              </kbd>
             )}
           </div>
 
@@ -837,8 +864,8 @@ export function MatchesPageContent({
       {/* Table / Grid */}
       {sorted.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16">
-          <Search className="h-8 w-8 text-[#D9D9D9] mb-3" />
-          <p className="text-[14px] font-medium text-[#0D0D0D] mb-1">No matches found</p>
+          <Search className="mb-3 h-8 w-8" strokeWidth={1.5} style={{ color: "var(--ink-300)" }} />
+          <p className="mb-1 text-[14px] font-medium" style={{ color: "var(--ink-900)" }}>No matches found</p>
           {(filters.length > 0 || search || lifecycle !== "all") && (
             <div className="mt-1 flex flex-col items-center gap-2">
               {search && (
@@ -852,7 +879,8 @@ export function MatchesPageContent({
                   setSearch("");
                   setLifecycle("all");
                 }}
-                className="text-xs text-[#888888] hover:text-[#3B82F6] underline underline-offset-2 transition-[color] duration-200"
+                className="text-[11px] font-medium"
+                style={{ color: "var(--blue)" }}
               >
                 Clear all filters
               </button>
@@ -874,14 +902,14 @@ export function MatchesPageContent({
           hairline, so the last one closes the table; a second line 16px below it
           just read as a doubled edge. Whitespace separates the two now. */}
       {sorted.length > 0 && (
-        <div className="flex items-center justify-between mt-5">
-          <div className="flex items-center gap-3 text-xs text-[#888888]">
-            <span className="tabular-nums">
+        <div className="mt-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-micro tabular">
               {rangeStart}–{rangeEnd} of {sorted.length}
             </span>
-            <span className="text-[#D9D9D9]">&middot;</span>
+            <span className="size-[3px] rounded-full" style={{ background: "var(--ink-300)" }} aria-hidden="true" />
             <div className="flex items-center gap-2">
-              <span>Results per page</span>
+              <span className="text-micro">Results per page</span>
               <div className="relative" ref={pageSizeRef} onKeyDown={handlePageSizeKeyDown}>
                 <button
                   ref={pageSizeTriggerRef}
@@ -889,13 +917,17 @@ export function MatchesPageContent({
                   aria-expanded={pageSizeOpen}
                   aria-haspopup="listbox"
                   aria-controls={pageSizeOpen ? "pagesize-listbox" : undefined}
-                  className="flex items-center gap-1 h-8 px-2.5 rounded-full ring-1 ring-inset ring-[#EAECF0] bg-white text-xs font-medium text-[#525252] hover:bg-[#EFF6FF] hover:ring-[#3B82F6]/30 hover:text-[#3B82F6] transition-[color,background-color] duration-200 tabular-nums"
+                  className={`flex h-7 items-center gap-1 rounded-[var(--radius-element)] px-2 text-[12px] tabular-nums transition-colors duration-150 ${pageSizeOpen ? "" : "hover:bg-[var(--surface-subtle)]"}`}
+                  style={{
+                    background: pageSizeOpen ? "var(--surface-subtle)" : undefined,
+                    color: pageSizeOpen ? "var(--ink-900)" : "var(--ink-600)",
+                  }}
                 >
                   {pageSize}
                   <ChevronDown
-                    className={`w-3 h-3 text-[#888888] transition-transform duration-200 ${
-                      pageSizeOpen ? "rotate-180" : ""
-                    }`}
+                    className={`h-3 w-3 transition-transform duration-200 ${pageSizeOpen ? "rotate-180" : ""}`}
+                    strokeWidth={1.5}
+                    style={{ color: "var(--ink-400)" }}
                   />
                 </button>
                 <AnimatePresence>
@@ -908,7 +940,12 @@ export function MatchesPageContent({
                       id="pagesize-listbox"
                       role="listbox"
                       aria-label="Results per page"
-                      className="absolute bottom-full left-0 mb-1.5 min-w-[56px] bg-white border border-[#E5E5EA] rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)] z-20 py-1 px-1"
+                      className="absolute bottom-full left-0 z-20 mb-1.5 min-w-[56px] rounded-xl border px-1 py-1"
+                      style={{
+                        background: "var(--surface-card)",
+                        borderColor: "var(--border-medium)",
+                        boxShadow: "var(--shadow-dropdown)",
+                      }}
                     >
                       {PAGE_SIZES.map((size, idx) => (
                         <button
@@ -921,11 +958,12 @@ export function MatchesPageContent({
                             setPageSize(size);
                             setPageSizeOpen(false);
                           }}
-                          className={`flex items-center justify-center w-full px-2 py-1.5 text-xs tabular-nums rounded-lg transition-[background-color,color] duration-200 ${
-                            pageSize === size
-                              ? "bg-[#EBF2FD] text-[#3B82F6] font-medium"
-                              : "text-[#525252] hover:bg-[#F5F5F5]"
-                          }`}
+                          className={`flex w-full items-center justify-center rounded-[var(--radius-element)] px-2 py-1.5 text-xs tabular-nums transition-colors duration-150 ${pageSize === size ? "" : "hover:bg-[var(--surface-subtle)]"}`}
+                          style={{
+                            background: pageSize === size ? "var(--surface-subtle)" : undefined,
+                            color: pageSize === size ? "var(--ink-900)" : "var(--ink-700)",
+                            fontWeight: pageSize === size ? 500 : 400,
+                          }}
                         >
                           {size}
                         </button>
@@ -943,11 +981,12 @@ export function MatchesPageContent({
               disabled={safePage <= 1}
               aria-label="Previous page"
               title="Previous page"
-              className="flex items-center justify-center w-8 h-8 rounded-full ring-1 ring-inset ring-[#EAECF0] text-[#525252] hover:bg-[#EFF6FF] hover:ring-[#3B82F6]/30 hover:text-[#3B82F6] disabled:opacity-30 disabled:pointer-events-none transition-[color,background-color] duration-200"
+              className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-element)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] disabled:pointer-events-none disabled:opacity-30"
+              style={{ color: "var(--ink-600)" }}
             >
-              <ChevronLeft className="w-3.5 h-3.5" />
+              <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.5} />
             </button>
-            <span className="text-xs text-[#525252] tabular-nums px-2">
+            <span className="px-2 text-[12px] tabular-nums" style={{ color: "var(--ink-600)" }}>
               {safePage} / {totalPages}
             </span>
             <button
@@ -955,9 +994,10 @@ export function MatchesPageContent({
               disabled={safePage >= totalPages}
               aria-label="Next page"
               title="Next page"
-              className="flex items-center justify-center w-8 h-8 rounded-full ring-1 ring-inset ring-[#EAECF0] text-[#525252] hover:bg-[#EFF6FF] hover:ring-[#3B82F6]/30 hover:text-[#3B82F6] disabled:opacity-30 disabled:pointer-events-none transition-[color,background-color] duration-200"
+              className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-element)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] disabled:pointer-events-none disabled:opacity-30"
+              style={{ color: "var(--ink-600)" }}
             >
-              <ChevronRight className="w-3.5 h-3.5" />
+              <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.5} />
             </button>
           </div>
         </div>
