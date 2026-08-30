@@ -32,12 +32,13 @@ export const LIST_GRID_COLS = {
 } as const;
 
 /**
- * The row frame, shared with the header row that sits above these. Column
- * widths already travel together via LIST_GRID_COLS; the gap and the side
- * padding have to as well, or a header cell drifts out of line with the column
- * it names and nothing catches it.
+ * The grid frame, shared with the header row above. Only the columns and the
+ * column gap travel together here — the header sits flush at the card's inset
+ * while the data rows pull out 16px each side for a rounded, inset hover wash
+ * (SKILL 8a). Both still land their content on the same x because the row's
+ * `-mx-4 px-4` cancels out to the header's flush edge.
  */
-export const LIST_ROW_FRAME = "grid items-center gap-x-3 pl-3.5 pr-9";
+export const LIST_ROW_FRAME = "grid items-center gap-x-3";
 
 interface MatchCardListProps {
   match: DisplayMatch;
@@ -54,7 +55,7 @@ export function MatchCardList({ match, isNew, unseen }: MatchCardListProps): Rea
 
   return (
     <div
-      className={`${LIST_ROW_FRAME} group relative h-[52px] border-b border-[var(--border-hairline)] transition-colors duration-200 hover:bg-[var(--surface-muted)]${
+      className={`${LIST_ROW_FRAME} group relative -mx-4 h-[52px] rounded-[var(--radius-element)] px-4 transition-colors duration-200 hover:bg-[var(--surface-muted)]${
         isNew ? " animate-[highlight-new-match_1.5s_ease-out_0.4s_both]" : ""
       }`}
       style={LIST_GRID_COLS}

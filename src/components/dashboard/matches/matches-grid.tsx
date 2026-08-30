@@ -66,42 +66,50 @@ export function MatchesGrid({
       </div>
 
       <div className="hidden lg:block">
-        {/* Column headers — 28px tall, no underline of their own; the rows
-            below open with a single top hairline and carry the rest. */}
-        <div className={`${LIST_ROW_FRAME} h-7`} style={LIST_GRID_COLS} role="row">
-          {COLUMNS.map((col, i) => (
-            <div
-              key={col.label || `col-${i}`}
-              className={`min-w-0 ${col.label === "Date" ? "text-right" : ""}`}
-              role="columnheader"
-              aria-sort={col.field === sortField ? (sortDir === "asc" ? "ascending" : "descending") : undefined}
-            >
-              {col.field ? (
-                <button
-                  onClick={() => onSort(col.field!)}
-                  className="eyebrow-sm inline-flex items-center gap-0.5 hover:text-[var(--ink-700)] hover:underline underline-offset-2 cursor-pointer transition-[color] duration-200"
-                >
-                  {col.label}
-                  <SortIcon field={col.field} sortField={sortField} sortDir={sortDir} />
-                </button>
-              ) : (
-                <span className="eyebrow-sm">{col.label}</span>
-              )}
-            </div>
-          ))}
-        </div>
-        {/* Rows — no per-item entrance tween. Content must never depend on an
-            animation frame to become visible; PageTransition already carries
-            the route-level entrance. */}
-        <div className="border-t border-[var(--border-hairline)]">
-          {matches.map((match) => (
-            <MatchCardList
-              key={match.id}
-              match={match}
-              isNew={match.id === newMatchId}
-              unseen={unseenIds?.has(match.id)}
-            />
-          ))}
+        {/* The whole table lives in one card (design 1e/1f/1g): surface-card,
+            8px 24px 12px padding, a hairline under the header only, and rows
+            that carry a rounded inset hover instead of dividers (SKILL 8a). */}
+        <div className="surface-card" style={{ padding: "8px 24px 12px" }}>
+          {/* Column headers — flush at the card inset, hairline underneath. */}
+          <div
+            className={`${LIST_ROW_FRAME} border-b border-[var(--border-hairline)] pb-2 pt-3`}
+            style={LIST_GRID_COLS}
+            role="row"
+          >
+            {COLUMNS.map((col, i) => (
+              <div
+                key={col.label || `col-${i}`}
+                className={`min-w-0 ${col.label === "Date" ? "text-right" : ""}`}
+                role="columnheader"
+                aria-sort={col.field === sortField ? (sortDir === "asc" ? "ascending" : "descending") : undefined}
+              >
+                {col.field ? (
+                  <button
+                    onClick={() => onSort(col.field!)}
+                    className="eyebrow-sm inline-flex items-center gap-0.5 hover:text-[var(--ink-700)] hover:underline underline-offset-2 cursor-pointer transition-[color] duration-200"
+                  >
+                    {col.label}
+                    <SortIcon field={col.field} sortField={sortField} sortDir={sortDir} />
+                  </button>
+                ) : (
+                  <span className="eyebrow-sm">{col.label}</span>
+                )}
+              </div>
+            ))}
+          </div>
+          {/* Rows — no per-item entrance tween. Content must never depend on an
+              animation frame to become visible; PageTransition already carries
+              the route-level entrance. */}
+          <div className="pt-1">
+            {matches.map((match) => (
+              <MatchCardList
+                key={match.id}
+                match={match}
+                isNew={match.id === newMatchId}
+                unseen={unseenIds?.has(match.id)}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </>
