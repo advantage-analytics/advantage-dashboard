@@ -129,25 +129,25 @@ ready).
   - [ ] A forfeited line mints no match and never enters the analysis pipeline: nothing can upload against it and it contributes no statistics
 - **notes:** The author's rationale — a forfeit happens when a team can't field enough players, so it is a real scheduling scenario, not a design flourish. `supabase/migrations/` runs ~100 migrations behind the live database, so verify the current shape of `program_event_entries` via the Supabase MCP before writing DDL. Read `docs/ui-revamp-guardrails.md`: a forfeit scored for the wrong side is exactly the silent-wrongness class this repo guards against — the team score would be confidently wrong with nothing looking broken.
 
-## T10 · Make team match results visible to everyone by default
-- **status:** todo
-- **model:** opus
-- **files:** a new `supabase/migrations/*_results_visible_default.sql` (guess), `src/lib/data/results-visibility.ts` (doc comment only)
-- **done when:**
-  - [ ] A migration sets `programs.roster_visible` to `default true` and backfills every existing row to `true`, committed AND applied to the live database — the flag is inert for the ~1,939 directory programs that have no members, and `true` is the intended meaning for every program that has a team
-  - [ ] A player on a program nobody has touched since sees their teammates' match results: `resultsScope({ role: "player", rosterVisible })` returns `"program"` without anyone changing a setting
-  - [ ] A coach can still choose "Coaches only" and a program set that way withholds exactly as before — the default moves, the capability does not
-  - [ ] `results-visibility.ts`'s doc comment no longer calls the narrow read "the ordinary case, not an edge" — true before this change, false after, and that sentence is the one a later reader would trust
-- **notes:** Author's ruling: a player on a team workspace seeing everyone's matches is the point of the product, so it is the default. Verify `programs`' current shape via the Supabase MCP before writing DDL — `supabase/migrations/` runs ~100 behind live. Does NOT invalidate T2's criterion 5: a coach can still set coaches-only, so the withholding branch stays reachable and must stay correct. Routed `opus` rather than `fable` because no design decision is left open, and above `sonnet` because it writes DDL to the live database and backfills 1,940 rows.
-
-## T11 · Rename roster_visible to what it actually gates
+## T10 · Team match results are always visible to team members
 - **status:** todo
 - **model:** fable
-- **needs:** T10
-- **files:** a new `supabase/migrations/*_rename_results_visible.sql` (guess), `src/lib/data/results-visibility.ts`, `src/components/dashboard/settings/team-settings-form.tsx`, `src/components/dashboard/settings/team-actions.ts`, `src/components/dashboard/team/roster-vocabulary.tsx`
+- **files:** a new `supabase/migrations/*_matches_visible_to_members.sql` (guess), `src/lib/data/results-visibility.ts`
 - **done when:**
-  - [ ] `programs.roster_visible` is renamed to `results_visible` and `update_program_settings`'s `p_roster_visible` parameter follows, applied to the live database — Postgres refuses to rename an input parameter through `CREATE OR REPLACE FUNCTION`, so this is a drop-and-recreate of that 9-argument function and the migration must leave no window where the settings page's named-argument call resolves to nothing
-  - [ ] Every TypeScript call site follows the rename (`rosterVisible` → `resultsVisible`, `p_roster_visible` → `p_results_visible`) and `npx tsc --noEmit` is clean — the client calls the RPC with NAMED arguments, so a missed one fails at runtime rather than at compile time
-  - [ ] The settings row stops being labelled "Roster visibility" and names match results instead, since this flag has never gated the roster — `program_players` is member-visible with no reference to it
-  - [ ] A player on a "coaches only" program still sees the roster and still sees all nine lines of a dual with both sides' names, and still cannot see results — proving the rename moved a name and nothing else
-- **notes:** The `matches` SELECT policy is the ONLY policy referencing this column; `program_players`, `program_event_entries` and `program_events` are all member-visible unconditionally. The current label is therefore actively misleading — it reads as gating the roster while gating results, and `roster-vocabulary.tsx` already tells the true story ("Match results are visible to coaches only"), so two screens describe one flag differently. Split from T10 because that one is a default plus a backfill, while this is a column rename under a live RLS policy and a function signature the UI depends on.
+  - [ ] The `matches` SELECT policy's program clause becomes membership-only — any member of the program reads that program's matches, staff and player alike — replacing `is_program_staff(program_id) or (user_program_role(program_id) = 'player' and exists (select 1 from programs p where p.id = matches.program_id and p.roster_visible))`. Committed AND applied to the live database
+  - [ ] The three non-program clauses are untouched — `(select auth.uid()) = created_by`, `player1_id in (my_player_ids())`, `player2_id in (my_player_ids())` — so a personal match stays personal and no non-member gains a read
+  - [ ] `resultsScope()` returns `"program"` for every program member regardless of `roster_visible`, and `results-visibility.ts`'s doc comment no longer describes the narrow read as the ordinary case
+  - [ ] Verified against the live database rather than by reading the policy: a `player` on a program with `roster_visible = false` — 1,940 of 1,941 programs today — reads a teammate's match row that the same query refused before the migration
+- **notes:** Author's ruling: a player seeing their teammates' results is the point of a team workspace, so it is not a setting. This supersedes the earlier "flip the default" framing — the gate goes, rather than its default moving. It also closes the coaches-only option, which is the intended consequence. `supabase/migrations/` runs ~100 behind live, so read the policy's current text via the Supabase MCP before writing DDL; it was captured on 2026-08-30 and the program clause is the last `OR` branch.
+
+## T11 · Remove the results-visibility machinery now that nothing gates
+- **status:** todo
+- **model:** fable
+- **needs:** T2, T10
+- **files:** a new `supabase/migrations/*_drop_roster_visible.sql` (guess), `src/lib/data/results-visibility.ts`, `src/components/dashboard/team/roster-vocabulary.tsx`, `src/components/dashboard/settings/team-settings-form.tsx`, `src/components/dashboard/settings/team-actions.ts`, `src/components/dashboard/team/dual-sheet.tsx`, `src/components/dashboard/schedule/dual-detail.tsx`, `src/components/dashboard/schedule/event-detail-pane.tsx`, `src/lib/data/team-home-server.ts`
+- **done when:**
+  - [ ] `programs.roster_visible` is dropped and `update_program_settings`'s `p_roster_visible` parameter with it — Postgres refuses to change an input parameter through `CREATE OR REPLACE FUNCTION`, so this is a drop-and-recreate of that 9-argument function, and the settings page calls it with NAMED arguments, so a missed rename fails at runtime rather than at `tsc`
+  - [ ] The "Roster visibility" settings row is removed — it never gated the roster in the first place; `program_players` is member-visible with no reference to the flag
+  - [ ] `resultsScope`, `isNarrowedToViewer`, `ResultsScope`, `RESULTS_WITHHELD_SENTENCE`, `RESULTS_WITHHELD_LABEL`, `resultsVisibilityPhrase`/`Sentence` and `DualSheetLine.readable` are deleted along with every withholding branch they feed — Team Home's dual sheet, the event page, the schedule pane, and `dualTally`'s scope gate — and `npx tsc --noEmit` is clean with no unused-import or dead-branch remnants
+  - [ ] A player and a coach on the same program see identical match results on Team Home, the schedule pane and the event page — verified by reading the rendered branches, since there is no longer a scope to switch on
+- **notes:** Split from T10 because that is one policy statement and this is a column drop, a function signature the UI depends on, and a cross-surface sweep. `needs: T2` as well as T10 because this deletes the pane's own withholding branch — running it before T2 lands would sweep the other surfaces and then let T2 reintroduce a branch that no longer has a question to answer.
