@@ -30,7 +30,7 @@ ready).
 - **notes:** Design: Onboarding & Team Setup.dc.html Stage 1 (screens 1.2, 1.3 — 1.1 is explicitly out of scope). /claim's RoleChoice carries the exact card copy to reuse. `users.role` is persona-only (migration 20260806144035 split entitlement into users.plan) — do not touch plan. The junior→parent mapping is a judgment call; profile settings can refine to academy later. T3 re-points the coach route, T5 the junior route. Full-screen pane style per design (no dashboard chrome). Read .skills/advantage-analytics-design/SKILL.md first.
 
 ## T2 · Non-college team workspace: schema + creation action
-- **status:** todo
+- **status:** blocked
 - **model:** fable
 - **files:** supabase/migrations/ (new, applied to live DB), src/lib/services/programs/ (new create action), src/lib/workspace/active-workspace-server.ts, src/lib/workspace/types.ts (guess)
 - **done when:**
