@@ -28,7 +28,13 @@ import { formatShortDate } from "@/lib/ui/date-format";
  * tracked `Badge`, so the width is set by the "RESULT" header above it.
  */
 export const LIST_GRID_COLS = {
-  gridTemplateColumns: "62px minmax(150px,1.1fr) 116px minmax(160px,1.3fr) minmax(140px,1.2fr) 52px 13px",
+  // Date is 84px, not the canvas's 52px: the mock only drew this-year dates
+  // ("Aug 22"), but formatShortDate stamps the year once a match isn't from
+  // this year ("Nov 13, 2025" ≈ 79px). At 52px that right-aligned, nowrap date
+  // overflowed leftward into the Analysis cell; 84px holds the longest form
+  // with a little air. Analysis min lifts 140→150 so its label keeps room at
+  // the narrow end after Date takes its width back.
+  gridTemplateColumns: "62px minmax(150px,1.1fr) 116px minmax(160px,1.3fr) minmax(150px,1.2fr) 84px 13px",
 } as const;
 
 /**
