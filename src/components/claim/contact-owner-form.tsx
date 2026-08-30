@@ -7,6 +7,7 @@ import {
   requestInvite,
   raiseObjection,
 } from "@/lib/services/programs/claim-actions";
+import { CLAIM_ROLES } from "@/lib/services/programs/claim-roles";
 import {
   CLAIM_BUTTON,
   CLAIM_FIELD,
@@ -71,6 +72,7 @@ export function ContactOwnerForm({
 }) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState(defaultName);
+  const [role, setRole] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
@@ -99,7 +101,13 @@ export function ContactOwnerForm({
     startTransition(async () => {
       const result =
         kind === "request"
-          ? await requestInvite({ programKey, email, name, note })
+          ? await requestInvite({
+              programKey,
+              email,
+              name,
+              note,
+              role: role || undefined,
+            })
           : await raiseObjection({ programKey, email, note });
 
       if (!result.ok) setError(result.error);
@@ -141,6 +149,32 @@ export function ContactOwnerForm({
             className={CLAIM_FIELD}
           />
         </div>
+
+        {/* The same five answers the claim setup form offers — one vocabulary
+            product-wide, so "assistant coach" means the same thing whether it
+            arrives on a claim or on a request. Optional, because a player
+            asking to join fits none of the staff roles and should not be made
+            to pick one anyway. */}
+        {kind === "request" && (
+          <div>
+            <label htmlFor="role" className={CLAIM_LABEL}>
+              Your role (optional)
+            </label>
+            <select
+              id="role"
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              className={`${CLAIM_FIELD} cursor-pointer`}
+            >
+              <option value="">Choose one</option>
+              {CLAIM_ROLES.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       <div>
@@ -156,7 +190,7 @@ export function ContactOwnerForm({
           rows={3}
           placeholder={
             kind === "request"
-              ? "Add anything that helps them place you — your role, or when you joined."
+              ? "Add anything that helps them place you — when you joined, or who you train with."
               : "They left the program in June."
           }
           className={`${CLAIM_FIELD} h-auto resize-none py-2.5 leading-[1.55]`}

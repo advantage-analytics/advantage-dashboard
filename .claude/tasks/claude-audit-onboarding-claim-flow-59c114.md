@@ -90,7 +90,7 @@ ready).
 - **notes:** Design: screens 4.1–4.3. 4.1's caption is the rule for criterion 1: "'On Advantage' is the only status a player is allowed to see about a program they don't belong to." The 4.2 rows are the same trio as 8.2 (T10) — keep the copy in one shared place if practical. ?ref is a display/campaign parameter, not a program key — no lookup required.
 
 ## T7 · Structured role on invite requests
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/ (new, applied to live DB), src/components/claim/contact-owner-form.tsx, src/lib/services/programs/claim-actions.ts, src/components/admin/review-rows.tsx (guess)
 - **done when:**

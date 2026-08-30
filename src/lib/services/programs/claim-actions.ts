@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkClaimEmail } from "./domain-match";
+import { toClaimRole, type ClaimRoleValue } from "./claim-roles";
 import { nextClaimStatus, type ClaimStatus } from "./claim-state";
 import { siteUrl } from "@/lib/site-url";
 
@@ -289,6 +290,12 @@ async function fileRequest(row: {
   programId?: string | null;
   email: string;
   name?: string | null;
+  /**
+   * Already allowlisted by the caller — this column is read back by admins,
+   * so it takes one of the five `CLAIM_ROLES` values or nothing, never free
+   * text. `program_requests_role_check` enforces the same set in the database.
+   */
+  role?: ClaimRoleValue | null;
   note?: string | null;
   schoolName?: string | null;
   team?: string | null;
@@ -299,6 +306,7 @@ async function fileRequest(row: {
     program_id: row.programId ?? null,
     email: row.email.trim().toLowerCase(),
     name: row.name?.trim() || null,
+    role: row.role ?? null,
     note: row.note?.trim() || null,
     school_name: row.schoolName?.trim() || null,
     team: row.team ?? null,
@@ -331,6 +339,8 @@ export async function requestInvite(input: {
   email: string;
   name?: string;
   note?: string;
+  /** One of `CLAIM_ROLES`, or absent. Anything else files as "no role". */
+  role?: string;
 }): Promise<ActionOutcome> {
   const email = input.email.trim();
   if (!email) return { ok: false, error: "Add an email address so they can reply." };
@@ -343,6 +353,10 @@ export async function requestInvite(input: {
     programId,
     email,
     name: input.name,
+    // Validated against the allowlist HERE, not trusted from the form. A value
+    // off the list is not an error worth failing the request over — the field
+    // is optional, so it degrades to the request that was always filed.
+    role: toClaimRole(input.role),
     note: input.note,
   });
 }

@@ -70,7 +70,7 @@ export default async function ReviewQueuePage() {
       db
         .from("program_requests")
         .select(
-          "id, kind, email, name, note, school_name, team, created_at, programs(school_name, team)"
+          "id, kind, email, name, role, note, school_name, team, created_at, programs(school_name, team)"
         )
         .eq("status", "open")
         .order("created_at", { ascending: true }),

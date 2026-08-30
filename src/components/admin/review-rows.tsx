@@ -10,6 +10,7 @@ import {
   resolveRequest,
 } from "@/lib/services/programs/admin-actions";
 import { divisionLabel, teamLabel } from "@/lib/data/programs-server";
+import { claimRoleLabel } from "@/lib/services/programs/claim-roles";
 import { cn } from "@/lib/utils";
 
 const CARD =
@@ -245,6 +246,14 @@ export function RequestRow({ request }: { request: Row }) {
         {request.name ? (
           <span className="ml-2 font-sans text-[var(--ink-500)]">
             {request.name as string}
+          </span>
+        ) : null}
+        {/* Structured, so it renders as the label it was picked as — not
+            whatever the note happened to say. Old rows have no role and show
+            nothing, same as before the column existed. */}
+        {request.role ? (
+          <span className="ml-2 font-sans text-[var(--ink-500)]">
+            · {claimRoleLabel(request.role as string)}
           </span>
         ) : null}
       </p>
