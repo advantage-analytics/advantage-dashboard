@@ -1,6 +1,9 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { completeClaim } from "@/lib/services/programs/claim-actions";
+import {
+  completeClaim,
+  completeClaimWithToken,
+} from "@/lib/services/programs/claim-actions";
 import { WORKSPACE_COOKIE } from "@/lib/workspace/active-workspace-server";
 
 /**
@@ -12,8 +15,20 @@ import { WORKSPACE_COOKIE } from "@/lib/workspace/active-workspace-server";
  * which is what stops an anonymous script parking an open claim on all 1,940
  * programs.
  *
- * The claim is identified by the SESSION's email and an httpOnly cookie, never
- * by an id in the URL — there is nothing here to tamper with.
+ * The claim is identified by the SESSION's email, never by an id in the URL —
+ * there is nothing here to tamper with.
+ *
+ * ── The second way in: `?token=` ────────────────────────────────────────────
+ * A claim started while SIGNED IN cannot ride the magic link — exchanging it
+ * would switch the session to (or mint) an account for the school address,
+ * when the whole point is that the coach keeps the account they have. Those
+ * claims arrive here carrying a token that was emailed to the school address
+ * and is stored only as a hash. It is proof of mailbox possession, not an
+ * identifier: nothing about it selects whose claim or which program — the row
+ * it hashes to decided that when the claim started, bound server-side to the
+ * session that started it and to the program the token was issued for.
+ * `completeClaimWithToken` requires that same session, so the link is inert
+ * in anyone else's hands.
  *
  * ── Why a Route Handler and not a page ──────────────────────────────────────
  * This was a Server Component that performed the write. Two things were wrong
@@ -27,8 +42,11 @@ import { WORKSPACE_COOKIE } from "@/lib/workspace/active-workspace-server";
  * already claimed" race into the user's problem. The RPC is idempotent for the
  * owner, so a refresh here is safe either way.
  */
-export async function GET() {
-  const result = await completeClaim();
+export async function GET(request: Request) {
+  const token = new URL(request.url).searchParams.get("token");
+  const result = token
+    ? await completeClaimWithToken(token)
+    : await completeClaim();
 
   // A code, never the copy — see `ClaimFailure`. The screen owns the wording.
   if (!result.ok) redirect(`/claim/verify/failed?reason=${result.reason}`);

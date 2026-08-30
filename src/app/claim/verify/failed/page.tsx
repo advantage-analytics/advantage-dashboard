@@ -53,6 +53,20 @@ const COPY: Record<
     sub: "Something went wrong on our side. Nothing was created — opening the link again is safe.",
     restart: false,
   },
+  // The two endings only the signed-in link can reach. That link finishes a
+  // setup started from an existing account, so it works solely in a session
+  // belonging to that account — the email says so, and these two screens are
+  // where the other arrangements land.
+  "sign-in-first": {
+    heading: "Sign in, then open the link again",
+    sub: "This link finishes a setup you started while signed in, so it only works once you are. Sign in with that account — any device works — then open the link from your email again.",
+    restart: false,
+  },
+  "wrong-account": {
+    heading: "That link belongs to a different account",
+    sub: "The setup this link finishes was started from another account. Sign in with the account that started it and open the link again — or start fresh from this one, and we'll send a link of its own.",
+    restart: false,
+  },
 };
 
 export default async function ClaimFailedPage({

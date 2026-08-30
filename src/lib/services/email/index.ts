@@ -19,6 +19,7 @@
  * | Analysis ready           | job reaches `completed` · pref `notifyAnalysisReady`  |
  * | Analysis failed          | job reaches `failed`/`derivation_failed` · pref `notifyAnalysisFailed` |
  * | Weekly team digest       | Monday schedule · pref `weeklyTeamDigest`      |
+ * | Claim verify address     | signed-in `startClaim()` / `resendClaim()` — WIRED |
  * | Claim approved           | claim enters `objection_window`                 |
  * | Claim declined           | `rejectClaim()` / `handBackClaim()`             |
  * | Claim objection notice   | claim enters `objection_window`, to each contact |
@@ -26,7 +27,7 @@
  * | Invite request declined  | `resolveRequest()` with a decline                |
  * | Expired-invite nudge     | `requestFreshInvite()` — WIRED                  |
  *
- * Only the two marked WIRED are called today. The rest are written, reviewed
+ * Only the rows marked WIRED are called today. The rest are written, reviewed
  * and ready — each one needs its trigger point to call it, which is a change in
  * the action or route that owns that transition, not a change here.
  */
@@ -63,9 +64,11 @@ export {
 } from "./templates/team-digest";
 
 export {
+  claimVerifyAddressEmail,
   claimApprovedEmail,
   claimDeclinedEmail,
   claimObjectionNoticeEmail,
+  type ClaimVerifyAddressInput,
   type ClaimApprovedInput,
   type ClaimDeclinedInput,
   type ClaimObjectionNoticeInput,

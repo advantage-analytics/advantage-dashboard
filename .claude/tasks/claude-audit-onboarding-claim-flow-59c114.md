@@ -55,7 +55,7 @@ ready).
 - **notes:** Design: screens 5.0, 5.1, 7.1, 7.2 (7.3's empty home already exists as /dashboard/team's first-steps). Public /claim URLs stay reachable for signed-out coaches arriving via referral links — the fork is the signed-in front door, not a replacement. Read docs/ui-revamp-guardrails.md and the design skill before touching sidebar chrome.
 
 ## T4 · Bind program claims to the signed-in account
-- **status:** blocked
+- **status:** done
 - **model:** fable
 - **files:** src/lib/services/programs/claim-actions.ts, src/app/claim/verify/route.ts, src/components/claim/setup-form.tsx (guess)
 - **done when:**
