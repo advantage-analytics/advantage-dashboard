@@ -4,7 +4,11 @@ import { createHash, randomBytes } from "node:crypto";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendEmail, claimVerifyAddressEmail } from "@/lib/services/email";
+import {
+  sendEmail,
+  claimVerifyAddressEmail,
+  inviteRequestReceivedEmail,
+} from "@/lib/services/email";
 import { programDisplayName } from "@/lib/data/programs-server";
 import { checkClaimEmail } from "./domain-match";
 import { toClaimRole, type ClaimRoleValue } from "./claim-roles";
@@ -958,14 +962,23 @@ async function fileRequest(row: {
   return { ok: true };
 }
 
-async function programIdFor(programKey: string): Promise<string | null> {
+/** The bits of a program the request actions need, resolved from its key. */
+async function programForKey(
+  programKey: string
+): Promise<{ id: string; schoolName: string; team: string | null } | null> {
   const db = createAdminClient();
   const { data } = await db
     .from("programs")
-    .select("id")
+    .select("id, school_name, team")
     .eq("program_key", programKey)
     .maybeSingle();
-  return (data?.id as string) ?? null;
+
+  if (!data) return null;
+  return {
+    id: data.id as string,
+    schoolName: data.school_name as string,
+    team: (data.team as string | null) ?? null,
+  };
 }
 
 /** F3.3 / F3.4 — "Request an invite". Reaches the owner; queues nothing for you. */
@@ -980,12 +993,16 @@ export async function requestInvite(input: {
   const email = input.email.trim();
   if (!email) return { ok: false, error: "Add an email address so they can reply." };
 
-  const programId = await programIdFor(input.programKey);
-  if (!programId) return { ok: false, error: "We could not find that program." };
+  const program = await programForKey(input.programKey);
+  if (!program) return { ok: false, error: "We could not find that program." };
 
-  return fileRequest({
+  // The FILING is unchanged from before this email existed — same row, same
+  // normalisation, same idempotent collapse of repeats — signed in or out.
+  // Only the receipt below is new, and it is gated so it can change nothing
+  // about how or when the row is written.
+  const filed = await fileRequest({
     kind: "invite_request",
-    programId,
+    programId: program.id,
     email,
     name: input.name,
     // Validated against the allowlist HERE, not trusted from the form. A value
@@ -994,6 +1011,58 @@ export async function requestInvite(input: {
     role: toClaimRole(input.role),
     note: input.note,
   });
+
+  if (!filed.ok) return filed;
+
+  // The receipt — deliberately NOT a mail relay, and deliberately NOT a timing
+  // oracle. This action is anonymous and unauthenticated: mailing whatever
+  // address the form carried would let anyone send our mail to any inbox, and
+  // gating the send on "did this call create a new request row" would leak,
+  // through timing, whether that (address, program) pair already had one open.
+  //
+  // So the send turns on TWO facts, and BOTH are about the CALLER alone:
+  //
+  //   1. there is a signed-in session — `getUser()` verifies it against the
+  //      auth server, so nothing posted from the form can fake it; and
+  //   2. the address typed into the form is that session's OWN account email,
+  //      compared case-insensitively.
+  //
+  // A signed-out requester, or a signed-in one who typed someone else's
+  // address, gets the on-screen confirmation and no mail. The receipt can
+  // therefore only ever reach an address its caller has already proven they
+  // control — never an arbitrary, unverified inbox. And because the decision
+  // reads only the session and the typed address — never a `program_requests`
+  // lookup — a first submission and a duplicate submission are identical in
+  // both timing and result: nothing here reveals whether a row already existed.
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const accountEmail = user?.email?.trim();
+  if (accountEmail && accountEmail.toLowerCase() === email.toLowerCase()) {
+    const sent = await sendEmail(
+      inviteRequestReceivedEmail({
+        // The verified account address itself — provably the caller's own,
+        // never anything the form could have steered.
+        to: accountEmail,
+        programName: programDisplayName(program.schoolName, program.team),
+        // Optional on the form, so the greeting has to survive without it.
+        requesterName: input.name?.trim() || null,
+      })
+    );
+
+    if (!sent.ok) {
+      // The row is what matters and it is already written — staff can act on
+      // the request whether or not the receipt arrived. `sendEmail` logged the
+      // technical cause; this names the request that went unacknowledged.
+      console.warn("[claim] invite-request receipt not sent", {
+        programKey: input.programKey,
+      });
+    }
+  }
+
+  return { ok: true };
 }
 
 /**

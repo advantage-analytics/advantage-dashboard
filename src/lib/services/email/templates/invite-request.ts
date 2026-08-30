@@ -22,9 +22,14 @@ import type { EmailMessage } from "../send";
  */
 
 export interface InviteRequestReceivedInput {
+  /** The requester. This is their receipt, not a notice to the program. */
   to: string;
   programName: string;
-  requesterName: string;
+  /**
+   * Null when they left the name field empty — it is optional on the form, so
+   * the greeting has to read without it rather than printing a dangling dash.
+   */
+  requesterName: string | null;
 }
 
 export function inviteRequestReceivedEmail(
@@ -32,12 +37,14 @@ export function inviteRequestReceivedEmail(
 ): EmailMessage {
   const { to, programName, requesterName } = input;
 
+  const name = requesterName?.trim();
+
   const content: EmailContent = {
     preheader: `Your request to join ${programName} is with the coaching staff.`,
     eyebrow: "Request received",
     heading: `Your request to join ${programName} is in`,
     body: [
-      `Thanks ${requesterName} — the people who run ${programName} on Advantage can see your request now.`,
+      `Thanks${name ? ` ${name}` : ""} — the people who run ${programName} on Advantage can see your request now.`,
       "They decide who joins, not us, so how quickly it moves is up to them. We'll email you either way.",
     ],
     facts: [{ label: "Program", value: programName }],

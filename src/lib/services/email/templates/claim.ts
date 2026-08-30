@@ -103,7 +103,13 @@ export function claimApprovedEmail(input: ClaimApprovedInput): EmailMessage {
     // Said plainly rather than hidden. The window is real, someone at the
     // school can still contest it, and a coach who first hears about that when
     // a colleague objects has been kept in the dark by omission.
-    note: `We've let the program's listed contacts know. If nobody raises a concern by ${windowClosesOn}, the claim settles for good — there's nothing for you to do either way.`,
+    //
+    // It does NOT say we told the program's contacts, because we don't: the
+    // announced claim — mail to every scraped contact whenever a program was
+    // claimed — was cut before launch (see the /admin/claims header), and
+    // `claimObjectionNoticeEmail` below has no caller. An email that claims a
+    // notice nobody received is worse than one that stays quiet about it.
+    note: `Someone at the program can still contest this. If nobody raises a concern by ${windowClosesOn}, the claim settles for good — there's nothing for you to do either way.`,
   };
 
   return {

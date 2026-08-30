@@ -8,10 +8,23 @@ import {
   rejectClaim,
   reopenClaim,
   resolveRequest,
+  type AdminOutcome,
 } from "@/lib/services/programs/admin-actions";
 import { divisionLabel, teamLabel } from "@/lib/data/programs-server";
 import { claimRoleLabel } from "@/lib/services/programs/claim-roles";
 import { cn } from "@/lib/utils";
+
+/**
+ * Every decidable claim action takes the same three arguments: the claim id,
+ * the internal note, and the claimant-facing message. Approve and reopen ignore
+ * the third — they send no decline — but sharing the signature lets one `act`
+ * helper drive all four buttons.
+ */
+type ClaimAction = (
+  claimId: string,
+  notes?: string,
+  claimantMessage?: string
+) => Promise<AdminOutcome>;
 
 const CARD =
   "rounded-[10px] border border-[var(--border-hairline)] bg-[var(--surface-card)] p-4";
@@ -39,13 +52,14 @@ function Result({ error }: { error: string | null }) {
 export function ClaimRow({ claim }: { claim: Row }) {
   const program = embedded(claim);
   const [notes, setNotes] = useState("");
+  const [claimantMessage, setClaimantMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const act = (fn: typeof approveClaim) =>
+  const act = (fn: ClaimAction) =>
     startTransition(async () => {
       setError(null);
-      const result = await fn(claim.id as string, notes);
+      const result = await fn(claim.id as string, notes, claimantMessage);
       if (!result.ok) setError(result.error);
     });
 
@@ -128,13 +142,45 @@ export function ClaimRow({ claim }: { claim: Row }) {
         </p>
       )}
 
+      {/* Two notes, two audiences, kept visibly apart. The internal note is
+          only ever seen here in the queue; the claimant message is the ONLY
+          text that leaves in the decline email. Each label says which is
+          which, so an admin cannot ship internal commentary to the person they
+          declined by mistake. */}
       {(decidable || reversible || reopenable) && (
-        <input
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Note (optional, kept on the claim)"
-          className="mt-3 h-8 w-full rounded-[6px] border border-[var(--border-medium)] bg-[var(--surface-card)] px-2.5 text-[12px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)] focus:border-[var(--ink-900)]"
-        />
+        <div className="mt-3">
+          <label
+            htmlFor={`note-${String(claim.id)}`}
+            className="mb-1 block text-[11px] text-[var(--ink-500)]"
+          >
+            Internal note — kept on the claim, never emailed
+          </label>
+          <input
+            id={`note-${String(claim.id)}`}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Only your team sees this"
+            className="h-8 w-full rounded-[6px] border border-[var(--border-medium)] bg-[var(--surface-card)] px-2.5 text-[12px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)] focus:border-[var(--ink-900)]"
+          />
+        </div>
+      )}
+
+      {(decidable || reversible) && (
+        <div className="mt-2">
+          <label
+            htmlFor={`claimant-msg-${String(claim.id)}`}
+            className="mb-1 block text-[11px] text-[var(--ink-500)]"
+          >
+            Message to claimant &mdash; they&rsquo;ll see this in the decline email
+          </label>
+          <input
+            id={`claimant-msg-${String(claim.id)}`}
+            value={claimantMessage}
+            onChange={(e) => setClaimantMessage(e.target.value)}
+            placeholder="Optional — added to what they receive"
+            className="h-8 w-full rounded-[6px] border border-[var(--border-medium)] bg-[var(--surface-card)] px-2.5 text-[12px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)] focus:border-[var(--ink-900)]"
+          />
+        </div>
       )}
 
       {decidable && (
