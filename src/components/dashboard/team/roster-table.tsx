@@ -11,6 +11,9 @@ import {
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AdvSwitch } from "@/components/ui/adv-switch";
+import { StatusChip } from "@/components/ui/status-chip";
+import { ResultMark } from "@/components/dashboard/result-mark";
+import { ScoreLine } from "@/components/dashboard/score-line";
 import { capitalize } from "@/lib/utils";
 import { formatDelta, getInitials } from "@/lib/data/match-utils";
 import {
@@ -141,17 +144,6 @@ function memberLine(member: RosterMember): string {
   if (parts.length > 0) return parts.join(" · ");
 
   return member.email ?? "No email on file";
-}
-
-/** "W" / "L" / an en-dash for a match nobody scored. */
-function outcomeLetter(won: boolean | null): string {
-  if (won === null) return "–";
-  return won ? "W" : "L";
-}
-
-function outcomeColor(won: boolean | null): string {
-  if (won === null) return "var(--ink-400)";
-  return won ? "var(--viz-good)" : "var(--viz-bad)";
 }
 
 function Problem({ message }: { message: string | null }) {
@@ -487,32 +479,66 @@ function MemberRow({
           </button>
         )}
         {lastMatch ? (
-          <>
-            <span
-              aria-hidden
-              className="w-4 shrink-0 text-center text-[11px] font-medium"
-              style={{ color: outcomeColor(lastMatch.won) }}
-            >
-              {outcomeLetter(lastMatch.won)}
-            </span>
-            <span className="sr-only">
-              {lastMatch.won === null
-                ? "Result unrecorded against"
-                : lastMatch.won
-                  ? "Won against"
-                  : "Lost to"}
-            </span>
-            <span className="w-[92px] shrink-0 truncate text-[12px] text-[var(--ink-700)]">
-              {lastMatch.opponent}
-            </span>
-            <span className="text-scoreboard-sm tabular shrink-0">
-              {lastMatch.score}
-            </span>
-            {member.claimedToday && <ClaimedTodayPill />}
-            <span className="text-micro tabular ml-auto shrink-0">
-              {lastMatch.date}
-            </span>
-          </>
+          lastMatch.analyzing ? (
+            /* Their newest match is a video still in analysis. The mark slot
+               keeps a quiet placeholder so the opponent stays on the same x as
+               the settled rows, and the live chip — the matches list's own
+               "Analyzing", same status vocabulary — carries the state where the
+               score would be. */
+            <>
+              <span
+                aria-hidden
+                className="flex w-4 shrink-0 items-center justify-center"
+              >
+                <span className="size-[5px] rounded-full bg-[var(--ink-300)]" />
+              </span>
+              <span className="w-[92px] shrink-0 truncate text-[12px] text-[var(--ink-700)]">
+                {lastMatch.opponent}
+              </span>
+              <StatusChip tone="blue" live className="shrink-0">
+                Analyzing
+              </StatusChip>
+              {member.claimedToday && <ClaimedTodayPill />}
+              <span className="text-micro tabular ml-auto shrink-0">
+                {lastMatch.date}
+              </span>
+            </>
+          ) : (
+            <>
+              {/* The outcome as a glyph, not a "W"/"L" letter: the Round 15
+                  table law bans the bare letter (standings shorthand that does
+                  not translate), and `ResultMark` is the same green/red pair
+                  the matches list draws. An unscored settled match keeps the em
+                  dash — right opponent, nothing claiming a result. */}
+              {lastMatch.won === null ? (
+                <>
+                  <span
+                    aria-hidden
+                    className="w-4 shrink-0 text-center text-[11px] text-[var(--ink-400)]"
+                  >
+                    –
+                  </span>
+                  <span className="sr-only">Result unrecorded against</span>
+                </>
+              ) : (
+                <ResultMark
+                  won={lastMatch.won}
+                  className="w-4 shrink-0 justify-center"
+                />
+              )}
+              <span className="w-[92px] shrink-0 truncate text-[12px] text-[var(--ink-700)]">
+                {lastMatch.opponent}
+              </span>
+              <ScoreLine
+                sets={lastMatch.sets}
+                className="text-scoreboard-sm shrink-0"
+              />
+              {member.claimedToday && <ClaimedTodayPill />}
+              <span className="text-micro tabular ml-auto shrink-0">
+                {lastMatch.date}
+              </span>
+            </>
+          )
         ) : (
           <>
             <span className="text-[12px] text-[var(--ink-400)]">

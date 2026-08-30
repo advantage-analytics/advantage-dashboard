@@ -228,9 +228,12 @@ export default async function RosterPage() {
         {canManage && joinRequests.length > 0 && (
           <JoinRequestsCard
             requests={joinRequests}
-            managedPlayers={managedPlayers}
             seats={roster.seats}
-            playersCanUpload={roster.playersCanUpload}
+            programName={active.name}
+            /* The program's own open invites, so a request whose address we have
+               already emailed reads "Matches your invite" rather than repeating
+               the outreach — the same array the table lists as pending rows. */
+            openInviteEmails={roster.invites.map((invite) => invite.email)}
           />
         )}
 

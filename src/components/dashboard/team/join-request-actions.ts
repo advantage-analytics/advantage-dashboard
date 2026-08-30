@@ -3,7 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import {
+  inviteMember,
+  type InviteResult,
+} from "@/components/dashboard/settings/team-actions";
 import type { ActionResult } from "@/components/dashboard/settings/actions";
+import type { DbJoinRequestRow } from "@/lib/data/join-requests-server";
 
 /**
  * Resolving a join request — the staff side of "Request an invite".
@@ -57,4 +62,80 @@ export async function resolveJoinRequest(
 
   revalidatePath(ROSTER_PATH);
   return { ok: true };
+}
+
+/**
+ * Approve a join request — the review dialog's one-click "Approve".
+ *
+ * Membership here is only ever self-created: `program_members.user_id` is NOT
+ * NULL and every insert path keys on `auth.uid()`, so a join request — which
+ * carries an email and no account — cannot be turned straight into a member.
+ * Approving therefore does what a coach would otherwise do by hand: it sends the
+ * requester a player invite, which reserves a seat now and mints the membership
+ * when they accept, and then clears the request from the queue.
+ *
+ * `inviteMember` already owns the seat reservation, the mail, and the refusals
+ * that must stop an approval — no free seat (`54000`), the tripwire onto a
+ * coach-managed profile (`link_player`), an address already on the roster
+ * (`23505`) — so this is those two existing steps in one action, in the order
+ * that keeps them honest: the invite is the durable half and goes first, and the
+ * request is only resolved once the invite is actually out.
+ *
+ * The address is read from the request's own row rather than taken from the
+ * caller: `program_join_requests` is SECURITY DEFINER, staff-gated, and returns
+ * only the active program's open requests, so looking the id up there both fixes
+ * the email to the one the requester actually filed and confirms the request
+ * belongs to the program the coach is in — the client passes only an id.
+ */
+export async function approveJoinRequest(
+  requestId: string
+): Promise<InviteResult> {
+  const workspace = await getWorkspaceContext();
+  if (!workspace || workspace.active.kind !== "team") {
+    return {
+      ok: false,
+      error: "Switch to your team workspace to manage join requests.",
+    };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("program_join_requests", {
+    p_program_id: workspace.active.id,
+  });
+  if (error) {
+    return { ok: false, error: "Couldn't load that request. Try again." };
+  }
+
+  const request = ((data ?? []) as DbJoinRequestRow[]).find(
+    (row) => row.id === requestId
+  );
+  if (!request) {
+    // Handled by someone else, declined already, or never this program's to
+    // approve — the same generic answer the SQL gate gives, for the same reason.
+    return { ok: false, error: "That request is no longer open." };
+  }
+
+  const invite = await inviteMember({ email: request.email, role: "player" });
+
+  // A refusal leaves the request open on purpose: the coach has something to fix
+  // before this person can be let in (a full program, a duplicate, a tripwire),
+  // and a request resolved without an invite behind it would vanish from the one
+  // list that still says they are waiting.
+  if (!invite.ok) return invite;
+
+  const resolved = await resolveJoinRequest(requestId);
+  if (!resolved.ok) {
+    // The invite is out and the seat is held; only closing the request failed.
+    // Not a failure of the whole action — re-approving simply refreshes the same
+    // invite, because `create_program_invite` upserts on the one-open-invite
+    // index. Surface it as a note rather than a red error over a sent invite.
+    return {
+      ok: true,
+      warning: `Invite sent, but the request stayed in the queue: ${resolved.error}`,
+    };
+  }
+
+  // Carry any invite-level warning through — an invite that saved but whose mail
+  // bounced — so "sent" is never claimed over an email that never left.
+  return invite;
 }

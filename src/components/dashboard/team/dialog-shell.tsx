@@ -44,8 +44,8 @@ export function RosterDialog({
   onOpenChange: (open: boolean) => void;
   title: string;
   description: string;
-  /** 440 for the invite and add dialogs, 520 for merge. */
-  width?: 440 | 520;
+  /** 440 for the invite and add dialogs, 480 for review requests, 520 for merge. */
+  width?: 440 | 480 | 520;
   children: React.ReactNode;
   footer: React.ReactNode;
 }) {
