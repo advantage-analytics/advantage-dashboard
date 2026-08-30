@@ -14,6 +14,10 @@ import type {
 /**
  * The dual sheet and the KPI strip, off a full read.
  *
+ * Named for what it pins, not for the gate it outlived: this file was
+ * `results-visibility.spec.ts` when a `resultsScope()` decided how much of a
+ * dual a viewer got. That gate is gone.
+ *
  * Since `20260830120000_matches_visible_to_members.sql` the `matches` read is
  * membership-only: every program member sees every line of a dual, so there
  * is no narrower read left to guard against and no `resultsScope()` left to

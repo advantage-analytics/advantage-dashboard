@@ -29,6 +29,34 @@ export interface LineupLineInput {
   forfeit?: "ours" | "theirs" | null;
 }
 
+/**
+ * The opponent's program id from the directory key the picker handed over.
+ *
+ * **Null when it resolves to nothing, and null when it resolves to us.** A
+ * program does not play itself, and the directory contains the caller's own
+ * row — the picker can offer it — so the self-check is part of resolving, not
+ * a thing each caller remembers to add afterwards. It was written out three
+ * times before this existed, which made forgetting it in a fourth the path of
+ * least resistance.
+ *
+ * `programs` is world-readable and `program_key` is unique across all 1,940
+ * rows, so this is a lookup rather than a search.
+ */
+async function resolveOpponentProgramId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  programKey: string,
+  ourProgramId: string
+): Promise<string | null> {
+  const { data: program } = await supabase
+    .from("programs")
+    .select("id")
+    .eq("program_key", programKey)
+    .maybeSingle();
+
+  const id = (program as { id: string } | null)?.id ?? null;
+  return id === ourProgramId ? null : id;
+}
+
 export interface CreateDualInput {
   opponent: string;
   /**
@@ -118,18 +146,13 @@ export async function createDual(
   // a lookup rather than a search. A key that resolves to nothing leaves the
   // dual pointing at free text, which is the same state every dual was in
   // before this column existed — degraded, never blocked.
-  let opponentProgramId: string | null = null;
-  if (input.opponentProgramKey) {
-    const { data: program } = await supabase
-      .from("programs")
-      .select("id")
-      .eq("program_key", input.opponentProgramKey)
-      .maybeSingle();
-    const id = (program as { id: string } | null)?.id ?? null;
-    // A program does not play itself. The directory contains the caller's own
-    // row, so the picker can offer it.
-    opponentProgramId = id === auth.programId ? null : id;
-  }
+  const opponentProgramId = input.opponentProgramKey
+    ? await resolveOpponentProgramId(
+        supabase,
+        input.opponentProgramKey,
+        auth.programId
+      )
+    : null;
 
   const { data: event, error: eventError } = await supabase
     .from("program_events")
@@ -528,18 +551,14 @@ export async function opponentRosterForDual(
 
   const supabase = await createClient();
 
-  const { data: program } = await supabase
-    .from("programs")
-    .select("id")
-    .eq("program_key", opponentProgramKey)
-    .maybeSingle();
-
-  const opponentProgramId = (program as { id: string } | null)?.id ?? null;
+  const opponentProgramId = await resolveOpponentProgramId(
+    supabase,
+    opponentProgramKey,
+    auth.programId
+  );
   // A key that resolves to nothing, or to ourselves, has no roster to offer.
   // Same non-answer as an opted-out pool: an empty list, never an error.
-  if (!opponentProgramId || opponentProgramId === auth.programId) {
-    return { candidates: [] };
-  }
+  if (!opponentProgramId) return { candidates: [] };
 
   const [{ data: rosterRows }, { data: matchRows }] = await Promise.all([
     supabase.rpc("pooled_roster", { p_program_id: opponentProgramId }),
@@ -611,16 +630,12 @@ export async function saveOpponentPlayer(input: {
 
   const supabase = await createClient();
 
-  const { data: program } = await supabase
-    .from("programs")
-    .select("id")
-    .eq("program_key", input.opponentProgramKey)
-    .maybeSingle();
-
-  const opponentProgramId = (program as { id: string } | null)?.id ?? null;
-  if (!opponentProgramId || opponentProgramId === auth.programId) {
-    return { saved: false };
-  }
+  const opponentProgramId = await resolveOpponentProgramId(
+    supabase,
+    input.opponentProgramKey,
+    auth.programId
+  );
+  if (!opponentProgramId) return { saved: false };
 
   try {
     const { data: contributed, error } = await supabase.rpc(
@@ -669,6 +684,28 @@ export async function setForfeit(
   if (entryError || !entry) return { error: "That line no longer exists." };
   if (entry.program_id !== auth.programId) {
     return { error: "That line belongs to another program." };
+  }
+
+  // A forfeit is a DUAL LINE's outcome, and the column is at that grain: one
+  // entry, one court, one point. A tournament entry is a whole run of matches,
+  // so a forfeit on one would stamp "Forfeited" across every round, blank
+  // every round's score and offer "Clear forfeit" once per round — the same
+  // one-answer-for-many-rounds failure `matchState` documents. There is no
+  // round-level forfeit to fall back on, so refuse rather than half-support it.
+  // Guarded on SETTING only. Clearing has to work on any event kind, or a row
+  // that reached this state some other way — a direct write, a future bulk
+  // insert — would be unrepairable through the UI, and the guard would be the
+  // reason. Refuse to create the state; never refuse to undo it.
+  if (side !== null) {
+    const { data: event } = await supabase
+      .from("program_events")
+      .select("kind")
+      .eq("id", entry.event_id)
+      .maybeSingle();
+
+    if (event?.kind !== "dual") {
+      return { error: "Only a dual line can be forfeited." };
+    }
   }
 
   // Setting a forfeit on a line that already has a match is a contradiction:

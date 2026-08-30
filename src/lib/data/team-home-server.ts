@@ -47,6 +47,7 @@ import {
   entryPlayed,
   entryState,
   forfeitWon,
+  lineWon,
   matchState,
   matchWon,
   type EntryState,
@@ -315,7 +316,7 @@ export interface DualTally {
   /**
    * Every line is in.
    *
-   * The same rule `getScheduleRows` prints a team score under, and it is here
+   * The same rule `scheduleRowsFrom` prints a team score under, and it is here
    * for the same reason: a partial tally presented as a final one is a result
    * the page invented. The card shows its running tally either way — it is a
    * live sheet — and says "final" only when this is true.
@@ -629,7 +630,16 @@ function dualLines(
     .filter((entry) => entry.discipline === discipline)
     .map((entry, index) => {
       const match = entry.matches[0] ?? null;
-      const state = match ? matchState(match) : entryState(entry);
+      // Forfeit first, for the same reason `lineWon` below puts it first: a
+      // forfeited line is not waiting on an analysis, whatever a match sitting
+      // under it says. Reading the match here while `won` reads the forfeit
+      // would render "we won" beside "Analyzing" on one row.
+      const state =
+        entry.forfeit !== null
+          ? entryState(entry)
+          : match
+            ? matchState(match)
+            : entryState(entry);
 
       return {
         id: entry.id,
@@ -638,7 +648,11 @@ function dualLines(
         theirs:
           match?.opponentLabels.join(" / ") || entry.opponentLabels.join(" / "),
         sets: scoreSetsFrom(match?.score),
-        won: match ? matchWon(match) : forfeitWon(entry),
+        // `lineWon`, not a local ternary: this line used to read
+        // `match ? matchWon(match) : forfeitWon(entry)`, which put the forfeit
+        // LAST and so disagreed with every other surface on a line carrying
+        // both. One spelling, one answer.
+        won: lineWon(entry, match),
         state,
         reportId: state === "ready" && match ? match.id : null,
       };
@@ -714,7 +728,7 @@ export function weekendDualRow<T extends { kind: string; startsOn: string }>(
  * both of which the read that produced `detail` has already done — at the cost
  * of reading the same three tables a second time in the same render.
  *
- * **Exported for `tests/results-visibility.spec.ts` only**, on the same terms as
+ * **Exported for `tests/weekend-dual-reads.spec.ts` only**, on the same terms as
  * `weekendDualRow` above: the page reaches it through `getTeamHomeData`, and
  * what is worth pinning is the shape a dual takes. Nothing here performs I/O.
  */

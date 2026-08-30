@@ -8,9 +8,8 @@ import {
   dualScore,
   entryPlayed,
   entryState,
-  forfeitWon,
+  lineWon,
   matchState,
-  matchWon,
 } from "@/lib/schedule/entry-state";
 import { LINE_STATUS } from "@/lib/schedule/line-status";
 import {
@@ -121,6 +120,14 @@ function DualPane({
       </div>
 
       <div className="mt-3 flex items-baseline gap-4">
+        {/* "matches", and a forfeited line counts among them — the author's
+            ruling, kept here because a reviewer has already flagged it once and
+            `dual-detail.tsx` argues the opposite for its own neighbouring
+            figure ("'lines', not 'matches'"). The two are not in conflict:
+            that one counts a card nobody has played yet, where "matches"
+            would promise nine things to read; this one counts what is settled,
+            and a forfeit settles a line as surely as a scoreline does. Do not
+            "fix" this to "lines" without re-opening the ruling. */}
         <span className="text-micro">
           <span className="tabular">{played}</span> of{" "}
           <span className="tabular">{entries.length}</span> matches ·{" "}
@@ -155,12 +162,9 @@ function DotStrip({
   discipline: Discipline;
   entries: EventEntry[];
 }) {
-  const outcomes = entries.map((entry) => {
-    if (!entryPlayed(entry)) return null;
-    const fw = forfeitWon(entry);
-    if (fw !== null) return fw;
-    return entry.matches.some((match) => matchWon(match) === true);
-  });
+  const outcomes = entries.map((entry) =>
+    entryPlayed(entry) ? lineWon(entry) : null
+  );
   const won = outcomes.filter((outcome) => outcome === true).length;
   const lost = outcomes.filter((outcome) => outcome === false).length;
   const unplayed = outcomes.length - won - lost;
@@ -207,11 +211,17 @@ function PaneRow({
   label: string;
 }) {
   const match = entry.matches[0] ?? null;
-  const ourLabel = entry.playerLabels.join(" / ");
+  // Word-for-word what `line-row.tsx` renders for the same line. The pane and
+  // the event page draw one dual between them, and a forfeited line reading
+  // "— no available player" on one screen and a bare em dash on the other is
+  // the same row telling two stories.
+  const ourLabel =
+    entry.forfeit !== null && entry.playerLabels.length === 0
+      ? "— no available player"
+      : entry.playerLabels.join(" / ");
   const theirLabel =
     match?.opponentLabels.join(" / ") || entry.opponentLabels.join(" / ");
-  const fw = forfeitWon(entry);
-  const won = fw !== null ? fw : match ? matchWon(match) : null;
+  const won = lineWon(entry, match);
 
   return (
     <div className={`grid ${COLUMNS} items-center gap-3 py-[11px]`}>

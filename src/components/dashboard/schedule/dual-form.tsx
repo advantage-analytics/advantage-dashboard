@@ -24,7 +24,7 @@ import {
 } from "@/lib/schedule/actions";
 import { splitNames } from "@/lib/schedule/format";
 import { benchFromLines } from "@/lib/schedule/roster-match";
-import { divisionLabel, programDisplayName } from "@/lib/data/programs-server";
+import { programDisplayName, programSubtitle } from "@/lib/data/programs-server";
 // `teamLabel` exists twice under two signatures. This is the workspace one,
 // which takes a nullable squad and answers null for null. The programs-server
 // twin takes a plain string and answers "Men's" to anything that is not
@@ -253,12 +253,12 @@ export function DualForm({
   // the squad by then ("Ridgeline University Men's Tennis"), which the rail's
   // subline and the mismatch warning already say once.
   const schoolDisplay = opponentProgram?.schoolName ?? opponent;
-  // "{conference} · {division}" — only a directory row knows either, so a
-  // free-text opponent renders no subline rather than an invented one.
+  // `programSubtitle`, not a local join: this printed "Big Sky · D-I" while
+  // the four claim-flow call sites print "D-I · Big Sky" off the same two
+  // fields. Only a directory row knows either, so a free-text opponent renders
+  // no subline rather than an invented one.
   const headerSubline = opponentProgram
-    ? [opponentProgram.conference, divisionLabel(opponentProgram.division)]
-        .filter(Boolean)
-        .join(" · ")
+    ? programSubtitle(opponentProgram.division, opponentProgram.conference)
     : "";
 
   function submit() {

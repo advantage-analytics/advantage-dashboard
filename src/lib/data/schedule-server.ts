@@ -226,7 +226,7 @@ async function readSchedule(
  * functions below instead is what made a Team Home render with a dual in range
  * cost 19 round trips where it now costs 14.
  *
- * `getScheduleRows` and `getUploadQueue` are therefore plain async functions —
+ * `getUploadQueue` is therefore a plain async function —
  * pure mapping over this one await. A second `cache()` layer over a shared one
  * only invites the question of which is doing the work.
  */
@@ -271,16 +271,6 @@ export function scheduleRowsFrom(
       teamScore: score?.decided ? { us: score.us, them: score.them } : null,
     };
   });
-}
-
-/**
- * The schedule page's rows, newest event first.
- */
-export async function getScheduleRows(
-  programId: string
-): Promise<ScheduleRow[]> {
-  const schedule = await getProgramSchedule(programId);
-  return scheduleRowsFrom(schedule);
 }
 
 /** Did this entry produce any match at all? Distinguishes "unplayed" from "filmed". */
@@ -341,15 +331,19 @@ export async function getUploadQueue(
       // Filtered per MATCH, not per entry. A tournament entry is a whole run,
       // so dropping the entry as soon as any one round had video hid the other
       // rounds entirely — a coach who filmed R32 could no longer reach Q1.
-      const waiting = all
-        .filter((entry) => entry.forfeit === null)
+      // A forfeited line has no match to film, so it is out of the queue and
+      // out of both counts. Filtered once, up here, rather than twice: the
+      // waiting list and the totals have to be about the same set of lines,
+      // and two filters are two chances for them to stop being.
+      const nonForfeited = all.filter((entry) => entry.forfeit === null);
+
+      const waiting = nonForfeited
         .map((entry) => ({
           ...entry,
           matches: entry.matches.filter((match) => !match.hasVideo),
         }))
         .filter((entry) => entry.matches.length > 0 || !hasAnyMatch(all, entry.id));
 
-      const nonForfeited = all.filter((entry) => entry.forfeit === null);
       const withVideo = nonForfeited.reduce(
         (count, entry) => count + entry.matches.filter((m) => m.hasVideo).length,
         0

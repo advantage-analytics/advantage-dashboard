@@ -7,8 +7,7 @@ import {
   dualScore,
   entryPlayed,
   entryState,
-  forfeitWon,
-  matchWon,
+  lineWon,
 } from "@/lib/schedule/entry-state";
 import { formatEventDay, siteTitle } from "@/lib/schedule/format";
 import type { EventDetail } from "@/lib/schedule/types";
@@ -16,14 +15,14 @@ import type { EventDetail } from "@/lib/schedule/types";
 const COLUMNS = "grid-cols-[44px_52px_1fr_150px_130px]";
 
 /**
- * 25c and 25d -- a dual, empty and filled.
+ * 25c and 25d — a dual, empty and filled.
  *
  * One renderer, not two. The transition between them is the thing being
  * designed: a dual stops being empty when its rows have scores in them, and a
  * separate "nothing played yet" screen would have to be dismissed. That is the
  * same reasoning `/dashboard/team/page.tsx` records for its own two states.
  *
- * Every member of the program sees the same data -- the membership-only RLS
+ * Every member of the program sees the same data — the membership-only RLS
  * policy hands every member the program's matches.
  */
 export function DualDetail({
@@ -65,11 +64,20 @@ export function DualDetail({
             Dual match · {formatEventDay(event.startsOn)} ·{" "}
             {siteTitle(event.site)} · {score?.decided ? "final" : event.surface ?? "—"}
           </span>
+          {/* A real h1. The page carried no heading of any level, so a screen
+              reader got no structure for the thing the page is about. "vs"
+              stays inside it: the accessible name is the fixture, not the
+              opponent standing on their own. */}
           <h1 className="mt-2 flex items-baseline gap-3">
             <span
               className="text-[30px] font-light leading-[34px] tracking-[-0.6px]"
               style={{ color: "var(--ink-600)" }}
             >
+              {/* The trailing space is load-bearing. These are flex children
+                  separated by a gap, so the visual space is layout, not text —
+                  and the h1's accessible name came out "vsState College of
+                  Ash". The space collapses visually and separates the words for
+                  a screen reader. */}
               {"vs "}
             </span>
             <span
@@ -102,6 +110,9 @@ export function DualDetail({
             </StatusChip>
           ) : (
             <span className="text-micro" style={{ color: "var(--ink-600)" }}>
+              {/* "lines", not "matches" — the create footer promised lines, and
+                  until one is played that is exactly what these are. Two words
+                  for one object is how a reader stops trusting either. */}
               <span className="tabular">{entries.length}</span>{" "}
               {entries.length === 1 ? "line" : "lines"} ·{" "}
               {anyPlayed ? `${withoutVideo} without video` : "no results yet"}
@@ -194,6 +205,9 @@ function Section({
         first ? "mt-7" : "mt-6"
       }`}
     >
+      {/* h2, not a span. Singles and Doubles are the page's two sections, and
+          a screen reader needs them in the outline to jump between. `.eyebrow`
+          carries the look either way. */}
       <h2 className="eyebrow">{title}</h2>
       <div className="flex-1" />
       {action}
@@ -202,9 +216,9 @@ function Section({
 }
 
 /**
- * "3-3" across one group of lines, or null while none are in.
+ * "3–3" across one group of lines, or null while none are in.
  *
- * Lines won against lines lost -- NOT `dualScore`, which folds three doubles
+ * Lines won against lines lost — NOT `dualScore`, which folds three doubles
  * into a single team point. The heading above the doubles table is counting
  * courts; the number in the hero is counting the point they add up to.
  */
@@ -213,8 +227,7 @@ function countGroup(entries: EventDetail["entries"]): string | null {
   let them = 0;
   for (const entry of entries) {
     if (!entryPlayed(entry)) continue;
-    const fw = forfeitWon(entry);
-    if (fw === true || (fw === null && entry.matches.some((match) => matchWon(match) === true))) us++;
+    if (lineWon(entry) === true) us++;
     else them++;
   }
   return us === 0 && them === 0 ? null : `${us}–${them}`;

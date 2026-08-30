@@ -192,82 +192,86 @@ export function LineupEditor({
   }
 
   function renderGroup(group: LineupLine[], discipline: LineupLine["discipline"]) {
-    return group.map((line, index) =>
-      line.forfeit !== null ? (
-        <ForfeitedRow
+    return group.map((line, index) => {
+      if (line.forfeit !== null) {
+        return (
+          <ForfeitedRow
+            key={line.key}
+            line={line}
+            onClear={() => setForfeited(line.key, false)}
+          />
+        );
+      }
+
+      return (
+        <div
           key={line.key}
-          line={line}
-          onClear={() => setForfeited(line.key, false)}
-        />
-      ) : (
-      <div
-        key={line.key}
-        className={cn(
-          GRID,
-          "group/line py-2.5",
-          dragging?.index === index && "opacity-60"
-        )}
-      >
-        <Grip
-          label={`Reorder ${line.ourLabels.join(" / ") || line.slot}`}
-          onDragStart={() => setDragging({ column: "ours", index })}
-          onDragEnd={() => setDragging(null)}
-          onDrop={() => {
-            if (dragging?.column === "ours") move(discipline, "ours", dragging.index, index);
-            setDragging(null);
-          }}
-          onMove={(delta) => move(discipline, "ours", index, index + delta)}
-        />
-        <span className="mono text-[11px]" style={{ color: "var(--ink-600)" }}>
-          {line.slot}
-        </span>
-        <NameField
-          value={line.ourLabels.join(" / ")}
-          placeholder={discipline === "doubles" ? "Name / Name" : "Name"}
-          onChange={(value) => setLabels(line.key, "ours", value)}
-        />
-        <span className="text-micro" style={{ color: "var(--ink-400)" }}>
-          vs
-        </span>
-        <div className="flex items-center gap-2">
+          className={cn(
+            GRID,
+            "group/line py-2.5",
+            dragging?.index === index && "opacity-60"
+          )}
+        >
           <Grip
-            label={`Reorder ${line.theirLabels.join(" / ") || `their ${line.slot}`}`}
-            onDragStart={() => setDragging({ column: "theirs", index })}
+            label={`Reorder ${line.ourLabels.join(" / ") || line.slot}`}
+            onDragStart={() => setDragging({ column: "ours", index })}
             onDragEnd={() => setDragging(null)}
             onDrop={() => {
-              if (dragging?.column === "theirs") {
-                move(discipline, "theirs", dragging.index, index);
-              }
+              if (dragging?.column === "ours") move(discipline, "ours", dragging.index, index);
               setDragging(null);
             }}
-            onMove={(delta) => move(discipline, "theirs", index, index + delta)}
+            onMove={(delta) => move(discipline, "ours", index, index + delta)}
           />
-          {/* Keyed on the opponent too: a re-target must remount the popover,
-              so no draft, suggestion highlight or pending "saved" toast typed
-              against the last school can survive into this one. */}
-          <OpponentNameCell
-            key={`${line.key}:${opponentTarget.key}`}
-            value={line.theirLabels.join(" / ")}
-            discipline={line.discipline}
-            target={opponentTarget}
-            onCommit={(value) => setLabels(line.key, "theirs", value)}
+          <span className="mono text-[11px]" style={{ color: "var(--ink-600)" }}>
+            {line.slot}
+          </span>
+          <NameField
+            value={line.ourLabels.join(" / ")}
+            placeholder={discipline === "doubles" ? "Name / Name" : "Name"}
+            onChange={(value) => setLabels(line.key, "ours", value)}
           />
-        </div>
+          <span className="text-micro" style={{ color: "var(--ink-400)" }}>
+            vs
+          </span>
+          <div className="flex items-center gap-2">
+            <Grip
+              label={`Reorder ${line.theirLabels.join(" / ") || `their ${line.slot}`}`}
+              onDragStart={() => setDragging({ column: "theirs", index })}
+              onDragEnd={() => setDragging(null)}
+              onDrop={() => {
+                if (dragging?.column === "theirs") {
+                  move(discipline, "theirs", dragging.index, index);
+                }
+                setDragging(null);
+              }}
+              onMove={(delta) => move(discipline, "theirs", index, index + delta)}
+            />
+            {/* Keyed on the opponent too: a re-target must remount the popover,
+                so no draft, suggestion highlight or pending "saved" toast typed
+                against the last school can survive into this one. */}
+            <OpponentNameCell
+              key={`${line.key}:${opponentTarget.key}`}
+              value={line.theirLabels.join(" / ")}
+              discipline={line.discipline}
+              target={opponentTarget}
+              onCommit={(value) => setLabels(line.key, "theirs", value)}
+            />
+          </div>
 
-        {/* Quiet until the row is hovered or the button is focused, as 2b
-            draws it — a destructive-ish action that should not compete with
-            the names for attention, but must still be reachable by keyboard. */}
-        <button
-          type="button"
-          onClick={() => setForfeited(line.key, true)}
-          className="text-micro rounded-[3px] text-right opacity-0 outline-none transition-opacity group-hover/line:opacity-100 focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)]"
-          style={{ color: "var(--blue)" }}
-        >
-          Forfeit
-        </button>
-      </div>
-      )
-    );
+          {/* Quiet until the row is hovered or the button is focused, as 2b
+              draws it — a destructive-ish action that should not compete with
+              the names for attention, but must still be reachable by keyboard. */}
+          <button
+            type="button"
+            onClick={() => setForfeited(line.key, true)}
+            className="text-micro rounded-[3px] text-right opacity-0 outline-none transition-opacity group-hover/line:opacity-100 focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)]"
+            style={{ color: "var(--blue)" }}
+          >
+            Forfeit
+          </button>
+        </div>
+      );
+    });
   }
 
   return (

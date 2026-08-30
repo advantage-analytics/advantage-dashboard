@@ -139,14 +139,41 @@ export function entryPlayed(entry: EventEntry): boolean {
 }
 
 /**
- * Did our side take this line? A tournament entry is "won" if any match was.
+ * Who took this line — the one spelling of it.
  *
- * A forfeit where `entry.forfeit === 'theirs'` counts as a win for us.
+ * **A forfeit outranks any match.** That precedence is the whole point of this
+ * function: `forfeitWon` shares the lookup but not the ordering, and the
+ * ordering is where the rule actually lives. Four surfaces re-derived it
+ * inline before this existed and one of them — Team Home's dual sheet — had
+ * it backwards, so the same dual read one way on the event page and another
+ * way on the home page, neither looking broken.
+ *
+ * `match` names ONE of the entry's matches, for a caller rendering a single
+ * row: a tournament entry is a whole run, and asking about the entry gives
+ * every round the loudest round's answer, exactly as `matchState` warns. Pass
+ * it and the answer is about that match; omit it and a tournament entry is
+ * "won" if any match was.
+ *
+ * Null means undecided — no forfeit, and no match with a settled score.
+ */
+export function lineWon(
+  entry: EventEntry,
+  match?: EntryMatch | null
+): boolean | null {
+  const forfeit = forfeitWon(entry);
+  if (forfeit !== null) return forfeit;
+  if (match !== undefined) return match ? matchWon(match) : null;
+  return entry.matches.some((m) => matchWon(m) === true);
+}
+
+/**
+ * Did our side take this line, counted over the whole entry?
+ *
+ * The zero-argument case of `lineWon`, kept as a boolean because every caller
+ * here has already established the line is decided via `entryPlayed`.
  */
 function entryWon(entry: EventEntry): boolean {
-  if (entry.forfeit === "theirs") return true;
-  if (entry.forfeit === "ours") return false;
-  return entry.matches.some((match) => matchWon(match) === true);
+  return lineWon(entry) === true;
 }
 
 /**

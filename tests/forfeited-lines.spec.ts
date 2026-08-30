@@ -5,6 +5,7 @@ import {
   entryPlayed,
   entryState,
   forfeitWon,
+  lineWon,
   supportsVideo,
 } from '@/lib/schedule/entry-state';
 import { LINE_STATUS } from '@/lib/schedule/line-status';
@@ -193,5 +194,47 @@ test.describe('a forfeited line is never a line waiting to be played', () => {
     expect(supportsVideo(entry('S6', 'forfeit-theirs', 5))).toBe(false);
     expect(supportsVideo(entry('S6', 'unplayed', 5))).toBe(true);
     expect(supportsVideo(entry('D3', 'unplayed', 8))).toBe(false);
+  });
+});
+
+test.describe('lineWon · one precedence, every surface', () => {
+  /**
+   * A line carrying BOTH a forfeit and a match. `setForfeit` refuses to mark a
+   * line that already has one and `recordResult` refuses to score a forfeited
+   * line, so the app cannot currently produce this row — but four surfaces
+   * used to answer it independently and Team Home's dual sheet answered it
+   * differently from the other three, printing the match result where the
+   * event page printed the forfeit. The guards are app-level, so the row is
+   * one direct write away; what is pinned here is that every surface would
+   * agree about it.
+   */
+  function contested(): EventEntry {
+    const e = entry('S6', 'forfeit-theirs', 5);
+    // The opponent forfeited — the line is ours — but a match under it says we
+    // lost. The forfeit is the outcome; the match is the thing that did not
+    // happen.
+    return { ...e, matches: [match('m-S6', 'them')] };
+  }
+
+  test('the forfeit outranks the match, whichever way it is asked', () => {
+    const e = contested();
+    expect(lineWon(e)).toBe(true);
+    expect(lineWon(e, e.matches[0])).toBe(true);
+    expect(lineWon(e, null)).toBe(true);
+  });
+
+  test('with no forfeit it defers to the match it was handed', () => {
+    const e = entry('S1', 'them', 0);
+    expect(lineWon(e, e.matches[0])).toBe(false);
+    // A row told there is no match for it is undecided, even though the entry
+    // holds one — that is the per-round question a tournament row asks.
+    expect(lineWon(e, null)).toBeNull();
+    // Asked about the whole entry, the match counts again.
+    expect(lineWon(e)).toBe(false);
+  });
+
+  test('an untouched line is undecided, not lost', () => {
+    expect(lineWon(entry('S1', 'unplayed', 0))).toBe(false);
+    expect(lineWon(entry('S1', 'unplayed', 0), null)).toBeNull();
   });
 });

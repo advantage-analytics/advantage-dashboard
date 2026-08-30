@@ -10,9 +10,8 @@ import { ScoreEntry } from "@/components/dashboard/schedule/score-entry";
 import { RowAction } from "@/components/dashboard/schedule/row-action";
 import {
   entryState,
-  forfeitWon,
+  lineWon,
   matchState,
-  matchWon,
   supportsVideo,
 } from "@/lib/schedule/entry-state";
 import { LINE_STATUS } from "@/lib/schedule/line-status";
@@ -59,12 +58,9 @@ export function LineRow({
   const theirLabel =
     match?.opponentLabels.join(" / ") || entry.opponentLabels.join(" / ");
 
-  // A forfeit's outcome is on the entry, not on a match.
-  const won = isForfeited
-    ? forfeitWon(entry)
-    : match
-      ? matchWon(match)
-      : null;
+  // A forfeit's outcome is on the entry, not on a match — `lineWon` is where
+  // that precedence is stated, for every surface at once.
+  const won = lineWon(entry, match);
 
   // This row's own match, not the entry's. A tournament entry renders one row
   // per round, and asking the entry gives every round the loudest round's
@@ -161,22 +157,40 @@ function Action({
   const router = useRouter();
   const [confirming, setConfirming] = useState<"ours" | "theirs" | null>(null);
   const [pending, startTransition] = useTransition();
+  // `setForfeit` refuses a line that already has a match, and refuses a
+  // tournament entry outright. Both refusals used to be dropped on the floor,
+  // which reached the coach as a button that did nothing — the guard was
+  // working and invisible, which is worse than no guard for the person
+  // clicking it.
+  const [failure, setFailure] = useState<string | null>(null);
 
-  function handleForfeit(side: "ours" | "theirs") {
+  function apply(side: "ours" | "theirs" | null) {
     startTransition(async () => {
       const result = await setForfeit(entryId, side);
-      if ("error" in result) return;
+      if ("error" in result) {
+        setFailure(result.error);
+        return;
+      }
+      setFailure(null);
       setConfirming(null);
       router.refresh();
     });
   }
 
-  function handleClearForfeit() {
-    startTransition(async () => {
-      const result = await setForfeit(entryId, null);
-      if ("error" in result) return;
-      router.refresh();
-    });
+  if (failure !== null) {
+    return (
+      <span className="flex items-center gap-2 text-[11px]">
+        <span style={{ color: "var(--danger)" }}>{failure}</span>
+        <button
+          type="button"
+          onClick={() => setFailure(null)}
+          className="rounded-[3px] text-[11px] outline-none focus-visible:shadow-[var(--focus-ring)]"
+          style={{ color: "var(--ink-500)" }}
+        >
+          Dismiss
+        </button>
+      </span>
+    );
   }
 
   // Forfeited: show status and a clear action for editors.
@@ -190,7 +204,7 @@ function Action({
       );
     }
     return (
-      <RowAction onClick={handleClearForfeit}>
+      <RowAction onClick={() => apply(null)}>
         {pending ? "Clearing…" : "Clear forfeit"}
       </RowAction>
     );
@@ -203,11 +217,11 @@ function Action({
     if (confirming !== null) {
       return (
         <span className="flex items-center gap-2 text-[11px]">
-          <RowAction onClick={() => handleForfeit("ours")}>
+          <RowAction onClick={() => apply("ours")}>
             {pending ? "…" : "Ours"}
           </RowAction>
           <span style={{ color: "var(--ink-300)" }}>·</span>
-          <RowAction onClick={() => handleForfeit("theirs")}>
+          <RowAction onClick={() => apply("theirs")}>
             {pending ? "…" : "Theirs"}
           </RowAction>
           <span style={{ color: "var(--ink-300)" }}>·</span>
