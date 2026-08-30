@@ -79,7 +79,7 @@ ready).
 - **notes:** Read `docs/ui-revamp-guardrails.md`. Design: DesignSync `afde9116…`, screen `2c`. `opponent-picker.tsx`'s directory-key-alongside-name contract (`ProgramSearchResult | null`) must survive — the key is what makes the opponent aggregatable; keep the squad-disambiguation and men's/women's mismatch warning behaviour from `dual-form.tsx`.
 
 ## T6 · Dual builder master-detail (design 2b)
-- **status:** todo
+- **status:** blocked
 - **model:** fable
 - **needs:** T5
 - **files:** `src/components/dashboard/schedule/dual-form.tsx`, `src/components/dashboard/schedule/lineup-editor.tsx`, new left-rail component (guess)
