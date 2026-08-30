@@ -49,7 +49,7 @@ export function RosterCard({ roster }: { roster: TeamRosterCard | null }) {
   const rest = roster.invites.length - shown.length;
 
   return (
-    <section className="rounded-[var(--radius-card)] border border-[var(--border-medium)] px-5 pt-4 pb-[18px]">
+    <section className="rounded-[var(--radius-card)] border border-[var(--border-medium)] px-5 pt-4 pb-[18px] shadow-[var(--shadow-card)]">
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="eyebrow">Roster</h2>
         <Link

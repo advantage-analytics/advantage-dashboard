@@ -48,7 +48,7 @@ export function NeedsAttention({ alerts }: { alerts: TeamAlert[] }) {
   if (alerts.length === 0) return null;
 
   return (
-    <section className="rounded-[var(--radius-card)] border border-[var(--border-medium)]">
+    <section className="rounded-[var(--radius-card)] border border-[var(--border-medium)] shadow-[var(--shadow-card)]">
       <h2 className="eyebrow px-5 pt-4 pb-2.5">Needs attention</h2>
 
       <ul>

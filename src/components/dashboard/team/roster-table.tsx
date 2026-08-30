@@ -648,7 +648,7 @@ export function RosterTable({
       {/* 9a: the card carries the horizontal padding and every row pulls its
           own back out again, which is what makes a hover a rounded panel inset
           from the card's edge rather than a band running wall to wall. */}
-      <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-medium)] bg-[var(--surface-card)]">
+      <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-medium)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
         <div className="min-w-[880px] px-6 pt-0.5 pb-1.5">
           <div
             className={`${ROW} border-b border-[var(--border-hairline)] pt-3 pb-2.5`}
