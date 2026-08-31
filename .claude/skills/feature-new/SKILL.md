@@ -26,7 +26,7 @@ for d in work/<slug>/*/; do mkdir -p "$d/output" "$d/references"; touch "$d/refe
 
 Then write two files:
 
-- `work/<slug>/CONTEXT.md` — three lines: the feature name, the branch it was
+- `work/<slug>/CONTEXT.md` — a few lines: the feature name, the branch it was
   scaffolded on, the date, and a pointer to `.claude/pipeline/CONTEXT.md` for
   the rules.
 - `work/<slug>/BRIEF-SEED.md` — a placeholder telling the human to replace it

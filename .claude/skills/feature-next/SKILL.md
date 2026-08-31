@@ -67,6 +67,10 @@ unblock — and proceed to the commit step. Blocked is a result.
 
 ## 5. Commit and stop
 
+A stage that deliberately stopped **without writing anything** — stage 05
+waiting on the queue drain — has nothing to commit: skip the commit, report,
+and stop. Otherwise:
+
 ```bash
 git add work/<slug> .claude/tasks && git commit -m "pipeline(<slug>): stage NN <name>"
 ```
