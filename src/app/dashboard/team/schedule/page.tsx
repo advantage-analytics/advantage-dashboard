@@ -43,8 +43,11 @@ export default async function SchedulePage() {
   const eyebrow = squad ? `${active.name} · ${squad}` : active.name;
 
   return (
-    <div className="w-full flex-1 bg-[var(--surface-card)]">
-      <div className="mx-auto flex flex-1 max-w-screen-2xl flex-col px-6 py-8 sm:px-10">
+    <div className="flex w-full flex-1 flex-col bg-[var(--surface-card)]">
+      {/* `w-full` alongside `mx-auto`: auto side margins on a column flex item
+          switch off the stretch that would otherwise size it — same chain as
+          the home page's container. */}
+      <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-6 py-8 sm:px-10">
         <ScheduleList
           rows={rows}
           details={details}

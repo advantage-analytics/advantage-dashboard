@@ -254,6 +254,14 @@ function ScheduleRowLine({
   );
 }
 
+const emptyHeadlineStyle = {
+  fontWeight: 300,
+  fontSize: "24px",
+  lineHeight: "28px",
+  letterSpacing: "-0.3px",
+  color: "var(--ink-900)",
+} as const;
+
 function EmptySchedule({ canCreate }: { canCreate: boolean }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center min-h-[360px] py-16 text-center">
@@ -262,20 +270,11 @@ function EmptySchedule({ canCreate }: { canCreate: boolean }) {
         strokeWidth={1.5}
         className="size-7 text-[var(--ink-300)]"
       />
+      <p className="mt-[18px]" style={emptyHeadlineStyle}>
+        {canCreate ? "No events yet" : "Nothing scheduled yet"}
+      </p>
       {canCreate ? (
         <>
-          <p
-            className="mt-[18px]"
-            style={{
-              fontWeight: 300,
-              fontSize: "24px",
-              lineHeight: "28px",
-              letterSpacing: "-0.3px",
-              color: "var(--ink-900)",
-            }}
-          >
-            No events yet
-          </p>
           <p
             className="text-body-sm mt-2 max-w-[46ch]"
             style={{ textWrap: "pretty" }}
@@ -301,18 +300,6 @@ function EmptySchedule({ canCreate }: { canCreate: boolean }) {
         </>
       ) : (
         <>
-          <p
-            className="mt-[18px]"
-            style={{
-              fontWeight: 300,
-              fontSize: "24px",
-              lineHeight: "28px",
-              letterSpacing: "-0.3px",
-              color: "var(--ink-900)",
-            }}
-          >
-            Nothing scheduled yet
-          </p>
           <p
             className="text-body-sm mt-2 max-w-[48ch]"
             style={{ textWrap: "pretty" }}
