@@ -298,7 +298,6 @@ export function DualForm({
 
   return (
     <EventShell
-      crumb="New dual"
       flush
       footer={
         <>

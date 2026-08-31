@@ -57,10 +57,7 @@ export function SingleDetail({
   const facts = [match.context, match.surface].filter(Boolean) as string[];
 
   return (
-    <EventShell
-      crumb={`${match.playerName} vs ${match.opponentName}`}
-      trail={[{ label: "Schedule", href: "/dashboard/team/schedule" }]}
-    >
+    <EventShell>
       <div className="flex items-end gap-12">
         <div className="min-w-0 flex-1">
           <span className="eyebrow">

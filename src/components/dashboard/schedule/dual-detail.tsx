@@ -54,16 +54,23 @@ export function DualDetail({
   const doublesScore = countGroup(doubles);
 
   return (
-    <EventShell
-      crumb={`vs ${event.name}`}
-      note={createdJustNow ? "Created just now" : undefined}
-    >
+    <EventShell>
       <div className="flex items-end gap-12">
         <div className="min-w-0 flex-1">
-          <span className="eyebrow">
-            Dual match · {formatEventDay(event.startsOn)} ·{" "}
-            {siteTitle(event.site)} · {score?.decided ? "final" : event.surface ?? "—"}
-          </span>
+          <div className="flex items-baseline gap-2.5">
+            <span className="eyebrow">
+              Dual match · {formatEventDay(event.startsOn)} ·{" "}
+              {siteTitle(event.site)} · {score?.decided ? "final" : event.surface ?? "—"}
+            </span>
+            {createdJustNow ? (
+              <>
+                <div className="flex-1" />
+                <span className="text-[11px] text-[var(--ink-500)]">
+                  Created just now
+                </span>
+              </>
+            ) : null}
+          </div>
           {/* A real h1. The page carried no heading of any level, so a screen
               reader got no structure for the thing the page is about. "vs"
               stays inside it: the accessible name is the fixture, not the

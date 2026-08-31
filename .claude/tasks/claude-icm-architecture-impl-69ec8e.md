@@ -24,7 +24,7 @@ iteration, and the runner only ever rewrites a task's `status:` line.
   work/schedule-breadcrumb-header/02_design/output/design.md §1.
 
 ## T2 · Remove EventShell's crumb bar, atomically with its callers
-- **status:** todo
+- **status:** done
 - **files:** src/components/dashboard/schedule/event-shell.tsx, new-event-chooser.tsx, dual-form.tsx, tournament-form.tsx, school-search.tsx, single-detail.tsx, dual-detail.tsx, tournament-detail.tsx (same dir)
 - **done when:**
   - [ ] `event-shell.tsx` renders no crumb bar; `crumb`, `trail`, `note` props gone; now-unused imports gone; doc comment describes the remaining body+footer frame and says breadcrumbs live in the dashboard shell header

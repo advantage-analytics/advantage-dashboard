@@ -161,7 +161,6 @@ export function TournamentForm({
 
   return (
     <EventShell
-      crumb="New tournament"
       flush
       footer={
         <>
