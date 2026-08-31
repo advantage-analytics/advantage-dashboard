@@ -18,7 +18,7 @@ straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Rewrite EmptySchedule as the role-branched 5a/5b day-zero body
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/schedule/schedule-list.tsx, src/app/dashboard/team/schedule/page.tsx (both confirmed via route trace, not guesses)
 - **done when:**

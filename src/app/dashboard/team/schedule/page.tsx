@@ -44,7 +44,7 @@ export default async function SchedulePage() {
 
   return (
     <div className="w-full flex-1 bg-[var(--surface-card)]">
-      <div className="mx-auto flex max-w-screen-2xl flex-col px-6 py-8 sm:px-10">
+      <div className="mx-auto flex flex-1 max-w-screen-2xl flex-col px-6 py-8 sm:px-10">
         <ScheduleList
           rows={rows}
           details={details}
