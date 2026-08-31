@@ -212,6 +212,27 @@ export function settingsSection(pathname: string): SettingsSection | null {
 }
 
 /**
+ * Leaf labels for the schedule subtree's four create screens. Here rather
+ * than in the header for the same reason SETTINGS_SECTIONS is: route-label
+ * data lives beside the routes it names, so a rename cannot silently leave
+ * the crumb saying the old word. Every other path under the schedule — the
+ * event pages at `[eventId]` and `single/[matchId]` — deliberately has no
+ * entry: those pages carry their identity in the body's own `<h1>`, and the
+ * header shows the linked Schedule crumb alone.
+ */
+const SCHEDULE_LEAF_LABELS: Record<string, string> = {
+  "/dashboard/team/schedule/new": "New event",
+  "/dashboard/team/schedule/new/dual": "New dual",
+  "/dashboard/team/schedule/new/tournament": "New tournament",
+  "/dashboard/team/schedule/new/single": "New single",
+};
+
+/** The schedule create-screen leaf label for a path, or null. */
+export function scheduleLeaf(pathname: string): string | null {
+  return SCHEDULE_LEAF_LABELS[pathname] ?? null;
+}
+
+/**
  * The deepest link matching a path.
  *
  * Longest-match rather than "first prefix wins", because the team menu nests —

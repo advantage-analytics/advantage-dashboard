@@ -27,11 +27,9 @@ const COLUMNS = "grid-cols-[44px_52px_1fr_168px_110px]";
 export function TournamentDetail({
   detail,
   canEdit,
-  createdJustNow,
 }: {
   detail: EventDetail;
   canEdit: boolean;
-  createdJustNow?: boolean;
 }) {
   const { event, entries } = detail;
 
@@ -49,10 +47,7 @@ export function TournamentDetail({
   );
 
   return (
-    <EventShell
-      crumb={event.name}
-      note={createdJustNow ? "Created just now" : undefined}
-    >
+    <EventShell>
       <div className="flex items-start gap-12">
         <div className="min-w-0 flex-1">
           <span className="eyebrow">

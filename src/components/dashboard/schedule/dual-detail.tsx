@@ -28,11 +28,9 @@ const COLUMNS = "grid-cols-[44px_52px_1fr_150px_130px]";
 export function DualDetail({
   detail,
   canEdit,
-  createdJustNow,
 }: {
   detail: EventDetail;
   canEdit: boolean;
-  createdJustNow?: boolean;
 }) {
   const { event, entries } = detail;
 
@@ -54,10 +52,7 @@ export function DualDetail({
   const doublesScore = countGroup(doubles);
 
   return (
-    <EventShell
-      crumb={`vs ${event.name}`}
-      note={createdJustNow ? "Created just now" : undefined}
-    >
+    <EventShell>
       <div className="flex items-end gap-12">
         <div className="min-w-0 flex-1">
           <span className="eyebrow">

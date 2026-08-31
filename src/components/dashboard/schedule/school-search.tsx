@@ -187,7 +187,6 @@ export function SchoolSearch({
 
   return (
     <EventShell
-      crumb="New dual"
       footer={
         <>
           <button

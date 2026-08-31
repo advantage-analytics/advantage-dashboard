@@ -197,6 +197,19 @@ Every task needs a `done when:` list. It is the contract
 Never present them inside a ```bash fence — the app renders a fenced shell
 block as a Run button, and running one there fails with `command not found`.
 
+### Feature pipeline (ICM)
+
+Larger features can run through the staged pipeline in `work/<slug>/`
+(brief → design → plan → tasks → build → review), scaffolded by
+`/feature-new` and advanced one stage at a time by `/feature-next`. Each
+stage's `output/` is a markdown file the human edits between invocations —
+re-invoking the runner is the approval. Rules and contracts:
+`.claude/pipeline/CONTEXT.md`; spec:
+`docs/superpowers/specs/2026-08-30-icm-feature-pipeline-design.md`.
+Stage 04 feeds the branch task queue above; 05/06 wrap the queue drain and
+`/pr-check`. Like `/task-next`, the runner is typed to Claude (never presented
+in a shell-fenced block) and must never be driven by `/loop`.
+
 ## Conventions
 
 - `@/` alias for imports from `src/`

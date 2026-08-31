@@ -26,7 +26,7 @@ import {
 } from "@/components/dashboard/shared/chrome-tooltip";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { navLabel, settingsSection } from "@/lib/dashboard/nav";
+import { navLabel, scheduleLeaf, settingsSection } from "@/lib/dashboard/nav";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { workspaceTitle } from "@/lib/workspace/types";
 import { WorkspaceOptionList } from "@/components/dashboard/workspace-switcher";
@@ -47,6 +47,18 @@ interface MatchCrumb {
 const MATCHES_STATIC_SEGMENTS = new Set(["new"]);
 
 const MATCHES_CRUMB = { label: "Matches", href: "/dashboard/matches" };
+
+/**
+ * Label resolved through the shared route table (`navLabel`), never restated:
+ * rename Schedule in the rail and this crumb renames with it — the drift
+ * `nav.ts` exists to prevent. The literal is only the fallback for a table
+ * that no longer lists the route at all.
+ */
+const SCHEDULE_HREF = "/dashboard/team/schedule";
+const SCHEDULE_CRUMB = {
+  label: navLabel(SCHEDULE_HREF) ?? "Schedule",
+  href: SCHEDULE_HREF,
+};
 
 /**
  * Pages whose leading slot is the workspace itself rather than a position
@@ -92,9 +104,21 @@ function getStaticBreadcrumbs(
   pathname: string
 ): { label: string; href?: string }[] {
   if (pathname === "/dashboard") return [];
-  // The one page that is a step within a destination rather than one itself.
+  // Pages that are steps within a destination rather than ones themselves:
+  // the match wizard here, the schedule create screens just below.
   if (pathname === "/dashboard/matches/new") {
     return [MATCHES_CRUMB, { label: "New match" }];
+  }
+
+  // The schedule subtree: a leaf crumb for the four create screens (the
+  // table lives in nav.ts with the other route labels), and just the linked
+  // Schedule crumb for every other page under it — the event and single-match
+  // detail pages name themselves in their own body's <h1>, so a leaf here
+  // would restate it: same philosophy as WORKSPACE_TITLE_PATHS above, the
+  // crumb slot doesn't compete with a display-type title for the same fact.
+  if (pathname.startsWith(`${SCHEDULE_HREF}/`)) {
+    const leaf = scheduleLeaf(pathname);
+    return leaf ? [SCHEDULE_CRUMB, { label: leaf }] : [SCHEDULE_CRUMB];
   }
 
   // Settings is the one destination with sub-pages of its own, so the trail

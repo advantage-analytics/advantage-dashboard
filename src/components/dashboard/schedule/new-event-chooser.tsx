@@ -87,7 +87,6 @@ export function NewEventChooser() {
 
   return (
     <EventShell
-      crumb="New event"
       footer={
         <>
           <button
