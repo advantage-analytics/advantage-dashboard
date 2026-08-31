@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { Bell, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { advButton } from "@/lib/ui/adv-button";
 import { EventDetailPane } from "@/components/dashboard/schedule/event-detail-pane";
@@ -28,11 +29,13 @@ export function ScheduleList({
   details,
   eyebrow,
   canCreate,
+  canAddOwnMatch,
 }: {
   rows: ScheduleRow[];
   details: Record<string, EventDetail>;
   eyebrow: string;
   canCreate: boolean;
+  canAddOwnMatch: boolean;
 }) {
   const today = useMemo(() => {
     const d = new Date();
@@ -68,14 +71,14 @@ export function ScheduleList({
 
   if (rows.length === 0) {
     return (
-      <div className="flex flex-col">
+      <div className="flex flex-1 flex-col">
         <Header
           eyebrow={eyebrow}
           totalCount={totalCount}
           upcomingCount={upcomingCount}
           canCreate={canCreate}
         />
-        <EmptySchedule />
+        <EmptySchedule canCreate={canCreate} canAddOwnMatch={canAddOwnMatch} />
       </div>
     );
   }
@@ -253,22 +256,91 @@ function ScheduleRowLine({
   );
 }
 
-function EmptySchedule() {
+const emptyHeadlineStyle = {
+  fontWeight: 300,
+  fontSize: "24px",
+  lineHeight: "28px",
+  letterSpacing: "-0.3px",
+  color: "var(--ink-900)",
+} as const;
+
+const emptyLinkClass =
+  "text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]";
+
+function EmptySchedule({
+  canCreate,
+  canAddOwnMatch,
+}: {
+  canCreate: boolean;
+  canAddOwnMatch: boolean;
+}) {
   return (
-    <div className="mt-8 flex flex-col gap-1.5">
-      <p
-        className="text-[24px] font-light leading-[1.2] tracking-[-0.4px]"
-        style={{ color: "var(--ink-900)" }}
-      >
-        Nothing scheduled yet
+    <div className="flex flex-1 flex-col items-center justify-center min-h-[360px] py-16 text-center">
+      <Calendar
+        size={28}
+        strokeWidth={1.5}
+        className="size-7 text-[var(--ink-300)]"
+      />
+      <p className="mt-[18px]" style={emptyHeadlineStyle}>
+        {canCreate ? "No events yet" : "Nothing scheduled yet"}
       </p>
-      <p
-        className="max-w-[56ch] text-[13px] leading-[1.6]"
-        style={{ color: "var(--ink-700)" }}
-      >
-        Start with the next dual. Naming the lineup creates a line for every
-        court, and video goes against those lines later.
-      </p>
+      {canCreate ? (
+        <>
+          <p
+            className="text-body-sm mt-2 max-w-[46ch]"
+            style={{ textWrap: "pretty" }}
+          >
+            Create a dual and the lineup card builds itself — S1–S6, D1–D3,
+            each slot a real match from the moment you set it.
+          </p>
+          <div className="mt-5 flex items-center gap-4">
+            <Link
+              href="/dashboard/team/schedule/new"
+              className={emptyLinkClass}
+            >
+              New event
+            </Link>
+            <span className="h-2.5 w-px bg-[var(--border-medium)]" />
+            <Link
+              href="/dashboard/matches/new"
+              className={emptyLinkClass}
+            >
+              Add a one-off match in Matches
+            </Link>
+          </div>
+        </>
+      ) : (
+        <>
+          <p
+            className="text-body-sm mt-2 max-w-[48ch]"
+            style={{ textWrap: "pretty" }}
+          >
+            Your coach adds the duals and tournaments. Once a lineup is set,
+            your line appears here with the opponent, site and time.
+          </p>
+          {/* Same rule as Team Home's upload button: a player the program
+              hasn't opened uploads to gets no link rather than a wizard that
+              refuses them at the end. */}
+          {canAddOwnMatch && (
+            <div className="mt-5 flex items-center gap-4">
+              <Link href="/dashboard/matches/new" className={emptyLinkClass}>
+                Add your own match
+              </Link>
+            </div>
+          )}
+          <div className="mt-[26px] flex max-w-[520px] items-center gap-2 rounded-lg bg-[var(--surface-subtle)] px-3 py-[9px]">
+            <Bell
+              size={13}
+              strokeWidth={1.5}
+              className="shrink-0 text-[var(--ink-500)]"
+            />
+            <span className="text-micro text-[var(--ink-600)]">
+              The schedule is coach-managed — your line appears here once the
+              lineup is set.
+            </span>
+          </div>
+        </>
+      )}
     </div>
   );
 }
