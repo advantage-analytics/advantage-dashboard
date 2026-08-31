@@ -29,11 +29,13 @@ export function ScheduleList({
   details,
   eyebrow,
   canCreate,
+  canAddOwnMatch,
 }: {
   rows: ScheduleRow[];
   details: Record<string, EventDetail>;
   eyebrow: string;
   canCreate: boolean;
+  canAddOwnMatch: boolean;
 }) {
   const today = useMemo(() => {
     const d = new Date();
@@ -76,7 +78,7 @@ export function ScheduleList({
           upcomingCount={upcomingCount}
           canCreate={canCreate}
         />
-        <EmptySchedule canCreate={canCreate} />
+        <EmptySchedule canCreate={canCreate} canAddOwnMatch={canAddOwnMatch} />
       </div>
     );
   }
@@ -262,7 +264,16 @@ const emptyHeadlineStyle = {
   color: "var(--ink-900)",
 } as const;
 
-function EmptySchedule({ canCreate }: { canCreate: boolean }) {
+const emptyLinkClass =
+  "text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]";
+
+function EmptySchedule({
+  canCreate,
+  canAddOwnMatch,
+}: {
+  canCreate: boolean;
+  canAddOwnMatch: boolean;
+}) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center min-h-[360px] py-16 text-center">
       <Calendar
@@ -285,14 +296,14 @@ function EmptySchedule({ canCreate }: { canCreate: boolean }) {
           <div className="mt-5 flex items-center gap-4">
             <Link
               href="/dashboard/team/schedule/new"
-              className="text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
+              className={emptyLinkClass}
             >
               New event
             </Link>
             <span className="h-2.5 w-px bg-[var(--border-medium)]" />
             <Link
               href="/dashboard/matches/new"
-              className="text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
+              className={emptyLinkClass}
             >
               Add a one-off match in Matches
             </Link>
@@ -307,14 +318,16 @@ function EmptySchedule({ canCreate }: { canCreate: boolean }) {
             Your coach adds the duals and tournaments. Once a lineup is set,
             your line appears here with the opponent, site and time.
           </p>
-          <div className="mt-5 flex items-center gap-4">
-            <Link
-              href="/dashboard/matches/new"
-              className="text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
-            >
-              Add your own match
-            </Link>
-          </div>
+          {/* Same rule as Team Home's upload button: a player the program
+              hasn't opened uploads to gets no link rather than a wizard that
+              refuses them at the end. */}
+          {canAddOwnMatch && (
+            <div className="mt-5 flex items-center gap-4">
+              <Link href="/dashboard/matches/new" className={emptyLinkClass}>
+                Add your own match
+              </Link>
+            </div>
+          )}
           <div className="mt-[26px] flex max-w-[520px] items-center gap-2 rounded-lg bg-[var(--surface-subtle)] px-3 py-[9px]">
             <Bell
               size={13}

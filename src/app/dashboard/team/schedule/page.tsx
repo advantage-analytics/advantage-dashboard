@@ -5,7 +5,11 @@ import {
   scheduleRowsFrom,
   eventDetailFrom,
 } from "@/lib/data/schedule-server";
-import { isProgramStaff, teamLabel } from "@/lib/workspace/types";
+import {
+  canUploadForProgram,
+  isProgramStaff,
+  teamLabel,
+} from "@/lib/workspace/types";
 import { ScheduleList } from "@/components/dashboard/schedule/schedule-list";
 import type { EventDetail } from "@/lib/schedule/types";
 
@@ -53,6 +57,7 @@ export default async function SchedulePage() {
           details={details}
           eyebrow={eyebrow}
           canCreate={isProgramStaff(active)}
+          canAddOwnMatch={canUploadForProgram(active)}
         />
       </div>
     </div>
