@@ -30,7 +30,7 @@ ready).
 - **notes:** Pipeline events-lineups step 1 (work/events-lineups/03_plan/output/plan.md; component spec in 02_design/output/design.md). Copy is verbatim from the approved design including its two deliberate deviations from the mock (dropped "How events work" + corrected note-strip copy) — do not "fix" the copy back to the mock. Em-dashes in body copy are U+2014 as written here.
 
 ## T2 · Run repo gates over the finished 5a/5b diff
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** none edited — gates run against T1's committed diff
