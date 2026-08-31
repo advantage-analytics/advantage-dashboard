@@ -114,9 +114,9 @@ function getStaticBreadcrumbs(
   // table lives in nav.ts with the other route labels), and just the linked
   // Schedule crumb for every other page under it — the event and single-match
   // detail pages name themselves in their own body's <h1>, so a leaf here
-  // would restate it: same philosophy as WORKSPACE_TITLE_PATHS below, the
+  // would restate it: same philosophy as WORKSPACE_TITLE_PATHS above, the
   // crumb slot doesn't compete with a display-type title for the same fact.
-  if (pathname.startsWith("/dashboard/team/schedule/")) {
+  if (pathname.startsWith(`${SCHEDULE_HREF}/`)) {
     const leaf = scheduleLeaf(pathname);
     return leaf ? [SCHEDULE_CRUMB, { label: leaf }] : [SCHEDULE_CRUMB];
   }

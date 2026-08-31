@@ -50,21 +50,19 @@ export function TournamentDetail({
     <EventShell>
       <div className="flex items-start gap-12">
         <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-2.5">
-            <span className="eyebrow">
-              Tournament ·{" "}
-              <span
-                className="mono"
-                style={{ fontSize: "10px", letterSpacing: 0 }}
-              >
-                {formatEventSpanWithYear(event.startsOn, event.endsOn)}
-              </span>
-              {/* No "· final" here. A dual is final when every line is in — a
-                  fact the page can check. A tournament has no such signal: one
-                  result played is not a finished weekend, and printing "final"
-                  after the first one says the opposite of what is true. */}
+          <span className="eyebrow">
+            Tournament ·{" "}
+            <span
+              className="mono"
+              style={{ fontSize: "10px", letterSpacing: 0 }}
+            >
+              {formatEventSpanWithYear(event.startsOn, event.endsOn)}
             </span>
-          </div>
+            {/* No "· final" here. A dual is final when every line is in — a
+                fact the page can check. A tournament has no such signal: one
+                result played is not a finished weekend, and printing "final"
+                after the first one says the opposite of what is true. */}
+          </span>
           {/* The page's h1. It had no heading at any level before. */}
           <h1
             className="mt-2.5 text-[30px] font-light leading-[34px] tracking-[-0.6px]"

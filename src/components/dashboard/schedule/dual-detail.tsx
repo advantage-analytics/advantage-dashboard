@@ -55,12 +55,10 @@ export function DualDetail({
     <EventShell>
       <div className="flex items-end gap-12">
         <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-2.5">
-            <span className="eyebrow">
-              Dual match · {formatEventDay(event.startsOn)} ·{" "}
-              {siteTitle(event.site)} · {score?.decided ? "final" : event.surface ?? "—"}
-            </span>
-          </div>
+          <span className="eyebrow">
+            Dual match · {formatEventDay(event.startsOn)} ·{" "}
+            {siteTitle(event.site)} · {score?.decided ? "final" : event.surface ?? "—"}
+          </span>
           {/* A real h1. The page carried no heading of any level, so a screen
               reader got no structure for the thing the page is about. "vs"
               stays inside it: the accessible name is the fixture, not the
