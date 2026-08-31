@@ -1,17 +1,8 @@
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import {
-  getProgramSchedule,
-  scheduleRowsFrom,
-  eventDetailFrom,
-} from "@/lib/data/schedule-server";
-import {
-  canUploadForProgram,
-  isProgramStaff,
-  teamLabel,
-} from "@/lib/workspace/types";
-import { ScheduleList } from "@/components/dashboard/schedule/schedule-list";
-import type { EventDetail } from "@/lib/schedule/types";
+import { canUploadForProgram, isProgramStaff } from "@/lib/workspace/types";
+import { StaticSchedule } from "@/components/dashboard/schedule/static/static-schedule";
+import { POPULATED_SCHEDULE } from "@/lib/schedule/fixtures";
 
 /**
  * 25a / 4c -- the program's schedule, now a master-detail layout.
@@ -23,6 +14,21 @@ import type { EventDetail } from "@/lib/schedule/types";
  *
  * Fetches once -- `getProgramSchedule` -- and passes the full data down so
  * selection in the list swaps the detail pane with no further round-trip.
+ *
+ * ── Static as of the events-lineups rebuild ────────────────────────────────
+ * The two paragraphs above describe the DB-wired body, which `ScheduleList`
+ * still implements and which this route no longer runs: nothing here fetches
+ * any more. The body is `StaticSchedule`, rendering artboards `7e` and `7d`
+ * from `src/lib/schedule/fixtures.ts` — swap `POPULATED_SCHEDULE` for
+ * `EMPTY_SCHEDULE` to land on the day-zero frame. `schedule-list.tsx` and the
+ * loaders it needs (`getProgramSchedule`, `scheduleRowsFrom`,
+ * `eventDetailFrom`) stay exactly where they are, dormant, for the re-wiring.
+ *
+ * The guards below are untouched, and both permission answers still come from
+ * the workspace rather than from the fixtures: `isProgramStaff` gates the
+ * drawer's "New event" CTA, and `canUploadForProgram` gates 7e's "One-off
+ * match in Matches" — the same rule the DB-wired empty state applied to "Add
+ * your own match".
  */
 export default async function SchedulePage() {
   const workspace = await getWorkspaceContext();
@@ -31,35 +37,11 @@ export default async function SchedulePage() {
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard");
 
-  const schedule = await getProgramSchedule(active.id);
-
-  const rows = scheduleRowsFrom(schedule);
-
-  // Build the detail map: every event's detail, keyed by id, so the client
-  // component can swap panes without a fetch.
-  const details: Record<string, EventDetail> = {};
-  for (const event of schedule.events) {
-    const detail = eventDetailFrom(schedule, event.id);
-    if (detail) details[event.id] = detail;
-  }
-
-  const squad = teamLabel(active.team);
-  const eyebrow = squad ? `${active.name} · ${squad}` : active.name;
-
   return (
-    <div className="flex w-full flex-1 flex-col bg-[var(--surface-card)]">
-      {/* `w-full` alongside `mx-auto`: auto side margins on a column flex item
-          switch off the stretch that would otherwise size it — same chain as
-          the home page's container. */}
-      <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-6 py-8 sm:px-10">
-        <ScheduleList
-          rows={rows}
-          details={details}
-          eyebrow={eyebrow}
-          canCreate={isProgramStaff(active)}
-          canAddOwnMatch={canUploadForProgram(active)}
-        />
-      </div>
-    </div>
+    <StaticSchedule
+      schedule={POPULATED_SCHEDULE}
+      canCreate={isProgramStaff(active)}
+      canAddOwnMatch={canUploadForProgram(active)}
+    />
   );
 }

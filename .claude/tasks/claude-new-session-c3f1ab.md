@@ -70,7 +70,7 @@ bodies do not repeat them — a subagent running any of T1–T12 should read the
 - **notes:** Smallest complete artboard, and the pattern-setter for the other three routes — get the route-edit shape right here. Footer goes in `EventShell`'s `footer` slot.
 
 ## T3 · Rebuild 7e and 7d — the schedule shell and drawer
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** `src/components/dashboard/schedule/static/static-schedule.tsx`, `src/components/dashboard/schedule/static/event-drawer.tsx` (both new), `src/app/dashboard/team/schedule/page.tsx`
