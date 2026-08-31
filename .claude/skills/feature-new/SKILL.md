@@ -11,8 +11,16 @@ One workspace per feature. The factory is `.claude/pipeline/`; read its
 
 ## 1. Validate
 
-- The slug must be kebab-case (`[a-z0-9-]+`). Reject anything else — it
-  becomes a folder name and a commit prefix.
+The argument is either a kebab-case slug or raw intent in natural language —
+both are legitimate:
+
+- **Kebab-case slug** (`[a-z0-9-]+`): use it as-is; the seed gets the
+  placeholder below for the human to fill in.
+- **Anything else is intent, not an error**: derive a short kebab-case slug
+  from it yourself, and write the human's words **verbatim** into
+  `BRIEF-SEED.md` (quoted, marked as captured from the invocation) — this
+  saves the seed-editing step, and stage 01 refines it from there. Tell the
+  human which slug you derived.
 - If `work/<slug>/` already exists, **stop and say so**. Never overwrite a
   workspace; resuming one is `/feature-next`, not `/feature-new`.
 
