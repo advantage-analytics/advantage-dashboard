@@ -15,3 +15,16 @@
   props (body+footer frame remains); seven call sites dropped the removed props;
   dual-detail and tournament-detail re-home "Created just now" right-aligned on
   the eyebrow row under the same createdJustNow condition.
+## T3 · Gates and single-breadcrumb proof — done
+- **gate:** tsc OK · lint OK (37 warnings, within the known tolerance) ·
+  build OK · test OK (227/227) — run by the task subagent over an unchanged
+  tree; no code diff, so pipeline-guardrails-reviewer and rls-boundary-reviewer
+  both skipped (no reviewable surface)
+- **changed:** nothing in src/ — verification task. **Limitation for stage 06:**
+  no authenticated preview session was available to the runner (dev server on
+  :3101 redirected /dashboard/team/schedule/new to /login; the runner does not
+  log in by policy). The single-breadcrumb claim is verified by construction
+  (one <nav aria-label="Breadcrumb"> render site in header.tsx; event-shell.tsx
+  bar removed in T2) but NOT by rendered DOM. The stage-06 human walk must
+  visually confirm /dashboard/team/schedule/new and one event page each show
+  exactly one breadcrumb row.

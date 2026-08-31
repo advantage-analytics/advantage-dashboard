@@ -36,7 +36,7 @@ iteration, and the runner only ever rewrites a task's `status:` line.
   Design §2–3.
 
 ## T3 · Gates and single-breadcrumb proof
-- **status:** todo
+- **status:** done
 - **files:** none expected; fix any test straggler the suite reveals
 - **done when:**
   - [ ] `npx tsc --noEmit && npm run lint && npm run build` green (0 errors; the 43 known pre-existing warnings tolerated)
