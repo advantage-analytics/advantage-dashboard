@@ -68,3 +68,84 @@ task finds a copy mismatch.
    **37** warnings, not 43. The brief and plan both carry the 43 figure. Worth
    correcting by hand — the queue file is the author's, so this run did not
    touch it beyond the `status:` line.
+
+## T2 · Rebuild 3b — the event-type chooser — blocked
+
+**gate:** mechanical **passed** — `npm run lint` 0 errors / 37 warnings (none
+added), `npx tsc --noEmit` clean, `npm test` 227 passed. Completion review
+**FAILED** — `VERDICT: needs-work`, three findings against `done when:` line 1
+(the 1280px fidelity criterion). Guardrails — `pipeline-guardrails-reviewer`
+**ran** (diff touches `src/app/dashboard/` and `src/components/dashboard/`) and
+returned **clean**: the chooser holds only `choice: EventKind` and neither sets
+nor drops `adScoring`, the route's guard block is byte-identical so no player
+reaches a builder they could not before, no provider-naming or
+misattribution hazard. `rls-boundary-reviewer` **skipped** — no
+`src/lib/supabase/`, `src/lib/data/`, `src/app/api/` or `supabase/migrations/`
+file in the diff (checked tracked and untracked) and no new query, table or
+view; the new component has no Supabase import, no `.from(`, no `fetch` and no
+`"use server"`.
+
+**why it failed:** three fidelity divergences from artboard `3b`, all inside
+the task's own first criterion.
+
+1. **The "Add it in Matches" link points at a live external route.** The
+   artboard's own anchor is the placeholder `href="#3b"`; the implementer wired
+   it to `/dashboard/matches/new`. The brief's non-goal is categorical — *"Links
+   may be inert or point within the rebuilt set; wiring them to real
+   destinations is later work"* — and `/dashboard/matches/new` is outside this
+   run's four rebuilt routes. `design.md`'s carve-out for `4c`'s report links is
+   a specific, reasoned exception for a different artboard and was never
+   extended to this one.
+2. **The selected card's inner divider is the wrong colour.** The artboard
+   specifies `rgba(59,130,246,0.15)`; the implementer used
+   `--blue-tint-12` (0.12), reasoning that no token carries 0.15. **That
+   reasoning is factually wrong** — `--blue-glow: rgba(59,130,246,0.15)` is
+   declared at `src/styles/design-system/colors.css:72`, the exact value,
+   currently unused. Verified independently by the runner. Reusing an existing
+   token is not the token work inherited rule 7 forbids, so an exact-fidelity
+   option was available and was not taken.
+3. **The bottom inset is unreconciled and unflagged.** The artboard's content
+   pane is `padding: 36px 48px 0`. The `pt-[10px]` wrapper correctly makes the
+   top edge 36px against `EventShell`'s `pt-[26px]`, but `EventShell`'s `pb-8`
+   (32px) stands against the artboard's 0. Declining to edit the shared
+   `EventShell` — which three other in-flight screens sit in — is a defensible
+   scope call; leaving the gap uncommented in the code is what makes it a
+   finding rather than a documented trade-off.
+
+**stash:** `29062bef5efd3795ad1e071e5ebad613936d9b95` (`git stash apply
+<sha>`, not `stash@{n}` — the stash stack is shared across this repo's
+worktrees and the index shifts). The stash holds the full T2 implementation:
+the new `static-event-chooser.tsx` and the route re-point. It is close to
+passing — the three findings are small, local edits, and the copy check,
+the state behaviour, the route-edit shape and every measured spacing/type/
+radius value were all verified correct.
+
+**changed:** nothing landed in the tree. This commit carries only the
+`status:` line and this log entry.
+
+**follow-ups:**
+1. **The route-edit shape T2 established is sound and worth keeping** even
+   though the task is blocked — T3, T5 and T8 copy it: change one import line,
+   change the `return`, leave the guard block untouched, append a paragraph to
+   the route's existing doc comment naming the dormant component, and do not
+   touch the dormant file. Net diff per route: two code lines plus a comment.
+   Verified byte-identical guards on this attempt.
+2. **A signed-in browser session does not exist in this worktree**, so no task
+   in this run can load a guarded route directly. T2 worked around it with a
+   temporary unguarded harness route sized to the artboard's content region
+   (1048×796 = 1280−232 sidebar, 840−44 topbar), measured computed styles
+   there, then deleted the harness. That technique works and later tasks will
+   need it — but a harness left behind would ship an unguarded route, so it
+   must be deleted before the gate every time.
+3. **Design copy flagged, not fixed — input for T12.** "Add it in Matches"
+   names a destination a team workspace's sidebar does not expose; the coach
+   cannot navigate there from the rail. Reproduced verbatim per inherited
+   rule 4. Note the dormant `new-event-chooser.tsx` had silently reworded this
+   to "Add a single match" pointing at the team single-match route — that
+   rewording is a divergence from the design, and the design wins here.
+4. **`Creates 9 lines` sets the 9 in `mono tabular`** per the artboard's own
+   class list, while the dormant component deliberately dropped `mono` on the
+   argument that Roboto Mono is reserved for timestamps, quota readouts and job
+   ids — never a count inside a sentence. The design was followed per rule 3.
+   Worth settling once in the design system rather than per component; it has
+   now been decided in two directions from the same artboard.
