@@ -107,23 +107,39 @@ Vasquez, Ridgeline University, the 09-26 dual, the 10-03→10-05 tournament,
 
 ## Open questions
 
-1. **Where does the static rebuild live?** Replacing the existing routes
-   in place makes `/dashboard/team/schedule` non-functional for real teams;
-   building alongside (new routes, or a preview area) keeps the app working
-   while the copy is reviewed. This is the biggest unresolved decision and it
-   shapes every later stage.
-2. **What happens to the existing DB-wired components?** Deleted, or left in
-   the tree dormant against the "we can do that later" re-wiring?
-3. **Responsive behaviour is undefined.** The design gives 1280px only. Below
-   that width — a real dashboard viewport — the intended behaviour is unknown.
-4. **Role variants.** All ten artboards show a coach/staff viewpoint. The
-   abandoned run had a distinct player-facing empty state; the design file has
-   no player variant. Does the static rebuild need one?
-5. **`--shadow-card` is missing** from the repo tokens. Add it, or is it
-   canvas-only chrome that never reaches app UI?
-6. **How interactive is "static"?** Are `2d`/`2e` and `7d`/`7c`/`4c` separate
-   static screens, or one component whose local state moves between them? The
-   design presents them as separate frames.
+Answered by the human in chat on 2026-08-31, immediately after reading this
+brief, and transcribed here by the runner rather than typed into the file by
+hand. The decisions are theirs; the keystrokes are not.
+
+1. **Where does the static rebuild live? → Replace.** The rebuild takes over
+   the existing routes in place. `/dashboard/team/schedule` and the
+   `schedule/new` branch become the static copy; the route surface does not
+   grow a parallel preview area. Accepted consequence: those routes stop
+   working for real teams until the later re-wiring.
+2. **What happens to the existing DB-wired components? → Leave dormant.**
+   They stay in the tree, unreferenced by the rebuilt routes, as the material
+   the "we can do that later" re-wiring draws on. They are not deleted, and
+   they are not kept working.
+3. **Responsive behaviour → desktop only.** *"The dashboard is not meant to
+   be used at a screensize close to mobile."* The design's 1280px is the
+   target; no mobile layout is owed. Narrow-viewport behaviour needs only to
+   not break — it is not a design surface in this run.
+6. **How interactive is "static"? → The states move.** `2d`→`2e` and
+   `7d`→`7c`→`4c` are each one component whose local state moves between the
+   frames, not separate static screens. "Static" constrains the *data* (no
+   database), not the interaction: local UI state is expected to work.
+
+### Still open
+
+4. **Role variants — "maybe".** All ten artboards show a coach/staff
+   viewpoint and the design file has no player variant. Unresolved: whether
+   the rebuild needs a player-facing counterpart, and if so what it shows.
+   Stage 02 should put a proposal in front of the human rather than assume
+   either way.
+5. **`--shadow-card` — "not too sure".** Missing from the repo tokens and
+   used on the design's frame chrome. Unresolved whether it belongs in the
+   app's token set or is canvas-only. A small question, but it wants an
+   answer before anything relies on it.
 
 ## Also consulted
 
