@@ -61,6 +61,7 @@ next-env.d.ts
 # list when you write it — the default is ignored.
 .claude/*
 !.claude/settings.json
+!.claude/pipeline/
 !.claude/agents/
 !.claude/hooks/
 !.claude/skills/
@@ -71,6 +72,8 @@ next-env.d.ts
 !.claude/skills/trace-route/
 !.claude/skills/task-next/
 !.claude/skills/task-add/
+!.claude/skills/feature-new/
+!.claude/skills/feature-next/
 .mcp.json
 
 # Agent scratch: SDD ledgers, review packages, task briefs and reports. Never
