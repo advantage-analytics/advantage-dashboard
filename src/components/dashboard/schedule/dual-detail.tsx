@@ -28,11 +28,9 @@ const COLUMNS = "grid-cols-[44px_52px_1fr_150px_130px]";
 export function DualDetail({
   detail,
   canEdit,
-  createdJustNow,
 }: {
   detail: EventDetail;
   canEdit: boolean;
-  createdJustNow?: boolean;
 }) {
   const { event, entries } = detail;
 
@@ -62,14 +60,6 @@ export function DualDetail({
               Dual match · {formatEventDay(event.startsOn)} ·{" "}
               {siteTitle(event.site)} · {score?.decided ? "final" : event.surface ?? "—"}
             </span>
-            {createdJustNow ? (
-              <>
-                <div className="flex-1" />
-                <span className="text-[11px] text-[var(--ink-500)]">
-                  Created just now
-                </span>
-              </>
-            ) : null}
           </div>
           {/* A real h1. The page carried no heading of any level, so a screen
               reader got no structure for the thing the page is about. "vs"

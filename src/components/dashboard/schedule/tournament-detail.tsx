@@ -27,11 +27,9 @@ const COLUMNS = "grid-cols-[44px_52px_1fr_168px_110px]";
 export function TournamentDetail({
   detail,
   canEdit,
-  createdJustNow,
 }: {
   detail: EventDetail;
   canEdit: boolean;
-  createdJustNow?: boolean;
 }) {
   const { event, entries } = detail;
 
@@ -66,14 +64,6 @@ export function TournamentDetail({
                   result played is not a finished weekend, and printing "final"
                   after the first one says the opposite of what is true. */}
             </span>
-            {createdJustNow ? (
-              <>
-                <div className="flex-1" />
-                <span className="text-[11px] text-[var(--ink-500)]">
-                  Created just now
-                </span>
-              </>
-            ) : null}
           </div>
           {/* The page's h1. It had no heading at any level before. */}
           <h1
