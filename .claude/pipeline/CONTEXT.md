@@ -3,7 +3,8 @@
 Staged, file-driven feature development per the Model Workspace Protocol
 (arXiv:2603.16021). Spec: docs/superpowers/specs/2026-08-30-icm-feature-pipeline-design.md.
 
-Stage order: `01_brief → 02_design → 03_plan → 04_tasks → 05_build → 06_review`.
+Stage order: `01_brief → 02_design → 03_plan → 04_tasks → 05_build →
+06_review → 07_land`.
 Each run lives in `work/<slug>/`, scaffolded by `/feature-new`, advanced by
 `/feature-next`.
 
@@ -25,6 +26,11 @@ Each run lives in `work/<slug>/`, scaffolded by `/feature-new`, advanced by
 5. **Plain markdown between stages.** No state files, no frontmatter status,
    no scripts deciding what runs next. The folder numbering is the
    orchestration.
+
+A landed pipeline leaves no residue: stage 07 merges the branch and then
+deletes its queue pair and workspace on the integration branch — git history
+is the archive. Only a workspace kept deliberately as the current worked
+example survives, and only one such example at a time.
 
 Per-feature contract edits are legitimate: the copies in `work/<slug>/` may be
 tuned for that feature. The factory templates here stay generic.

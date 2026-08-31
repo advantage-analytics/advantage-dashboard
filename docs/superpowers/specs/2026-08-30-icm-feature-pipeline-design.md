@@ -2,6 +2,9 @@
 
 Date: 2026-08-30
 Status: approved (brainstorm 2026-08-30)
+Amended 2026-08-31, after the pilot: stage `07_land` added — merge gated on
+the sign-off, then delete the branch's queue pair and workspace on the
+integration branch. Six stages below reads as seven now.
 Source: "Interpretable Context Methodology: Folder Structure as Agentic
 Architecture" (Van Clief & McDermott, arXiv:2603.16021) — the Model Workspace
 Protocol (MWP).

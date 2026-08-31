@@ -185,6 +185,9 @@ on task files are structurally impossible.
 - The queue file is yours; append to it any time, including while the loop
   runs. The runner only ever rewrites a task's `status:` line.
 - `.claude/tasks/<slug>.log.md` is the runner's. Do not hand-edit it.
+- A merged branch whose queue is fully `done` gets its queue pair deleted in
+  a cleanup commit on the integration branch — git history is the archive.
+  Pipeline branches get this from stage 07; do it by hand for the rest.
 - Status values: `todo`, `next`, `doing`, `done` and `blocked` are the
   runner-driven ones. `later` is a deferred task — `/task-next`'s picker never
   selects it automatically, so a loop drain skips straight past
@@ -200,14 +203,15 @@ block as a Run button, and running one there fails with `command not found`.
 ### Feature pipeline (ICM)
 
 Larger features can run through the staged pipeline in `work/<slug>/`
-(brief → design → plan → tasks → build → review), scaffolded by
+(brief → design → plan → tasks → build → review → land), scaffolded by
 `/feature-new` and advanced one stage at a time by `/feature-next`. Each
 stage's `output/` is a markdown file the human edits between invocations —
 re-invoking the runner is the approval. Rules and contracts:
 `.claude/pipeline/CONTEXT.md`; spec:
 `docs/superpowers/specs/2026-08-30-icm-feature-pipeline-design.md`.
 Stage 04 feeds the branch task queue above; 05/06 wrap the queue drain and
-`/pr-check`. Like `/task-next`, the runner is typed to Claude (never presented
+`/pr-check`; 07 merges and then deletes the branch's queue pair and
+workspace on the integration branch (git history is the archive). Like `/task-next`, the runner is typed to Claude (never presented
 in a shell-fenced block) and must never be driven by `/loop`.
 
 ## Conventions
