@@ -1,7 +1,6 @@
 # Review — schedule-breadcrumb-header
 
-**Sign-off: pending** ← edit this line to `approved` (or annotate) after the
-visual walk below.
+**Sign-off: approved** — by CJ in chat, 2026-08-31, after the visual walk.
 
 ## The one check only a human can do
 
