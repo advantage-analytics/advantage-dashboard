@@ -1,6 +1,11 @@
 # Review — events-lineups
 
-Sign-off: pending
+Sign-off: approved
+
+> Given by the human in chat ("looks good", 2026-08-31) alongside the
+> instruction to run stage 07, and transcribed here by the runner rather
+> than typed into the file by hand. The word is theirs; the keystrokes are
+> not.
 
 pr-check target: branch range `2ac0f00...HEAD` (working tree clean; base =
 merge-base with `splitstep-integration`). Range = the feature's commits plus
