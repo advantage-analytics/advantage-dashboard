@@ -48,6 +48,26 @@ const MATCHES_STATIC_SEGMENTS = new Set(["new"]);
 
 const MATCHES_CRUMB = { label: "Matches", href: "/dashboard/matches" };
 
+const SCHEDULE_CRUMB = { label: "Schedule", href: "/dashboard/team/schedule" };
+
+/**
+ * Leaf labels for the schedule subtree's four create screens. Every other
+ * path strictly under `/dashboard/team/schedule/` — the event detail pages at
+ * `[eventId]` and `single/[matchId]` — gets the linked `SCHEDULE_CRUMB` alone:
+ * those pages already carry their identity in the body's own `<h1>` (the
+ * event name, the matchup), so a leaf crumb here would just restate it in a
+ * second place — same philosophy as `WORKSPACE_TITLE_PATHS` below, the crumb
+ * slot doesn't compete with a display-type title for the same fact. Static
+ * strings, not a fetch: unlike the match-detail crumb built at render time,
+ * there is no per-event name to look up on these four create routes.
+ */
+const SCHEDULE_LEAF_LABELS: Record<string, string> = {
+  "/dashboard/team/schedule/new": "New event",
+  "/dashboard/team/schedule/new/dual": "New dual",
+  "/dashboard/team/schedule/new/tournament": "New tournament",
+  "/dashboard/team/schedule/new/single": "New single",
+};
+
 /**
  * Pages whose leading slot is the workspace itself rather than a position
  * within a flow (design 9g, and 1a–1g for the personal pair).
@@ -95,6 +115,15 @@ function getStaticBreadcrumbs(
   // The one page that is a step within a destination rather than one itself.
   if (pathname === "/dashboard/matches/new") {
     return [MATCHES_CRUMB, { label: "New match" }];
+  }
+
+  // The schedule subtree: a leaf crumb for the four create screens
+  // (SCHEDULE_LEAF_LABELS), and just the linked Schedule crumb for every
+  // other page under it — the event and single-match detail pages, which
+  // name themselves in their own body instead.
+  if (pathname.startsWith("/dashboard/team/schedule/")) {
+    const leaf = SCHEDULE_LEAF_LABELS[pathname];
+    return leaf ? [SCHEDULE_CRUMB, { label: leaf }] : [SCHEDULE_CRUMB];
   }
 
   // Settings is the one destination with sub-pages of its own, so the trail

@@ -11,7 +11,7 @@ Append freely while it runs: the queue is re-read at the start of every
 iteration, and the runner only ever rewrites a task's `status:` line.
 
 ## T1 · Schedule subtree breadcrumbs in the shell header
-- **status:** todo
+- **status:** done
 - **files:** src/app/dashboard/header.tsx
 - **done when:**
   - [ ] `getStaticBreadcrumbs` returns a linked Schedule crumb (`href: /dashboard/team/schedule`) plus leaf "New event" / "New dual" / "New tournament" / "New single" for `/dashboard/team/schedule/new`, `/new/dual`, `/new/tournament`, `/new/single` respectively
