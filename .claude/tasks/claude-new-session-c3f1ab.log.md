@@ -249,3 +249,100 @@ to T1's and T2's. `Events & Lineups.dc.html` was deliberately not re-pulled:
 6. **The `EventRow` "vs" prefix is the drawn treatment for duals**; a tournament
    row has none designed. Worth a design answer before the re-wiring, since the
    live loader can return one.
+
+## T4 · Rebuild 7c and 4c — the dual widget — blocked
+
+**gate:** mechanical **passed** — `npm run lint` 0 errors / 37 warnings (none
+added), `npx tsc --noEmit` clean, `npm test` 227 passed. Completion review
+**FAILED** — `VERDICT: needs-work`, criteria 1 and 2 not met on one element.
+Criteria 3, 4 and 5 met. Guardrails — `pipeline-guardrails-reviewer` **ran**
+(diff is entirely under `src/components/dashboard/`) and returned **no
+findings**, having traced the surface that matters most on a results screen:
+`player1`-is-our-side ordering, the tiebreak-against-the-set's-loser
+convention, forfeit precedence (`'ours'` → the point goes to them), and
+singles/doubles segregation all correct — and correct *because* the widget
+never re-derives them, calling the existing `entry-state.ts` and
+`score-format.ts` helpers instead, so it has no path to introduce a side flip.
+`rls-boundary-reviewer` **skipped** — no file under `src/lib/supabase/`,
+`src/lib/data/`, `src/app/api/` or `supabase/migrations/`, no new query;
+`grep` over the three files for `supabase|createClient|\.from(|await|use
+server` returns nothing.
+
+**why it failed: one knowing divergence from the artboard.**
+
+The implementer did not reproduce the header's outcome rails as drawn. Both
+`7c` and `4c` draw the singles rail as five decided marks with a sixth in
+`--ink-200`, and the doubles rail as two decided with a third in `--ink-200`.
+It rendered them derived from `lineWon`/`entryPlayed` instead, which colours
+S6 `--viz-bad` and D3 `--viz-good`.
+
+**Its factual claim was verified true** before the reasoning was judged: the
+artboard really does contradict itself. Its own rows draw S6 as a loss
+(`circle-x`) and D3 as a win (`circle-check`), and its own header reads `5–2`,
+which is only reachable if both lines count — the greyed reading totals 4–1.
+The implementer's argument was that a rail derived from the lines is not copy,
+and that drawing an "unplayed" mark two inches above a row showing a red cross
+would be wrong on any data.
+
+**Ruled not sanctioned, on three grounds:**
+1. The brief forecloses exactly this move — *"Divergence is a defect, not a
+   judgement call"* exists to stop a reasoned "I know this is more correct".
+2. Inherited rule 4's remedy is *"reproduce it as drawn and report it"*. The
+   implementer did the report half and skipped the reproduce half — which is
+   the branch rule 4 names as forbidden, not the sanctioned one.
+3. **Precedent inside this same run, in the same file, decided the other way.**
+   T3 hit a structurally identical contradiction a few components away —
+   `SelectAnEventPane`'s season marks (three wins drawn) against
+   `SEASON_FACTS`'s "3–1 in duals" — and reproduced it literally, with a
+   comment reading "NOT derived… Reproduced as drawn and reported". That
+   contradiction was just as locally visible, which undercuts any
+   "this one is worse because it's adjacent" distinction. Reproduce-then-flag
+   is this run's established convention and T4 broke it.
+
+The implementer itself offered the fix: *"If the human wants the literal, it is
+a two-line change."* It is `railColor()` at `dual-widget.tsx:149-152`.
+
+**stash:** `3101b4e047178721fc939ec4f89ded8733b5d3d2` (`git stash apply <sha>`,
+not `stash@{n}` — the stash stack is shared across this repo's worktrees).
+Holds the new `dual-widget.tsx` plus the `static-schedule.tsx` and
+`event-drawer.tsx` edits. **Everything else in it passed**, verified at
+measured-value level: header padding `20px 32px 14px`, the inset hairline as an
+`::after` at `left/right 32px` rather than a full-bleed border, `text-score`
+40/300/−1px, rail mark geometry, the row grid, and 53/53 copy tokens identical
+codepoint by codepoint including the en dash in `5–2` and the raised `3` on
+`6-7³`. Both frame heights were measured (1048×576 and 1048×816) and one
+component serves both with no variant prop.
+
+**changed:** nothing landed. This commit carries only the `status:` line and
+this log entry.
+
+**follow-ups:**
+1. **`event-drawer.tsx` was edited outside T4's `files:` list and the reviewer
+   ruled it a legitimate extension, not creep** — T3's log deferred this exact
+   edit and left a standing code comment saying so. The finding: T3's
+   `--surface-muted` wash was right but incomplete; `7c` also raises the
+   selected row's name to `font-weight:500` and its score from `--ink-700` to
+   `--ink-900`. That edit is correct and is in the stash — keep it on re-run.
+2. **One difference between `7c` and `4c` is NOT height-driven**, which the
+   task said to report rather than resolve: the topbar count string. `7c` reads
+   "6 events · 2 upcoming"; `4c` reads "6 events · 2 upcoming · 4 completed".
+   Unrendered either way (T3 established the app header has no slot shaped like
+   it), so this is now the third open question about that one line.
+3. **Design copy flagged, not fixed — input for T12.** "Coming soon" on the
+   three doubles lines is not merely unverifiable but **false about the app**:
+   `supportsVideo()` refuses doubles and `job-request.ts` rejects a doubles
+   `match_type` outright with "Video analysis supports singles matches only".
+   It promises analysis that does not exist and is not on a roadmap.
+4. **The `no-video` singles case renders an empty action cell** because no
+   artboard draws one. Unreachable on these fixtures, but reachable the moment
+   the schedule is re-wired — it should get the "Add video" affordance the
+   dormant `line-row.tsx` already has.
+5. **Three copies of the same link treatment now exist** at three sizes —
+   `LINK_CLASS` (12px, `static-schedule.tsx`), `REPORT_LINK` (11px,
+   `dual-widget.tsx`) and `new-event-chooser.tsx:232`. Worth one helper beside
+   `advButton()`.
+6. **Measurement note for anyone repeating the harness technique:** the Browser
+   pane runs with `document.hidden === true`, which freezes CSS transitions at
+   t=0, so a `transition-colors` background reads as `rgba(0,0,0,0)` until you
+   call `getAnimations().forEach(a => a.finish())`. It looks exactly like a
+   broken class and is not one.

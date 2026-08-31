@@ -83,7 +83,7 @@ bodies do not repeat them — a subagent running any of T1–T12 should read the
 - **notes:** Both branches must be reachable to verify — a fixture flag or two exported fixture sets, whichever reads more plainly. The selected states are T4; until then a selection renders the `7d` prompt. **Check `7d`/`7e` for a `canAddOwnMatch` control before dropping that prop, and say which you found in the report.** Reproducing the sidebar or topbar from the artboards would render the app's chrome twice — that is the failure this architecture exists to avoid.
 
 ## T4 · Rebuild 7c and 4c — the dual widget
-- **status:** todo
+- **status:** blocked
 - **model:** opus
 - **needs:** T3
 - **files:** `src/components/dashboard/schedule/static/dual-widget.tsx` (new), `src/components/dashboard/schedule/static/static-schedule.tsx`
