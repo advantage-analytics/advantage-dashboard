@@ -45,7 +45,7 @@ bodies do not repeat them — a subagent running any of T1–T12 should read the
 ---
 
 ## T1 · Build the schedule fixtures module
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** `src/lib/schedule/fixtures.ts` (new); reads `src/lib/schedule/types.ts`
 - **done when:**
