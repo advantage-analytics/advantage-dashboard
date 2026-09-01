@@ -1981,3 +1981,83 @@ unchanged at 5 — a real account with a membership would have cascaded. Most
 consistent with a leftover harness account from an earlier task finally being
 removed, but it is not proven, and it is recorded here rather than smoothed
 over.
+
+## T21 · Dual step one searches real schools — done (fixed after a blocked run)
+
+**gate:** re-run in full after the fix. lint clean · `tsc --noEmit` clean ·
+`npm test` green (260) · `npm run build` green.
+`task-completion-reviewer` → **VERDICT: pass**, all six criteria re-checked
+after the change. Guardrails: **both re-ran** —
+`pipeline-guardrails-reviewer` confirmed the previously reported defect is
+closed with nothing new introduced; `rls-boundary-reviewer` confirmed both
+edits are boundary-neutral.
+
+**what was fixed.** The blocked run failed 5c on a real defect:
+`historyForProgram()` looked up the squad-qualified opponent name and, finding
+nothing, fell back to the bare school name — so a school fielding both squads
+showed one squad's dual record on the other squad's row.
+
+The fallback is now gone; a single lookup on
+`programDisplayName(schoolName, team)` remains. It could never have been
+correct: `programDisplayName(name, null)` already returns the bare name, so
+the fallback never fired for a single-squad school — it fired only on
+squad-bearing rows, where a bare-name record by definition does not name that
+squad. Both reviewers confirmed the crossover is closed, that the single
+lookup is right for `team = null` and squad-bearing programs alike, and that
+what was lost is confined to the free-text path: a bare-named dual no longer
+shows against the directory row for the same school. That is a missing true
+fact rather than a stated false one — the trade the brief asks for — and the
+function's header records it, including that recovering it properly means
+recording opponents by `programKey`, a data change and not this screen's.
+
+The still-buggy two-lookup version survives in the dormant
+`school-search.tsx`, which no route reaches; T23 deletes it. Worth not
+re-copying.
+
+Also corrected, documentation only: `directoryTotal()`'s header claimed the
+count covered "the whole row set, unfiltered". Verified live from the runner
+that `programs` SELECT is
+`org_type = 'college' OR owner_user_id = auth.uid() OR user_program_role(id) IS NOT NULL`,
+so the count is RLS-scoped and viewer-dependent. The comment now says so.
+Nothing leaks — the policy can only ever add the reader's own rows — but the
+comment stated something untrue.
+
+**how this was fixed, and why not by a subagent.** The stashed work was
+already gate-clean except for this one defect, and the fixes were small and
+precisely specified, so the runner applied the stash and made them directly
+rather than re-dispatching a subagent to rebuild a finished screen. The full
+gate — 5a, 5b and both 5c reviewers — was re-run from scratch on the result;
+nothing was carried over from the earlier passes.
+
+**changed:** the route restores `getLadder`, `getTeamSettings`,
+`getConferenceTable` and `getProgramSchedule` in one `Promise.all` plus a real
+`count: "exact"` head query, then `opponentDualHistory()`; guards
+byte-identical. The drawn field is a real `<input>` over a 180ms-debounced,
+per-keystroke-aborted `/api/programs/search`; the `seasonRecord` slot and the
+"Region" pill are gone, and the two surviving pills are real `aria-pressed`
+filters. The total renders "8 of 1,941" via `toLocaleString("en-US")`,
+degrading to `N listed` if the count fails. Selecting a school advances the
+step; the school does not yet travel to step two, which is T22.
+
+`dual-school-step.tsx` also now exports `NewDualDataProvider`, which the route
+wraps the builder in. It carries `ladder`, `defaultSurface`, `ourName` and
+`ourTeam` that step one does not use: T22 and T23 own step two and their
+`files:` include no route, so without this they would have no path to a
+loader. Both reviewers cleared it — `LadderPlayer` carries only
+`program_players.id`, a name and a ladder position, and `getTeamSettings`'
+member and invite lists never enter the context.
+
+**spec discipline:** exactly one retirement, `drawn(step1, …, 'Region')`, with
+its reason; `drawn()` count 127 → 126. The `fixtures.ts`-reading assertions
+were deliberately **not** retired — they still pass and are still true of the
+module they name — with a note recording that their audience is now the design
+record rather than the live screen. Nothing weakened. Rule 9 held in both
+directions.
+
+**follow-ups:**
+1. `programs-server.ts`'s `toResult()` casts `row.team as 'mens' | 'womens'`
+   with no runtime narrowing, while the column is nullable for custom orgs.
+   Pre-existing, outside T21's files.
+2. The dormant `school-search.tsx` still carries the two-lookup crossover.
+   T23 deletes that file; if that changes, fix it there rather than leaving it
+   to be copied again.

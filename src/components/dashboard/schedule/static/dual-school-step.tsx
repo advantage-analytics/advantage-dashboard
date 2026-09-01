@@ -1,24 +1,108 @@
 "use client";
 
-import { useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronRight, Plus, Search } from "lucide-react";
+import { ChevronRight, Plus, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { advButton } from "@/lib/ui/adv-button";
-import { divisionLabel, teamLabel } from "@/lib/data/programs-server";
-import { formatOpponentRecord } from "@/lib/schedule/opponent-history";
 import {
-  ALL_PROGRAM_SCHOOLS,
-  CONFERENCE_SCHOOLS,
-  DIRECTORY_TERM,
-  DIRECTORY_TOTAL,
-  OUR_CONFERENCE,
-  OUR_DIVISION,
-  type DirectorySchool,
-} from "@/lib/schedule/fixtures";
+  divisionLabel,
+  programDisplayName,
+  teamLabel,
+} from "@/lib/data/programs-server";
+import {
+  formatOpponentRecord,
+  opponentHistoryFor,
+  type OpponentDualHistory,
+} from "@/lib/schedule/opponent-history";
+import type { LadderPlayer } from "@/lib/data/roster-server";
+import type { ProgramSearchResult } from "@/lib/data/programs-server";
 
 /**
- * `2c` — step one of a new dual: which school, rendered from fixtures.
+ * Everything `/dashboard/team/schedule/new/dual` reads, for both of its steps.
+ *
+ * The same set of props the dormant `DualForm` took, plus `directoryTotal` —
+ * the route reads once for the whole flow, as it always did.
+ *
+ * ── Why a context and not props ────────────────────────────────────────────
+ * `StaticDualBuilder` is the two steps' shell: it owns which step is showing
+ * and nothing else, deliberately, so that neither step's work has to be read
+ * through it. Threading one screen's data through that shell as props would
+ * undo exactly that. So the route wraps it in the provider below and each step
+ * takes what it needs — step one the directory half, `ourConference` through
+ * `directoryTotal`, and step two the rest.
+ *
+ * `ladder`, `defaultSurface`, `ourName` and `ourTeam` are therefore read on a
+ * screen that does not use them: they are step two's, and this route is the
+ * flow's one read.
+ */
+export interface NewDualData {
+  /** The viewer's own program, for step two's header and its squad warning. */
+  ourName: string;
+  ourTeam: "mens" | "womens" | null;
+  /** `getLadder` — step two's lineup. Step one does not read it. */
+  ladder: LadderPlayer[];
+  /** `getTeamSettings` — step two's surface default. */
+  defaultSurface: string | null;
+  /** From `getTeamSettings` — the label the own-conference chip carries. */
+  ourConference: string | null;
+  /** Already label-formatted ("D-I"), so the chip and the sublines agree. */
+  ourDivision: string | null;
+  /** So a program cannot schedule a dual against itself out of the directory. */
+  ourProgramKey: string | null;
+  /** `getConferenceTable`'s rows, own program already dropped. */
+  conferencePrograms: ProgramSearchResult[];
+  /**
+   * `opponentDualHistory()`'s map, flattened to entries.
+   *
+   * A Map would probably survive the server/client boundary, but an array of
+   * its entries is the shape that needs no assumption about what the
+   * serializer supports, and rebuilding it costs one `useMemo` over a list the
+   * size of this program's opponents.
+   */
+  historyEntries: [string, OpponentDualHistory][];
+  /**
+   * How many programs the directory holds — a real `count` over `programs`,
+   * null when that count could not be read.
+   */
+  directoryTotal: number | null;
+}
+
+const NewDualDataContext = createContext<NewDualData | null>(null);
+
+export function NewDualDataProvider({
+  data,
+  children,
+}: {
+  data: NewDualData;
+  children: ReactNode;
+}) {
+  return (
+    <NewDualDataContext.Provider value={data}>
+      {children}
+    </NewDualDataContext.Provider>
+  );
+}
+
+/** Loud rather than empty: a missing provider is a broken route, not a screen
+ *  with no schools in it. */
+export function useNewDualData(): NewDualData {
+  const data = useContext(NewDualDataContext);
+  if (!data) {
+    throw new Error("useNewDualData must be used inside <NewDualDataProvider>");
+  }
+  return data;
+}
+
+/**
+ * `2c` — step one of a new dual: which school.
  *
  * The question this screen exists to ask is the one every other field on the
  * builder depends on, which is why it is a step rather than one input among
@@ -26,52 +110,137 @@ import {
  * design puts them: your conference, then the whole directory, then free text
  * for a club side the ITA scrape never had.
  *
- * ── Static ─────────────────────────────────────────────────────────────────
- * Nothing here fetches. `school-search.tsx` is the DB-wired implementation of
- * this same screen and stays exactly where it is, dormant, for the re-wiring —
- * this component is not a replacement for it and does not import it. The rows
- * come from `CONFERENCE_SCHOOLS` / `ALL_PROGRAM_SCHOOLS` in
- * `lib/schedule/fixtures.ts`, typed as the `ProgramSearchResult` +
- * `OpponentDualHistory` pair the dormant component already takes.
+ * ── Wired, as of the schedule re-wiring ────────────────────────────────────
+ * The rows are real programs. The conference list is `getConferenceTable`'s,
+ * already in memory and narrowed here rather than by a round trip; the
+ * directory list is `/api/programs/search`, debounced and aborted per
+ * keystroke; every subline's head-to-head half is this program's own duals,
+ * from `opponentDualHistory()`. The field is an `<input>`, and the pills and
+ * "Clear" are buttons that filter what is listed.
  *
- * The sidebar and the 44px "Meridian State › Schedule › New dual" topbar the
- * artboard draws are the app's own chrome and already on screen — the crumb
- * trail comes from `getStaticBreadcrumbs()` in `app/dashboard/header.tsx`.
+ * The sidebar and the 44px "… › Schedule › New dual" topbar the artboard draws
+ * are the app's own chrome and already on screen — the crumb trail comes from
+ * `getStaticBreadcrumbs()` in `app/dashboard/header.tsx`.
  *
- * ── The search field is drawn, not wired ───────────────────────────────────
- * `2c` draws a focused field mid-term: the glyphs "Ridg", a caret rule, and
- * "5 of 1,940" at the far end. It is reproduced as that — a rendering of a
- * field, not an `<input>` — because there is no directory behind this screen
- * for a second term to search. An input that accepted keystrokes and never
- * changed the five rows below it would be a worse lie than a static one. The
- * pills and "Clear" are inert for the same reason.
+ * ── Two drawn slots are gone, deliberately ─────────────────────────────────
+ * Nothing here fabricates a figure to fill a slot the schema cannot back, so
+ * two of the three figures the artboard draws are absent rather than invented:
  *
- * ── What the design draws that this app cannot know ────────────────────────
- * Three figures on `2c` have no source in this codebase. The dormant
- * `SchoolSearch` omits all three and says why in its own header; this rebuild
- * draws all three, because the artboard draws them, and each is reported:
- *
- *   "5 of 1,940"   the 5 is the rows below; the total is a fixture literal.
- *                  `/api/programs/search` answers with a capped page and no
- *                  total.
  *   "Region ⌄"     `programs` has `state`, `division` and `conference`. There
- *                  is no region column and no mapping to invent one from.
+ *                  is no region column and no mapping to invent one from, so
+ *                  the pill is gone rather than drawn dead.
  *   "18–4"         the opponent's OWN season record, from matches this program
- *                  never saw. See `DirectorySchool` in the fixtures.
+ *                  never saw. `opponent-history.ts` says it "does not exist
+ *                  anywhere in this app"; the subline keeps its other three
+ *                  facts and drops this one.
+ *
+ * The third — "5 of 1,940" — IS backable, and is real: the left figure counts
+ * the rows on screen, the right is a `count` over `programs` taken by the
+ * route. `/api/programs/search` answers with a capped page and no total, which
+ * is why the count is the route's and not this component's.
+ *
+ * ── What the choice still does not carry ───────────────────────────────────
+ * `onContinue` takes nothing, so the chosen school does not yet reach step
+ * two — that step draws one school throughout and would otherwise print one
+ * school's name over another school's data. Making it travel is the next task;
+ * see `static-dual-builder.tsx`'s header for the defect that shaped this.
  */
 export function DualSchoolStep({ onContinue }: { onContinue: () => void }) {
-  // The artboard opens with the first conference row picked — its own row is
-  // filled and weighted, and the footer names it. Local, and the only state
-  // this step owns: the step itself belongs to `StaticDualBuilder`.
-  const [selectedKey, setSelectedKey] = useState(
-    CONFERENCE_SCHOOLS[0].program.programKey
-  );
+  const {
+    ourConference,
+    ourDivision,
+    ourProgramKey,
+    conferencePrograms,
+    historyEntries,
+    directoryTotal,
+  } = useNewDualData();
 
-  const listed = CONFERENCE_SCHOOLS.length + ALL_PROGRAM_SCHOOLS.length;
-  const selected =
-    [...CONFERENCE_SCHOOLS, ...ALL_PROGRAM_SCHOOLS].find(
-      (school) => school.program.programKey === selectedKey
-    ) ?? null;
+  const [term, setTerm] = useState("");
+  const [results, setResults] = useState<ProgramSearchResult[]>([]);
+  const [conferenceOnly, setConferenceOnly] = useState(false);
+  const [divisionOnly, setDivisionOnly] = useState(false);
+  const [picked, setPicked] = useState<ProgramSearchResult | null>(null);
+
+  const histories = useMemo(() => new Map(historyEntries), [historyEntries]);
+
+  useEffect(() => {
+    const query = term.trim();
+    // Clearing below the threshold belongs to the input handler, not here — a
+    // synchronous setState in this effect cascades a render per keystroke.
+    if (query.length < 2) return;
+
+    // Debounced and aborted on the next keystroke: the route is cached for
+    // five minutes, but a request per character still queues them.
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `/api/programs/search?q=${encodeURIComponent(query)}`,
+          { signal: controller.signal }
+        );
+        if (!response.ok) return;
+        const body = (await response.json()) as {
+          results: ProgramSearchResult[];
+        };
+        setResults(body.results);
+      } catch {
+        // An aborted fetch is the normal case here, not a failure worth showing.
+      }
+    }, 180);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [term]);
+
+  const query = term.trim().toLowerCase();
+
+  function passesChips(program: ProgramSearchResult): boolean {
+    if (conferenceOnly && program.conference !== ourConference) return false;
+    if (divisionOnly && divisionLabel(program.division) !== ourDivision) {
+      return false;
+    }
+    return true;
+  }
+
+  // The whole conference on arrival, narrowed as the term is typed. The table
+  // is already in memory — 1,941 rows are seeded with a conference, so this is
+  // a real list on day one — and a substring match over a few dozen rows is not
+  // worth a round trip. Listing it unfiltered is the one departure from the
+  // dormant `SchoolSearch`, which showed nothing until two characters were
+  // typed: behind a field that is now genuinely empty on arrival, that reads as
+  // a program with no opponents rather than as a directory waiting for a term.
+  const conferenceRows = conferencePrograms
+    .filter(
+      (program) =>
+        query.length === 0 || program.schoolName.toLowerCase().includes(query)
+    )
+    .filter(passesChips);
+
+  const listedKeys = new Set(conferenceRows.map((row) => row.programKey));
+  const searchRows = results
+    .filter((program) => program.programKey !== ourProgramKey)
+    .filter((program) => !listedKeys.has(program.programKey))
+    .filter(passesChips);
+
+  const listed = conferenceRows.length + searchRows.length;
+  const chipsOn = conferenceOnly || divisionOnly;
+
+  /**
+   * What Continue carries — a picked directory row, or whatever is in the box.
+   *
+   * Free text is a choice, not a fallback: a coach who types "Riverside Racquet
+   * Club" has answered the question this screen asks, and Continue has to take
+   * it. The escape row below is the same commitment with the reasoning printed
+   * on it.
+   */
+  const chosen: string | null = picked ? picked.schoolName : term.trim() || null;
+
+  function commit() {
+    if (chosen === null) return;
+    onContinue();
+  }
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col bg-[var(--surface-card)]">
@@ -92,103 +261,164 @@ export function DualSchoolStep({ onContinue }: { onContinue: () => void }) {
               strokeWidth={1.5}
               className="shrink-0 text-[var(--ink-600)]"
             />
-            <span className="text-[16px] text-[var(--ink-900)]">
-              {DIRECTORY_TERM}
-            </span>
-            {/* The caret. Drawn, because the field is drawn focused. */}
-            <span className="h-[19px] w-px bg-[var(--blue)]" />
-            <div className="flex-1" />
+            {/* Autofocused, which is how `2c` draws it: a field with the caret
+                already in it. The blue rule under the row is the drawn focus
+                state and stays put. */}
+            <input
+              autoFocus
+              value={term}
+              onChange={(event) => {
+                const next = event.target.value;
+                setTerm(next);
+                setPicked(null);
+                if (next.trim().length < 2) setResults([]);
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") return;
+                event.preventDefault();
+                // Whatever is chosen — which after any keystroke is the typed
+                // text, because typing clears the picked row above.
+                commit();
+              }}
+              placeholder="Search programs, or type any opponent"
+              aria-label="Search programs"
+              className="w-full bg-transparent text-[16px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-300)]"
+            />
             <span
               className="text-micro tabular shrink-0"
               style={{ color: "var(--ink-500)" }}
             >
-              {listed} of {DIRECTORY_TOTAL}
+              {directoryTotal === null
+                ? // No total rather than a made-up one, on the one path where
+                  // the count did not come back.
+                  `${listed} listed`
+                : `${listed} of ${directoryTotal.toLocaleString("en-US")}`}
             </span>
           </div>
 
-          <div className="mt-4 flex items-center gap-2">
-            {/* Drawn ACTIVE, over a list that includes three programs outside
-                this conference and a total that counts all 1,940. Reproduced
-                as drawn — the pills are a picture of a filter, not one — and
-                reported. */}
-            <FilterPill label={OUR_CONFERENCE} active />
-            <FilterPill label={OUR_DIVISION} />
-            <FilterPill label="Region" trailing={<ChevronDownIcon />} />
-            <div className="flex-1" />
-            {/* `--blue`, not `--blue-text`. The artboard states this colour
-                outright (`color:var(--blue)`), where `7e`'s links only set size
-                and weight and inherited theirs from a stylesheet this app does
-                not load — so the substitution `static-schedule.tsx` documents
-                does not apply here. 11px blue on white measures 3.68:1 and
-                fails WCAG 1.4.3 AA; drawn as drawn, and reported. */}
-            <span className="cursor-pointer text-[11px] font-medium text-[var(--blue)]">
-              Clear
-            </span>
-          </div>
-
-          <div
-            className="eyebrow-sm pb-1.5 pt-[22px]"
-            style={{ color: "var(--ink-400)" }}
-          >
-            Your conference
-          </div>
-          <div className="flex flex-col">
-            {CONFERENCE_SCHOOLS.map((school) => (
-              <SchoolRow
-                key={school.program.programKey}
-                school={school}
-                selected={school.program.programKey === selectedKey}
-                onSelect={() => setSelectedKey(school.program.programKey)}
-              />
-            ))}
-          </div>
-
-          <div
-            className="eyebrow-sm pb-1.5 pt-5"
-            style={{ color: "var(--ink-400)" }}
-          >
-            All programs
-          </div>
-          <div className="flex flex-col">
-            {ALL_PROGRAM_SCHOOLS.map((school) => (
-              <SchoolRow
-                key={school.program.programKey}
-                school={school}
-                selected={school.program.programKey === selectedKey}
-                onSelect={() => setSelectedKey(school.program.programKey)}
-              />
-            ))}
-          </div>
-
-          {/* The escape hatch, drawn and inert. Choosing it would carry a
-              free-text opponent into step two, and step two is a stub — so it
-              renders exactly as the artboard draws it, `cursor:pointer` and
-              all, and moves nothing. The same treatment `7e`'s "One-off match
-              in Matches" gets. */}
-          <div className="mt-[18px] flex cursor-pointer items-center gap-2.5 border-t border-[var(--border-hairline)] pt-4">
-            <Plus
-              size={13}
-              strokeWidth={1.5}
-              className="shrink-0 text-[var(--blue)]"
-            />
-            <div className="min-w-0 flex-1">
-              <div className="text-[12px] font-medium text-[var(--blue)]">
-                {`Add "${DIRECTORY_TERM}" as an unlisted school or club side`}
-              </div>
-              <div
-                className="text-micro mt-0.5"
-                style={{ color: "var(--ink-600)" }}
-              >
-                No program record — their lineup gets typed by hand.
-              </div>
+          {ourConference || ourDivision ? (
+            <div className="mt-4 flex items-center gap-2">
+              {/* Two pills, not three. Both are real filters over the two
+                  columns `programs` actually carries; the artboard's third,
+                  "Region", has no column behind it and is not drawn. */}
+              {ourConference ? (
+                <FilterPill
+                  label={ourConference}
+                  active={conferenceOnly}
+                  onClick={() => setConferenceOnly((on) => !on)}
+                />
+              ) : null}
+              {ourDivision ? (
+                <FilterPill
+                  label={ourDivision}
+                  active={divisionOnly}
+                  onClick={() => setDivisionOnly((on) => !on)}
+                />
+              ) : null}
+              <div className="flex-1" />
+              {/* `--blue`, not `--blue-text`. The artboard states this colour
+                  outright (`color:var(--blue)`), where `7e`'s links only set
+                  size and weight and inherited theirs from a stylesheet this
+                  app does not load. 11px blue on white measures 3.68:1 and
+                  fails WCAG 1.4.3 AA; drawn as drawn, and reported. */}
+              {chipsOn ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConferenceOnly(false);
+                    setDivisionOnly(false);
+                  }}
+                  className="cursor-pointer text-[11px] font-medium text-[var(--blue)]"
+                >
+                  Clear
+                </button>
+              ) : null}
             </div>
-            <span
-              className="mono shrink-0 text-[10px]"
-              style={{ color: "var(--ink-500)" }}
+          ) : null}
+
+          {conferenceRows.length > 0 ? (
+            <>
+              <div
+                className="eyebrow-sm pb-1.5 pt-[22px]"
+                style={{ color: "var(--ink-400)" }}
+              >
+                Your conference
+              </div>
+              <div className="flex flex-col">
+                {conferenceRows.map((program) => (
+                  <SchoolRow
+                    key={program.programKey}
+                    program={program}
+                    history={historyForProgram(histories, program)}
+                    selected={picked?.programKey === program.programKey}
+                    onSelect={() => setPicked(program)}
+                  />
+                ))}
+              </div>
+            </>
+          ) : null}
+
+          {searchRows.length > 0 ? (
+            <>
+              <div
+                className="eyebrow-sm pb-1.5 pt-5"
+                style={{ color: "var(--ink-400)" }}
+              >
+                All programs
+              </div>
+              <div className="flex flex-col">
+                {searchRows.map((program) => (
+                  <SchoolRow
+                    key={program.programKey}
+                    program={program}
+                    history={historyForProgram(histories, program)}
+                    selected={picked?.programKey === program.programKey}
+                    onSelect={() => setPicked(program)}
+                  />
+                ))}
+              </div>
+            </>
+          ) : null}
+
+          {/* The escape hatch, available once something is typed. A dual against
+              a club side or a school the ITA scrape missed is a real fixture,
+              and a picker that only offered the directory would make the coach
+              lie about who they played to get past the field. */}
+          {term.trim() ? (
+            <button
+              type="button"
+              onClick={() => {
+                setPicked(null);
+                onContinue();
+              }}
+              className="mt-[18px] flex w-full cursor-pointer items-center gap-2.5 border-t border-[var(--border-hairline)] pt-4 text-left"
             >
-              ↵
-            </span>
-          </div>
+              <Plus
+                size={13}
+                strokeWidth={1.5}
+                className="shrink-0 text-[var(--blue)]"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[12px] font-medium text-[var(--blue)]">
+                  {`Add "${term.trim()}" as an unlisted school or club side`}
+                </span>
+                <span
+                  className="text-micro mt-0.5 block"
+                  style={{ color: "var(--ink-600)" }}
+                >
+                  No program record — their lineup gets typed by hand.
+                </span>
+              </span>
+              {picked === null ? (
+                <span
+                  className="mono shrink-0 text-[10px]"
+                  style={{ color: "var(--ink-500)" }}
+                >
+                  ↵
+                </span>
+              ) : null}
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -202,14 +432,15 @@ export function DualSchoolStep({ onContinue }: { onContinue: () => void }) {
           Cancel
         </Link>
         <div className="flex-1" />
-        {selected ? (
+        {chosen ? (
           <span className="text-[11px]" style={{ color: "var(--ink-600)" }}>
-            {selected.program.schoolName} · date, site and lineup come next
+            {chosen} · date, site and lineup come next
           </span>
         ) : null}
         <button
           type="button"
-          onClick={onContinue}
+          onClick={commit}
+          disabled={chosen === null}
           className={advButton("primary", "md")}
         >
           Continue
@@ -222,34 +453,26 @@ export function DualSchoolStep({ onContinue }: { onContinue: () => void }) {
 /**
  * One directory row.
  *
- * The subline is squad · where they play · their season · how it has gone
- * against US — `teamLabel`, `divisionLabel` and `formatOpponentRecord`, the
- * same three primitives `schoolRowSubline()` composes, with the design's
- * season record between the second and the third. Not a call to
- * `schoolRowSubline()` itself: that function deliberately omits the record
- * (see `opponent-history.ts`), and widening it would change a dormant
- * component's output to suit this one.
+ * The subline is squad · where they play · how it has gone against US —
+ * `teamLabel`, `divisionLabel` and `formatOpponentRecord`. The design's third
+ * slot, the opponent's own season record, is absent rather than approximated:
+ * see this file's header, and `opponent-history.ts`.
  */
 function SchoolRow({
-  school,
+  program,
+  history,
   selected,
   onSelect,
 }: {
-  school: DirectorySchool;
+  program: ProgramSearchResult;
+  history: OpponentDualHistory;
   selected: boolean;
   onSelect: () => void;
 }) {
-  const { program, history, seasonRecord } = school;
-  // Exactly one of the two per row, which is what the artboard prints and what
-  // `schoolRowSubline` already does. Four rows show a conference; the fifth
-  // shows a division. Reproduced, and reported.
+  // Exactly one of the two per row, which is what the artboard prints: most
+  // rows show a conference, a row without one shows its division.
   const where = program.conference ?? divisionLabel(program.division);
-  const subline = [
-    teamLabel(program.team),
-    where,
-    seasonRecord,
-    formatOpponentRecord(history),
-  ]
+  const subline = [teamLabel(program.team), where, formatOpponentRecord(history)]
     .filter(Boolean)
     .join(" · ");
 
@@ -304,21 +527,21 @@ function SchoolRow({
 /**
  * A filter pill — `rounded-full`, which is what the design system reserves for
  * pills, tabs, avatars and indicators. Buttons stay on `--radius-button`.
- *
- * A span rather than a button: these are drawn, not wired, and a `<button>`
- * that takes focus and does nothing is worse than a picture of one.
  */
 function FilterPill({
   label,
-  active = false,
-  trailing,
+  active,
+  onClick,
 }: {
   label: string;
-  active?: boolean;
-  trailing?: React.ReactNode;
+  active: boolean;
+  onClick: () => void;
 }) {
   return (
-    <span
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
       className={cn(
         "inline-flex h-[26px] cursor-pointer items-center gap-[5px] rounded-full px-[11px] text-[12px]",
         "transition-colors duration-[var(--duration-hover)]",
@@ -328,17 +551,44 @@ function FilterPill({
       )}
     >
       {label}
-      {trailing}
-    </span>
+    </button>
   );
 }
 
-function ChevronDownIcon() {
-  return (
-    <ChevronDown
-      size={12}
-      strokeWidth={1.5}
-      className="text-[var(--ink-400)]"
-    />
+/**
+ * This program's record against one school row.
+ *
+ * One lookup, on the name a dual is actually recorded under:
+ * `programDisplayName()`, which is the bare school name for a program that
+ * fields no squad and "Ridgeline University Men's Tennis" for one that does.
+ *
+ * ── Why there is no fall back to the bare school name ──────────────────────
+ * The dormant `school-search.tsx` tries the squad-qualified key first and
+ * falls back to `program.schoolName` when it finds nothing. That fallback
+ * cannot be right. `programDisplayName(name, null)` already *is* the bare
+ * name, so the fallback never fires for a school fielding one team — it fires
+ * only for a squad-bearing row, and the record it then returns is keyed on a
+ * name that by definition does not name that squad. A school fielding both
+ * teams surfaces as two rows here, so a dual stored under the bare name (which
+ * this screen's own free-text escape hatch produces) would print on *both* of
+ * them: "you lead 3–0" against a squad this program has never played.
+ *
+ * A row with no squad-qualified history therefore reads "never played". That
+ * loses a true fact on the free-text path — a bare-named dual no longer shows
+ * against the directory row for the same school — and refuses to state a false
+ * one, which is the trade the brief asks for. Recovering it properly means
+ * recording the opponent by `programKey` rather than by name; that is a data
+ * change, not this screen's to make.
+ *
+ * Not imported from `school-search.tsx`: that file is scheduled for deletion,
+ * and a live screen importing from it would take this row's record with it.
+ */
+function historyForProgram(
+  histories: Map<string, OpponentDualHistory>,
+  program: ProgramSearchResult
+): OpponentDualHistory {
+  return opponentHistoryFor(
+    histories,
+    programDisplayName(program.schoolName, program.team)
   );
 }

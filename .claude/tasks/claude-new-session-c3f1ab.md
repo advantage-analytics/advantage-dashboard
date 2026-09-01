@@ -360,7 +360,7 @@ list below instead.
 - **notes:** `createTournament` already exists in `actions.ts` — wire it, do not write a second one. `entry-editor.tsx` holds the draw and seed vocabulary ("Main draw", "Qualifying") that `rosterSubline()` reads; port it rather than inventing new values.
 
 ## T21 · Dual step one searches real schools
-- **status:** blocked
+- **status:** done
 - **model:** opus
 - **needs:** T13
 - **files:** `tests/schedule-static-copy.spec.ts`; `src/app/dashboard/team/schedule/new/dual/page.tsx`, `src/components/dashboard/schedule/static/dual-school-step.tsx`

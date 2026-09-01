@@ -402,6 +402,11 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
   const popup = screen('opponent-popup.tsx');
 
   test("2c's directory, as the artboard states it", () => {
+    // Held, not retired: every expectation below reads `fixtures.ts`, which
+    // this run has not touched, so each is still true of the module it names.
+    // What changed is the audience — step one now lists real programs and
+    // counts the real directory, so these describe the design record rather
+    // than the live screen. T26 owns that demotion.
     expect(DIRECTORY_TERM).toBe('Ridg');
     // "5 of 1,940". A formatted string rather than a number, so the comma is
     // the design's and not the render locale's.
@@ -463,7 +468,10 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
   test("2c's own words", () => {
     drawn(step1, 'dual-school-step.tsx', 'New dual · step 1 of 2');
     drawn(step1, 'dual-school-step.tsx', 'Which school are you playing?');
-    drawn(step1, 'dual-school-step.tsx', 'Region');
+    // RETIRED 'Region' — the pill is gone from the screen, not renamed. Nothing
+    //   in `programs` backs a region and no mapping invents one, so the wired
+    //   step drops the control rather than drawing a filter that cannot filter.
+    //   The two pills beside it — conference and division — are now real.
     drawn(step1, 'dual-school-step.tsx', 'Clear');
     drawn(step1, 'dual-school-step.tsx', 'Your conference');
     drawn(step1, 'dual-school-step.tsx', 'All programs');
