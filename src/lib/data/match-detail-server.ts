@@ -1,6 +1,5 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
-import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { getMatchStatisticsFromSupabase, getPlayerAverageStats } from "@/lib/data/match-stats-server";
 import { getMyPlayerIds } from "@/lib/data/player-identity-server";
 import { getMatchPointsFromSupabase } from "@/lib/data/match-points-server";
@@ -175,51 +174,6 @@ const FILLER_KEY_MOMENTS = [
   { moment: "Set Point Conversion", description: "Closed out the first set with a forehand winner up the line on your second set point, refusing to let the opportunity slip." },
   { moment: "Strong Finish", description: "Won the final four games in a row to seal the match, mixing aggressive returning with high first-serve percentage on the closing hold." },
 ];
-
-/**
- * Returns the previous/next match ids in chronological order:
- * `previousId` = older match (earlier date), `nextId` = newer match (later date).
- * Used for arrow-key navigation between adjacent matches.
- * Returns null on either side at the list bounds.
- *
- * Scoped to the active workspace, and it has to be: this walks the list the
- * reader arrived from, so it must ask the question `/dashboard/matches` asked.
- * It filtered on `created_by` alone, which inside a program meant the arrows
- * silently skipped every match the viewer had not uploaded themselves — a coach
- * paging through the squad's matches would step from their own upload straight
- * past a player's, with nothing on screen saying a row had been left out. The
- * two predicates are deliberately the same shape as the list page's.
- */
-export const getAdjacentMatchIds = cache(async (currentMatchId: string) => {
-  const supabase = await createClient();
-  const [
-    {
-      data: { user },
-    },
-    workspace,
-  ] = await Promise.all([supabase.auth.getUser(), getWorkspaceContext()]);
-  if (!user) return { previousId: null, nextId: null };
-
-  const scoped = supabase
-    .from("matches")
-    .select("id")
-    .order("date", { ascending: false });
-
-  const { data } = await (workspace?.active.kind === "team"
-    ? scoped.eq("program_id", workspace.active.id)
-    : scoped.eq("created_by", user.id).is("program_id", null));
-
-  if (!data) return { previousId: null, nextId: null };
-
-  const idx = data.findIndex((m) => m.id === currentMatchId);
-  if (idx === -1) return { previousId: null, nextId: null };
-
-  // Array is date desc, so a smaller index = newer match.
-  return {
-    previousId: idx < data.length - 1 ? data[idx + 1].id : null,
-    nextId: idx > 0 ? data[idx - 1].id : null,
-  };
-});
 
 /**
  * Which event a match's line belongs to, or null if it has no line.
