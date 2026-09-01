@@ -109,7 +109,7 @@ bodies do not repeat them — a subagent running any of T1–T12 should read the
 - **notes:** The largest single deletion in the run. Keeping the shell thin is what lets T6 and T7 extend it without re-reading it whole. Name the stub as a stub in the report so a reviewer does not read it as the finished screen.
 
 ## T6 · Rebuild 2b — the master-detail dual builder
-- **status:** blocked
+- **status:** done
 - **model:** opus
 - **needs:** T5
 - **files:** `src/components/dashboard/schedule/static/dual-build-step.tsx` (new), `src/components/dashboard/schedule/static/static-dual-builder.tsx`

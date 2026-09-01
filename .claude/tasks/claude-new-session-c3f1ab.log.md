@@ -823,3 +823,91 @@ cover.
 4. **Three copies of the same link treatment at three sizes** — `LINK_CLASS`
    (12px), `REPORT_LINK` (11px), and `new-event-chooser.tsx:232`. Worth one
    helper beside `advButton()`.
+
+## T6 · Rebuild 2b — the master-detail dual builder — done (re-run)
+
+Re-run of the task blocked earlier this session. Stash
+`3e857ab68c9f6ee870afbda39e3dfaae2ad09877` applied — with a conflict, see
+below — the blocking defect fixed per the human's decision, re-gated in full.
+
+**gate:** mechanical — `npm run lint` 0 errors / 37 warnings, `npx tsc
+--noEmit` clean, `npm test` 227 passed. Completion review — `VERDICT: pass`.
+Guardrails — `pipeline-guardrails-reviewer` **ran** (it is the reviewer that
+blocked this task) and reports the defect **"closed by construction (shared
+object reference, not parallel state)"**, with no outstanding findings.
+`rls-boundary-reviewer` **skipped** — no matching path, no query, no route file.
+
+**the fix: step two is always Ridgeline.** The human chose this from three
+options. `2b` draws Ridgeline throughout — header, rail check, subline, footer
+— so the artboard has one path and the reproduction has one path. Making the
+header follow `2c`'s selection was behaviour invented *beyond* the design;
+removing it restores fidelity and removes the defect in the same move.
+
+- `DualBuildStep` takes **no props**, reading
+  `const DUAL_DRAFT_SCHOOL: DirectorySchool = RAIL_SCHOOLS[0]`.
+  `RAIL_SCHOOLS[0]` is `CONFERENCE_SCHOOLS[0]` **by reference**, not a second
+  `directorySchool()` call with matching fields — so the header's name and the
+  rail's tick read one object and cannot drift. The reviewer verified the
+  reference, not just the values.
+- `static-dual-builder.tsx` back to `useState<"find-school" | "build">` — the
+  shape T5 delivered and a review passed. Selection advances the step and
+  carries nothing.
+- `dual-school-step.tsx` reverted to its committed state; the `onContinue`
+  widening is no longer needed and the file is out of the diff entirely.
+- `DUAL_DRAFT_SCHOOL` carries a doc comment saying **the re-wiring must undo
+  this**: once a real dual is built the school genuinely does travel, and
+  re-pointing the loaders without re-threading it would pin every new dual to
+  Ridgeline. Same class of trap as T4's rail constants, documented the same way.
+
+**A merge hazard worth recording, because it nearly landed silently.**
+`fixtures.ts` conflicted: T8 had appended to the same file while this work sat
+stashed. The two blocks are disjoint (T8 exports `TournamentFieldRow` /
+`TOURNAMENT_FIELD`; this one `DUAL_DRAFT_EVENT` / `RAIL_SCHOOLS` /
+`DUAL_DRAFT_LINES`) and both type-only imports were kept, so the resolution was
+"keep both sides".
+
+**The first resolution silently truncated T8's `TOURNAMENT_FIELD` array** — git's
+conflict region had swallowed its closing `},` and `];`. `tsc` caught it
+immediately; the closer was restored and T8's block diffed byte-for-byte
+against its committed form. Both reviewers independently confirmed
+`git diff HEAD -- src/lib/schedule/fixtures.ts` is **purely additive**, nothing
+removed from an already-gated screen. Had the syntax happened to stay valid,
+this would have been a passing gate over a quietly damaged neighbour — worth
+remembering for the two-stash-into-one-file case generally.
+
+**still verified after the change:** `FORMAT_VALUE = "3|false"` remains a
+literal, corroborated three ways (`dual-form.tsx:52`'s `FORMATS[0]`,
+`fixtures.ts:96`'s `DUAL_FORMAT`, and the decoder round trip) — not
+interpolated, because `EventFormat.adScoring` is `boolean | null` and `${null}`
+encodes `"null"`, which `=== "true"` reads as a confident `false`, the outage
+`tournament-form.tsx` records. `EventShell flush` still in effect. Nine lines
+still filter strictly on `discipline`, so no doubles pair can render as
+singles. S6's `forfeit: "ours"` still means the point goes to them.
+
+**follow-ups:**
+1. **Nine contradictions in `2b`, reproduced as drawn and flagged — input for
+   T12**, two spot-checked as genuine reproductions. (a) The lineup contradicts
+   itself: S6 is "— no available player" and forfeited while D3 pairs
+   "Moreau / **Adeyemi**". (b) "pairs carried from singles" is false of its own
+   rows — D3's Adeyemi is in no singles line. (c) Doubles use surnames, singles
+   full names. (d) "Big Ten · D-I" reverses the app's own `programSubtitle()`
+   order, which four claim-flow call sites depend on. (e) The Forfeit control is
+   an invisible target — `opacity:0` with the reveal on the span, not the row.
+   (f) The rail's history figures have no source: "you lead 3–1" over Fairmont
+   implies four decided duals where the fixtures hold one, and each opponent's
+   own season record does not exist anywhere in this app. (g) `2b` shows nine
+   lines before create while `7d` calls the same event "lineup not set".
+   (h) The rail's six Big Ten schools do not match `2c`'s conference section and
+   omit Ridgemont Tech, which `2c` lists. (i) `lastPlayedOn` unset on four rows
+   with decided duals.
+2. **`2c` now offers five schools that all lead to the same step two.** That is
+   the artboard reproduced faithfully, and it is also the thing a human should
+   look at once: the design never drew what picking a non-Ridgeline row does.
+   The re-wiring answers it for real; until then it is a known, documented
+   property rather than a defect.
+3. Decide whether the Forfeit control keeps its invisible-until-hovered
+   treatment — moving the reveal to the row is a one-word change.
+4. When this screen returns to the database, `RAIL_SCHOOLS`,
+   `DUAL_DRAFT_LINES`, `DUAL_DRAFT_EVENT` and `DUAL_DRAFT_SCHOOL` are the four
+   to swap for `OpponentRail` + `LineupEditor` + `createDual` + the real
+   selection; the props already line up.

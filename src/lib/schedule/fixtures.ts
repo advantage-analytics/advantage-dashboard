@@ -56,6 +56,10 @@ import type {
 import type { OpponentDualHistory } from "@/lib/schedule/opponent-history";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
 import type { LadderPlayer } from "@/lib/data/roster-server";
+// The dormant builder's own line shape, for `2b`'s nine lines at the foot of
+// this file. `import type`, like the two above — a type is erased, so nothing
+// about a `"use client"` module follows it in here.
+import type { LineupLine } from "@/components/dashboard/schedule/lineup-editor";
 
 /* ── Who the design is signed in as ─────────────────────────────────────── */
 
@@ -687,6 +691,12 @@ export const CONFERENCE_SCHOOLS: DirectorySchool[] = [
   directorySchool({
     schoolName: "Ridgeline University",
     conference: OUR_CONFERENCE,
+    // The one row that carries BOTH halves. `2c` prints only the conference,
+    // and `schoolRowSubline`'s `conference ?? divisionLabel(division)` is why
+    // adding this changes nothing there — but `2b` puts this school's detail
+    // header at "Big Ten · D-I", so the design does name its division. The
+    // other rows keep exactly one half, which is all their artboard gives.
+    division: "D1",
     seasonRecord: "18–4",
   }),
   directorySchool({
@@ -825,5 +835,199 @@ export const TOURNAMENT_FIELD: TournamentFieldRow[] = [
       ladderPosition: 6,
     },
     entry: null,
+  },
+];
+
+/* ── The dual 2b is building ────────────────────────────────────────────── */
+
+/**
+ * `2b`'s draft, as the `ProgramEvent` its "Create dual" would write.
+ *
+ * Not a second event. `2b` draws 09-26, Home, Hard and best-of-3 no-ad, which
+ * is `RIDGELINE_EVENT` field for field — the builder is the screen that
+ * creates the dual 7d already lists as next up. Exported under its own name
+ * because a draft and a scheduled row read differently at the call site even
+ * when they are the same object, and because `2b` is where the fields are
+ * still answers rather than facts.
+ *
+ * One thing the two artboards disagree about, reproduced and reported rather
+ * than reconciled: `2b` has all nine lines filled in before create, and 7d
+ * describes the same event as "lineup not set". `EVENT_DETAILS` keeps 7d's
+ * empty `entries`; the nine lines below belong to the builder, which has not
+ * created anything yet.
+ */
+export const DUAL_DRAFT_EVENT: ProgramEvent = RIDGELINE_EVENT;
+
+/**
+ * `2b`'s opponent rail — the six Big Ten rows it draws.
+ *
+ * A different list from `CONFERENCE_SCHOOLS` above, which is `2c`'s conference
+ * section *after* the "Ridg" term: the rail draws no search term, no Ridgemont
+ * Tech, and five schools `2c` never lists. The two share their first row and
+ * share it literally, so the school picked on `2c` and the school checked on
+ * `2b` are one object rather than two spellings of Ridgeline.
+ *
+ * The rail's subline is squad · their own season · how it has gone against US,
+ * and prints no conference and no division — `2b` puts those on the detail
+ * header instead, and only for the school in focus.
+ *
+ * `lastPlayedOn` is left at its default on every row, the four with decided
+ * duals included. The rail draws no last-played cell — unlike `2c`'s list,
+ * which is why the field exists at all — and the four dates the artboard
+ * withheld would be invented. Nothing on this screen reads it.
+ */
+export const RAIL_SCHOOLS: DirectorySchool[] = [
+  // `2c`'s selected row, unchanged and by reference.
+  CONFERENCE_SCHOOLS[0],
+  directorySchool({
+    schoolName: "Fairmont A&M",
+    conference: OUR_CONFERENCE,
+    seasonRecord: "15–7",
+    // "you lead 3–1".
+    played: 4,
+    us: 3,
+    them: 1,
+  }),
+  directorySchool({
+    schoolName: "Crestwood College",
+    conference: OUR_CONFERENCE,
+    seasonRecord: "12–9",
+    // "split 1–1" — `formatOpponentRecord`'s word for an even count.
+    played: 2,
+    us: 1,
+    them: 1,
+  }),
+  directorySchool({
+    schoolName: "Northlake State",
+    conference: OUR_CONFERENCE,
+    seasonRecord: "9–12",
+    // "you lead 5–2".
+    played: 7,
+    us: 5,
+    them: 2,
+  }),
+  directorySchool({
+    schoolName: "Ashford University",
+    conference: OUR_CONFERENCE,
+    seasonRecord: "14–6",
+  }),
+  directorySchool({
+    schoolName: "Merritt College",
+    conference: OUR_CONFERENCE,
+    seasonRecord: "7–14",
+    // "you lead 2–0".
+    played: 2,
+    us: 2,
+  }),
+];
+
+/**
+ * `2b`'s nine lines, exactly as the artboard states them.
+ *
+ * `LineupLine` is the dormant builder's own line shape (`lineup-editor.tsx`),
+ * whose `forfeit` doc comment already names this artboard's
+ * "— no available player" as the one forfeit a builder can set. Using it means
+ * the re-wiring hands these rows straight to `LineupEditor`.
+ *
+ * ── Stated, not seeded ─────────────────────────────────────────────────────
+ * `dual-form.tsx`'s `seedLineup()` fills S1–S6 from `ladder[0..5]` and pairs
+ * D1–D3 out of the same list. Over a ladder deep enough to put Adeyemi in D3
+ * it would also put Adeyemi in S6 — and `2b` draws S6 as forfeited for want of
+ * an available player. The rows below are therefore the artboard's, stated one
+ * by one, because any derivation has to contradict one half of what it draws.
+ * The doubles labels are surnames where the singles labels are full names, for
+ * the same reason: that is what is drawn.
+ *
+ * `ourIds` is empty on every row. `LineupLine` documents it as "roster ids
+ * where we know them", and there is no roster behind a static screen — the
+ * same empty-because-unknown this module gives `ProgramSearchResult.state`.
+ */
+export const DUAL_DRAFT_LINES: LineupLine[] = [
+  {
+    key: "S1",
+    slot: "S1",
+    discipline: "singles",
+    ourIds: [],
+    ourLabels: ["Dana Brooks"],
+    theirLabels: [],
+    forfeit: null,
+  },
+  {
+    key: "S2",
+    slot: "S2",
+    discipline: "singles",
+    ourIds: [],
+    ourLabels: ["Marcus Reid"],
+    theirLabels: [],
+    forfeit: null,
+  },
+  {
+    key: "S3",
+    slot: "S3",
+    discipline: "singles",
+    ourIds: [],
+    ourLabels: ["Rafael Osei"],
+    theirLabels: [],
+    forfeit: null,
+  },
+  {
+    key: "S4",
+    slot: "S4",
+    discipline: "singles",
+    ourIds: [],
+    ourLabels: ["Sam Tanaka"],
+    theirLabels: [],
+    forfeit: null,
+  },
+  {
+    key: "S5",
+    slot: "S5",
+    discipline: "singles",
+    ourIds: [],
+    ourLabels: ["Jules Moreau"],
+    theirLabels: [],
+    forfeit: null,
+  },
+  {
+    // The forfeited line. Nobody named on either side, which is what
+    // `LineupLine.forfeit` and `line-row.tsx` both already treat as the shape
+    // of a forfeit — and `"ours"` is the only side a builder can set: it
+    // awards the point to THEM.
+    key: "S6",
+    slot: "S6",
+    discipline: "singles",
+    ourIds: [],
+    ourLabels: [],
+    theirLabels: [],
+    forfeit: "ours",
+  },
+  {
+    key: "D1",
+    slot: "D1",
+    discipline: "doubles",
+    ourIds: [],
+    ourLabels: ["Brooks", "Reid"],
+    theirLabels: [],
+    forfeit: null,
+  },
+  {
+    key: "D2",
+    slot: "D2",
+    discipline: "doubles",
+    ourIds: [],
+    ourLabels: ["Osei", "Tanaka"],
+    theirLabels: [],
+    forfeit: null,
+  },
+  {
+    // Adeyemi pairs into D3 and appears in no singles line — see the header
+    // above. Drawn, not resolved.
+    key: "D3",
+    slot: "D3",
+    discipline: "doubles",
+    ourIds: [],
+    ourLabels: ["Moreau", "Adeyemi"],
+    theirLabels: [],
+    forfeit: null,
   },
 ];
