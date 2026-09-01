@@ -1,6 +1,16 @@
 
 ---
 
+> **Amended after this stage ran — the branch queue is authoritative.**
+> On 2026-09-01, T17 and T19 blocked during stage 05 on defects in these task
+> definitions, and `.claude/tasks/claude-new-session-c3f1ab.md` was amended:
+> T17's criterion 1 grep was narrowed to imports and JSX (it had scoped wider
+> than the task's own `files:`), and `tests/schedule-static-copy.spec.ts` was
+> added to T19–T23 with a matching criterion, because that spec reads component
+> *source* and a task forbidden to touch it cannot pass its own gate. See rule 9
+> in the queue. This file stays as the record of what stage 04 originally
+> produced; read the queue for current task state.
+
 # Re-wiring the schedule to the database — T13–T26
 
 > Scope: `work/team-schedule-db-wiring/`. Appended by pipeline stage 04 from

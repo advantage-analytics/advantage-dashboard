@@ -239,6 +239,26 @@ list below instead.
 8. The queue preamble's "43-warning baseline" is **stale** — the
    events-lineups gates all measured 37. Compare against a fresh measurement,
    not against either number.
+9. **`tests/schedule-static-copy.spec.ts` is co-owned by every task that
+   rewrites a screen it reads.** Added 2026-09-01 after T19 blocked. That spec
+   holds 129 `drawn()` assertions that read *component source* for literal
+   strings, across four screens: `dual-build-step.tsx` (27), `static-schedule.tsx`
+   (22), `dual-school-step.tsx` (15), `opponent-popup.tsx` (10),
+   `dual-widget.tsx` (10), `event-drawer.tsx` (8),
+   `static-tournament-builder.tsx` (2) and `static-event-chooser.tsx` (2).
+   Re-wiring a screen turns some of those literals into interpolated values, so
+   the change that breaks an assertion and the retirement of that assertion are
+   the same piece of work — and a task forbidden to touch the spec cannot pass
+   its own gate. T19, T20, T21, T22 and T23 therefore each carry the spec in
+   `files:` and retire only the assertions their own diff invalidates, with a
+   reason per removal. T26 is the final sweep, not the whole job.
+
+   **Retire, do not weaken.** An assertion whose literal genuinely left the
+   component is removed and the reason recorded. An assertion that still holds
+   stays. Deleting a failing assertion to get a green run is the one thing this
+   rule is not licence for — that spec is the fidelity contract for a
+   character-for-character design rebuild, and `npm test` going green is not
+   evidence the screen still matches its artboard.
 
 ## T13 · Seed a verifiable schedule program
 - **status:** done
@@ -289,15 +309,15 @@ list below instead.
 - **notes:** **Silent-wrong-data trap 1 of 3**, recorded in `work/events-lineups/REGRESSION-NOTE.md` §4 and in this file's own header exception. Point the component at live data without re-deriving these and every dual — won or lost — renders the identical `good bad good good good grey` rail with correct rows beneath it and nothing on screen looking broken. The header states re-deriving them "is part of the re-wiring, not something that follows from it."
 
 ## T17 · Delete the read path's dormant pair
-- **status:** blocked
+- **status:** todo
 - **model:** sonnet
 - **needs:** T15
 - **files:** delete `src/components/dashboard/schedule/schedule-list.tsx` and `src/components/dashboard/schedule/event-detail-pane.tsx`; `src/components/dashboard/schedule/README.md`
 - **done when:**
-  - [ ] Both files are deleted and `grep -rn "schedule-list\|event-detail-pane" src` returns nothing
+  - [ ] Both files are deleted, and `grep -rnE '(from|import\()[^;]*(schedule-list|event-detail-pane)|<(ScheduleList|EventDetailPane)[ />]' src` returns nothing — provenance mentions inside comment blocks are references to history, not to code, and may remain
   - [ ] README §2's table no longer lists either file
   - [ ] `npm run build` is green
-- **notes:** Mechanical. README §4's type-only lifeline means the import graph lies about what is safe to remove — these two are named safe by §2; the lifeline pair is not, and is T24.
+- **notes:** **Amended 2026-09-01 after a blocked run.** Criterion 1 originally required a bare `grep` over all of `src` to return nothing, which two provenance comments in `event-drawer.tsx` and `opponent-history.ts` made unsatisfiable — neither file is in this task's `files:`, so the criterion demanded work the task was not allowed to do. It now matches imports and JSX only. **The stashed work from that run is good and applies cleanly: `git stash apply b3ed7738f06061390cecd10cfe26b0bf6de6bce4`** — apply it first rather than redoing the deletion. Mechanical. README §4's type-only lifeline means the import graph lies about what is safe to remove — these two are named safe by §2; the lifeline pair is not, and is T24.
 
 ## T18 · Retire the dormant event chooser
 - **status:** todo
@@ -312,66 +332,71 @@ list below instead.
 - **notes:** `StaticEventChooser` "reads nothing" per its route header, so no data wiring is expected here. If it turns out to need any, stop and report rather than inventing it.
 
 ## T19 · Tournament builder reads the roster
-- **status:** blocked
+- **status:** todo
 - **model:** opus
 - **needs:** T13
-- **files:** `src/app/dashboard/team/schedule/new/tournament/page.tsx`, `src/components/dashboard/schedule/static/static-tournament-builder.tsx`
+- **files:** `src/app/dashboard/team/schedule/new/tournament/page.tsx`, `src/components/dashboard/schedule/static/static-tournament-builder.tsx`, `tests/schedule-static-copy.spec.ts`
 - **done when:**
   - [ ] The route fetches `getLadder` and `getTeamSettings` in parallel and passes both down
   - [ ] The roster rail lists the seeded program's real players rather than `TOURNAMENT_FIELD`
   - [ ] Name, starts, ends, site and format are controlled inputs that hold what is entered
   - [ ] The format control carries an explicit boolean for ad scoring, never an interpolated `null`
   - [ ] The route's `/login`, non-team and `isProgramStaff` redirects are unchanged
-- **notes:** The route's own header names the target: "this route reading again and handing `TournamentForm` the same two props it always did" — handed to the static component instead. Submitting is T20; this task stops at the form holding its state.
+  - [ ] Every `tests/schedule-static-copy.spec.ts` assertion that reads this screen's source for a literal this task now interpolates is retired or moved, each with a one-line reason, and `npm test` is green
+- **notes:** **Amended 2026-09-01 after a blocked run** — see rule 9 above. The copy spec pins this component's drawn dates in its *source*, which criterion 3 necessarily replaces, so the spec is now in `files:`. **The stashed work applies cleanly: `git stash apply c4ac7d1e7aff3449eb7e21c12d9488f165beaef0`** — it already satisfies criteria 1–5 and removes the `"<bestOf>|<adScoring>"` string encoding from this file entirely; only the spec retirement is left. The route's own header names the target: "this route reading again and handing `TournamentForm` the same two props it always did" — handed to the static component instead. Submitting is T20; this task stops at the form holding its state.
 
 ## T20 · Tournament builder writes
 - **status:** todo
 - **model:** opus
 - **needs:** T15, T19
-- **files:** `src/components/dashboard/schedule/static/static-tournament-builder.tsx`; reads `src/lib/schedule/actions.ts`; delete `tournament-form.tsx` and `entry-editor.tsx`; `README.md`
+- **files:** `tests/schedule-static-copy.spec.ts`; `src/components/dashboard/schedule/static/static-tournament-builder.tsx`; reads `src/lib/schedule/actions.ts`; delete `tournament-form.tsx` and `entry-editor.tsx`; `README.md`
 - **done when:**
   - [ ] Entries can be added from the rail with draw and seed, and removed again
   - [ ] Submitting calls `createTournament`, and its `ActionError` is shown rather than swallowed
   - [ ] A tournament created through the UI appears in the schedule list and opens at `/dashboard/team/schedule/<id>`
   - [ ] Its stored `format` is jsonb with a real boolean `ad_scoring`
   - [ ] `tournament-form.tsx` and `entry-editor.tsx` are deleted and README §2 no longer lists them
+  - [ ] Every `tests/schedule-static-copy.spec.ts` assertion that reads this screen's source for a literal this task now interpolates is retired or moved, each with a one-line reason, and `npm test` is green
 - **notes:** `createTournament` already exists in `actions.ts` — wire it, do not write a second one. `entry-editor.tsx` holds the draw and seed vocabulary ("Main draw", "Qualifying") that `rosterSubline()` reads; port it rather than inventing new values.
 
 ## T21 · Dual step one searches real schools
 - **status:** todo
 - **model:** opus
 - **needs:** T13
-- **files:** `src/app/dashboard/team/schedule/new/dual/page.tsx`, `src/components/dashboard/schedule/static/dual-school-step.tsx`
+- **files:** `tests/schedule-static-copy.spec.ts`; `src/app/dashboard/team/schedule/new/dual/page.tsx`, `src/components/dashboard/schedule/static/dual-school-step.tsx`
 - **done when:**
   - [ ] The route fetches `getLadder`, `getTeamSettings`, `getConferenceTable` and `getProgramSchedule`, then `opponentDualHistory()` over the last
   - [ ] The drawn field is a real input, and typing narrows the listed schools
   - [ ] The `seasonRecord` slot and the "Region" control are gone from the rendered screen
   - [ ] The "N of M" total is a real count rather than a literal
   - [ ] Selecting a school advances to step two
+  - [ ] Every `tests/schedule-static-copy.spec.ts` assertion that reads this screen's source for a literal this task now interpolates is retired or moved, each with a one-line reason, and `npm test` is green
 - **notes:** Dropping `seasonRecord` and "Region" applies the brief's "nothing fabricates a figure": `opponent-history.ts` says that record "does not exist anywhere in this app", and `programs` has no region column and no mapping to invent one from. The directory total is the one of the three that is backable. `school-search.tsx` is the dormant implementation of this screen — read it before writing.
 
 ## T22 · Carry the chosen school into step two, and make the format control real
 - **status:** todo
 - **model:** fable
 - **needs:** T21
-- **files:** `src/components/dashboard/schedule/static/static-dual-builder.tsx`, `src/components/dashboard/schedule/static/dual-build-step.tsx`
+- **files:** `tests/schedule-static-copy.spec.ts`; `src/components/dashboard/schedule/static/static-dual-builder.tsx`, `src/components/dashboard/schedule/static/dual-build-step.tsx`
 - **done when:**
   - [ ] The school chosen in step one is what step two's header, rail and footer name, by every path through step one
   - [ ] `DUAL_DRAFT_SCHOOL` and `FORMAT_VALUE` no longer pin the screen to Ridgeline or to `"3|false"`
   - [ ] Date, site and format are controlled inputs
   - [ ] Ad scoring submits as a real boolean for both settings, and never as the string `"null"`
+  - [ ] Every `tests/schedule-static-copy.spec.ts` assertion that reads this screen's source for a literal this task now interpolates is retired or moved, each with a one-line reason, and `npm test` is green
 - **notes:** **The highest-risk edit in the run, and traps 2 of 3.** `FORMAT_VALUE = "3|false"` is hard-coded because an interpolated `adScoring` of `null` becomes the string `"null"`, which the decoder's `adScoring === "true"` reads as a confident `false` — the exact failure that made every tournament video fail submission long after the coach had left. Read `dual-build-step.tsx`'s header and `docs/ui-revamp-guardrails.md` §3.1 and §4 before editing. Separately, `static-dual-builder.tsx`'s header explains that the school deliberately does not travel today, because threading it put one school's name over another school's drawn data — the fix is that step two's data now travels too, not that the guard is simply removed.
 
 ## T23 · Dual lineup editing and submit
 - **status:** todo
 - **model:** opus
 - **needs:** T22
-- **files:** `src/components/dashboard/schedule/static/dual-build-step.tsx`, `src/components/dashboard/schedule/static/opponent-popup.tsx`; reads `src/lib/schedule/actions.ts` and `roster-match.ts`; delete `dual-form.tsx`, `school-search.tsx`, `opponent-rail.tsx`, `field-row.tsx`; `README.md`
+- **files:** `tests/schedule-static-copy.spec.ts`; `src/components/dashboard/schedule/static/dual-build-step.tsx`, `src/components/dashboard/schedule/static/opponent-popup.tsx`; reads `src/lib/schedule/actions.ts` and `roster-match.ts`; delete `dual-form.tsx`, `school-search.tsx`, `opponent-rail.tsx`, `field-row.tsx`; `README.md`
 - **done when:**
   - [ ] Lines are editable against the real ladder, with roster matching for typed names
   - [ ] The opponent popup's school and its saved roster travel together, so it dedupes against that school's pool
   - [ ] Submitting calls `createDual`; the dual appears in the schedule list and opens at its event page carrying the players chosen
   - [ ] The four dormant files are deleted and README §2 no longer lists them
+  - [ ] Every `tests/schedule-static-copy.spec.ts` assertion that reads this screen's source for a literal this task now interpolates is retired or moved, each with a one-line reason, and `npm test` is green
 - **notes:** **Trap 3 of 3** — the popup's school and saved roster "must travel together or it dedupes against the wrong pool". `roster-match.ts` already holds the matching and name splitting, and `createDual` already exists; port both rather than re-implementing. `lineup-editor.tsx` and `opponent-name-cell.tsx` are NOT deleted here — they are T24.
 
 ## T24 · Resolve the type-only lifeline
@@ -404,7 +429,7 @@ list below instead.
 - **files:** `tests/schedule-static-copy.spec.ts`, `src/components/dashboard/schedule/README.md`, `src/lib/schedule/fixtures.ts` (import graph only)
 - **done when:**
   - [ ] No file under `src/app/` imports `src/lib/schedule/fixtures.ts`
-  - [ ] Assertions reading component source for a literal this feature now interpolates are removed or moved, and the spec's header says it guards the design record rather than the live screen
+  - [ ] Any assertion still reading component source for a literal this feature interpolates is removed or moved — T19–T23 retire their own as they land, so this is the sweep for whatever they missed — and the spec's header says it guards the design record rather than the live screen
   - [ ] README §2 and §4 are gone, or every remaining entry is still true of the tree
   - [ ] `npm run lint` shows no new warnings against a freshly measured baseline, and `npm run build` and `npm test` are green
 - **notes:** The trap this task exists for: the spec asserts over `fixtures.ts` exports and over component source text, never over a rendered page — so demoting the fixtures to test-only leaves most of it green while it stops describing anything a user sees. `PROGRAM_NAME`, `USER_NAME` and `SEASON_LABEL` have no consumer in `src/` at all; this spec is their only reader. Do not touch `team-home-schedule-reads.spec.ts` or `weekend-dual-reads.spec.ts`.
