@@ -7,41 +7,64 @@ import { cn } from "@/lib/utils";
 import { DualWidget } from "@/components/dashboard/schedule/static/dual-widget";
 import { EventDrawer } from "@/components/dashboard/schedule/static/event-drawer";
 import { formatEventDay, siteTitle } from "@/lib/schedule/format";
-import {
-  SEASON_FACTS,
-  type StaticSchedule as StaticScheduleData,
-} from "@/lib/schedule/fixtures";
-import type { ScheduleRow } from "@/lib/schedule/types";
+/**
+ * `import type`, and only ever `import type`.
+ *
+ * `schedule-server.ts` builds a cookie-scoped Supabase client; a value import
+ * from it would follow this `"use client"` file into a route bundle. The type
+ * is erased at build, which is the same lifeline `fixtures.ts` used for
+ * `ProgramSearchResult` and `OpponentDualHistory` and the one `README.md` §4
+ * documents. `SeasonSummary` lives beside the function that derives it because
+ * the two are one contract — the doc comment there is the spec for what each
+ * figure counts and, more importantly, what it deliberately does not.
+ */
+import type { SeasonSummary } from "@/lib/data/schedule-server";
+import type { EventDetail, ScheduleRow } from "@/lib/schedule/types";
 
 /**
- * `7e`, `7d`, `7c` and `4c` — the schedule's drawer-plus-pane frame, rendered
- * from fixtures.
+ * One program's schedule, as this component reads it.
  *
- * Two branches over one `StaticSchedule`:
+ * `ScheduleRow[]` and `EventDetail` are `scheduleRowsFrom()`'s and
+ * `eventDetailFrom()`'s own return types, composed and redeclared nowhere —
+ * `fixtures.ts` declared this same pair and said why: "it is the same pair the
+ * live route already hands `ScheduleList`, so a component taking this takes the
+ * loader's output unchanged later." Later is now, and the claim held: the
+ * fixture import became a loader call and no prop moved.
+ */
+export interface ScheduleData {
+  rows: ScheduleRow[];
+  details: Record<string, EventDetail>;
+}
+
+/**
+ * `7e`, `7d`, `7c` and `4c` — the schedule's drawer-plus-pane frame.
  *
- *   `POPULATED_SCHEDULE` → `7d`, the landing state: four events in the drawer
- *                          and a pane that prompts, carrying the two facts
- *                          that hold without a selection.
- *   `EMPTY_SCHEDULE`     → `7e`, day zero: "None yet" in both drawer sections
- *                          and the empty state over the nine-line scaffold.
+ * Two branches over one `ScheduleData`, and `rows.length` is what picks:
  *
- * Two fixture sets rather than one behind a flag, because `7e` is not `7d`
- * with the rows removed — its pane is different copy over different structure.
- * The route hands over `POPULATED_SCHEDULE`; pointing that import at
- * `EMPTY_SCHEDULE` is the whole of what it takes to render the other artboard.
+ *   rows        → `7d`, the landing state: the program's events in the drawer
+ *                 and a pane that prompts, carrying the two facts that hold
+ *                 without a selection.
+ *   no rows     → `7e`, day zero: "None yet" in both drawer sections and the
+ *                 empty state over the nine-line scaffold.
+ *
+ * The branch is on the rows rather than on a flag, because `7e` is not `7d`
+ * with the rows removed — its pane is different copy over different structure —
+ * and because no boolean can then drift out of step with what the drawer draws.
+ * `EMPTY_SCHEDULE` used to stand in for the second branch; a program that has
+ * scheduled nothing reaches it for real.
  *
  * ── Selection ─────────────────────────────────────────────────────────────
  * The drawer's rows and the pane's "Jump to" rows both move one piece of local
- * state and nothing else — no route change, no fetch. Selecting an event whose
- * detail carries a lineup swaps the prompt pane for `DualWidget`, which is
- * `7c` at 620px and `4c` at 860px; that walk — `7d` → `7c` → `4c` — is one
+ * state and nothing else — no route change, no fetch. The route hands down
+ * every event's detail with the rows, so selecting an event whose detail
+ * carries a lineup swaps the prompt pane for `DualWidget` — `7c` at 620px and
+ * `4c` at 860px — with no round-trip; that walk `7d` → `7c` → `4c` is one
  * `useState` and a window resize, and nothing else moves.
  *
  * A selection the details map cannot answer falls back to the same prompt
- * pane. `EVENT_DETAILS` is deliberately partial — two of the four drawn rows
- * have no designed pane, and Ridgeline's detail exists with no entries because
- * `7d` says its lineup is not set — so "no pane for this row" is a state the
- * design has already answered rather than one to invent a pane for.
+ * pane. Two real shapes land there and both are designed states rather than
+ * gaps: a tournament, which has no `DualWidget`, and a dual whose lineup is not
+ * set, which `7d` describes in as many words.
  *
  * ── Chrome ────────────────────────────────────────────────────────────────
  * The sidebar and the 44px breadcrumb topbar the artboards draw are the app's
@@ -50,14 +73,18 @@ import type { ScheduleRow } from "@/lib/schedule/types";
  */
 export function StaticSchedule({
   schedule,
+  season,
   canCreate,
   canAddOwnMatch,
 }: {
+  schedule: ScheduleData;
   /**
-   * Aliased on import: `fixtures.ts` exports this shape as `StaticSchedule`
-   * too, and the component owns that name here.
+   * `seasonSummaryFrom()` upstream — the three figures `7d`'s season block
+   * draws. Structured, never pre-formatted: the en dash, the `·` and the
+   * `tabularNumerals()` treatment are this component's business, and the
+   * loader's header says so.
    */
-  schedule: StaticScheduleData;
+  season: SeasonSummary;
   /** `isProgramStaff` upstream — gates the drawer-footed "New event" CTA. */
   canCreate: boolean;
   /**
@@ -92,7 +119,11 @@ export function StaticSchedule({
       ) : dual ? (
         <DualWidget detail={dual} />
       ) : (
-        <SelectAnEventPane schedule={schedule} onSelect={setSelectedId} />
+        <SelectAnEventPane
+          schedule={schedule}
+          season={season}
+          onSelect={setSelectedId}
+        />
       )}
     </div>
   );
@@ -110,12 +141,20 @@ function Pane({ children }: { children: React.ReactNode }) {
  */
 function SelectAnEventPane({
   schedule,
+  season,
   onSelect,
 }: {
-  schedule: StaticScheduleData;
+  schedule: ScheduleData;
+  season: SeasonSummary;
   onSelect: (eventId: string) => void;
 }) {
-  const next = schedule.rows.find((row) => row.playedCount === 0) ?? null;
+  // `findLast` for Next, `find` for Last, and the asymmetry is the point:
+  // `rows` is newest first, so the nearest unplayed event is at the END of the
+  // unplayed run and the most recent played one is at the FRONT of the played
+  // run. Both were `find` while the fixtures drew a single upcoming row, where
+  // the two spellings cannot disagree; against a real season `find` labels the
+  // furthest-away event "Next".
+  const next = schedule.rows.findLast((row) => row.playedCount === 0) ?? null;
   const last = schedule.rows.find((row) => row.playedCount > 0) ?? null;
 
   // "hard". A surface belongs to the event, not to the row the drawer lists,
@@ -133,37 +172,50 @@ function SelectAnEventPane({
         line&apos;s result and the report behind each one.
       </div>
 
-      <div className="mt-[22px] flex items-center gap-3.5">
+      {/* `flex-wrap`, on the row and on the rail, is the whole of what a real
+          season needs that the artboard did not. `7d` drew four marks; a D-I
+          program plays twenty-five duals and a program mid-February has played
+          six. Wrapping keeps every mark — no cap, no ellipsis, no "last ten"
+          rule the design never wrote — and a season short enough to fit lays
+          out exactly as drawn, because nothing wraps until it must. */}
+      <div className="mt-[22px] flex flex-wrap items-center gap-3.5">
         <span className="eyebrow-sm">Season</span>
-        {/* One loss then three wins, exactly as drawn. NOT derived: the four
-            marks claim a fourth completed dual that no artboard names, which
-            is the same gap `SEASON_FACTS` records ("3–1 in duals" over three
-            drawn results, all of them wins). Reproduced as drawn and reported;
-            deriving it would mean inventing the event the design never wrote. */}
-        <div className="flex items-center gap-1.5">
-          <CircleX
-            size={14}
-            strokeWidth={1.5}
-            className="text-[var(--viz-bad)]"
-          />
-          <CircleCheck
-            size={14}
-            strokeWidth={1.5}
-            className="text-[var(--viz-good)]"
-          />
-          <CircleCheck
-            size={14}
-            strokeWidth={1.5}
-            className="text-[var(--viz-good)]"
-          />
-          <CircleCheck
-            size={14}
-            strokeWidth={1.5}
-            className="text-[var(--viz-good)]"
-          />
-        </div>
-        <span className="h-3 w-px bg-[var(--border-medium)]" />
-        <span className="text-body-sm">{tabularNumerals(SEASON_FACTS)}</span>
+        {/* One mark per DECIDED dual, oldest first — `seasonSummaryFrom()`'s
+            order, which is a form strip's own reading order. Undecided duals
+            and tournaments contribute no mark rather than a third glyph; the
+            loader's header is the spec for which is which.
+
+            Empty is a real season: a program whose duals are all still ahead
+            of it has no form yet. The rail AND the divider both go in that
+            case — a divider with one thing on its left separates nothing —
+            leaving "Season" against the facts line, which still reads. */}
+        {season.form.length > 0 ? (
+          <>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {season.form.map((result, index) =>
+                result === "won" ? (
+                  <CircleCheck
+                    key={index}
+                    size={14}
+                    strokeWidth={1.5}
+                    className="text-[var(--viz-good)]"
+                  />
+                ) : (
+                  <CircleX
+                    key={index}
+                    size={14}
+                    strokeWidth={1.5}
+                    className="text-[var(--viz-bad)]"
+                  />
+                )
+              )}
+            </div>
+            <span className="h-3 w-px bg-[var(--border-medium)]" />
+          </>
+        ) : null}
+        <span className="text-body-sm">
+          {tabularNumerals(seasonFacts(season))}
+        </span>
       </div>
 
       <div className="min-h-0 flex-1" />
@@ -227,6 +279,26 @@ function SelectAnEventPane({
 /** "Fri 26 Sep · Home" — the two facts every drawn row carries. */
 function factsLine(row: ScheduleRow): string {
   return `${formatEventDay(row.startsOn)} · ${siteTitle(row.site)}`;
+}
+
+/**
+ * "3–1 in duals · 31 of 36 lines analyzed" — the season block's sentence.
+ *
+ * One string rather than four interpolations in the JSX, so `tabularNumerals()`
+ * below can find the digit runs and wrap each one exactly as `7d` draws them.
+ * The punctuation is the design's and is checked at byte level by
+ * `tests/schedule-static-copy.spec.ts`: `–` is U+2013 and `·` is U+00B7.
+ *
+ * Every figure comes from `seasonSummaryFrom()`. Nothing here decides what
+ * counts as a dual, a decided dual or an analyzed line — that is the loader's
+ * header, deliberately, so the marks beside this sentence and the record inside
+ * it are one fact counted once.
+ */
+function seasonFacts({ dualRecord, lines }: SeasonSummary): string {
+  return (
+    `${dualRecord.won}–${dualRecord.lost} in duals · ` +
+    `${lines.analyzed} of ${lines.total} lines analyzed`
+  );
 }
 
 /**
@@ -393,12 +465,13 @@ function Separator() {
 /**
  * Wrap each run of digits in a `.tabular` span.
  *
- * `SEASON_FACTS` is one flat string in the fixtures; `7d` draws its numerals —
- * 3, 1, 31, 36 — each inside `<span class="tabular">`, with the en dash
- * between the first two left outside. Splitting on digit runs reproduces that
- * markup exactly and keeps the sentence itself in one place. Writing the spans
- * out by hand would put a second copy of the copy here, which is the drift
- * T10's spec exists to catch.
+ * `seasonFacts()` returns one flat string; `7d` draws its numerals — 3, 1, 31,
+ * 36 — each inside `<span class="tabular">`, with the en dash between the first
+ * two left outside. Splitting on digit runs reproduces that markup exactly and
+ * keeps the sentence itself in one place, whatever the figures turn out to be:
+ * a 12–4 record wraps two digits where the artboard wrapped one, and the rule
+ * does not change. Writing the spans out by hand would put a second copy of the
+ * copy here, which is the drift `schedule-static-copy.spec.ts` exists to catch.
  */
 function tabularNumerals(text: string): React.ReactNode[] {
   return text

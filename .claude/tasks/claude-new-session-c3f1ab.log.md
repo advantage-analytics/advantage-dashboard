@@ -1406,3 +1406,69 @@ analyzed".
    unanalyzed despite it having full statistics. Pre-existing gap in the
    loader, not in T14's files; fixing it would also change `entryState` on the
    event page, so it wants its own task.
+
+## T15 · Re-point the schedule page at the database — done
+
+**gate:** lint clean (0 errors, 37 warnings, none in either edited file) ·
+`tsc --noEmit` clean · `npm test` green (260 passed, including all 17 of
+`schedule-static-copy.spec.ts` — no spec edit was needed, T26's scope intact).
+`task-completion-reviewer` → **VERDICT: pass**. Guardrails: **both ran** —
+`pipeline-guardrails-reviewer` (diff touches `src/app/dashboard/` and
+`src/components/dashboard/`) found no violations, confirming in particular
+that "lines analyzed" counts `isAnalysisReady` and so excludes a vendor
+`completed` whose derivation has not run — the §3.2 trap avoided;
+`rls-boundary-reviewer` (the route now issues queries) found no blocking
+issues, confirming program scoping cannot be redirected by any param or
+cookie, that the `import type { SeasonSummary }` really is erased at build so
+no Supabase server client reaches the `"use client"` bundle, and that
+`MATCH_COLUMNS` carries no vendor credential fields into the page payload.
+
+**changed:** `/dashboard/team/schedule` reads the database again. The route
+calls `getProgramSchedule`, `scheduleRowsFrom`, `eventDetailFrom` and
+`seasonSummaryFrom`; `static-schedule.tsx` imports nothing from `fixtures.ts`
+and takes a local `ScheduleData` prop over the loaders' own types. The claim in
+`fixtures.ts` — that a component taking `StaticSchedule` takes the loader's
+output unchanged — was verified rather than assumed, and held: no prop moved.
+The season block's four hard-coded `CircleX`/`CircleCheck` icons and its
+`SEASON_FACTS` literal are now derived; the `tabularNumerals` treatment, the
+en dash and the `·` separator are unchanged. Empty `form` drops the rail and
+its divider together; a long `form` wraps rather than capping, since no
+artboard wrote a cap. Guards byte-identical. Verified live in the browser
+against seeded data and against a zero-event program for the `7e` frame.
+One correction inside a file already being rewritten: the "Next" jump row used
+`find` over a newest-first list, which named the furthest-away event "Next"
+once more than one upcoming event exists — now `findLast`, with "Last" left as
+`find` and the asymmetry commented. The reviewer verified that against the
+documented ordering and judged it incidental to the re-point, not creep.
+
+**Verification touched the live database and was cleaned up.** No session was
+available, so the subagent used the repo's own `tests/fixtures/live-db.ts`
+pattern: one ephemeral auth user added as `coach` to ZZ Test Program, plus one
+ephemeral zero-event program for the day-zero case rather than borrowing UCLA.
+All removed afterwards; independently re-checked from this session — 3 claimed
+programs, 5 events, 33 entries, ZZ back to 1 member, UCLA still 0 events.
+
+**follow-ups:**
+1. **The page now states two things that are false.** The "Jump to" rows still
+   draw a hard-coded `in 4 days` and `· 8 of 9 lines analyzed` — against
+   seeded data the latter sits under a dual with 9 lines and 0 analyzed. Both
+   are `REGRESSION-NOTE.md` §5 items 5 and 6. Out of T15's criteria (which
+   scope to the season block) and out of its files: a per-event lines figure
+   needs a new export in `schedule-server.ts`, and "in 4 days" needs a
+   server-computed clock threaded down to avoid a hydration guard in a
+   `"use client"` component. Wants its own task, and it should land before
+   this branch merges — these are the last two invented facts on the page.
+2. **"N of M lines analyzed" is viewer-dependent.** `processing_jobs` RLS is
+   per-creator, so the ephemeral coach saw `0 of 30` where the seed's creator
+   sees `1 of 30`. `seasonSummaryFrom` is correct — it counts what the reader
+   may see — but a coverage figure on a shared team surface that changes per
+   viewer is a product decision worth making deliberately.
+3. **T16's trap confirmed live**, not merely predicted: Seed State's
+   `DualWidget` drew the transcribed rail beside correct rows, and nothing
+   looked broken on screen.
+4. **The drawer's Upcoming section is newest-first**, so with several upcoming
+   events the soonest sits at the bottom — the same ordering issue fixed in
+   the jump row, still present in `event-drawer.tsx`.
+5. `event-drawer.tsx`'s header comment and `README.md`'s route table both now
+   describe this route as fixture-backed. T26 owns the README; the component
+   header is smaller and adjacent.

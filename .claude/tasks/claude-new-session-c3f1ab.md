@@ -264,7 +264,7 @@ list below instead.
 - **notes:** Pure and exported beside `scheduleRowsFrom` for that function's own stated reason — "so this mapping can be tested without a database". `dualScore()` and `entryPlayed()` in `entry-state.ts` already answer most of it; port, do not re-implement.
 
 ## T15 · Re-point the schedule page at the database
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T13, T14
 - **files:** `src/app/dashboard/team/schedule/page.tsx`, `src/components/dashboard/schedule/static/static-schedule.tsx`
