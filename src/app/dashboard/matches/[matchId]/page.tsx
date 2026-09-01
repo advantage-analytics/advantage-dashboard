@@ -132,6 +132,12 @@ export default async function MatchDetailPage({ params }: PageProps) {
         rail={
           <MatchRail
             aiSummary={summary}
+            // Same guard `StatisticsTab` uses for `DerivedStatsNotice`
+            // (which `MatchDataBlock` supersedes): a derived match whose
+            // stats haven't published yet — `timeline` — reaches this
+            // branch same as `completed` does, and has no winners/errors
+            // numbers yet for the block's caveats to be about.
+            isDerived={isDerived && statsPublished}
             film={
               video
                 ? "card"

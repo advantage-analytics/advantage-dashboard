@@ -1,0 +1,47 @@
+# Match detail round 46 — flagged design copy
+
+**Point-in-time (2026-09-01), as of task T6 on `claude/design-round-46-matchid-d97cbd`.**
+Every "Resolved" row below is settled behaviour, kept current by whichever
+task actually did the work; every "Open" row is a real gap, not a TODO
+comment, and should be re-checked (not trusted) the next time this file is
+read. Rows do not get deleted when resolved — the fact that this element was
+once fabricated design copy is itself worth keeping.
+
+The round-46 rebuild (`work/design-round-46-matchid/`, tasks T1–T7 on this
+branch) copied a Claude Design artboard (`match-details-final.dc.html`) 1:1.
+Most of the artboard is real: every number on it traces to a live column
+through `useMatchData()`. A handful of elements are the artboard's own
+invention — a plausible-looking count, label, or link that nothing in the
+schema backs yet. This file is the list of those elements: what they show,
+where they render, what real thing (if anything) is standing in for them, and
+what would have to exist before they stop being copy and start being data.
+See `work/design-round-46-matchid/02_design/output/design.md`'s "The
+flagged-items file" section for the original eight-item list this doc grew
+from.
+
+| # | Element | Renders where | Suspected real source | Unblock condition | Status |
+|---|---|---|---|---|---|
+| 1 | Insight strip's fabricated evidence count ("from 12 analyzed matches") | `insight-strip.tsx` (Statistics tab) | `insights.{player1,player2}.summary` — one prose string per side, no analyzed-match count anywhere near it | N/A — T2 renders only the real summary as the claim line and omits the count entirely | **Resolved** (T2) |
+| 2 | "Open the full analysis" / rail "View analysis" link | `insight-strip.tsx`, `match-rail.tsx` (Advantage Intelligence blurb) | No analysis page exists; both link to `/dashboard/ask` today | A dedicated per-match analysis page (or `/dashboard/ask` pre-seeded with this match's context) | **Open** |
+| 3 | "Add video" / "Import from SwingVision" CTAs | `match-rail.tsx` (no-video note strip), `film-empty-state.tsx` (46d) | No add-video-to-an-existing-match flow and no import-only route exist; both CTAs link to `/dashboard/matches/new`, the full new-match wizard | A flow that attaches video (or a SwingVision file) to an *existing* match without re-entering score/players | **Open** |
+| 4 | "MP4 up to 4 GB" size cap in the empty-state micro-copy | `film-empty-state.tsx` (46d) | Real cap is `MAX_VIDEO_SIZE_BYTES` (`src/lib/services/splitstep/config.ts`) = 8,000,000,000 − 1 bytes, i.e. ~8 GB | N/A — T5 renders `Math.round(MAX_VIDEO_SIZE_BYTES / 1_000_000_000)` = "8 GB" instead of the artboard's invented "4 GB" | **Resolved** (T5) |
+| 5 | `MatchDataBlock`'s third caveat line, "Two games have no point data" | Would have rendered in `match-data-block.tsx` (rail, 46c) | Investigated for this task: **not derivable today.** `points.flags`/`shots.flags` (migration `20260818000000_derived_row_flags.sql`) exist in the schema, but they mark data-quality *contradictions on rows that were written* (e.g. `"winner_disputed"`), not games with *zero* rows — a structurally different question. `getMatchPointsFromSupabase` (`match-points-server.ts`) doesn't even select `flags` yet. A real "N games missing" count would need new gap-detection logic (reconciling `match.score.sets`' game totals, tiebreak-aware, against distinct game numbers actually present in `points`) that exists nowhere in the codebase | Either (a) select and surface `points.flags`/`shots.flags` and count rows with a code that means "no data", or (b) write and test the game-count-vs-score reconciliation described above | **Resolved by omission** — T6 ships the block with only the two true caveat lines and adjusts the summary sentence to say "Two" (matching what actually renders) instead of the artboard's "Three" |
+| 6 | Film control-bar extras — loop, playback speed, kebab menu glyphs | `film-player.tsx` (Film room tab) | No spec exists for what these should do | A spec for loop/speed/overflow-menu behaviour | **Resolved** (T5) — rendered inert with explanatory tooltips instead of guessed behaviour, per the artboard's own glyphs |
+| 7 | Court "maximize" button → larger-court dialog | `shots/court-header.tsx` (Shots & placement tab) | No specced expanded view exists; the button opens a plain dialog reusing the same court SVG at a larger size | A specced expanded-court view (filters, comparison, or annotation — undecided) | **Open / unverified** — T4 built this, but **T4 itself is `blocked`** in this branch's task queue (`.claude/tasks/claude-design-round-46-matchid-d97cbd.md`): its `done when` criterion requiring verification on a viewer-is-player2 match was marked `[unverifiable]` in this environment (no real player2-viewer match in the live DB, no dev-login capability here). T4's code is otherwise complete and stashed; until it lands, this row describes code that isn't in the render tree at all |
+| 8 | H2H per-set stat-chip filtering | `head-to-head-card.tsx` (Statistics tab) | Whole-match values come from published `match_stats`; per-set values are recomputed client-side from `points`, which can disagree at the margin with the published aggregate (different derivation paths) | N/A — working as designed. T2 recomputes only the rows that are derivable from `points` per set and shows "—" for the rest; "Whole match" always falls back to the published, authoritative numbers | **Resolved** (T2) — documented behaviour, not a gap, kept here because it's the kind of thing a coach could reasonably distrust without this note |
+| 9 | Fabricated "0-0" game/point score in hover tooltips on a derived match | `performance-tracker-chart.tsx`'s momentum-chart hover annotation (`Set {n} · {gameScore} · {pointScore}`, Statistics tab); `visuals/court-visualization.tsx` and `visuals/half-court-svg.tsx`'s serve-dot tooltips (current Shots tab, `serve-placement-card.tsx` — also the file T4's still-blocked Shots & placement rebuild reuses for its coordinate normalization, so this carries forward once T4 lands) | `match-points-server.ts`'s `getMatchPointsFromSupabase` coerces a `null` `point_score`/`game_score` to the literal string `"0-0"` (`gameScore: point.game_score ?? "0-0"`, line 210; `pointScore: point.point_score ?? "0-0"`, line 211). The Advantage Intelligence derivation pipeline never writes either column — confirmed on the one real analyzed match in the live DB, all 114 points carry `NULL` for both (see `point-list.tsx`'s own `columnHasValues()` comment, added by T5). So on every derived match, every point's tooltip score is the coerced placeholder, not a real score | `point-list.tsx` already solved this correctly for its own rows: `columnHasValues()` checks whether a column is `"0-0"` end-to-end and hides the whole column when it is, rather than printing a fabricated score. The same guard needs to be applied at `performance-tracker-chart.tsx`'s tooltip and at the two `visuals/` tooltip sites — or, better, fixed once at the source by having `match-points-server.ts` carry `null` through instead of coercing, so every consumer can tell "0-0" (real) from "unknown" (absent) itself, per T5's own follow-up note in the run log | **Open** — newly identified during this task; not part of design.md's original eight, added per this task's instruction to check the null-score-coercion follow-up T5 flagged |
+
+## Reading this file
+
+- A row moving from Open to Resolved should say which task resolved it and
+  how, the way rows 1/4/6/8 do — "it works now" isn't enough for the next
+  reader to trust without re-checking the code.
+- A new element discovered to be design copy (a plausible number, count, or
+  link with no data behind it) gets a new numbered row here, not a silent
+  fix. The next total rewrite of this page should start from this list, not
+  from the artboard again.
+- This file is about presented-copy honesty specifically — a number, label,
+  or link that looks computed but isn't. General engineering follow-ups
+  (accessibility gaps, code-quality cleanup, RLS edge cases) belong in
+  `.claude/tasks/claude-design-round-46-matchid-d97cbd.log.md`'s per-task
+  follow-up notes, not here.

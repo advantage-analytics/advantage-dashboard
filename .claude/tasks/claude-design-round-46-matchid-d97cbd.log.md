@@ -94,3 +94,9 @@ is the runner's. Newest entries at the bottom.
 2. Separately: `court-visualization.tsx`'s 1st/2nd-serve filter heuristic checks `pointScore === "0-0"` as a fallback — on a derived match where every point's `pointScore` is coerced to `"0-0"`, this could misclassify every serve as "first." A data-correctness bug, not a copy-honesty one, so it wasn't added to the flags doc, but worth its own look.
 3. Entry 7 (court maximize dialog) in the flags doc can't move to "Resolved" until T4 unblocks; entry 9's Shots-tab scope also depends on T4 actually landing — re-read the flags doc once T4 resolves.
 4. Root fix worth considering: have `match-points-server.ts` carry `null` through instead of coercing to `"0-0"`, so every consumer (present and future) can tell "real 0-0" from "unknown" itself rather than needing its own guard.
+
+## T6 · Rail completion: match-data block, no-video strip, flags doc — done
+
+**gate:** mechanical (lint/tsc/test) pass, 2nd pass · task-completion-reviewer `VERDICT: pass`, 2nd pass · pipeline-guardrails-reviewer clean, 2nd pass (fresh full re-read, not just the one fixed line) · rls-boundary-reviewer skipped (no data/api/migration surface in diff)
+
+**changed (resume from stash 707ba8e):** The one flagged line in `match-data-block.tsx` — "Winners and errors are model output" → `"Errors" counts forced and unforced together` — now states the real invariant (errors bundle forced+unforced, reading ~2x a hand-tagged count) that the block exists to convey, matching the file's own JSDoc and `derived-stats-notice.tsx`. Nothing else in the stashed diff was touched; both reviewers independently re-verified the rest of the criteria still hold (gating to `sourceProvider === "splitstep" && statsPublished`, the no-video note strip's condition/copy unchanged, the "Two statistics" count matching two caveat lines, the 9-entry flags doc, the docs/README.md index row).

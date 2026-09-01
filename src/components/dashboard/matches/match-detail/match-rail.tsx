@@ -8,6 +8,7 @@ import { Calendar, Check, Clock, Play, Swords } from "lucide-react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { parseMatchTab } from "@/components/dashboard/matches/match-detail/match-tabs";
+import { MatchDataBlock } from "@/components/dashboard/matches/match-detail/match-data-block";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
@@ -15,8 +16,9 @@ import { cn } from "@/lib/utils";
 /**
  * The 300px match rail (artboard 46a–46d): identity block (names + verified
  * check + score with superscript tiebreaks), fact list, the Advantage
- * Intelligence blurb, and — pinned to the bottom — either the film cross-link
- * card (video present) or the round-44 no-video note strip.
+ * Intelligence blurb, and — pinned to the bottom — the derived-match
+ * `MatchDataBlock` (46c) followed by either the film cross-link card (video
+ * present) or the round-44 no-video note strip.
  *
  * Which side is "you" comes exclusively from `useMatchSides()`
  * (guardrails §4) — nothing here looks at player1/player2 directly.
@@ -38,6 +40,13 @@ interface MatchRailProps {
    * `note-neutral` = video-analyzed match whose trimmed copy isn't available.
    */
   film: "card" | "note-swingvision" | "note-neutral" | "none";
+  /**
+   * Video-derived match with published statistics — renders `MatchDataBlock`
+   * above the film slot. Defaults to `false` so the awaiting-analysis
+   * short-circuit (which never mounts a stats section at all) never has to
+   * pass it; `page.tsx` threads the real value once stats are on the page.
+   */
+  isDerived?: boolean;
 }
 
 /** `match.date` ("August 2, 2026") → the rail's short-month "Aug 2, 2026". */
@@ -82,7 +91,7 @@ function FactRow({
   );
 }
 
-export function MatchRail({ aiSummary, film }: MatchRailProps) {
+export function MatchRail({ aiSummary, film, isDerived = false }: MatchRailProps) {
   const { match, points } = useMatchData();
   const sides = useMatchSides();
   const router = useRouter();
@@ -230,57 +239,63 @@ export function MatchRail({ aiSummary, film }: MatchRailProps) {
         </div>
       ) : null}
 
-      {/* Bottom slot */}
-      {film === "card" ? (
-        <div className="mt-auto flex flex-col gap-3">
-          <button
-            type="button"
-            onClick={openFilmRoom}
-            aria-label="Open film room"
-            className="relative h-32 cursor-pointer overflow-hidden rounded-xl bg-[var(--surface-dark)] text-left"
-          >
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-pill)] bg-white/[0.14]">
-                <Play
-                  className="h-3.5 w-3.5 text-white"
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-              </div>
+      {/* Bottom slot: the derived-match MatchDataBlock (46c) sits above the
+          film cross-link card / no-video note, both pinned to the rail's
+          bottom together — MatchDataBlock never replaces the film slot. */}
+      {isDerived || film !== "none" ? (
+        <div className="mt-auto flex flex-col gap-4">
+          {isDerived ? <MatchDataBlock /> : null}
+
+          {film === "card" ? (
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={openFilmRoom}
+                aria-label="Open film room"
+                className="relative h-32 cursor-pointer overflow-hidden rounded-xl bg-[var(--surface-dark)] text-left"
+              >
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-pill)] bg-white/[0.14]">
+                    <Play
+                      className="h-3.5 w-3.5 text-white"
+                      strokeWidth={1.5}
+                      aria-hidden="true"
+                    />
+                  </div>
+                </div>
+                <div className="absolute bottom-3 left-3 flex flex-col gap-0.5">
+                  <span className="text-[11px] font-medium text-white">
+                    Full match film
+                  </span>
+                  <span className="mono text-[10px] text-white/60">
+                    {duration ? `${duration} · ` : ""}
+                    {points.length} points
+                  </span>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={openFilmRoom}
+                className={cn(advButton("primary", "md"), "w-full")}
+              >
+                Open film room
+              </button>
             </div>
-            <div className="absolute bottom-3 left-3 flex flex-col gap-0.5">
-              <span className="text-[11px] font-medium text-white">
-                Full match film
+          ) : film === "note-swingvision" || film === "note-neutral" ? (
+            <div className="flex flex-col gap-[5px] rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3 py-[11px]">
+              <span className="text-[11px] leading-[1.5] text-[var(--ink-700)] [text-wrap:pretty]">
+                {film === "note-swingvision"
+                  ? "No video on this match — the stats came from the SwingVision export."
+                  : "No video available for this match."}
               </span>
-              <span className="mono text-[10px] text-white/60">
-                {duration ? `${duration} · ` : ""}
-                {points.length} points
-              </span>
+              <Link
+                href="/dashboard/matches/new"
+                className="text-[11px] font-medium text-[var(--blue)]"
+              >
+                Add video
+              </Link>
             </div>
-          </button>
-          <button
-            type="button"
-            onClick={openFilmRoom}
-            className={cn(advButton("primary", "md"), "w-full")}
-          >
-            Open film room
-          </button>
-        </div>
-      ) : film === "note-swingvision" || film === "note-neutral" ? (
-        <div className="mt-auto">
-          <div className="flex flex-col gap-[5px] rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3 py-[11px]">
-            <span className="text-[11px] leading-[1.5] text-[var(--ink-700)] [text-wrap:pretty]">
-              {film === "note-swingvision"
-                ? "No video on this match — the stats came from the SwingVision export."
-                : "No video available for this match."}
-            </span>
-            <Link
-              href="/dashboard/matches/new"
-              className="text-[11px] font-medium text-[var(--blue)]"
-            >
-              Add video
-            </Link>
-          </div>
+          ) : null}
         </div>
       ) : null}
     </>
