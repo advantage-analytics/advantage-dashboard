@@ -1567,3 +1567,84 @@ files T17 may touch — then set `status:` back to `todo`. The stash applies
 cleanly onto the current tree. Alternatively widen `files:` to include the two
 comment-bearing files, but `event-drawer.tsx` has been deliberately excluded
 across three tasks, so amending the criterion is the smaller change.
+
+## T19 · Tournament builder reads the roster — blocked
+
+**gate:** stage **5a failed** on `npm test` — 259 passed, **1 failed**. lint
+clean · `tsc --noEmit` clean. 5b and 5c were not reached; 5a stops the gate.
+
+```
+✘ tests/schedule-static-copy.spec.ts:660 › 3c's own words
+  Error: static-tournament-builder.tsx no longer draws "10-03"
+```
+
+**reason — a task-ordering defect in the stage-03 plan, not a fault in the
+work.** That assertion, and its sibling at :674 for `10-05`, read the
+*component's source* for two drawn date literals. T19's own criterion 3
+requires those literals to become controlled `<input type="date">` values, so
+satisfying the task necessarily breaks the spec. The spec is owned by **T26**,
+which runs last and which T19 was explicitly forbidden to touch. T19 therefore
+cannot pass its own gate at its position in the order.
+
+**This will recur.** `schedule-static-copy.spec.ts` carries **129**
+source-reading `drawn()` assertions across all four static routes —
+`7e 7d 7c 4c`, `3b`, `2c 2b 2d 2e` and `3c`. T21, T22 and T23 rewrite three of
+those four screens and will hit the same wall. T15 and T16 escaped only
+because they changed values the spec happens to assert through `fixtures.ts`
+exports rather than through component source.
+
+**stash:** `c4ac7d1e7aff3449eb7e21c12d9488f165beaef0` (tag `blocked: T19`).
+Recover with `git stash apply c4ac7d1e7aff3449eb7e21c12d9488f165beaef0` — a
+SHA rather than `stash@{0}`, because `refs/stash` is shared with the main
+checkout and other worktrees. The stashed work was otherwise clean: lint and
+`tsc` green, every other assertion for `3c` still passing, and the route,
+roster rail, controlled inputs and format encoding all verified live.
+
+**to unblock — a plan-level decision, not a re-run.** The spec correction
+cannot stay last. Two options:
+
+1. **Preferred: add `tests/schedule-static-copy.spec.ts` to the `files:` of
+   each re-wiring task** (T19, T21, T22, T23), so each screen retires exactly
+   the assertions its own change invalidates and the completion reviewer can
+   judge that retirement against the diff in front of it. T26 then does the
+   final sweep it was always meant to do rather than absorbing four
+   screens-worth of consequence at the end.
+2. Insert one spec-retirement task before T21. Riskier — it removes coverage
+   in a batch, ahead of the code meant to replace it, with no diff to judge
+   each removal against.
+
+Under either option, set T19 `status:` back to `todo` and apply the stash.
+
+**what the run established anyway** (all verified before the gate failed, and
+preserved in the stash): the route runs `getLadder` and `getTeamSettings`
+through one `Promise.all` and hands down `roster` and `defaultSurface`; the
+rail walks the real roster keyed on `player.userId`; name / starts / ends /
+site / format are one controlled `draft` object; and the
+`"<bestOf>|<adScoring>"` string encoding is **gone from this file entirely** —
+`FORMATS` is a table of literal `{bestOf, adScoring}` rows and the `<select>`
+carries an opaque option name that is only ever compared, never parsed, with
+`adScoring` typed `boolean` rather than `boolean | null` so a null is a
+compile error rather than a convention. That is a stronger answer to
+guardrails §3.1/§4 than the `"3|false"` literal it replaces, and it is worth
+keeping when this is re-run.
+
+**follow-ups:**
+1. **ZZ Test Program has zero `program_players` rows** — T13 seeded typed
+   labels only, so `getLadder` returns an empty ladder there and any task
+   needing a real roster must seed players first. This run created six
+   ephemeral ones and removed them.
+2. `3c` still draws "3 Big Ten programs are in this field", which no table can
+   compute — no queue task owns removing it, and the brief's "nothing
+   fabricates a figure" argues it should go the way T21 drops `seasonRecord`
+   and "Region".
+3. The empty-roster branch needed two distinct strings — "No player by that
+   name." for a search miss versus "No players on the roster yet." for a
+   program with nobody on it. The fixture rail could only ever produce the
+   first.
+4. `todayISO()` should build from local date components; `toISOString().slice(0, 10)`,
+   as the dormant form does, can open a coach's evening on tomorrow's date.
+
+**Live-database verification was cleaned up.** One ephemeral auth user, one
+`program_members` row and six `program_players` rows for ZZ, all removed.
+Post-check: 3 claimed programs, 5 events, 33 entries, 5 `program_members`, ZZ
+with 1 member and 0 players, UCLA 0 events, no leftover harness rows.
