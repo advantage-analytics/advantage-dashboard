@@ -1003,3 +1003,83 @@ the remount guarantee silently stops holding for the other.
    `DUAL_DRAFT_TYPED_NAME` become props or fetches **together** — the school and
    its saved roster must travel as one, or the popup dedupes against the wrong
    pool.
+
+## T9 · Label the dormant schedule tree — done
+
+**gate:** mechanical — `npm run lint` 0 errors / 37 warnings, `npx tsc
+--noEmit` clean, `npm test` 227 passed. Completion review — `VERDICT: pass`,
+every classification independently re-derived rather than taken from the
+runner or the implementer. Guardrails — `pipeline-guardrails-reviewer` **ran**
+(this is a §3.5 change and a wrong label *is* the §3.5 failure), confirmed
+every label against the import graph, and raised one factual slip in the
+README, **fixed before commit**. `rls-boundary-reviewer` **skipped** — no
+matching path, no query; the diff is comment-only.
+
+**The task's `files:` list was materially wrong, and correcting it was the
+job.** The list and its "eight dormant entry points" were written at stage 04,
+before the static tree existed. Verified reachability (BFS of the `@/` import
+graph from every file under `src/app/`, then refined by hand for type-only
+edges) gives a different partition:
+
+- **9 DORMANT** — `schedule-list`, `event-detail-pane`, `new-event-chooser`,
+  `dual-form`, `school-search`, `opponent-rail`, `tournament-form`,
+  `entry-editor`, `field-row`. The task's list omitted the last three.
+- **1 LIVE, and in the task's list** — `dual-detail.tsx`, imported directly by
+  `[eventId]/page.tsx`, one of the three routes stage 02 left out of scope.
+  Labelling it dormant would have been a false comment in live code — the exact
+  §3.5 failure this task exists to prevent, committed by the task meant to
+  prevent it.
+- **2 PARTLY DORMANT + `DO NOT DELETE THIS FILE`** — `lineup-editor.tsx` and
+  `opponent-name-cell.tsx`.
+
+**The third category corrected the runner's own analysis, and the correction
+was verified.** A module-graph walk cannot tell `import type` from a value
+import. `<LineupEditor>` renders only at `dual-form.tsx:453` (dormant);
+`lineup-editor.tsx`'s only *value* importer is `dual-form.tsx`, while
+`static/dual-build-step.tsx:23` and `lib/schedule/fixtures.ts:62` import
+`LineupLine` with `import type`, erased at build. `<OpponentNameCell>` renders
+only at `lineup-editor.tsx:265`. So both are unreachable at runtime **and
+undeletable at compile time** — a flat DORMANT label would have invited a
+build-breaking deletion. Both reviewers reproduced this independently.
+
+**changed:** New `src/components/dashboard/schedule/README.md` — route table
+(including the three out-of-scope routes still on the DB-wired tree), the
+dormant list with replacements, the live list, an ASCII graph of the type-only
+lifeline, what the dormant tree still owns for the re-wiring (server actions,
+roster matching, the `"<bestOf>|<adScoring>"` encoding), and the two greps to
+regenerate the map. Header comments on 11 files. **116 insertions, 0
+deletions**; every added line in a tracked file is a comment, and `"use client"`
+remains the literal first line in all ten client files.
+
+**two README inaccuracies found at the gate and fixed before commit:**
+1. It claimed `event-detail-pane.tsx` was once "mounted by a route directly".
+   Git history says otherwise — `page.tsx` only ever imported `ScheduleList`;
+   `event-detail-pane` was always reached through it. Rewritten to name the four
+   that really were route-mounted and to spell out each transitive chain.
+2. It called `row-action.tsx` "shared by both trees". It is not imported under
+   `static/` at all. Rewritten: it is used from three live surfaces —
+   `/dashboard/team/roster` directly, `line-row.tsx` (via
+   `dual-detail`/`tournament-detail`), and `team/dual-sheet.tsx` via
+   `/dashboard/team`. All three importers verified by grep.
+
+The README states plainly that it labels the §3.5 hazard and does not remove
+it — only deleting the dormant tree would, and the brief forbids that. Both
+reviewers confirmed it does not overclaim.
+
+**follow-ups:**
+1. **`field-row.tsx` is the weakest entry in the map** — no 1:1 static
+   replacement, because both static builders drew their own defaults cells.
+   Worth deciding at re-wire time whether that duplication was intentional.
+2. **A CI check would keep this honest without anyone remembering to.** Fail
+   when a file under `src/components/dashboard/schedule/` is unreachable from
+   `src/app/` and lacks a `DORMANT`/`PARTLY DORMANT` header. The reachability
+   walk generalises, and `npm run map` already generates `MAP.md`'s route table
+   — a dormant-file report could ride the same command. **Note the subtlety any
+   such check must handle: reachability alone mislabels the two type-only
+   cases.**
+3. `docs/ui-revamp-guardrails.md` §3.5 cites only the deleted
+   `match-video-panel.tsx` as its example; a pointer to this README would make
+   it a live instance instead of a retired one.
+4. **That same guardrails doc, §7, states the lint baseline as 43.** The real
+   figure is 37. This is now the third place the stale number has been found
+   (brief, plan, queue preamble) — worth one correction pass across all four.

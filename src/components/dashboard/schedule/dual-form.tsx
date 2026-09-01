@@ -1,5 +1,17 @@
 "use client";
 
+/*
+ * DORMANT — no route renders this file. `/dashboard/team/schedule/new/dual`
+ * was re-pointed this run to `static/static-dual-builder.tsx`, whose two steps
+ * are `static/dual-school-step.tsx` and `static/dual-build-step.tsx`.
+ *
+ * This is still the only DB-wired dual builder: the `createDual` call, the
+ * roster matching and the §3.1/§4 format encoding all live here and have no
+ * counterpart in the static tree. Re-wiring reads FROM this file.
+ *
+ * See `./README.md` for the full live/dormant map.
+ */
+
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle } from "lucide-react";

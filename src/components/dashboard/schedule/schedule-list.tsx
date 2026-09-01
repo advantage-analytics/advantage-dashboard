@@ -1,5 +1,13 @@
 "use client";
 
+/*
+ * DORMANT — no route renders this file. `/dashboard/team/schedule` was
+ * re-pointed this run to `static/static-schedule.tsx` (list + pane) and
+ * `static/event-drawer.tsx` (the drawer half).
+ *
+ * See `./README.md` for the full live/dormant map.
+ */
+
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Bell, Calendar } from "lucide-react";

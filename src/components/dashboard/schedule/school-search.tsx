@@ -1,5 +1,13 @@
 "use client";
 
+/*
+ * DORMANT — no route renders this file. Step one of the dual builder is now
+ * `static/dual-school-step.tsx`. Note `historyForProgram`/`schoolRowSubline`
+ * are exported from here for `opponent-rail.tsx`, which is dormant as well.
+ *
+ * See `./README.md` for the full live/dormant map.
+ */
+
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, Plus, Search } from "lucide-react";

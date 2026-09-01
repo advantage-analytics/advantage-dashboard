@@ -1,5 +1,18 @@
 "use client";
 
+/*
+ * PARTLY DORMANT — the `LineupEditor` component below is unreachable; the
+ * `LineupLine` type it exports is live. DO NOT DELETE THIS FILE.
+ *
+ * `static/dual-build-step.tsx` and `lib/schedule/fixtures.ts` both do
+ * `import type { LineupLine }` from here. A type import is erased at build, so
+ * the component never enters a route bundle — the only thing that renders
+ * `<LineupEditor>` is dormant `dual-form.tsx`. The static stand-in for the
+ * editor itself is `static/dual-build-step.tsx`.
+ *
+ * See `./README.md` for the full live/dormant map.
+ */
+
 import { useState } from "react";
 import { GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";

@@ -1,5 +1,15 @@
 "use client";
 
+/*
+ * DORMANT — no route renders this file. It has no single static counterpart:
+ * `static/dual-build-step.tsx` and `static/static-tournament-builder.tsx` each
+ * draw their own defaults cells, deliberately NOT reusing this row's 25b
+ * spacing (see `dual-build-step.tsx:391`). Its only importers, `dual-form.tsx`
+ * and `tournament-form.tsx`, are dormant too.
+ *
+ * See `./README.md` for the full live/dormant map.
+ */
+
 import { ChevronDown, Calendar } from "lucide-react";
 
 /**

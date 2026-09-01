@@ -1,5 +1,18 @@
 "use client";
 
+/*
+ * PARTLY DORMANT — nothing renders `<OpponentNameCell>` on a live route, but
+ * this file is NOT free-standing dead code. DO NOT DELETE IT.
+ *
+ * Its only importer is `lineup-editor.tsx`, whose component is in turn rendered
+ * only by dormant `dual-form.tsx`. So the popover is unreachable today while
+ * the module is still the DB-wired half of the re-wire — `saveOpponentPlayer`
+ * and the re-target `key` contract described below have no static counterpart.
+ * The static stand-in for the popup alone is `static/opponent-popup.tsx`.
+ *
+ * See `./README.md` for the full live/dormant map.
+ */
+
 import { useEffect, useRef, useState } from "react";
 import { CircleCheck, Plus, Search } from "lucide-react";
 import { normalizedPersonName } from "@/lib/data/person-name";

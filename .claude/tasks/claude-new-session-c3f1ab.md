@@ -147,7 +147,7 @@ bodies do not repeat them — a subagent running any of T1–T12 should read the
 - **notes:** Same master-detail shape as `2b`. Independent of T5–T7 — it may run before or between them. The artboard states there is no lineup and no matches until played; reproduce that, do not invent a lineup.
 
 ## T9 · Label the dormant schedule tree
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2, T3, T5, T8
 - **files:** `src/components/dashboard/schedule/README.md` (new); header comments only in `schedule-list.tsx`, `new-event-chooser.tsx`, `dual-form.tsx`, `school-search.tsx`, `tournament-form.tsx`, `event-detail-pane.tsx`, `dual-detail.tsx`, `opponent-name-cell.tsx`

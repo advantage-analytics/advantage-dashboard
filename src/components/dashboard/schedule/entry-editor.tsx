@@ -1,5 +1,13 @@
 "use client";
 
+/*
+ * DORMANT — no route renders this file. Its `EntryList`/`RosterRail` pair is
+ * now drawn inside `static/static-tournament-builder.tsx`; the only thing that
+ * ever mounted it, `tournament-form.tsx`, is dormant too.
+ *
+ * See `./README.md` for the full live/dormant map.
+ */
+
 import { useRef, useState } from "react";
 import { Check, Plus, Search, X } from "lucide-react";
 import { normalizedPersonName } from "@/lib/data/person-name";

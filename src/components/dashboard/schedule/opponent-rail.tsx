@@ -1,5 +1,13 @@
 "use client";
 
+/*
+ * DORMANT — no route renders this file. Its rail is now the left pane of
+ * `static/dual-build-step.tsx`, which folded step one's school list into the
+ * builder rather than keeping a separate rail component.
+ *
+ * See `./README.md` for the full live/dormant map.
+ */
+
 import { useEffect, useMemo, useState } from "react";
 import { Check, Plus, Search } from "lucide-react";
 import {
