@@ -5,6 +5,8 @@ import { motion, useReducedMotion } from "framer-motion";
 
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { LegendSwatch } from "@/components/dashboard/matches/match-detail/legend-swatch";
+import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 
 /**
@@ -40,7 +42,6 @@ import type { MatchPoint } from "@/lib/data/match-points-server";
  */
 
 const EASE_CHART = [0.2, 0, 0.4, 1] as const;
-const EASE_PRIMARY = [0.25, 0.46, 0.45, 0.94] as const;
 
 type OutcomeKey = "winners" | "aces" | "unforcedErrors" | "doubleFaults";
 
@@ -254,14 +255,7 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
 
       <div className="flex flex-wrap gap-x-4 gap-y-1.5 pt-0.5">
         {outcomes.map((o) => (
-          <span key={o.key} className="inline-flex items-center gap-[5px]">
-            <span
-              aria-hidden="true"
-              className="h-2 w-2 shrink-0 rounded-[2px]"
-              style={{ background: o.you }}
-            />
-            <span className="text-micro whitespace-nowrap">{o.label}</span>
-          </span>
+          <LegendSwatch key={o.key} color={o.you} label={o.label} />
         ))}
       </div>
 
@@ -285,22 +279,14 @@ function SegmentTooltip({
   align: "start" | "center" | "end";
 }) {
   return (
-    <span
-      aria-hidden="true"
-      className="pointer-events-none absolute z-[3] flex flex-col gap-0.5 whitespace-nowrap rounded-[12px] px-2.5 py-2"
-      style={{
-        bottom: "calc(100% + 6px)",
-        left: align === "end" ? undefined : align === "center" ? "50%" : 0,
-        right: align === "end" ? 0 : undefined,
-        transform: align === "center" ? "translateX(-50%)" : undefined,
-        background: "var(--ink-900)",
-        boxShadow: "var(--shadow-dropdown)",
-        opacity: open ? 1 : 0,
-        transition: `opacity 200ms cubic-bezier(${EASE_PRIMARY.join(",")})`,
-      }}
+    <ChartTooltip
+      open={open}
+      align={align}
+      bottomOffset={6}
+      className="gap-0.5 px-2.5 py-2"
     >
       <span className="text-[12px] font-medium text-white">{label}</span>
       <span className="tabular text-[11px] text-white/[0.64]">{detail}</span>
-    </span>
+    </ChartTooltip>
   );
 }

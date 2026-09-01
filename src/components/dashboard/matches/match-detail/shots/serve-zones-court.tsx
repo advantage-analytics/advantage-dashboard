@@ -26,6 +26,7 @@ import type {
   CourtView,
   ShotMode,
 } from "@/components/dashboard/matches/match-detail/shots/use-shot-filters";
+import { LegendSwatch } from "@/components/dashboard/matches/match-detail/legend-swatch";
 
 /**
  * The Shots tab's court card (artboard 46b lines 693–733 / 47a lines 122–162).
@@ -212,21 +213,6 @@ export function ServeZonesCourt({
         )}
       </div>
     </div>
-  );
-}
-
-function LegendSwatch({ color, label }: { color: string; label: string }) {
-  return (
-    <span className="flex items-center gap-1.5">
-      <span
-        className="size-2 rounded-[2px]"
-        style={{ backgroundColor: color }}
-        aria-hidden
-      />
-      <span className="text-micro" style={{ color: "var(--ink-500)" }}>
-        {label}
-      </span>
-    </span>
   );
 }
 

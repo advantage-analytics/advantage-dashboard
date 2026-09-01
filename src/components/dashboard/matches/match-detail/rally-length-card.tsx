@@ -5,6 +5,8 @@ import { motion, useReducedMotion } from "framer-motion";
 
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { LegendSwatch } from "@/components/dashboard/matches/match-detail/legend-swatch";
+import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { cn } from "@/lib/utils";
 
 /**
@@ -25,7 +27,6 @@ import { cn } from "@/lib/utils";
  */
 
 const EASE_CHART = [0.2, 0, 0.4, 1] as const;
-const EASE_PRIMARY = [0.25, 0.46, 0.45, 0.94] as const;
 
 interface Band {
   key: "short" | "medium" | "long";
@@ -255,21 +256,11 @@ function BandTooltip({
   align: "start" | "center" | "end";
 }) {
   return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "pointer-events-none absolute z-[3] flex flex-col gap-1 whitespace-nowrap rounded-[12px] px-3 py-2.5",
-        open ? "opacity-100" : "opacity-0",
-      )}
-      style={{
-        bottom: "calc(100% + 8px)",
-        left: align === "end" ? undefined : align === "center" ? "50%" : 0,
-        right: align === "end" ? 0 : undefined,
-        transform: align === "center" ? "translateX(-50%)" : undefined,
-        background: "var(--ink-900)",
-        boxShadow: "var(--shadow-dropdown)",
-        transition: `opacity 200ms cubic-bezier(${EASE_PRIMARY.join(",")})`,
-      }}
+    <ChartTooltip
+      open={open}
+      align={align}
+      bottomOffset={8}
+      className="gap-1 px-3 py-2.5"
     >
       <span className="text-[12px] font-medium text-white">{band.title}</span>
       <span className="tabular text-[11px] text-white/[0.64]">
@@ -281,19 +272,6 @@ function BandTooltip({
       <span className="tabular text-[11px] text-white/[0.78]">
         {oppName} {band.oppWon} · {Math.round(pct(band.oppWon, band.count))}%
       </span>
-    </span>
-  );
-}
-
-function LegendSwatch({ color, label }: { color: string; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span
-        aria-hidden="true"
-        className="h-2 w-2 shrink-0 rounded-[2px]"
-        style={{ background: color }}
-      />
-      <span className="text-micro whitespace-nowrap">{label}</span>
-    </span>
+    </ChartTooltip>
   );
 }

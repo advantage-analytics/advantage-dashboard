@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/server";
 import { reconcileBeforePageRead } from "@/lib/services/splitstep/reconcile";
 
@@ -16,9 +17,22 @@ import { MatchDetailShell } from "@/components/dashboard/matches/match-detail/ma
 import { MatchRail } from "@/components/dashboard/matches/match-detail/match-rail";
 import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { StatisticsTab } from "@/components/dashboard/matches/match-detail/statistics-tab";
-import { ShotsTab } from "@/components/dashboard/matches/match-detail/shots/shots-tab";
-import { FilmTab } from "@/components/dashboard/matches/match-detail/film/film-tab";
 import { getMatchVideo } from "@/lib/data/match-video-server";
+
+// Statistics is the default tab and loads eagerly with the page; Shots and
+// Film are each a substantial subtree (filters, an SVG court, a video
+// player) that a visitor landing on Statistics never needs — code-split so
+// their JS is fetched only once the tab is actually opened.
+const ShotsTab = dynamic(() =>
+  import("@/components/dashboard/matches/match-detail/shots/shots-tab").then(
+    (m) => m.ShotsTab,
+  ),
+);
+const FilmTab = dynamic(() =>
+  import("@/components/dashboard/matches/match-detail/film/film-tab").then(
+    (m) => m.FilmTab,
+  ),
+);
 
 interface PageProps {
   params: Promise<{ matchId: string }>;

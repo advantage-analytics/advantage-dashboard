@@ -5,6 +5,7 @@ import { motion, useReducedMotion } from "framer-motion";
 
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import { LegendSwatch } from "@/components/dashboard/matches/match-detail/legend-swatch";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 
 /**
@@ -108,6 +109,18 @@ export function PerformanceTrackerChart() {
     }
     return out;
   }, [points, youIsPlayer1]);
+
+  // `match-points-server.ts` coerces a null `game_score`/`point_score` to
+  // "0-0" — the Advantage Intelligence derivation writes neither, so an
+  // analyzed match would otherwise show a fabricated "0-0 · 0-0" on every
+  // hover. Same test `point-list.tsx`'s `columnHasValues()` uses: if the
+  // column is "0-0" match-wide there is nothing real behind it.
+  const showScores = useMemo(
+    () =>
+      points.length > 0 &&
+      points.some((p) => p.gameScore !== "0-0" || p.pointScore !== "0-0"),
+    [points],
+  );
 
   const geometry = useMemo(() => {
     if (samples.length < 2) return null;
@@ -376,7 +389,9 @@ export function PerformanceTrackerChart() {
               {leadLabel}
             </span>
             <span className="tabular text-[11px] text-white/[0.64]">
-              Set {hovered.setNumber} · {hovered.gameScore} · {hovered.pointScore}
+              {showScores
+                ? `Set ${hovered.setNumber} · ${hovered.gameScore} · ${hovered.pointScore}`
+                : `Set ${hovered.setNumber}`}
             </span>
           </div>
         )}
@@ -396,18 +411,5 @@ export function PerformanceTrackerChart() {
         ))}
       </div>
     </section>
-  );
-}
-
-function LegendSwatch({ color, label }: { color: string; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span
-        aria-hidden="true"
-        className="h-2 w-2 shrink-0 rounded-[2px]"
-        style={{ background: color }}
-      />
-      <span className="text-micro whitespace-nowrap">{label}</span>
-    </span>
   );
 }

@@ -9,6 +9,7 @@ import { useMatchData } from "@/components/dashboard/matches/match-data-provider
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { parseMatchTab } from "@/components/dashboard/matches/match-detail/match-tabs";
 import { MatchDataBlock } from "@/components/dashboard/matches/match-detail/match-data-block";
+import { shortMonthDate, formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
@@ -49,26 +50,6 @@ interface MatchRailProps {
   isDerived?: boolean;
 }
 
-/** `match.date` ("August 2, 2026") → the rail's short-month "Aug 2, 2026". */
-function shortMonthDate(displayDate: string): string {
-  const date = new Date(displayDate);
-  if (Number.isNaN(date.getTime())) return displayDate;
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-/** Seconds → "1:26:00" (h:mm:ss, mono machine value). */
-function clockOf(totalSeconds: number): string {
-  const seconds = Math.max(0, Math.round(totalSeconds));
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-}
-
 function FactRow({
   icon,
   mono = false,
@@ -105,7 +86,7 @@ export function MatchRail({ aiSummary, film, isDerived = false }: MatchRailProps
   );
   const duration =
     typeof match.durationSec === "number" && match.durationSec > 0
-      ? clockOf(match.durationSec)
+      ? formatClock(match.durationSec, { alwaysShowHours: true })
       : null;
 
   const openFilmRoom = () => {

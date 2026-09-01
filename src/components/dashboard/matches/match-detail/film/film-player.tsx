@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -12,6 +13,7 @@ import {
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { MatchVideo } from "@/lib/data/match-video-server";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
+import { shortMonthDate, formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
 import { advButton } from "@/lib/ui/adv-button";
 import {
   Tooltip,
@@ -65,29 +67,6 @@ interface FilmPlayerProps {
   points: MatchPoint[];
   /** Fires on `timeupdate`/`seeked`; drives the point list's playing row. */
   onTimeChange: (seconds: number) => void;
-}
-
-/** Seconds → "44:28", or "1:26:00" once there is an hour to show. */
-export function clockOf(totalSeconds: number): string {
-  if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return "0:00";
-  const seconds = Math.floor(totalSeconds);
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  return h > 0
-    ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
-    : `${m}:${String(s).padStart(2, "0")}`;
-}
-
-/** `match.date` ("August 2, 2026") → the overlay's short-month form. */
-function shortMonthDate(displayDate: string): string {
-  const date = new Date(displayDate);
-  if (Number.isNaN(date.getTime())) return displayDate;
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 }
 
 const GLYPH =
@@ -152,10 +131,17 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
     useImperativeHandle(ref, () => ({ seekTo }), [seekTo]);
 
     // Points carrying a `videoTime`, in film order — the prev/next targets.
-    const stops = points
-      .map((p) => p.videoTime)
-      .filter((t): t is number => typeof t === "number")
-      .sort((a, b) => a - b);
+    // Memoized because `currentTime`/`timeupdate` state changes re-render this
+    // component at the video's native tick rate, and `points` itself changes
+    // far less often (only when the film filter is applied).
+    const stops = useMemo(
+      () =>
+        points
+          .map((p) => p.videoTime)
+          .filter((t): t is number => typeof t === "number")
+          .sort((a, b) => a - b),
+      [points],
+    );
 
     const togglePlay = useCallback(() => {
       const el = videoRef.current;
@@ -322,7 +308,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
               </span>
               <div className="flex-1" />
               <span className="mono tabular text-[10px] text-white/50">
-                {clockOf(currentTime)} / {clockOf(duration)}
+                {formatClock(currentTime)} / {formatClock(duration)}
               </span>
             </div>
 
@@ -334,7 +320,7 @@ export const FilmPlayer = forwardRef<FilmPlayerHandle, FilmPlayerProps>(
               aria-valuemin={0}
               aria-valuemax={Math.round(duration)}
               aria-valuenow={Math.round(currentTime)}
-              aria-valuetext={`${clockOf(currentTime)} of ${clockOf(duration)}`}
+              aria-valuetext={`${formatClock(currentTime)} of ${formatClock(duration)}`}
               onPointerDown={(e) => {
                 e.preventDefault();
                 setScrubbing(true);

@@ -259,6 +259,7 @@ export function PointList({
           tab={tab}
           filtered={filtered}
           hasAnyPoints={allPoints.length > 0}
+          hasAnySaved={allPoints.some((p) => p.saved)}
           onClear={clearAll}
           onGoToPoints={() => onTabChange("points")}
         />
@@ -459,16 +460,23 @@ function EmptyList({
   tab,
   filtered,
   hasAnyPoints,
+  hasAnySaved,
   onClear,
   onGoToPoints,
 }: {
   tab: "points" | "saved";
   filtered: boolean;
   hasAnyPoints: boolean;
+  hasAnySaved: boolean;
   onClear: () => void;
   onGoToPoints: () => void;
 }) {
   if (tab === "saved") {
+    // A player with real bookmarks can still land here if the active film
+    // filter happens to exclude every one of them — that reads as "you have
+    // no bookmarks" unless the copy says otherwise and offers the same
+    // recovery the Points tab's filtered-empty state does.
+    const hiddenByFilter = filtered && hasAnySaved;
     return (
       <div className="flex flex-col items-center gap-1 px-6 py-14 text-center">
         <span className="mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-[var(--surface-subtle)]">
@@ -479,21 +487,22 @@ function EmptyList({
           />
         </span>
         <span className="text-[12px] font-medium text-[var(--ink-700)]">
-          Nothing bookmarked yet
+          {hiddenByFilter ? "No bookmarks match" : "Nothing bookmarked yet"}
         </span>
         <span
           className="text-micro max-w-[240px]"
           style={{ color: "var(--ink-500)" }}
         >
-          Hover a point on the Points tab and press the bookmark to keep it
-          here.
+          {hiddenByFilter
+            ? "The current cut hides every point you bookmarked."
+            : "Hover a point on the Points tab and press the bookmark to keep it here."}
         </span>
         <button
           type="button"
-          onClick={onGoToPoints}
+          onClick={hiddenByFilter ? onClear : onGoToPoints}
           className="mt-3 cursor-pointer text-[11px] font-medium text-[var(--blue)]"
         >
-          Go to Points
+          {hiddenByFilter ? "Clear filter" : "Go to Points"}
         </button>
       </div>
     );
