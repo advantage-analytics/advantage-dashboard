@@ -1,7 +1,7 @@
 # Account deletion that leaves team data behind — Design
 
 Date: 2026-09-01
-Status: approved in brainstorm (2026-09-01), awaiting written review
+Status: approved 2026-09-01; implemented on `claude/delete-cjgimena-email-d017fe`
 Branch: `claude/delete-cjgimena-email-d017fe`
 Reviewed against: the *Supabase Postgres Best Practices* skill
 (`supabase:supabase-postgres-best-practices`, rules `security-privileges`,
