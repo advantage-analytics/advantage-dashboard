@@ -1801,3 +1801,86 @@ held, and created nothing this run.
 2. `3c` still draws "3 Big Ten programs are in this field", which no table can
    compute. No queue task owns removing it.
 3. `README.md` still describes this route's tree as static. T26 owns it.
+
+## T20 · Tournament builder writes — done
+
+**gate:** lint clean (37 warnings, the measured baseline) · `tsc --noEmit`
+clean · `npm test` green (260) · `npm run build` green.
+`task-completion-reviewer` → **VERDICT: pass**; it re-ran the `3c` tests
+itself and checked the zero-retirement claim literal by literal rather than
+accepting it. Guardrails: **both ran** — `pipeline-guardrails-reviewer` found
+no violations; `rls-boundary-reviewer` found no blocking issues.
+
+**changed:** the first write path in this feature. Entries gain a draw
+`<select>` and a click-to-edit seed, both **ported** from the deleted
+`entry-editor.tsx` — `"Main draw"` / `"Qualifying"` verbatim, same casing and
+spacing, which matters because `rosterSubline()` reads those exact strings.
+Create calls the existing `createTournament`; `actions.ts` is untouched, so
+no second action exists. An `ActionError` replaces the footer count in
+`var(--danger)` and only success navigates — proven live by setting Ends
+before Starts and getting "The tournament can't end before it starts." with
+nothing written. `tournament-form.tsx` (280) and `entry-editor.tsx` (424)
+deleted; README §2 down to four rows, plus one §5 edit the reviewer judged
+forced rather than creep — that bullet claimed `createTournament`'s wiring
+still lived only in the file this task deleted. `field-row.tsx` survives
+because `dual-form.tsx` still imports it.
+
+**the format value, which is what §3.1/§4 are about here.** Verified from the
+stored row, not inferred: `jsonb_typeof(format->'ad_scoring')` is `boolean`,
+value `true`. The guardrails reviewer traced every path that could write it —
+including the default before the user touches the control, and a resubmit
+after a failed attempt — and found no route to a string, a null or an absent
+key, because the format is only ever assigned as a whole `FORMATS` row of
+literal booleans and `DEFAULT_FORMAT` is one of those rows. It also checked
+the seed conversion, which is the same class of hazard: the draft holds a
+string so "nothing typed" and "0" stay distinguishable, every keystroke is
+filtered to digits, and `entry.seed ? Number(entry.seed) : null` therefore
+cannot see `NaN` and cannot coerce `""` to `0`. Switching a draw to
+Qualifying clears the seed in the same update and the input is unreachable
+while qualifying.
+
+**criterion 6: zero retirements, and that is the right answer.** Every literal
+the spec reads survives — the draw consts, `"Unseeded"`, `"—"`,
+`` `Seed ${entry.seed}` ``, the `Creates …` count line and `Create tournament`
+all remain literal substrings because the new code computes label strings and
+uses ternaries rather than branching into JSX text nodes. The spec file shows
+no diff at all. The vestigial `3c's roster rail and the field it feeds` test
+was deliberately **left alone**: this task did not make it false, only leaves
+it disconnected, and retiring a passing assertion is what rule 9 forbids.
+
+**Live-DB checks the runner added.** `rls-boundary-reviewer` again had no
+Supabase MCP connection and verified from `supabase/migrations/`. Closed from
+the runner against live: the `matches_block_client_regraft` trigger exists and
+is enabled (its "not exploitable" conclusion depends on it); the entries
+INSERT policy really is `is_program_staff(program_id)`; and `is_program_staff`
+delegates to `user_program_role`, which filters `pm.user_id = auth.uid()` — so
+the write path is caller-scoped in the database, one indirection deeper than
+the reviewer described but sound.
+
+**Verification touched the live database and was cleaned up.** Four ephemeral
+`program_players` on ZZ, one ephemeral coach, and one tournament created
+through the UI — all removed. Independently re-checked from this session:
+3 claimed programs, 5 events, 33 entries, 5 `program_members`, ZZ 1 member /
+0 players, UCLA 0 events, **0 leftover test events**, 15 auth users. Two
+`users`-table writes were refused by the permission classifier, so the
+ephemeral account was onboarded by clicking through the app's own onboarding
+and deleted at the end via `auth.admin.deleteUser` — disclosed rather than
+worked around silently.
+
+**follow-ups:**
+1. **Pre-existing, confirmed live, not this diff's defect:**
+   `program_event_entries` has no check constraint validating that
+   `player_user_ids` elements belong to the program's roster — only the
+   `is_program_staff` INSERT policy applies. Not reachable through this UI
+   (the free-text entry path left with `entry-editor.tsx` and was not ported),
+   and neutralised where it would matter by `matches_block_client_regraft`.
+   Worth a decision on its own, not a fix here.
+2. Five files carry now-stale comments naming the two deleted files:
+   `new/tournament/page.tsx:26-29` (says "Submitting is not wired yet… the
+   Create button is still inert", now false), `fixtures.ts:30/:36/:408`,
+   `field-row.tsx:8`, `static/dual-build-step.tsx:36`. All owned by later
+   tasks; the route one is the most misleading.
+3. `roster-match.ts`'s `rosterIdsForLabels` is now self-referenced only — the
+   typed-name/walk-on entry path left with `entry-editor.tsx`. T23 needs the
+   same matching for the dual side, so it should be checked there before
+   anyone retires it.

@@ -37,24 +37,26 @@ live". Some of the original components lost their route; others kept one.
 
 ## 2. Dormant — unreachable from any route
 
-Six files. Each carries a `DORMANT` header naming its replacement.
+Four files. Each carries a `DORMANT` header naming its replacement.
 
 | Dormant file | Replaced on the live route by |
 |---|---|
 | `dual-form.tsx` | `static/static-dual-builder.tsx` (shell) → `dual-school-step` + `dual-build-step` |
 | `school-search.tsx` | `static/dual-school-step.tsx` |
 | `opponent-rail.tsx` | the left pane of `static/dual-build-step.tsx` |
-| `tournament-form.tsx` | `static/static-tournament-builder.tsx` |
-| `entry-editor.tsx` | drawn inline in `static/static-tournament-builder.tsx` |
 | `field-row.tsx` | nothing 1:1 — the static builders each draw their own defaults cells |
 
-Only `dual-form.tsx` and `tournament-form.tsx` were ever mounted by a route
-directly — those two are what the remaining re-pointed routes used to
-import. (`new-event-chooser.tsx` was the third; it has since been deleted —
-see git history.) The rest became unreachable transitively, because the only
-things importing them did: `school-search` and `field-row` through the two
-forms, `opponent-rail` through `dual-form`, and `entry-editor` through
-`tournament-form`.
+`tournament-form.tsx` and `entry-editor.tsx` were the other two, and they are
+**deleted** — `static/static-tournament-builder.tsx` now calls
+`createTournament` itself and draws the entry list inline, so the tree they
+were the DB-wired half of no longer exists. See git history.
+
+Of what is left, only `dual-form.tsx` was ever mounted by a route directly, and
+it is what `/dashboard/team/schedule/new/dual` used to import.
+(`new-event-chooser.tsx` and `tournament-form.tsx` were the other two mounted
+forms; both are deleted.) The rest became unreachable transitively, because the
+only things importing them did: `school-search` and `field-row` through
+`dual-form`, and `opponent-rail` through `dual-form` as well.
 
 ---
 
@@ -125,9 +127,10 @@ So:
 The dormant tree is not a discard pile — it is the half that knows about the
 database. Everything the static screens do not have lives there:
 
-- `createDual` / `createTournament` and their server actions (`dual-form.tsx`,
-  `tournament-form.tsx`)
-- roster matching and name splitting (`dual-form.tsx`, `entry-editor.tsx`)
+- `createDual` and its server-action call (`dual-form.tsx`).
+  `createTournament`'s is already ported — `static/static-tournament-builder.tsx`
+  calls it, which is why the two files that held it are gone.
+- roster matching and name splitting (`dual-form.tsx`)
 - opponent-player contribution and the re-target `key` contract
   (`opponent-name-cell.tsx` — read its own header before touching it)
 - the `"<bestOf>|<adScoring>"` format encoding that

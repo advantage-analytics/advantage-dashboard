@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Check, ChevronDown, Info, Plus, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { advButton } from "@/lib/ui/adv-button";
 import { EventShell } from "@/components/dashboard/schedule/event-shell";
+import { createTournament } from "@/lib/schedule/actions";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 import type { EventSite } from "@/lib/schedule/types";
 
@@ -19,14 +21,33 @@ import type { EventSite } from "@/lib/schedule/types";
  * ── Reading again ──────────────────────────────────────────────────────────
  * The rail was `TOURNAMENT_FIELD` in `lib/schedule/fixtures.ts` for the length
  * of the `events-lineups` rebuild. It is now `getLadder()`'s `LadderPlayer[]`,
- * handed down by the route — the same prop `tournament-form.tsx` takes, which
- * is why this is a loader coming back rather than a new shape. Nothing in this
- * file imports a fixture.
+ * handed down by the route — the same prop the dormant `TournamentForm` took,
+ * which is why this is a loader coming back rather than a new shape. Nothing in
+ * this file imports a fixture.
  *
  * The five facts `3c` draws — the name, both dates, the site and the format —
- * are controls now rather than pictures of controls, and they hold what is
- * entered. Writing them is not wired yet: Create is still inert, because a
- * button that navigated would claim a tournament that does not exist.
+ * are controls, and they hold what is entered.
+ *
+ * ── Writing ────────────────────────────────────────────────────────────────
+ * Create calls `createTournament` in `lib/schedule/actions.ts` — the action
+ * that already existed, not a second one. It re-resolves the workspace, refuses
+ * a caller who is not staff here, writes the event and its entries, and rolls
+ * the event back if the entries fail, so a tournament with nobody in it is
+ * never left on the schedule. Its `ActionError` is a sentence meant for the
+ * coach: it is held in `error` below and printed in the footer, in place of the
+ * count, rather than swallowed into a button that just stops working. Only on
+ * success does this navigate, and it navigates to the event the action reports
+ * — `/dashboard/team/schedule/<eventId>` — so the screen the coach lands on is
+ * the row that now exists.
+ *
+ * `host` goes as null on purpose. `3c` draws no Hosted-by cell, `createTournament`
+ * takes the field, and inventing a host is inventing a fact about the weekend
+ * nobody entered.
+ *
+ * The dormant `tournament-form.tsx` and `entry-editor.tsx` — the DB-wired pair
+ * this screen replaced — are deleted with this change. Their draw and seed
+ * vocabulary is ported below rather than reinvented, because it is what the
+ * stored `program_event_entries.draw` already says on rows they wrote.
  *
  * The 232px sidebar and the 44px "Meridian State › Schedule › New tournament"
  * topbar the artboard draws are the app's own chrome and already on screen —
@@ -44,10 +65,17 @@ import type { EventSite } from "@/lib/schedule/types";
  *
  * ── What `3c` does not draw, and this therefore does not build ─────────────
  * No doubles section, no "Add a name" control beside the entries header, no
- * Surface or Hosted-by cell, no draw or seed editing — every one of which
- * `tournament-form.tsx` and `entry-editor.tsx` build. `3c` draws the draw and
- * the seed as plain text, and its entries hint reads "added from the roster"
- * rather than the dormant list's "from the roster, or typed".
+ * Surface or Hosted-by cell — every one of which the deleted pair built. The
+ * entries hint reads "added from the roster" rather than that list's "from the
+ * roster, or typed".
+ *
+ * The draw and the seed ARE editable, which `3c` draws as plain text. They are
+ * the two facts an entry carries beyond the player, `createTournament` takes
+ * both, and a builder that could only ever write "Main draw, unseeded" would
+ * make the artboard's own qualifying row and its "seed 3" unreachable through
+ * the UI that draws them. Both cells keep the drawn appearance: the draw reads
+ * as text until it is opened, and the seed prints "Unseeded" until a number is
+ * typed over it.
  *
  * The program's `defaultSurface` arrives all the same, because
  * `createTournament` takes a surface and the artboard asks for none. It sits in
@@ -58,9 +86,10 @@ import type { EventSite } from "@/lib/schedule/types";
  * ── What the design draws that this app cannot know ────────────────────────
  * The info callout — "3 Big Ten programs are in this field — matches against
  * them count toward conference seeding." — has no source in this codebase.
- * Nothing records which programs attend a tournament, and `tournament-form.tsx`
- * says so in its own header and deliberately omits the callout. This rebuild
- * draws it, because the artboard draws it, and it is reported.
+ * Nothing records which programs attend a tournament; the deleted
+ * `tournament-form.tsx` said so in its own header and omitted the callout for
+ * that reason. This rebuild draws it, because the artboard draws it, and it is
+ * reported.
  */
 export function StaticTournamentBuilder({
   roster,
@@ -69,6 +98,10 @@ export function StaticTournamentBuilder({
   roster: LadderPlayer[];
   defaultSurface: string | null;
 }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  /** `createTournament`'s `ActionError`, held so the footer can print it. */
+  const [error, setError] = useState<string | null>(null);
   const [entered, setEntered] = useState<ReadonlyMap<string, FieldEntry>>(
     () => new Map()
   );
@@ -103,10 +136,10 @@ export function StaticTournamentBuilder({
   function enter(player: LadderPlayer) {
     setEntered((current) => {
       const next = new Map(current);
-      // What the dormant `toggle()` puts on a freshly entered player: the main
-      // draw, unseeded. `3c` draws no way to change either, so this is where a
-      // re-added player lands and stays.
-      next.set(player.userId, { draw: MAIN_DRAW, seed: null });
+      // Where a freshly entered player lands: the main draw, unseeded. Both
+      // cells then move from the entry row, which is where the artboard draws
+      // them.
+      next.set(player.userId, { draw: MAIN_DRAW, seed: "" });
       return next;
     });
   }
@@ -116,6 +149,76 @@ export function StaticTournamentBuilder({
       const next = new Map(current);
       next.delete(player.userId);
       return next;
+    });
+  }
+
+  /**
+   * Change one entered player's draw or seed, keyed by the id the map is keyed
+   * by. Never by name and never by row index — the two keys that put "Seed 3"
+   * under the wrong person the moment two rows share a surname, or a row above
+   * is removed.
+   */
+  function amend(player: LadderPlayer, patch: Partial<FieldEntry>) {
+    setEntered((current) => {
+      const existing = current.get(player.userId);
+      if (!existing) return current;
+      const next = new Map(current);
+      next.set(player.userId, { ...existing, ...patch });
+      return next;
+    });
+  }
+
+  /**
+   * Write the tournament, then go to it.
+   *
+   * `bestOf` and `adScoring` are read off the chosen `FORMATS` row and travel
+   * as themselves — there is no `"<bestOf>|<adScoring>"` string to decode, which
+   * is the whole point of that table (see `TournamentFormat`). `adScoring` is a
+   * real boolean here and a real boolean in the `format` jsonb the action
+   * writes, which is what `docs/ui-revamp-guardrails.md` §3.1 and §4 require of
+   * every event a video is later submitted against.
+   *
+   * `position` is the index in `field`, which is roster order filtered — so an
+   * entry's position is its ladder order, and no two entries can claim the same
+   * one.
+   */
+  function submit() {
+    setError(null);
+    startTransition(async () => {
+      const result = await createTournament({
+        name: draft.name,
+        startsOn: draft.startsOn,
+        endsOn: draft.endsOn,
+        site: draft.site,
+        surface: draft.surface,
+        // No Hosted-by cell on this artboard, and a host nobody entered is a
+        // fact about the weekend we would be inventing.
+        host: null,
+        bestOf: draft.format.bestOf,
+        adScoring: draft.format.adScoring,
+        entries: field.map(({ player, entry }, index) => ({
+          // `3c` has one section and it is singles. A doubles pair is one
+          // entry carrying two names, and this screen draws no way to make one.
+          discipline: "singles" as const,
+          position: index,
+          draw: entry.draw,
+          // "" is "nobody typed a seed", which is a null column — not a 0,
+          // which would print as an actual seeding.
+          seed: entry.seed ? Number(entry.seed) : null,
+          playerUserIds: [player.userId],
+          playerLabels: [player.name],
+        })),
+      });
+
+      if ("error" in result) {
+        // The action's own sentence, on screen. A refusal that only turned the
+        // button off would leave a coach re-clicking a form that had already
+        // told us why it could not save.
+        setError(result.error);
+        return;
+      }
+
+      router.push(`/dashboard/team/schedule/${result.eventId}`);
     });
   }
 
@@ -239,6 +342,7 @@ export function StaticTournamentBuilder({
                     player={player}
                     entry={entry}
                     last={index === field.length - 1}
+                    onAmend={(patch) => amend(player, patch)}
                     onRemove={() => remove(player)}
                   />
                 ))}
@@ -271,16 +375,31 @@ export function StaticTournamentBuilder({
             Cancel
           </Link>
           <div className="flex-1" />
-          <span className="text-[11px]" style={{ color: "var(--ink-600)" }}>
-            Creates <span className="tabular">{field.length}</span>{" "}
-            {field.length === 1 ? "entry" : "entries"} and no matches — a match
-            exists once it&#39;s played
-          </span>
-          {/* Still inert: this screen holds a draft and writes nothing, so a
-              Create that navigated would claim a tournament that does not
-              exist. `createTournament` is the next step, not this one. */}
-          <button type="button" className={advButton("primary", "md")}>
-            Create tournament
+          {/* The action's refusal takes the count's place rather than sitting
+              beside it: the count is a promise about a write that is now not
+              going to happen, and printing both would leave two answers on
+              screen about the same click. */}
+          {error ? (
+            <span className="text-[11px]" style={{ color: "var(--danger)" }}>
+              {error}
+            </span>
+          ) : (
+            <span className="text-[11px]" style={{ color: "var(--ink-600)" }}>
+              Creates <span className="tabular">{field.length}</span>{" "}
+              {field.length === 1 ? "entry" : "entries"} and no matches — a
+              match exists once it&#39;s played
+            </span>
+          )}
+          {/* `createTournament` refuses an unnamed tournament, so the button
+              says so by being off rather than by making the coach find out
+              from an error. */}
+          <button
+            type="button"
+            disabled={pending || !draft.name.trim()}
+            onClick={submit}
+            className={advButton("primary", "md")}
+          >
+            {pending ? "Creating…" : "Create tournament"}
           </button>
         </div>
       </div>
@@ -295,13 +414,17 @@ export function StaticTournamentBuilder({
  * a name key is how "Seed 3" ends up under the wrong person once two rows share
  * a surname, and an index key is how it happens the moment a row is removed.
  *
- * `draw` is nullable because `EventEntry.draw` is, and a null is left as one
- * rather than defaulted: the cell then prints nothing instead of asserting a
- * draw nobody chose.
+ * `draw` is one of `DRAWS` and nothing else — the cell is a two-option select,
+ * so there is no third state to represent and no null to print around. `seed`
+ * is the STRING the seed cell holds rather than a number, which is what lets
+ * "nothing typed" and "0" stay different answers all the way to the write: the
+ * empty string becomes a null column, and a number only exists once somebody
+ * typed one. Parsing at every keystroke is how an empty field becomes `NaN`
+ * and a cleared one becomes 0.
  */
 interface FieldEntry {
-  draw: string | null;
-  seed: number | null;
+  draw: string;
+  seed: string;
 }
 
 /** The five facts `3c` asks for, plus the one it does not draw. */
@@ -324,16 +447,18 @@ interface TournamentDraft {
  * One row of the Format control: the option it is, and what it means.
  *
  * ── Why this is a table and not an encoding ────────────────────────────────
- * Both dormant forms carry the format through a `<select>` as the string
- * `"<bestOf>|<adScoring>"` and decode it with `format.split("|")` →
- * `Number(bestOf)` and `adScoring === "true"` (`tournament-form.tsx:40`,
- * `dual-form.tsx:52`). That round trip is where the outage lived: `adScoring`
- * is `boolean | null` on `EventFormat`, a null interpolates into that string as
- * the four characters `null`, and `=== "true"` reads those as a confident
- * `false` — a wrong answer that looks like a real one. `tournament-form.tsx`'s
- * own header records the result: format arrived as `{}`, `adScoring` arrived
- * null, and every tournament video failed vendor submission long after the
- * coach had left. See `docs/ui-revamp-guardrails.md` §3.1 and §4.
+ * The dormant forms carried the format through a `<select>` as the string
+ * `"<bestOf>|<adScoring>"` and decoded it with `format.split("|")` →
+ * `Number(bestOf)` and `adScoring === "true"` (`dual-form.tsx:52`, and the same
+ * two lines in the now-deleted `tournament-form.tsx`). That round trip is where
+ * the outage lived: `adScoring` is `boolean | null` on `EventFormat`, a null
+ * interpolates into that string as the four characters `null`, and
+ * `=== "true"` reads those as a confident `false` — a wrong answer that looks
+ * like a real one. What that produced, recorded in the deleted file's header
+ * and in `lib/schedule/actions.ts`'s `CreateTournamentInput`: format arrived as
+ * `{}`, `adScoring` arrived null, and every tournament video failed vendor
+ * submission long after the coach had left. See
+ * `docs/ui-revamp-guardrails.md` §3.1 and §4.
  *
  * So there is no encoding to get wrong here. `value` is an opaque option name
  * that is only ever compared, never parsed; `bestOf` and `adScoring` are stated
@@ -395,18 +520,37 @@ function todayISO(): string {
   ].join("-");
 }
 
-/** `DRAWS[0]` in `entry-editor.tsx` — a stored value, not a label. */
+/** The first of `DRAWS` — a stored value, not a label. */
 const MAIN_DRAW = "Main draw";
 
 /** The other one. `3c` draws it on Rafael Osei's row. */
 const QUALIFYING = "Qualifying";
 
 /**
+ * Where an entry can start, and nowhere else.
+ *
+ * These two strings are the deleted `entry-editor.tsx`'s `DRAWS`, ported
+ * verbatim rather than reworded. They are STORED values — they land in
+ * `program_event_entries.draw` and come back out as themselves — so an entry
+ * this screen writes has to be spelled the way every entry that pair wrote is
+ * spelled, or the same draw reads as two.
+ *
+ * Consolation and the flights are not offered, for that file's own reason: they
+ * are not places a coach enters anyone. A player arrives in consolation by
+ * losing, and that move is recorded per result on the event page. Offering them
+ * at creation would let a weekend be described before it happened.
+ */
+const DRAWS: readonly string[] = [MAIN_DRAW, QUALIFYING];
+
+/**
  * The rail's state line — their ladder spot, then what entering them did.
  *
- * The same four shapes `stateLine()` produces in `entry-editor.tsx`, which is
- * private to that module. `3c` draws all four: "S1 · entered · seed 3",
- * "S2 · entered", "S3 · qualifying", and a bare "S4".
+ * The same four shapes the deleted `entry-editor.tsx`'s `stateLine()` produced,
+ * which was private to that module. `3c` draws all four: "S1 · entered · seed
+ * 3", "S2 · entered", "S3 · qualifying", and a bare "S4". They are the rail's
+ * whole feedback loop — the row that enters a player is the row that reports
+ * the draw and the seed back, so a coach editing the right-hand pane never has
+ * to look left to check the click landed.
  */
 function railSubline(
   player: LadderPlayer,
@@ -418,7 +562,7 @@ function railSubline(
     player.ladderPosition !== null ? `S${player.ladderPosition}` : "Unranked";
   if (!entry) return spot;
   if (entry.draw === QUALIFYING) return `${spot} · qualifying`;
-  return entry.seed !== null
+  return entry.seed
     ? `${spot} · entered · seed ${entry.seed}`
     : `${spot} · entered`;
 }
@@ -572,22 +716,33 @@ function RailRow({
  * `player.name`, the same string the rail printed, and the draw and the seed
  * are that player's own entry. There is no second list to fall out of step
  * with, and no lookup that could return somebody else's.
+ *
+ * The name is deliberately NOT editable in place, which is the deleted entry
+ * list's rule and the reason it exists: retyping a name over an entry that
+ * already carries a roster id is how a match gets attributed to the wrong
+ * athlete. The rail owns who is in, and the `x` takes them back out — a
+ * correction is remove-and-re-add, never an edit that silently keeps the old
+ * id.
  */
 function EntryRow({
   player,
   entry,
   last,
+  onAmend,
   onRemove,
 }: {
   player: LadderPlayer;
   entry: FieldEntry;
   last: boolean;
+  onAmend: (patch: Partial<FieldEntry>) => void;
   onRemove: () => void;
 }) {
+  const [editingSeed, setEditingSeed] = useState(false);
+
   const name = player.name;
   const qualifying = entry.draw === QUALIFYING;
   // A qualifier holds no seed, and `3c` draws an em dash rather than the word.
-  const seeded = !qualifying && entry.seed !== null;
+  const seeded = !qualifying && entry.seed !== "";
   const seed = qualifying ? "—" : seeded ? `Seed ${entry.seed}` : "Unseeded";
 
   return (
@@ -598,13 +753,70 @@ function EntryRow({
       )}
     >
       <span className="truncate text-[13px] text-[var(--ink-900)]">{name}</span>
-      <span className="text-[12px] text-[var(--ink-600)]">{entry.draw}</span>
-      <span
-        className="mono text-[11px]"
-        style={{ color: seeded ? "var(--ink-600)" : "var(--ink-400)" }}
+
+      {/* The artboard draws this cell as text, so the select carries no border
+          and no chevron: `appearance-none` is what stops the platform drawing
+          one, and unlike the four-up row above there is no icon to put in its
+          place — `3c` draws none here. It reads as the drawn value until it is
+          opened. */}
+      <select
+        aria-label={`Draw for ${name}`}
+        value={entry.draw}
+        onChange={(event) =>
+          onAmend({
+            draw: event.target.value,
+            // A qualifier is not seeded, and the cell beside this one says so
+            // with a dash. Keeping a seed alive behind that dash would send a
+            // number nobody could see.
+            seed: event.target.value === QUALIFYING ? "" : entry.seed,
+          })
+        }
+        className="w-full cursor-pointer appearance-none bg-transparent text-[12px] text-[var(--ink-600)] outline-none"
       >
-        {seed}
-      </span>
+        {DRAWS.map((draw) => (
+          <option key={draw} value={draw}>
+            {draw}
+          </option>
+        ))}
+      </select>
+
+      {qualifying || !editingSeed ? (
+        <button
+          type="button"
+          aria-label={`Seed for ${name}`}
+          // A qualifier's dash is not a control: there is no seed to type, so
+          // the cell reports that rather than opening a field that would have
+          // to throw the number away.
+          disabled={qualifying}
+          onClick={() => setEditingSeed(true)}
+          className="mono tabular cursor-pointer text-left text-[11px] disabled:cursor-default"
+          style={{ color: seeded ? "var(--ink-600)" : "var(--ink-400)" }}
+        >
+          {seed}
+        </button>
+      ) : (
+        <input
+          autoFocus
+          value={entry.seed}
+          inputMode="numeric"
+          placeholder="seed"
+          aria-label={`Seed for ${name}`}
+          // Digits only, filtered on the way in rather than validated on the
+          // way out — `Number("3rd")` is `NaN`, and a NaN seed reaches the
+          // column as a write that fails long after the coach typed it.
+          onChange={(event) =>
+            onAmend({ seed: event.target.value.replace(/[^0-9]/g, "") })
+          }
+          onBlur={() => setEditingSeed(false)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === "Escape") {
+              event.currentTarget.blur();
+            }
+          }}
+          className="mono tabular w-full bg-transparent text-[11px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-300)]"
+        />
+      )}
+
       <button
         type="button"
         aria-label={`Remove ${name}`}

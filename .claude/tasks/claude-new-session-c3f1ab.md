@@ -346,7 +346,7 @@ list below instead.
 - **notes:** **Amended 2026-09-01 after a blocked run** — see rule 9 above. The copy spec pins this component's drawn dates in its *source*, which criterion 3 necessarily replaces, so the spec is now in `files:`. **The stashed work applies cleanly: `git stash apply c4ac7d1e7aff3449eb7e21c12d9488f165beaef0`** — it already satisfies criteria 1–5 and removes the `"<bestOf>|<adScoring>"` string encoding from this file entirely; only the spec retirement is left. The route's own header names the target: "this route reading again and handing `TournamentForm` the same two props it always did" — handed to the static component instead. Submitting is T20; this task stops at the form holding its state.
 
 ## T20 · Tournament builder writes
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T15, T19
 - **files:** `tests/schedule-static-copy.spec.ts`; `src/components/dashboard/schedule/static/static-tournament-builder.tsx`; reads `src/lib/schedule/actions.ts`; delete `tournament-form.tsx` and `entry-editor.tsx`; `README.md`
