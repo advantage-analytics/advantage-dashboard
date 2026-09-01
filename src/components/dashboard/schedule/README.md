@@ -37,11 +37,10 @@ live". Some of the original components lost their route; others kept one.
 
 ## 2. Dormant — unreachable from any route
 
-Seven files. Each carries a `DORMANT` header naming its replacement.
+Six files. Each carries a `DORMANT` header naming its replacement.
 
 | Dormant file | Replaced on the live route by |
 |---|---|
-| `new-event-chooser.tsx` | `static/static-event-chooser.tsx` |
 | `dual-form.tsx` | `static/static-dual-builder.tsx` (shell) → `dual-school-step` + `dual-build-step` |
 | `school-search.tsx` | `static/dual-school-step.tsx` |
 | `opponent-rail.tsx` | the left pane of `static/dual-build-step.tsx` |
@@ -49,12 +48,13 @@ Seven files. Each carries a `DORMANT` header naming its replacement.
 | `entry-editor.tsx` | drawn inline in `static/static-tournament-builder.tsx` |
 | `field-row.tsx` | nothing 1:1 — the static builders each draw their own defaults cells |
 
-Only `new-event-chooser.tsx`, `dual-form.tsx` and `tournament-form.tsx` were
-ever mounted by a route directly — those three are what the remaining
-re-pointed routes used to import. The rest became unreachable transitively,
-because the only things importing them did: `school-search` and `field-row`
-through the two forms, `opponent-rail` through `dual-form`, and
-`entry-editor` through `tournament-form`.
+Only `dual-form.tsx` and `tournament-form.tsx` were ever mounted by a route
+directly — those two are what the remaining re-pointed routes used to
+import. (`new-event-chooser.tsx` was the third; it has since been deleted —
+see git history.) The rest became unreachable transitively, because the only
+things importing them did: `school-search` and `field-row` through the two
+forms, `opponent-rail` through `dual-form`, and `entry-editor` through
+`tournament-form`.
 
 ---
 

@@ -13,10 +13,10 @@ import { StaticEventChooser } from "@/components/dashboard/schedule/static/stati
  * every destination would refuse them.
  *
  * The body is now `StaticEventChooser` — a literal rebuild of the `3b`
- * artboard. `new-event-chooser.tsx` is left in the tree, dormant, as the
- * material a later re-wiring starts from. Nothing above this line changed:
- * the guards are the route's job, not the body's, and they stay whether the
- * screen is fixture-backed or live.
+ * artboard. `new-event-chooser.tsx`, the prior DB-wired body, has since been
+ * deleted (dormant and unreachable; see `README.md` §2). Nothing above this
+ * line changed: the guards are the route's job, not the body's, and they
+ * stay whether the screen is fixture-backed or live.
  */
 export default async function NewEventPage() {
   const workspace = await getWorkspaceContext();

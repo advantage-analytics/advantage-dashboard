@@ -1688,3 +1688,46 @@ untouched. Verified: the four remaining prose mentions of these filenames
 across `src` are all inside JSDoc blocks and none is an import or a render.
 
 **follow-ups:** none.
+
+## T18 · Retire the dormant event chooser — done
+
+**gate:** lint clean · `tsc --noEmit` clean · `npm test` green (260) ·
+`npm run build` green (62 routes). `task-completion-reviewer` →
+**VERDICT: pass**. Guardrails: `pipeline-guardrails-reviewer` **ran** (diff
+touches `src/app/dashboard/` and `src/components/dashboard/`) and found no
+violations — it read the deleted file in full via `git show` and confirmed it
+held one piece of `useState` and three links, never touching the five
+vendor-required wizard fields or the `"<bestOf>|<adScoring>"` encoding that
+§3.1/§4 govern, despite being the entry point to the two create flows;
+`rls-boundary-reviewer` **skipped** — a deletion plus a docblock and a doc
+edit, no query, no file under `src/lib/data/`, `src/lib/supabase/`,
+`src/app/api/` or `supabase/migrations/`.
+
+**changed:** `new-event-chooser.tsx` (247 lines) deleted — dormant since the
+route was re-pointed to `static/static-event-chooser.tsx`, and never imported
+by it. `page.tsx` changed in its docblock only: the header claimed the deleted
+file "is left in the tree, dormant", which the deletion makes false. Both
+reviewers confirmed independently that every guard line — `getWorkspaceContext`,
+`redirect("/login")`, the non-team redirect and `isProgramStaff` — is unchanged
+context in the diff, not part of either side of the hunk. README §2 down to six
+rows with its count and dependent sentence corrected. Nothing became
+transitively unreachable; the deleted file had no dependents.
+
+**criterion 2 was verified by reading, not by rendering, and the report says
+so.** `static-event-chooser.tsx` is untouched by this diff and was never on the
+deleted file's import graph, so the screen cannot have changed; the component
+renders exactly two cards linking to `/new/dual` and `/new/tournament`, and the
+build's route table lists both as compiled routes. The subagent found a dev
+server already up, hit the expected `/login`, and judged standing up an
+ephemeral staff user to view an unchanged screen disproportionate for an inert
+deletion. The dispatch permitted that fallback provided the method was stated;
+the completion reviewer ruled the evidence sufficient rather than leaving the
+criterion an open gap.
+
+**follow-ups:**
+1. `static/static-event-chooser.tsx:17` still says of the just-deleted
+   component "that component is left in place, dormant". Stale prose in a file
+   outside T18's `files:`; both reviewers called it a follow-up rather than a
+   defect in this diff. It is the same staleness `page.tsx`'s docblock had, and
+   it is the sort of thing T26's README sweep should catch — but T26 owns the
+   README, not this comment.

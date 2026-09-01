@@ -320,7 +320,7 @@ list below instead.
 - **notes:** **Amended 2026-09-01 after a blocked run.** Criterion 1 originally required a bare `grep` over all of `src` to return nothing, which two provenance comments in `event-drawer.tsx` and `opponent-history.ts` made unsatisfiable — neither file is in this task's `files:`, so the criterion demanded work the task was not allowed to do. It now matches imports and JSX only. **The stashed work from that run is good and applies cleanly: `git stash apply b3ed7738f06061390cecd10cfe26b0bf6de6bce4`** — apply it first rather than redoing the deletion. Mechanical. README §4's type-only lifeline means the import graph lies about what is safe to remove — these two are named safe by §2; the lifeline pair is not, and is T24.
 
 ## T18 · Retire the dormant event chooser
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T17
 - **files:** `src/app/dashboard/team/schedule/new/page.tsx`; delete `src/components/dashboard/schedule/new-event-chooser.tsx`; `src/components/dashboard/schedule/README.md`
