@@ -86,7 +86,7 @@ ready).
 - **notes:** Plan step 5. Frames 46c (753–1138) and 46d (1140–1217). Guardrails: this file is "the match video", never a highlight/condensed cut. SAS expires ~30min — video error state offers reload.
 
 ## T6 · Rail completion: match-data block, no-video strip, flags doc
-- **status:** todo
+- **status:** blocked
 - **model:** sonnet
 - **needs:** T1, T5
 - **files:** src/components/dashboard/matches/match-detail/{match-data-block.tsx (new),match-rail.tsx}, docs/match-detail-v46-flags.md (new), docs/README.md
