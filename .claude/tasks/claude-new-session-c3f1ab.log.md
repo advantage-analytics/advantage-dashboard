@@ -1472,3 +1472,52 @@ programs, 5 events, 33 entries, ZZ back to 1 member, UCLA still 0 events.
 5. `event-drawer.tsx`'s header comment and `README.md`'s route table both now
    describe this route as fixture-backed. T26 owns the README; the component
    header is smaller and adjacent.
+
+## T16 · Derive the dual widget's outcome rail — done
+
+**gate:** lint clean · `tsc --noEmit` clean · `npm test` green (260 passed).
+`task-completion-reviewer` → **VERDICT: pass**, and it verified the "one
+definition of won" claim in the code rather than accepting it. Guardrails:
+`pipeline-guardrails-reviewer` **ran** (diff under
+`src/components/dashboard/`) and found no violations — it confirmed the rail
+now answers a *result* question through `lineWon()` while `LineAction`'s
+`matchState()` still answers the separate *analysis* question, with no
+conflation and no §3.2 predicate collapsed; `rls-boundary-reviewer`
+**skipped** — the diff is presentation logic in one client component, adds no
+query and touches no file under `src/lib/data/`, `src/lib/supabase/`,
+`src/app/api/` or `supabase/migrations/`.
+
+**changed:** `SINGLES_MARKS` and `DOUBLES_MARKS` are deleted — silent-wrong-data
+trap 1 of 3, and it was live on screen after T15, not merely predicted. Both
+the rail and `LineRow`'s glyph now route through one new `lineOutcome(entry)`
+wrapping `lineWon()`, so the two cannot drift; rail order and row order come
+from the same `singles`/`doubles` arrays, computed once. `OutcomeRail`'s
+markup is byte-identical to HEAD — same tokens, same `2.5×12px` marks, same
+`S · divider · D` order — only the source of each mark moved. Observed live:
+Seed State drew `S: good bad good good good bad | D: good bad good` against a
+5–2 header, where the old constants had claimed `good bad good good good grey`;
+Placeholder College drew two decided marks then greys; Fixture Tech drew nine
+greys. Three duals, three distinct rails, each agreeing with its rows.
+
+Two decisions, both upheld by the reviewers: a **forfeited line takes a
+win/loss colour, never grey**, because `lineWon()` reads `forfeit` before any
+match and `dualScore()` already counts it toward the header score directly
+above the rail — greying it would say "not played" about a line that has
+already moved the score. And a **partial lineup draws only the groups that
+have lines**, divider included only when both exist; a fully empty lineup
+never reaches this component, since `StaticSchedule` mounts it only when
+`entries.length > 0`.
+
+**Verification touched the live database and was cleaned up.** One ephemeral
+auth user, its `public.users` row, and two `program_members` rows — ZZ Test
+Program, and briefly Dartmouth to reach a partial-lineup dual — signed in via
+an admin-generated magic link through the app's own `/confirm` route, with no
+credential typed into a form. All removed; independently re-checked from this
+session: 3 claimed programs, 5 events, 33 entries, 5 `program_members` rows,
+ZZ at 1 member, Dartmouth back at 2, and zero `t16-rail-%` rows in either
+`auth.users` or `public.users`.
+
+**follow-ups:** none new. The subagent noted that with `static-schedule.tsx`'s
+season marks derived in T15 and this rail derived here, the only transcribed
+constant the regression note still lists is `DUAL_DRAFT_SCHOOL` pinning the
+dual builder's step two to Ridgeline — already covered by T22.

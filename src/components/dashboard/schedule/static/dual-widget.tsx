@@ -41,18 +41,24 @@ import { cn } from "@/lib/utils";
  * returns the same shape, so re-wiring is a changed import upstream and no
  * change here.
  *
- * **`OutcomeRail` is the one exception to that paragraph, and re-wiring must
- * not skip it.** Every other cell — the rows, the score line, the played
- * count, the per-line action — recomputes from whatever `EventDetail` it is
- * given, so a live loader genuinely changes nothing here. The rail does not:
- * its marks are fixed constants transcribed from the artboard (see
- * `SINGLES_MARKS` below and the note above it), because the design's own rail
- * contradicts the rows beside it and this run reproduces the design rather
- * than correcting it. Point this component at real matches without re-deriving
- * those marks and every dual, won or lost, renders the identical
- * `good bad good good good grey` — confidently wrong, with nothing on screen
- * looking broken. Re-deriving them from `entries` is part of the re-wiring,
- * not something that follows from it.
+ * ~~**`OutcomeRail` is the one exception to that paragraph**~~ — **it was, and
+ * is not any more.** Until the re-wiring the rail drew two module-level
+ * constants transcribed from the artboard, because the design's own rail
+ * contradicts the rows beside it and the static run reproduced the design
+ * rather than correcting it. That exception was scoped to the static run: it
+ * survived only while this component drew fixtures, and the header said in as
+ * many words that re-deriving the marks from `entries` "is part of the
+ * re-wiring, not something that follows from it". The route now reads the
+ * database, so the constants are gone and `railMarks()` below derives every
+ * mark from the same `lineWon()` answer the row underneath it draws. Nothing
+ * in this file is drawn-not-derived any more.
+ *
+ * The contradiction that produced them is still a real design defect and is
+ * still on the record — `work/events-lineups/REGRESSION-NOTE.md` §5 item 10,
+ * and §4's warning that this is exactly where the re-wiring goes silently
+ * wrong. Reproducing it against live matches would have rendered the identical
+ * `good bad good good good grey` rail on every dual a coach opens, won or lost,
+ * with correct rows beneath it and nothing looking broken.
  */
 export function DualWidget({ detail }: { detail: EventDetail }) {
   const { event, entries } = detail;
@@ -60,6 +66,8 @@ export function DualWidget({ detail }: { detail: EventDetail }) {
   const doubles = entries.filter((entry) => entry.discipline === "doubles");
   const score = dualScore(entries);
   const played = entries.filter(entryPlayed).length;
+  const singlesMarks = railMarks(singles);
+  const doublesMarks = railMarks(doubles);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
@@ -86,10 +94,23 @@ export function DualWidget({ detail }: { detail: EventDetail }) {
           <span className="text-score leading-none">
             {score.us}–{score.them}
           </span>
+          {/* A rail per group that HAS lines, and the divider only when both
+              do. A lineup can arrive half-built — six singles entered and the
+              doubles still to come — and an "S"/"D" label with no marks after
+              it, or a divider with nothing on one side, reads as a rail that
+              failed to load rather than as a group nobody has filled in. The
+              artboard draws no such state, so there is nothing to copy; the
+              6 + divider + 3 case it does draw is untouched. */}
           <div className="flex items-center gap-2.5">
-            <OutcomeRail label="S" marks={SINGLES_MARKS} />
-            <span className="h-2.5 w-px bg-[var(--border-medium)]" />
-            <OutcomeRail label="D" marks={DOUBLES_MARKS} />
+            {singlesMarks.length > 0 ? (
+              <OutcomeRail label="S" marks={singlesMarks} />
+            ) : null}
+            {singlesMarks.length > 0 && doublesMarks.length > 0 ? (
+              <span className="h-2.5 w-px bg-[var(--border-medium)]" />
+            ) : null}
+            {doublesMarks.length > 0 ? (
+              <OutcomeRail label="D" marks={doublesMarks} />
+            ) : null}
           </div>
         </div>
       </div>
@@ -123,47 +144,77 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * The six-mark and three-mark rails beside the team score.
- *
- * **Drawn, not derived — and the artboard contradicts itself here.** Both
- * `7c` and `4c` draw the singles rail as `good bad good good good ink-200`
- * and the doubles rail as `good bad ink-200`, byte-identical between the two
- * frames. Yet the rows directly below draw S6 as a loss and D3 as a win, and
- * the score above reads 5–2 — which is only reachable if S6 and D3 both
- * count. Read the greyed marks literally and the score is 4–1.
- *
- * An earlier pass computed the rail from `lineWon`/`entryPlayed` instead,
- * reasoning that a rail is a function of the lines rather than copy, and that
- * an "unplayed" mark two inches above a red cross for the same line is wrong
- * on any data. That reasoning is sound and it was still the wrong call: the
- * brief says the design wins and that divergence is a defect, not a judgement
- * call, and rule 4's remedy for design content that is wrong about the app is
- * to reproduce it as drawn AND report it — reporting alone is the forbidden
- * half. The sibling task on `7d` hit the same contradiction and reproduced it
- * literally; this now matches.
- *
- * So the sequences below are the artboard's own, transcribed. The
- * contradiction is recorded for the human, not resolved here.
+ * The three colours a mark can take. Exactly the tokens the artboard uses, and
+ * the whole vocabulary — there is no fourth treatment.
  */
-/** The singles rail, exactly as `7c` and `4c` draw it. */
-const SINGLES_MARKS = [
-  "--viz-good",
-  "--viz-bad",
-  "--viz-good",
-  "--viz-good",
-  "--viz-good",
-  "--ink-200",
-] as const;
+type OutcomeMark = "--viz-good" | "--viz-bad" | "--ink-200";
 
-/** The doubles rail, exactly as `7c` and `4c` draw it. */
-const DOUBLES_MARKS = ["--viz-good", "--viz-bad", "--ink-200"] as const;
+/**
+ * The rail beside the team score — one mark per line, in the order the rows
+ * below draw them.
+ *
+ * **Derived from the lines, not transcribed — and the artboard contradicts
+ * itself here.** Both `7c` and `4c` draw the singles rail as
+ * `good bad good good good ink-200` and the doubles rail as
+ * `good bad ink-200`, byte-identical between the two frames. Yet the rows
+ * directly below draw S6 as a loss and D3 as a win, and the score above reads
+ * 5–2 — which is only reachable if S6 and D3 both count. Read the greyed marks
+ * literally and the score is 4–1. Recorded as `REGRESSION-NOTE.md` §5 item 10;
+ * it is a defect in the design, not a rule about this app.
+ *
+ * The static run reproduced that contradiction as constants, on the standing
+ * "the design wins" rule, and reported it. That was the right call **for a
+ * component drawing one frozen fixture**. It stops being the right call the
+ * moment the component is handed real matches: a constant cannot be right
+ * about a dual it was not transcribed from, so every dual in the program would
+ * render one school's rail — nine grey/green/red marks that belong to a
+ * different match — above nine correct rows. No amount of reporting makes a
+ * coach reading his own score board immune to that, and there is no design
+ * intent left to preserve, because the artboard never drew this dual.
+ *
+ * So the marks are computed, and computed through `lineWon()` specifically —
+ * the same call `LineRow` makes for its own glyph, via `lineOutcome()` below,
+ * so the rail and the row cannot disagree about a line. Won is `--viz-good`,
+ * lost is `--viz-bad`, and undecided keeps the artboard's own `--ink-200`,
+ * which is what its third doubles mark already meant. Colour, order, size and
+ * stroke are unchanged; only the source of each mark is.
+ *
+ * **A forfeit is a decided line and takes a colour**, green or red by which
+ * side walked — `lineWon()` reads `forfeit` before it reads any match, and its
+ * doc comment says why that precedence is the rule rather than a shortcut.
+ * That also keeps the rail in step with `dualScore()` overhead, which counts a
+ * forfeited line as a point to the non-forfeiting side. Greying a forfeit
+ * would say "not played yet" about a line that is over and has already moved
+ * the score.
+ */
+function railMarks(entries: EventEntry[]): OutcomeMark[] {
+  return entries.map((entry) => {
+    const won = lineOutcome(entry);
+    if (won === null) return "--ink-200";
+    return won ? "--viz-good" : "--viz-bad";
+  });
+}
+
+/**
+ * Who took this line — asked once, for both the rail and the row.
+ *
+ * A dual entry carries at most one match, so `matches[0]` is the line's match;
+ * passing it explicitly is what stops `lineWon` falling back to its
+ * any-match-won reading, which belongs to tournament entries. Both callers go
+ * through here so that the mark in the header and the glyph in the row are the
+ * same answer by construction — a second, drifting definition of "won" two
+ * inches above the first is the exact failure this task removed.
+ */
+function lineOutcome(entry: EventEntry): boolean | null {
+  return lineWon(entry, entry.matches[0] ?? null);
+}
 
 function OutcomeRail({
   label,
   marks,
 }: {
   label: string;
-  marks: readonly string[];
+  marks: readonly OutcomeMark[];
 }) {
   return (
     <div className="flex items-center gap-[5px]">
@@ -196,7 +247,7 @@ function OutcomeRail({
  */
 function LineRow({ entry }: { entry: EventEntry }) {
   const match = entry.matches[0] ?? null;
-  const won = lineWon(entry, match);
+  const won = lineOutcome(entry);
 
   return (
     <div

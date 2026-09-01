@@ -277,7 +277,7 @@ list below instead.
 - **notes:** Upcoming/completed grouping stays `playedCount`-based, as `event-drawer.tsx:50-51` already does — see plan correction C4; the drawer needs no edit. `dual-widget.tsx` does need one, but that is T16. The season block's marks are currently four hard-coded `CircleX`/`CircleCheck` icons at `static-schedule.tsx:141-163`, with a comment saying they are deliberately not derived because the artboard claimed a dual the fixtures never named — that reason dies with the fixtures.
 
 ## T16 · Derive the dual widget's outcome rail
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T15
 - **files:** `src/components/dashboard/schedule/static/dual-widget.tsx`
