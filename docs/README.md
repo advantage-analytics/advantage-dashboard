@@ -10,6 +10,7 @@
 | [`splitstep-integration-spec.md`](splitstep-integration-spec.md) | The original design spec. Kept for the reasoning; several sections are deliberately superseded and marked as such at the top | You want to know *why* something was built this way |
 | [`roster-edit-and-people-search.md`](roster-edit-and-people-search.md) | Two roster changes — editing a player from the row menu (**built** as T1 on `claude/roster-edit-player`) and making people findable in the command palette (still unbuilt; the palette searches only `matches` today) — plus why roster filtering was declined. **Point-in-time (2026-08-25)**, and §1's "archived rows are editable" risk is superseded by migration `20260825131815` | You are picking up T1 on `claude/roster-edit-player`, or wondering whether the roster should be filterable |
 | [`llm-setup.md`](llm-setup.md) | Configuring the `/api/chat` provider (Anthropic or OpenAI), keys, mock mode, rough costs | Setting up LLM features locally |
+| [`superpowers/specs/2026-09-01-account-deletion-team-retention-design.md`](superpowers/specs/2026-09-01-account-deletion-team-retention-design.md) | Why deleting an account keeps program-filed matches with the program under a coach-managed profile, purges only personal ones, refuses owners, and how the `program_players_claim_check` failure was fixed at the root. **Design spec (2026-09-01)**, implemented on `claude/delete-cjgimena-email-d017fe` | You are changing account deletion, roster claims, or any FK that points at `users` |
 
 Also relevant, on the **`splitstep-derivation`** branch:
 
