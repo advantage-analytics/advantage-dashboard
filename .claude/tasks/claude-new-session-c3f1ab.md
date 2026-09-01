@@ -289,7 +289,7 @@ list below instead.
 - **notes:** **Silent-wrong-data trap 1 of 3**, recorded in `work/events-lineups/REGRESSION-NOTE.md` §4 and in this file's own header exception. Point the component at live data without re-deriving these and every dual — won or lost — renders the identical `good bad good good good grey` rail with correct rows beneath it and nothing on screen looking broken. The header states re-deriving them "is part of the re-wiring, not something that follows from it."
 
 ## T17 · Delete the read path's dormant pair
-- **status:** todo
+- **status:** blocked
 - **model:** sonnet
 - **needs:** T15
 - **files:** delete `src/components/dashboard/schedule/schedule-list.tsx` and `src/components/dashboard/schedule/event-detail-pane.tsx`; `src/components/dashboard/schedule/README.md`

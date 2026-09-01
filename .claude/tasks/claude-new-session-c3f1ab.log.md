@@ -1521,3 +1521,49 @@ ZZ at 1 member, Dartmouth back at 2, and zero `t16-rail-%` rows in either
 season marks derived in T15 and this rail derived here, the only transcribed
 constant the regression note still lists is `DUAL_DRAFT_SCHOOL` pinning the
 dual builder's step two to Ridgeline — already covered by T22.
+
+## T17 · Delete the read path's dormant pair — blocked
+
+**gate:** stage **5b failed**. lint clean · `tsc --noEmit` clean · `npm test`
+green (260) · `npm run build` green (62 pages). `task-completion-reviewer` →
+**VERDICT: needs-work** on criterion 1. Guardrails were not reached — 5b
+stops the gate.
+
+**reason — the criterion is unsatisfiable as written, and the fault is in the
+task, not the work.** Criterion 1 is `grep -rn "schedule-list\|event-detail-pane" src`
+returns nothing. Both files were correctly deleted and nothing imports or
+renders either one, but the grep still returns two lines:
+
+```
+src/components/dashboard/schedule/static/event-drawer.tsx:130   (doc comment)
+src/lib/schedule/opponent-history.ts:141                        (doc comment)
+```
+
+Both are provenance prose inside comment blocks. Neither file is in T17's
+`files:` list — `event-drawer.tsx` is additionally on the do-not-touch list
+this feature has carried since T15 — so satisfying the criterion literally
+would require violating the task's own scope. The reviewer was asked to rule
+explicitly and ruled that the literal wording governs: "the criterion as
+written is a literal executable check with a literal pass condition, and it
+does not return nothing." It judged the criterion's *intent* satisfied and the
+implementation correct, and located the defect in how the criterion was
+authored at stage 04 — a grep over a scope wider than the `files:` list the
+same task grants.
+
+**stash:** `b3ed7738f06061390cecd10cfe26b0bf6de6bce4` (tag `blocked: T17`).
+Recover with `git stash apply b3ed7738f06061390cecd10cfe26b0bf6de6bce4` — a
+SHA rather than `stash@{0}`, because `refs/stash` is shared with the main
+checkout and other worktrees. The stashed work is believed correct and was
+otherwise clean through every mechanical gate: both deletions, plus a README
+§2 edit the reviewer judged the minimal correction the deletion forces (two
+table rows, the "Nine files" → "Seven files" count, the sentence naming
+route-mounted dormant files, and one §5 count reference). It also confirmed
+`lineup-editor.tsx`, `opponent-name-cell.tsx` and `dual-detail.tsx` untouched,
+and that nothing became transitively unreachable.
+
+**to unblock:** amend T17's criterion 1 by hand to match the scope the task
+grants — scope the grep to imports and JSX rather than all prose, or to the
+files T17 may touch — then set `status:` back to `todo`. The stash applies
+cleanly onto the current tree. Alternatively widen `files:` to include the two
+comment-bearing files, but `event-drawer.tsx` has been deliberately excluded
+across three tasks, so amending the criterion is the smaller change.
