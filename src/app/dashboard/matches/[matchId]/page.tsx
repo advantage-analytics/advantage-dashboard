@@ -2,10 +2,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { reconcileBeforePageRead } from "@/lib/services/splitstep/reconcile";
 
-import {
-  getAdjacentMatchIds,
-  getMatchDetailData,
-} from "@/lib/data/match-detail-server";
+import { getMatchDetailData } from "@/lib/data/match-detail-server";
 import { shortName } from "@/lib/data/match-utils";
 import {
   isAnalysisFailed,
@@ -18,9 +15,9 @@ import { MarkReportSeen } from "@/components/dashboard/matches/match-detail/mark
 import { UnpublishedStatsNotice } from "@/components/dashboard/matches/match-detail/unpublished-stats-notice";
 import { DerivedStatsNotice } from "@/components/dashboard/matches/match-detail/derived-stats-notice";
 
-import { MatchSummaryRow } from "@/components/dashboard/matches/match-detail/match-summary-row";
-import { MatchKpiRow } from "@/components/dashboard/matches/match-detail/match-kpi-row";
-import { MatchDetailHero } from "@/components/dashboard/matches/match-detail-hero";
+import { MatchDetailShell } from "@/components/dashboard/matches/match-detail/match-detail-shell";
+import { MatchRail } from "@/components/dashboard/matches/match-detail/match-rail";
+import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { PerformanceTrackerCard } from "@/components/dashboard/matches/match-detail/performance-tracker-card";
 import {
   MatchStatisticsCard,
@@ -29,23 +26,9 @@ import {
 import { ServePlacementCard } from "@/components/dashboard/matches/match-detail/serve-placement-card";
 import { AiInsightCard } from "@/components/dashboard/ai-insight-card";
 import { InsightStatChip } from "@/components/dashboard/shared/insight-stat-chip";
-import { PerformanceProfileCard } from "@/components/dashboard/matches/match-detail/performance-profile-card";
-import { KeyMomentsCard } from "@/components/dashboard/matches/match-detail/key-moments-card";
-import { SectionsStagger } from "@/components/dashboard/matches/match-detail/sections-stagger";
 import { MatchVideoCard } from "@/components/dashboard/matches/match-detail/match-video-card";
 import { getMatchVideo } from "@/lib/data/match-video-server";
 import type { PlayerStatistics } from "@/lib/data/types";
-
-const RADAR_STATS: { key: keyof PlayerStatistics; label: string }[] = [
-  { key: "firstServeInPct", label: "First Serve In" },
-  { key: "firstServeWinPct", label: "First Serve Won" },
-  { key: "secondServeWinPct", label: "Second Serve Won" },
-  { key: "serviceGamesWonPct", label: "Service Games Won" },
-  { key: "breakpointsWonPct", label: "Break Points Converted" },
-  { key: "firstReturnWonPct", label: "First Serve Returns Won" },
-  { key: "secondReturnWonPct", label: "Second Serve Return Points Won" },
-  { key: "returnGamesWonPct", label: "Return Games Won" },
-];
 
 type StatConfig = {
   key: keyof PlayerStatistics;
@@ -81,8 +64,8 @@ const OTHER_STATS: StatConfig[] = [
   { key: "unforcedErrors", label: "Unforced Errors", isPercentage: false },
   { key: "netPointsAppearances", label: "Net Approaches", isPercentage: false },
   { key: "netPointsWonPct", label: "Net Points Won %", isPercentage: true, fractionKey: "netPointsWonPct" },
-  { key: "shortRallyWonPct", label: "Short Rallies (1\u20134)", isPercentage: true, fractionKey: "shortRallyWonPct" },
-  { key: "mediumRallyWonPct", label: "Medium Rallies (5\u20138)", isPercentage: true, fractionKey: "mediumRallyWonPct" },
+  { key: "shortRallyWonPct", label: "Short Rallies (1–4)", isPercentage: true, fractionKey: "shortRallyWonPct" },
+  { key: "mediumRallyWonPct", label: "Medium Rallies (5–8)", isPercentage: true, fractionKey: "mediumRallyWonPct" },
   { key: "longRallyWonPct", label: "Long Rallies (9+)", isPercentage: true, fractionKey: "longRallyWonPct" },
   { key: "totalPointsWon", label: "Total Points Won", isPercentage: false },
 ];
@@ -131,9 +114,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // a round trip in front of a page that is otherwise ready. It resolves to
   // null for every imported match and every job that produced no trimmed copy,
   // which is most of them.
-  const [data, adjacent, jobs, video] = await Promise.all([
+  const [data, jobs, video] = await Promise.all([
     getMatchDetailData(matchId),
-    getAdjacentMatchIds(matchId),
     createClient().then(async (supabase) => {
       // Ask the vendor about jobs that look stuck BEFORE reading, so what the
       // poll learns is what this page renders. Never fatal — and not inside
@@ -165,12 +147,13 @@ export default async function MatchDetailPage({ params }: PageProps) {
 
   if (!data) notFound();
 
-  const { match, statsResult, points, keyMoments, insights, playerAverages } =
-    data;
+  const { match, statsResult, points, insights, playerAverages } = data;
 
-  const userInsights = match.isUserPlayer1
-    ? insights?.player1
-    : insights?.player2;
+  // The single attribution point (guardrails §4): every you/opp decision on
+  // this page routes through `getMatchSides`, keyed on `match.isUserPlayer1`.
+  const sides = getMatchSides(match, statsResult);
+
+  const userInsights = sides.pick(insights?.player1, insights?.player2);
   // Synthesized prose insight (home-quality), generated once at upload. Falls back to
   // the single top strength/weakness for matches processed before summaries existed.
   const summary = userInsights?.summary?.trim() || null;
@@ -185,7 +168,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
   // carries a delta vs the player's career average (computed live, always fresh). The
   // delta is only shown when the user is player1, matching how `playerAverages` is
   // computed (over the user's player1_id matches).
-  const userStats = match.isUserPlayer1 ? p1 : p2;
+  const userStats = sides.you.stats;
   const chipSpecs: { label: string; key: keyof PlayerStatistics; isPct: boolean }[] = [
     { label: "First Serve In", key: "firstServeInPct", isPct: true },
     { label: "Break Points Won", key: "breakpointsWonPct", isPct: true },
@@ -196,7 +179,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
         const matchVal = Math.round(userStats[spec.key] as number);
         const avgVal = playerAverages?.[spec.key];
         const change =
-          match.isUserPlayer1 && typeof avgVal === "number" && avgVal > 0
+          sides.you.isPlayer1 && typeof avgVal === "number" && avgVal > 0
             ? matchVal - Math.round(avgVal)
             : undefined;
         return {
@@ -250,43 +233,15 @@ export default async function MatchDetailPage({ params }: PageProps) {
     isInFlight(analysis.status) || isAnalysisFailed(analysis.status);
 
   if (isAwaitingAnalysis) {
+    // Guardrails §3.3 — the short-circuit gate. Rail identity renders fine
+    // from `match`; the content pane holds the pipeline state and nothing
+    // else. No tabs, no stat section that would draw zeroes.
     return (
-      <div className="flex-1 w-full bg-white">
-        <div className="mx-auto max-w-screen-2xl px-6 sm:px-8 py-8 sm:py-10">
-          <SectionsStagger className="flex flex-col">
-            <MatchDetailHero
-              match={match}
-              previousMatchId={adjacent.previousId}
-              nextMatchId={adjacent.nextId}
-            />
-
-            <div className="mt-8">
-              <MatchSummaryRow
-                match={match}
-                p1Name={p1Name}
-                p2Name={p2Name}
-                previousMatchId={adjacent.previousId}
-                nextMatchId={adjacent.nextId}
-              />
-            </div>
-
-            <div className="mt-8">
-              <MatchAnalysisProgress analysis={analysis} matchId={matchId} />
-            </div>
-          </SectionsStagger>
-        </div>
-      </div>
+      <MatchDetailShell rail={<MatchRail aiSummary={summary} film="none" />}>
+        <MatchAnalysisProgress analysis={analysis} matchId={matchId} />
+      </MatchDetailShell>
     );
   }
-
-  const radarData =
-    p1 && p2
-      ? RADAR_STATS.map((stat) => ({
-          stat: stat.label,
-          p1: (p1[stat.key] as number) ?? 0,
-          p2: (p2[stat.key] as number) ?? 0,
-        }))
-      : [];
 
   const statSections =
     p1 && p2
@@ -298,145 +253,106 @@ export default async function MatchDetailPage({ params }: PageProps) {
       : [];
 
   return (
-    <div className="flex-1 w-full bg-white">
-      <div className="mx-auto max-w-screen-2xl px-6 sm:px-8 py-8 sm:py-10">
-        <MarkReportSeen matchId={matchId} />
-        <SectionsStagger className="flex flex-col">
-        <MatchDetailHero
-          match={match}
-          previousMatchId={adjacent.previousId}
-          nextMatchId={adjacent.nextId}
-        />
-
-        <div className="mt-8">
-          <MatchSummaryRow
-            match={match}
-            p1Name={p1Name}
-            p2Name={p2Name}
-            previousMatchId={adjacent.previousId}
-            nextMatchId={adjacent.nextId}
+    <>
+      <MarkReportSeen matchId={matchId} />
+      <MatchDetailShell
+        rail={
+          <MatchRail
+            aiSummary={summary}
+            film={
+              video
+                ? "card"
+                // Allowlist, not "not splitstep": `sourceProvider` is also
+                // `null` for a match a coach typed in by hand (never
+                // imported, never analysed) — see the comment on
+                // `source_provider` in `lib/schedule/actions.ts`. Only the
+                // exact `swing-vision` value backs the SwingVision claim;
+                // every other no-video case gets the neutral copy, which is
+                // true for all of them (splitstep missing its trimmed copy,
+                // a hand-scored match, or any future provider).
+                : match.sourceProvider === "swing-vision"
+                  ? "note-swingvision"
+                  : "note-neutral"
+            }
           />
-        </div>
-
-        {statsPublished && (
-        <div className="mt-8">
-          <MatchKpiRow
-            approximate={isDerived}
-            duration={match.duration}
-            matchDurationSec={matchDurationSec}
-            playingTimeSec={points.reduce((sum, p) => sum + (p.duration ?? 0), 0)}
-            p1Stats={p1}
-            p2Stats={p2}
-            p1Name={p1Short}
-            p2Name={p2Short}
-          />
-        </div>
-        )}
-
-        {!statsPublished && (
-          <div className="mt-8">
-            <UnpublishedStatsNotice />
-          </div>
-        )}
-
-        {statsPublished && isDerived && (
-          <div className="mt-8">
-            <DerivedStatsNotice />
-          </div>
-        )}
-
-        <div className="mt-8 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-8">
-          <main
-            aria-label="Match details"
-            className="min-w-0 flex flex-col gap-6 order-1"
-          >
-            {/* Above the charts, because a coach opening this page to show a
-                player something opens it for the video. The stats keep their
-                order below it. */}
-            {video && <MatchVideoCard video={video} />}
-            <PerformanceTrackerCard
-              points={points}
-              p1Name={p1Short}
-              p2Name={p2Short}
-              matchDurationSec={matchDurationSec}
-            />
-            {statSections.some((s) => s.rows.length > 0) && (
-              <MatchStatisticsCard
-                sections={statSections}
-                p1Name={p1Short}
-                p2Name={p2Short}
-              />
-            )}
-            <div id="match-serve-placement" className="scroll-mt-6">
-              <ServePlacementCard />
-            </div>
-          </main>
-
-          <aside
-            aria-label="Match insights"
-            className="flex flex-col gap-6 min-w-0 order-2"
-          >
-            <AiInsightCard
-              storageKey={`advantage-ai-insight-dismissed:${matchId}`}
-            >
-              <div className="flex flex-col gap-3.5">
-                {summary ? (
-                  <p className="text-[12px] font-normal text-[var(--color-text-body)] leading-[19.8px]">
-                    {summary}
-                  </p>
-                ) : topInsight ? (
-                  <div className="flex flex-col gap-1.5">
-                    <p className="text-[12px] font-medium text-[var(--color-text-primary)] leading-[18px]">
-                      {topInsight.name}
-                    </p>
+        }
+        tabs={{
+          statistics: (
+            <>
+              <AiInsightCard
+                storageKey={`advantage-ai-insight-dismissed:${matchId}`}
+              >
+                <div className="flex flex-col gap-3.5">
+                  {summary ? (
                     <p className="text-[12px] font-normal text-[var(--color-text-body)] leading-[19.8px]">
-                      {topInsight.description}
+                      {summary}
                     </p>
-                  </div>
-                ) : (
-                  <p className="text-[12px] font-normal text-[var(--color-text-body)] leading-[19.8px]">
-                    Insights will appear here once this match is fully analyzed.
-                  </p>
-                )}
-                {insightChips.length > 0 && (
-                  <div className="flex flex-col gap-2">
-                    {showAvgCaption && (
-                      <span className="text-[9px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
-                        vs your average
-                      </span>
-                    )}
-                    <div className="flex flex-wrap gap-2">
-                      {insightChips.map((chip) => (
-                        <InsightStatChip
-                          key={chip.label}
-                          label={chip.label}
-                          value={chip.value}
-                          change={chip.change}
-                        />
-                      ))}
+                  ) : topInsight ? (
+                    <div className="flex flex-col gap-1.5">
+                      <p className="text-[12px] font-medium text-[var(--color-text-primary)] leading-[18px]">
+                        {topInsight.name}
+                      </p>
+                      <p className="text-[12px] font-normal text-[var(--color-text-body)] leading-[19.8px]">
+                        {topInsight.description}
+                      </p>
                     </div>
-                  </div>
-                )}
-              </div>
-            </AiInsightCard>
-            {radarData.length > 0 && (
-              <PerformanceProfileCard
-                data={radarData}
+                  ) : (
+                    <p className="text-[12px] font-normal text-[var(--color-text-body)] leading-[19.8px]">
+                      Insights will appear here once this match is fully analyzed.
+                    </p>
+                  )}
+                  {insightChips.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      {showAvgCaption && (
+                        <span className="text-[9px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
+                          vs your average
+                        </span>
+                      )}
+                      <div className="flex flex-wrap gap-2">
+                        {insightChips.map((chip) => (
+                          <InsightStatChip
+                            key={chip.label}
+                            label={chip.label}
+                            value={chip.value}
+                            change={chip.change}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </AiInsightCard>
+
+              {!statsPublished && <UnpublishedStatsNotice />}
+              {statsPublished && isDerived && <DerivedStatsNotice />}
+
+              <PerformanceTrackerCard
+                points={points}
                 p1Name={p1Short}
                 p2Name={p2Short}
+                matchDurationSec={matchDurationSec}
               />
-            )}
-            <KeyMomentsCard
-              points={points}
-              narrativeMoments={keyMoments}
-              p1Name={p1Short}
-              p2Name={p2Short}
-            />
-          </aside>
-        </div>
-
-        </SectionsStagger>
-      </div>
-    </div>
+              {statSections.some((s) => s.rows.length > 0) && (
+                <MatchStatisticsCard
+                  sections={statSections}
+                  p1Name={p1Short}
+                  p2Name={p2Short}
+                />
+              )}
+            </>
+          ),
+          shots: <ServePlacementCard />,
+          film: video ? (
+            <MatchVideoCard video={video} />
+          ) : (
+            // Placeholder only — the real 46d empty state lands with the Film
+            // room build.
+            <div className="flex items-center justify-center rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] py-16">
+              <span className="text-body-sm">No video for this match</span>
+            </div>
+          ),
+        }}
+      />
+    </>
   );
 }
