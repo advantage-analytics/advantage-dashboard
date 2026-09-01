@@ -15,6 +15,8 @@ pending-invite-intercept` starts the pipeline once you're happy with it.
 > Yes, go with B and set both up, should it be a dashboard banner or show up
 > in the activity feed? or a dialog when a user first enters?
 
+> I meant the activity button on the header at the top right of the screen
+
 ## The gap this closes
 
 Nothing in the app looks up `program_invites` by the signed-in person's
@@ -27,34 +29,51 @@ invited later has no way in except the email.
 
 ## Agreed in discussion (2026-09-01) — edit freely
 
-- **Option B, two surfaces, one shared component and one lookup.**
+- **Option B, two surfaces, one shared offer pane and one lookup.**
   1. Onboarding **step zero**, before the persona question in
      `src/app/onboarding/onboarding-flow.tsx`: "You've been invited to
      <program> as <role>[, by <inviter>]" with the sharing terms and a Join
      button, plus "Not now" which continues into the normal questions.
-  2. A dismissable **banner** at the top of the personal dashboard home
-     (`src/app/dashboard/(home)/home-content.tsx`) for anyone with a live
-     invitation — covers accounts invited after onboarding, and anyone who
-     pressed Not now and changed their mind.
-- **Why a banner, not a dialog or the activity feed.** A dialog blocks, and
-  step zero already is the first-entry prompt for new accounts. The personal
-  home's "Activity" widget is a 52-week heatmap of match days, not an event
-  feed, and the invitee is not on the team yet so the team-home feed is
-  unreachable to them. Banner is a recommendation, not a decision — change it
-  here if you disagree.
+  2. A row in the header **activity tray**
+     (`src/components/dashboard/activity/activity-tray.tsx`, the popover
+     titled "Notifications", fed by `getActivityFeed` in
+     `src/lib/data/activity-server.ts`) for anyone with a live invitation —
+     covers accounts invited after onboarding, and anyone who pressed Not
+     now and changed their mind. The row links to the same offer pane step
+     zero uses; it does not accept inline.
+- **Why the tray, not a home banner or a dialog.** The tray is the app's one
+  notification surface and renders on every dashboard page, where a banner
+  would live on the home page only. Its blue dot already means "something
+  needs you", and its rule that the dot clears itself with no mark-all-read
+  holds for an invitation, which clears when accepted or expired. A dialog
+  blocks, and step zero already is the first-entry prompt for new accounts.
+  (The personal home's "Activity" widget is a heatmap of match days, not a
+  feed, and was never a candidate.)
+- **Tray constraints to design around.** Every row today is a `Link` to a
+  match and the feed item is one shape (`ActivityItem`: matchId, title,
+  analysis, at). An invitation is a second item kind, so `ActivityFeed`
+  becomes a discriminated union and the tray gets a second row component.
+  The 326px popover cannot host the sharing terms and a Join button, hence
+  the link-out. The feed is workspace-scoped; invitations are per-email and
+  must show whichever workspace is active. The dot count adds live
+  invitations to in-flight jobs, and the tooltip detail names both
+  ("1 invitation · 2 in flight").
+- **Where the offer pane lives for an existing account** is a stage-02
+  decision: a small route (linkable from the tray row, decline as a query
+  flag the way `/join/[token]?not-now=1` works) or a dialog. Lean: route.
 - **Why step zero, not after the college question.** A coach invitee never
   reaches the college question (step 1 "I coach" finishes onboarding); the
   invitation already answers both questions; invites also come from
   non-college (custom org) programs.
-- **Join from the intercept** sets `users.role` from the invite's role,
-  stamps `onboarded_at`, sets the workspace cookie to the program (see
-  `activate()` in `src/lib/services/programs/join-actions.ts`) and lands on
-  `/dashboard/team`. The sharing terms and quota footer
+- **Join from the offer pane** sets `users.role` from the invite's role,
+  stamps `onboarded_at` if null, sets the workspace cookie to the program
+  (see `activate()` in `src/lib/services/programs/join-actions.ts`) and
+  lands on `/dashboard/team`. The sharing terms and quota footer
   (`src/components/join/join-terms.tsx`) are shown before Join, same rule as
   `/join/[token]`: nobody reaches a Join button without passing them.
-- **Not now / dismiss.** Onboarding: continue as today. Banner: remembered
-  per invitation per browser (invites expire in 14 days, so nothing durable
-  is needed).
+- **Not now.** Onboarding: continue as today. From the tray: the row stays
+  while the invitation is live, because it is; whether the dot is suppressed
+  per browser after a decline is a stage-02 call.
 - **Database (the one required piece).** The accept function
   `accept_program_invite(p_token_hash)` needs the token, and only the hash is
   stored, so the app cannot rebuild a join link. Add:
