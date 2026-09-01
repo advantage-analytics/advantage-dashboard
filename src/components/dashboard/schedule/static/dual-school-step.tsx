@@ -139,13 +139,18 @@ export function useNewDualData(): NewDualData {
  * route. `/api/programs/search` answers with a capped page and no total, which
  * is why the count is the route's and not this component's.
  *
- * ── What the choice still does not carry ───────────────────────────────────
- * `onContinue` takes nothing, so the chosen school does not yet reach step
- * two — that step draws one school throughout and would otherwise print one
- * school's name over another school's data. Making it travel is the next task;
- * see `static-dual-builder.tsx`'s header for the defect that shaped this.
+ * ── What the choice carries ────────────────────────────────────────────────
+ * `onContinue` takes the answer with it: the directory row beside the
+ * school's own name for a pick, the typed text and a null row for a club side
+ * or a school the directory never had — the dormant `SchoolSearch.onChosen`'s
+ * contract. Step two names whichever it was given and nothing else; see
+ * `static-dual-builder.tsx`'s header for the defect that shaped this.
  */
-export function DualSchoolStep({ onContinue }: { onContinue: () => void }) {
+export function DualSchoolStep({
+  onContinue,
+}: {
+  onContinue: (name: string, program: ProgramSearchResult | null) => void;
+}) {
   const {
     ourConference,
     ourDivision,
@@ -239,7 +244,7 @@ export function DualSchoolStep({ onContinue }: { onContinue: () => void }) {
 
   function commit() {
     if (chosen === null) return;
-    onContinue();
+    onContinue(chosen, picked);
   }
 
   return (
@@ -389,7 +394,9 @@ export function DualSchoolStep({ onContinue }: { onContinue: () => void }) {
               type="button"
               onClick={() => {
                 setPicked(null);
-                onContinue();
+                // The row's own promise — the typed text, whatever row may
+                // have been picked above it.
+                onContinue(term.trim(), null);
               }}
               className="mt-[18px] flex w-full cursor-pointer items-center gap-2.5 border-t border-[var(--border-hairline)] pt-4 text-left"
             >

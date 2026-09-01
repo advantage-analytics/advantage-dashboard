@@ -450,6 +450,13 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
 
     // The four head-to-head phrases the two artboards draw, each read off the
     // fixture row that draws it. En dash between the figures throughout.
+    //
+    // Held, not retired, on the four `RAIL_SCHOOLS` rows below: they read
+    // `fixtures.ts`, which this run has not touched, so each is still true of
+    // the module it names. What changed is the audience — `2b`'s rail now
+    // lists the real conference and this program's real record, so these
+    // describe the design record rather than the live screen. T26 owns that
+    // demotion.
     expect(formatOpponentRecord(CONFERENCE_SCHOOLS[0].history)).toBe(
       'never played'
     );
@@ -501,6 +508,15 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
   });
 
   test("2b's draft, as the fields print it", () => {
+    // Held, not retired: every expectation below reads `fixtures.ts`, which
+    // this run has not touched, so each is still true of the module it names.
+    // What changed is the audience — step two's date, site, surface and format
+    // are controlled inputs now, its rail lists the real conference, and the
+    // school is whichever step one chose, so `DUAL_DRAFT_EVENT` and
+    // `RAIL_SCHOOLS` describe the design record rather than the live screen.
+    // `DUAL_DRAFT_LINES` alone is still rendered, until T23 seeds the lineup
+    // from the ladder. T26 owns the demotion.
+    //
     // "09-26", month and day, the same slice `2c`'s last-played cell takes.
     expect(DUAL_DRAFT_EVENT.startsOn.slice(5)).toBe('09-26');
     expect(siteTitle(DUAL_DRAFT_EVENT.site)).toBe('Home');

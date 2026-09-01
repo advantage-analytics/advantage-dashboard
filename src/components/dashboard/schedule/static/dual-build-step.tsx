@@ -1,47 +1,190 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Calendar, Check, ChevronDown, Search } from "lucide-react";
-import { capitalize, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { advButton } from "@/lib/ui/adv-button";
 import { EventShell } from "@/components/dashboard/schedule/event-shell";
 import { OpponentPopup } from "@/components/dashboard/schedule/static/opponent-popup";
-import { divisionLabel, teamLabel } from "@/lib/data/programs-server";
-import { formatOpponentRecord } from "@/lib/schedule/opponent-history";
-import { siteTitle } from "@/lib/schedule/format";
+import { useNewDualData } from "@/components/dashboard/schedule/static/dual-school-step";
 import {
-  DUAL_DRAFT_EVENT,
-  DUAL_DRAFT_LINES,
-  DUAL_DRAFT_OPPONENT_SHORT,
-  DUAL_DRAFT_SAVED_ROSTER,
-  DUAL_DRAFT_TYPED_NAME,
-  OUR_CONFERENCE,
-  RAIL_SCHOOLS,
-  type DirectorySchool,
-} from "@/lib/schedule/fixtures";
+  divisionLabel,
+  programDisplayName,
+  teamLabel,
+} from "@/lib/data/programs-server";
+import {
+  formatOpponentRecord,
+  opponentHistoryFor,
+  type OpponentDualHistory,
+} from "@/lib/schedule/opponent-history";
+import { DUAL_DRAFT_LINES } from "@/lib/schedule/fixtures";
 import type { LineupLine } from "@/components/dashboard/schedule/lineup-editor";
+import type { ProgramSearchResult } from "@/lib/data/programs-server";
+import type { EventSite } from "@/lib/schedule/types";
 
 /**
- * The Format cell's value, in the `"<bestOf>|<adScoring>"` encoding
- * `dual-form.tsx:266` decodes with `format.split("|")` — this run's one live
- * guardrail seam (`docs/ui-revamp-guardrails.md` §3.1 and §4, and `FORMATS`'
- * first entry at `dual-form.tsx:53`). It is the same answer
- * `DUAL_DRAFT_EVENT.format` carries as an `EventFormat`: best of 3, no-ad.
+ * The school step one chose, as step two receives it.
  *
- * Written out rather than interpolated from that `EventFormat`, because
- * `adScoring` is `boolean | null` and a null interpolates as the STRING
- * "null" — which the decoder's `adScoring === "true"` reads as a confident
- * `false`. That is a wrong answer that looks like a real one, and it is the
- * exact failure `tournament-form.tsx`'s header records: format arrived as
- * `{}`, `adScoring` arrived null, and every tournament video failed submission
- * long after the coach had left. The draft's answer is an explicit `false`, so
- * that is what the control carries.
+ * Two shapes rather than a name beside a nullable row, so the name and the
+ * row cannot disagree: a directory pick carries the row and nothing else — its
+ * name is read off the row wherever it is printed — and a typed opponent
+ * carries the text and no row. `createDual` takes the two apart again at
+ * submit (T23): the squad-qualified `programDisplayName` and the key for a
+ * pick, the text and a null key for the rest.
  */
-const FORMAT_VALUE = "3|false";
+export type ChosenSchool =
+  | { kind: "program"; program: ProgramSearchResult }
+  | { kind: "text"; name: string };
 
 /**
- * `2b` — step two of a new dual: the master–detail builder, from fixtures.
+ * One row of the Format control: the option it is, and what it means.
+ *
+ * ── Why this is a table and not an encoding ────────────────────────────────
+ * The dormant `dual-form.tsx` carries the format through a `<select>` as the
+ * string `"<bestOf>|<adScoring>"` and decodes it with `format.split("|")` →
+ * `Number(bestOf)` and `adScoring === "true"`. Until this change the cell here
+ * held the same string, hard-coded to `"3|false"` — because `adScoring` is
+ * `boolean | null` on `EventFormat`, a null interpolates into that string as
+ * the four characters `null`, and `=== "true"` reads those as a confident
+ * `false`: a wrong answer that looks like a real one. That is the recorded
+ * cause of a real outage — format arrived as `{}`, `adScoring` arrived null,
+ * and every tournament video failed vendor submission long after the coach had
+ * left. See `docs/ui-revamp-guardrails.md` §3.1 and §4, and `TournamentFormat`
+ * in `static-tournament-builder.tsx`, which made this same call first.
+ *
+ * So there is no encoding to get wrong. `value` is an opaque option name that
+ * is only ever compared, never parsed; `bestOf` and `adScoring` are stated as
+ * literals in `FORMATS` and travel as themselves. `adScoring` is typed
+ * `boolean` rather than `boolean | null`, which makes "the control carries a
+ * real boolean" a compile error to break rather than a convention to
+ * remember: no null can be assigned into this shape, so none can reach
+ * `createDual`'s `format` jsonb.
+ *
+ * `sets` and `scoring` are the two strings `2b` prints — the sets half inside
+ * the underline, the scoring half under it. Both are read off the chosen row,
+ * so the label and the value cannot drift into disagreeing about which format
+ * this dual is.
+ */
+interface DualFormat {
+  /** The `<select>` option's value — matched against, never split. */
+  value: string;
+  /** What the dropdown lists, once open. */
+  label: string;
+  /** What the closed cell prints. */
+  sets: string;
+  /** What prints under the underline. */
+  scoring: string;
+  bestOf: number;
+  adScoring: boolean;
+}
+
+/**
+ * The four formats the control offers.
+ *
+ * `2b` draws one — "Best of 3 sets" over "No-ad scoring" — and no dropdown
+ * contents, so the other three are built from vocabulary that already exists
+ * rather than invented: "One set", "ad" and "no-ad" are the dormant
+ * `FORMATS`' words, in that table's order. The first row is what the artboard
+ * draws, and what a new dual opens on.
+ */
+const FORMATS: readonly DualFormat[] = [
+  {
+    value: "bo3-no-ad",
+    label: "Best of 3 sets · no-ad",
+    sets: "Best of 3 sets",
+    scoring: "No-ad scoring",
+    bestOf: 3,
+    adScoring: false,
+  },
+  {
+    value: "bo3-ad",
+    label: "Best of 3 sets · ad",
+    sets: "Best of 3 sets",
+    scoring: "Ad scoring",
+    bestOf: 3,
+    adScoring: true,
+  },
+  {
+    value: "one-set-no-ad",
+    label: "One set · no-ad",
+    sets: "One set",
+    scoring: "No-ad scoring",
+    bestOf: 1,
+    adScoring: false,
+  },
+  {
+    value: "one-set-ad",
+    label: "One set · ad",
+    sets: "One set",
+    scoring: "Ad scoring",
+    bestOf: 1,
+    adScoring: true,
+  },
+];
+
+/** What `2b` draws: best of 3, no-ad. Explicit — never a default standing in
+ *  for a null. */
+const DEFAULT_FORMAT = FORMATS[0];
+
+/**
+ * The three sites a dual can be at, labelled as the dormant form labels them
+ * and in its order. `EventSite` on `value`, so the union is checked here rather
+ * than cast at the change handler.
+ */
+const SITES: readonly { value: EventSite; label: string }[] = [
+  { value: "home", label: "Home" },
+  { value: "away", label: "Away" },
+  { value: "neutral", label: "Neutral" },
+];
+
+/**
+ * The surfaces a dual can be on — `programs.default_surface`'s own vocabulary,
+ * which is the settings form's `SURFACE_OPTIONS` (`team-settings-form.tsx`).
+ *
+ * Not the dormant form's "Hard"/"Indoor hard" list: the column stores the
+ * lowercase key, this cell opens on that column's value, and the event page
+ * prints `event.surface` verbatim — so a dual written from here has to spell
+ * its surface the way the program's default already does, or one schedule
+ * reads "hard" on one row and "Hard" on the next. The first option is none,
+ * under the app's own glyph for an absent value; `createDual` stores it as a
+ * null column.
+ */
+const SURFACES: readonly { value: string; label: string }[] = [
+  { value: "", label: "—" },
+  { value: "hard", label: "Hard" },
+  { value: "clay", label: "Clay" },
+  { value: "grass", label: "Grass" },
+  { value: "carpet", label: "Carpet" },
+];
+
+/** The four facts `2b`'s top row asks for, held as what the coach entered. */
+interface DualDraft {
+  /** YYYY-MM-DD, as `program_events.starts_on` stores it. */
+  date: string;
+  site: EventSite;
+  /** One of `SURFACES`' values; `""` is none. */
+  surface: string;
+  format: DualFormat;
+}
+
+/**
+ * Local today, in the `YYYY-MM-DD` shape a date input and the column share.
+ * `static-tournament-builder.tsx`'s own, repeated rather than exported from a
+ * screen: `toISOString()` is UTC and puts a dual on yesterday for anyone west
+ * of Greenwich after dinner.
+ */
+function todayISO(): string {
+  const now = new Date();
+  return [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+/**
+ * `2b` — step two of a new dual: the master–detail builder.
  *
  * The conference stays on the left while the fixture fills in on the right, so
  * the answer step one asked for is revisable without a screen hop. Date, site,
@@ -62,97 +205,123 @@ const FORMAT_VALUE = "3|false";
  * artboard draws different numbers. Where the design and the shell disagree the
  * design wins.
  *
- * ── Static ─────────────────────────────────────────────────────────────────
- * Nothing here fetches and nothing here writes. `dual-form.tsx` is the DB-wired
- * implementation of this same screen — its own header describes 2b — and stays
- * exactly where it is, dormant, along with `OpponentRail` and `LineupEditor`.
- * This component imports none of them; the rows come from
- * `RAIL_SCHOOLS` / `DUAL_DRAFT_LINES` / `DUAL_DRAFT_EVENT` in
- * `lib/schedule/fixtures.ts`, and the nine lines are typed as the same
- * `LineupLine` the dormant editor takes.
+ * ── Reading again, as of the schedule re-wiring ────────────────────────────
+ * The school is the one step one chose — a `ChosenSchool`, handed down by
+ * `static-dual-builder.tsx`, which holds nothing else. It names the header,
+ * the rail's check, the subline, the footer and the popup, and every one of
+ * those reads the same object, so they cannot drift. This used to be a module
+ * const pinned to Ridgeline, and that const was the fix for a real defect:
+ * step two's date, site, format and nine lines were Ridgeline's fixtures,
+ * drawn and unvarying, so a header that followed step one's pick put one
+ * school's name over another school's data. The pin comes out now because the
+ * data travels with the school — see below — not because the guard was
+ * unwanted.
  *
- * The sidebar and the 44px "Meridian State › Schedule › New dual" topbar the
- * artboard draws are the app's own chrome and already on screen.
+ * Date, site, surface and format are controlled state, opened on today, home,
+ * the program's `default_surface` and `2b`'s own format. The rail lists the
+ * real conference — `getConferenceTable`'s rows, own program already dropped —
+ * with the chosen school checked, and pins that school on top when it is not
+ * a conference row: a searched school, or a club side typed past the
+ * directory. Sublines are this program's own head-to-head, from
+ * `opponentDualHistory()`. All of it arrives through `useNewDualData()`; the
+ * route reads once for both steps.
  *
- * ── What is drawn and what is wired ────────────────────────────────────────
- * Four things on this screen are pictures of controls, for the same reason
- * `2c`'s search field is:
+ * The nine lines are still `DUAL_DRAFT_LINES`, the design's sample lineup for
+ * OUR side. They are not the opponent's data, so no school's name sits over
+ * them wrongly — but they are a lineup nobody on this program entered, and
+ * seeding them from the ladder and editing them is T23, which also calls
+ * `createDual`. `dual-form.tsx` is the dormant DB-wired implementation of that
+ * half and stays where it is until then.
  *
- *   the rail rows       `2b` gives the five unselected rows a hover wash and no
- *                       `cursor:pointer`. Re-targeting a dual is not a
- *                       highlight — `dual-form.tsx`'s `takeOpponent` has to
- *                       clear every opposing name typed against the old school
- *                       or a name can silently attach to a real, different
- *                       person at the new one — and none of that is drawn here.
- *   date/site/surface   Underlined cells with a trailing glyph. A native
- *                       `<input type="date">` cannot render "09-26", and a
- *                       `<select>` over three sites that commits nothing is a
- *                       control whose only effect is to disagree with the
- *                       artboard.
- *   Format              See `FORMAT_VALUE` above — the drawn label is the sets
- *                       half only, so no native `<select>` can both carry the
- *                       whole encoding and print what `2b` prints.
+ * ── What is a control and what is still a picture ──────────────────────────
+ *   date/site/surface   Real: an `<input type="date">` and two native
+ *                       `<select>`s under the artboard's own underline
+ *                       treatment, with the drawn glyph beside each.
+ *   Format              Real, and the one cell a plain native select could not
+ *                       draw: `2b` prints the sets half inside the underline
+ *                       and the scoring half BELOW it, and a select prints one
+ *                       label. So the select is a real one laid over the cell
+ *                       at `opacity:0` — it owns the click, the keyboard and
+ *                       the dropdown — while the two strings the cell prints
+ *                       are read off the chosen `FORMATS` row underneath it.
+ *   the rail rows       Still drawn: a hover wash and no `cursor:pointer`,
+ *                       which is what `2b` gives the unselected rows. A row
+ *                       that re-targeted the dual would have to clear every
+ *                       opposing name typed against the old school AND swap
+ *                       the popup's saved roster for the new school's, or a
+ *                       name can silently attach to a real, different person
+ *                       at the new one — that second half is T23's, so the
+ *                       rows wait for it. The search field above them is a
+ *                       picture for the same reason.
  *   "Create dual"       Inert. Creating writes nine lines to the database,
- *                       which this run does not do, and lands on
- *                       `/dashboard/team/schedule/[eventId]`, which is outside
- *                       the set of screens rebuilt here.
+ *                       which is T23's, and lands on
+ *                       `/dashboard/team/schedule/[eventId]`.
  *
- * The opponent cells ("Add name" / "Add pair") are the one exception, and the
- * only live control on this screen: `2d` and `2e` draw the popup behind them,
- * so each cell is an `OpponentPopup` (T7). It writes to the row's own local
- * state and nowhere else — no fixture is mutated, nothing is persisted, and a
- * reload is back to nine unnamed lines.
+ * The opponent cells ("Add name" / "Add pair") are live: each is an
+ * `OpponentPopup` (T7) writing to the row's own local state and nowhere else.
+ * It is handed this school's name and NO saved roster — `candidates` is empty
+ * until T23 fetches the school's own pool, so `2d`'s "already has a close name
+ * saved" card cannot appear yet, and no fixture person can be offered under a
+ * real school. That is deliberate: the popup's school and its roster must
+ * travel together or it dedupes against the wrong pool, and a fixture roster
+ * under a real name is exactly that.
  *
  * ── What the design draws that this app cannot know ────────────────────────
- * "18–4" and its five siblings on the rail are each opponent's OWN season
+ * "18–4" and its five siblings on the rail were each opponent's OWN season
  * record, from matches this program never saw — `opponent-history.ts`'s header
- * says outright that the figure does not exist anywhere in this app. Drawn
- * because the artboard draws it, held as the literal string the design wrote,
- * and reported. The head-to-head half beside it ("you lead 3–1") IS the app's
- * own vocabulary, through `formatOpponentRecord`.
+ * says outright that the figure does not exist anywhere in this app. The slot
+ * is gone rather than filled, the same call `2c` made in the previous task:
+ * the rail's subline is squad · head-to-head now, two facts instead of three.
  */
-/**
- * The school `2b` draws, and the only one it can draw.
- *
- * `RAIL_SCHOOLS[0]` is `CONFERENCE_SCHOOLS[0]` by reference — the same
- * Ridgeline row `2c` lists and this rail draws checked — so the header's name
- * and the rail's tick cannot drift apart. It is read from the rail rather than
- * passed in, and that is the fix for a real defect: this screen's date, site,
- * format and nine lines are Ridgeline's, drawn and fixed, so a header that
- * followed `2c`'s selection put one school's name over another school's data
- * for four of the five rows `2c` offers.
- *
- * The artboard has one path; the reproduction has one path. The header
- * following the selection was invented beyond the design, not required by it.
- *
- * **The re-wiring must undo this.** Once a real dual is being built, the
- * school genuinely does travel from step one, and this constant becomes the
- * prop it used to be — alongside `DUAL_DRAFT_EVENT` and `DUAL_DRAFT_LINES`,
- * which become the event and lineup under construction. Re-pointing the
- * loaders without re-threading the school would pin every new dual to
- * Ridgeline.
- */
-const DUAL_DRAFT_SCHOOL: DirectorySchool = RAIL_SCHOOLS[0];
+export function DualBuildStep({ school }: { school: ChosenSchool }) {
+  const { ourConference, conferencePrograms, historyEntries, defaultSurface } =
+    useNewDualData();
 
-export function DualBuildStep() {
-  const { program } = DUAL_DRAFT_SCHOOL;
+  const [draft, setDraft] = useState<DualDraft>(() => ({
+    date: todayISO(),
+    site: "home",
+    // The program's own default, or none — not "Hard". A court type nobody
+    // stated is a fact about the fixture we would be inventing.
+    surface: defaultSurface ?? "",
+    format: DEFAULT_FORMAT,
+  }));
 
-  // Decoded back the way `dual-form.tsx:266` decodes it — `split("|")`, then
-  // `Number()` on the first half and `=== "true"` on the second. The two
-  // strings `2b` prints are that round trip, so the label and the value cannot
-  // drift into disagreeing about which format this dual is.
-  const [encodedBestOf, encodedAdScoring] = FORMAT_VALUE.split("|");
-  const formatSets = `Best of ${Number(encodedBestOf)} sets`;
-  const formatScoring =
-    encodedAdScoring === "true" ? "Ad scoring" : "No-ad scoring";
+  function edit(patch: Partial<DualDraft>) {
+    setDraft((current) => ({ ...current, ...patch }));
+  }
+
+  const histories = useMemo(() => new Map(historyEntries), [historyEntries]);
+
+  const program = school.kind === "program" ? school.program : null;
+  const schoolName =
+    school.kind === "program" ? school.program.schoolName : school.name;
+  // `OpponentTarget.key`'s mechanism (`opponent-name-cell.tsx`): every name on
+  // a line is typed against ONE school, and this key rides in each row's React
+  // key so a change of school remounts the row and drops the name with it.
+  const schoolKey =
+    school.kind === "program"
+      ? `program:${school.program.programKey}`
+      : `text:${school.name}`;
 
   // "Big Ten · D-I" — conference first. `programSubtitle()` prints the two the
   // other way round ("D-I · Big Sky") and four claim-flow call sites depend on
   // that order, so this composes its own rather than reversing a shared helper
-  // for one screen. The artboard's order, and reported.
-  const headerSubline = [program.conference, divisionLabel(program.division)]
-    .filter(Boolean)
-    .join(" · ");
+  // for one screen. The artboard's order, and reported. Only a directory row
+  // knows either, so a typed opponent renders no subline rather than an
+  // invented one.
+  const headerSubline = program
+    ? [program.conference, divisionLabel(program.division)]
+        .filter(Boolean)
+        .join(" · ")
+    : "";
+
+  // The chosen school always has a row carrying the check. When it is a
+  // conference row that row is it; when it is not — a searched school, or a
+  // club side typed past the directory — it is pinned on top rather than
+  // silently absent. The dormant `OpponentRail`'s rule.
+  const pinned =
+    program === null ||
+    !conferencePrograms.some((row) => row.programKey === program.programKey);
 
   // A line counts once our side is named, and a forfeited line counts with
   // nobody named on either side — `dual-form.tsx`'s rule, which is why the
@@ -176,9 +345,7 @@ export function DualBuildStep() {
         <div className="flex w-80 min-h-0 shrink-0 flex-col border-r border-[var(--border-hairline)]">
           <div className="px-5 pb-3 pt-[18px]">
             <span className="eyebrow">Opponent</span>
-            {/* Drawn, not wired — see the header. A field that took keystrokes
-                over six fixture rows would be a worse lie than a picture of
-                one, the same call `2c`'s search field gets. */}
+            {/* Drawn, not wired — see the header. */}
             <div className="mt-2.5 flex h-8 items-center gap-[9px] rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-2.5">
               <Search
                 size={14}
@@ -189,17 +356,43 @@ export function DualBuildStep() {
                 className="text-[12px]"
                 style={{ color: "var(--ink-600)" }}
               >
-                {OUR_CONFERENCE} · type to search all
+                {/* The artboard's sentence in full where the program has a
+                    conference to name, and its second half alone where it
+                    does not — never a separator with nothing before it. */}
+                {ourConference
+                  ? `${ourConference} · type to search all`
+                  : "type to search all"}
               </span>
             </div>
           </div>
 
           <div className="min-h-0 flex-1 overflow-auto px-3 pb-3">
-            {RAIL_SCHOOLS.map((row) => (
+            {pinned ? (
               <RailRow
-                key={row.program.programKey}
-                school={row}
-                selected={row.program.programKey === program.programKey}
+                name={schoolName}
+                subline={
+                  program
+                    ? railSubline(program, histories)
+                    : // "unlisted" is the dormant rail's own word for a typed
+                      // opponent, and `2c`'s escape row's. No squad — nothing
+                      // said one. Looked up under the typed text, which is the
+                      // name a free-text dual is recorded under.
+                      [
+                        "unlisted",
+                        formatOpponentRecord(
+                          opponentHistoryFor(histories, schoolName)
+                        ),
+                      ].join(" · ")
+                }
+                selected
+              />
+            ) : null}
+            {conferencePrograms.map((row) => (
+              <RailRow
+                key={row.programKey}
+                name={row.schoolName}
+                subline={railSubline(row, histories)}
+                selected={program?.programKey === row.programKey}
               />
             ))}
           </div>
@@ -221,7 +414,7 @@ export function DualBuildStep() {
                   className="min-w-0 truncate text-[30px] font-light leading-none tracking-[-0.6px]"
                   style={{ color: "var(--ink-900)" }}
                 >
-                  {program.schoolName}
+                  {schoolName}
                 </span>
               </div>
             </div>
@@ -237,38 +430,67 @@ export function DualBuildStep() {
 
           <div className="grid grid-cols-4 gap-6">
             <FieldCell label="Date" glyph="calendar">
-              <span className="mono text-[13px] text-[var(--ink-900)]">
-                {/* "09-26", not `formatEventSpan`'s "26 Sep". The artboard's
-                    cell is month and day, so the year on the draft's
-                    `startsOn` is sliced off rather than formatted — the same
-                    slice `2c`'s last-played cell takes. */}
-                {DUAL_DRAFT_EVENT.startsOn.slice(5)}
-              </span>
+              {/* `2b` draws "09-26", month and day; a native date input
+                  prints the platform's own form of the same value. The
+                  tournament builder made the same trade on its two dates. */}
+              <input
+                type="date"
+                value={draft.date}
+                onChange={(event) => edit({ date: event.target.value })}
+                className="mono w-full bg-transparent text-[13px] text-[var(--ink-900)] outline-none"
+              />
             </FieldCell>
 
             <FieldCell label="Site" glyph="chevron">
-              <span className="text-[13px] text-[var(--ink-900)]">
-                {siteTitle(DUAL_DRAFT_EVENT.site)}
-              </span>
+              <FieldSelect
+                value={draft.site}
+                options={SITES}
+                onChange={(value) => {
+                  const chosen = SITES.find((option) => option.value === value);
+                  if (chosen) edit({ site: chosen.value });
+                }}
+              />
             </FieldCell>
 
             <FieldCell label="Surface" glyph="chevron">
-              <span className="text-[13px] text-[var(--ink-900)]">
-                {/* The fixture holds the dataset's own lowercase "hard" — 7d
-                    draws it that way in a facts line. `2b` draws it as a
-                    field's value, title-cased, so it is title-cased here: the
-                    same treatment `siteTitle()` gives site one cell over. */}
-                {DUAL_DRAFT_EVENT.surface ? capitalize(DUAL_DRAFT_EVENT.surface) : ""}
-              </span>
+              <FieldSelect
+                value={draft.surface}
+                options={SURFACES}
+                onChange={(value) => edit({ surface: value })}
+              />
             </FieldCell>
 
             {/* `2b` draws the ad half BELOW the underline rather than inside
-                the value, which is the whole reason no native `<select>` can
-                print this cell — see `FORMAT_VALUE`. */}
-            <FieldCell label="Format" glyph="chevron" note={formatScoring}>
+                the value — see the header for how the select is laid over
+                the cell rather than being it. */}
+            <FieldCell
+              label="Format"
+              glyph="chevron"
+              note={draft.format.scoring}
+            >
               <span className="text-[13px] text-[var(--ink-900)]">
-                {formatSets}
+                {draft.format.sets}
               </span>
+              <select
+                aria-label="Format"
+                value={draft.format.value}
+                onChange={(event) => {
+                  // The chosen ROW, not a parse of the chosen string. This is
+                  // the only assignment `format` has, and every row of that
+                  // table states `adScoring` as a literal boolean.
+                  const chosen = FORMATS.find(
+                    (option) => option.value === event.target.value
+                  );
+                  if (chosen) edit({ format: chosen });
+                }}
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+              >
+                {FORMATS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </FieldCell>
           </div>
 
@@ -277,6 +499,8 @@ export function DualBuildStep() {
             note="six required · from your ladder"
             lines={singles}
             addLabel="Add name"
+            schoolKey={schoolKey}
+            schoolName={schoolName}
           />
 
           <div>
@@ -285,6 +509,8 @@ export function DualBuildStep() {
               note="three required · pairs carried from singles"
               lines={doubles}
               addLabel="Add pair"
+              schoolKey={schoolKey}
+              schoolName={schoolName}
             />
             <div
               className="text-micro mt-2.5"
@@ -310,7 +536,7 @@ export function DualBuildStep() {
         <div className="flex-1" />
         <span className="text-[11px]" style={{ color: "var(--ink-600)" }}>
           Creates <span className="tabular">{lineCount}</span>{" "}
-          {lineCount === 1 ? "line" : "lines"} vs {program.schoolName}
+          {lineCount === 1 ? "line" : "lines"} vs {schoolName}
         </span>
         {/* Inert — see the header. A button rather than a span because this is
             the screen's one primary action and the artboard draws it as the
@@ -324,31 +550,47 @@ export function DualBuildStep() {
 }
 
 /**
+ * A rail row's subline: squad · how it has gone against us.
+ *
+ * The history is looked up under the name a dual is actually recorded under —
+ * `programDisplayName()`, squad-qualified — and under nothing else. Step one's
+ * `historyForProgram` (`dual-school-step.tsx`) explains why there is
+ * deliberately no fall back to the bare school name: a school fielding both
+ * squads is two rows here, and a record keyed on the bare name would print
+ * on both of them.
+ */
+function railSubline(
+  program: ProgramSearchResult,
+  histories: Map<string, OpponentDualHistory>
+): string {
+  const history = opponentHistoryFor(
+    histories,
+    programDisplayName(program.schoolName, program.team)
+  );
+  return [teamLabel(program.team), formatOpponentRecord(history)].join(" · ");
+}
+
+/**
  * One rail row.
  *
- * Subline is squad · their own season · how it has gone against us —
- * `teamLabel`, the fixture's literal `seasonRecord`, and
+ * Subline is squad · how it has gone against us — `teamLabel` and
  * `formatOpponentRecord`. No conference and no division: `2b` keeps those for
- * the detail header, unlike `2c`'s list, which prints one of them per row.
+ * the detail header, unlike `2c`'s list, which prints one of them per row. And
+ * no season record — see the header.
  *
  * The selected row is not washed — it is weighted and carries a blue check,
  * which is the whole of what the artboard distinguishes it by — and it is the
  * one row with no hover state.
  */
 function RailRow({
-  school,
+  name,
+  subline,
   selected,
 }: {
-  school: DirectorySchool;
+  name: string;
+  subline: string;
   selected: boolean;
 }) {
-  const { program, history, seasonRecord } = school;
-  const subline = [
-    teamLabel(program.team),
-    seasonRecord,
-    formatOpponentRecord(history),
-  ].join(" · ");
-
   return (
     <div
       className={cn(
@@ -364,7 +606,7 @@ function RailRow({
             selected ? "font-medium" : null
           )}
         >
-          {program.schoolName}
+          {name}
         </div>
         <div
           className="text-micro mt-0.5 truncate"
@@ -386,14 +628,17 @@ function RailRow({
 
 /**
  * One underlined fact — `2b` draws all four the same way, with a trailing
- * glyph that says how it would be answered.
+ * glyph that says how it is answered.
+ *
+ * A `<label>` rather than a `<div>`, now that every cell holds a real control:
+ * the eyebrow is the control's name, so it labels it rather than sitting beside
+ * it. The underlined row is `relative` so the Format cell's overlaid select
+ * has something to fill.
  *
  * Not `field-row.tsx`'s `FieldCellText`/`FieldCellSelect`: those are 25b's row
  * and carry its `FieldRow` spacing (`mt-3.5`, `gap-8`) where this artboard
- * draws a plain four-up at `gap:24px`, and they render real inputs — see the
- * header for why these are drawn. Everything below the label matches those
- * cells exactly, `pt-1.5 pb-[7px]` and a 12px glyph included, so the two read
- * as one control when the screen is re-wired.
+ * draws a plain four-up at `gap:24px`. Everything below the label matches those
+ * cells exactly, `pt-1.5 pb-[7px]` and a 12px glyph included.
  */
 function FieldCell({
   label,
@@ -408,25 +653,25 @@ function FieldCell({
   children: React.ReactNode;
 }) {
   return (
-    <div>
+    <label className="block">
       <span className="eyebrow">{label}</span>
-      <div className="flex items-center border-b border-[var(--border-hairline)] pb-[7px] pt-1.5">
+      <span className="relative flex items-center border-b border-[var(--border-hairline)] pb-[7px] pt-1.5">
         {children}
-        <div className="flex-1" />
+        <span className="flex-1" />
         {glyph === "calendar" ? (
           <Calendar
             size={12}
             strokeWidth={1.5}
-            className="shrink-0 text-[var(--ink-400)]"
+            className="pointer-events-none shrink-0 text-[var(--ink-400)]"
           />
         ) : (
           <ChevronDown
             size={12}
             strokeWidth={1.5}
-            className="shrink-0 text-[var(--ink-400)]"
+            className="pointer-events-none shrink-0 text-[var(--ink-400)]"
           />
         )}
-      </div>
+      </span>
       {note ? (
         <span
           className="text-micro mt-[5px] block"
@@ -435,7 +680,37 @@ function FieldCell({
           {note}
         </span>
       ) : null}
-    </div>
+    </label>
+  );
+}
+
+/**
+ * The Site and Surface cells: a native `<select>` under the artboard's own
+ * underline treatment, so the value the app will store is in the document
+ * rather than implied by a label. `appearance-none` is what stops the platform
+ * drawing a second chevron beside `FieldCell`'s.
+ */
+function FieldSelect({
+  value,
+  options,
+  onChange,
+}: {
+  value: string;
+  options: readonly { value: string; label: string }[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className="w-full cursor-pointer appearance-none bg-transparent text-[13px] text-[var(--ink-900)] outline-none"
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -445,11 +720,16 @@ function LineupBlock({
   note,
   lines,
   addLabel,
+  schoolKey,
+  schoolName,
 }: {
   title: string;
   note: string;
   lines: LineupLine[];
   addLabel: string;
+  /** `OpponentTarget.key` — see `DualBuildStep`. Rides in every row's key. */
+  schoolKey: string;
+  schoolName: string;
 }) {
   return (
     <div>
@@ -462,18 +742,16 @@ function LineupBlock({
       <div className="mt-1 flex flex-col">
         {lines.map((line, index) => (
           <LineRow
-            // The program key rides in the row key on purpose, and it is
-            // `OpponentTarget.key`'s mechanism (`opponent-name-cell.tsx`):
-            // every name on this row was typed against ONE school, and
+            // The school's key rides in the row key on purpose: every name on
+            // this row was typed against ONE school, and
             // `contribute_opponent_player` matches by name WITHIN the target
-            // program, so a name that survived a re-target could attach to a
-            // real, different person at the new school. Re-targeting cannot
-            // happen while the school is a module const — but when the
-            // re-wiring makes it travel again, this key already remounts the
-            // row and drops the resolved name with it. Nothing to remember.
-            key={`${DUAL_DRAFT_SCHOOL.program.programKey}:${line.key}`}
+            // program, so a name that survived a change of school could
+            // attach to a real, different person at the new one. This key
+            // remounts the row and drops the resolved name with it.
+            key={`${schoolKey}:${line.key}`}
             line={line}
             addLabel={addLabel}
+            schoolName={schoolName}
             last={index === lines.length - 1}
           />
         ))}
@@ -493,7 +771,7 @@ const LINE_GRID = "grid grid-cols-[34px_1fr_20px_1fr_70px] items-center gap-2.5"
  * row of each block without the rule and without the hover wash; both follow
  * `last`.
  *
- * ── The one piece of state on this screen ──────────────────────────────────
+ * ── The one piece of per-row state on this screen ──────────────────────────
  * The opposing name, and it lives HERE rather than in a map upstream. The
  * failure this screen has to be incapable of is a name landing on a line
  * nobody meant, and a keyed map is where that happens: one stale key, one
@@ -514,10 +792,12 @@ const LINE_GRID = "grid grid-cols-[34px_1fr_20px_1fr_70px] items-center gap-2.5"
 function LineRow({
   line,
   addLabel,
+  schoolName,
   last,
 }: {
   line: LineupLine;
   addLabel: string;
+  schoolName: string;
   last: boolean;
 }) {
   const forfeited = line.forfeit !== null;
@@ -579,12 +859,16 @@ function LineRow({
           value={theirLabel}
           addLabel={addLabel}
           discipline={line.discipline}
-          // The header's name and the rail's tick read the same object, and so
-          // does `2e`'s confirmation. One school, one source, no drift.
-          schoolName={DUAL_DRAFT_SCHOOL.program.schoolName}
-          schoolShortName={DUAL_DRAFT_OPPONENT_SHORT}
-          candidates={DUAL_DRAFT_SAVED_ROSTER}
-          draftName={DUAL_DRAFT_TYPED_NAME}
+          // The header's name, the rail's tick and `2e`'s confirmation all
+          // read the one school step one chose. `programs` holds no short
+          // form of a name, so the full name serves for both.
+          schoolName={schoolName}
+          schoolShortName={schoolName}
+          // No saved roster until T23 fetches this school's own — see the
+          // header. An empty list is the popup's "nothing to warn about"
+          // state, not an error.
+          candidates={[]}
+          draftName=""
           onCommit={setTheirLabel}
           onActiveChange={setActive}
         />

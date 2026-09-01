@@ -2061,3 +2061,97 @@ directions.
 2. The dormant `school-search.tsx` still carries the two-lookup crossover.
    T23 deletes that file; if that changes, fix it there rather than leaving it
    to be copied again.
+
+## T22 · Carry the chosen school into step two, and make the format control real — done
+
+**gate:** lint clean (37 warnings, the baseline) · `tsc --noEmit` clean ·
+`npm test` green (260) · `npm run build` green.
+`task-completion-reviewer` → **VERDICT: pass**; it verified the
+zero-retirement claim by diffing HEAD's spec rather than accepting it.
+Guardrails: `pipeline-guardrails-reviewer` **ran** and found no violations —
+`rls-boundary-reviewer` **skipped**, the diff is three client components and a
+spec, with no query, no `src/lib/data/`, `src/lib/supabase/`, `src/app/api/`
+or migration file.
+
+**both recorded hazards are closed, and the reviewer confirmed closed rather
+than relocated.**
+
+*Trap 2 of 3 — the format encoding.* The `"<bestOf>|<adScoring>"` string is
+gone from this screen entirely, the same answer T20 reached on the tournament
+side. `FORMATS` is a table of rows carrying literal `bestOf` and
+`adScoring: boolean` — non-nullable, so a null is a compile error rather than
+a convention — and the `<select>`'s value is an opaque option name compared,
+never split. The reviewer traced the value's real destination to confirm this
+mattered: `program_events.format` → `schedule-server.ts` → the upload wizard's
+preset at `upload/page.tsx:219` → `job-request.ts`'s vendor payload. That is a
+live path from this screen to the submission §3.1/§4 protect, and nothing on
+it can now receive the string `"null"`.
+
+*The school pinning.* `schoolName`, `program` and `schoolKey` all derive from
+one `ChosenSchool` threaded from the shell's state, and the header, rail,
+footer and popup all read that one variable — they cannot disagree. The
+earlier defect this guard existed for (one school's name over another's drawn
+data) is not reintroduced: the reviewer checked the one fixture still
+rendered, `DUAL_DRAFT_LINES`, and confirmed it carries only our side —
+`theirLabels` empty on every line, popup `candidates={[]}` — so no other
+school's data renders beside the chosen identity.
+
+**one edit outside `files:`, flagged rather than hidden.**
+`dual-school-step.tsx` (23 lines): `onContinue` was typed `() => void`, so the
+chosen school could not leave step one at all and criterion 1 was structurally
+unreachable without changing it. The new signature `(name, program | null)`
+matches the dormant `SchoolSearch.onChosen` contract rather than inventing a
+shape, and T21's own header on that function said "Making it travel is the
+next task". The completion reviewer confirmed from `git show HEAD` that the
+old signature made the criterion impossible, and judged it a gap in the
+`files:` list rather than creep.
+
+**one control beyond the criteria.** Surface joined date, site and format as a
+controlled input — the fourth cell of the same drawn row, where leaving one
+cell a picture beside three real ones is its own defect. Its vocabulary is the
+settings form's stored values (`hard|clay|grass|carpet`), and the reviewer
+verified that is what `dual-detail.tsx` and `tournament-detail.tsx` print
+verbatim, so no casing mismatch reaches a later screen. It opens on the
+program's `default_surface`, never a hard-coded "Hard".
+
+**criterion 1, path by path.** Conference row; directory hit outside the
+conference (pinned above the conference rows); row then Enter; text then
+Enter; text then Continue; the escape row; and the subtle one — a row picked
+and *then* the escape row clicked, which yields the typed text, matching that
+row's own label. Nothing typed and nothing picked leaves Continue disabled.
+
+**spec:** **zero retirements**, +16/−0, `drawn()` count unchanged at 126. The
+literals the task predicted losing (the Ridgeline strings, `09-26`, the format
+label) turn out to be asserted through `fixtures.ts` reads, not through this
+component's source — the completion reviewer confirmed that against HEAD.
+Two held-notes added instead, recording that those assertions now describe the
+design record rather than the live screen. Rule 9 held.
+
+**Verification touched the live database and was cleaned up.** One ephemeral
+staff user; ZZ's `conference`/`division` lent values again, since both are
+null and the conference list and pills need them. Restored. Re-checked from
+this session: 1,941 programs, 5 events, 33 entries, ZZ 0 players and
+conference/division both null, `auth.users` 14 — unchanged.
+
+**a real change to the database that was not ours.** Owned programs went 3 → 4
+and `program_members` 5 → 6 during this run: **Bakersfield College** was
+claimed by a pre-existing real account, the repo owner's own, mid-session. The
+subagent spotted the discrepancy against the baseline it was given, checked
+the timing and left it alone; confirmed independently from the runner that
+`auth.users` is unchanged at 14, so no ephemeral account was involved. Later
+baselines should read 4 owned / 6 members.
+
+**follow-ups:**
+1. The opponent popup now receives the real school and an **empty** roster —
+   `2d`'s saved-name card is unreachable until T23 fetches that school's pool.
+   A fixture roster under a real name would have been trap 3, so it was
+   emptied rather than carried.
+2. Rail rows and the rail search field are still drawn and inert;
+   re-targeting from the rail needs the popup's roster to travel first (T23).
+3. The dormant form's squad-mismatch advisory (a men's coach picking the
+   women's row) is not drawn on `2b`. Worth deciding in T23, before
+   `createDual`.
+4. `CreateDualInput.adScoring` in `actions.ts` is still typed
+   `boolean | null`, because the dormant `dual-form.tsx` can still pass null.
+   Once T23 deletes that file, the type can narrow to `boolean` and match what
+   both builders now produce.

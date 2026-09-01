@@ -374,7 +374,7 @@ list below instead.
 - **notes:** Dropping `seasonRecord` and "Region" applies the brief's "nothing fabricates a figure": `opponent-history.ts` says that record "does not exist anywhere in this app", and `programs` has no region column and no mapping to invent one from. The directory total is the one of the three that is backable. `school-search.tsx` is the dormant implementation of this screen — read it before writing.
 
 ## T22 · Carry the chosen school into step two, and make the format control real
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T21
 - **files:** `tests/schedule-static-copy.spec.ts`; `src/components/dashboard/schedule/static/static-dual-builder.tsx`, `src/components/dashboard/schedule/static/dual-build-step.tsx`
