@@ -47,7 +47,7 @@ ready).
 - **notes:** Plan step 2. Frame 46a lines 486–517. AiInsightCard + MatchStatisticsCard leave the render here but their files survive until T7.
 
 ## T3 · Statistics tab: momentum, rally length, point endings charts
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** src/components/dashboard/matches/match-detail/{performance-tracker-chart.tsx,rally-length-card.tsx,point-endings-card.tsx} (new), statistics-tab.tsx

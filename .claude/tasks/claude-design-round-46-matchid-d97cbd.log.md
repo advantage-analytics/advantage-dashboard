@@ -44,3 +44,14 @@ is the runner's. Newest entries at the bottom.
 2. `MatchStatisticsCard`'s `STAT_DESCRIPTIONS` tooltip copy wasn't carried over to the new rows (plain centered labels per the artboard) — if that copy is worth keeping, it needs a home before the old card is deleted.
 3. Service Games Won / Service Breaks could become derivable per-set by folding game winners off each game's last point; left out as too fragile for v1 (matches design.md open question #4).
 4. `match-kpi-row.tsx` imports `statRowAnchorId` from `match-statistics-card.tsx`, and neither is rendered anymore — both parked for T7, but confirm T7 deletes the pair together since the anchor contract they share is now dead.
+
+## T3 · Statistics tab: momentum, rally length, point endings charts — done
+
+**gate:** mechanical (lint/tsc/test) pass · task-completion-reviewer `VERDICT: pass` · pipeline-guardrails-reviewer clean, no findings · rls-boundary-reviewer skipped (no data/api/migration surface in diff)
+
+**changed:** New `performance-tracker-chart.tsx` (mirrored momentum area chart, viewBox `0 0 600 200`, clipPath-split you/opp fills, break-of-serve dashed verticals ported from `performance-tracker.tsx`'s `detectBreaks()` with two fixes — the final game now evaluated, tiebreak games skipped via a shared-server check), `rally-length-card.tsx` (marimekko banded by rallyLength 1–4/5–8/9+, width ∝ share, fill ∝ you-won%, dark tooltips summing to a "banded points only" header total), `point-endings-card.tsx` (two 100%-stacked bars, you first per `useMatchSides()`, resultType bucketing sourced from `calculate_match_stats`'s SQL predicate, Aces segment genuinely absent — not zero-hidden — for splitstep-derived matches since derivation never emits `'Ace'` at all). `statistics-tab.tsx` swaps the parked PerformanceTrackerCard for PerformanceTrackerChart and adds the two new cards in the artboard's order. `page.tsx` drops three now-dead props that only fed the old card. Every you/opp bucket across all three charts routes through `useMatchSides()`; both reviewers traced this explicitly per-file. Reduced motion via the repo's existing `useReducedMotion()` (framer-motion) pattern, opacity/pathLength only.
+
+**follow-ups (from the build subagent):**
+1. The momentum chart is hover-only; the retired `MomentumChartCompact` had full keyboard navigation (arrows/Home/End/Escape) and an aria-live readout. Worth restoring on the new chart before T7 deletes the old one, or explicitly deciding it's dropped.
+2. `MomentumChartCompact` (`matches/performance-tracker.tsx`) loses its only importer once T7 deletes `performance-tracker-card.tsx` — check whether it should go too.
+3. `lib/design/player-colors.ts` (`PLAYER_1`/`PLAYER_2`/`EVENT_ACCENT`) is player-order-keyed color, the exact shape guardrails §4 warns about — worth auditing its remaining call sites on a separate branch.

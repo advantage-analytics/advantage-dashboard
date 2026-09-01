@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import { reconcileBeforePageRead } from "@/lib/services/splitstep/reconcile";
 
 import { getMatchDetailData } from "@/lib/data/match-detail-server";
-import { shortName } from "@/lib/data/match-utils";
 import {
   isAnalysisFailed,
   isInFlight,
@@ -82,13 +81,6 @@ export default async function MatchDetailPage({ params }: PageProps) {
   const p1 = statsResult?.statistics?.player1Stats;
   const p2 = statsResult?.statistics?.player2Stats;
 
-  const p1Name = statsResult?.player1Name ?? match.player1.name;
-  const p2Name = statsResult?.player2Name ?? match.player2.name;
-  const p1Short = shortName(p1Name, 14);
-  const p2Short = shortName(p2Name, 14);
-
-  const matchDurationSec = match.durationSec ?? null;
-
   // A match whose video hasn't finished analysing has no stats to show. Every
   // section below would render zeroes, and an empty serve chart reads as "you
   // hit no serves" rather than "we're still working" — so the page stops at the
@@ -164,9 +156,6 @@ export default async function MatchDetailPage({ params }: PageProps) {
               summary={summary}
               statsPublished={statsPublished}
               isDerived={isDerived}
-              p1Name={p1Short}
-              p2Name={p2Short}
-              matchDurationSec={matchDurationSec}
             />
           ),
           shots: <ServePlacementCard />,
