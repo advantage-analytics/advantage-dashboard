@@ -332,7 +332,7 @@ list below instead.
 - **notes:** `StaticEventChooser` "reads nothing" per its route header, so no data wiring is expected here. If it turns out to need any, stop and report rather than inventing it.
 
 ## T19 · Tournament builder reads the roster
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T13
 - **files:** `src/app/dashboard/team/schedule/new/tournament/page.tsx`, `src/components/dashboard/schedule/static/static-tournament-builder.tsx`, `tests/schedule-static-copy.spec.ts`

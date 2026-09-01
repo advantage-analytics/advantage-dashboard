@@ -1731,3 +1731,73 @@ criterion an open gap.
    defect in this diff. It is the same staleness `page.tsx`'s docblock had, and
    it is the sort of thing T26's README sweep should catch — but T26 owns the
    README, not this comment.
+
+## T19 · Tournament builder reads the roster — done (re-run after amendment)
+
+**gate:** lint clean · `tsc --noEmit` clean · `npm test` green (260).
+`task-completion-reviewer` → **VERDICT: pass**. Guardrails: **both ran** —
+`pipeline-guardrails-reviewer` found no violations and judged the format
+rework "a genuine fix, not a relabeling"; `rls-boundary-reviewer` found no
+issues and confirmed the settings object is destructured to a single scalar
+before crossing into the client.
+
+**changed:** the route fetches again — `Promise.all([getLadder,
+getTeamSettings])`, handed down as `roster` and `defaultSurface`, the same two
+props `TournamentForm` took. The rail lists the real ladder; name, starts,
+ends, site and format are one controlled `draft`. Guards byte-identical.
+
+**the format encoding, which is the point of this task.** The old
+`"<bestOf>|<adScoring>"` string is gone from the file as executable code — the
+only `split("|")` left is prose in a doc comment explaining the hazard.
+`FORMATS` is a closed table of rows stating `bestOf`/`adScoring` as literals,
+the `<select>` carries an opaque option name compared and never parsed, and
+`TournamentFormat.adScoring` is typed `boolean`, so a null is a compile error
+rather than a convention. The guardrails reviewer traced whether §3.1's "do
+not simplify to boolean with a default" applies and ruled it does not: that
+instruction scopes to the wizard's five vendor-required fields, where null is
+a real "not yet answered" state; `CreateTournamentInput.adScoring` was already
+non-nullable at the point of creation, and the read-side
+`EventFormat.adScoring: boolean | null` is untouched for events predating the
+requirement. It also confirmed no laundering path — the wizard never reads a
+scheduled event's format to prefill its own.
+
+**criterion 6, the first exercise of rule 9 — retire, do not weaken.** Two
+assertions retired out of 129 (`drawn()` count 129 → 127), both in the `3c`
+block, each with a `RETIRED` comment giving its reason. Verified independently
+from the runner: `10-03` and `10-05` are genuinely absent from the component,
+and all six literals whose assertions were kept — `Buckeye Fall Classic`,
+`Neutral`, `Bo3 · ad`, `Tournament · name`, `Starts`, `Ends` — are still
+present. No matcher loosened, no scope narrowed, no `describe` skipped, no
+other block touched; the whole spec diff is 12 lines. The design's dates were
+deliberately **not** moved onto `TOURNAMENT_DETAIL`: nothing renders that
+fixture, so an assertion over it could not fail for anything this screen does
+— a green light with no wire behind it, which is what the spec's own header
+argues against. The reviewer independently confirmed `TOURNAMENT_DETAIL` is
+dead code and agreed retiring beat moving.
+
+**Live-DB check the runner added.** `rls-boundary-reviewer` had no Supabase MCP
+connection and verified the roster RPCs' scoping from `supabase/migrations/`,
+which runs ~100 behind live. Closed from the runner: `program_roster_full`,
+`program_roster` and `user_program_ids` all reference `user_program_ids()` in
+their **live** definitions and are `SECURITY DEFINER`, so the reviewer's claim
+holds against the database and not only against the folder.
+
+**Recovered from the stash rather than redone.**
+`git stash apply c4ac7d1e7aff3449eb7e21c12d9488f165beaef0` applied cleanly;
+only criterion 6 was new work. That stash is now redundant and was dropped
+after this commit. The subagent did not re-run the browser, and said so: the
+two source files are byte-identical to the stash that was browser-verified in
+the first run, and the identical loader pair is already live on the sibling
+`/new/single` route. It confirmed read-only that the first run's DB cleanup
+held, and created nothing this run.
+
+**follow-ups:**
+1. The `3c's roster rail and the field it feeds` test still asserts against
+   `TOURNAMENT_FIELD`'s array shape, which the component no longer imports —
+   it now checks fixture data disconnected from the live screen. It passes and
+   does not read the screen's source, so rule 9 correctly kept it, but both
+   the fixture and that test are vestigial. Belongs to whoever owns fixture
+   retirement (T26).
+2. `3c` still draws "3 Big Ten programs are in this field", which no table can
+   compute. No queue task owns removing it.
+3. `README.md` still describes this route's tree as static. T26 owns it.

@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { isProgramStaff } from "@/lib/workspace/types";
+import { getLadder } from "@/lib/data/roster-server";
+import { getTeamSettings } from "@/lib/data/team-settings-server";
 import { StaticTournamentBuilder } from "@/components/dashboard/schedule/static/static-tournament-builder";
 
 /**
@@ -8,22 +10,23 @@ import { StaticTournamentBuilder } from "@/components/dashboard/schedule/static/
  * the field is built from, so the roster fetch is not decoration here. Without
  * it the right pane has nothing to enter.
  *
- * ── Static as of the events-lineups rebuild ────────────────────────────────
- * The paragraph above describes the DB-wired body, which `TournamentForm` still
- * implements and which this route no longer runs: nothing here fetches. It used
- * to run `getLadder` and `getTeamSettings` in parallel and hand the results
- * down as `roster` and `defaultSurface`; both are gone with the fetch, and so
- * is the Surface cell that `defaultSurface` answered — `3c` draws Name, Starts,
- * Ends, Site and Format, and no surface or host field. The body is
- * `StaticTournamentBuilder`, rendering artboard `3c` from
- * `src/lib/schedule/fixtures.ts`.
+ * ── Back on the database, against the rebuilt body ─────────────────────────
+ * The `events-lineups` run re-pointed this route at `StaticTournamentBuilder`
+ * reading `src/lib/schedule/fixtures.ts`, so `3c` could be built without a
+ * query. The body stays; the fixtures go. The two loaders below are the
+ * pre-static read verbatim — `getLadder` and `getTeamSettings`, in parallel —
+ * and they arrive as the same two props `TournamentForm` always took.
  *
- * `tournament-form.tsx` and the `entry-editor.tsx` pair it composes
- * (`RosterRail`, `EntryList`) are the DB-wired implementation of this screen
- * and stay exactly where they are, dormant, along with the loaders they need
- * (`getLadder`, `getTeamSettings`) and the `createTournament` action they
- * write through. The re-wiring is this route reading again and handing
- * `TournamentForm` the same two props it always did.
+ * `defaultSurface` has no cell to fill. `3c` draws Name, Starts, Ends, Site and
+ * Format, and no surface or host field, so the value travels as the surface the
+ * created event will carry rather than as a control: `createTournament` takes a
+ * `surface`, and the program's own answer is the only non-invented one
+ * available. Nothing here defaults it to a court type the program never chose.
+ *
+ * Submitting is not wired yet — the builder holds its own draft and the Create
+ * button is still inert. `tournament-form.tsx` and the `entry-editor.tsx` pair
+ * it composes stay dormant where they are until that lands, along with the
+ * `createTournament` action they write through.
  *
  * The guards below are untouched.
  */
@@ -35,5 +38,15 @@ export default async function NewTournamentPage() {
   if (active.kind !== "team") redirect("/dashboard");
   if (!isProgramStaff(active)) redirect("/dashboard/team/schedule");
 
-  return <StaticTournamentBuilder />;
+  const [roster, settings] = await Promise.all([
+    getLadder(active.id),
+    getTeamSettings(active.id),
+  ]);
+
+  return (
+    <StaticTournamentBuilder
+      roster={roster}
+      defaultSurface={settings?.program.defaultSurface ?? null}
+    />
+  );
 }

@@ -666,12 +666,18 @@ test.describe('/dashboard/team/schedule/new/tournament · 3c', () => {
     drawn(builder, file, '${spot} · entered');
 
     drawn(builder, file, 'Tournament · name');
+    // Still drawn, as the name field's placeholder now rather than as text: a
+    // new tournament opens unnamed, and this is the string the empty cell shows.
     drawn(builder, file, 'Buckeye Fall Classic');
     drawn(builder, file, 'Starts');
     drawn(builder, file, 'Ends');
-    // Month and day, no year, on both date cells.
-    drawn(builder, file, '10-03');
-    drawn(builder, file, '10-05');
+    // RETIRED '10-03' — the Starts cell is an `<input type="date">` bound to the
+    //   draft now, so `3c`'s drawn sample date is no longer a literal in this
+    //   file. A date input has no placeholder to keep it in.
+    // RETIRED '10-05' — the same, on the Ends cell.
+    // Not moved onto `TOURNAMENT_DETAIL`, which still carries the design's
+    //   '2025-10-03'/'2025-10-05': nothing renders that fixture, so an
+    //   assertion over it could not fail for anything this screen does.
     drawn(builder, file, 'Neutral');
     // "Bo3 · ad" — best of 3, AD scoring, which is the opposite of the dual's.
     drawn(builder, file, 'Bo3 · ad');
