@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ChevronRight, CircleCheck, CircleX } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DualWidget } from "@/components/dashboard/schedule/static/dual-widget";
 import { EventDrawer } from "@/components/dashboard/schedule/static/event-drawer";
 import { formatEventDay, siteTitle } from "@/lib/schedule/format";
 import {
@@ -13,8 +14,8 @@ import {
 import type { ScheduleRow } from "@/lib/schedule/types";
 
 /**
- * `7e` and `7d` — the schedule's drawer-plus-pane frame, rendered from
- * fixtures.
+ * `7e`, `7d`, `7c` and `4c` — the schedule's drawer-plus-pane frame, rendered
+ * from fixtures.
  *
  * Two branches over one `StaticSchedule`:
  *
@@ -31,10 +32,16 @@ import type { ScheduleRow } from "@/lib/schedule/types";
  *
  * ── Selection ─────────────────────────────────────────────────────────────
  * The drawer's rows and the pane's "Jump to" rows both move one piece of local
- * state and nothing else — no route change, no fetch. Until T4 lands the dual
- * widget, a selection still renders `7d`'s prompt pane, which is the designed
- * answer for a row the design draws no pane for anyway (`EVENT_DETAILS` is
- * deliberately partial).
+ * state and nothing else — no route change, no fetch. Selecting an event whose
+ * detail carries a lineup swaps the prompt pane for `DualWidget`, which is
+ * `7c` at 620px and `4c` at 860px; that walk — `7d` → `7c` → `4c` — is one
+ * `useState` and a window resize, and nothing else moves.
+ *
+ * A selection the details map cannot answer falls back to the same prompt
+ * pane. `EVENT_DETAILS` is deliberately partial — two of the four drawn rows
+ * have no designed pane, and Ridgeline's detail exists with no entries because
+ * `7d` says its lineup is not set — so "no pane for this row" is a state the
+ * design has already answered rather than one to invent a pane for.
  *
  * ── Chrome ────────────────────────────────────────────────────────────────
  * The sidebar and the 44px breadcrumb topbar the artboards draw are the app's
@@ -62,6 +69,16 @@ export function StaticSchedule({
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  // A dual with at least one entry is the only thing `DualWidget` can draw:
+  // `7c`/`4c` are a lineup, and a lineup with no lines is `7d`'s "lineup not
+  // set", not an empty widget. The `kind` test is not redundant with it — a
+  // tournament detail would satisfy the entry count and is a different pane.
+  const selected = selectedId ? (schedule.details[selectedId] ?? null) : null;
+  const dual =
+    selected && selected.event.kind === "dual" && selected.entries.length > 0
+      ? selected
+      : null;
+
   return (
     <div className="flex min-h-0 w-full flex-1 bg-[var(--surface-card)]">
       <EventDrawer
@@ -72,6 +89,8 @@ export function StaticSchedule({
       />
       {schedule.rows.length === 0 ? (
         <DayZeroPane canAddOwnMatch={canAddOwnMatch} />
+      ) : dual ? (
+        <DualWidget detail={dual} />
       ) : (
         <SelectAnEventPane schedule={schedule} onSelect={setSelectedId} />
       )}

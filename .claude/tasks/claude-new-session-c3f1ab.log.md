@@ -748,3 +748,78 @@ the existing doc comment. `new-event-chooser.tsx` untouched.
    list, while the dormant component dropped `mono` on the argument that Roboto
    Mono is reserved for timestamps and job ids. The design was followed; worth
    settling once in the design system.
+
+## T4 · Rebuild 7c and 4c — the dual widget — done (re-run)
+
+Re-run of the task blocked earlier this session. Stash
+`3101b4e047178721fc939ec4f89ded8733b5d3d2` applied cleanly, the one finding
+fixed, plus one further fix the re-gate surfaced.
+
+**gate:** mechanical — `npm run lint` 0 errors / 37 warnings (none added),
+`npx tsc --noEmit` clean, `npm test` 227 passed. Completion review —
+`VERDICT: pass`, five of five, rail constants confirmed byte-identical to the
+artboard at `_full.dc.html:803`/`:805` and `:915`/`:917`. Guardrails —
+`pipeline-guardrails-reviewer` **ran**, found no violation, and raised one
+actionable hazard which was **fixed before commit** (below).
+`rls-boundary-reviewer` **skipped** — no matching path, no query;
+`entry-state.ts` and `score-format.ts` have zero diff.
+
+**the finding, fixed: the rails are now drawn, not derived.** The sequences
+were extracted from the authoritative capture rather than taken from the
+earlier report. Both `7c` and `4c` draw, byte-identically:
+
+- singles (6): `--viz-good --viz-bad --viz-good --viz-good --viz-good --ink-200`
+- doubles (3): `--viz-good --viz-bad --ink-200`
+
+`railColor()` is deleted (`grep -rn "railColor" src/` is empty). `OutcomeRail`
+takes a `marks` prop and renders two module constants. `entryPlayed` and
+`lineWon` remain in use for the played count and the per-row outcome icon, so
+no import went stale.
+
+The contradiction is now recorded in the component rather than resolved by it:
+the artboard greys S6 and D3 while the rows beneath draw S6 a loss and D3 a
+win, and the header reads 5–2, which the greyed marks would make 4–1. The
+earlier pass computed the rail instead — reasoning that a rail is a function of
+the lines and that an "unplayed" mark two inches above a red cross is wrong on
+any data. That reasoning is sound; it was still the wrong call under a contract
+that says divergence is a defect, not a judgement call, and whose rule 4 remedy
+is reproduce **and** report. T3 had already reproduced the same class of
+contradiction literally on `7d`; this now matches.
+
+**a second fix, from the re-gate — a false promise in the file's own header.**
+The doc comment said re-wiring this component is "a changed import upstream and
+no change here". True of every other cell, which recomputes from whatever
+`EventDetail` it is handed — and **false of `OutcomeRail`**, whose marks are now
+fixed constants. Left standing, the next task would re-point this at live
+matches on the strength of that sentence and ship a rail that renders
+`good bad good good good grey` for every dual a coach opens, won or lost, with
+correct rows beneath it and nothing looking broken. The header now carries an
+explicit exception saying re-deriving those marks is part of the re-wiring, not
+a consequence of it. Worth noting the shape: reproducing a self-contradictory
+design safely required *documenting* the reproduction as a trap, not just
+performing it.
+
+**changed:** `static/dual-widget.tsx` (new), `static/static-schedule.tsx` (pane
+wiring), and `static/event-drawer.tsx` — the last outside `files:`, being the
+handoff T3's log deferred here, ruled a legitimate extension twice: `7c` raises
+the selected drawer row's name to `font-weight:500` and its score from
+`--ink-700` to `--ink-900`, which T3's `--surface-muted` wash alone did not
+cover.
+
+**follow-ups:**
+1. **One difference between `7c` and `4c` is NOT height-driven** — the topbar
+   count string: `7c` reads "6 events · 2 upcoming", `4c` reads "6 events ·
+   2 upcoming · 4 completed". Unrendered either way, so this is the third open
+   question about that one line.
+2. **Design copy flagged, not fixed — input for T12.** "Coming soon" on the
+   three doubles lines is **false about the app**: `supportsVideo()` refuses
+   doubles and `job-request.ts` rejects a doubles `match_type` outright with
+   "Video analysis supports singles matches only". It promises analysis that
+   does not exist and is not planned. Also the rail contradiction above.
+3. **The `no-video` singles case renders an empty action cell** because no
+   artboard draws one. Unreachable on these fixtures, reachable the moment the
+   schedule is re-wired; it should get the "Add video" affordance the dormant
+   `line-row.tsx` already has.
+4. **Three copies of the same link treatment at three sizes** — `LINK_CLASS`
+   (12px), `REPORT_LINK` (11px), and `new-event-chooser.tsx:232`. Worth one
+   helper beside `advButton()`.

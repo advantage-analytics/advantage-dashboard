@@ -180,10 +180,13 @@ function EventGroup({
  * Every row the design draws is a dual, hence the bare "vs" prefix. A
  * tournament row has no drawn treatment; none is invented here.
  *
- * The selected row takes the same `--surface-muted` wash the artboard gives
- * hover. `7d` has nothing selected and `7c` — the artboard that draws the
- * settled selected state — is outside this task's set, so this stands in until
- * T4 reconciles it against `7c`.
+ * ── The selected row, reconciled against `7c` ──────────────────────────────
+ * `7d` has nothing selected, so T3 stood the selected state up as the same
+ * `--surface-muted` wash the artboard gives hover. `7c` and `4c` draw it
+ * settled, and the wash was right — but it is not the whole treatment. Both
+ * artboards also raise the selected row's name to `font-weight:500` and its
+ * team score from `--ink-700` to `--ink-900`, so the row reads as current even
+ * where the wash is subtle. All three now follow `isSelected`.
  */
 function EventRow({
   row,
@@ -210,10 +213,22 @@ function EventRow({
         <span className="mono text-[11px] text-[var(--ink-600)]">
           {formatEventDay(row.startsOn)} · {siteTitle(row.site)}
         </span>
-        <span className="text-[13px] text-[var(--ink-900)]">vs {row.name}</span>
+        <span
+          className={cn(
+            "text-[13px] text-[var(--ink-900)]",
+            isSelected && "font-medium"
+          )}
+        >
+          vs {row.name}
+        </span>
       </span>
       {row.teamScore ? (
-        <span className="tabular text-[14px] text-[var(--ink-700)]">
+        <span
+          className={cn(
+            "tabular text-[14px]",
+            isSelected ? "text-[var(--ink-900)]" : "text-[var(--ink-700)]"
+          )}
+        >
           {row.teamScore.us}–{row.teamScore.them}
         </span>
       ) : null}
