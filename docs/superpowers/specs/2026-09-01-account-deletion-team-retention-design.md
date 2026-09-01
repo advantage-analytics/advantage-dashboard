@@ -394,6 +394,19 @@ personal match.
   policy filters on them. Cheap fix, unrelated to this change.
 - **Pending `program_claims` by the departing user** lose their claimant via
   SET NULL. Approved claims are covered by the owner guard.
+- **A retained match can lose its trimmed video if its uploader deletes their
+  account mid-processing.** `webhooks/splitstep/route.ts` reads a job's
+  `created_by` live. Once this feature nulls it on a retained program job, a
+  `completed` vendor delivery arriving afterward still stores the results JSON
+  (under a `null/` key segment) but SKIPS the trimmed-video copy — its guard at
+  `route.ts:366` requires `created_by` — while the source blob is still deleted.
+  Net: stats survive, the video is lost. Narrow (needs the vendor to deliver
+  after deletion) and currently unreachable (the only user-id-attributed live
+  matches belong to the blocked owner). The fix belongs in the video seam, not
+  here: a retained match's video is attributable via `match_id` and deletable
+  via `purgeMatchStorage`, so both artifacts can be keyed under a `former-member`
+  segment symmetrically, and the stale `route.ts:355` `created_by!` assertion
+  goes with it. Surfaced by the whole-branch review 2026-09-01; its own branch.
 
 ## 9. Postgres best-practices review
 
