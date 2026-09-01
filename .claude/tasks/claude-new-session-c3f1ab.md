@@ -184,7 +184,7 @@ bodies do not repeat them — a subagent running any of T1–T12 should read the
 - **notes:** The whole-set pass no single task can do — its value is catching drift *between* screens, which per-screen checks cannot see. Per-artboard fidelity was already verified inside T2–T8 while the design detail was still in context; do not re-do that from memory, look for the cross-screen divergences.
 
 ## T12 · Write the regression note and the flagged-copy list
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T11
 - **files:** `work/events-lineups/REGRESSION-NOTE.md` (new)

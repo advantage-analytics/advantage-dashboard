@@ -1246,3 +1246,83 @@ detail fall back to the prompt pane, as T1 intended.
 4. The reviewer noted N8's exact DOM metrics rest on a since-deleted harness and
    cannot be reproduced from the tree; the qualitative claim is independently
    supported by the artboard markup. If that number matters later, re-measure.
+
+## T12 · Write the regression note and the flagged-copy list — done
+
+**gate:** mechanical — `npx tsc --noEmit` clean, `npm run lint` 0 errors / 37
+warnings, `npm test` 244 passed; `git diff HEAD -- src tests` **empty**, which
+is what this task requires. Completion review — `VERDICT: pass`, four of four,
+with the route diffs re-run against the `ce173da` baseline, the guards verified
+byte-identical, the three out-of-scope routes verified zero-diff, and **eight**
+flagged strings spot-checked in source against a required four. Guardrails —
+**both skipped, legitimately**: no source change at all; the diff is one
+markdown file under `work/`.
+
+**changed:** `work/events-lineups/REGRESSION-NOTE.md` (384 lines) — the PR body
+stages 06 and 07 draw from. Seven sections: what each route lost · what did not
+change · what was gained · deliberately unfinished · the flagged-copy list ·
+gates · where to look.
+
+**it opens by naming the regression, which is criterion 3's whole point:**
+
+> # Events & Lineups — the schedule area is now static, and that is a regression
+> **Four routes that read the database now read a fixture file.** … A coach
+> opening the schedule sees Ridgeline University and Fairmont A&M whatever
+> program they are actually in; "Create dual" and "Create tournament" are
+> inert… This was chosen, not stumbled into.
+
+The reviewer confirmed nothing later in the document walks that back — §2 and §3
+add accurate context (guards intact, gains listed) without minimising it.
+
+**the flagged-copy list: 50 items, grouped by artboard**, each tagged **F**
+false about the app · **C** the design contradicts itself · **U** asserts a
+figure the app has no source for · **D** drifts between screens. Counts: `3b` 2,
+`7d`/`7e` 7, `7c`/`4c` 6, `2c` 8, `2b` 9, `2d`/`2e` 8, `3c` 9, cross-set 1.
+T11's N1/N2/N3/N7/N8 are folded into the artboards they belong to rather than
+listed apart.
+
+**criterion 4's second half — "still unchanged in the code" — was actually
+verified**, not assumed. Most items are pinned by `tests/schedule-static-copy.spec.ts`
+and so ride on the suite being green; the rest were grepped by hand ("Big Ten ·
+D-I", "Unranked", "Nobody yet —", the interpolated `9 of 9 matches` footer, and
+the non-string treatments — the `SINGLES_MARKS`/`DOUBLES_MARKS` constants,
+Forfeit's `opacity-0`, `caret-[var(--blue)]`, the 236px toast, the no-flip
+popup, and `3c`'s focus rule on a non-focusable span). All present.
+
+**One item is honestly declared unverifiable and the note says so**: the topbar
+count line survives only in comments and fixture doc blocks, because T3 left it
+unrendered — the app chrome has no slot shaped like it. Flagged as *not present
+in any rendered output* rather than quietly counted as reproduced. The reviewer
+ruled that the honest handling.
+
+**two contradictions inside this log, both carried into the note:**
+1. T4's rationale for `7c` stopping after S3 was wrong arithmetic — T11's N8
+   measured nine rows fitting at 620px with ~30px spare. The decision (one pane,
+   two heights) stands; the *reason* does not, and the note says the rationale
+   must not be quoted as fact.
+2. The lint baseline is 43 in the brief, the plan, this queue's preamble and
+   `docs/ui-revamp-guardrails.md` §7. Every gate all run measured **37**.
+
+A third apparent contradiction was examined and dismissed: T3 and T5 look like
+opposite `--blue` / `--blue-text` calls, but T5's review and T11's measured pass
+both showed one rule applied consistently — substitute only where the artboard
+states no colour. Not recorded as a contradiction.
+
+**deliberately left out of the note**, as process rather than PR content: the
+three blocked-and-re-run tasks and their stash SHAs, the stale 87,329-byte
+design capture that cost a review cycle, the `document.hidden` frozen-transition
+measurement trap, the `fixtures.ts` stash conflict that briefly truncated a
+neighbour's array, and the harness technique. All remain here in the log. The
+three re-wiring traps that could cause a silent wrong-data failure were kept.
+
+**follow-ups:**
+1. **The queue is drained** — twelve of twelve done. `work/events-lineups/`
+   now carries `FIDELITY-PASS.md` and `REGRESSION-NOTE.md` for stages 06 and 07.
+2. **One correction pass across four documents** would retire the stale
+   43-warning baseline: the brief, the plan, this queue's preamble, and
+   `docs/ui-revamp-guardrails.md` §7.
+3. **Three re-wiring traps are recorded in §4 of the note** and are the things
+   most likely to ship silently wrong data: `dual-widget.tsx`'s rail constants
+   do not re-derive; `dual-build-step.tsx`'s `DUAL_DRAFT_SCHOOL` must become a
+   prop again or every new dual pins to Ridgeline; and the popup's school and
+   saved roster must travel together or it dedupes against the wrong pool.
