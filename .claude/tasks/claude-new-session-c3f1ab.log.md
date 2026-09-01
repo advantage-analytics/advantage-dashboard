@@ -1326,3 +1326,42 @@ three re-wiring traps that could cause a silent wrong-data failure were kept.
    do not re-derive; `dual-build-step.tsx`'s `DUAL_DRAFT_SCHOOL` must become a
    prop again or every new dual pins to Ridgeline; and the popup's school and
    saved roster must travel together or it dedupes against the wrong pool.
+
+## T13 · Seed a verifiable schedule program — done
+
+**gate:** lint clean · `tsc --noEmit` clean (no stale `.next/` re-run needed) ·
+`npm test` green. `task-completion-reviewer` → **VERDICT: pass**, all five
+criteria met, scope exactly the task's `files:` field. Guardrails:
+`rls-boundary-reviewer` **ran** (the script issues new queries through the
+service-role admin client) and found no issues across service-role
+containment, blast radius, secret handling and read-policy exposure;
+`pipeline-guardrails-reviewer` **skipped** — the diff touches neither
+`src/app/dashboard/`, `src/components/dashboard/` nor the upload wizard, and
+in fact touches no `src/` file at all.
+
+**changed:** New `scripts/seed-schedule-fixtures.ts`, run with
+`npx tsx scripts/seed-schedule-fixtures.ts`. Seeds ZZ Test Program
+(`edaf1aa0…`) with 4 `program_events` — three duals and one tournament — and
+30 `program_event_entries`, plus 13 entry-linked `matches` and 2
+`processing_jobs`. `dual-decided` resolves through the real `dualScore()` to
+`us 5 — them 2, decided: true` (one line via `forfeit: 'theirs'`);
+`dual-upcoming` to `decided: false`; a third dual is partly played for the
+in-between rendering. Two entries carry jobs in different analysis states
+(`completed` with a derivation stamp, and `processing`), so
+"N of M lines analyzed" has something to count. Idempotent: every id is a
+SHA-256-derived UUID under a fixed namespace and every write is an
+`upsert(onConflict: 'id')` — no deletes or updates anywhere in the file. Two
+consecutive runs produced byte-identical output. A fail-closed guard reads
+`programs` live and aborts unless the target's `school_name` starts with
+"ZZ", so a mistyped id cannot write to Dartmouth or UCLA. Dartmouth's one
+real event and UCLA's zero-event day-zero state are both untouched.
+
+**follow-ups:**
+1. The seeded S1 line resolves to `completed` with no `match_stats` or points
+   rows behind it, so its "View report" link lands on a stats page of zeroes.
+   Fine for verifying schedule wiring; if a later task needs that fixture's
+   match page to look right, either seed minimal `match_stats` or drop the
+   job's `derivation_version` so it reads "Stats pending" instead.
+2. `rls-boundary-reviewer` suggested lifting the ZZ-prefix guard idiom into
+   `scripts/lib/` if further seed scripts are written, so future authors get
+   the fail-closed target check by default rather than re-deriving it.

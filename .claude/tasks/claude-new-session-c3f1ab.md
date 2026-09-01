@@ -241,7 +241,7 @@ list below instead.
    not against either number.
 
 ## T13 · Seed a verifiable schedule program
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** `scripts/seed-schedule-fixtures.ts` (new, guess); no `src/` changes
 - **done when:**
