@@ -60,7 +60,7 @@ ready).
 - **notes:** Plan step 3. Frame 46a lines 519–556 carries the exact SVG/legend/tooltip structure and the `.seg`/`.mom-annot` hover patterns (reproduce with CSS/React state, not the artboard's global stylesheet).
 
 ## T4 · Shots & placement tab: filters, court, zone table
-- **status:** todo
+- **status:** blocked
 - **model:** fable
 - **needs:** T1
 - **files:** src/components/dashboard/matches/match-detail/shots/{use-shot-filters.ts,court-header.tsx,serve-zones-court.tsx,zone-table.tsx,shots-tab.tsx} (new), src/app/dashboard/matches/[matchId]/page.tsx
