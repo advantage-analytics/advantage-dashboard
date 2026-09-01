@@ -258,8 +258,20 @@ export function OpponentPopup({
     }
     if (event.key === "Enter") {
       event.preventDefault();
-      if (rowCount > 0) activateRow(highlighted);
-      else save(draft);
+      if (rowCount > 0) {
+        activateRow(highlighted);
+        return;
+      }
+      // An empty field commits nothing. `splitNames` drops blank parts, so
+      // `save("")` would hand the line "" — clearing a name the coach had
+      // already entered — while still toasting that it was saved. Close the
+      // way Escape does instead: this screen reverts rather than commits on
+      // every path that is not a deliberate save.
+      if (splitNames(draft).length === 0) {
+        setOpen(false);
+        return;
+      }
+      save(draft);
     }
   }
 

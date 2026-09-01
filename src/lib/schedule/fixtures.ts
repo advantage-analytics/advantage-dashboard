@@ -261,7 +261,7 @@ const BUCKEYE_EVENT: ProgramEvent = {
  * and two to them, plus the doubles point for taking two of three.
  */
 const FAIRMONT_ENTRIES: EventEntry[] = [
-  dualLine({
+  /* @__PURE__ */ dualLine({
     eventId: FAIRMONT_ID,
     key: "fairmont-s1",
     slot: "S1",
@@ -275,7 +275,7 @@ const FAIRMONT_ENTRIES: EventEntry[] = [
     status: "completed",
     hasVideo: true,
   }),
-  dualLine({
+  /* @__PURE__ */ dualLine({
     eventId: FAIRMONT_ID,
     key: "fairmont-s2",
     slot: "S2",
@@ -295,7 +295,7 @@ const FAIRMONT_ENTRIES: EventEntry[] = [
     status: "processing",
     hasVideo: true,
   }),
-  dualLine({
+  /* @__PURE__ */ dualLine({
     eventId: FAIRMONT_ID,
     key: "fairmont-s3",
     slot: "S3",
@@ -309,7 +309,7 @@ const FAIRMONT_ENTRIES: EventEntry[] = [
     status: "completed",
     hasVideo: true,
   }),
-  dualLine({
+  /* @__PURE__ */ dualLine({
     eventId: FAIRMONT_ID,
     key: "fairmont-s4",
     slot: "S4",
@@ -323,7 +323,7 @@ const FAIRMONT_ENTRIES: EventEntry[] = [
     status: "completed",
     hasVideo: true,
   }),
-  dualLine({
+  /* @__PURE__ */ dualLine({
     eventId: FAIRMONT_ID,
     key: "fairmont-s5",
     slot: "S5",
@@ -337,7 +337,7 @@ const FAIRMONT_ENTRIES: EventEntry[] = [
     status: "completed",
     hasVideo: true,
   }),
-  dualLine({
+  /* @__PURE__ */ dualLine({
     eventId: FAIRMONT_ID,
     key: "fairmont-s6",
     slot: "S6",
@@ -351,7 +351,7 @@ const FAIRMONT_ENTRIES: EventEntry[] = [
     status: "completed",
     hasVideo: true,
   }),
-  dualLine({
+  /* @__PURE__ */ dualLine({
     eventId: FAIRMONT_ID,
     key: "fairmont-d1",
     slot: "D1",
@@ -367,7 +367,7 @@ const FAIRMONT_ENTRIES: EventEntry[] = [
     status: "manual",
     hasVideo: false,
   }),
-  dualLine({
+  /* @__PURE__ */ dualLine({
     eventId: FAIRMONT_ID,
     key: "fairmont-d2",
     slot: "D2",
@@ -381,7 +381,7 @@ const FAIRMONT_ENTRIES: EventEntry[] = [
     status: "manual",
     hasVideo: false,
   }),
-  dualLine({
+  /* @__PURE__ */ dualLine({
     eventId: FAIRMONT_ID,
     key: "fairmont-d3",
     slot: "D3",
@@ -399,7 +399,7 @@ const FAIRMONT_ENTRIES: EventEntry[] = [
 
 /** 3c's field: three entries, added from the roster rail, no matches yet. */
 const BUCKEYE_ENTRIES: EventEntry[] = [
-  tournamentEntry({
+  /* @__PURE__ */ tournamentEntry({
     eventId: BUCKEYE_ID,
     key: "buckeye-brooks",
     position: 0,
@@ -410,7 +410,7 @@ const BUCKEYE_ENTRIES: EventEntry[] = [
     draw: "Main draw",
     seed: 3,
   }),
-  tournamentEntry({
+  /* @__PURE__ */ tournamentEntry({
     eventId: BUCKEYE_ID,
     key: "buckeye-reid",
     position: 1,
@@ -419,7 +419,7 @@ const BUCKEYE_ENTRIES: EventEntry[] = [
     // 3c draws "Unseeded".
     seed: null,
   }),
-  tournamentEntry({
+  /* @__PURE__ */ tournamentEntry({
     eventId: BUCKEYE_ID,
     key: "buckeye-osei",
     position: 2,
@@ -523,6 +523,15 @@ export const EVENT_DETAILS: Record<string, EventDetail> = {
  * Not on `SCHEDULE_ROWS`: 3c is the screen that *creates* it, so the schedule
  * has not got it yet. Listing a tournament the coach is still filling in would
  * contradict the artboard it comes from.
+ */
+/**
+ * **Not rendered — editing this moves nothing on screen.** `3c`'s builder types
+ * its five drawn facts (the name, both dates, the site and the format) as
+ * literals in `static-tournament-builder.tsx`, because `schedule-static-copy.spec.ts`
+ * pins them in that file's own source. This stays because it is the
+ * `EventDetail` shape the re-wiring hands back, and because `TOURNAMENT_FIELD`
+ * pairs its rows with the same `BUCKEYE_ENTRIES` this wraps — but nothing reads
+ * it today. Change the component, not this, to change the screen.
  */
 export const TOURNAMENT_DETAIL: EventDetail = {
   event: BUCKEYE_EVENT,
@@ -693,7 +702,7 @@ export const DIRECTORY_TERM = "Ridg";
 
 /** `2c`'s "Your conference" section — two Big Ten rows, the first selected. */
 export const CONFERENCE_SCHOOLS: DirectorySchool[] = [
-  directorySchool({
+  /* @__PURE__ */ directorySchool({
     schoolName: "Ridgeline University",
     conference: OUR_CONFERENCE,
     // The one row that carries BOTH halves. `2c` prints only the conference,
@@ -704,7 +713,7 @@ export const CONFERENCE_SCHOOLS: DirectorySchool[] = [
     division: "D1",
     seasonRecord: "18–4",
   }),
-  directorySchool({
+  /* @__PURE__ */ directorySchool({
     schoolName: "Ridgemont Tech",
     conference: OUR_CONFERENCE,
     seasonRecord: "11–10",
@@ -723,7 +732,7 @@ export const CONFERENCE_SCHOOLS: DirectorySchool[] = [
  * carry a conference. Reproduced as drawn; see the report.
  */
 export const ALL_PROGRAM_SCHOOLS: DirectorySchool[] = [
-  directorySchool({
+  /* @__PURE__ */ directorySchool({
     schoolName: "Ridgeway College",
     conference: "Coastal",
     seasonRecord: "14–7",
@@ -732,12 +741,12 @@ export const ALL_PROGRAM_SCHOOLS: DirectorySchool[] = [
     us: 1,
     lastPlayedOn: "2024-09-30",
   }),
-  directorySchool({
+  /* @__PURE__ */ directorySchool({
     schoolName: "Ridge Valley State",
     conference: "Mountain West",
     seasonRecord: "9–12",
   }),
-  directorySchool({
+  /* @__PURE__ */ directorySchool({
     // "D-III" is `divisionLabel("D3")`, so the raw dataset value is what goes
     // in — the same string `programs.division` holds.
     schoolName: "Ridgefield Academy",
@@ -884,7 +893,7 @@ export const DUAL_DRAFT_EVENT: ProgramEvent = RIDGELINE_EVENT;
 export const RAIL_SCHOOLS: DirectorySchool[] = [
   // `2c`'s selected row, unchanged and by reference.
   CONFERENCE_SCHOOLS[0],
-  directorySchool({
+  /* @__PURE__ */ directorySchool({
     schoolName: "Fairmont A&M",
     conference: OUR_CONFERENCE,
     seasonRecord: "15–7",
@@ -893,7 +902,7 @@ export const RAIL_SCHOOLS: DirectorySchool[] = [
     us: 3,
     them: 1,
   }),
-  directorySchool({
+  /* @__PURE__ */ directorySchool({
     schoolName: "Crestwood College",
     conference: OUR_CONFERENCE,
     seasonRecord: "12–9",
@@ -902,7 +911,7 @@ export const RAIL_SCHOOLS: DirectorySchool[] = [
     us: 1,
     them: 1,
   }),
-  directorySchool({
+  /* @__PURE__ */ directorySchool({
     schoolName: "Northlake State",
     conference: OUR_CONFERENCE,
     seasonRecord: "9–12",
@@ -911,12 +920,12 @@ export const RAIL_SCHOOLS: DirectorySchool[] = [
     us: 5,
     them: 2,
   }),
-  directorySchool({
+  /* @__PURE__ */ directorySchool({
     schoolName: "Ashford University",
     conference: OUR_CONFERENCE,
     seasonRecord: "14–6",
   }),
-  directorySchool({
+  /* @__PURE__ */ directorySchool({
     schoolName: "Merritt College",
     conference: OUR_CONFERENCE,
     seasonRecord: "7–14",

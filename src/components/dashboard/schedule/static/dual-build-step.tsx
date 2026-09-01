@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Calendar, Check, ChevronDown, Search } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { capitalize, cn } from "@/lib/utils";
 import { advButton } from "@/lib/ui/adv-button";
 import { EventShell } from "@/components/dashboard/schedule/event-shell";
 import { OpponentPopup } from "@/components/dashboard/schedule/static/opponent-popup";
@@ -258,7 +258,7 @@ export function DualBuildStep() {
                     draws it that way in a facts line. `2b` draws it as a
                     field's value, title-cased, so it is title-cased here: the
                     same treatment `siteTitle()` gives site one cell over. */}
-                {titleCase(DUAL_DRAFT_EVENT.surface)}
+                {DUAL_DRAFT_EVENT.surface ? capitalize(DUAL_DRAFT_EVENT.surface) : ""}
               </span>
             </FieldCell>
 
@@ -619,10 +619,4 @@ function LineRow({
       )}
     </div>
   );
-}
-
-/** "hard" → "Hard". The dataset's case is not the field's. */
-function titleCase(value: string | null): string {
-  if (!value) return "";
-  return value.charAt(0).toUpperCase() + value.slice(1);
 }
