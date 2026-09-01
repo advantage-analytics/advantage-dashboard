@@ -10,7 +10,7 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
-import { isWorking } from "@/lib/data/match-analysis";
+import { isAnalysisReady, isWorking } from "@/lib/data/match-analysis";
 import { dualScore, entryPlayed } from "@/lib/schedule/entry-state";
 import { roundRank } from "@/lib/schedule/format";
 import type {
@@ -271,6 +271,121 @@ export function scheduleRowsFrom(
       teamScore: score?.decided ? { us: score.us, them: score.them } : null,
     };
   });
+}
+
+/** How one decided dual went. There is no third mark, and no third glyph. */
+export type DualResult = "won" | "lost";
+
+/**
+ * The three figures the schedule page's season block draws.
+ *
+ * Structured, never pre-formatted. The block's en dash, its `·` separators and
+ * its `tabularNumerals()` treatment are the component's business; this side
+ * owes it numbers it can render without parsing anything back out —
+ * "3–1 in duals · 31 of 36 lines analyzed" is `dualRecord` and `lines`, in
+ * that order, with the component's own punctuation between them.
+ */
+export interface SeasonSummary {
+  /**
+   * One mark per decided dual, OLDEST FIRST.
+   *
+   * Reversed out of `events`, which arrives newest-first — the reversal
+   * `ProgramSchedule`'s own doc comment asks a forwards-in-time surface to do,
+   * rather than ordering `program_events` a second way. A form strip reads
+   * left to right through the season, so the first mark is the first dual.
+   *
+   * Only DECIDED duals appear. An undecided one has no mark at all rather than
+   * a third state: the same gate `scheduleRowsFrom` puts on `teamScore` and
+   * `opponentDualHistory` puts on its tally, for the same reason — a partial
+   * dual has no result yet, and a mark is a claim that it does.
+   */
+  form: DualResult[];
+  /**
+   * Duals won and lost. Counted OFF `form`, so the marks and the record are
+   * one fact counted once and cannot disagree on screen.
+   *
+   * `won + lost` can therefore be less than the decided duals played: a dual
+   * whose lines split level is decided and has no winner, so it takes neither
+   * a mark nor a column — exactly how `opponentDualHistory` lets `played`
+   * exceed `us + them`. Seven points make that unreachable on a full ITA card;
+   * a short card (four singles, no doubles) reaches it.
+   */
+  dualRecord: { won: number; lost: number };
+  /** Lines with a report, over lines that could have one. */
+  lines: { analyzed: number; total: number };
+}
+
+/**
+ * The season block's figures, over a schedule already read.
+ *
+ * Pure, and exported beside `scheduleRowsFrom` for that function's own stated
+ * reason — so this mapping can be tested without a database.
+ *
+ * ── What counts where ───────────────────────────────────────────────────────
+ * **Tournaments are out of the record and the form, and in the lines count.**
+ * The figure says "in duals", and a bracket has no team-vs-team result to fold
+ * into a dual tally — the same skip `opponentDualHistory` makes, in the same
+ * words. Its lines are still lines: coverage is about video work done against
+ * video work owed, and a tournament weekend is most of a season's of both.
+ *
+ * **A line is a match, with a floor of one.** Deliberately the arithmetic
+ * `getUploadQueue` below already uses — `Math.max(1, entry.matches.length)`
+ * over non-forfeited entries. On a dual the two readings agree (one match per
+ * line); on a tournament an entry is a whole run, and counting the run as one
+ * line would call a five-round entry analyzed off a single round's report. The
+ * queue's total and this total are about the same set of lines because they are
+ * the same expression; two spellings are two chances for the page to say a
+ * coach has nothing left to upload and 24 of 30 lines analyzed at once.
+ *
+ * **Forfeits are out of both halves**, again as the queue has it: a forfeited
+ * line has no match to film, so leaving it in the denominator would hold a
+ * fully covered dual at 8 of 9 forever, describing completed work as
+ * outstanding.
+ *
+ * **Analyzed means `isAnalysisReady`** — "there is a report to read".
+ * Explicitly none of the in-flight family: `isInFlight`, `isWorking` and
+ * `isLiveUpdating` all answer "is this row still going to change", which is a
+ * different question with a different answer on every unfinished line, and
+ * every one of them would count a job still queued as analyzed. Nor
+ * `matchState`'s `ready`, which adds `&& hasVideo` because it is deciding what
+ * a line is waiting for in the VIDEO pipeline; a match imported complete from
+ * a file has statistics and no job, and is analyzed by any honest reading.
+ */
+export function seasonSummaryFrom({
+  events,
+  entriesByEvent,
+}: ProgramSchedule): SeasonSummary {
+  const form: DualResult[] = [];
+  let analyzed = 0;
+  let total = 0;
+
+  for (const event of [...events].reverse()) {
+    const entries = entriesByEvent.get(event.id) ?? [];
+
+    if (event.kind === "dual") {
+      const score = dualScore(entries);
+      // Level and decided is a real outcome and not a mark — see `dualRecord`.
+      if (score.decided && score.us > score.them) form.push("won");
+      else if (score.decided && score.them > score.us) form.push("lost");
+    }
+
+    for (const entry of entries) {
+      if (entry.forfeit !== null) continue;
+      total += Math.max(1, entry.matches.length);
+      analyzed += entry.matches.filter((match) =>
+        isAnalysisReady(match.status)
+      ).length;
+    }
+  }
+
+  return {
+    form,
+    dualRecord: {
+      won: form.filter((result) => result === "won").length,
+      lost: form.filter((result) => result === "lost").length,
+    },
+    lines: { analyzed, total },
+  };
 }
 
 /** Did this entry produce any match at all? Distinguishes "unplayed" from "filmed". */

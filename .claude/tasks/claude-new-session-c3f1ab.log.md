@@ -1365,3 +1365,44 @@ real event and UCLA's zero-event day-zero state are both untouched.
 2. `rls-boundary-reviewer` suggested lifting the ZZ-prefix guard idiom into
    `scripts/lib/` if further seed scripts are written, so future authors get
    the fail-closed target check by default rather than re-deriving it.
+
+## T14 · Derive the season summary — done
+
+**gate:** lint clean · `tsc --noEmit` clean · `npm test` green (260 passed).
+`task-completion-reviewer` → **VERDICT: pass**, all four criteria met, and it
+independently confirmed the three judgement calls below rather than taking
+them on trust. Guardrails: `rls-boundary-reviewer` **ran** (the diff touches
+`src/lib/data/`) and found no issues — it verified the new function really is
+client-free, that program scoping still lives upstream in `readSchedule`'s
+`.eq("program_id", …)` and cannot be bypassed by a function that takes no
+`programId`, and that the new exports reach no client bundle;
+`pipeline-guardrails-reviewer` **skipped** — no `src/app/dashboard/`,
+`src/components/dashboard/` or upload-wizard file in the diff.
+
+**changed:** `src/lib/data/schedule-server.ts` gains `DualResult`,
+`SeasonSummary` and a pure `seasonSummaryFrom()` beside `scheduleRowsFrom`,
+returning `{ form, dualRecord: {won, lost}, lines: {analyzed, total} }` —
+structured data, not a formatted string, so the component keeps its en dash,
+`·` and `tabularNumerals()` treatment. New `tests/schedule-season-summary.spec.ts`,
+16 tests, no database and no browser. `dualScore()` and `entryPlayed()` are
+imported, not re-implemented, so "decided" and "played" keep one definition.
+Three judgement calls, each documented in the function header: tournaments are
+out of the dual record and form but their lines count toward coverage; only a
+decided, non-level dual takes a form mark, so `won + lost` can be less than
+duals played; and the coverage denominator is every non-forfeited entry counted
+per match with a floor of one — literally `getUploadQueue`'s own arithmetic at
+`schedule-server.ts:466-469`, verified by the reviewer. "Analyzed" is
+`isAnalysisReady` ("a report exists"), deliberately not `isInFlight` /
+`isWorking` / `isLiveUpdating`, which all answer "will this still change".
+Against the T13 seed the function yields "1–0 in duals · 1 of 30 lines
+analyzed".
+
+**follow-ups:**
+1. `readSchedule` selects `source_provider` in `MATCH_COLUMNS`, but
+   `DbEntryMatch` never declares it and the mapping is
+   `analysis?.status ?? "manual"` — `analysisFor` is never called. So a
+   SwingVision-imported match linked to an entry reads as `manual` on every
+   schedule surface instead of `imported`, and this function counts it as
+   unanalyzed despite it having full statistics. Pre-existing gap in the
+   loader, not in T14's files; fixing it would also change `entryState` on the
+   event page, so it wants its own task.

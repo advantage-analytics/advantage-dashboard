@@ -253,7 +253,7 @@ list below instead.
 - **notes:** ZZ Test Program is the designated test program — active, mens, one member, zero events at time of writing. Live counts before this task: 1 event, 3 entries, **0 matches linked to any entry**, which is why a correctly wired page would otherwise be indistinguishable from a broken one. UCLA already has zero events and serves as the day-zero program — do not seed it. Dartmouth College is a real claimed program; do not seed it either.
 
 ## T14 · Derive the season summary
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** `src/lib/data/schedule-server.ts`; `tests/schedule-season-summary.spec.ts` (new); reads `src/lib/schedule/entry-state.ts`
 - **done when:**
