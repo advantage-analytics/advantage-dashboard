@@ -1648,3 +1648,43 @@ keeping when this is re-run.
 `program_members` row and six `program_players` rows for ZZ, all removed.
 Post-check: 3 claimed programs, 5 events, 33 entries, 5 `program_members`, ZZ
 with 1 member and 0 players, UCLA 0 events, no leftover harness rows.
+
+## T17 · Delete the read path's dormant pair — done (re-run after amendment)
+
+**gate:** lint clean · `tsc --noEmit` clean · `npm test` green (260) ·
+`npm run build` green (62 pages). Criterion 1's amended grep re-run
+independently from the runner: exit 1, no output.
+`task-completion-reviewer` → **VERDICT: pass**. Guardrails:
+`pipeline-guardrails-reviewer` **ran** (diff under
+`src/components/dashboard/`) and found no violations — it confirmed neither
+deleted file appeared on §2's never-touch list, that neither carried any
+§3.2 analysis-status, §3.3 short-circuit or §3.4 storage-key-cleanup logic
+that would have died with it, and that the README's live/dormant map now
+matches disk exactly; `rls-boundary-reviewer` **skipped** — a deletion plus a
+doc edit, no query, and no file under `src/lib/data/`, `src/lib/supabase/`,
+`src/app/api/` or `supabase/migrations/`.
+
+**changed:** `schedule-list.tsx` (354 lines) and `event-detail-pane.tsx` (366)
+deleted — the previous DB-wired implementation of the schedule screen, dead
+since T15 re-pointed the route. README §2's table drops to seven rows, its
+count corrected "Nine files" → "Seven files", the route-mounted sentence from
+four files to three, and §5's "the dormant nine" generalised. §1, §3, §4 and
+§6 untouched; §4's type-only lifeline (`lineup-editor.tsx`,
+`opponent-name-cell.tsx`) is T24's and was left alone, as was the live
+`dual-detail.tsx`. Nothing became transitively unreachable — every import the
+deleted files pulled in still has other live referencing files.
+
+**Recovered from the stash rather than redone.**
+`git stash apply b3ed7738f06061390cecd10cfe26b0bf6de6bce4` applied cleanly, so
+the earlier blocked run's work landed unchanged. That stash is now redundant
+and was dropped after this commit.
+
+**why the first run blocked, and what changed:** nothing was wrong with the
+work — criterion 1 required a bare `grep` over all of `src` to return nothing,
+which two provenance comments in `event-drawer.tsx` and `opponent-history.ts`
+made unsatisfiable, since neither file is in this task's `files:`. The
+criterion now matches imports and JSX only, and both comments survive
+untouched. Verified: the four remaining prose mentions of these filenames
+across `src` are all inside JSDoc blocks and none is an import or a render.
+
+**follow-ups:** none.

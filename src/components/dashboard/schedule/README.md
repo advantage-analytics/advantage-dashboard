@@ -37,12 +37,10 @@ live". Some of the original components lost their route; others kept one.
 
 ## 2. Dormant — unreachable from any route
 
-Nine files. Each carries a `DORMANT` header naming its replacement.
+Seven files. Each carries a `DORMANT` header naming its replacement.
 
 | Dormant file | Replaced on the live route by |
 |---|---|
-| `schedule-list.tsx` | `static/static-schedule.tsx` + `static/event-drawer.tsx` |
-| `event-detail-pane.tsx` | `static/dual-widget.tsx` |
 | `new-event-chooser.tsx` | `static/static-event-chooser.tsx` |
 | `dual-form.tsx` | `static/static-dual-builder.tsx` (shell) → `dual-school-step` + `dual-build-step` |
 | `school-search.tsx` | `static/dual-school-step.tsx` |
@@ -51,13 +49,12 @@ Nine files. Each carries a `DORMANT` header naming its replacement.
 | `entry-editor.tsx` | drawn inline in `static/static-tournament-builder.tsx` |
 | `field-row.tsx` | nothing 1:1 — the static builders each draw their own defaults cells |
 
-Only `schedule-list.tsx`, `new-event-chooser.tsx`, `dual-form.tsx` and
-`tournament-form.tsx` were ever mounted by a route directly — those four are
-what the four re-pointed routes used to import. The rest became unreachable
-transitively, because the only things importing them did: `event-detail-pane`
-through `schedule-list`, `school-search` and `field-row` through the two forms,
-`opponent-rail` through `dual-form`, and `entry-editor` through
-`tournament-form`.
+Only `new-event-chooser.tsx`, `dual-form.tsx` and `tournament-form.tsx` were
+ever mounted by a route directly — those three are what the remaining
+re-pointed routes used to import. The rest became unreachable transitively,
+because the only things importing them did: `school-search` and `field-row`
+through the two forms, `opponent-rail` through `dual-form`, and
+`entry-editor` through `tournament-form`.
 
 ---
 
@@ -139,8 +136,8 @@ database. Everything the static screens do not have lives there:
   its header explains why an interpolated value corrupts submissions.
 
 Re-wiring means porting those into the static components, then deleting the
-dormant nine — at which point this file's §2 should shrink to nothing and §4
-disappears entirely.
+rest of the dormant tree — at which point this file's §2 should shrink to
+nothing and §4 disappears entirely.
 
 ---
 
