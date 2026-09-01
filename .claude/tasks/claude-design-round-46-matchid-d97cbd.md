@@ -22,7 +22,7 @@ straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Build the two-pane shell, rail and tabs; flip page.tsx onto them
-- **status:** todo
+- **status:** blocked
 - **model:** fable
 - **files:** src/components/dashboard/matches/match-detail/{use-match-sides.ts,match-detail-shell.tsx,match-rail.tsx,match-tabs.tsx} (new), src/app/dashboard/matches/[matchId]/page.tsx
 - **done when:**
