@@ -1,6 +1,6 @@
 # Review — events-lineups
 
-**Sign-off: pending**
+**Sign-off: approved**
 
 Edit that line to `approved` (or annotate otherwise) to open stage 07. That
 edit is the pipeline's final gate — nothing below substitutes for it.
