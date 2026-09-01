@@ -669,3 +669,82 @@ Reproduce-and-flag was correct.
 7. **`--blue` on white at 11px keeps failing WCAG 1.4.3 AA across these
    artboards** (`3c`'s callout neighbours, `2c`'s "Clear"). Third task to raise
    it; worth one deliberate design-system decision rather than a per-task note.
+
+## T2 · Rebuild 3b — the event-type chooser — done (re-run)
+
+Re-run of the task blocked earlier this session. Stash
+`29062bef5efd3795ad1e071e5ebad613936d9b95` applied cleanly (note: `git stash
+apply --check` reports a false conflict on any stash containing untracked
+files — the real apply succeeded), the three findings fixed, re-gated in full.
+
+**gate:** mechanical — `npm run lint` 0 errors / 37 warnings (none added),
+`npx tsc --noEmit` clean, `npm test` 227 passed. Completion review —
+`VERDICT: pass` on the second pass (the first pass is described below).
+Guardrails — `pipeline-guardrails-reviewer` **ran** and returned **no
+findings**: guard block byte-identical, the chooser never touches `adScoring`,
+both onward routes carry their own unmodified `isProgramStaff` gate so
+`router.push` cannot ride a player into a builder.
+`rls-boundary-reviewer` **skipped** — no matching path, no query.
+
+**the three fixes:**
+1. **The aside link is inert.** The artboard's own anchor is the placeholder
+   `href="#3b"`; it had been wired to `/dashboard/matches/new`, outside the
+   rebuilt set. Now an inert `<span>` with the link treatment, matching how
+   `7e`'s "One-off match in Matches" is handled. `next/link` dropped as its
+   sole use. Verified the artboard's anchor carries no `style-hover`, so losing
+   the hover/focus classes is not a new divergence.
+2. **The divider is `--blue-glow`.** `colors.css:72` is exactly the artboard's
+   `rgba(59,130,246,0.15)`. The header comment that asserted "no token carries
+   0.15" was rewritten — that claim was the actual defect, not just the class.
+3. **The bottom inset is documented.** `EventShell`'s `pb-8` stands against the
+   artboard's `padding-bottom: 0`; editing the shared shell would move three
+   other screens in this run, so the divergence is recorded in the wrapper's
+   comment rather than left silent.
+
+**A stale design capture is loose on this machine, and it cost a review cycle.**
+The first re-review returned `VERDICT: needs-work` on two new findings — a
+missing `New event` eyebrow above the `3b` heading, and a body padding of
+`0 48px` with `justify-content:center`. **Both are false.** It had read a
+different capture of `Events & Lineups.dc.html`:
+
+| | current | stale |
+|---|---|---|
+| md5 | `045f55b3a44cfa304c7772fd6bddcdaf` | `5cb178cd252bffbd4dc8b3d2cf88f31d` |
+| size | 125,343 bytes | 87,329 bytes |
+| artboards | `7e 3b 2c 2b 2d 2e 3c 7d 7c 4c` | `5a 5b 4c 3b 3c 2b 2c 2d 2e` |
+
+The stale one carries **`5a` and `5b`** — the artboards of the earlier
+`events-lineups` run this workspace's `CONTEXT.md` says the human **abandoned**
+— and is **missing `7e`, `7d` and `7c`**, three of this run's ten. It is the
+pre-revision morning file (10:20), superseded by the 14:21 capture the brief
+was written against.
+
+Verified against the current capture's bytes: line 147 is `3b`'s body div at
+`padding:36px 48px 0` with no `justify-content`, and line 148 is the `<h1>` as
+its first child — no eyebrow. The one `eyebrow` string near that frame is
+`3 · Dual branch`, a section label in the document's annotation layer
+**outside** the 1280×840 frame. A second completion review, given the
+provenance and asked to check for itself, confirmed both findings false and
+passed the task.
+
+**Every task T1–T8 reported md5 `045f55b3`, so no delivered work is built on
+the stale bytes** — only that one review was. But the file is still sitting in
+a scratchpad and will mislead the next agent that finds it by globbing.
+
+**changed:** `static/static-event-chooser.tsx` (new) and the route re-point —
+one import, one `return`, guard block byte-identical, a paragraph appended to
+the existing doc comment. `new-event-chooser.tsx` untouched.
+
+**follow-ups:**
+1. **Pin the design capture.** Three sessions independently re-captured this
+   file, and a fourth (superseded) copy is indistinguishable by filename. Later
+   tasks and reviewers should be handed the md5 and the absolute path, as this
+   re-run was, rather than left to glob for `*.dc.html`.
+2. Design copy flagged, not fixed — input for T12: "Add it in Matches" names a
+   destination a team workspace's rail does not expose. Reproduced verbatim;
+   the dormant component had silently reworded it to "Add a single match", and
+   that rewording is the divergence, not the design.
+3. `Creates 9 lines` sets the 9 in `mono tabular` per the artboard's own class
+   list, while the dormant component dropped `mono` on the argument that Roboto
+   Mono is reserved for timestamps and job ids. The design was followed; worth
+   settling once in the design system.

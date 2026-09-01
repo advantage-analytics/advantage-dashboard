@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { isProgramStaff } from "@/lib/workspace/types";
-import { NewEventChooser } from "@/components/dashboard/schedule/new-event-chooser";
+import { StaticEventChooser } from "@/components/dashboard/schedule/static/static-event-chooser";
 
 /**
  * 3b — New event, as a page rather than a dropdown.
@@ -11,6 +11,12 @@ import { NewEventChooser } from "@/components/dashboard/schedule/new-event-choos
  * menu item is not authorization, and a player who types this URL should land
  * back on the schedule they are allowed to read rather than on a chooser whose
  * every destination would refuse them.
+ *
+ * The body is now `StaticEventChooser` — a literal rebuild of the `3b`
+ * artboard. `new-event-chooser.tsx` is left in the tree, dormant, as the
+ * material a later re-wiring starts from. Nothing above this line changed:
+ * the guards are the route's job, not the body's, and they stay whether the
+ * screen is fixture-backed or live.
  */
 export default async function NewEventPage() {
   const workspace = await getWorkspaceContext();
@@ -20,5 +26,5 @@ export default async function NewEventPage() {
   if (active.kind !== "team") redirect("/dashboard");
   if (!isProgramStaff(active)) redirect("/dashboard/team/schedule");
 
-  return <NewEventChooser />;
+  return <StaticEventChooser />;
 }

@@ -57,7 +57,7 @@ bodies do not repeat them — a subagent running any of T1–T12 should read the
 - **notes:** `EventFormat.adScoring` is `boolean | null` and null is a real state — the vision pipeline refuses a job without it, and `tournament-form.tsx`'s header records the outage that followed the last time it went missing. This is the one live guardrail seam in the run. The `"3|false"` string is the *form control's* value encoding used by the dormant forms (T6, T8 reproduce it); it is not the fixture type.
 
 ## T2 · Rebuild 3b — the event-type chooser
-- **status:** blocked
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** `src/components/dashboard/schedule/static/static-event-chooser.tsx` (new), `src/app/dashboard/team/schedule/new/page.tsx`
