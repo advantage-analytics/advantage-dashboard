@@ -562,3 +562,110 @@ this log entry.
 6. When this screen returns to the database, `RAIL_SCHOOLS`,
    `DUAL_DRAFT_LINES` and `DUAL_DRAFT_EVENT` are the three imports to swap for
    `OpponentRail` + `LineupEditor` + `createDual`; the props already line up.
+
+## T8 · Rebuild 3c — the tournament builder — done
+
+**gate:** mechanical — `npm run lint` 0 errors / 37 warnings (none in the
+changed files), `npx tsc --noEmit` clean, `npm test` 227 passed (the reviewer
+also ran `npm run build` green). Completion review — `VERDICT: pass`, five of
+five, all eight requested judgments resolved in the implementation's favour
+against a live artboard capture. Guardrails —
+`pipeline-guardrails-reviewer` **ran** (diff touches `src/app/dashboard/` and
+`src/components/dashboard/`) and stated plainly that **nothing breaks a
+guardrail**. `rls-boundary-reviewer` **skipped** — no file under
+`src/lib/supabase/`, `src/lib/data/`, `src/app/api/` or `supabase/migrations/`,
+no new query; the route *removes* two loader calls.
+
+**changed:** New `static/static-tournament-builder.tsx` — the `3c` roster rail
+feeding an entries list, inside `EventShell flush`. The route drops `getLadder`,
+`getTeamSettings` and their `Promise.all`, guard block byte-identical, with a
+paragraph appended to the existing doc comment. `tournament-form.tsx`,
+`entry-editor.tsx` and `field-row.tsx` untouched.
+
+**Declared extension:** `src/lib/schedule/fixtures.ts`, **98 insertions / 0
+deletions** — a pure append plus one `import type { LadderPlayer }` slotted into
+the existing import block with nothing reordered. Deliberately shaped that way
+because three tasks are stashed and T6's stash also edits this file; the
+conflict surface is now one import line at worst.
+
+**The format seam — this run's most dangerous point, handled correctly.**
+The component emits `FORMAT = { value: "3|true", label: "Bo3 · ad" }` as a
+literal. Both reviewers verified independently: `"3|true"` is genuinely
+`FORMATS[1]` in `tournament-form.tsx:42`, it round-trips through
+`dual-form.tsx:266`'s decoder to `{ bestOf: 3, adScoring: true }`, and the
+fixture agrees (`TOURNAMENT_FORMAT = { bestOf: 3, adScoring: true }`) — one
+tournament, one format, stated twice, both statements matching. The
+literal-not-interpolated choice is right for the recorded reason: `adScoring` is
+`boolean | null`, `${null}` encodes as `"null"`, and `"null" === "true"` is a
+confident `false` — the exact outage `tournament-form.tsx`'s header describes,
+on this exact screen.
+
+**The T6 defect is absent, by construction rather than by discipline.** T6 was
+blocked because a rail selection could render one school's name over another's
+data. Here `TOURNAMENT_FIELD` pairs each `LadderPlayer` with its own
+`EventEntry` in one object literal — no parallel arrays, no name or index join.
+Both panes read `row.player.name`; `entered` is a `Map` keyed on
+`player.userId`; the entries list is a `flatMap` over the same array the rail
+iterates, so each rendered row carries the entry it was filtered by; the footer
+count is `field.length`, not a literal. `enter()`/`remove()` touch only the
+passed key, so no other row's draw or seed can shift. Verified live by both
+reviewers and by interaction.
+
+**A ruling worth recording — the missing Surface cell is NOT a pipeline
+defect.** `3c` draws Name / Starts / Ends / Site / Format and no Surface, while
+the dormant `tournament-form.tsx` deliberately adds one so an event cannot be
+created without it. The runner's dispatch assumed surface might be a
+vendor-required field; **the guardrails reviewer checked `job-request.ts`
+directly and it is not.** The five fields §3.1 names are both player names, a
+non-zero set score, `initialTopPlayerIsPlayer1`, `fixedCamera` and `adScoring` —
+surface appears nowhere in `SplitStepJobRequest` or its validation. `surface` is
+a display/analytics field: `actions.ts:481` writes `court_type: event.surface ??
+undefined`, and `statistics-server.ts` already falls back to "Unknown". So a
+null surface degrades a statistics grouping, it does not fail a submission.
+Reproduce-and-flag was correct.
+
+**follow-ups:**
+1. **Nine contradictions in `3c`, reproduced as drawn and flagged — input for
+   T12.** (a) **The info callout is the big one**: "3 Big Ten programs are in
+   this field — matches against them count toward conference seeding." Nothing
+   in this app records which programs attend a tournament, and nothing models
+   conference seeding; `tournament-form.tsx`'s own header says such a callout
+   "is not built, and should not be… A hardcoded one would be a confident lie
+   about a field nobody entered." Drawn verbatim anyway, per rule 4 — the
+   reviewer upheld this, distinguishing a frozen fixture where the sentence is
+   true of the data it names from a live tool computing it over real data.
+   (b) No Surface and no Hosted-by cell (see the ruling above). (c) Dates are
+   drawn year-less (`10-03`, `10-05`) while `startsOn`/`endsOn` are YYYY-MM-DD
+   and the dormant form uses `<input type="date">`, which cannot render a
+   year-less value. (d) No doubles section and no typed-name path, so there is
+   no way to enter a walk-on, guest or unrostered recruit — a capability
+   `entry-editor.tsx` calls out as necessary. (e) No draw or seed editing, so a
+   re-added player returns as Main draw / Unseeded with no way back to
+   "Qualifying". (f) "Bo3 · ad" is the artboard's shorthand, not the app's label
+   for that value ("Best of 3 · ad" in both dormant `FORMATS` tables) — the
+   label diverges, the value does not. (g) Site and Format draw chevrons but
+   state one value each; rendered as one-option selects rather than inventing
+   options the design never wrote. (h) Every rail row asserts a ladder number,
+   though `LadderPlayer.ladderPosition` is nullable and renders "Unranked".
+   (i) The name field carries a 2px blue focus rule on non-focusable text.
+2. **Two invented empty-state strings**, both outside anything `3c` draws: the
+   zero-entries message "Nobody yet — add players from the roster." (reachable
+   via the `x` the artboard does draw, and marked in source as scaffolding), and
+   the rail's "No player by that name." The reviewer accepted both but noted the
+   second **lacks the inline scaffolding flag** the first has — worth
+   annotating for consistency.
+3. **`"<bestOf>|<adScoring>"` now lives in three places** — both dormant
+   `FORMATS` tables and this component's `FORMAT`. A shared encode/decode pair
+   would close the `${null}` → `"null"` trap permanently, which is worth doing
+   given this seam has already caused one real outage.
+4. **The component hardcodes "Buckeye Fall Classic" / "10-03" / "10-05" as JSX
+   literals** rather than reading them off `TOURNAMENT_DETAIL.event`, which
+   holds the same values. Consistent today; a DRY nit the reviewer flagged as
+   out of scope.
+5. Extract `stateLine()` and `DRAWS` from `entry-editor.tsx` so the static and
+   dormant screens cannot drift on the four subline shapes.
+6. `getTeamSettings` may now have no live caller under the schedule subtree —
+   worth confirming it is dormant by design rather than orphaned.
+7. **`--blue` on white at 11px keeps failing WCAG 1.4.3 AA across these
+   artboards** (`3c`'s callout neighbours, `2c`'s "Clear"). Third task to raise
+   it; worth one deliberate design-system decision rather than a per-task note.

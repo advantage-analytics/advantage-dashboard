@@ -55,6 +55,7 @@ import type {
 } from "./types";
 import type { OpponentDualHistory } from "@/lib/schedule/opponent-history";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
+import type { LadderPlayer } from "@/lib/data/roster-server";
 
 /* ── Who the design is signed in as ─────────────────────────────────────── */
 
@@ -728,4 +729,101 @@ export const ALL_PROGRAM_SCHOOLS: DirectorySchool[] = [
     division: "D3",
     seasonRecord: "16–5",
   }),
+];
+
+/* ── 3c's roster rail, and the field it feeds ───────────────────────────── */
+
+/**
+ * One row of `3c`'s left rail: a roster player, and the entry they are already
+ * in — or null, meaning rostered and not entered.
+ *
+ * ── Why the pair is one row rather than two lists ──────────────────────────
+ * `3c` is master–detail: the rail on the left and the entries list on the right
+ * describe the same three people. Two parallel arrays joined by name or by
+ * index is exactly how one player's seed ends up printed under another
+ * player's name — the rail says "S1 · entered · seed 3" while the list says
+ * "Marcus Reid · Seed 3" and nothing on screen looks broken. Pairing them here,
+ * in one literal, means there is a single source per player and no join to get
+ * wrong: `player.name` is the only name either pane renders, and `entry.draw` /
+ * `entry.seed` are that same row's.
+ *
+ * `player` is `LadderPlayer` — what `getLadder()` returns and what the dormant
+ * `RosterRail` already takes, so the re-wiring is the loader call coming back,
+ * not a new prop shape. `entry` is an `EventEntry` out of `TOURNAMENT_DETAIL`
+ * above, not a copy of one.
+ *
+ * ── The ladder positions are 3c's, not a derivation ────────────────────────
+ * `3c` draws S1…S6 against the six names below, in that order. `ladderPosition`
+ * is null in real data whenever a program never set a ladder; every row here
+ * carries a number because the artboard prints one for every row.
+ */
+export interface TournamentFieldRow {
+  player: LadderPlayer;
+  /** The entry this player starts in, or null — rostered, not entered. */
+  entry: EventEntry | null;
+}
+
+/**
+ * The six names `3c` draws in the rail, in the order it draws them.
+ *
+ * The first three are the three `TOURNAMENT_DETAIL` entries, so the field the
+ * right pane lists and the checked rows on the left are the same three rows of
+ * this array. The last three are the rest of the roster, drawn with a `+`.
+ *
+ * `userId` is a fixture id in the shape a `program_players.id` occupies. It is
+ * never rendered: it is the key the rail and the entries list agree on, which
+ * is the whole point of it being here rather than a name.
+ */
+export const TOURNAMENT_FIELD: TournamentFieldRow[] = [
+  {
+    player: {
+      userId: "fixture-player-brooks",
+      name: "Dana Brooks",
+      ladderPosition: 1,
+    },
+    // "S1 · entered · seed 3" on the rail, "Main draw · Seed 3" in the list.
+    entry: BUCKEYE_ENTRIES[0],
+  },
+  {
+    player: {
+      userId: "fixture-player-reid",
+      name: "Marcus Reid",
+      ladderPosition: 2,
+    },
+    // "S2 · entered", "Main draw · Unseeded".
+    entry: BUCKEYE_ENTRIES[1],
+  },
+  {
+    player: {
+      userId: "fixture-player-osei",
+      name: "Rafael Osei",
+      ladderPosition: 3,
+    },
+    // "S3 · qualifying", "Qualifying · —".
+    entry: BUCKEYE_ENTRIES[2],
+  },
+  {
+    player: {
+      userId: "fixture-player-tanaka",
+      name: "Sam Tanaka",
+      ladderPosition: 4,
+    },
+    entry: null,
+  },
+  {
+    player: {
+      userId: "fixture-player-moreau",
+      name: "Jules Moreau",
+      ladderPosition: 5,
+    },
+    entry: null,
+  },
+  {
+    player: {
+      userId: "fixture-player-adeyemi",
+      name: "Lena Adeyemi",
+      ladderPosition: 6,
+    },
+    entry: null,
+  },
 ];

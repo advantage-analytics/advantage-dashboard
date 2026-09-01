@@ -134,7 +134,7 @@ bodies do not repeat them — a subagent running any of T1–T12 should read the
 - **notes:** One popup, two states of its local state — per the brief's decision that the paired frames are one component moving, not two screens.
 
 ## T8 · Rebuild 3c — the tournament builder
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** `src/components/dashboard/schedule/static/static-tournament-builder.tsx` (new), `src/app/dashboard/team/schedule/new/tournament/page.tsx`
