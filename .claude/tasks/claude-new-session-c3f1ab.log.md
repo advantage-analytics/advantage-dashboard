@@ -1083,3 +1083,82 @@ reviewers confirmed it does not overclaim.
 4. **That same guardrails doc, §7, states the lint baseline as 43.** The real
    figure is 37. This is now the third place the stale number has been found
    (brief, plan, queue preamble) — worth one correction pass across all four.
+
+## T10 · Add the copy-fidelity spec — done
+
+**gate:** mechanical — `npm run lint` 0 errors / 37 warnings, `npx tsc
+--noEmit` clean, `npm test` **244 passed** (227 pre-existing + 17 new).
+Completion review — `VERDICT: pass`, all four criteria and all six requested
+judgments, with the crux (no self-comparison) traced across all 86 assertions.
+Guardrails — **both skipped, legitimately**: the diff is one new file under
+`tests/`, touching no path either reviewer covers, adding no query and changing
+no component. The spec *imports* `@/lib/data/programs-server` for two pure
+formatters, which is a read, not a change to that module.
+
+**the design decision that makes this spec worth having.** The expected strings
+are **hand-transcribed literals**, read out of the authoritative artboard
+capture and written into the spec by hand. Nothing imports a string from
+`fixtures.ts` and asserts it equals itself. Every assertion has app code on one
+side — a fixture export, a real formatter called on real fixture data, or
+normalised component source — and the transcription on the other. A spec that
+sources both sides from the code under test passes forever and catches nothing;
+this one is an independent second copy of the design's strings.
+
+**criterion 4 verified twice over, by the runner as well as the implementer.**
+The runner ran two of its own mutations, different from the implementer's, and
+reverted both: a fixture en dash → hyphen in `seasonRecord: "18–4"` failed 2
+tests, and a one-sentence change in `static-event-chooser.tsx`'s JSX failed 1
+with the message *"static-event-chooser.tsx no longer draws …"*. The reviewer
+independently ran a third (`SEASON_FACTS` "36" → "37"). Three mutations, three
+failures, tree clean after each.
+
+**changed:** New `tests/schedule-static-copy.spec.ts` — 710 lines, 17 tests in
+four describe blocks, one per static route. Characters asserted as themselves
+and counted at codepoint level by the reviewer: en dash U+2013 ×23, em dash
+U+2014 ×35, middle dot U+00B7 ×36, `↵` U+21B5 ×4, and **zero** curly
+apostrophes or quotes — the design's straight U+0027 was not "upgraded".
+
+**the normaliser, and a correction to its own rationale.** Component source is
+read through a `screen()` helper that decodes `&#39;`/`&apos;`/`&quot;`/`&amp;`
+but deliberately **not** `&rsquo;` (so an apostrophe drifting curly fails rather
+than passes), strips comments, strips the `{ }` a removed JSX comment leaves
+mid-sentence, replaces `{" "}` and collapses whitespace, and returns the source
+twice — once with JSX tags removed, because attribute copy lives inside a tag
+while prose split across `<span className="tabular">` only reads whole with tags
+gone.
+
+Comment-stripping is the load-bearing step: without it the spec passes on a doc
+block *quoting* the copy after the copy itself is gone. **The implementer's
+cited example of this was wrong** — the tournament-builder JSDoc it named is
+accidentally immune, because the `\n * ` line-continuation asterisk breaks the
+contiguous match anyway. The reviewer found a real case that proves the same
+point: `static-schedule.tsx` quotes "One-off match in Matches" verbatim in a
+*single-line* comment, and simulating the copy's deletion there passes without
+stripping and fails with it. The step is justified; the stated reason was not.
+
+**follow-ups:**
+1. **Coverage gaps, declared rather than papered over** — the reviewer
+   spot-checked each and found them accurately described. `6-7³` is asserted as
+   score *input* (`player1_tiebreaks: [null, 3]`, the digit on the losing side)
+   rather than rendered text, because `<ScoreLine>` cannot be mounted.
+   Interpolated sentences are asserted as contiguous fragments plus the fixture
+   values that fill the holes — a wording change is caught, a re-ordering of the
+   interpolations is not. `7e`'s scaffold slot labels are props, not copy. The
+   topbar counts have no code to check, since T3 left them unrendered.
+   `savedSubline()` is unexported, so its output is pinned as a template literal
+   plus the fixture's numbers.
+2. **Two assertions are deliberately markup-shaped** —
+   `'{row.teamScore.us}–{row.teamScore.them}'` and `'{score.us}–{score.them}'`.
+   That en dash exists nowhere else and cannot be pinned without a renderer.
+   They will break on an innocuous refactor of those two lines; the trade is
+   commented at the call site.
+3. **Extract `screen()`'s normaliser** if a second copy-fidelity spec ever
+   lands. It is now non-trivial and a hand-rolled second copy would drift.
+4. **If a DOM renderer is ever added** (`happy-dom` plus a React test renderer),
+   the fragment assertions and both markup-shaped checks collapse into
+   rendered-text assertions. That is the right end state, and it is a dependency
+   decision rather than a test one.
+5. **`dual-widget.tsx`'s `SINGLES_MARKS`/`DOUBLES_MARKS` are not covered here** —
+   they are colour tokens, not copy. They are also the one thing on that screen
+   that will not re-derive when it is pointed at live data, so they want their
+   own guard in the re-wiring task. This is the second task to flag that trap.

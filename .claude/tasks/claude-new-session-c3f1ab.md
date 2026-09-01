@@ -159,7 +159,7 @@ bodies do not repeat them — a subagent running any of T1–T12 should read the
 - **notes:** These eight files run 240–509 lines each; read each one's header block, not the whole file, or the context goes. This labels the `docs/ui-revamp-guardrails.md` §3.5 hazard — a dead near-duplicate beside working code is how the wrong one gets edited later — it does not remove it. Only deleting the dormant tree would, and the brief says not to.
 
 ## T10 · Add the copy-fidelity spec
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2, T4, T7, T8
 - **files:** `tests/schedule-static-copy.spec.ts` (new)
