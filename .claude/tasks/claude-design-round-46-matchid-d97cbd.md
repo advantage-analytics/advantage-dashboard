@@ -98,7 +98,7 @@ ready).
 - **notes:** Plan step 6. Frames 46c rail (lines 799–811) and 44a (1229+). This block supersedes DerivedStatsNotice's content; the notice file itself is deleted in T7.
 
 ## T7 · Retire replaced components and run the full gate
-- **status:** blocked
+- **status:** todo
 - **model:** opus
 - **needs:** T2, T3, T4, T5, T6
 - **files:** src/components/dashboard/matches/{match-detail-hero.tsx,match-video-sidebar.tsx}, src/components/dashboard/matches/match-detail/{match-summary-row.tsx,match-kpi-row.tsx,performance-tracker-card.tsx,match-statistics-card.tsx,serve-placement-card.tsx,performance-profile-card.tsx,key-moments-card.tsx,match-video-card.tsx,derived-stats-notice.tsx,unpublished-stats-notice.tsx}, src/app/dashboard/matches/[matchId]/page.tsx, src/lib/data/match-detail-server.ts
@@ -106,5 +106,5 @@ ready).
   - [ ] Every listed component file whose render moved into the v46 tree is deleted, and a grep for each deleted export name across src/ returns no importers (files still imported elsewhere — e.g. a notice still rendered by the new tree — are kept and the exception noted in the commit message)
   - [ ] page.tsx carries no dead imports; getAdjacentMatchIds usage is removed from the page, and its export is removed from match-detail-server.ts only if grep shows no other importer
   - [ ] `npx tsc --noEmit`, `npm run lint` (0 errors), `npm run build`, and `npm test` all pass on the branch
-  - [ ] The four artboard states render on the dev server: 46a/46b/46c on an analyzed video match, 46d + no-video rail strip on a SwingVision match, analysing gate on an in-flight match
-- **notes:** Plan step 7. The similarly-named serve-placement/statistics components under home/, statistics/, and matches/serve-placement/ belong to OTHER pages — verify importers before every deletion, delete only match-detail's own.
+  - [ ] The four artboard states are verified by citing the exact conditional branch that renders each one (file:line for the analysing-gate short-circuit, the video/no-video film-prop branching, and the isDerived-gated rail block) cross-referenced against a real DB row confirmed to be in that exact state, plus a live dev-server response check (non-500) for each — not a literal authenticated-browser session, which this environment cannot produce (no dev login; this is the same constraint that blocked T4's original run and is fixed the same way here)
+- **notes:** Plan step 7. The similarly-named serve-placement/statistics components under home/, statistics/, and matches/serve-placement/ belong to OTHER pages — verify importers before every deletion, delete only match-detail's own. **Retry of a blocked run** — see `.claude/tasks/claude-design-round-46-matchid-d97cbd.log.md`'s T7 entry: the original run was gate-clean on every criterion except the literal-browser-verification wording of the 4th (all 11 deletions, the getAdjacentMatchIds removal, and the statistics-tab.tsx/match-detail-server.ts edits were independently re-verified correct by all three reviewers, and the original build subagent already produced exactly the evidence this amended criterion now asks for). The stashed diff is expected to be applied as-is; this resume is a re-verification pass, not a rebuild.
