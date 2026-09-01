@@ -178,13 +178,6 @@ export function LoginForm() {
               Create an account
             </Link>
           </span>
-          <span className="text-micro">
-            Bringing a program?{" "}
-            <Link href="/claim/program" className={AUTH_LINK}>
-              Find it here
-            </Link>{" "}
-            — setup takes one form.
-          </span>
         </AuthFooter>
       </div>
     </form>
