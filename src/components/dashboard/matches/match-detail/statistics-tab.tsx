@@ -6,18 +6,22 @@ import { PerformanceTrackerChart } from "@/components/dashboard/matches/match-de
 import { RallyLengthCard } from "@/components/dashboard/matches/match-detail/rally-length-card";
 import { PointEndingsCard } from "@/components/dashboard/matches/match-detail/point-endings-card";
 import { UnpublishedStatsNotice } from "@/components/dashboard/matches/match-detail/unpublished-stats-notice";
-import { DerivedStatsNotice } from "@/components/dashboard/matches/match-detail/derived-stats-notice";
 
 /**
  * The Statistics tab's panel (artboard 46a) — insight strip, head-to-head
  * card, then the three point-derived charts in the artboard's order
- * (performance tracker → rally length → how points ended), plus the two
- * provenance notices the page has always shown above them.
+ * (performance tracker → rally length → how points ended), plus the
+ * unpublished-stats notice the page has always shown above them.
  *
- * The notice gating is carried over from `page.tsx` unchanged: a match with a
- * verified point timeline but no published aggregates says so rather than
- * printing zeroes, and a video-derived match keeps its caveat above numbers
- * that are approximate per statistic.
+ * That notice's gating is carried over from `page.tsx` unchanged: a match with
+ * a verified point timeline but no published aggregates says so rather than
+ * printing zeroes.
+ *
+ * The derived-match caveat that used to sit beside it (`DerivedStatsNotice`)
+ * is gone from this pane, not dropped: the rail's `MatchDataBlock` is its
+ * redesigned home and renders on the same condition `page.tsx` computes here
+ * (`isDerived && statsPublished`), so it is already on screen next to these
+ * charts on every tab. Two copies of the same caveat is one too many.
  *
  * None of the charts take a player name or a points array as a prop: they read
  * `points` from `MatchDataProvider` and their you/opp orientation from
@@ -47,7 +51,6 @@ export function StatisticsTab({
       <InsightStrip summary={summary} matchId={matchId} />
 
       {!statsPublished && <UnpublishedStatsNotice />}
-      {statsPublished && isDerived && <DerivedStatsNotice />}
 
       <HeadToHeadCard />
 

@@ -98,7 +98,7 @@ ready).
 - **notes:** Plan step 6. Frames 46c rail (lines 799–811) and 44a (1229+). This block supersedes DerivedStatsNotice's content; the notice file itself is deleted in T7.
 
 ## T7 · Retire replaced components and run the full gate
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2, T3, T4, T5, T6
 - **files:** src/components/dashboard/matches/{match-detail-hero.tsx,match-video-sidebar.tsx}, src/components/dashboard/matches/match-detail/{match-summary-row.tsx,match-kpi-row.tsx,performance-tracker-card.tsx,match-statistics-card.tsx,serve-placement-card.tsx,performance-profile-card.tsx,key-moments-card.tsx,match-video-card.tsx,derived-stats-notice.tsx,unpublished-stats-notice.tsx}, src/app/dashboard/matches/[matchId]/page.tsx, src/lib/data/match-detail-server.ts
