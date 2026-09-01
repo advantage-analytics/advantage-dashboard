@@ -32,3 +32,15 @@ is the runner's. Newest entries at the bottom.
 1. Tab switching via `router.push` refetches the whole RSC wave (reconcile + analysis + video) per switch; `window.history.pushState` shallow routing would keep back-button behavior with zero server round-trips.
 2. `MatchDataProvider`'s `insights` context type omits `summary` while the server type has it — close the typing gap when T2 reads insights client-side.
 3. Icons: `public/icons/{tennis-court-icon,tournament-icon}.svg` exist but bake `#888888` stroke; a token-colored variant may be wanted.
+
+## T2 · Statistics tab: insight strip + head-to-head card — done
+
+**gate:** mechanical (lint/tsc/test) pass · task-completion-reviewer `VERDICT: pass` · pipeline-guardrails-reviewer clean, no findings · rls-boundary-reviewer skipped (no data/api/migration surface in diff)
+
+**changed:** New `insight-strip.tsx` (46a strip — ink-900 logo chip reusing `home/focus-card.tsx`'s existing pattern since no `logo-mark.svg` exists, insight summary as the sole claim line with no fabricated evidence count, dismiss X via `useSyncExternalStore` reusing `AiInsightCard`'s exact localStorage key so dismissal state carries over), `head-to-head-card.tsx` (legend + set-score chips from `sides.sets` + the relocated SERVE/RETURN/OTHER configs and `buildStatRows`/`statDisplay`, now keyed `you`/`opp` instead of `p1`/`p2`; per-set filtering recomputes derivable rows straight from `points` and falls back to the existing em-dash/tooltip convention — including staying withheld under a filter when the whole-match view is withheld, so a derived match's un-published aces can't leak a confident number through a set filter), `statistics-tab.tsx` (composes the two new cards + the still-parked PerformanceTrackerCard + the existing UnpublishedStatsNotice/DerivedStatsNotice gating, unchanged). `page.tsx` drops the stat configs/builders/chip logic entirely and renders `<StatisticsTab>` in the tab slot. All you/opp attribution — including the new per-set point-bucketing — routes through `useMatchSides()`/`sides.you.isPlayer1`; both reviewers traced this explicitly. AiInsightCard/MatchStatisticsCard files are unrendered but not deleted (T7).
+
+**follow-ups (from the build subagent):**
+1. The dismissed insight strip has no restore affordance on the Statistics tab (the old AiInsightCard had a "Show AI Insight" button; 46a has none) — the rail still shows the summary on the other three tabs. Worth a design call before T7.
+2. `MatchStatisticsCard`'s `STAT_DESCRIPTIONS` tooltip copy wasn't carried over to the new rows (plain centered labels per the artboard) — if that copy is worth keeping, it needs a home before the old card is deleted.
+3. Service Games Won / Service Breaks could become derivable per-set by folding game winners off each game's last point; left out as too fragile for v1 (matches design.md open question #4).
+4. `match-kpi-row.tsx` imports `statRowAnchorId` from `match-statistics-card.tsx`, and neither is rendered anymore — both parked for T7, but confirm T7 deletes the pair together since the anchor contract they share is now dead.

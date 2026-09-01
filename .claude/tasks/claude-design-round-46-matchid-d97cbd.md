@@ -34,7 +34,7 @@ ready).
 - **notes:** Plan step 1. Artboard frames 46a–d (lines 431–1217 of the reference .dc.html) share this shell; two-pane flush precedent: `schedule/event-shell.tsx`. Read `docs/ui-revamp-guardrails.md` §3.2–3.4 first. Header breadcrumb is already handled by `src/app/dashboard/header.tsx` — do not add a second crumb bar. Prev/next arrows and `getAdjacentMatchIds` leave the render (deletion happens in T7). **Retry of a blocked run** — see `.claude/tasks/claude-design-round-46-matchid-d97cbd.log.md`'s T1 entry for the two failures being fixed here (broken independent-scroll chain outside the original file list; a false SwingVision-provenance claim on video-analyzed matches missing their trimmed copy). No existing "add video to an existing match" flow was found in the codebase — the SwingVision-import copy's "Add video" link may still point at `/dashboard/matches/new` (a semantic gap already flagged in `docs/match-detail-v46-flags.md`'s planned entries), but the copy itself must not appear for a match it doesn't describe.
 
 ## T2 · Statistics tab: insight strip + head-to-head card
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/components/dashboard/matches/match-detail/{insight-strip.tsx,head-to-head-card.tsx,statistics-tab.tsx} (new), src/app/dashboard/matches/[matchId]/page.tsx

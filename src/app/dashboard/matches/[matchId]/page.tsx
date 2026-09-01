@@ -12,94 +12,14 @@ import {
 import { analysisFor, loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import { MatchAnalysisProgress } from "@/components/dashboard/matches/match-detail/match-analysis-progress";
 import { MarkReportSeen } from "@/components/dashboard/matches/match-detail/mark-report-seen";
-import { UnpublishedStatsNotice } from "@/components/dashboard/matches/match-detail/unpublished-stats-notice";
-import { DerivedStatsNotice } from "@/components/dashboard/matches/match-detail/derived-stats-notice";
 
 import { MatchDetailShell } from "@/components/dashboard/matches/match-detail/match-detail-shell";
 import { MatchRail } from "@/components/dashboard/matches/match-detail/match-rail";
 import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
-import { PerformanceTrackerCard } from "@/components/dashboard/matches/match-detail/performance-tracker-card";
-import {
-  MatchStatisticsCard,
-  type StatRow,
-} from "@/components/dashboard/matches/match-detail/match-statistics-card";
+import { StatisticsTab } from "@/components/dashboard/matches/match-detail/statistics-tab";
 import { ServePlacementCard } from "@/components/dashboard/matches/match-detail/serve-placement-card";
-import { AiInsightCard } from "@/components/dashboard/ai-insight-card";
-import { InsightStatChip } from "@/components/dashboard/shared/insight-stat-chip";
 import { MatchVideoCard } from "@/components/dashboard/matches/match-detail/match-video-card";
 import { getMatchVideo } from "@/lib/data/match-video-server";
-import type { PlayerStatistics } from "@/lib/data/types";
-
-type StatConfig = {
-  key: keyof PlayerStatistics;
-  label: string;
-  isPercentage: boolean;
-  fractionKey?: string;
-};
-
-const SERVE_STATS: StatConfig[] = [
-  { key: "aces", label: "Aces", isPercentage: false },
-  { key: "doubleFaults", label: "Double Faults", isPercentage: false },
-  { key: "firstServeInPct", label: "First Serves In", isPercentage: true, fractionKey: "firstServeInPct" },
-  { key: "firstServeWinPct", label: "First Serve Points Won", isPercentage: true, fractionKey: "firstServeWinPct" },
-  { key: "secondServeWinPct", label: "Second Serve Points Won", isPercentage: true, fractionKey: "secondServeWinPct" },
-  { key: "breakpointsSaved", label: "Break Points Saved", isPercentage: false, fractionKey: "breakpointsSaved" },
-  { key: "servicePointsWon", label: "Service Points Won", isPercentage: false, fractionKey: "servicePointsWon" },
-  { key: "serviceGamesWon", label: "Service Games Won", isPercentage: false },
-];
-
-const RETURN_STATS: StatConfig[] = [
-  { key: "firstReturnInPct", label: "First Returns In Play", isPercentage: false },
-  { key: "firstReturnWonPct", label: "First Return Points Won", isPercentage: false },
-  { key: "secondReturnInPct", label: "Second Returns In Play", isPercentage: true, fractionKey: "secondReturnInPct" },
-  { key: "secondReturnWonPct", label: "Second Return Points Won", isPercentage: true, fractionKey: "secondReturnWonPct" },
-  { key: "breakpointsWonPct", label: "Break Points Converted", isPercentage: true, fractionKey: "breakpointsWonPct" },
-  { key: "returnPointsWon", label: "Return Points Won", isPercentage: false, fractionKey: "returnPointsWon" },
-  { key: "returnGamesWonPct", label: "Return Games Won %", isPercentage: true, fractionKey: "returnGamesWonPct" },
-  { key: "returnGamesWon", label: "Service Breaks", isPercentage: false },
-];
-
-const OTHER_STATS: StatConfig[] = [
-  { key: "winners", label: "Winners", isPercentage: false },
-  { key: "unforcedErrors", label: "Unforced Errors", isPercentage: false },
-  { key: "netPointsAppearances", label: "Net Approaches", isPercentage: false },
-  { key: "netPointsWonPct", label: "Net Points Won %", isPercentage: true, fractionKey: "netPointsWonPct" },
-  { key: "shortRallyWonPct", label: "Short Rallies (1–4)", isPercentage: true, fractionKey: "shortRallyWonPct" },
-  { key: "mediumRallyWonPct", label: "Medium Rallies (5–8)", isPercentage: true, fractionKey: "mediumRallyWonPct" },
-  { key: "longRallyWonPct", label: "Long Rallies (9+)", isPercentage: true, fractionKey: "longRallyWonPct" },
-  { key: "totalPointsWon", label: "Total Points Won", isPercentage: false },
-];
-
-/** "" is what MatchStatisticsCard treats as missing; 0 is a measurement. */
-function statDisplay(value: number | null, isPercentage?: boolean): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "";
-  return isPercentage ? `${Math.round(value)}%` : String(Math.round(value));
-}
-
-function buildStatRows(
-  configs: StatConfig[],
-  p1: PlayerStatistics,
-  p2: PlayerStatistics,
-): StatRow[] {
-  return configs.map((c) => {
-    const p1Val = p1[c.key] as number | null;
-    const p2Val = p2[c.key] as number | null;
-    const p1Frac = c.fractionKey ? p1.fractions[c.fractionKey] : undefined;
-    const p2Frac = c.fractionKey ? p2.fractions[c.fractionKey] : undefined;
-
-    return {
-      label: c.label,
-      // An empty display is the card's existing contract for "no data", which
-      // it renders as an italic em dash with an explanatory tooltip. Absent must
-      // reach here as null rather than 0 — see the mapping in
-      // match-stats-server.ts.
-      p1Display: statDisplay(p1Val, c.isPercentage),
-      p2Display: statDisplay(p2Val, c.isPercentage),
-      p1Fraction: p1Frac ? `${p1Frac.made}/${p1Frac.attempts}` : undefined,
-      p2Fraction: p2Frac ? `${p2Frac.made}/${p2Frac.attempts}` : undefined,
-    };
-  });
-}
 
 interface PageProps {
   params: Promise<{ matchId: string }>;
@@ -147,51 +67,21 @@ export default async function MatchDetailPage({ params }: PageProps) {
 
   if (!data) notFound();
 
-  const { match, statsResult, points, insights, playerAverages } = data;
+  const { match, statsResult, points, insights } = data;
 
   // The single attribution point (guardrails §4): every you/opp decision on
   // this page routes through `getMatchSides`, keyed on `match.isUserPlayer1`.
   const sides = getMatchSides(match, statsResult);
 
   const userInsights = sides.pick(insights?.player1, insights?.player2);
-  // Synthesized prose insight (home-quality), generated once at upload. Falls back to
-  // the single top strength/weakness for matches processed before summaries existed.
+  // Synthesized prose insight (home-quality), generated once at upload. The
+  // rail shows it on every tab but Statistics, where it is the pane's own
+  // insight strip instead (artboard 46a).
   const summary = userInsights?.summary?.trim() || null;
-  const topInsight =
-    userInsights?.weaknesses?.[0] ?? userInsights?.strengths?.[0] ?? null;
 
   const p1 = statsResult?.statistics?.player1Stats;
   const p2 = statsResult?.statistics?.player2Stats;
 
-  // Deterministic evidence chips — real computed match stats for the user, never the
-  // LLM-emitted insight `value` (which would reintroduce hallucinated numbers). Each
-  // carries a delta vs the player's career average (computed live, always fresh). The
-  // delta is only shown when the user is player1, matching how `playerAverages` is
-  // computed (over the user's player1_id matches).
-  const userStats = sides.you.stats;
-  const chipSpecs: { label: string; key: keyof PlayerStatistics; isPct: boolean }[] = [
-    { label: "First Serve In", key: "firstServeInPct", isPct: true },
-    { label: "Break Points Won", key: "breakpointsWonPct", isPct: true },
-    { label: "Winners", key: "winners", isPct: false },
-  ];
-  const insightChips = userStats
-    ? chipSpecs.map((spec) => {
-        const matchVal = Math.round(userStats[spec.key] as number);
-        const avgVal = playerAverages?.[spec.key];
-        const change =
-          sides.you.isPlayer1 && typeof avgVal === "number" && avgVal > 0
-            ? matchVal - Math.round(avgVal)
-            : undefined;
-        return {
-          label: spec.label,
-          value: spec.isPct ? `${matchVal}%` : String(matchVal),
-          change,
-        };
-      })
-    : [];
-  const showAvgCaption = insightChips.some(
-    (c) => typeof c.change === "number" && c.change !== 0,
-  );
   const p1Name = statsResult?.player1Name ?? match.player1.name;
   const p2Name = statsResult?.player2Name ?? match.player2.name;
   const p1Short = shortName(p1Name, 14);
@@ -243,15 +133,6 @@ export default async function MatchDetailPage({ params }: PageProps) {
     );
   }
 
-  const statSections =
-    p1 && p2
-      ? [
-          { title: "Serve", rows: buildStatRows(SERVE_STATS, p1, p2) },
-          { title: "Return", rows: buildStatRows(RETURN_STATS, p1, p2) },
-          { title: "Other", rows: buildStatRows(OTHER_STATS, p1, p2) },
-        ]
-      : [];
-
   return (
     <>
       <MarkReportSeen matchId={matchId} />
@@ -278,68 +159,15 @@ export default async function MatchDetailPage({ params }: PageProps) {
         }
         tabs={{
           statistics: (
-            <>
-              <AiInsightCard
-                storageKey={`advantage-ai-insight-dismissed:${matchId}`}
-              >
-                <div className="flex flex-col gap-3.5">
-                  {summary ? (
-                    <p className="text-[12px] font-normal text-[var(--color-text-body)] leading-[19.8px]">
-                      {summary}
-                    </p>
-                  ) : topInsight ? (
-                    <div className="flex flex-col gap-1.5">
-                      <p className="text-[12px] font-medium text-[var(--color-text-primary)] leading-[18px]">
-                        {topInsight.name}
-                      </p>
-                      <p className="text-[12px] font-normal text-[var(--color-text-body)] leading-[19.8px]">
-                        {topInsight.description}
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="text-[12px] font-normal text-[var(--color-text-body)] leading-[19.8px]">
-                      Insights will appear here once this match is fully analyzed.
-                    </p>
-                  )}
-                  {insightChips.length > 0 && (
-                    <div className="flex flex-col gap-2">
-                      {showAvgCaption && (
-                        <span className="text-[9px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
-                          vs your average
-                        </span>
-                      )}
-                      <div className="flex flex-wrap gap-2">
-                        {insightChips.map((chip) => (
-                          <InsightStatChip
-                            key={chip.label}
-                            label={chip.label}
-                            value={chip.value}
-                            change={chip.change}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </AiInsightCard>
-
-              {!statsPublished && <UnpublishedStatsNotice />}
-              {statsPublished && isDerived && <DerivedStatsNotice />}
-
-              <PerformanceTrackerCard
-                points={points}
-                p1Name={p1Short}
-                p2Name={p2Short}
-                matchDurationSec={matchDurationSec}
-              />
-              {statSections.some((s) => s.rows.length > 0) && (
-                <MatchStatisticsCard
-                  sections={statSections}
-                  p1Name={p1Short}
-                  p2Name={p2Short}
-                />
-              )}
-            </>
+            <StatisticsTab
+              matchId={matchId}
+              summary={summary}
+              statsPublished={statsPublished}
+              isDerived={isDerived}
+              p1Name={p1Short}
+              p2Name={p2Short}
+              matchDurationSec={matchDurationSec}
+            />
           ),
           shots: <ServePlacementCard />,
           film: video ? (
