@@ -1,16 +1,21 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { Calendar, Check, ChevronDown, Plus, Search } from "lucide-react";
+import { Calendar, Check, ChevronDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { advButton } from "@/lib/ui/adv-button";
 import { EventShell } from "@/components/dashboard/schedule/event-shell";
+import { OpponentPopup } from "@/components/dashboard/schedule/static/opponent-popup";
 import { divisionLabel, teamLabel } from "@/lib/data/programs-server";
 import { formatOpponentRecord } from "@/lib/schedule/opponent-history";
 import { siteTitle } from "@/lib/schedule/format";
 import {
   DUAL_DRAFT_EVENT,
   DUAL_DRAFT_LINES,
+  DUAL_DRAFT_OPPONENT_SHORT,
+  DUAL_DRAFT_SAVED_ROSTER,
+  DUAL_DRAFT_TYPED_NAME,
   OUR_CONFERENCE,
   RAIL_SCHOOLS,
   type DirectorySchool,
@@ -92,8 +97,11 @@ const FORMAT_VALUE = "3|false";
  *                       `/dashboard/team/schedule/[eventId]`, which is outside
  *                       the set of screens rebuilt here.
  *
- * The opponent cells ("Add name" / "Add pair") are drawn and inert too; their
- * popup is the next task.
+ * The opponent cells ("Add name" / "Add pair") are the one exception, and the
+ * only live control on this screen: `2d` and `2e` draw the popup behind them,
+ * so each cell is an `OpponentPopup` (T7). It writes to the row's own local
+ * state and nowhere else — no fixture is mutated, nothing is persisted, and a
+ * reload is back to nine unnamed lines.
  *
  * ── What the design draws that this app cannot know ────────────────────────
  * "18–4" and its five siblings on the rail are each opponent's OWN season
@@ -454,7 +462,16 @@ function LineupBlock({
       <div className="mt-1 flex flex-col">
         {lines.map((line, index) => (
           <LineRow
-            key={line.key}
+            // The program key rides in the row key on purpose, and it is
+            // `OpponentTarget.key`'s mechanism (`opponent-name-cell.tsx`):
+            // every name on this row was typed against ONE school, and
+            // `contribute_opponent_player` matches by name WITHIN the target
+            // program, so a name that survived a re-target could attach to a
+            // real, different person at the new school. Re-targeting cannot
+            // happen while the school is a module const — but when the
+            // re-wiring makes it travel again, this key already remounts the
+            // row and drops the resolved name with it. Nothing to remember.
+            key={`${DUAL_DRAFT_SCHOOL.program.programKey}:${line.key}`}
             line={line}
             addLabel={addLabel}
             last={index === lines.length - 1}
@@ -475,6 +492,24 @@ const LINE_GRID = "grid grid-cols-[34px_1fr_20px_1fr_70px] items-center gap-2.5"
  * keeps "Forfeited" under "Forfeit" on the rows above it. `2b` draws the last
  * row of each block without the rule and without the hover wash; both follow
  * `last`.
+ *
+ * ── The one piece of state on this screen ──────────────────────────────────
+ * The opposing name, and it lives HERE rather than in a map upstream. The
+ * failure this screen has to be incapable of is a name landing on a line
+ * nobody meant, and a keyed map is where that happens: one stale key, one
+ * index off by one, and a name typed on S1 is submitted under D3. A row that
+ * holds its own name cannot be addressed by another row at all — `onCommit`
+ * is a closure over this row's own setter, and the popup is handed no line id,
+ * no index and no way to reach a sibling.
+ *
+ * Seeded from `line.theirLabels`, which is empty on all nine draft lines. The
+ * fixture is never mutated; a reload is nine unnamed lines again.
+ *
+ * `active` is the popup saying it is open or still holding `2e`'s
+ * confirmation. `2d` and `2e` both draw that row lifted above the rows below
+ * it (`z-index:20`) with the Forfeit affordance showing — the resting row `2b`
+ * draws keeps it hidden until the pointer is on it, which is what T6 built and
+ * what stays.
  */
 function LineRow({
   line,
@@ -486,12 +521,18 @@ function LineRow({
   last: boolean;
 }) {
   const forfeited = line.forfeit !== null;
+  const [theirLabel, setTheirLabel] = useState(line.theirLabels.join(" / "));
+  const [active, setActive] = useState(false);
 
   return (
     <div
       className={cn(
         LINE_GRID,
         "py-[7px]",
+        // The popup's containing block: `2d` anchors it to `right:0` of the
+        // row, so the row is what it is positioned against.
+        "relative",
+        active ? "z-20" : null,
         last
           ? null
           : [
@@ -531,14 +572,22 @@ function LineRow({
       {forfeited ? (
         <span />
       ) : (
-        // Inert. The popup behind it is the next task.
-        <span
-          className="inline-flex cursor-pointer items-center gap-1 text-[11px]"
-          style={{ color: "var(--ink-400)" }}
-        >
-          <Plus size={9} strokeWidth={1.5} className="shrink-0" />
-          {addLabel}
-        </span>
+        // `2d`/`2e`. The trigger `2b` draws is this component's closed state,
+        // unchanged — 11px ink-400, a 9px plus, and the block's own
+        // "Add name"/"Add pair".
+        <OpponentPopup
+          value={theirLabel}
+          addLabel={addLabel}
+          discipline={line.discipline}
+          // The header's name and the rail's tick read the same object, and so
+          // does `2e`'s confirmation. One school, one source, no drift.
+          schoolName={DUAL_DRAFT_SCHOOL.program.schoolName}
+          schoolShortName={DUAL_DRAFT_OPPONENT_SHORT}
+          candidates={DUAL_DRAFT_SAVED_ROSTER}
+          draftName={DUAL_DRAFT_TYPED_NAME}
+          onCommit={setTheirLabel}
+          onActiveChange={setActive}
+        />
       )}
 
       {forfeited ? (
@@ -553,8 +602,16 @@ function LineRow({
         // is what `2b` draws — the row's own hover is a separate wash. Drawn
         // as drawn, and reported: an invisible target is not a discoverable
         // control.
+        //
+        // `active` is the second half of the same drawing rather than a
+        // softening of it: `2d` and `2e` draw this word plainly visible on the
+        // row their popup is anchored to, and `2b` draws it hidden on a row at
+        // rest. Both are reproduced — the resting row is untouched.
         <span
-          className="text-micro text-right opacity-0 transition-opacity duration-[var(--duration-hover)] hover:opacity-100"
+          className={cn(
+            "text-micro text-right transition-opacity duration-[var(--duration-hover)] hover:opacity-100",
+            active ? "opacity-100" : "opacity-0"
+          )}
           style={{ color: "var(--blue)" }}
         >
           Forfeit

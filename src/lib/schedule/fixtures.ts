@@ -60,6 +60,11 @@ import type { LadderPlayer } from "@/lib/data/roster-server";
 // this file. `import type`, like the two above — a type is erased, so nothing
 // about a `"use client"` module follows it in here.
 import type { LineupLine } from "@/components/dashboard/schedule/lineup-editor";
+// The pooled-roster row `2d`'s popup renders, for the saved-name list at the
+// foot of this file. `import type` again, and here it is load-bearing rather
+// than tidy: `lib/schedule/actions` is a `"use server"` module, so only an
+// erased import may name it from a file the static screens bundle.
+import type { OpponentRosterCandidate } from "@/lib/schedule/actions";
 
 /* ── Who the design is signed in as ─────────────────────────────────────── */
 
@@ -1029,5 +1034,66 @@ export const DUAL_DRAFT_LINES: LineupLine[] = [
     ourLabels: ["Moreau", "Adeyemi"],
     theirLabels: [],
     forfeit: null,
+  },
+];
+
+/* ── `2d`/`2e` — the add-opponent popup ─────────────────────────────────── */
+
+/**
+ * The pooled-roster shape the popup renders, re-exported so nothing under
+ * `static/` has to name `lib/schedule/actions` — a `"use server"` module — to
+ * type against it.
+ *
+ * `getOpponentRoster()` is what fills this list live; the array below is the
+ * one row `2d` draws of it.
+ */
+export type { OpponentRosterCandidate };
+
+/**
+ * What `2d` has typed into the popup's field.
+ *
+ * The artboard opens the popup already mid-name, with the close match already
+ * surfaced — a partial spelling is the only input that produces the state it
+ * draws, so it is stated here rather than left to a keystroke that never
+ * happens. Every line's popup opens on it: `2d` draws one path, so the
+ * reproduction has one path, the same call `DUAL_DRAFT_SCHOOL` records.
+ */
+export const DUAL_DRAFT_TYPED_NAME = "Alexis Cast";
+
+/**
+ * "Ridgeline" — the short form `2d` writes, twice.
+ *
+ * Held as a literal, and this is the design's own inconsistency rather than a
+ * choice: `2d`'s prose ("Ridgeline already has a close name saved.") and its
+ * saved-card subline ("Saved · Ridgeline #2 …") both drop "University", while
+ * `2e`'s toast keeps it ("Saved to Ridgeline University roster"). Both are
+ * reproduced as drawn and reported.
+ *
+ * NOT derived by slicing the first word off `schoolName`: that is a rule the
+ * design never states, and it prints "Fairmont" for "Fairmont A&M" and
+ * "Crestwood" for "Crestwood College" — a short form that is wrong for two of
+ * the six rows one list up. Live, the popup has only `schoolName` and says so
+ * in full (`opponent-name-cell.tsx`).
+ */
+export const DUAL_DRAFT_OPPONENT_SHORT = "Ridgeline";
+
+/**
+ * Ridgeline's saved names, as `2d`'s popup sees them — the one row it draws.
+ *
+ * `lineupSpot` 2 and `priorMeetings` 2 are the two numbers the artboard's
+ * subline states ("Saved · Ridgeline #2 · 2 prior meetings"); `playerId` is
+ * the required field the design draws nothing of, slugged the same
+ * `fixture-` way as every other id in this module.
+ *
+ * One entry, because the popup exists to ask "is this the same person?" and
+ * `2d` draws exactly one candidate to ask it about. A second invented row
+ * would change what the screen is for.
+ */
+export const DUAL_DRAFT_SAVED_ROSTER: OpponentRosterCandidate[] = [
+  {
+    playerId: "fixture-opponent-player-alexis-castellano",
+    name: "Alexis Castellano",
+    lineupSpot: 2,
+    priorMeetings: 2,
   },
 ];

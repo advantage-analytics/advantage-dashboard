@@ -122,7 +122,7 @@ bodies do not repeat them — a subagent running any of T1–T12 should read the
 - **notes:** `flush` exists for this artboard by name — see the prop's doc comment in `event-shell.tsx`. It is the difference between the master-detail body and a padded column, and it is easy to miss.
 
 ## T7 · Rebuild 2d and 2e — the add-opponent popup
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T6
 - **files:** `src/components/dashboard/schedule/static/opponent-popup.tsx` (new), `src/components/dashboard/schedule/static/dual-build-step.tsx`

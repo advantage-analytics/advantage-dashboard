@@ -911,3 +911,95 @@ singles. S6's `forfeit: "ours"` still means the point goes to them.
    `DUAL_DRAFT_LINES`, `DUAL_DRAFT_EVENT` and `DUAL_DRAFT_SCHOOL` are the four
    to swap for `OpponentRail` + `LineupEditor` + `createDual` + the real
    selection; the props already line up.
+
+## T7 · Rebuild 2d and 2e — the add-opponent popup — done
+
+**gate:** mechanical — `npm run lint` 0 errors / 37 warnings (none in the
+changed files), `npx tsc --noEmit` clean, `npm test` 227 passed, **and
+`npm run build` OK** — a build was added to this task's gate deliberately, see
+below. Completion review — `VERDICT: pass`, four of four, all seven requested
+judgments upheld against the authoritative capture. Guardrails —
+`pipeline-guardrails-reviewer` **ran** and returned **no findings**, having
+checked the opponent-identity hazard against the code rather than the comments.
+`rls-boundary-reviewer` **skipped** — no file under `src/lib/supabase/`,
+`src/lib/data/`, `src/app/api/` or `supabase/migrations/`, no new query, no
+route touched.
+
+**why a build was added to the gate.** `fixtures.ts` now does
+`import type { OpponentRosterCandidate } from "@/lib/schedule/actions"`, and
+`actions.ts` **is a `"use server"` module**. `tsc` alone would not catch a
+server action reaching a client bundle; `next build` would. It passes, and the
+reviewer confirmed the mechanism: `isolatedModules: true` forces `import type`
+to be fully erased, `OpponentRosterCandidate` is a plain interface rather than
+an action, and nothing under `static/` names `actions` at all — the type is
+re-exported through `fixtures.ts` precisely so it need not.
+
+**changed:** New `static/opponent-popup.tsx` — one component, two states of its
+own local state (`open` → `2d`, `confirmation` → `2e`). No second popup exists.
+`dual-build-step.tsx`'s inert opponent cell becomes its closed state, with T6's
+drawn treatment of that cell unchanged. `fixtures.ts` gains
+`DUAL_DRAFT_TYPED_NAME`, `DUAL_DRAFT_OPPONENT_SHORT` and
+`DUAL_DRAFT_SAVED_ROSTER`, appended at the end with nothing reordered — the
+reviewer confirmed `RAIL_SCHOOLS`/`CONFERENCE_SCHOOLS` intact, which matters
+because a stash conflict on this file once truncated a neighbour's array.
+
+**the wrong-line hazard, closed structurally.** `dual-form.tsx:220`'s
+`takeOpponent` exists because a name typed against school A can silently attach
+to a real person at school B. The static analogue is a name landing on the wrong
+*line*. That is foreclosed by construction, verified in code by the reviewer
+rather than taken on the component's word: each `LineRow` owns its own
+`useState` for its opposing label, `onCommit` is that row's own setter closed
+over, and the popup receives no line id, no index and no keyed map — there is no
+expressible path to a sibling row. The school half reads
+`DUAL_DRAFT_SCHOOL.program.schoolName`, the same object the header and the
+rail's tick read, and the rail is drawn-not-clickable so no re-target path
+exists at all. T6's fix is intact: `DualBuildStep()` still takes no props.
+
+**a note the re-wiring must not lose.** Rows are keyed
+`${DUAL_DRAFT_SCHOOL.program.programKey}:${line.key}` so a future re-target
+remounts every row and drops its resolved name rather than leaving a name
+attached under a different program id. **Today that key is inert** — the school
+is a module const, so it never changes — and the code says so honestly. The
+guardrails reviewer added the detail that matters later: `LineupBlock` is called
+once for singles and once for doubles, so a live school must flow into a single
+shared value every one of the nine rows reads. Thread it into one block only and
+the remount guarantee silently stops holding for the other.
+
+**follow-ups:**
+1. **Eight contradictions in `2d`/`2e`, reproduced as drawn and flagged — input
+   for T12**, two spot-checked as genuine reproductions. (a) **`2e`'s toast is
+   false on the path `2e` itself draws**: it resolves the line to a name the
+   roster *already held* and still toasts "Saved to Ridgeline University
+   roster". Picking an existing name saves nothing. The dormant
+   `opponent-name-cell.tsx` splits these into two sentences and toasts the save
+   one only after the server confirms a write. (b) The school's name is
+   inconsistent within the pair — `2d` writes "Ridgeline" twice, `2e` writes
+   "Ridgeline University"; held as a literal rather than derived, because a
+   first-word slice would print "Fairmont" and "Crestwood" for two rail rows.
+   (c) `2e` drops a rail row that `2d` lists — saving a name cannot remove a
+   school from the rail, so this is a drawing artefact and the rail was left as
+   built. (d) The toast's own 236px width does not fit its own string at 12px;
+   the artboard's CSS produces the same wrap. (e) `top:calc(100%+8px)` with no
+   flip clips on the lower rows. (f) `2d`/`2e` draw Forfeit plainly where `2b`
+   draws it `opacity:0` — read as active vs resting row, and upheld on review.
+   (g) `2d`/`2e` draw only S1–S3 and no field row, a truncated draw rather than
+   a statement. (h) The 1px blue bar beside the typed text is a caret a static
+   capture cannot render; reproduced as `caret-color: var(--blue)`, the one
+   place markup was read as a stand-in rather than a literal — also upheld.
+2. **Undrawn behaviour filled in, all ruled legitimate** since the artboards
+   state nothing: Escape and outside-click **revert** rather than commit —
+   a deliberate departure from the dormant cell's commit-on-blur, on the
+   grounds that a third implicit write path is the wrong side to err on;
+   arrow-key highlight, a `<button>` trigger with a focus ring, doubles
+   resolving one segment at a time, and a 2800ms toast — the last four lifted
+   verbatim from the dormant cell so the two cannot drift.
+3. Decide the toast copy for the pick path, and settle the toast width — the
+   dormant cell already has both answers.
+4. Give the popup a flip-up when it would open past the detail pane's bottom
+   edge; D2/D3 open partly clipped today.
+5. Settle "Ridgeline" vs "Ridgeline University" in the popup and delete
+   `DUAL_DRAFT_OPPONENT_SHORT` once it is.
+6. At re-wiring, `DUAL_DRAFT_SCHOOL`, `DUAL_DRAFT_SAVED_ROSTER` and
+   `DUAL_DRAFT_TYPED_NAME` become props or fetches **together** — the school and
+   its saved roster must travel as one, or the popup dedupes against the wrong
+   pool.
