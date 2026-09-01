@@ -117,27 +117,34 @@ export async function requestPasswordReset(): Promise<ActionResult> {
 }
 
 /**
- * Delete the signed-in user's account and everything belonging to it.
+ * Delete the signed-in user's account.
  *
- * This used to be a single `auth.admin.deleteUser()` call, and it could not
- * work for anyone who had ever uploaded a match. Deleting an `auth.users` row
- * cascades into `public.users`, and three foreign keys point at that table with
- * NO ACTION — `matches.created_by`, `processing_jobs.created_by` and
+ * Program-filed matches are NOT deleted. A match can only be filed under a
+ * program by a current member, and where it is filed never changes, so
+ * `program_id` alone says "uploaded while on the team". Those rows stay with
+ * the program, attributed to the person's roster profile, which becomes
+ * coach-managed. `release_my_account_from_programs()` does every program-side
+ * write in one transaction — the second reviewed exception to
+ * docs/ui-revamp-guardrails.md §2 — and is called with the USER's client so
+ * it can only ever act on the caller. It refuses while the caller still owns
+ * a program (42501); the page repeats that sentence.
+ *
+ * Personal matches (`program_id is null`) are purged, storage first. This
+ * used to be a single `auth.admin.deleteUser()` call, and it could not work
+ * for anyone who had ever uploaded a match: deleting an `auth.users` row
+ * cascades into `public.users`, and three foreign keys point at that table
+ * with NO ACTION — `matches.created_by`, `processing_jobs.created_by` and
  * `processing_usage.created_by`. Any one row under any of them pinned the
- * account in place, in Supabase Studio as well as here, and the raw Postgres
- * constraint error was handed straight to the user.
+ * account in place, in Supabase Studio as well as here.
  *
  * The fix is NOT `ON DELETE CASCADE` on those keys. A database-level cascade
- * bypasses `purgeMatchStorage()`, which is what removes the Azure video blobs,
- * the vendor results and the uploaded provider files. The rows would vanish and
- * several GB of athlete video would stay in the storage account — still billed,
- * still holding footage the person just asked to have erased, and no longer
- * nameable by anything in the database. So the ordering is enforced here, in
- * code, where the storage step exists.
+ * bypasses `purgeMatchStorage()`, which is what removes the Azure video
+ * blobs, the vendor results and the uploaded provider files. So the ordering
+ * is enforced here, in code, where the storage step exists.
  *
- * Order: storage, then matches (everything else cascades from them), then any
- * stragglers, then the auth user last. The auth user goes last on purpose — if
- * an earlier step fails the account still exists and the user can retry, where
+ * Order: release from programs, then storage, then personal matches, then
+ * stragglers, then the auth user last. If an earlier step fails the account
+ * still exists and the user can retry — every step is idempotent — where
  * the reverse would leave orphaned data belonging to nobody.
  */
 export async function deleteAccount(): Promise<ActionResult> {
@@ -151,15 +158,48 @@ export async function deleteAccount(): Promise<ActionResult> {
     return { ok: false, error: "Your session expired. Sign in again to delete your account." };
   }
 
+  // 1. Programs first, and as the user: the RPC derives its subject from
+  //    auth.uid(), so the admin client would have nobody to act for. Failing
+  //    here changes nothing, which is the point of doing it first.
+  const { data: released, error: releaseError } = await supabase.rpc(
+    "release_my_account_from_programs"
+  );
+
+  if (releaseError) {
+    if (releaseError.code === "42501") {
+      return {
+        ok: false,
+        error:
+          "You still own a program. Transfer ownership in Team settings, then delete your account.",
+      };
+    }
+    console.error("[account delete] program release failed:", releaseError.message);
+    return {
+      ok: false,
+      error: "We could not release your team data, so nothing was deleted. Try again.",
+    };
+  }
+
+  for (const row of (released ?? []) as ReleasedProgram[]) {
+    console.log(
+      `[account delete] released from program ${row.program_id}: ` +
+        `${row.retained} match(es) retained, ${row.repointed} re-pointed`
+    );
+  }
+
   // Admin client for the cleanup: the id is the authenticated caller's own,
   // never anything supplied by the request, so this widens what can be deleted
   // and not whose data can be reached.
   const adminClient = createAdminClient();
 
+  // 2. Personal matches only. Program-filed rows were re-homed above and no
+  //    longer carry this user as created_by; the filter makes that explicit
+  //    rather than relying on it.
   const { data: matches, error: matchesError } = await adminClient
     .from("matches")
     .select("id")
-    .eq("created_by", user.id);
+    .eq("created_by", user.id)
+    .is("program_id", null);
 
   if (matchesError) {
     console.error("[account delete] could not list matches:", matchesError.message);
@@ -190,13 +230,15 @@ export async function deleteAccount(): Promise<ActionResult> {
     }
   }
 
-  // Stragglers: a job or usage row this user created against a match that was
-  // not theirs. Neither cascades from `matches`, and either one would block the
-  // auth delete below. Both are keyed to the caller and best-effort — a failure
-  // here surfaces as the auth delete refusing, which is the honest outcome.
+  // 3. Stragglers: individual-ledger usage, and a job or usage row this user
+  //    created against a match that was not theirs. Neither cascades from
+  //    `matches`, and either one would block the auth delete below. Both are
+  //    keyed to the caller and best-effort — a failure here surfaces as the
+  //    auth delete refusing, which is the honest outcome.
   await adminClient.from("processing_jobs").delete().eq("created_by", user.id);
   await adminClient.from("processing_usage").delete().eq("created_by", user.id);
 
+  // 4. The login, last.
   const { error: deleteAuthError } = await adminClient.auth.admin.deleteUser(user.id);
 
   if (deleteAuthError) {
@@ -212,3 +254,11 @@ export async function deleteAccount(): Promise<ActionResult> {
   revalidatePath("/", "layout");
   redirect("/");
 }
+
+/** One row per program `release_my_account_from_programs()` touched. */
+type ReleasedProgram = {
+  program_id: string;
+  profile_id: string | null;
+  retained: number;
+  repointed: number;
+};

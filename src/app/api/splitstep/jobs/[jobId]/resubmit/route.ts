@@ -75,7 +75,7 @@ export async function POST(
     console.error(`${LOG} job lookup failed`, { jobId, error: jobError.message });
     return NextResponse.json({ error: 'Could not load the job' }, { status: 500 });
   }
-  if (!jobRow || (jobRow as { created_by: string }).created_by !== user.id) {
+  if (!jobRow || (jobRow as { created_by: string | null }).created_by !== user.id) {
     return NextResponse.json({ error: 'Job not found' }, { status: 404 });
   }
 

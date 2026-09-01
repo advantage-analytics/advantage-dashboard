@@ -76,6 +76,22 @@ be. Doubles teams and existing users depend on it.
 > aggregate is computed at read time, and `match_stats` is keyed on
 > `match_id` + `is_player1`, never on a player id.
 
+> **A second reviewed exception, added 2026-09-01: `release_my_account_from_programs`.**
+>
+> Account deletion re-points `matches.player1_id` / `player2_id` from the
+> departing login id to that person's roster profile id, on one program's
+> rows, and clears `created_by` on the same rows. Weighed against this rule
+> on the merge exception's terms and allowed for the same reason: it is the
+> opposite of a silent bulk rewrite. It is a single explicit action by the
+> data subject; scoped to their own rows in programs they belong to;
+> touching **only** the attribution and uploader columns — never `score`,
+> `format`, `program_id` or `event_entry_id`, and nothing under
+> `match_stats`, `points` or `shots`; and audit-logged to `program_audit_log`
+> as `member.account_deleted` with the counts. Without it a self-uploaded
+> team match would detach from the coach-managed profile the moment the
+> login that filed it disappears. Design:
+> `docs/superpowers/specs/2026-09-01-account-deletion-team-retention-design.md`.
+
 **These files are the integration, not UI.** Changing them to suit a layout is
 almost always the wrong fix:
 

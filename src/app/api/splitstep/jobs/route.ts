@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
   const job = jobRow as {
     id: string;
     match_id: string;
-    created_by: string;
+    created_by: string | null;
     status: string;
     external_job_id: string | null;
     video_object_key: string | null;

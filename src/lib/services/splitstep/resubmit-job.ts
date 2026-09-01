@@ -153,7 +153,22 @@ export async function resubmitJob(params: {
   if (parentError || !parentRow) {
     return { ok: false, reason: 'not_found', message: 'Job not found.' };
   }
-  const parent = parentRow as ParentJob;
+
+  // `created_by` is nullable since the uploader may have deleted their
+  // account (release_my_account_from_programs). The match stayed with its
+  // program, but nothing may spend quota on a departed person's behalf, so
+  // the job reads as not found — the same answer the route gives for
+  // "not yours".
+  const raw = parentRow as Omit<ParentJob, 'created_by'> & { created_by: string | null };
+  if (!raw.created_by) {
+    return {
+      ok: false,
+      reason: 'not_found',
+      message:
+        'The account that uploaded this analysis no longer exists, so it cannot be retried.',
+    };
+  }
+  const parent: ParentJob = { ...raw, created_by: raw.created_by };
 
   if (parent.status !== 'failed') {
     return {
