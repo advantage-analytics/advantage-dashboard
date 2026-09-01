@@ -17,6 +17,13 @@
  * design draws cannot be said in these types, that is a finding, not a licence
  * to widen them.
  *
+ * The school directory at the foot of this file is the same bargain one module
+ * over: `DirectorySchool` pairs `ProgramSearchResult` (`lib/data/programs-server`)
+ * with `OpponentDualHistory` (`lib/schedule/opponent-history`) — the two shapes
+ * `SchoolSearch` already takes — and adds one documented field for the single
+ * figure on `2c` that neither can hold. Both are `import type`, so nothing
+ * server-side follows them into a client bundle.
+ *
  * ── `format.adScoring` is the one live guardrail seam in here ───────────────
  * `EventFormat.adScoring` is `boolean | null` and null is a real state, not a
  * missing one: the vision pipeline refuses a job without it, and
@@ -46,6 +53,8 @@ import type {
   ProgramEvent,
   ScheduleRow,
 } from "./types";
+import type { OpponentDualHistory } from "@/lib/schedule/opponent-history";
+import type { ProgramSearchResult } from "@/lib/data/programs-server";
 
 /* ── Who the design is signed in as ─────────────────────────────────────── */
 
@@ -543,3 +552,180 @@ export const EMPTY_SCHEDULE: StaticSchedule = {
   rows: [],
   details: {},
 };
+
+/* ── The program directory, as 2c draws it ──────────────────────────────── */
+
+/**
+ * One row of `2c`'s school list.
+ *
+ * A pair of shapes the dormant code already uses, plus the one cell neither
+ * of them holds — not a third row type:
+ *
+ *   `program`  `ProgramSearchResult`, exactly what `SchoolSearch` takes for
+ *              both of its lists and what the dual route's `toDirectoryRow()`
+ *              built a conference row into. `programKey` is the aggregation
+ *              handle a chosen opponent is recorded by, so it is carried here
+ *              rather than dropped for a name.
+ *   `history`  `opponentDualHistory()`'s value type — the "you lead 2–1" half
+ *              of every subline, and the last-played cell beside it. Rendered
+ *              through `formatOpponentRecord()`, so the four phrases `2c`
+ *              draws are the app's own vocabulary and not a second copy of it.
+ *
+ * ── `seasonRecord` is the one figure this app does not have ────────────────
+ * `2c` draws an opponent's OWN season record ("18–4") as the third slot of
+ * every subline. It comes from matches this program never played and never
+ * saw, and `opponent-history.ts`'s header says so in as many words: "that
+ * figure … does not exist anywhere in this app, so nothing below invents one."
+ * The dormant `SchoolSearch` therefore omits it. The rebuild draws it, because
+ * the artboard draws it — as the literal string the design wrote, the same
+ * treatment `SEASON_FACTS` above gets, and reported rather than approximated.
+ *
+ * ── The one field below that is set and never rendered ─────────────────────
+ * `history.lastPlayedOn` is documented as YYYY-MM-DD; `2c`'s mono cell is
+ * MM-DD. The component slices the month and day off, so the year is chosen
+ * here and appears nowhere on screen — the same class of unrendered required
+ * value as `programKey` and `status`. Note this is NOT `formatLastPlayed()`,
+ * which renders "12 Apr": `2c` draws "04-12", and the artboard wins.
+ */
+export interface DirectorySchool {
+  program: ProgramSearchResult;
+  history: OpponentDualHistory;
+  /** "18–4" — the opponent's own season record. See above; literal as drawn. */
+  seasonRecord: string;
+}
+
+/**
+ * One directory row from what `2c` actually prints of it.
+ *
+ * `conference` and `division` are separate and both default to null because
+ * the artboard prints only ONE of them per row — "Big Ten" on four rows and
+ * "D-III" on the fifth — which is exactly `schoolRowSubline`'s
+ * `conference ?? divisionLabel(division)`. Filling in the missing half would
+ * be inventing a fact the design withheld.
+ */
+function directorySchool({
+  schoolName,
+  conference = null,
+  division = null,
+  seasonRecord,
+  played = 0,
+  us = 0,
+  them = 0,
+  lastPlayedOn = null,
+}: {
+  schoolName: string;
+  conference?: string | null;
+  division?: string | null;
+  seasonRecord: string;
+  played?: number;
+  us?: number;
+  them?: number;
+  lastPlayedOn?: string | null;
+}): DirectorySchool {
+  return {
+    program: {
+      // Slugged from the drawn name, same `fixture-` convention as the event
+      // ids above. `2c` draws no key; a row still needs the one field that
+      // makes an opponent aggregatable across seasons.
+      programKey: `fixture-program-${schoolName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")}-mens`,
+      schoolName,
+      // Every row's subline opens "Men's".
+      team: "mens",
+      division,
+      conference,
+      // `2c` prints no state and no claim state. `state` is nullable;
+      // `ProgramStatus` is not, and "unclaimed" is what a directory row nobody
+      // has claimed is. Neither reaches the screen.
+      state: null,
+      status: "unclaimed",
+      // The owner projection belongs to the claim flow's definer RPC, and no
+      // part of this screen shows who runs the other program — the same reason
+      // the dual route's `toDirectoryRow()` gives for nulling it.
+      ownerDisplay: null,
+    },
+    history: { played, us, them, lastPlayedOn },
+    seasonRecord,
+  };
+}
+
+/**
+ * The viewer's conference, from `2c`'s first filter pill and the four rows
+ * whose subline names it.
+ *
+ * Live, this is `getTeamSettings()`'s `program.conference`.
+ */
+export const OUR_CONFERENCE = "Big Ten";
+
+/**
+ * The viewer's division, from `2c`'s second pill — already label-formatted,
+ * the way `divisionLabel()` hands it to `SchoolSearch`.
+ */
+export const OUR_DIVISION = "D-I";
+
+/**
+ * "5 of 1,940" — the search field's counter, and the run's copy for "all
+ * programs".
+ *
+ * The 5 is derived (the two lists below hold five rows between them). The
+ * total is this literal: `programs` has 1,940 rows — `ConferenceProgram`'s
+ * `programKey` doc says so — but `/api/programs/search` answers with a capped
+ * page of 8 and no total, so nothing this screen calls can produce it. Held as
+ * a formatted string rather than a number so the comma is the design's and not
+ * the render locale's.
+ */
+export const DIRECTORY_TOTAL = "1,940";
+
+/** The term `2c` is mid-search on, in the field and in the free-text row. */
+export const DIRECTORY_TERM = "Ridg";
+
+/** `2c`'s "Your conference" section — two Big Ten rows, the first selected. */
+export const CONFERENCE_SCHOOLS: DirectorySchool[] = [
+  directorySchool({
+    schoolName: "Ridgeline University",
+    conference: OUR_CONFERENCE,
+    seasonRecord: "18–4",
+  }),
+  directorySchool({
+    schoolName: "Ridgemont Tech",
+    conference: OUR_CONFERENCE,
+    seasonRecord: "11–10",
+    // "you lead 2–1", and a mono cell reading "04-12".
+    played: 3,
+    us: 2,
+    them: 1,
+    lastPlayedOn: "2025-04-12",
+  }),
+];
+
+/**
+ * `2c`'s "All programs" section — three rows.
+ *
+ * Ridgefield Academy is the row that carries a DIVISION where the other four
+ * carry a conference. Reproduced as drawn; see the report.
+ */
+export const ALL_PROGRAM_SCHOOLS: DirectorySchool[] = [
+  directorySchool({
+    schoolName: "Ridgeway College",
+    conference: "Coastal",
+    seasonRecord: "14–7",
+    // "you lead 1–0", and a mono cell reading "09-30".
+    played: 1,
+    us: 1,
+    lastPlayedOn: "2024-09-30",
+  }),
+  directorySchool({
+    schoolName: "Ridge Valley State",
+    conference: "Mountain West",
+    seasonRecord: "9–12",
+  }),
+  directorySchool({
+    // "D-III" is `divisionLabel("D3")`, so the raw dataset value is what goes
+    // in — the same string `programs.division` holds.
+    schoolName: "Ridgefield Academy",
+    division: "D3",
+    seasonRecord: "16–5",
+  }),
+];

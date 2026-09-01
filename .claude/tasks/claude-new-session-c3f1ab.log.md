@@ -346,3 +346,103 @@ this log entry.
    t=0, so a `transition-colors` background reads as `rgba(0,0,0,0)` until you
    call `getAnimations().forEach(a => a.finish())`. It looks exactly like a
    broken class and is not one.
+
+## T5 · Rebuild 2c — find the school — done
+
+**gate:** mechanical — `npm run lint` 0 errors / 37 warnings (none in the
+changed files), `npx tsc --noEmit` clean, `npm test` 227 passed. Completion
+review — `VERDICT: pass`, five of five, all seven requested judgments resolved
+in the implementation's favour on byte-level evidence. Guardrails —
+`pipeline-guardrails-reviewer` **ran** (diff touches `src/app/dashboard/` and
+`src/components/dashboard/`) and returned **no findings**: the `isProgramStaff`
+gate on this create route sits entirely outside the diff's ± lines (genuine
+unmodified context, not a retyped copy that happens to match), the new
+components hold only local step state with no write path, and the
+`"<bestOf>|<adScoring>"` encoding is untouched because `dual-form.tsx` — one of
+the two components that own it — is now unimported and has a zero-line diff.
+`rls-boundary-reviewer` **skipped** — no file under `src/lib/supabase/`,
+`src/lib/data/`, `src/app/api/` or `supabase/migrations/` is modified, and no
+new query; the route *removes* four loader calls, which cannot open an RLS hole.
+
+**Runner-resolved before review, so it did not reach the gate:**
+`dual-school-step.tsx` value-imports `divisionLabel`/`teamLabel` from
+`@/lib/data/programs-server` into a `"use client"` component, which looks like a
+rule-5 violation. It is not: both are pure string functions, that module's only
+Supabase reference is a type-only `SupabaseClient` import, and six other client
+components — including the dormant `school-search.tsx` this replaces — already
+do exactly this. Established house practice.
+
+**changed:** Two new components — `static/static-dual-builder.tsx` (30 lines:
+one `useState<"find-school" | "build">`, one branch, no props, no other state)
+and `static/dual-school-step.tsx` (artboard `2c`). The route drops the four
+parallel loaders, `toDirectoryRow`, `opponentDualHistory`, `divisionLabel`, the
+`self` lookup and the entire `DualForm` prop wall — the largest single deletion
+in the run — with the guard block byte-identical and a paragraph appended to the
+existing doc comment. `school-search.tsx` and `dual-form.tsx` untouched.
+
+**Declared extension outside `files:`, sanctioned at dispatch:**
+`src/lib/schedule/fixtures.ts` gained program-directory data, because `2c` is a
+school-search screen and T1's fixtures carried none. Reviewed for quality:
+`DirectorySchool` **nests** `ProgramSearchResult` and `OpponentDualHistory` as
+`program`/`history` rather than flattening them, so it composes the existing
+shapes and shadows neither; both imports are `import type`, so nothing
+server-side can reach a client bundle; the one new field, `seasonRecord`, is the
+single figure on the artboard that neither existing type can hold, and it is
+documented against `opponent-history.ts`'s own header saying that figure does
+not exist in this app.
+
+**The consistency question, settled with byte evidence.** T5 reproduced
+`color: var(--blue)` exactly as `2c` draws it on 11px and 12px text and flagged
+the WCAG AA failure (3.68:1) rather than substituting `--blue-text` — the
+opposite of what T3 did on `7e`. The reviewer verified the distinction holds:
+`7e`'s three links are `<a>` tags setting only `font-size`/`font-weight` with
+**no `color` property at all**, so T3 filled a genuine inheritance gap left by a
+stylesheet this app does not load; `2c`'s coloured elements are `<span>`/`<div>`
+that **state `color:var(--blue)` inline**, so there is no gap to fill and
+substituting would be the T4 error. Both tasks are right, and the run is
+consistent.
+
+**`EventShell` deliberately not used** — `2c` draws `32px 40px` body and
+`16px 40px 20px` footer against `EventShell`'s `48/32/26` and `48/22/16`.
+Reusing the shell would recreate exactly the unreconciled padding gap that
+contributed to T2's failure. The reviewer confirmed this creates no seam with
+T6, whose `2b` is a structurally different master-detail layout that *does*
+require `EventShell` with `flush`.
+
+**Design provenance:** cached fallback, stated plainly — the same same-day
+on-disk capture T1–T4 used, md5 `045f55b3a44cfa304c7772fd6bddcdaf`, reading only
+lines 188–286 (`2c`). `get_file` returns all ten artboards in one blob, which
+inherited rule 2 forbids taking into context.
+
+**follow-ups:**
+1. **Seven contradictions in `2c`, all reproduced as drawn and flagged — input
+   for T12.** Three were spot-checked against the artboard bytes and confirmed
+   genuine reproductions rather than quiet normalisations. (a) The opponent's
+   own season record — "18–4", "11–10", "14–7", "9–12", "16–5" — **does not
+   exist anywhere in this app**; `opponent-history.ts`'s header says so outright
+   and the dormant `SchoolSearch` deliberately omits the slot. (b) The "Big Ten"
+   pill is drawn **active**, with "Clear" present, while the list below shows
+   Coastal, Mountain West and D-III rows and the counter reads "5 of 1,940" —
+   the pill and the list cannot both be right. (c) "Region ⌄" filters on a
+   column that does not exist; `programs` has `state`, `division` and
+   `conference` and no way to derive a region. (d) "5 of 1,940" is a total the
+   API cannot return — `/api/programs/search` answers with a capped 8-row page
+   and no count, which is why the dormant component says "5 listed". (e) The
+   mono column is MM-DD; `formatLastPlayed()` renders "12 Apr". (f) One row's
+   subline carries a division where the other four carry a conference. (g) The
+   free-text row uses straight ASCII quotes where the design's own prose uses
+   typographic ones.
+2. **Every directory fixture row hardcodes `team: "mens"`** — noted by the
+   guardrails reviewer as a fidelity gap, explicitly not filed as a finding
+   since nothing here reads the workspace. A women's-team workspace would see
+   "Men's" on every subline once this is re-wired.
+3. **`2c`'s search field is drawn, not wired** — the artboard renders a `<span>`
+   plus a caret rule, not an `<input>`, and there is no directory behind the
+   screen for a second term. Reproduced as a static field.
+4. **T6 will need `DualSchoolStep` to hand the chosen `DirectorySchool` up
+   through `StaticDualBuilder`.** `onContinue` deliberately takes no argument
+   today; that is a one-line widening, left for the task that needs it.
+5. Before re-wiring, decide: drop the season-record slot or source it (an ITA
+   scrape); add a `region` concept or drop the pill; give
+   `/api/programs/search` a total count or accept "N listed"; and settle MM-DD
+   against "12 Apr" before two formats for one fact drift apart.

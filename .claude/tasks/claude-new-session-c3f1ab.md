@@ -96,7 +96,7 @@ bodies do not repeat them — a subagent running any of T1–T12 should read the
 - **notes:** `7c` and `4c` are the same pane at two heights, not two components. Anything that differs between them and is *not* height-driven is a finding for the human, not a reason to split. The links 404 on fixture ids — that is the accepted decision, recorded in T12.
 
 ## T5 · Rebuild 2c — find the school
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** `src/components/dashboard/schedule/static/static-dual-builder.tsx`, `src/components/dashboard/schedule/static/dual-school-step.tsx` (both new), `src/app/dashboard/team/schedule/new/dual/page.tsx`
