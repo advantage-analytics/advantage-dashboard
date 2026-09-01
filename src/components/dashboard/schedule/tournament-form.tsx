@@ -1,5 +1,16 @@
 "use client";
 
+/*
+ * DORMANT — no route renders this file.
+ * `/dashboard/team/schedule/new/tournament` was re-pointed this run to
+ * `static/static-tournament-builder.tsx`.
+ *
+ * This is still the only DB-wired tournament builder: `createTournament` and
+ * the format-encoding fix its header records have no static counterpart.
+ *
+ * See `./README.md` for the full live/dormant map.
+ */
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { advButton } from "@/lib/ui/adv-button";

@@ -1,3 +1,11 @@
+/*
+ * DORMANT — no route renders this file. Its pane is now
+ * `static/dual-widget.tsx`; the only thing that ever mounted it,
+ * `schedule-list.tsx`, is dormant too.
+ *
+ * See `./README.md` for the full live/dormant map.
+ */
+
 import { ChevronRight } from "lucide-react";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ResultMark } from "@/components/dashboard/result-mark";

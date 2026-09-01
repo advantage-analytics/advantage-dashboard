@@ -1,3 +1,13 @@
+/*
+ * LIVE — do not mistake this for part of the dormant tree.
+ * `app/dashboard/team/schedule/[eventId]/page.tsx` renders it, and that route
+ * was deliberately left out of scope this run. `static/dual-widget.tsx` draws
+ * the same `7c`/`4c` artboards from fixtures, but it is a second copy, not a
+ * replacement: this one is the DB-wired event page.
+ *
+ * See `./README.md` for the full live/dormant map.
+ */
+
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { StatusChip } from "@/components/ui/status-chip";

@@ -1,5 +1,12 @@
 "use client";
 
+/*
+ * DORMANT — no route renders this file. `/dashboard/team/schedule/new` was
+ * re-pointed this run to `static/static-event-chooser.tsx`.
+ *
+ * See `./README.md` for the full live/dormant map.
+ */
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
