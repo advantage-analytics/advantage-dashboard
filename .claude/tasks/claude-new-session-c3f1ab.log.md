@@ -446,3 +446,119 @@ inherited rule 2 forbids taking into context.
    scrape); add a `region` concept or drop the pill; give
    `/api/programs/search` a total count or accept "N listed"; and settle MM-DD
    against "12 Apr" before two formats for one fact drift apart.
+
+## T6 · Rebuild 2b — the master-detail dual builder — blocked
+
+**gate:** mechanical **passed** — `npm run lint` 0 errors / 37 warnings (none
+added), `npx tsc --noEmit` clean, `npm test` 227 passed. Completion review
+**passed** — `VERDICT: pass`, five of five criteria, all eight requested
+judgments resolved in the implementation's favour on byte-level evidence.
+Guardrails — `pipeline-guardrails-reviewer` **ran and returned a finding**,
+which blocks: task-next's fail-closed rule is that any finding from a guardrail
+agent blocks, with no severity triage at this gate.
+`rls-boundary-reviewer` **skipped** — no file under `src/lib/supabase/`,
+`src/lib/data/`, `src/app/api/` or `supabase/migrations/`, no new query, no
+route file touched.
+
+**why it failed: one school's data renders under another's name.**
+
+`DualSchoolStep` lets the user pick any of five schools — `CONFERENCE_SCHOOLS`
+(Ridgeline University, Ridgemont Tech) plus `ALL_PROGRAM_SCHOOLS` (Ridgeway
+College, Ridge Valley State, Ridgefield Academy). Whichever is picked is passed
+to `DualBuildStep`, where it feeds **only** the header, the subline and the
+rail's selected highlight. The date, site, surface, format and all nine lineup
+lines are unconditional module-level imports of `DUAL_DRAFT_EVENT` and
+`DUAL_DRAFT_LINES` — which are Ridgeline's, field for field.
+
+So: pick "Ridgemont Tech" on step one, hit Continue, and step two reads
+**"vs Ridgemont Tech"** above Ridgeline's 09-26 / Home / Hard / Bo3-no-ad and
+the Dana Brooks / Marcus Reid lineup, with the rail showing six Big Ten schools
+and none checked. Reachable without any code change, **four of the five ways
+through step one**.
+
+It is inert — nothing writes, "Create dual" does nothing — and the reviewer
+noted it sits in §3.5 "safe to redesign freely" territory rather than being a
+guardrail violation in the doc's technical sense. **That distinction is
+deliberately not applied here.** The gate does not triage severity, and
+"one school's data under another's name" is the exact pattern this repo's
+guardrails exist to catch; letting it through because it is currently inert
+would be inventing the triage the skill forbids.
+
+**Two fixes the reviewer named**, either of which resolves it: restrict step
+one's selectable set to what step two can depict consistently (Ridgeline only,
+for now), or have step two visibly acknowledge that the detail pane is fixed
+regardless of selection.
+
+**stash:** `3e857ab68c9f6ee870afbda39e3dfaae2ad09877` (`git stash apply <sha>`,
+not `stash@{n}` — the stash stack is shared across this repo's worktrees).
+**Everything else in it passed and is worth keeping.** Verified: 80 rendered
+strings diffed against the artboard with **zero** differences; `EventShell`'s
+`flush` proven in effect by squeezing the frame to 420px and confirming two
+independent inner scrollers (rail 353/251, pane 658/347) inside a
+non-scrolling body; and the format seam handled correctly (below).
+
+**The format seam, handled well and worth preserving on re-run.** The component
+emits the literal `FORMAT_VALUE = "3|false"` rather than interpolating from
+`DUAL_DRAFT_EVENT.format`. Both reviewers confirmed the reasoning: `adScoring`
+is `boolean | null`, and `${null}` encodes as the string `"null"`, which
+`dual-form.tsx:266`'s `adScoring === "true"` reads as a **confident `false`** —
+a wrong answer that looks like a real one, and the exact failure
+`tournament-form.tsx`'s header records. Round-trip verified against that
+decoder and corroborated against `tournament-form.tsx:97`'s own `FORMATS` table
+(`{ value: "3|false", label: "Best of 3 · no-ad" }`). Forfeit encoding also
+checked: `LineupLine.forfeit` is narrowed to `"ours" | null` because a builder
+can only forfeit its own line, `"ours"` correctly means the point goes to them,
+and the rendered "— no available player" is copied verbatim from the live
+`line-row.tsx`'s vocabulary for the same state rather than reinvented.
+
+**changed:** nothing landed. This commit carries only the `status:` line and
+this log entry.
+
+**follow-ups:**
+1. **Three sanctioned or in-scope changes in the stash that the completion
+   reviewer explicitly upheld — keep them on re-run.** (a) The shell's state was
+   collapsed from `useState<"find-school" | "build">` to
+   `useState<DirectorySchool | null>`; ruled legitimate because the file is in
+   T6's own `files:` list, T5's "and nothing else" was a gate criterion for T5's
+   delivered diff rather than a frozen interface, T7 consumes the
+   `DualBuildStep({ school })` prop boundary which is untouched, and the
+   collapse removes the very two-values-can-drift risk the plan warned of.
+   (b) The stub's "Back to step one" control was deleted — correct, since the
+   artboard's footer draws only Cancel and Create dual, and keeping an undrawn
+   control would itself be a divergence. (c) The footer is hand-rolled at `2b`'s
+   `16px 32px 20px` rather than through `EventShell`'s `footer` slot (48/22/16);
+   criterion 2 scopes the shell requirement to the body, and using the slot
+   would have introduced a measurable divergence.
+2. **A cross-task fixture mutation was verified inert**, not merely claimed:
+   `division: "D1"` was added to the Ridgeline row that `2c` already renders.
+   `SchoolRow`'s `program.conference ?? divisionLabel(program.division)`
+   short-circuits on that row's non-null conference, so committed `2c` is
+   unchanged. Confirmed by direct code read.
+3. **`fixtures.ts` now type-imports `LineupLine` from `lineup-editor.tsx`** — a
+   lib importing a type from a component. Erased at runtime and consistent with
+   this run's reuse-don't-duplicate principle, but a layering purist would hoist
+   the type to a neutral module. Noted, not blocking.
+4. **Nine contradictions in `2b`, reproduced as drawn and flagged — input for
+   T12.** Two were spot-checked against the artboard and confirmed genuine
+   reproductions. (a) **The lineup contradicts itself**: S6 reads "— no
+   available player" and is forfeited while D3 pairs "Moreau / **Adeyemi**" —
+   Adeyemi is available for doubles and not for singles, so any real
+   `seedLineup()` must contradict one half of the drawing. (b) "pairs carried
+   from singles" is false of its own rows — D3's Adeyemi appears in no singles
+   line. (c) Doubles use surnames where singles use full names. (d) "Big Ten ·
+   D-I" reverses the app's own `programSubtitle()` order, which four claim-flow
+   call sites depend on. (e) **The Forfeit control is an invisible target** —
+   `opacity:0` with the hover reveal on the span itself, not the row, so it
+   appears only once the pointer is already over something unseeable.
+   (f) The rail's history figures have no source: "you lead 3–1" over Fairmont
+   implies four decided duals where the fixtures hold one. (g) `2b`'s Ridgeline
+   dual has nine lines before create while `7d` calls the same event "lineup not
+   set". (h) The rail's six Big Ten schools do not match `2c`'s conference
+   section and omit Ridgemont Tech, which `2c` lists. (i) `lastPlayedOn` is
+   unset on four rail rows with decided duals, because the rail draws no
+   last-played cell.
+5. Decide whether the Forfeit control keeps its invisible-until-hovered
+   treatment — moving the reveal to the row's hover is a one-word change.
+6. When this screen returns to the database, `RAIL_SCHOOLS`,
+   `DUAL_DRAFT_LINES` and `DUAL_DRAFT_EVENT` are the three imports to swap for
+   `OpponentRail` + `LineupEditor` + `createDual`; the props already line up.
