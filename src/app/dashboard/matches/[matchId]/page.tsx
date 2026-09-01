@@ -17,7 +17,7 @@ import { MatchRail } from "@/components/dashboard/matches/match-detail/match-rai
 import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { StatisticsTab } from "@/components/dashboard/matches/match-detail/statistics-tab";
 import { ServePlacementCard } from "@/components/dashboard/matches/match-detail/serve-placement-card";
-import { MatchVideoCard } from "@/components/dashboard/matches/match-detail/match-video-card";
+import { FilmTab } from "@/components/dashboard/matches/match-detail/film/film-tab";
 import { getMatchVideo } from "@/lib/data/match-video-server";
 
 interface PageProps {
@@ -159,15 +159,11 @@ export default async function MatchDetailPage({ params }: PageProps) {
             />
           ),
           shots: <ServePlacementCard />,
-          film: video ? (
-            <MatchVideoCard video={video} />
-          ) : (
-            // Placeholder only — the real 46d empty state lands with the Film
-            // room build.
-            <div className="flex items-center justify-center rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-card)] py-16">
-              <span className="text-body-sm">No video for this match</span>
-            </div>
-          ),
+          // `video` is the short-lived playback SAS, or null when there is no
+          // trimmed copy to serve — FilmTab renders the 46d empty state for
+          // the second case. Points come from `MatchDataProvider`, so the
+          // whole tab needs exactly this one prop.
+          film: <FilmTab video={video} />,
         }}
       />
     </>

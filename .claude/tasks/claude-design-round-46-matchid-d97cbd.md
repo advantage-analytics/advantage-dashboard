@@ -73,7 +73,7 @@ ready).
 - **notes:** Plan step 4. Frames 46b (lines 564–751) for the page, 47a (lines 44–164) for the header — the canvas marks 47a "what ships". Read guardrails §4 before touching placement math; the existing `matches/visuals/` + `serve-placement-card.tsx` code is the reference for coordinate normalization.
 
 ## T5 · Film room tab: player, point list, empty state
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/components/dashboard/matches/match-detail/film/{film-player.tsx,point-list.tsx,film-filters.tsx,film-empty-state.tsx,film-tab.tsx} (new), src/app/dashboard/matches/[matchId]/page.tsx
