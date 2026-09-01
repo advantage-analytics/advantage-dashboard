@@ -1884,3 +1884,100 @@ worked around silently.
    typed-name/walk-on entry path left with `entry-editor.tsx`. T23 needs the
    same matching for the dual side, so it should be checked there before
    anyone retires it.
+
+## T21 · Dual step one searches real schools — blocked
+
+**gate:** stage **5c failed**. lint clean · `tsc --noEmit` clean · `npm test`
+green (260) · `npm run build` green. `task-completion-reviewer` →
+**VERDICT: pass** (it examined the unplanned client provider and the three
+artboard departures individually and cleared each). `rls-boundary-reviewer`
+→ **clear**, no RLS, service-role or data-boundary issues.
+`pipeline-guardrails-reviewer` → **finding**, which blocks: it reported no
+violation of the guardrails doc, but named "a real bug in the surface
+reviewed, newly made reachable by this diff". The gate does no severity
+triage, and on the substance this one deserves none.
+
+**the finding — a squad crossover in the head-to-head subline.** Verified in
+the code from the runner, not taken on report:
+
+- `opponentDualHistory()` keys on `normalizedOpponentName(event.name)` — the
+  string stored on the dual, squad-qualified only if it was picked from the
+  directory.
+- `historyForProgram()` (`dual-school-step.tsx:572-582`) tries the
+  squad-qualified name, and when that has `played === 0` falls back to the
+  **bare school name**.
+- A school fielding both squads surfaces as two rows. If any decided dual is
+  recorded under a bare name — which this screen's own free-text escape hatch
+  produces — both rows fall through to the same key.
+
+So a record earned against a school's men's team can render "you lead 3–0" on
+that school's **women's** row, against a squad this program has never played.
+It is a confidently wrong fact, on the screen whose task was precisely about
+not fabricating figures, and it directly contradicts the brief's rule. The
+fallback is copied from the dormant `school-search.tsx`, but that file is
+reachable from no route, so this diff makes the behaviour live for the first
+time — it is newly introduced in effect, not merely inherited.
+
+**stash:** `dc7e85c5e5d20f31738227b67e490e457ae281c8` (tag `blocked: T21`).
+Recover with `git stash apply dc7e85c5e5d20f31738227b67e490e457ae281c8` — a
+SHA, not `stash@{0}`, because `refs/stash` is shared across worktrees. The
+work is otherwise sound and close to done; everything below survived every
+other gate.
+
+**to unblock:** set `status:` back to `todo` and re-run. Two fixes:
+
+1. **Drop the bare-name fallback**, or key the lookup on something that
+   cannot collide across squads. A row with no squad-qualified history should
+   read "never played" rather than borrow the other squad's record. Worth
+   checking whether the dormant `school-search.tsx` copy should be corrected
+   too before T23 deletes it, so the defect is not re-copied.
+2. **Correct the `directoryTotal()` comment.** It claims the count covers
+   "the whole row set, unfiltered". Confirmed live from the runner: the
+   `programs` SELECT policy is
+   `org_type = 'college' OR owner_user_id = auth.uid() OR user_program_role(id) IS NOT NULL`,
+   so the count is RLS-scoped and varies per viewer by their own custom orgs.
+   No row leaks — `rls-boundary-reviewer` was explicit that this is a
+   precision note, not a boundary problem — but the comment states something
+   untrue and the figure is viewer-dependent.
+
+**what the run established, and should be kept** (all in the stash): the
+route restores the four loaders plus `opponentDualHistory()` in one
+`Promise.all` with guards byte-identical; the drawn field is a real
+`<input>` over a debounced, aborted `/api/programs/search`; `seasonRecord`
+and the "Region" pill are gone and the two surviving pills are real
+`aria-pressed` filters; the total is a real `count: "exact"` head query
+rendered `toLocaleString("en-US")` ("8 of 1,941"), degrading to `N listed`
+if the count fails; selection advances the step. **Spec discipline was
+exemplary** — exactly one retirement (`drawn(step1, …, 'Region')`) with a
+reason, `drawn()` count 127 → 126, and it declined to retire the
+`fixtures.ts`-reading assertions because they still pass and are still true
+of the module they name, adding a note that their audience has changed
+instead. Nothing weakened.
+
+**the architectural decision the reviewer cleared, for the record:**
+`dual-school-step.tsx` now exports `NewDualDataProvider` and the route wraps
+the builder in it, carrying `ladder`, `defaultSurface`, `ourName` and
+`ourTeam` that step one does not use. T22 and T23 own step two and their
+`files:` include no route, so without this they would have no path to a
+loader at all. `rls-boundary-reviewer` confirmed the payload is not
+sensitive — `LadderPlayer` carries only `program_players.id`, a name and a
+ladder position, no email and no auth id — and that `getTeamSettings`'
+member and invite lists never enter the context.
+
+**Verification touched the live database and was cleaned up.** One ephemeral
+staff user; ZZ's `conference`/`division` temporarily lent values because the
+live row carries **null** for both (my dispatch said otherwise — that was the
+runner's error, carried over from Dartmouth's row); one seeded dual briefly
+renamed to prove the head-to-head resolves. All restored. Re-checked from
+this session: 1,941 programs, 3 claimed, 5 events, 33 entries, 5
+`program_members`, ZZ 1 member / 0 players / conference and division both
+null, UCLA 0 events, ZZ's four event names back to their seeded values.
+
+**one unexplained observation, benign so far.** `auth.users` read 15 after
+every task from T13 to T20 and reads **14** now. No integrity damage:
+`auth.users` and `public.users` agree at 14, zero orphaned profiles, zero
+`program_members` rows pointing at a missing user, and `program_members` is
+unchanged at 5 — a real account with a membership would have cascaded. Most
+consistent with a leftover harness account from an earlier task finally being
+removed, but it is not proven, and it is recorded here rather than smoothed
+over.
