@@ -28,7 +28,7 @@ import { cn } from "@/lib/utils";
  * already resolved.
  */
 export default function AccountPage() {
-  const { active, viewer } = useWorkspace();
+  const { available, viewer } = useWorkspace();
 
   const [confirmText, setConfirmText] = useState("");
   const [message, setMessage] = useState<{
@@ -77,7 +77,15 @@ export default function AccountPage() {
   }, []);
 
   const canDelete = confirmText === viewer.email;
-  const ownsProgram = active.kind === "team" && active.role === "owner";
+  // Every workspace, not the active one: the guard in the database refuses
+  // deletion while this account owns ANY program, and the box has to warn
+  // about the same set or someone reading their personal workspace is
+  // refused without ever having been told why.
+  const ownedPrograms = available.filter(
+    (workspace) => workspace.kind === "team" && workspace.role === "owner"
+  );
+  const ownsProgram = ownedPrograms.length > 0;
+  const ownedNames = ownedPrograms.map((workspace) => workspace.name).join(", ");
 
   return (
     <div className="flex max-w-[660px] flex-col gap-10">
@@ -177,8 +185,9 @@ export default function AccountPage() {
 
         <div className="flex flex-col gap-3 px-5 pb-4">
           <span className="text-[12px] leading-[1.55] text-[var(--ink-600)]">
-            Removes match data, statistics, reports, and your account record.
-            This cannot be undone.
+            Removes your personal matches, statistics, reports, and your
+            account record. Matches you filed under a team stay with that
+            team, as a profile its coaches manage. This cannot be undone.
           </span>
 
           {ownsProgram && (
@@ -190,10 +199,10 @@ export default function AccountPage() {
               />
               <div>
                 <div className="text-[12px] text-[var(--ink-900)]">
-                  You own {active.name}
+                  You own {ownedNames}
                 </div>
                 <div className="mt-0.5 text-[11px] leading-[1.5] text-[var(--ink-600)]">
-                  Transfer ownership first, or the program goes with you.{" "}
+                  Deletion is blocked until you transfer ownership.{" "}
                   <Link
                     href="/dashboard/settings/team"
                     className="text-[var(--blue)] hover:text-[var(--blue-hover)]"
