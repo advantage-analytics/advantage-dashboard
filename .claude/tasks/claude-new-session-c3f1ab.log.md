@@ -1162,3 +1162,87 @@ stripping and fails with it. The step is justified; the stated reason was not.
    they are colour tokens, not copy. They are also the one thing on that screen
    that will not re-derive when it is pointed at live data, so they want their
    own guard in the re-wiring task. This is the second task to flag that trap.
+
+## T11 · Full-set fidelity pass and gates — done
+
+**gate:** all four criterion-5 gates run by the runner independently —
+`npx tsc --noEmit` clean, `npm run lint` 0 errors / **37** warnings,
+`npm run build` **green**, `npm test` **244 passed**. Completion review —
+`VERDICT: pass`, five of five, with **seven of the eight new findings
+byte-verified** against the artboard capture and the source by the reviewer
+rather than accepted from the report. Guardrails — **both skipped,
+legitimately**: this task made **no source changes at all**, which is what its
+contract requires; the only new file is a markdown findings document under
+`work/`.
+
+**changed:** `work/events-lineups/FIDELITY-PASS.md` only. Criterion 3's grep run
+independently by the runner: **zero matches, exit 1** across the whole `static/`
+tree and all four route files. Criterion 4 verified both halves — the render
+half through a harness (`canCreate={false}` → no CTA, `drawerLinks: 0`,
+`drawerHrefs: []`) and the read half by the runner (`isProgramStaff(active))
+redirect` present exactly once in each of the three create routes). Harness
+deleted and never committed.
+
+**eight new cross-screen findings — the drift no per-screen check could see:**
+1. **N1 · "lines" vs "matches".** `7d`/`7e`/`2b` count a dual's nine things as
+   *lines*; `7c`/`4c`'s pane footer counts the same Fairmont event as "9 of 9
+   **matches**". One concept, two nouns, one click apart.
+2. **N2 · "Creates N …" numerals.** `3b` sets its 9 `mono tabular`; `2b` and
+   `3c` set theirs bare `tabular` Inter. Each screen is faithful — the *design*
+   disagrees with itself. T2 flagged 3b against the DS rule but not the split.
+3. **N3 · slot labels.** S1–D3 are mono on `2b`/`7e`, plain Inter on `7c`/`4c`.
+4. **N4 · two selected-row grammars.** Wash + weight in the drawer and on `2c`;
+   check + weight and no wash on `2b`/`3c`'s rails. Possibly semantic, nowhere
+   recorded.
+5. **N5 · Cancel's two implementations.** A `<Link>` on `2c`/`2b`/`3c`, a
+   `<button>` + `router.push` on `3b` — the same drawn control with different
+   href semantics.
+6. **N6 · a gating asymmetry, guards intact.** With `canCreate=false`, `7e`'s
+   pane still draws "New dual" and "New tournament" links to routes that bounce
+   a player; only the drawer CTA and the one-off link are gated. Server-side
+   guards hold — the runner verified all three redirects — so this is a UX
+   inconsistency, not an access-control hole. Worth a decision before re-wiring.
+7. **N7 · the resting-row half of T7's Forfeit item.** `2b` gives resting rows a
+   hover-revealed Forfeit; `2d`/`2e` draw the same resting rows with an empty
+   cell. T7 recorded the active-row half only.
+8. **N8 · a correction to this run's own record.** At 620px the nine rows
+   **fit** — scrollHeight 513 against clientHeight 481, roughly 30px to spare.
+   So `7c`'s stop after S1–S3 is *whitespace in the artboard*, not height
+   clipping, and **T4's stated rationale was wrong arithmetic**. Its upheld
+   decision — that `7c` and `4c` are one pane at two heights, not two components
+   — stands and is independently attested in `plan.md`. But the drawn `7c` is a
+   state the build cannot produce, which is a genuine finding for the human.
+
+**fourteen already-recorded items verified rather than rediscovered**, including
+all three cross-screen ones handed to the task: the `7c`/`4c` topbar count
+spellings (still the only non-height-driven difference between those frames),
+the `2b`-rail vs `2c`-conference mismatch including the omitted Ridgemont Tech,
+and the five-schools-into-always-Ridgeline step two, walked live. Also
+re-confirmed: the S6/D3 contradiction, rails-vs-rows against 5–2, "8 of 9",
+"Coming soon", the seeding callout, 2026–27 against a 2025 calendar, the 236px
+toast, short vs full "Ridgeline", `SEASON_LABEL` still unrendered, and that the
+`--blue` / `--blue-text` rule was applied **consistently** across screens
+(measured rgb values) — which is the cross-screen confirmation that T3's and
+T5's opposite-looking choices really were the same rule.
+
+**both stateful sequences walked end to end.** `2d → 2e`: the popup opens
+seeded, the saved card highlights with its `↵`, the active row lifts to z-20
+with Forfeit shown, picking resolves the line to 13px/400/ink-900 and fires a
+`role="status"` toast that self-clears at 2800ms; Escape reverts and a committed
+name survives. `7d → 7c → 4c`: one selection state plus height — at 576 the rows
+scroll with the footer clipped, at 816 all nine and the footer are visible with
+5 report links, 1 Analyzing chip and 3 "Coming soon"; events with no fixture
+detail fall back to the prompt pane, as T1 intended.
+
+**follow-ups:**
+1. **N1–N8 are T12's input** alongside the ~30 per-screen contradictions already
+   in this log. N1, N2 and N3 are the ones a designer should see — they are the
+   design disagreeing with itself across screens, not the build drifting.
+2. **N6 wants a decision before re-wiring** — either gate `7e`'s two pane links
+   on `canCreate` like the drawer CTA, or accept that a player sees links that
+   bounce. Today it is inconsistent within one screen.
+3. **N8 means `7c` as drawn is unreachable.** Worth telling the designer: the
+   frame implies a clip that the real content does not produce.
+4. The reviewer noted N8's exact DOM metrics rest on a since-deleted harness and
+   cannot be reproduced from the tree; the qualitative claim is independently
+   supported by the artboard markup. If that number matters later, re-measure.

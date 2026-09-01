@@ -171,7 +171,7 @@ bodies do not repeat them — a subagent running any of T1–T12 should read the
 - **notes:** The strings are this run's fidelity contract, and copy drift is exactly what a reviewer's eye slides over. It is also the cheapest guard against a fixture being silently emptied. A copy spec that cannot fail is not a copy spec — criterion 4 is the point of the task, not a formality. Do not touch `team-home-schedule-reads.spec.ts` or `weekend-dual-reads.spec.ts`; they test the data layer this run does not modify and must stay green unedited.
 
 ## T11 · Full-set fidelity pass and gates
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T9, T10
 - **files:** no source changes expected; findings recorded under `work/events-lineups/`
