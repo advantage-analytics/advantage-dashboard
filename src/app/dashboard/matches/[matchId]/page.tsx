@@ -16,7 +16,7 @@ import { MatchDetailShell } from "@/components/dashboard/matches/match-detail/ma
 import { MatchRail } from "@/components/dashboard/matches/match-detail/match-rail";
 import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { StatisticsTab } from "@/components/dashboard/matches/match-detail/statistics-tab";
-import { ServePlacementCard } from "@/components/dashboard/matches/match-detail/serve-placement-card";
+import { ShotsTab } from "@/components/dashboard/matches/match-detail/shots/shots-tab";
 import { FilmTab } from "@/components/dashboard/matches/match-detail/film/film-tab";
 import { getMatchVideo } from "@/lib/data/match-video-server";
 
@@ -164,7 +164,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
               isDerived={isDerived}
             />
           ),
-          shots: <ServePlacementCard />,
+          shots: <ShotsTab />,
           // `video` is the short-lived playback SAS, or null when there is no
           // trimmed copy to serve — FilmTab renders the 46d empty state for
           // the second case. Points come from `MatchDataProvider`, so the
