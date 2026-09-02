@@ -43,7 +43,7 @@ ready).
 - **notes:** Two behavioural lines; the rest is comments. Known, approved spillover: `displayName` also feeds `/onboarding`, `/invitations/[inviteId]`, `components/join/invite-offer.tsx` and the dashboard activity tray, which inherit corrected casing only — do not touch those files. Until T3 lands, the claim surfaces still render `Clajerson G.` because the abbreviation is still in SQL; that is expected, not a failure.
 
 ## T3 · Migration: both definer functions return the full name, with corrected comments
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<timestamp>_full_owner_name.sql (new); the live database via the Supabase MCP — guess
 - **done when:**
