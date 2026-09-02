@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
 import { ClaimHeading } from "@/components/claim/claim-shell";
 import { InviteOffer } from "@/components/join/invite-offer";
-import { ROLE_NOUN } from "@/components/join/join-terms";
 import { getPendingInvites } from "@/lib/data/pending-invites-server";
+import { isNotNow, notNowHref } from "@/lib/services/programs/join-links";
 import { quotaHours } from "@/lib/services/programs/join-quota";
+import { inviteSentence } from "@/lib/services/programs/join-role";
 import { createClient } from "@/lib/supabase/server";
 import { OnboardingFlow } from "./onboarding-flow";
 
@@ -65,9 +66,11 @@ export default async function OnboardingPage({
 
   if (row?.onboarded_at) redirect("/dashboard");
 
-  const invites = await getPendingInvites(supabase);
+  // The flag is known before any query runs, so a decline never pays for the
+  // list it is about to ignore.
+  const invites = isNotNow(query) ? [] : await getPendingInvites(supabase);
 
-  if (invites.length > 0 && query["not-now"] !== "1") {
+  if (invites.length > 0) {
     // Never with an empty list: this guard is what keeps `InviteOffer` from
     // rendering a pane with nothing in it.
     const single = invites.length === 1 ? invites[0] : null;
@@ -92,13 +95,9 @@ export default async function OnboardingPage({
               eyebrow={single ? single.programName : "Invitations"}
               title="You've been invited"
               titlePadTop={8}
-              // `inviterName` is however much of a person this flow is allowed
-              // to name, and it is printed whole or not at all.
               body={
                 single
-                  ? single.inviterName
-                    ? `${single.inviterName} invited you to join ${single.programName} as ${ROLE_NOUN[single.role]}.`
-                    : `You've been invited to join ${single.programName} as ${ROLE_NOUN[single.role]}.`
+                  ? inviteSentence(single)
                   : "Join one now, or continue and decide later."
               }
               bodyMax="58ch"
@@ -107,7 +106,7 @@ export default async function OnboardingPage({
               invites={invites}
               programHours={programHours}
               personalHours={personalHours}
-              notNowHref="/onboarding?not-now=1"
+              notNowHref={notNowHref("/onboarding")}
             />
           </div>
         </div>

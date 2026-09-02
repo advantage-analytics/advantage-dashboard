@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, type TransitionStartFunction } from "react";
+import { useState, useTransition } from "react";
 import { CLAIM_BUTTON, ClaimActions } from "@/components/claim/claim-shell";
 import { advButton } from "@/lib/ui/adv-button";
 import {
@@ -8,8 +8,8 @@ import {
   JoinSharingTerms,
   NotNowLink,
   Problem,
-  ROLE_NOUN,
 } from "@/components/join/join-terms";
+import { ROLE_NOUN } from "@/lib/services/programs/join-role";
 import { acceptPendingInvite } from "@/lib/services/programs/join-actions";
 import type { PendingInvite } from "@/lib/data/pending-invites-server";
 
@@ -51,18 +51,15 @@ export function InviteOffer({
   /** Where declining goes. Composed by the caller — see `NotNowLink`. */
   notNowHref: string;
 }) {
-  const single = invites.length === 1 ? invites[0] : null;
+  const footer = (
+    <JoinQuotaFooter programHours={programHours} personalHours={personalHours} />
+  );
 
   return (
     <div className="flex flex-col gap-4">
       <JoinSharingTerms />
-      {single ? (
-        <SingleInvite invite={single} notNowHref={notNowHref}>
-          <JoinQuotaFooter
-            programHours={programHours}
-            personalHours={personalHours}
-          />
-        </SingleInvite>
+      {invites.length === 1 ? (
+        <SingleInvite invite={invites[0]} notNowHref={notNowHref} footer={footer} />
       ) : (
         <>
           <ul className="flex flex-col gap-3">
@@ -72,10 +69,7 @@ export function InviteOffer({
           </ul>
           <ClaimActions>
             <NotNowLink href={notNowHref} />
-            <JoinQuotaFooter
-              programHours={programHours}
-              personalHours={personalHours}
-            />
+            {footer}
           </ClaimActions>
         </>
       )}
@@ -83,57 +77,69 @@ export function InviteOffer({
   );
 }
 
+/**
+ * The accept, once, for both shapes.
+ *
+ * Each button owns its own pending and error state, because two rows can be
+ * pressed in either order and a shared spinner would put the second person's
+ * failure under the first person's button. On success the action redirects
+ * and the transition never settles, so there is no success branch to write —
+ * only a refusal comes back.
+ */
+function useAccept(inviteId: string) {
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+
+  const run = () =>
+    start(async () => {
+      setError(null);
+      const result = await acceptPendingInvite(inviteId);
+      if (result && !result.ok) setError(result.error);
+    });
+
+  return { pending, error, run };
+}
+
 /** One invitation: the primary button, named after the program it joins. */
 function SingleInvite({
   invite,
   notNowHref,
-  children,
+  footer,
 }: {
   invite: PendingInvite;
   notNowHref: string;
-  /** The quota footer, composed by the caller for the same reason the forms do. */
-  children: React.ReactNode;
+  footer: React.ReactNode;
 }) {
-  const [error, setError] = useState<string | null>(null);
-  const [pending, start] = useTransition();
+  const { pending, error, run } = useAccept(invite.id);
 
   return (
     <>
       <ClaimActions>
-        {/* CLAIM_BUTTON is `advButton("primary")` — the same primary every
-            other screen in this flow wears. */}
         <button
           type="button"
           disabled={pending}
           className={CLAIM_BUTTON}
-          onClick={() => accept(invite.id, start, setError)}
+          onClick={run}
         >
           {pending ? "Joining…" : `Join ${invite.programName}`}
         </button>
         <NotNowLink href={notNowHref} />
-        {children}
+        {footer}
       </ClaimActions>
       <Problem message={error} />
     </>
   );
 }
 
-/**
- * One row of several. Its own pending and error state, because two rows can be
- * pressed in either order and a shared spinner would put the second person's
- * failure under the first person's button.
- */
+/** One row of several: the program, the role, who asked, and a quiet Join. */
 function InviteRow({ invite }: { invite: PendingInvite }) {
-  const [error, setError] = useState<string | null>(null);
-  const [pending, start] = useTransition();
+  const { pending, error, run } = useAccept(invite.id);
 
   return (
     <li className="flex flex-col gap-2 border-t border-[var(--border-hairline)] pt-3 first:border-t-0 first:pt-0">
       <div className="flex items-center gap-3">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="text-body-sm truncate">{invite.programName}</span>
-          {/* One string, printed whole. `inviterName` is however much of a
-              person this flow is allowed to name — never split for effect. */}
           <span className="text-micro truncate">
             as {ROLE_NOUN[invite.role]}
             {invite.inviterName ? ` · from ${invite.inviterName}` : ""}
@@ -143,7 +149,7 @@ function InviteRow({ invite }: { invite: PendingInvite }) {
           type="button"
           disabled={pending}
           className={advButton("outline", "sm")}
-          onClick={() => accept(invite.id, start, setError)}
+          onClick={run}
         >
           {pending ? "Joining…" : "Join"}
         </button>
@@ -151,22 +157,4 @@ function InviteRow({ invite }: { invite: PendingInvite }) {
       <Problem message={error} />
     </li>
   );
-}
-
-/**
- * The accept, once, for both shapes.
- *
- * On success the action redirects and this never resolves, so there is no
- * success branch to write. Only a refusal comes back.
- */
-function accept(
-  inviteId: string,
-  start: TransitionStartFunction,
-  setError: (message: string | null) => void
-) {
-  start(async () => {
-    setError(null);
-    const result = await acceptPendingInvite(inviteId);
-    if (result && !result.ok) setError(result.error);
-  });
 }

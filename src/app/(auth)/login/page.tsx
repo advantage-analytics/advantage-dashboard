@@ -1,7 +1,3 @@
-"use client";
-
-import { Suspense } from "react";
-import { useSearchParams } from "next/navigation";
 import { LoginForm } from "@/components/auth/login-form";
 import { safeNext } from "@/lib/auth/safe-next";
 
@@ -12,20 +8,19 @@ import { safeNext } from "@/lib/auth/safe-next";
  * `/join/<token>` afterwards, so the destination is attacker-controlled and
  * has to go through `safeNext`. Only a path travels — never the invitee's
  * email, which would let anyone with the link learn who was invited.
+ *
+ * A Server Component reading `searchParams`, not a client page reading
+ * `useSearchParams()`. The client version needed a `<Suspense>` boundary, and
+ * Next prerenders the boundary's fallback: the busiest signed-out route was
+ * shipping an empty panel and drawing its form only after hydration. Awaiting
+ * the params makes the route dynamic, and the render is pure JSX with no I/O,
+ * so that buys a full first paint for a per-request render of nothing.
  */
-function LoginContent() {
-  const searchParams = useSearchParams();
-  const next = safeNext(searchParams.get("next"));
-
-  return <LoginForm next={next} />;
-}
-
-export default function Page() {
-  // `useSearchParams` opts its subtree into client-side rendering, so it needs
-  // a Suspense boundary above it or the build fails on this route.
-  return (
-    <Suspense>
-      <LoginContent />
-    </Suspense>
-  );
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const { next } = await searchParams;
+  return <LoginForm next={safeNext(typeof next === "string" ? next : null)} />;
 }

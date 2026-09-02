@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { programDisplayName } from "@/lib/data/programs-server";
 import type { ProgramOrgType } from "@/lib/workspace/types";
+import type { JoinRole } from "./join-role";
 import { hashToken } from "./tokens";
 
 /**
@@ -19,8 +20,12 @@ import { hashToken } from "./tokens";
  * instead of trusting whatever the browser posts back.
  */
 
-/** Mirrors `program_invites_role_check`. Owner moves by transfer, not invite. */
-export type JoinRole = "coach" | "staff" | "player";
+/**
+ * Re-exported from its leaf so existing importers keep working. The type lives
+ * in `join-role.ts` beside the noun that prints it, where client components
+ * can reach it without this server-only module.
+ */
+export type { JoinRole } from "./join-role";
 
 /**
  * The coach behind the invitation, as far as a screen is allowed to say it.
@@ -67,18 +72,13 @@ export type JoinState =
   /**
    * An account already exists for the invited address, and nobody is signed in.
    *
-   * They sign in with the password they already have. They are NOT offered a
-   * new one — see `createAccountAndAccept` for why that distinction is the
-   * most important line in this feature.
+   * No screen: the page sends them to `/login?next=` and they come back as
+   * `ready`. Nothing about the invitation rides on this state, because nothing
+   * renders it — and an existing account is never offered a password box here;
+   * see `createAccountAndAccept` for why that is the most important line in
+   * this feature.
    */
-  | {
-      kind: "sign_in";
-      programName: string;
-      programOrgType: ProgramOrgType;
-      role: JoinRole;
-      email: string;
-      inviterName: InviterName;
-    }
+  | { kind: "sign_in" }
   /** No account yet. Name and password, and they are in. */
   | {
       kind: "sign_up";
@@ -266,8 +266,10 @@ export async function resolveJoinState(token: string): Promise<JoinState> {
     };
   }
 
+  if (await accountExists(email)) return { kind: "sign_in" };
+
   return {
-    kind: (await accountExists(email)) ? "sign_in" : "sign_up",
+    kind: "sign_up",
     programName,
     programOrgType,
     role,
@@ -332,23 +334,45 @@ export async function acceptWithSession(
   token: string,
   client?: Awaited<ReturnType<typeof createClient>>
 ): Promise<AcceptOutcome> {
-  const supabase = client ?? (await createClient());
+  return acceptVia(
+    client ?? (await createClient()),
+    "accept_program_invite",
+    { p_token_hash: hashToken(token.trim()) },
+    "[join] accept failed"
+  );
+}
 
-  const { data, error } = await supabase
-    .rpc("accept_program_invite", { p_token_hash: hashToken(token.trim()) })
-    .maybeSingle();
+const REFUSED: AcceptOutcome = {
+  ok: false,
+  status: "error",
+  message: "We couldn't finish that. Try again.",
+};
+
+/**
+ * The handshake both doors share.
+ *
+ * Both database functions return the same `(status, program_id)` row, so the
+ * row-to-outcome mapping — including the cast that keeps `AcceptOutcome`'s
+ * status list honest — lives here once. The log carries the message only: the
+ * token is a live credential to a program and the id is the key to a row that
+ * names an address, and neither belongs in the one place people paste into a
+ * ticket without thinking.
+ */
+async function acceptVia(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  rpc: "accept_program_invite" | "accept_pending_invite",
+  args: Record<string, string>,
+  logLabel: string
+): Promise<AcceptOutcome> {
+  const { data, error } = await supabase.rpc(rpc, args).maybeSingle();
 
   if (error) {
-    // Never logs the token. It is a live credential to a program, and a server
-    // log is the one place people paste into a ticket without thinking.
-    console.error("[join] accept failed", { message: error.message });
-    return { ok: false, status: "error", message: "We couldn't finish that. Try again." };
+    console.error(logLabel, { message: error.message });
+    return REFUSED;
   }
 
   const row = data as { status: string; program_id: string | null } | null;
-  if (!row) {
-    return { ok: false, status: "error", message: "We couldn't finish that. Try again." };
-  }
+  if (!row) return REFUSED;
 
   if (row.status === "ok" && row.program_id) {
     return { ok: true, programId: row.program_id };
@@ -383,33 +407,10 @@ export async function acceptPendingWithSession(
   inviteId: string,
   client?: Awaited<ReturnType<typeof createClient>>
 ): Promise<AcceptOutcome> {
-  const supabase = client ?? (await createClient());
-
-  const { data, error } = await supabase
-    .rpc("accept_pending_invite", { p_invite_id: inviteId })
-    .maybeSingle();
-
-  if (error) {
-    // The message only. The id is not a credential, but it is the key to a
-    // row that names an address, and it does not belong in a log line either.
-    console.error("[join] accept by id failed", { message: error.message });
-    return { ok: false, status: "error", message: "We couldn't finish that. Try again." };
-  }
-
-  const row = data as { status: string; program_id: string | null } | null;
-  if (!row) {
-    return { ok: false, status: "error", message: "We couldn't finish that. Try again." };
-  }
-
-  if (row.status === "ok" && row.program_id) {
-    return { ok: true, programId: row.program_id };
-  }
-
-  return {
-    ok: false,
-    status: row.status as Exclude<
-      Extract<AcceptOutcome, { ok: false }>["status"],
-      "error"
-    >,
-  };
+  return acceptVia(
+    client ?? (await createClient()),
+    "accept_pending_invite",
+    { p_invite_id: inviteId },
+    "[join] accept by id failed"
+  );
 }

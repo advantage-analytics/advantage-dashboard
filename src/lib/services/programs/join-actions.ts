@@ -17,6 +17,7 @@ import {
   type AcceptOutcome,
   type InviteRecord,
 } from "./invite-acceptance";
+import { joinHref, signInThenHref } from "./join-links";
 
 /**
  * The two ways an invitation is accepted, and the one that is refused.
@@ -99,43 +100,55 @@ async function activate(programId: string): Promise<void> {
   revalidatePath("/dashboard", "layout");
 }
 
+/** Where every successful accept ends: inside the program, on the team page. */
+async function finishJoin(programId: string): Promise<never> {
+  await activate(programId);
+  redirect("/dashboard/team");
+}
+
 /**
- * Already signed in as the invited address. Nothing to collect.
+ * A membership answers both first-run questions, so bouncing a just-joined
+ * member into /onboarding would ask what the invitation already settled — and
+ * a Google-created account that arrives through a link never passed through
+ * /onboarding at all, so the layout at `src/app/dashboard/layout.tsx` would
+ * send them there.
  *
- * Also stamps `onboarded_at`, mirroring `createAccountAndAccept` below: a
- * Google-created account that lands here never passed through `/onboarding`
- * before reaching `/join`, so without this the layout at
- * `src/app/dashboard/layout.tsx` would bounce a just-joined member straight
- * back to onboarding questions the invitation already answered.
+ * Called only AFTER an accept confirmed the membership, never merely because
+ * an account was created: stamping earlier left an account whose accept then
+ * failed permanently marked onboarded with no membership behind it, and a
+ * failed accept should leave /onboarding reachable. A trusted server path
+ * holding the service role, not auth metadata a crafted signup could imitate.
+ * Best effort: a miss costs one redundant onboarding screen, never the
+ * membership.
  */
+async function markOnboarded(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string
+): Promise<void> {
+  const { error } = await admin
+    .from("users")
+    .update({ onboarded_at: new Date().toISOString() })
+    .eq("id", userId)
+    .is("onboarded_at", null);
+  if (error) {
+    console.error("[join] could not mark the account onboarded", {
+      message: error.message,
+    });
+  }
+}
+
+/** Already signed in as the invited address. Nothing to collect. */
 export async function acceptInvite(token: string): Promise<JoinActionResult> {
   const supabase = await createClient();
   const outcome = await acceptWithSession(token, supabase);
   if (!outcome.ok) return { ok: false, error: describe(outcome) };
 
-  // A player whose acceptance JUST SUCCEEDED joined a program that answers
-  // both first-run questions, so bouncing them into /onboarding would ask what
-  // the invitation already settled. Stamp only now — after `acceptWithSession`
-  // confirmed the membership. Best effort: a miss costs one redundant
-  // onboarding screen, never the membership.
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (user?.id) {
-    const { error: stampError } = await createAdminClient()
-      .from("users")
-      .update({ onboarded_at: new Date().toISOString() })
-      .eq("id", user.id)
-      .is("onboarded_at", null);
-    if (stampError) {
-      console.error("[join] could not mark the account onboarded", {
-        message: stampError.message,
-      });
-    }
-  }
+  if (user?.id) await markOnboarded(createAdminClient(), user.id);
 
-  await activate(outcome.programId);
-  redirect("/dashboard/team");
+  return finishJoin(outcome.programId);
 }
 
 /** RFC 4122 shape, any version — what `program_invites.id` is generated as. */
@@ -196,26 +209,20 @@ export async function acceptPendingInvite(
   if (user?.id) {
     const admin = createAdminClient();
 
-    const { error: stampError } = await admin
-      .from("users")
-      .update({ onboarded_at: new Date().toISOString() })
-      .eq("id", user.id)
-      .is("onboarded_at", null);
-    if (stampError) {
-      console.error("[join] could not mark the account onboarded", {
-        message: stampError.message,
-      });
-    }
-
-    // Read back, never passed in. The row was written by a SECURITY DEFINER
-    // function from the invitation's own `role`, so this is the one place the
-    // answer cannot have been chosen by the caller.
-    const { data: membership, error: memberError } = await admin
-      .from("program_members")
-      .select("role")
-      .eq("program_id", outcome.programId)
-      .eq("user_id", user.id)
-      .maybeSingle();
+    // The stamp and the read-back share no data, so they go out together;
+    // only the persona write waits on the read. The role is read back, never
+    // passed in: the row was written by a SECURITY DEFINER function from the
+    // invitation's own `role`, so this is the one place the answer cannot
+    // have been chosen by the caller.
+    const [, { data: membership, error: memberError }] = await Promise.all([
+      markOnboarded(admin, user.id),
+      admin
+        .from("program_members")
+        .select("role")
+        .eq("program_id", outcome.programId)
+        .eq("user_id", user.id)
+        .maybeSingle(),
+    ]);
     if (memberError) {
       console.error("[join] could not read the new membership", {
         message: memberError.message,
@@ -242,8 +249,7 @@ export async function acceptPendingInvite(
     }
   }
 
-  await activate(outcome.programId);
-  redirect("/dashboard/team");
+  return finishJoin(outcome.programId);
 }
 
 /**
@@ -324,30 +330,12 @@ export async function createAccountAndAccept(
   const outcome = await acceptWithSession(token, supabase);
   if (!outcome.ok) return { ok: false, error: describe(outcome) };
 
-  // A player whose acceptance JUST SUCCEEDED joined a program that answers
-  // both first-run questions, so bouncing them into /onboarding would ask what
-  // the invitation already settled. Stamp only now — after `acceptWithSession`
-  // confirmed the membership, never merely because `createUser` succeeded.
-  // Stamping earlier left an account whose accept then failed permanently
-  // marked onboarded with no membership behind it; a failed accept should
-  // leave /onboarding reachable. A trusted server path holding the service
-  // role, not auth metadata a crafted signup could imitate. Best effort: a
-  // miss costs one redundant onboarding screen, never the membership.
-  if (created?.user?.id) {
-    const { error: stampError } = await admin
-      .from("users")
-      .update({ onboarded_at: new Date().toISOString() })
-      .eq("id", created.user.id)
-      .is("onboarded_at", null);
-    if (stampError) {
-      console.error("[join] could not mark the account onboarded", {
-        message: stampError.message,
-      });
-    }
-  }
+  // Only now — after `acceptWithSession` confirmed the membership, never merely
+  // because `createUser` succeeded. See `markOnboarded` for why that order is
+  // the whole point.
+  if (created?.user?.id) await markOnboarded(admin, created.user.id);
 
-  await activate(outcome.programId);
-  redirect("/dashboard/team");
+  return finishJoin(outcome.programId);
 }
 
 // ---------------------------------------------------------------------------
@@ -478,9 +466,5 @@ export async function signOutForInvite(token: string): Promise<void> {
   await supabase.auth.signOut();
 
   const invite = await loadInvite(token);
-  redirect(
-    invite
-      ? `/login?next=${encodeURIComponent(`/join/${encodeURIComponent(token)}`)}`
-      : "/login"
-  );
+  redirect(invite ? signInThenHref(joinHref(token)) : "/login");
 }

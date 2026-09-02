@@ -10,6 +10,11 @@ import {
 import { JoinPane } from "@/components/join/join-pane";
 import { NothingSent } from "@/components/join/nothing-sent";
 import { resolveJoinState } from "@/lib/services/programs/invite-acceptance";
+import {
+  isNotNow,
+  joinHref,
+  signInThenHref,
+} from "@/lib/services/programs/join-links";
 import { quotaHours } from "@/lib/services/programs/join-quota";
 
 export const metadata = { title: "Join your program" };
@@ -62,7 +67,7 @@ export default async function JoinPage({
   // "Not now" is a query flag and nothing else — see `NotNowLink`. It only
   // means anything on the three screens that were offering a Join button;
   // everywhere else the state itself is the answer.
-  const declined = query["not-now"] === "1";
+  const declined = isNotNow(query);
 
   switch (state.kind) {
     // Revoked, mistyped, or never real. One message for all three, because
@@ -140,7 +145,7 @@ export default async function JoinPage({
       if (declined) {
         return (
           <NothingSent
-            reviewHref={`/join/${encodeURIComponent(token)}`}
+            reviewHref={joinHref(token)}
             programName={state.programName}
             inviterName={state.inviterName}
           />
@@ -165,15 +170,13 @@ export default async function JoinPage({
     // branch: there is no Join button on this state to decline, and the
     // invitation is untouched either way.
     case "sign_in":
-      redirect(
-        `/login?next=${encodeURIComponent(`/join/${encodeURIComponent(token)}`)}`
-      );
+      redirect(signInThenHref(joinHref(token)));
 
     case "sign_up":
       if (declined) {
         return (
           <NothingSent
-            reviewHref={`/join/${encodeURIComponent(token)}`}
+            reviewHref={joinHref(token)}
             programName={state.programName}
             inviterName={state.inviterName}
           />

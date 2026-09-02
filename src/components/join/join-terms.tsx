@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { advButton } from "@/lib/ui/adv-button";
-import type { JoinRole } from "@/lib/services/programs/invite-acceptance";
 
 /**
  * Screen 8.2 — what the program can see, before anyone joins it.
@@ -35,23 +34,13 @@ import type { JoinRole } from "@/lib/services/programs/invite-acceptance";
  */
 
 /**
- * How a role is named to the person about to hold it.
- *
- * Here rather than in `join-forms.tsx` because two files now print it — the
- * token screens and the signed-in `InviteOffer` — and a second copy is how
- * "a coach" and "coach" end up on two screens of the same flow.
- */
-export const ROLE_NOUN: Record<JoinRole, string> = {
-  coach: "a coach",
-  staff: "staff",
-  player: "a player",
-};
-
-/**
  * The one way this flow reports a refused action.
  *
- * Same reason as `ROLE_NOUN`: every join surface needs it, so it lives beside
- * the other shared pieces rather than being exported out of one of them.
+ * Every join surface needs it, so it lives beside the other shared pieces
+ * rather than being exported out of one of them. (The role nouns used to sit
+ * here too; they moved to `services/programs/join-role.ts` once the dashboard
+ * header needed one, because importing this component module for a three-line
+ * record dragged its links and terms into every dashboard page's chunk.)
  */
 export function Problem({ message }: { message: string | null }) {
   if (!message) return null;

@@ -3,8 +3,8 @@ import { programDisplayName } from "@/lib/data/programs-server";
 import {
   displayName,
   type InviterName,
-  type JoinRole,
 } from "@/lib/services/programs/invite-acceptance";
+import type { JoinRole } from "@/lib/services/programs/join-role";
 import type { ProgramOrgType } from "@/lib/workspace/types";
 
 /**
@@ -47,17 +47,23 @@ export interface DbPendingInviteRow {
   expires_at: string;
 }
 
+/**
+ * What a screen needs, and only that. The row above is the database's shape;
+ * this is the offer's. `program_id` and `expires_at` stay on the row and stop
+ * here: nothing renders a countdown (the page behind the link states expiry
+ * properly), and the program is named, never linked, until it is joined.
+ * Every field on this crosses to client components, so an unused one is
+ * payload on every dashboard page for nothing.
+ */
 export interface PendingInvite {
   /** `program_invites.id` — what `acceptPendingInvite()` takes. Not a secret. */
   id: string;
-  programId: string;
   programName: string;
+  /** Read server-side by `quotaHours()`; never rendered by a client component. */
   programOrgType: ProgramOrgType;
   role: JoinRole;
   /** The coach who sent it, as far as a screen may say. See `InviterName`. */
   inviterName: InviterName;
-  /** ISO timestamp, as stored. Rows arrive newest first. */
-  expiresAt: string;
 }
 
 export async function getPendingInvites(
@@ -76,11 +82,9 @@ export async function getPendingInvites(
 
   return ((data ?? []) as DbPendingInviteRow[]).map((row) => ({
     id: row.invite_id,
-    programId: row.program_id,
     programName: programDisplayName(row.school_name, row.team),
     programOrgType: row.org_type as ProgramOrgType,
     role: row.role as JoinRole,
     inviterName: displayName(row.inviter_first_name, row.inviter_last_name),
-    expiresAt: row.expires_at,
   }));
 }

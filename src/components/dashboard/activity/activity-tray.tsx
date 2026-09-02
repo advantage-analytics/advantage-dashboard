@@ -25,7 +25,7 @@ import {
   uploadEtaSeconds,
 } from "@/lib/data/match-analysis";
 import { formatDisplayDate } from "@/lib/data/match-utils";
-import { ROLE_NOUN } from "@/components/join/join-terms";
+import { ROLE_NOUN } from "@/lib/services/programs/join-role";
 import { trayDetail } from "./tray-detail";
 import type { ActivityFeed, ActivityItem } from "@/lib/data/activity-server";
 // Type-only, and it has to stay that way: `pending-invites-server.ts` builds a

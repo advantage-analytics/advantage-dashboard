@@ -15,7 +15,6 @@ import {
   JoinSharingTerms,
   NotNowLink,
   Problem,
-  ROLE_NOUN,
 } from "@/components/join/join-terms";
 import {
   acceptInvite,
@@ -23,8 +22,13 @@ import {
   requestFreshInvite,
   signOutForInvite,
 } from "@/lib/services/programs/join-actions";
+import {
+  joinHref,
+  notNowHref,
+  signInThenHref,
+} from "@/lib/services/programs/join-links";
+import { ROLE_NOUN, type JoinRole } from "@/lib/services/programs/join-role";
 import { PASSWORD_RULE } from "@/lib/auth/error-messages";
-import type { JoinRole } from "@/lib/services/programs/invite-acceptance";
 
 /**
  * The interactive half of `/join/[token]`.
@@ -94,7 +98,7 @@ export function JoinReady({
         >
           {pending ? "Joining…" : `Join ${programName}`}
         </button>
-        <NotNowLink href={`/join/${encodeURIComponent(token)}?not-now=1`} />
+        <NotNowLink href={notNowHref(joinHref(token))} />
         <JoinQuotaFooter
           programHours={programHours}
           personalHours={personalHours}
@@ -209,16 +213,13 @@ export function JoinSignUp({
         <button type="submit" disabled={pending} className={CLAIM_BUTTON}>
           {pending ? "Joining…" : `Join ${programName}`}
         </button>
-        <NotNowLink href={`/join/${encodeURIComponent(token)}?not-now=1`} />
+        <NotNowLink href={notNowHref(joinHref(token))} />
         {/* Some of the people reading this have never chosen a password for
             anything and are not about to start. Google is on `/login`, so the
             way to offer it here is to point at that page and come back — the
             same `?next=` the `sign_in` state redirects through. They return
             holding a session, and this screen becomes the Join button. */}
-        <Link
-          href={`/login?next=${encodeURIComponent(`/join/${encodeURIComponent(token)}`)}`}
-          className="text-[12px] text-[var(--blue)] hover:underline"
-        >
+        <Link href={signInThenHref(joinHref(token))} className={CLAIM_LINK}>
           Sign in with Google instead
         </Link>
         <JoinQuotaFooter
