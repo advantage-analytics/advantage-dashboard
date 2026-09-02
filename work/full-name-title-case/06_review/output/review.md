@@ -1,16 +1,15 @@
 # Review — full-name-title-case
 
-**Sign-off: pending**
-
-One open finding blocks a clean sign-off. It is a real, user-visible bug with a
-verified fix, but the fix narrows a rule the human chose deliberately at stage
-04, so it is theirs to approve rather than mine to apply. See **Open finding**
-below; everything else in the range is clean.
+**Sign-off: approved** — by the human, 2026-09-02, after the R1b fix and a `ready` receipt at `4817ad3`.
 
 Range reviewed: `fd13c75...HEAD` (`branch-range`, base `splitstep-integration`).
-The working tree carried the quality pass's uncommitted fixes at review time and
-they were included in scope. Receipt recorded against `4f21fc4` as
-**not-ready**, with the finding named.
+
+**This gate ran twice.** The first run found a real, user-visible bug and
+recorded `4f21fc4` as **not-ready** rather than softening it. The human said fix
+it; the fix turned out to need two passes, and the second run of the gate over
+the clean tree recorded `4817ad3` as **ready**. Everything below is kept in the
+order it happened — the blocked finding, its first fix, and what the re-run found
+wrong with that fix — because the sequence is the part worth reading.
 
 ## Success criteria, from the brief
 
@@ -25,10 +24,12 @@ they were included in scope. Receipt recorded against `4f21fc4` as
 
 ## Gate results
 
+Both runs. Where they differ, the second is given after an arrow.
+
 | Stage | Result |
 |---|---|
-| lint · tsc · test | Pass. 315 tests (313 before the branch). Re-run green after the quality pass. |
-| `simplify` | 4 fixes applied, 8 findings skipped with reasons — below. |
+| lint · tsc · test · build | Pass, both runs. 315 → **316** tests (313 before the branch). |
+| `simplify` | 4 fixes applied → **3 more** on the re-run, including the incomplete-fix finding. |
 | `vercel-react-best-practices` | **Skipped — surface not touched.** The range contains zero `.tsx` files, so none of its three triggers (a `"use client"` added, a new component file, a data-fetching change) fires. |
 | `code-review medium` | 1 finding — the open one below. |
 | `rls-boundary-reviewer` | Clean. Ran over the whole range, not reported as covered-per-task: seven pipeline and amendment commits in the range never faced the per-task gate, so this ran fail-closed. |
@@ -37,11 +38,9 @@ they were included in scope. Receipt recorded against `4f21fc4` as
 
 ## The finding that blocked sign-off — FIXED in `1a52db6`
 
-> Recorded after the fact, on the human's instruction to fix it. The
-> `Sign-off:` line above is untouched — that word stays theirs. What changed
-> here is only the status of the finding, because leaving it recorded as open
-> would make this file say something that is no longer true. The receipt still
-> reads `not-ready` and needs a fresh `/pr-check` run on the clean tree.
+> Recorded after the fact, on the human's instruction to fix it. The first fix
+> is below; **it was incomplete, and the second gate run caught that** — see
+> "What the re-run found" further down.
 
 **`src/lib/data/person-name.ts:159` — R1b uppercases short real surnames.**
 
@@ -98,6 +97,46 @@ THROUGHOUT still reads as a suffix: `titleCaseName('wei xi')` returns
 paragraph was rewritten to describe this narrower residue instead of the old
 `Vivi`/`Ivi` claim, which is no longer true. Typed the ordinary way — one
 capital, the rest lower — the name is safe, and that is the case that occurs.
+
+## What the re-run found — the first fix was incomplete, `4817ad3`
+
+Re-running the gate on the fixed code is the reason to re-run it at all, and it
+paid for itself. `simplify`'s altitude agent found that **the fix closed the bug
+in one token position only.** R1b was gated on casing but not on where the token
+sat, so an i/v/x name anywhere but last still went through it:
+
+```
+xi wei      -> XI Wei
+vivi chen   -> VIVI Chen
+VIVI CHEN   -> VIVI Chen
+```
+
+That is the same shouted-name bug, in the other slot — and `xi` as a given name
+in Chinese order is exactly what a collegiate roster will see. A generational
+suffix is terminal, so the second fix gates on that as well. Verified against
+every case the spec pins: no churn, and all three above come back correct.
+
+With position carrying half the rule, the case-uniformity half folded into the
+regex it was correcting — `/^(?:[ivx]{2,}|[IVX]{2,})$/` rather than an `/i` flag
+plus a helper narrowing it back — which `simplify`'s reuse and simplification
+agents both flagged independently. R1b is one rule and now reads as one.
+
+**Two doc statements were wrong, not merely thin, and both were corrected:**
+
+- The residue paragraph claimed all-caps entry "was already going to be re-cased
+  by some rule or other". It is not: R1b intercepts first, so `WEI XI` keeps its
+  shouted surname where `CLAJERSON GIMENA` — the case R2 exists for — is re-cased
+  normally. The spec now pins both directions.
+- The spec's R1 identity loop contained `'III'` under a comment asserting every
+  member holds an uppercase after its first character *and a lowercase*. `III`
+  has no lowercase and never reaches R1. Moved to the R1b test, which gained
+  coverage rather than losing it.
+
+**One low finding from `code-review`, closed by documenting it.** The position
+gate has a price: a suffix with anything after it is no longer terminal, so
+`sam reid iii jr` renders `Sam Reid Iii Jr`. The trade is right — a shouted given
+name is commoner and worse — but it is a real edge, and the R1b doc now names it
+so the next reader recognises a boundary rather than a bug.
 
 ## Findings fixed during the review
 
