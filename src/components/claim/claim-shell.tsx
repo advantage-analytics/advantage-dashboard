@@ -263,9 +263,13 @@ export const CLAIM_BUTTON = advButton("primary");
  * byte-identical copies of both, and this file is already where the flow's
  * shared styling lives.
  *
- * `advField("boxed")` — the design system's boxed field, at 36px and
- * `radius-button` (6px) rather than the 38px / `radius-element` (8px) this
- * constant used before that helper existed. No focus treatment of its own —
+ * `advField("boxed")` — 38px at `radius-element` (8px), the geometry this
+ * constant has always had. The helper is not here to change how the field
+ * looks; it is here so the `<input>`s and the `<select>`s that share this
+ * string cannot drift apart from each other, and so the same field can be
+ * reached from outside the claim flow. See `adv-field.ts` for why these
+ * numbers deliberately differ from the design system's `radius-input` row.
+ * No focus treatment of its own —
  * focus.css resolves `input`/`select`/`textarea` to the neutral
  * `--focus-ring-field` unlayered, which is why `advField()` emits no focus
  * utility and this constant drops the `outline-none` it used to carry: that
