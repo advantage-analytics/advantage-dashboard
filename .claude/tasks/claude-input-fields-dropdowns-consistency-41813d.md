@@ -55,7 +55,7 @@ ready).
 - **notes:** Guardrail-gated — `ScoreCell` is the set-score input. Blast radius is verified small: `Input` has exactly one consumer (`ScoreCell`); `SelectTrigger` and `Textarea` have zero consumers in `src/`. The plan says "delete the redundant `h-8`", but `Input` stays `h-9`, so deleting `h-8` without a small tier grows the cell to 36px — hence the outcome-pinned criterion. `input.tsx`'s `focus-visible:border-[#E5E5E5]` is a border-colour utility, not a ring, so focus.css does not discard it; leave it. Screenshot the score grid in both consumers before/after and confirm the cells are unchanged in size and position.
 
 ## T3 · Convert CLAIM_FIELD and the program-search box to advField("boxed")
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T1
 - **files:** `src/components/claim/claim-shell.tsx` (`CLAIM_FIELD`, ~line 267), `src/components/claim/program-search.tsx` (search-box wrapper ~line 109) — guess, both verified present
