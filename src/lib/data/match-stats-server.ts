@@ -82,6 +82,94 @@ interface TiebreakCounts {
   player2Tiebreaks: number;
 }
 
+/* ── The player's own stat rows ────────────────────────── */
+
+/**
+ * One side of one of a player's matches, as the shared fetch returns it: the
+ * `match_stats_with_percentages` columns the caller asked for, plus the two
+ * keys that place the row in that player's history — which match it belongs to
+ * and when that match was played.
+ *
+ * Cells carry the union the view actually returns: counts as numbers,
+ * percentages as numeric strings.
+ */
+export interface PlayerStatRow {
+  match_id: string;
+  /** `matches.date`, carried across from the match query. */
+  date: string | null;
+  [column: string]: string | number | null;
+}
+
+/**
+ * The player's matches → their side of each one's stat row.
+ *
+ * Both loaders below are built on this, and it matters that they agree on
+ * WHICH rows a player's history is made of: `is_player1 = true` on the matches
+ * they hold as player one. That is a real limitation — a match this person
+ * played as player two is not in the set at all — but it is one limitation in
+ * one place. A baseline drawn from a different set of rows than the series
+ * beside it would be worse than a narrow one, because the tile would then
+ * compare a number against the average of something else.
+ *
+ * `excludeMatchId` drops a match at the query. A caller that needs the current
+ * match in the set for one figure and out of it for another leaves it unset and
+ * excludes in the arithmetic instead.
+ */
+async function fetchPlayerStatRows(
+  playerIds: readonly string[],
+  columns: string,
+  excludeMatchId?: string,
+): Promise<PlayerStatRow[] | null> {
+  if (playerIds.length === 0) return null;
+
+  const supabase = await createClient();
+
+  let query = supabase
+    .from("matches")
+    .select("id, date")
+    .in("player1_id", playerIds as string[]);
+  if (excludeMatchId) query = query.neq("id", excludeMatchId);
+  const { data: matches } = await query;
+
+  if (!matches?.length) return null;
+
+  // The date travels with the row rather than being looked up again later: it
+  // is the only thing that can order a series, and a value separated from its
+  // match date is a point that can land anywhere on a line.
+  const dateByMatch = new Map<string, string | null>(
+    matches.map((m) => [m.id as string, (m.date as string | null) ?? null]),
+  );
+
+  const { data: rows } = await supabase
+    .from("match_stats_with_percentages")
+    .select(`match_id, ${columns}`)
+    .in("match_id", [...dateByMatch.keys()])
+    .eq("is_player1", true);
+
+  if (!rows?.length) return null;
+
+  // supabase-js types a `.select()` from its literal column list; this one is
+  // assembled by the caller, so the row type it infers is a parser error rather
+  // than a shape. The cast is over that, not over what the view returns.
+  const cells = rows as unknown as Record<string, string | number | null>[];
+
+  return cells.map((row) => {
+    const matchId = String(row.match_id);
+    return { ...row, match_id: matchId, date: dateByMatch.get(matchId) ?? null };
+  });
+}
+
+/**
+ * A count column off a row whose cells are typed as the view's whole union.
+ *
+ * Absent stays absent: a cell that is not a number is null here, never 0, so it
+ * is excluded from a mean rather than dragging one down.
+ */
+function countCell(row: PlayerStatRow, column: string): number | null {
+  const value = row[column];
+  return typeof value === "number" ? num(value) : null;
+}
+
 /* ── Cross-match averages for player1 ──────────────────── */
 
 export async function getPlayerAverageStats(
@@ -96,32 +184,15 @@ export async function getPlayerAverageStats(
   playerIds: readonly string[],
   excludeMatchId?: string,
 ): Promise<Partial<PlayerStatistics> | null> {
-  if (playerIds.length === 0) return null;
-
-  const supabase = await createClient();
-
   // Average over the player's OTHER matches. On a match-detail page we exclude the
   // current match so the baseline is the player's typical level elsewhere — otherwise
   // a 1-match player compares against themselves (every delta = 0) and a few-match
   // player sees diluted deltas (the current match drags the average toward itself).
-  let query = supabase
-    .from("matches")
-    .select("id")
-    .in("player1_id", playerIds as string[]);
-  if (excludeMatchId) query = query.neq("id", excludeMatchId);
-  const { data: matches } = await query;
-
-  if (!matches?.length) return null;
-
-  const matchIds = matches.map((m) => m.id);
-
-  const { data: rows } = await supabase
-    .from("match_stats_with_percentages")
-    .select(
-      "first_serve_pct, first_serve_won_pct, second_serve_won_pct, service_games_won_pct, break_points_converted_pct, first_return_won_pct, second_return_won_pct, return_games_won_pct, net_points_won, net_points_appearances, short_rally_won_pct, medium_rally_won_pct, long_rally_won_pct, aces, double_faults, winners, unforced_errors, total_points_won, total_points",
-    )
-    .in("match_id", matchIds)
-    .eq("is_player1", true);
+  const rows = await fetchPlayerStatRows(
+    playerIds,
+    "first_serve_pct, first_serve_won_pct, second_serve_won_pct, service_games_won_pct, break_points_converted_pct, first_return_won_pct, second_return_won_pct, return_games_won_pct, net_points_won, net_points_appearances, short_rally_won_pct, medium_rally_won_pct, long_rally_won_pct, aces, double_faults, winners, unforced_errors, total_points_won, total_points",
+    excludeMatchId,
+  );
 
   if (!rows?.length) return null;
 
@@ -136,24 +207,17 @@ export async function getPlayerAverageStats(
   // with them — a match where the player genuinely converted no break points was
   // dropped from their conversion average rather than counted in it.
   const avgPct = (field: string) =>
-    meanOfPresent(
-      rows.map((r) => pct((r as Record<string, string | null>)[field])),
-      0
-    ) ?? undefined;
+    meanOfPresent(rows.map((r) => pct(r[field])), 0) ?? undefined;
 
   const avgNum = (field: string) =>
-    meanOfPresent(
-      rows.map((r) => num((r as Record<string, number | null>)[field])),
-      0
-    ) ?? undefined;
+    meanOfPresent(rows.map((r) => countCell(r, field)), 0) ?? undefined;
 
   const netWon = rows.reduce(
-    (a, r) => a + ((r as Record<string, number | null>).net_points_won ?? 0),
+    (a, r) => a + (countCell(r, "net_points_won") ?? 0),
     0,
   );
   const netTotal = rows.reduce(
-    (a, r) =>
-      a + ((r as Record<string, number | null>).net_points_appearances ?? 0),
+    (a, r) => a + (countCell(r, "net_points_appearances") ?? 0),
     0,
   );
 
@@ -177,6 +241,195 @@ export async function getPlayerAverageStats(
     totalPointsWon: avgNum("total_points_won"),
     totalPoints: avgNum("total_points"),
   } as Partial<PlayerStatistics>;
+}
+
+/* ── Per-match KPI history ─────────────────────────────── */
+
+/**
+ * The four statistics the match page's KPI strip shows, and nothing else.
+ *
+ * A closed union rather than free strings because each key is a promise that a
+ * column exists behind it and measures that thing. It is the one spelling the
+ * tile, its baseline and its sparkline all agree on.
+ */
+export type MatchKpiKey =
+  | "firstServeIn"
+  | "firstServeWon"
+  | "secondServeWon"
+  | "breakPointsSaved";
+
+export interface MatchKpiHistory {
+  /**
+   * Whether the viewer IS the player these figures describe. It decides the
+   * pronoun — "vs your avg 61%" against "vs avg 61%" — and nothing else.
+   *
+   * Set by the CALLER, not here. This loader is handed one player id; a viewer
+   * holds several (their login, plus any roster profile they have claimed), and
+   * only the caller resolved both. `getMatchKpiHistory` therefore returns
+   * `false`, which is the value that degrades to the neutral wording rather
+   * than telling a coach that an athlete's average is their own.
+   */
+  viewerIsPlayer: boolean;
+  /**
+   * Mean over the player's OTHER matches, in whole percent.
+   *
+   * A key is ABSENT when none of those matches measured it — which is a
+   * different claim from an average of zero, and the only honest one.
+   */
+  baseline: Partial<Record<MatchKpiKey, number>>;
+  /**
+   * Oldest → newest, ending at this match. A key is absent below two points.
+   */
+  series: Partial<Record<MatchKpiKey, number[]>>;
+}
+
+/** The view column behind each key. */
+const KPI_COLUMN: Record<MatchKpiKey, string> = {
+  firstServeIn: "first_serve_pct",
+  firstServeWon: "first_serve_won_pct",
+  secondServeWon: "second_serve_won_pct",
+  breakPointsSaved: "break_points_saved_pct",
+};
+
+const KPI_KEYS = Object.keys(KPI_COLUMN) as MatchKpiKey[];
+
+/**
+ * How many matches a sparkline may cover: this one and the seven before it.
+ *
+ * Eight is the personal Home strip's window (`performance-server.ts` —
+ * `measured.slice(0, 8)`), matched here on purpose. Both lines sit under a
+ * single match's headline number and answer the same question, so a reader
+ * moving between the two pages should not have to work out that one of them
+ * covers a different stretch of season. It is a convention, not a season
+ * boundary — the schema has no season.
+ */
+export const KPI_SERIES_WINDOW = 8;
+
+/**
+ * Below two points there is no line, only a dot, and a chart drawn through one
+ * point still reads as a trend. The tile shows its hint text instead.
+ */
+export const KPI_SERIES_MIN_POINTS = 2;
+
+/** `matches.date` as a timestamp; NaN for a row that has none we can read. */
+function rowTime(row: PlayerStatRow): number {
+  return Date.parse(String(row.date ?? ""));
+}
+
+/**
+ * The two figures behind one match's KPI tiles, from one player's stat rows.
+ *
+ * Pure — no query, no Supabase import — the same split `team-kpi.ts` keeps, and
+ * for the same reason: the rules that decide what a figure may CLAIM are the
+ * part worth testing, and they should be testable without a database.
+ *
+ * The current match sits on both sides of one line here, deliberately:
+ *
+ * - It is **out of the baseline.** A mean that includes the match it is being
+ *   compared against is a comparison with itself: a one-match player's every
+ *   delta would be zero, and a few-match player's deltas would be diluted by
+ *   the current match pulling the average toward it. Same rule
+ *   `getPlayerAverageStats` states above, applied in the arithmetic rather than
+ *   at the query, because the row is still needed for the line.
+ * - It is **the series' last point.** The line answers "how did this match sit
+ *   in the run up to it", so it ends on the match being read.
+ *
+ * Absent is never zero in either: a match that withheld a statistic is dropped
+ * from that key's mean and skipped in that key's line, and a key nothing
+ * measured is absent from both maps rather than present as 0.
+ */
+export function buildKpiHistory(
+  rows: readonly PlayerStatRow[],
+  matchId: string,
+): Pick<MatchKpiHistory, "baseline" | "series"> {
+  const others = rows.filter((row) => row.match_id !== matchId);
+  const anchor = rows.find((row) => row.match_id === matchId) ?? null;
+  const anchorTime = anchor ? rowTime(anchor) : Number.NaN;
+
+  // Strictly BEFORE the anchor. `matches.date` is a day, so two matches played
+  // on the same day cannot be ordered, and putting one of them on the line
+  // before the other would place a point where nothing supports it. The id
+  // tiebreak below is not that guess — it only keeps a window that has to cut
+  // between same-day matches from shuffling between reads.
+  //
+  // No anchor, no window: a series that does not end at this match is a line
+  // about a different question, and drawing it under this match's number would
+  // read as this match's trend.
+  const windowRows: PlayerStatRow[] = [];
+  if (anchor && Number.isFinite(anchorTime)) {
+    const earlier = others
+      .filter((row) => {
+        const time = rowTime(row);
+        return Number.isFinite(time) && time < anchorTime;
+      })
+      .sort(
+        (a, b) => rowTime(a) - rowTime(b) || a.match_id.localeCompare(b.match_id),
+      );
+    windowRows.push(...earlier.slice(-(KPI_SERIES_WINDOW - 1)), anchor);
+  }
+
+  const baseline: Partial<Record<MatchKpiKey, number>> = {};
+  const series: Partial<Record<MatchKpiKey, number[]>> = {};
+
+  for (const key of KPI_KEYS) {
+    const column = KPI_COLUMN[key];
+
+    // Whole percent, as `getPlayerAverageStats` averages, because the label it
+    // feeds reads "vs your avg 61%".
+    const mean = meanOfPresent(
+      others.map((row) => pct(row[column])),
+      0,
+    );
+    if (mean !== null) baseline[key] = mean;
+
+    // Rounded for the same reason: the newest point of this line IS the number
+    // printed above it, and a line whose end disagrees with the headline reads
+    // as a bug rather than as precision.
+    const measured = windowRows
+      .map((row) => pct(row[column]))
+      .filter((value): value is number => value !== null)
+      .map((value) => Math.round(value));
+
+    if (measured.length >= KPI_SERIES_MIN_POINTS) series[key] = measured;
+  }
+
+  return { baseline, series };
+}
+
+/**
+ * The baseline and series behind one match page's KPI strip.
+ *
+ * `matchDate` anchors the series to this match's DATE rather than to its stat
+ * row. The row set is the player's own matches as player one, so a match they
+ * played as player two is not in it (see `fetchPlayerStatRows`); handing the
+ * date in keeps the window's right edge fixed on the match being read instead
+ * of collapsing the line entirely. The anchor carries no measurements, so it
+ * contributes no point of its own — exactly as a match that withheld a
+ * statistic already contributes none.
+ *
+ * Null means "no history": the player has no stat rows at all, a first analyzed
+ * match or an id with nothing behind it. The tile says that out loud. It is
+ * never a baseline of zero and never an invented delta.
+ */
+export async function getMatchKpiHistory(
+  playerId: string,
+  matchId: string,
+  matchDate: string,
+): Promise<MatchKpiHistory | null> {
+  // No `excludeMatchId`: this match has to be IN the set, because the series
+  // ends on it. `buildKpiHistory` leaves it out of the baseline instead.
+  const rows = await fetchPlayerStatRows(
+    [playerId],
+    KPI_KEYS.map((key) => KPI_COLUMN[key]).join(", "),
+  );
+
+  if (!rows?.length) return null;
+
+  const anchored = rows.some((row) => row.match_id === matchId)
+    ? rows
+    : [...rows, { match_id: matchId, date: matchDate }];
+
+  return { viewerIsPlayer: false, ...buildKpiHistory(anchored, matchId) };
 }
 
 /* ── Single-match stats ────────────────────────────────── */

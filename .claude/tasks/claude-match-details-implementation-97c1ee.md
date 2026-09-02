@@ -20,7 +20,7 @@ straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · KPI history loader and its spec
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/data/match-stats-server.ts, tests/match-kpi-history.spec.ts
 - **done when:**
