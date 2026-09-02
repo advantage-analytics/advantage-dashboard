@@ -6,10 +6,12 @@
 This directory now holds two implementations of the same four screens. This file
 says which one a user actually sees.
 
-> This labels the hazard; it does not remove it. Only deleting the dormant tree
-> would, and the brief for this run says not to — the dormant files are still
-> the only DB-wired implementation, and the re-wire reads from them. Until that
-> happens, both trees stay, and the labels are the whole defence.
+> **Updated during the re-wiring.** This file was written to *label* the
+> near-duplicate hazard, because deleting the dormant tree was out of scope for
+> the run that created it — those files were then the only DB-wired
+> implementation, and the re-wire read from them. That has now happened: §2's
+> list is empty and §5 says where each dormant file's knowledge landed. What
+> remains labelled rather than removed is §4's type-only lifeline.
 
 ---
 
@@ -37,26 +39,26 @@ live". Some of the original components lost their route; others kept one.
 
 ## 2. Dormant — unreachable from any route
 
-Four files. Each carries a `DORMANT` header naming its replacement.
+**None left.** The re-wiring has caught up with the whole list this section
+used to hold, and every file that was on it is deleted:
 
-| Dormant file | Replaced on the live route by |
+| Was dormant | Deleted when the live route grew its behaviour |
 |---|---|
-| `dual-form.tsx` | `static/static-dual-builder.tsx` (shell) → `dual-school-step` + `dual-build-step` |
+| `schedule-list.tsx`, `event-detail-pane.tsx` | `static/static-schedule.tsx` + `static/event-drawer.tsx` read the database |
+| `new-event-chooser.tsx` | `static/static-event-chooser.tsx` took the route |
+| `tournament-form.tsx`, `entry-editor.tsx` | `static/static-tournament-builder.tsx` calls `createTournament` |
+| `dual-form.tsx` | `static/static-dual-builder.tsx` → `dual-school-step` + `dual-build-step`, which now call `createDual` |
 | `school-search.tsx` | `static/dual-school-step.tsx` |
 | `opponent-rail.tsx` | the left pane of `static/dual-build-step.tsx` |
 | `field-row.tsx` | nothing 1:1 — the static builders each draw their own defaults cells |
 
-`tournament-form.tsx` and `entry-editor.tsx` were the other two, and they are
-**deleted** — `static/static-tournament-builder.tsx` now calls
-`createTournament` itself and draws the entry list inline, so the tree they
-were the DB-wired half of no longer exists. See git history.
+Only `dual-form.tsx`, `new-event-chooser.tsx` and `tournament-form.tsx` were
+ever mounted by a route directly. The rest were unreachable transitively:
+`school-search` and `field-row` through `dual-form`, `opponent-rail` through
+`dual-form` as well, and `entry-editor` through `tournament-form`.
 
-Of what is left, only `dual-form.tsx` was ever mounted by a route directly, and
-it is what `/dashboard/team/schedule/new/dual` used to import.
-(`new-event-chooser.tsx` and `tournament-form.tsx` were the other two mounted
-forms; both are deleted.) The rest became unreachable transitively, because the
-only things importing them did: `school-search` and `field-row` through
-`dual-form`, and `opponent-rail` through `dual-form` as well.
+Git history is the archive — what each one knew is recorded in the ported code
+that replaced it, and each porting commit names the file it read from.
 
 ---
 
@@ -99,17 +101,19 @@ runtime, and both must still be kept.
 ```
 fixtures.ts ─── import type { LineupLine } ──┐
                                              ├──▶ lineup-editor.tsx ──▶ opponent-name-cell.tsx
-dual-build-step.tsx ─ import type ───────────┘         │ (value import, rendered)
-                                                       │
-dual-form.tsx (DORMANT) ─── <LineupEditor> ────────────┘
+dual-build-step.tsx ─ import type ───────────┘         (value import, but nothing
+                                                        renders <LineupEditor> now
+                                                        that dual-form.tsx is deleted)
 ```
 
 `import type` is erased at build, so neither live importer puts
-`lineup-editor.tsx` in a route bundle. The only thing that renders
-`<LineupEditor>` — and through it `<OpponentNameCell>` — is dormant
-`dual-form.tsx`.
+`lineup-editor.tsx` in a route bundle. Nothing renders `<LineupEditor>` — and
+so nothing renders `<OpponentNameCell>` — at all any more: the one thing that
+did was `dual-form.tsx`, deleted with the rest of §2's list. **The two type
+importers are now the whole of why either file is still here**, which is the
+question T24 exists to settle.
 
-So:
+So, until it does:
 
 - **Do not delete either file.** `lineup-editor.tsx` exports the `LineupLine`
   type that `fixtures.ts` and `dual-build-step.tsx` compile against; removing it
@@ -122,25 +126,35 @@ So:
 
 ---
 
-## 5. Re-wiring the static tree later
+## 5. Where the dormant tree's knowledge went
 
-The dormant tree is not a discard pile — it is the half that knows about the
-database. Everything the static screens do not have lives there:
+The dormant tree was never a discard pile — it was the half that knew about the
+database. Deleting it was safe only because each piece landed somewhere first.
+Where to read each one now:
 
-- `createDual` and its server-action call (`dual-form.tsx`).
-  `createTournament`'s is already ported — `static/static-tournament-builder.tsx`
-  calls it, which is why the two files that held it are gone.
-- roster matching and name splitting (`dual-form.tsx`)
-- opponent-player contribution and the re-target `key` contract
-  (`opponent-name-cell.tsx` — read its own header before touching it)
-- the `"<bestOf>|<adScoring>"` format encoding that
+- **`createDual` and its server-action call** — `static/dual-build-step.tsx`'s
+  `submit()`. `createTournament`'s is `static/static-tournament-builder.tsx`'s.
+- **Roster matching and name splitting** — `lib/schedule/roster-match.ts` and
+  `lib/schedule/format.ts`, which is where both already lived; the builder
+  calls `rosterIdsForLabels` rather than keeping a second rule.
+- **The ladder seed** — `seedLineup()` in `static/dual-build-step.tsx`, ported
+  from `dual-form.tsx` unchanged.
+- **The re-target `key` contract** — `OpponentPool` in
+  `static/opponent-popup.tsx`, which binds a school to ITS saved roster so the
+  popup cannot dedupe against another school's pool. `opponent-name-cell.tsx`'s
+  `OpponentTarget` header is still the fullest statement of *why*; read it
+  before touching either. Opponent-player contribution itself is `createDual`'s
+  own best-effort loop and `saveOpponentPlayer` in `lib/schedule/actions.ts`.
+- **The `"<bestOf>|<adScoring>"` format encoding** that
   [`docs/ui-revamp-guardrails.md`](../../../../docs/ui-revamp-guardrails.md)
-  §3.1 and §4 govern. `static/dual-build-step.tsx` hard-codes `"3|false"` and
-  its header explains why an interpolated value corrupts submissions.
+  §3.1 and §4 govern — **gone, deliberately.** Both builders now carry `bestOf`
+  and `adScoring` as literal fields on a `FORMATS` row, typed `boolean` so a
+  null cannot be assigned; there is no string left to parse and so no `null`
+  left to read as a confident `false`. `static/dual-build-step.tsx`'s
+  `DualFormat` header records the outage that rule comes from.
 
-Re-wiring means porting those into the static components, then deleting the
-rest of the dormant tree — at which point this file's §2 should shrink to
-nothing and §4 disappears entirely.
+What is left of the re-wiring is §4's lifeline — where `LineupLine` should
+live, and whether `lineup-editor.tsx` and `opponent-name-cell.tsx` survive it.
 
 ---
 

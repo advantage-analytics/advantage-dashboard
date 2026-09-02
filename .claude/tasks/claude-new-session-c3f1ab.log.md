@@ -2155,3 +2155,113 @@ baselines should read 4 owned / 6 members.
    `boolean | null`, because the dormant `dual-form.tsx` can still pass null.
    Once T23 deletes that file, the type can narrow to `boolean` and match what
    both builders now produce.
+
+## T23 · Dual lineup editing and submit — done
+
+**gate:** lint clean (37 warnings, baseline) · `tsc --noEmit` clean ·
+`npm test` green (260) · `npm run build` green.
+`task-completion-reviewer` → **VERDICT: pass**. Guardrails: **both ran and
+cleared**. The first `pipeline-guardrails-reviewer` run **crashed** with an
+API error and returned only partial narration; under the fail-closed rule a
+crashed subagent is a failure, so it was re-run from scratch rather than
+credited — the retry found no violations. `rls-boundary-reviewer` found no
+blocking issues.
+
+**trap 3 of 3 is closed, and closed structurally.** The popup no longer takes
+`schoolName` + `schoolShortName` + `candidates`. It takes one `OpponentPool`
+whose interface is keyed on an **unexported `unique symbol`**, so an object
+literal assembled at any other call site cannot type-check as the prop and
+there is exactly one constructor, `opponentPoolFor(key, schoolName, fetched)`,
+which gates on `fetched?.forKey === key`. The completion reviewer checked this
+adversarially rather than confirming it: the symbol really is unexported, no
+`as OpponentPool` / `as unknown as` / `@ts-ignore` exists anywhere in `src/`,
+and there is **no stale-render window** — on the render a school changes, the
+constructor already sees a mismatched `forKey` and returns an empty candidate
+list, while the row key `${pool.key}:${line.key}` forces a remount in the same
+commit. A mismatch is not expressible rather than merely avoided.
+
+**changed:** `DUAL_DRAFT_LINES` is gone from the screen; `seedLineup(ladder)`
+fills S1–S6 from `getLadder` and pairs D1–D3 from the same list.
+`rosterIdsForLabels` is **ported** from `roster-match.ts`, not re-implemented,
+and recomputes `ourIds` in the same `setState` as the label so the two cannot
+drift. `createDual` is wired, not duplicated — `actions.ts` is untouched.
+`Forfeit`/`Forfeited` became real buttons, which is what finally makes `2b`'s
+drawn "— no available player" row reachable. Four dormant files deleted
+(1,435 lines): `dual-form.tsx`, `school-search.tsx`, `opponent-rail.tsx`,
+`field-row.tsx`.
+
+**what the guardrails retry actually checked, and found sound:** near-identical
+names and initials ("D. Brooks" vs "Dana Brooks") produce **no** id rather than
+a wrong one; a doubles pair typed as one string is split by `splitNames` and
+resolved per name, not as a blob; case and whitespace go through
+`normalizedPersonName`, the same rule `merge_program_players` uses. A forfeited
+line clears ids and labels in the same update and is forced to empty arrays at
+submit regardless of state, and `recordResult` independently refuses a
+forfeited entry — so a forfeit cannot mint a match, carry an invented score, or
+enter the analysis pipeline, exactly as `EventEntry.forfeit`'s doc comment
+requires. Every line's opponent names funnel into the one program id resolved
+from the single school chosen in step one; a typed opponent sends `null` and
+contributes nowhere. Format still carries a real boolean, no string encoding
+reintroduced.
+
+**live checks the runner added.** `rls-boundary-reviewer` again had no Supabase
+MCP access and verified from `supabase/migrations/`, citing
+`20260817073914_programs.sql` for a "world-readable `programs`" that is in fact
+superseded live — the drift `CLAUDE.md` warns about. Its conclusion survives
+(the live policy is *more* restrictive), and the two functions its
+cross-program-write reasoning depends on were verified live from the runner:
+`contribute_opponent_player` is `SECURITY DEFINER` and checks both
+`is_program_staff` and `program_members` — the backstop that refuses to write
+into a program that manages its own roster — and `pooled_roster` is
+`SECURITY DEFINER` gated on `roster_public`.
+
+**spec:** **zero retirements.** `drawn()` unchanged at 126 and `expect()`
+unchanged at 57; the six deleted lines are comment text being rewritten. The
+only literal this task moved to interpolation was `DUAL_DRAFT_LINES`, and the
+assertions covering it read the fixtures module's own export, never this
+component's source. Two stale *notes* were corrected — the `2b` block no
+longer claims `DUAL_DRAFT_LINES` is rendered, and `2d`/`2e` records that
+`DUAL_DRAFT_OPPONENT_SHORT` is not. **No `DUAL_DRAFT_*` export has a consumer
+under `src/` any more**; this spec is now their only reader, which is exactly
+the demotion T26 owns.
+
+**`schoolShortName` was dropped.** The artboard draws a short form
+("Fairmont" for "Fairmont A&M"), `programs` holds none, and the design states
+no rule deriving one — so the popup writes the full name in both places, which
+is the dormant cell's own behaviour. The brief's "nothing fabricates a figure"
+applied to a name.
+
+**README:** §2 is now empty and reframed as a "was dormant → deleted when"
+table. §4's diagram (which named the deleted `dual-form.tsx` as
+`<LineupEditor>`'s renderer), §5 (which pointed at deleted files for
+`createDual`, roster matching and the format encoding) and the top blockquote
+were each corrected because this task's deletions made them false. The
+completion reviewer judged each forced rather than creep, and confirmed the
+edits leave T24's authority over the lifeline intact.
+
+**Verification touched the live database and was cleaned up.** An ephemeral
+coach, six seeded ZZ `program_players`, a lent conference/division, a created
+dual with nine entries, and one contributed opponent row on Michigan State —
+all removed. Re-checked from this session: 1,941 programs, 4 owned, 5 events,
+33 entries, 6 members, 4 players (0 for ZZ), conference and division null,
+14 `auth.users`, and ZZ's four seeded events intact.
+
+**follow-ups:**
+1. **The lifeline pair is now fully unrendered.** Deleting `dual-form.tsx`
+   removed the last renderer of `<LineupEditor>` and through it
+   `<OpponentNameCell>`. Both still compile-load `LineupLine` for `fixtures.ts`
+   and `dual-build-step.tsx`, so they were left in place — T24's decision, and
+   README §4 now states the new fact.
+2. `benchFromLines` in `roster-match.ts` lost its only `src/` caller with
+   `dual-form.tsx`. `2b` draws no bench. Still covered by
+   `tests/person-name-matching.spec.ts`; a candidate for T26's sweep.
+3. **Pre-existing, and now reachable for the first time:** `createDual`'s
+   entries insert does not re-validate that `player_user_ids` belong to the
+   inserting program's roster — that trust boundary is enforced only by the
+   client code, not by RLS or the action. Same class as the T20 note about
+   `program_event_entries`. This diff is what makes `createDual` reachable
+   from a live route, so it is worth a decision on its own.
+4. The rail rows are still drawn and inert. The blocker its old header named —
+   "swap the popup's saved roster for the new school's" — is now resolved by
+   `OpponentPool`, so a later task can make them live without re-deriving
+   either half.

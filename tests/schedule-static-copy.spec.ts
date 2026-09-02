@@ -511,11 +511,12 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
     // Held, not retired: every expectation below reads `fixtures.ts`, which
     // this run has not touched, so each is still true of the module it names.
     // What changed is the audience — step two's date, site, surface and format
-    // are controlled inputs now, its rail lists the real conference, and the
-    // school is whichever step one chose, so `DUAL_DRAFT_EVENT` and
-    // `RAIL_SCHOOLS` describe the design record rather than the live screen.
-    // `DUAL_DRAFT_LINES` alone is still rendered, until T23 seeds the lineup
-    // from the ladder. T26 owns the demotion.
+    // are controlled inputs, its rail lists the real conference, the school is
+    // whichever step one chose, and the nine lines are now seeded from
+    // `getLadder` and edited in place, so `DUAL_DRAFT_EVENT`, `RAIL_SCHOOLS`
+    // and `DUAL_DRAFT_LINES` alike describe the design record rather than the
+    // live screen. No `DUAL_DRAFT_*` export has a consumer under `src/` any
+    // more; this spec is their only reader, which is the demotion T26 owns.
     //
     // "09-26", month and day, the same slice `2c`'s last-played cell takes.
     expect(DUAL_DRAFT_EVENT.startsOn.slice(5)).toBe('09-26');
@@ -621,7 +622,11 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
       },
     ]);
     // The short form `2d` writes twice, where `2e`'s toast writes the school
-    // in full. The design's own inconsistency, held rather than smoothed.
+    // in full. The design's own inconsistency — still recorded here, but no
+    // longer rendered: the wired popup reads one `OpponentPool.schoolName` in
+    // both places, because `programs` holds no short form and the rule that
+    // would derive one ("Fairmont" for "Fairmont A&M") is wrong for most rows.
+    // Held rather than retired: it is still true of `fixtures.ts`.
     expect(DUAL_DRAFT_OPPONENT_SHORT).toBe('Ridgeline');
 
     drawn(

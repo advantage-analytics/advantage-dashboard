@@ -387,7 +387,7 @@ list below instead.
 - **notes:** **The highest-risk edit in the run, and traps 2 of 3.** `FORMAT_VALUE = "3|false"` is hard-coded because an interpolated `adScoring` of `null` becomes the string `"null"`, which the decoder's `adScoring === "true"` reads as a confident `false` — the exact failure that made every tournament video fail submission long after the coach had left. Read `dual-build-step.tsx`'s header and `docs/ui-revamp-guardrails.md` §3.1 and §4 before editing. Separately, `static-dual-builder.tsx`'s header explains that the school deliberately does not travel today, because threading it put one school's name over another school's drawn data — the fix is that step two's data now travels too, not that the guard is simply removed.
 
 ## T23 · Dual lineup editing and submit
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T22
 - **files:** `tests/schedule-static-copy.spec.ts`; `src/components/dashboard/schedule/static/dual-build-step.tsx`, `src/components/dashboard/schedule/static/opponent-popup.tsx`; reads `src/lib/schedule/actions.ts` and `roster-match.ts`; delete `dual-form.tsx`, `school-search.tsx`, `opponent-rail.tsx`, `field-row.tsx`; `README.md`
