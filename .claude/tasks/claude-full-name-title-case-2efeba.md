@@ -18,7 +18,7 @@ straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Add `titleCaseName` and its offline spec
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/data/person-name.ts, tests/person-name-display.spec.ts (new) — guess
 - **done when:**

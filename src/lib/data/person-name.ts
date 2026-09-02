@@ -46,3 +46,120 @@ export function normalizedPersonName(
     .replace(/\s+/g, " ")
     .toLowerCase();
 }
+
+/**
+ * The one definition of "how a name is spelled on screen".
+ *
+ * `normalizedPersonName` above answers "are these the same person"; this
+ * answers the other half — what to print once you know. The two are
+ * deliberately separate: matching throws case away, display has to put a
+ * plausible case back, and a function that did both would have to pick which
+ * one it was wrong about.
+ *
+ * The input is whatever a human typed into a roster form or an uploader typed
+ * into the wizard, so it arrives in every case there is — `clajerson gimena`,
+ * `CLAJERSON GIMENA`, `Clajerson Gimena`. Rendering those three side by side in
+ * one roster is the thing this exists to stop.
+ *
+ * Applied per whitespace-separated token, first match wins:
+ *
+ * - **R1 — deliberate mixed casing wins.** A token holding an uppercase letter
+ *   after its first character AND at least one lowercase letter is returned
+ *   untouched. `McCarthy`, `O'Brien`, `DeMarco`, `MacLeod`, `LaSalle` are people
+ *   telling us how their name is spelled, and no rule table beats that. Note
+ *   what this excludes: `GIMENA` holds uppercase after its first character but
+ *   no lowercase, so an all-caps token is NOT deliberate casing — it falls
+ *   through to R2, which is the whole point.
+ * - **R1b — roman numerals.** A token made entirely of the letters `i`/`v`/`x`,
+ *   in any case, two characters or more, is uppercased whole. Generational
+ *   suffixes are all-caps, so R1 cannot protect them; without this, `III` would
+ *   reach R2 and come back as `Iii`. `iii` becomes `III` for the same reason.
+ * - **R2 — otherwise, re-case.** Lowercase the token, then uppercase the first
+ *   letter of each segment split on `-` and `'`, so `gimena` and `GIMENA` both
+ *   land on `Gimena`, `o'brien` on `O'Brien`, `smith-jones` on `Smith-Jones`.
+ * - **R2a — the `mc` exception, inside R2 only.** A segment beginning `mc` with
+ *   at least two more letters also uppercases the letter after the `mc`, so a
+ *   roster row typed `MCCARTHY` renders `McCarthy` rather than `Mccarthy`.
+ *
+ * Two decisions were taken and declined, and both are decisions rather than
+ * omissions:
+ *
+ * - **No particle table.** `DE LA CRUZ` becomes `De La Cruz`, not `de la Cruz`.
+ *   Which particles lowercase is a per-family and per-country answer — Dutch
+ *   `van` lowercases in the Netherlands and capitalizes in the United States —
+ *   so any table we shipped would be confidently wrong for some share of a
+ *   roster. `De La Cruz` is merely conventional, and a bearer who cares can
+ *   type `de la Cruz`, which R1 then protects forever.
+ * - **No `mac` equivalent to R2a.** `Macon`, `Macey` and `Mackey` are not
+ *   Mac-names; a symmetric rule would render them `MacOn`, `MacEy`, `MacKey`
+ *   and corrupt three real surnames to fix one. `mc` is safe because almost
+ *   nothing else in a surname starts with it. A genuine `MacLeod` typed as
+ *   `MacLeod` is already protected by R1, and one typed `MACLEOD` renders
+ *   `Macleod` — wrong, but wrong in a way the bearer can fix by typing it, and
+ *   quietly so rather than by mangling a stranger's name.
+ *
+ * On whitespace, this side is looser than the SQL one, on purpose. It collapses
+ * `\s+`, which in JS includes tabs and the non-breaking spaces (U+00A0, U+202F,
+ * U+FEFF) that `btrim`/`[[:space:]]` in
+ * `supabase/migrations/20260822140000_merge_program_players.sql` leave alone. A
+ * name pasted from Word therefore renders with clean single spaces while the
+ * stored value keeps its NBSP. That divergence is harmless precisely because
+ * this is display only: nothing here is a key, nothing here is written back,
+ * and no comparison is made against it. Keep it that way — the moment a
+ * title-cased string is stored or compared, this gap becomes the same
+ * matching bug the doc above describes.
+ *
+ * Never throws, and returns `""` for empty or whitespace-only input, so a
+ * caller can render it straight into JSX without a guard.
+ *
+ * Known and accepted: a given name spelled only from the letters `i`, `v` and
+ * `x` is read as a roman numeral by R1b and uppercased — `Vivi` and `Ivi` both
+ * lose, while `Livi` is safe on the strength of its `l`. Nothing in the token
+ * distinguishes the two readings, and a generational suffix is the far commoner
+ * one on a tennis roster.
+ */
+export function titleCaseName(value: string): string {
+  return value
+    .trim()
+    .split(/\s+/)
+    .filter((token) => token.length > 0)
+    .map(titleCasedToken)
+    .join(" ");
+}
+
+/** R1's test: an uppercase after the first character, plus a lowercase somewhere. */
+function isDeliberatelyMixedCase(token: string): boolean {
+  const chars = Array.from(token);
+  return chars.slice(1).some(isUpperCase) && chars.some(isLowerCase);
+}
+
+/**
+ * Case tests by round-trip rather than `[A-Z]`, so `ÖZDEMIR` counts as
+ * uppercase. `\p{Lu}` would say the same thing, but it needs an ES2018 target
+ * and this project compiles to ES2017.
+ */
+function isUpperCase(char: string): boolean {
+  return char !== char.toLowerCase() && char === char.toUpperCase();
+}
+
+function isLowerCase(char: string): boolean {
+  return char !== char.toUpperCase() && char === char.toLowerCase();
+}
+
+/** R1b: `III`, `iv`, `xii`. Length 2 or more, so a lone `V` is a name. */
+const ROMAN_NUMERAL_TOKEN = /^[ivx]{2,}$/i;
+
+/** R2a: `mccarthy` — `mc` plus at least two more letters. */
+const MC_SEGMENT = /^mc([a-z])([a-z]+)$/;
+
+function titleCasedToken(token: string): string {
+  if (isDeliberatelyMixedCase(token)) return token;
+  if (ROMAN_NUMERAL_TOKEN.test(token)) return token.toUpperCase();
+  return token.toLowerCase().replace(/[^-']+/g, titleCasedSegment);
+}
+
+function titleCasedSegment(segment: string): string {
+  const mc = MC_SEGMENT.exec(segment);
+  if (mc) return `Mc${mc[1].toUpperCase()}${mc[2]}`;
+  return segment.charAt(0).toUpperCase() + segment.slice(1);
+}
