@@ -176,8 +176,9 @@ export interface Viewer {
   plan: string;
   /**
    * `users.role` — the self-described persona (player/coach/parent/academy).
-   * Shapes what the app shows; never what the account is entitled to. See
-   * `lib/user/roles.ts` for why those two had to be split.
+   * Shown on the profile and preferences pages; it gates nothing (team
+   * surfaces key off `Workspace.role` above) and is never what the account
+   * is entitled to. See `lib/user/roles.ts` for why those two had to be split.
    */
   role: string | null;
   /** `users.created_at` as "Mon YYYY", or null for a row without one. */

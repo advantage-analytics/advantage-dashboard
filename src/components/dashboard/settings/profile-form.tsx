@@ -23,7 +23,9 @@ import { cn } from "@/lib/utils";
  * appeared every visit until the last field was filled.
  *
  * Editing is a draft with one commit, which is what the save bar exists for.
- * Role lives here and pays for nothing: what you see, never what you owe.
+ * Role lives here and pays for nothing: a self-description, never what you
+ * owe. It gates nothing either — roster and team surfaces key off the
+ * workspace's `program_members.role`, not this column.
  *
  * The row arrives as a prop. Fetching it in an effect meant the page rendered
  * an empty form and a "7 fields left" badge for one paint on every visit, and
@@ -292,8 +294,9 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
             })}
           </div>
           <span className="text-[11px] leading-[1.5] text-[var(--ink-500)]">
-            Role shapes what you see — coaches get roster and team surfaces. It
-            never changes what you pay for; that&apos;s{" "}
+            Role is how you describe yourself; roster and team tools come from
+            your workspace membership, not this setting. It never changes what
+            you pay for; that&apos;s{" "}
             <Link
               href="/dashboard/settings/plan"
               className="text-[var(--blue)] hover:text-[var(--blue-hover)]"
