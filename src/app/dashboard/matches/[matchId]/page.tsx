@@ -17,6 +17,7 @@ import { MatchDetailShell } from "@/components/dashboard/matches/match-detail/ma
 import { MatchRail } from "@/components/dashboard/matches/match-detail/match-rail";
 import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { StatisticsTab } from "@/components/dashboard/matches/match-detail/statistics-tab";
+import { SetScopeChips } from "@/components/dashboard/matches/match-detail/set-scope";
 import { getMatchVideo } from "@/lib/data/match-video-server";
 
 // Statistics is the default tab and loads eagerly with the page; Shots and
@@ -186,6 +187,9 @@ export default async function MatchDetailPage({ params }: PageProps) {
           // whole tab needs exactly this one prop.
           film: <FilmTab video={video} />,
         }}
+        // Statistics only: the scope narrows that pane's point-derived cards,
+        // and Shots and Film room answer to their own filters.
+        tabBarTrailing={{ statistics: <SetScopeChips /> }}
       />
     </>
   );

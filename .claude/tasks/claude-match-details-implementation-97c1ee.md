@@ -55,7 +55,7 @@ ready).
 - **notes:** design § Components → `set-scope.tsx`; plan step 3. Sets come from `useMatchSides().sets`, never player order.
 
 ## T4 · Shell surface and tab row with the trailing slot
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3
 - **files:** src/components/dashboard/matches/match-detail/match-detail-shell.tsx, src/components/dashboard/matches/match-detail/match-tabs.tsx, src/app/dashboard/matches/[matchId]/page.tsx

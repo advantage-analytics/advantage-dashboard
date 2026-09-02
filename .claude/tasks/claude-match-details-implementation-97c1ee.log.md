@@ -154,3 +154,50 @@ is the runner's. Newest entries at the bottom.
   4. `select()` has no "already there" guard, unlike `match-tabs.tsx`.
      Unreachable through the UI, since re-selecting the active chip toggles to
      null; a direct `select(activeSet)` would issue a no-op `replace`.
+
+## T4 · Shell surface and tab row with the trailing slot — done
+- **gate:** mechanical — `npm run lint` 0 errors / 37 warnings (baseline 43),
+  `npx tsc --noEmit` exit 0, `npm test` green; the subagent also ran
+  `npm run build` to exit 0, which is the real proof for a server-to-client
+  element prop. Completion review `VERDICT: pass`; it verified the §3.3 branch
+  independently rather than on the subagent's word, and ruled the ARIA
+  restructure a necessary consequence of the trailing slot rather than
+  unrequested scope. Guardrails — `pipeline-guardrails-reviewer` ran and
+  reported "no guardrail violation": the `isAwaitingAnalysis` condition is
+  byte-identical, the tab-less branch still renders rail plus
+  `MatchAnalysisProgress` and no stat section, and `tabBarTrailing` is read
+  only inside the `tabs` branch so it structurally cannot leak a control into
+  the short-circuit. §3.1 wizard and §3.2 predicates have empty diffs; no
+  customer-facing "splitstep" string. `rls-boundary-reviewer` skipped — no
+  query, loader or migration; the new control filters already-fetched,
+  already-RLS-scoped points.
+- **changed:** the content pane moves to `surface-card` at `px-5 pb-4 gap-3.5`,
+  keeping `min-h-0 overflow-y-auto`. `MatchTabs` becomes a 42 px sticky row on
+  `surface-card` with its bottom hairline removed, `role="tablist"` moved to an
+  inner wrapper holding only the tab buttons, then a `flex-1` spacer and a new
+  `trailing` slot. `MatchDetailShell` takes
+  `tabBarTrailing?: Partial<Record<MatchTab, ReactNode>>` and renders only the
+  active tab's entry, so a filter cannot outlive the panel it filters.
+  `page.tsx` passes `{ statistics: <SetScopeChips /> }` on the analysed branch
+  only.
+- **follow-ups:**
+  1. **Two set filters are now live at once**, as predicted in T3's entry: the
+     tab-row chips and `head-to-head-card.tsx`'s own local chips do not talk to
+     each other. T6 removes the card's copy. This is the intermediate state the
+     author chose when they left the queue order alone.
+  2. **The analysing pane is now white**, so `MatchAnalysisProgress`'s own
+     white card sits card-on-card and loses the contrast the grey page
+     background used to give it. `match-analysis-progress.tsx` is outside this
+     task's files and no criterion covers it; both reviewers saw it and agreed
+     leaving it was right rather than patching silently. Worth a look in T12.
+  3. **The dropped tab-strip hairline diverges from the repo's only other tab
+     row on the same pattern**, `film/point-list.tsx`, which keeps its
+     `border-hairline` under an identical blue-underline treatment. Removing it
+     is what the 47f frame draws, so this is the design's call rather than a
+     defect — but strip and pane are now the same white with nothing between
+     them until a card mounts under the row in T5. A designer's eye before
+     that lands would settle it.
+  4. `MatchDetailShell`'s `tabs` prop is still a hand-written
+     `{ statistics; shots; film }` object while the new prop uses
+     `Record<MatchTab, …>`. Collapsing the two would keep them in step if a
+     fourth tab ever appears.
