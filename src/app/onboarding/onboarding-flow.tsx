@@ -16,6 +16,10 @@ import {
   RadioDot,
   TermMark,
 } from "@/components/claim/claim-shell";
+import {
+  PERSON_NAME_MAX,
+  titleCaseTypedName,
+} from "@/lib/data/person-name-case";
 import { cn } from "@/lib/utils";
 import {
   finishGuardianOnboarding,
@@ -25,7 +29,7 @@ import {
 import { guardianClassYears } from "./guardian-options";
 
 /**
- * The first run — Onboarding & Team Setup screens 1.2 and 1.3, plus the
+ * The first run — Onboarding & Team Setup screens 1.2 through 1.4, plus the
  * guardian branch's 3.1. Full-screen panes with no dashboard chrome and,
  * unlike the claim flow's shell, no escape chrome either: there is no
  * account-intact "leave setup" here, because the account is already made and
@@ -33,14 +37,22 @@ import { guardianClassYears } from "./guardian-options";
  * college question's Skip; the guardian step has none, because consent is the
  * one answer that can't be deferred.
  *
- * Step 1 reuses the claim flow's persona cards verbatim — one question
+ * Step 1 (1.2) asks what to call the person. Both fields start empty even when
+ * Google or Apple handed us a display name — the OAuth profile is often a
+ * legal name, an initial or a school-issued string, and this name goes on
+ * invites, the roster and every report a coach reads. Title case is applied on
+ * blur by `titleCaseTypedName` and never enforced. Nothing is written here:
+ * the name rides along in state and lands with whichever resolution finishes
+ * the flow, so a bail after this step leaves the row exactly as it was.
+ *
+ * Step 2 (1.3) reuses the claim flow's persona cards verbatim — one question
  * vocabulary product-wide (`claim/role-choice.tsx` carries the same copy).
  * The difference is what happens after: here the answer persists to
  * `users.role` and stamps `onboarded_at`, where /claim's copy only routes.
  *
  * The junior persona is the exception to "the answer persists": picking it
- * writes nothing and only turns the page to 3.1. Everything — role, the
- * player's details, consent, the stamp — lands together on the guardian
+ * writes nothing and only turns the page to 3.1. Everything — the name, role,
+ * the player's details, consent, the stamp — lands together on the guardian
  * screen's Continue, so bailing there leaves the account un-onboarded and the
  * gate intact. See `finishGuardianOnboarding` in `actions.ts`.
  */
@@ -48,8 +60,11 @@ import { guardianClassYears } from "./guardian-options";
 type Persona = "play" | "coach" | "junior";
 type CollegeAnswer = "yes" | "no" | "not_yet";
 
-/** 1 = persona (1.2) · 2 = college question (1.3) · 3 = guardian step (3.1) */
-type Step = 1 | 2 | 3;
+/**
+ * 1 = name (1.2) · 2 = persona (1.3) · 3 = college question (1.4) ·
+ * 4 = guardian step (3.1)
+ */
+type Step = 1 | 2 | 3 | 4;
 
 const PERSONAS: {
   id: Persona;
@@ -77,7 +92,7 @@ const PERSONAS: {
   },
 ];
 
-/** Screen 1.3's three answers, verbatim. */
+/** Screen 1.4's three answers, verbatim. */
 const COLLEGE_OPTIONS: { id: CollegeAnswer; label: string; sub: string }[] = [
   {
     id: "yes",
@@ -110,6 +125,8 @@ const GUARDIAN_ACKNOWLEDGMENTS: readonly string[] = [
 
 export function OnboardingFlow() {
   const [step, setStep] = useState<Step>(1);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [persona, setPersona] = useState<Persona | null>(null);
   const [college, setCollege] = useState<CollegeAnswer | null>(null);
   const [playerName, setPlayerName] = useState("");
@@ -123,29 +140,39 @@ export function OnboardingFlow() {
     startTransition(async () => {
       // Success redirects on the server; reaching the line below means the
       // write failed and there is a sentence to show.
-      const result = await finishOnboarding(choice);
+      const result = await finishOnboarding({ choice, firstName, lastName });
       if (result && !result.ok) setError(result.error);
     });
   };
 
-  const continueFromStep1 = () => {
+  // Both halves, non-blank. The server refuses anything less anyway
+  // (`parseTypedName`); this keeps the button honest about what a tap will do.
+  const nameReady = firstName.trim().length > 0 && lastName.trim().length > 0;
+
+  const continueFromName = () => {
+    if (!nameReady) return;
+    setError(null);
+    setStep(2);
+  };
+
+  const continueFromPersona = () => {
     if (!persona) return;
     setError(null);
     // Both branches only turn a page: "play" to the college question, "junior"
     // to the guardian step. Nothing is written until the branch's own submit,
     // so a guardian who bails on 3.1 is still gated into onboarding next time.
     if (persona === "play") {
-      setStep(2);
+      setStep(3);
       return;
     }
     if (persona === "junior") {
-      setStep(3);
+      setStep(4);
       return;
     }
     submit("coach");
   };
 
-  const continueFromStep2 = () => {
+  const continueFromCollege = () => {
     if (!college) return;
     submit(college === "yes" ? "college" : "solo");
   };
@@ -161,6 +188,8 @@ export function OnboardingFlow() {
     setError(null);
     startTransition(async () => {
       const result = await finishGuardianOnboarding({
+        firstName,
+        lastName,
         playerName,
         classYear,
         consent,
@@ -180,17 +209,99 @@ export function OnboardingFlow() {
     <div className="flex min-h-screen items-center bg-[var(--surface-card)] px-6 py-24 sm:px-10">
       <div
         className="mx-auto w-full"
-        style={{ maxWidth: step === 1 ? 840 : step === 2 ? 560 : 584 }}
+        // The name step shares the persona step's 840 frame rather than the
+        // design's 560: two fields side by side at 560 read as a sliver, and
+        // one width across the first two screens keeps the eyebrow, title and
+        // Continue from shifting between them.
+        style={{
+          maxWidth: step === 1 || step === 2 ? 840 : step === 4 ? 584 : 560,
+        }}
       >
         <div
           className="flex min-w-0 flex-col"
-          style={{ gap: step === 3 ? 20 : 28 }}
+          style={{ gap: step === 4 ? 20 : 28 }}
         >
           {step === 1 ? (
+            // A form, so Enter from either field continues — the one step in
+            // the flow that is typed rather than tapped. `contents` keeps the
+            // parent's column gap running through it.
+            <form
+              className="contents"
+              onSubmit={(event) => {
+                event.preventDefault();
+                continueFromName();
+              }}
+            >
+              <ClaimHeading
+                gap={8}
+                step="Step 1 of 3"
+                title="What should we call you?"
+                body="Coaches and teammates see this name on every match you send. Type it the way you want it read."
+                bodyMax="52ch"
+              />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label
+                    htmlFor="onboarding-first-name"
+                    className={CLAIM_LABEL}
+                  >
+                    First name
+                  </label>
+                  <input
+                    id="onboarding-first-name"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    onBlur={() =>
+                      setFirstName((value) => titleCaseTypedName(value))
+                    }
+                    // On, unlike the guardian's player field: the browser's
+                    // saved identity IS this person, and a suggestion they
+                    // can edit is not the OAuth string the design keeps out.
+                    autoComplete="given-name"
+                    autoFocus
+                    maxLength={PERSON_NAME_MAX}
+                    className={CLAIM_FIELD}
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="onboarding-last-name"
+                    className={CLAIM_LABEL}
+                  >
+                    Last name
+                  </label>
+                  <input
+                    id="onboarding-last-name"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    onBlur={() =>
+                      setLastName((value) => titleCaseTypedName(value))
+                    }
+                    autoComplete="family-name"
+                    maxLength={PERSON_NAME_MAX}
+                    className={CLAIM_FIELD}
+                  />
+                </div>
+              </div>
+              <ClaimActions gap={16}>
+                <button
+                  type="submit"
+                  disabled={!nameReady}
+                  className={CLAIM_BUTTON}
+                >
+                  Continue
+                </button>
+                <span className={CLAIM_MICRO}>
+                  Capitalized as you leave the field — &quot;marcus reid&quot;
+                  becomes &quot;Marcus Reid&quot;.
+                </span>
+              </ClaimActions>
+            </form>
+          ) : step === 2 ? (
             <>
               <ClaimHeading
                 gap={8}
-                step="Step 1 of 2"
+                step="Step 2 of 3"
                 title="How do you use Advantage?"
                 body="This sets what your dashboard opens on. You can change it in settings."
                 bodyMax="60ch"
@@ -240,21 +351,21 @@ export function OnboardingFlow() {
                 <button
                   type="button"
                   disabled={!persona || isPending}
-                  onClick={continueFromStep1}
+                  onClick={continueFromPersona}
                   className={CLAIM_BUTTON}
                 >
                   Continue
                 </button>
                 <span className={CLAIM_MICRO}>
-                  Coaches take a different second step.
+                  Coaches and guardians take a different next step.
                 </span>
               </ClaimActions>
             </>
-          ) : step === 2 ? (
+          ) : step === 3 ? (
             <>
               <ClaimHeading
                 gap={8}
-                step="Step 2 of 2"
+                step="Step 3 of 3"
                 title="Do you play for a college program?"
                 body="This decides where your first matches go — and whether your coach is part of it."
                 bodyMax="52ch"
@@ -296,13 +407,14 @@ export function OnboardingFlow() {
                 <button
                   type="button"
                   disabled={!college || isPending}
-                  onClick={continueFromStep2}
+                  onClick={continueFromCollege}
                   className={CLAIM_BUTTON}
                 >
                   Continue
                 </button>
                 {/* Skip finishes as an individual player — the persona from
-                    step 1 still counts, only this question goes unanswered. */}
+                    the step before still counts, only this question goes
+                    unanswered. */}
                 <button
                   type="button"
                   disabled={isPending}
@@ -315,7 +427,7 @@ export function OnboardingFlow() {
             </>
           ) : (
             <>
-              {/* Screen 3.1 — the guardian acknowledgment. Unlike 1.2/1.3
+              {/* Screen 3.1 — the guardian acknowledgment. Unlike 1.2–1.4
                   there is no step eyebrow and the title is `text-title`, not
                   `text-title-lg`: the design draws this as the smaller pane
                   where the account holder stops being the subject. */}

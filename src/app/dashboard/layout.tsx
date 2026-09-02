@@ -34,7 +34,7 @@ export default async function Layout({
   // started, so a logged-out request pays for nothing it will discard.
   if (!workspace) redirect("/login");
 
-  // First run: the two-question onboarding owns the first dashboard visit.
+  // First run: the three-question onboarding owns the first dashboard visit.
   // Here rather than in `src/proxy.ts` for the same reason the login gate is —
   // route protection lives beside the workspace lookup it depends on, and the
   // proxy deliberately does session refresh only. Rides the users-row select
