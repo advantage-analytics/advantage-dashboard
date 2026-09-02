@@ -1,6 +1,7 @@
 import { meanOfPresent, num, pct } from "./aggregate";
 import { createClient } from "@/lib/supabase/server";
 import type { MatchDetailedStats, PlayerStatistics, StatFraction } from "./types";
+import { playerSeat } from "./viewer-side";
 
 interface DbMatchStatsView {
   is_player1: boolean;
@@ -101,15 +102,50 @@ export interface PlayerStatRow {
 }
 
 /**
- * The player's matches → their side of each one's stat row.
+ * The columns of a match that decide which seat a stat row belongs to, plus the
+ * date that orders it. `id` joins the two reads; `date` rides along because a
+ * value separated from its match date is a point that can land anywhere on a
+ * line, and looking it up again later is a second chance to lose it.
+ */
+export interface SeatMatch {
+  id: string;
+  date: string | null;
+  player1_id: string | null;
+  player2_id: string | null;
+}
+
+/**
+ * A stat row straight off `match_stats_with_percentages`, before its seat is
+ * resolved: the two keys that place it — its match and its side — and whatever
+ * columns the caller asked for. `is_player1` is the side; `ownSeatRows` reads it
+ * and then strips it, so it is the one boolean this shape carries.
+ */
+export interface RawStatRow {
+  match_id: string;
+  is_player1: boolean;
+  [column: string]: string | number | boolean | null;
+}
+
+/**
+ * The player's matches → their OWN side of each one's stat row.
  *
- * Both loaders below are built on this, and it matters that they agree on
- * WHICH rows a player's history is made of: `is_player1 = true` on the matches
- * they hold as player one. That is a real limitation — a match this person
- * played as player two is not in the set at all — but it is one limitation in
- * one place. A baseline drawn from a different set of rows than the series
- * beside it would be worse than a narrow one, because the tile would then
- * compare a number against the average of something else.
+ * Both loaders below are built on this, and it matters that they agree on WHICH
+ * rows a player's history is made of: the row for the seat the player actually
+ * sat in each match, resolved per match by `ownSeatRows`. Keying on
+ * `is_player1 = true` alone — the rule this replaces — read a seat as if it were
+ * a fact about the player rather than about the recorder, and so silently
+ * dropped every match they were entered in second, including, on a seat-two
+ * match, the very match the page was open on. That is what let a sparkline stop
+ * one match short of the headline above it.
+ *
+ * The read widens to both id columns —
+ * `.or(player1_id.in.(…),player2_id.in.(…))` — and the seat is then decided
+ * from the ids, never from a null column, because `player2_id` is absent on
+ * whole classes of rows (team schedule rows, doubles, scrubbed uploads) and
+ * "not seat one" is not evidence of seat two. `ownSeatRows` keeps only the row
+ * for the seat the player is named on and discards the opponent's — already
+ * readable under the same match policy, already fetched — server-side, so this
+ * widening exposes nothing the match read did not.
  *
  * `excludeMatchId` drops a match at the query. A caller that needs the current
  * match in the set for one figure and out of it for another leaves it unset and
@@ -124,39 +160,94 @@ async function fetchPlayerStatRows(
 
   const supabase = await createClient();
 
+  const ids = [...new Set(playerIds)];
+  const list = ids.join(",");
+
   let query = supabase
     .from("matches")
-    .select("id, date")
-    .in("player1_id", playerIds as string[]);
+    .select("id, date, player1_id, player2_id")
+    .or(`player1_id.in.(${list}),player2_id.in.(${list})`);
   if (excludeMatchId) query = query.neq("id", excludeMatchId);
-  const { data: matches } = await query;
+  const { data: matchRows } = await query;
 
-  if (!matches?.length) return null;
+  if (!matchRows?.length) return null;
+  const matches = matchRows as unknown as SeatMatch[];
 
-  // The date travels with the row rather than being looked up again later: it
-  // is the only thing that can order a series, and a value separated from its
-  // match date is a point that can land anywhere on a line.
-  const dateByMatch = new Map<string, string | null>(
-    matches.map((m) => [m.id as string, (m.date as string | null) ?? null]),
-  );
-
-  const { data: rows } = await supabase
+  const { data: statRows } = await supabase
     .from("match_stats_with_percentages")
-    .select(`match_id, ${columns}`)
-    .in("match_id", [...dateByMatch.keys()])
-    .eq("is_player1", true);
+    .select(`match_id, is_player1, ${columns}`)
+    .in("match_id", matches.map((m) => m.id));
 
-  if (!rows?.length) return null;
+  if (!statRows?.length) return null;
 
   // supabase-js types a `.select()` from its literal column list; this one is
   // assembled by the caller, so the row type it infers is a parser error rather
   // than a shape. The cast is over that, not over what the view returns.
-  const cells = rows as unknown as Record<string, string | number | null>[];
+  return ownSeatRows(matches, statRows as unknown as RawStatRow[], ids);
+}
 
-  return cells.map((row) => {
-    const matchId = String(row.match_id);
-    return { ...row, match_id: matchId, date: dateByMatch.get(matchId) ?? null };
-  });
+/**
+ * One row per match — the side the player actually occupied — out of the
+ * both-seat rows the fetch hands over.
+ *
+ * Pure — no query, no Supabase import — the split `team-kpi.ts` keeps, and for
+ * the same reason: the rule that decides which row is a player's OWN is the part
+ * worth pinning, and it should be testable with plain objects rather than a
+ * database.
+ *
+ * The seat comes from `playerSeat`: seat one if a player id is in `player1_id`,
+ * else seat two if one is in `player2_id`, else the match is dropped — a seat is
+ * never guessed from a null column. When both columns name the player (a match
+ * recorded against themselves) seat one wins and exactly one row survives,
+ * because seat one is the row the page's headline is drawn from and the
+ * sparkline anchor has to be the same row as the number above it.
+ *
+ * A stat row whose match is not in `matches` has no seat to resolve and is
+ * dropped. `is_player1` is stripped from the output: the seat it marked is
+ * spent, and `PlayerStatRow`'s cells are `string | number | null`. Absent stays
+ * null — a withheld statistic is carried through untouched, never made zero.
+ */
+export function ownSeatRows(
+  matches: readonly SeatMatch[],
+  stats: readonly RawStatRow[],
+  playerIds: readonly string[],
+): PlayerStatRow[] {
+  // Each match resolves to one seat, held as the boolean the stat rows carry so
+  // the filter below reads `raw.is_player1 === wantPlayer1` — the same `===`
+  // check `performance-server.ts` makes against its own map. The date rides
+  // along on the second map so the surviving row can carry it.
+  const wantPlayer1 = new Map<string, boolean>();
+  const dateByMatch = new Map<string, string | null>();
+  for (const match of matches) {
+    const seat = playerSeat(match, playerIds);
+    if (seat === null) continue;
+    wantPlayer1.set(match.id, seat === "player1");
+    dateByMatch.set(match.id, match.date ?? null);
+  }
+
+  const rows: PlayerStatRow[] = [];
+  for (const raw of stats) {
+    const matchId = String(raw.match_id);
+    const want = wantPlayer1.get(matchId);
+    if (want === undefined) continue; // no seat resolved → not this player's match
+    if (raw.is_player1 !== want) continue; // the opponent's row on our match
+
+    // Re-key the id and re-attach the date; copy every other cell EXCEPT the
+    // seat. `is_player1` is the only boolean the view returns, so skipping
+    // booleans both drops it and narrows the rest to what `PlayerStatRow` holds.
+    const row: PlayerStatRow = {
+      match_id: matchId,
+      date: dateByMatch.get(matchId) ?? null,
+    };
+    for (const [column, value] of Object.entries(raw)) {
+      if (column === "match_id" || column === "date") continue;
+      if (typeof value === "boolean") continue;
+      row[column] = value;
+    }
+    rows.push(row);
+  }
+
+  return rows;
 }
 
 /**
@@ -170,7 +261,7 @@ function countCell(row: PlayerStatRow, column: string): number | null {
   return typeof value === "number" ? num(value) : null;
 }
 
-/* ── Cross-match averages for player1 ──────────────────── */
+/* ── Cross-match averages, over the player's own rows ──── */
 
 export async function getPlayerAverageStats(
   /**
@@ -354,7 +445,9 @@ export function buildKpiHistory(
   //
   // No anchor, no window: a series that does not end at this match is a line
   // about a different question, and drawing it under this match's number would
-  // read as this match's trend.
+  // read as this match's trend. This is now the only place that decides so —
+  // the loader no longer invents an anchor to keep the right edge fixed, so a
+  // match with no own-seat stat row for this player correctly yields no line.
   const windowRows: PlayerStatRow[] = [];
   if (anchor && Number.isFinite(anchorTime)) {
     const earlier = others
@@ -399,13 +492,17 @@ export function buildKpiHistory(
 /**
  * The baseline and series behind one match page's KPI strip.
  *
- * `matchDate` anchors the series to this match's DATE rather than to its stat
- * row. The row set is the player's own matches as player one, so a match they
- * played as player two is not in it (see `fetchPlayerStatRows`); handing the
- * date in keeps the window's right edge fixed on the match being read instead
- * of collapsing the line entirely. The anchor carries no measurements, so it
- * contributes no point of its own — exactly as a match that withheld a
- * statistic already contributes none.
+ * This match enters the row set on the same terms as every other one, because
+ * `fetchPlayerStatRows` now covers both seats: there is no date to hand in and
+ * no anchor to manufacture. An earlier version fetched only the player's
+ * seat-one matches, so a match they were entered in second arrived with no
+ * anchor; it patched the hole with a bare `{ match_id, date }` row carrying no
+ * measurements, which `buildKpiHistory` then dropped on its null filter — and
+ * the line ended one match short, under a headline that was correct for the
+ * match it stopped short of. With the seat fixed at the source there is nothing
+ * to patch: a match that genuinely has no own-seat stat row yields no series,
+ * and because that only happens when the match's own stats are unpublished,
+ * `statsPublished` is false and the strip is not on screen to miss it.
  *
  * Null means "no history": the player has no stat rows at all, a first analyzed
  * match or ids with nothing behind them. The tile says that out loud. It is
@@ -422,7 +519,6 @@ export async function getMatchKpiHistory(
    */
   playerIds: readonly string[],
   matchId: string,
-  matchDate: string,
 ): Promise<MatchKpiHistory | null> {
   // No `excludeMatchId`: this match has to be IN the set, because the series
   // ends on it. `buildKpiHistory` leaves it out of the baseline instead.
@@ -433,11 +529,7 @@ export async function getMatchKpiHistory(
 
   if (!rows?.length) return null;
 
-  const anchored = rows.some((row) => row.match_id === matchId)
-    ? rows
-    : [...rows, { match_id: matchId, date: matchDate }];
-
-  return { viewerIsPlayer: false, ...buildKpiHistory(anchored, matchId) };
+  return { viewerIsPlayer: false, ...buildKpiHistory(rows, matchId) };
 }
 
 /* ── Single-match stats ────────────────────────────────── */

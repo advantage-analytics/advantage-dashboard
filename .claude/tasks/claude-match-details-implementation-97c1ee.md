@@ -161,7 +161,7 @@ ready).
 - **notes:** plan step 11. To see the frame: open the design URL in Chrome → Present → New tab (the canvas view ignores automated scrolling). Fixes only — no new surfaces.
 
 ## T13 · KPI history covers both seats — fix the loader that blocked T5
-- **status:** next
+- **status:** done
 - **model:** opus
 - **files:** src/lib/data/match-stats-server.ts, src/lib/data/viewer-side.ts, src/lib/data/match-detail-server.ts, tests/own-seat-rows.spec.ts (new), tests/match-kpi-history.spec.ts (one comment)
 - **done when:**

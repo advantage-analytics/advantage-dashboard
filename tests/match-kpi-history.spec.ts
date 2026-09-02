@@ -203,11 +203,12 @@ test.describe('the series', () => {
   });
 
   test('is absent when this match is not in the set to end on', () => {
-    // The row set is the player matches as player one; a match they played as
-    // player two is not in it. `getMatchKpiHistory` hands the date in for that
-    // case, so the window still has a right edge — but with no anchor at all
-    // there is no line, because a line that stops short of this match would be
-    // read as this match trend.
+    // buildKpiHistory draws a line only if this match is among the rows — the
+    // anchor its window ends on. Absent, there is no anchor and no line, and
+    // that is now the whole answer: `getMatchKpiHistory` no longer manufactures
+    // a bare anchor to force a right edge, so a match with no own-seat stat row
+    // lands here and correctly draws nothing. A line that stopped short of this
+    // match would be read as this match's trend.
     const { baseline, series } = buildKpiHistory(
       [
         firstServe('a', daysBefore(2), 50),

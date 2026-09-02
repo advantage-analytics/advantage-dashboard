@@ -319,7 +319,7 @@ async function resolveUploadedBy(
  * Anyone else — a coach — is known to this page only by the id on the row.
  */
 async function resolveKpiHistory(
-  row: Pick<DbMatch, "id" | "date" | "player1_id" | "player2_id">,
+  row: Pick<DbMatch, "id" | "player1_id" | "player2_id">,
   myPlayerIds: readonly string[],
 ): Promise<MatchKpiHistory | null> {
   const { playerId } = resolveYouSide(row, myPlayerIds);
@@ -327,7 +327,6 @@ async function resolveKpiHistory(
   const history = await getMatchKpiHistory(
     viewerIsPlayer ? myPlayerIds : playerId ? [playerId] : [],
     row.id,
-    row.date,
   );
   return history ? { ...history, viewerIsPlayer } : null;
 }

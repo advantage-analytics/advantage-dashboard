@@ -288,3 +288,65 @@ is the runner's. Newest entries at the bottom.
      seen in the real two-column layout.
   4. The third group is titled "Points" per the design, where the old card said
      "Other". Nothing else referenced those titles.
+
+## T13 · KPI history covers both seats — fix the loader that blocked T5 — done
+- **gate:** mechanical — `npm run lint` 0 errors / 37 warnings (baseline 43),
+  `npx tsc --noEmit` exit 0, `npm test` green with 29 tests across the two KPI
+  specs (15 new). Completion review `VERDICT: pass`, verified against `HEAD`:
+  the `playerSeat` extraction is byte-for-byte the old inline clauses in the
+  same order before the uploader clause (so `performance-server.ts` and
+  `recent-activity.tsx` are behaviour-identical), and `getPlayerAverageStats`'s
+  body — signature and all 18 fields — is absent from the diff. Guardrails —
+  `rls-boundary-reviewer` ran (diff is entirely `src/lib/data/`) and reported
+  no findings: reads stay on the cookie-scoped client, the `.or()` widens the
+  request but RLS ANDs its `USING` clause on before the filter narrows, the
+  `match_stats` view is `security_invoker` so the opponent's row was already
+  readable and is dropped server-side in `ownSeatRows`, and the id list is
+  always `getMyPlayerIds()` (RPC off `auth.uid()`) or an already-authorised
+  row id, never request input. Its one note — the `.or()` builds its list by
+  string-join — it labelled non-exploitable (uuid columns can't hold `,`/`)`/`.`)
+  and explicitly not a finding. `pipeline-guardrails-reviewer` skipped: no
+  dashboard component, route or wizard file in the diff.
+- **live-DB check (the gap the RLS reviewer couldn't close in its
+  environment):** ran a read-only query via Supabase MCP. **No match in the
+  live database has `player2_id` set** — opponents are stored in
+  `opponent_player_id`, never `player2_id` (the wizard rule the guardrails doc
+  states). So every one of the 19 analysed matches is seat one, all carry both
+  seat stat rows, and the new both-seats `.or()` query returns the identical
+  set the old `.eq("is_player1", true)` did. The fix is therefore
+  **behaviour-preserving on today's data and correct for the day a seat-two
+  row exists** — exactly what the flags doc predicted for round 46. The bug it
+  removes (a sparkline ending on an older match) is real in the code and
+  unreachable with current data; the pure `ownSeatRows` spec pins the
+  seat-two case live data cannot yet exercise. Corollary: `getPlayerAverageStats`'s
+  numbers do NOT move for any real viewer today — the "values move for
+  seat-two players" caveat is theoretical until seat-two data exists.
+- **changed:** `viewer-side.ts` gains `playerSeat(match, playerIds)` and
+  `viewerSide` delegates to it. `match-stats-server.ts` gains the pure exported
+  `ownSeatRows(matches, stats, playerIds)` (own-seat row per match via
+  `playerSeat`, both-ids → seat one, unknown-match rows dropped, `is_player1`
+  stripped, nulls preserved); `fetchPlayerStatRows` fetches both seats with
+  `.or()` and no `is_player1` SQL filter and returns `ownSeatRows(...)`;
+  `getMatchKpiHistory` loses its `matchDate` param and the empty-anchor
+  fallback that was the mechanism of the bug. `match-detail-server.ts`'s
+  `resolveKpiHistory` calls the two-arg signature and its `Pick` drops `date`.
+  New `tests/own-seat-rows.spec.ts` (15 pure tests); one comment rewritten in
+  `tests/match-kpi-history.spec.ts`, whose ~L205 "no anchor → no series" test
+  is now the load-bearing contract that makes deleting the fallback safe.
+  The three seat-one-limitation doc comments were rewritten to say why both
+  seats and why no fallback.
+- **resolves:** T1 follow-up 2, T2 follow-ups 1–2, and the flags-doc seat-two
+  truncation note — all were this same defect seen from different tasks.
+- **follow-ups (recorded, not built — all in the approved plan's out-of-scope
+  list):** the page-wide three-state viewer rule (own task; also fixes a
+  legacy no-id row inverting win/loss); `playerAverages` is now dead code with
+  no consumer and is computed for the viewer rather than the you-side player, a
+  removal candidate once the strip reads `kpiHistory`; whether a personal
+  "your avg" should exclude team matches; the duplicate `playerSide()` in
+  `player-identity-server.ts`; alumni/season archiving (its own feature —
+  `programs.season` and `program_players.archived_at` are the existing
+  vocabulary).
+- **NEXT:** T5 is unblocked. Its stash `4de0791` is applied to the tree and its
+  status set to `todo` in this same commit, so the next `/task-next` re-runs it
+  against this fixed loader; the strip code needs no edit and must clear the
+  guardrails reviewer on the exact sparkline-ends-early finding.
