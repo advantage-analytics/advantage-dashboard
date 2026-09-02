@@ -126,7 +126,7 @@ ready).
 - **notes:** design § Components → `point-endings-card.tsx`; plan step 8b.
 
 ## T10 · Rail metrics and the insight card; retire the strip
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T5
 - **files:** src/components/dashboard/matches/match-detail/match-rail.tsx, src/components/dashboard/matches/match-detail/rail-insight-card.tsx (new), src/components/dashboard/matches/match-detail/insight-dismissal.ts (new), src/components/dashboard/matches/match-detail/insight-strip.tsx (delete), src/app/dashboard/matches/[matchId]/page.tsx

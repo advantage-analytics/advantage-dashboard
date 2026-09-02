@@ -479,3 +479,43 @@ is the runner's. Newest entries at the bottom.
      Both reviewers judged this reasonable in-scope, not creep. If a third card
      ever needs a non-8 px swatch, adding a `size` prop and consolidating the
      two is the cleanup — a `/simplify` candidate at branch end, not a defect.
+
+## T10 · Rail metrics and the insight card; retire the strip — done
+- **gate:** mechanical — `npm run lint` 0 errors / 37 warnings (baseline 43,
+  none in T10's files), `npx tsc --noEmit` exit 0, `npm test` green, subagent's
+  `npm run build` clean, `grep -rn insight-strip src` empty. Completion review
+  `VERDICT: pass`, having verified the dismissal store's key
+  (`advantage-ai-insight-dismissed:${matchId}`) and `"true"` sentinel are
+  byte-identical to the deleted strip (a changed key would silently
+  un-dismiss everyone), the card self-gates on `!summary || dismissed`, and
+  the bottom group order is right. Guardrails —
+  `pipeline-guardrails-reviewer` ran and reported "no findings": the rail
+  identity still reads only `useMatchSides()`/`match.*`, the summary is the
+  already-side-picked value, `MatchDataBlock` still renders first for a
+  derived match (the new wrapper gate `isDerived || film !== "none" ||
+  Boolean(aiSummary)` only widens the old one, and the block's own `isDerived`
+  gate is untouched), the `Add video` link is unchanged (flag #3), §3.3's
+  early return is byte-identical, and the card's label reads "Advantage
+  Intelligence". `rls-boundary-reviewer` skipped — no query or loader.
+- **changed:** new `insight-dismissal.ts` (the dismissal store moved verbatim
+  from the strip); new `rail-insight-card.tsx` (surface-subtle card, 20 px logo
+  chip with the strip's mark+inversion, 13/500 headline = the viewer's
+  `summary`, dismiss ✕, `View full analysis` → `/dashboard/ask`, "Advantage
+  Intelligence" micro label, renders nothing without a summary or once
+  dismissed). `match-rail.tsx` adopts 47f metrics (px-5 py-[18px] gap-4, 26 px
+  score, one fact group), drops the AI blurb and the film cross-link card, and
+  orders the `mt-auto` group `MatchDataBlock` → no-video note →
+  `RailInsightCard`; the `film` prop loses `"card"`. `page.tsx` passes `"none"`
+  for `film` when a video exists. `insight-strip.tsx` deleted. This closes the
+  T5 gap: the AI summary now lives only in this rail card, shown on every tab.
+- **follow-ups:**
+  1. **MUST-DO for T12 — the rail double-pads.** T10's rail now carries its own
+     `px-5 py-[18px]`, but `match-detail-shell.tsx`'s `<aside>` still has round-46
+     `p-6 gap-6` (T4 restyled only the pane, not the aside; the design doc never
+     specced the aside's padding, so this fell between the two tasks — both
+     reviewers confirmed it is a genuine spec gap, not a T10 miss). The result
+     is ~44/42 px of padding instead of the intended 20/18. T12 must set the
+     aside to `p-0` (its `gap-6` is now inert — the rail is its single child).
+     T12's own done-when already covers "remaining pixel deviations… fixed in
+     the owning file"; this is the specific one to fix, in
+     `match-detail-shell.tsx`.

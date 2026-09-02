@@ -156,7 +156,10 @@ export default async function MatchDetailPage({ params }: PageProps) {
             isDerived={isDerived && statsPublished}
             film={
               video
-                ? "card"
+                // The rail's film cross-link card is gone in 47f — a match with
+                // video shows nothing in the note slot, and its Film tab is
+                // reached from the tab row instead.
+                ? "none"
                 // Allowlist, not "not splitstep": `sourceProvider` is also
                 // `null` for a match a coach typed in by hand (never
                 // imported, never analysed) — see the comment on
