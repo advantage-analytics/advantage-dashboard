@@ -372,7 +372,7 @@ export function OnboardingFlow() {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-3 rounded-[var(--radius-element)] border border-[var(--border-hairline)] bg-[var(--surface-subtle)] px-[18px] py-4">
+              <div className="flex flex-col gap-3 rounded-[var(--radius-element)] border border-[var(--border-hairline)] bg-[var(--surface-subtle)] px-5 py-4">
                 <span className="eyebrow">If the player is under 18</span>
                 {/* The same 14px check the join page's sharing terms carry,
                     in ink and never blue. `AuthCheckbox` below fills Signal
