@@ -81,7 +81,7 @@ ready).
 - **notes:** Plan step 5. Node-level spec — no browser, no `webServer`; `playwright.config.ts` deliberately configures neither. Can run before T3/T4 land; only the helper matters. Reading needs no session: `programs` is anon-readable, but use the fixture's `createAdminClient()` for consistency with the other live specs. Live table is ~1,941 rows.
 
 ## T6 · Verify the claim eyebrows in the browser and record the result
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3, T4
 - **files:** work/eyebrow-text-wrap/05_build/references/browser-check.md and work/eyebrow-text-wrap/05_build/references/status-1280.png (new, guess); no src/ changes
