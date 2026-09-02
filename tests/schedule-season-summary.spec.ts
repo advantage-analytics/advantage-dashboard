@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { seasonSummaryFrom } from '@/lib/data/schedule-server';
+import { lineCoverageFrom } from '@/lib/schedule/entry-state';
 import type { ProgramSchedule } from '@/lib/data/schedule-server';
 import type { AnalysisStatus } from '@/lib/data/match-analysis';
 import type {
@@ -433,5 +434,59 @@ test.describe('seasonSummaryFrom · lines analyzed over lines total', () => {
     );
     expect(summary.lines).toEqual({ analyzed: 10, total: 12 });
     expect(summary.dualRecord).toEqual({ won: 1, lost: 0 });
+  });
+});
+
+/**
+ * One event's coverage, on its own.
+ *
+ * `lineCoverageFrom` is shared: the season strip sums it across every event,
+ * and the schedule pane's "Last" jump row prints one event's. It was extracted
+ * in stage 06 precisely because those two figures used to be computed
+ * differently — the row's was a hard-coded "8 of 9" sitting under the strip's
+ * real count. Pinned here so they cannot drift apart again.
+ */
+test.describe('lineCoverageFrom · one event', () => {
+  test('no entries owes nothing', () => {
+    expect(lineCoverageFrom([])).toEqual({ analyzed: 0, total: 0 });
+  });
+
+  test('an entry with no match still owes one line', () => {
+    expect(lineCoverageFrom([entry('a')])).toEqual({ analyzed: 0, total: 1 });
+  });
+
+  test('a forfeited line is owed nothing and counts toward neither half', () => {
+    const coverage = lineCoverageFrom([
+      entry('a', { forfeit: 'ours' }),
+      entry('b'),
+    ]);
+    expect(coverage).toEqual({ analyzed: 0, total: 1 });
+  });
+
+  test('an analyzed match counts, a pending one does not', () => {
+    const coverage = lineCoverageFrom([
+      entry('a', { matches: [match('m1', 'us', 'completed')] }),
+      entry('b', { matches: [match('m2', 'us', 'processing')] }),
+    ]);
+    expect(coverage).toEqual({ analyzed: 1, total: 2 });
+  });
+
+  test('an entry with several matches owes one line per match', () => {
+    const coverage = lineCoverageFrom([
+      entry('a', {
+        matches: [match('m1', 'us', 'completed'), match('m2', 'us', 'processing')],
+      }),
+    ]);
+    expect(coverage).toEqual({ analyzed: 1, total: 2 });
+  });
+
+  test('analyzed can never exceed total', () => {
+    const coverage = lineCoverageFrom([
+      entry('a', { matches: [match('m1', 'us', 'completed')] }),
+      entry('b', { matches: [match('m2', 'us', 'completed')] }),
+      entry('c'),
+    ]);
+    expect(coverage.analyzed).toBeLessThanOrEqual(coverage.total);
+    expect(coverage).toEqual({ analyzed: 2, total: 3 });
   });
 });

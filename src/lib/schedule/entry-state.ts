@@ -259,3 +259,34 @@ export function dualScore(entries: EventEntry[]): {
 
   return { us, them, decided: entries.length > 0 && entries.every(entryPlayed) };
 }
+
+/**
+ * One event's lines analyzed, over its lines owed.
+ *
+ * Exported because two surfaces print this ratio — the season strip, which
+ * sums it, and the schedule pane's "Last" jump row, which prints one event's.
+ * Two spellings of "analyzed" is two chances to disagree on the same screen,
+ * which is exactly what the hard-coded "8 of 9" it replaces did.
+ *
+ * A forfeited line is owed nothing and counts toward neither half, and an entry
+ * with no match yet still owes one — `Math.max(1, …)`, the same arithmetic
+ * `getUploadQueue` uses below, so "nothing left to upload" and "N of M
+ * analyzed" cannot contradict each other.
+ */
+export function lineCoverageFrom(entries: EventEntry[]): {
+  analyzed: number;
+  total: number;
+} {
+  let analyzed = 0;
+  let total = 0;
+
+  for (const entry of entries) {
+    if (entry.forfeit !== null) continue;
+    total += Math.max(1, entry.matches.length);
+    analyzed += entry.matches.filter((match) =>
+      isAnalysisReady(match.status)
+    ).length;
+  }
+
+  return { analyzed, total };
+}

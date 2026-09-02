@@ -210,8 +210,16 @@ const DOUBLES_SLOTS = ["D1", "D2", "D3"];
  * play it.
  */
 function seedLineup(ladder: LadderPlayer[]): LineupLine[] {
+  // Only players the program actually ranked. `getLadder` returns the whole
+  // roster, sorting the unranked alphabetically last — so `ladder[0..5]` on a
+  // program that never set a ladder is alphabetical order presented as S1–S6.
+  // That is the "invented order" the paragraph above forbids, and it would be
+  // persisted: these ids become `program_event_entries.player_user_ids`
+  // against court numbers nobody assigned.
+  const ranked = ladder.filter((player) => player.ladderPosition !== null);
+
   const singles = SINGLES_SLOTS.map((slot, index) => {
-    const player = ladder[index];
+    const player = ranked[index];
     return {
       key: slot,
       slot,
@@ -224,7 +232,7 @@ function seedLineup(ladder: LadderPlayer[]): LineupLine[] {
   });
 
   const doubles = DOUBLES_SLOTS.map((slot, index) => {
-    const pair = ladder.slice(index * 2, index * 2 + 2);
+    const pair = ranked.slice(index * 2, index * 2 + 2);
     return {
       key: slot,
       slot,

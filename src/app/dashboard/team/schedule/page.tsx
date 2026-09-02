@@ -68,6 +68,14 @@ export default async function SchedulePage() {
     <StaticSchedule
       schedule={{ rows, details }}
       season={seasonSummaryFrom(schedule)}
+      // Today in UTC, so the pane's "Next" row can say how far off an event is
+      // without a clock read that would differ between the server and client
+      // renders of a `"use client"` component. UTC deliberately, and not
+      // `todayISO()`: `daysAway` differences UTC midnights, so both ends of the
+      // subtraction agree, and a server's own local zone is arbitrary anyway.
+      // `starts_on` is a plain date, so the worst case is a coarse label a day
+      // out near midnight rather than the fixed claim this replaces.
+      today={new Date().toISOString().slice(0, 10)}
       canCreate={isProgramStaff(active)}
       canAddOwnMatch={canUploadForProgram(active)}
     />

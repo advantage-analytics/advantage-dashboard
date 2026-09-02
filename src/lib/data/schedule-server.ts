@@ -11,7 +11,11 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import { isAnalysisReady, isWorking } from "@/lib/data/match-analysis";
-import { dualScore, entryPlayed } from "@/lib/schedule/entry-state";
+import {
+  dualScore,
+  entryPlayed,
+  lineCoverageFrom,
+} from "@/lib/schedule/entry-state";
 import { roundRank } from "@/lib/schedule/format";
 import type {
   EntryMatch,
@@ -369,13 +373,9 @@ export function seasonSummaryFrom({
       else if (score.decided && score.them > score.us) form.push("lost");
     }
 
-    for (const entry of entries) {
-      if (entry.forfeit !== null) continue;
-      total += Math.max(1, entry.matches.length);
-      analyzed += entry.matches.filter((match) =>
-        isAnalysisReady(match.status)
-      ).length;
-    }
+    const coverage = lineCoverageFrom(entries);
+    total += coverage.total;
+    analyzed += coverage.analyzed;
   }
 
   return {

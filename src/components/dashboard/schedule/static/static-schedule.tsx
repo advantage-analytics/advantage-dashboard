@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { DualWidget } from "@/components/dashboard/schedule/static/dual-widget";
 import { EventDrawer } from "@/components/dashboard/schedule/static/event-drawer";
 import { formatEventDay, siteTitle } from "@/lib/schedule/format";
+import { lineCoverageFrom } from "@/lib/schedule/entry-state";
 /**
  * `import type`, and only ever `import type`.
  *
@@ -74,6 +75,7 @@ export interface ScheduleData {
 export function StaticSchedule({
   schedule,
   season,
+  today,
   canCreate,
   canAddOwnMatch,
 }: {
@@ -85,6 +87,18 @@ export function StaticSchedule({
    * loader's header says so.
    */
   season: SeasonSummary;
+  /**
+   * Today in UTC, `YYYY-MM-DD`.
+   *
+   * A prop rather than a clock read, because this is a `"use client"` component
+   * that also renders on the server: `new Date()` here would give the two
+   * renders different answers and React would report a hydration mismatch on
+   * the "Next" row. UTC, so a reader far enough east or west can see a boundary
+   * case off by one — a coarse label being a day out near midnight is a much
+   * smaller claim than the fixed "in 4 days" it replaces, which was wrong every
+   * time.
+   */
+  today: string;
   /** `isProgramStaff` upstream — gates the drawer-footed "New event" CTA. */
   canCreate: boolean;
   /**
@@ -120,6 +134,7 @@ export function StaticSchedule({
         <DualWidget detail={dual} />
       ) : (
         <SelectAnEventPane
+          today={today}
           schedule={schedule}
           season={season}
           onSelect={setSelectedId}
@@ -137,30 +152,71 @@ function Pane({ children }: { children: React.ReactNode }) {
 }
 
 /**
+ * How far off an event is, as `7d`'s trailing micro-copy words it.
+ *
+ * Both arguments are plain `YYYY-MM-DD` civil dates, differenced as UTC
+ * midnights so no zone or daylight-saving shift can move the count: these are
+ * days on a calendar, not instants.
+ *
+ * Returns null for an event too far out to phrase this way — the row then
+ * prints nothing rather than a number nobody asked for, and the date is already
+ * on the line above it.
+ */
+function daysAway(startsOn: string, today: string): string | null {
+  const day = 24 * 60 * 60 * 1000;
+  const from = Date.parse(`${today}T00:00:00Z`);
+  const to = Date.parse(`${startsOn}T00:00:00Z`);
+  if (Number.isNaN(from) || Number.isNaN(to)) return null;
+
+  const days = Math.round((to - from) / day);
+  if (days < 0) return null;
+  if (days === 0) return "today";
+  if (days === 1) return "tomorrow";
+  if (days <= 30) return `in ${days} days`;
+  return null;
+}
+
+/**
  * `7d`'s prompt pane: the title, the season strip, and the two jump rows.
  */
 function SelectAnEventPane({
   schedule,
   season,
+  today,
   onSelect,
 }: {
   schedule: ScheduleData;
   season: SeasonSummary;
+  today: string;
   onSelect: (eventId: string) => void;
 }) {
   // `findLast` for Next, `find` for Last, and the asymmetry is the point:
-  // `rows` is newest first, so the nearest unplayed event is at the END of the
-  // unplayed run and the most recent played one is at the FRONT of the played
-  // run. Both were `find` while the fixtures drew a single upcoming row, where
-  // the two spellings cannot disagree; against a real season `find` labels the
-  // furthest-away event "Next".
-  const next = schedule.rows.findLast((row) => row.playedCount === 0) ?? null;
+  // `rows` is newest first, so the soonest event still ahead is at the END of
+  // the run that is ahead, and the most recent played one is at the FRONT of
+  // the played run.
+  //
+  // Next is chosen by DATE, not by played count. A played count of zero means
+  // "no result recorded", which a January dual nobody scored has all year and
+  // which every tournament has for weeks after it finishes — so the old
+  // predicate offered the oldest unscored event as "Next" and never offered
+  // the real one. The row now prints how far away it is, which would have made
+  // that read "4 months ago" under a heading that says Next.
+  const next =
+    schedule.rows.findLast((row) => row.startsOn >= today) ?? null;
   const last = schedule.rows.find((row) => row.playedCount > 0) ?? null;
 
   // "hard". A surface belongs to the event, not to the row the drawer lists,
   // so it comes from the detail — and the detail map is deliberately partial,
   // hence the optional chain rather than an assumed hit.
   const nextSurface = next ? schedule.details[next.id]?.event.surface : null;
+
+  // Counted off the same detail the pane already holds, so the row needs no
+  // second read. `?? []` for the same reason `nextSurface` optional-chains:
+  // the detail map is built for every event, but a row without one prints
+  // "0 of 0" rather than throwing.
+  const lastCoverage = lineCoverageFrom(
+    last ? (schedule.details[last.id]?.entries ?? []) : []
+  );
 
   return (
     <Pane>
@@ -234,12 +290,15 @@ function SelectAnEventPane({
                 {next.entryCount === 0 ? " · lineup not set" : null}
               </>
             }
-            /* "in 4 days" is the design's, and the rows cannot produce it: the
-               fixture calendar is September 2025 and today is not four days
-               before it. A literal, flagged, rather than a clock read that
-               would print something the artboard never says. */
+            /* The design draws "in 4 days". Derived now rather than drawn:
+               against fixtures the literal was flagged and harmless, against a
+               real event it asserted a date. `today` is a prop rather than a
+               clock read here, so the server and the client render the same
+               string and there is no hydration mismatch. */
             trailing={
-              <span className="text-micro tabular text-right">in 4 days</span>
+              <span className="text-micro tabular text-right">
+                {daysAway(next.startsOn, today)}
+              </span>
             }
             onSelect={onSelect}
           />
@@ -252,13 +311,14 @@ function SelectAnEventPane({
             detail={
               <>
                 {factsLine(last)} ·{" "}
-                {/* "8 of 9 lines analyzed" is the design's own claim and is
-                    not derivable from the rows it draws — three of the nine
-                    lines are doubles, which carry no video at all. T1 flagged
-                    it against the fixtures; it is reproduced here verbatim
-                    rather than recomputed into a different number. */}
-                <span className="tabular">8</span> of{" "}
-                <span className="tabular">9</span> lines analyzed
+                {/* The design draws "8 of 9 lines analyzed". Counted now, by
+                    the same `lineCoverageFrom` the season strip sums — two
+                    spellings of "analyzed" on one screen is how the drawn
+                    figure came to sit under a computed one that disagreed
+                    with it. */}
+                <span className="tabular">{lastCoverage.analyzed}</span> of{" "}
+                <span className="tabular">{lastCoverage.total}</span> lines
+                analyzed
               </>
             }
             trailing={

@@ -259,17 +259,18 @@ test.describe('/dashboard/team/schedule · 7e 7d 7c 4c', () => {
     drawn(schedule, 'static-schedule.tsx', 'Jump to');
     drawn(schedule, 'static-schedule.tsx', 'Next');
     drawn(schedule, 'static-schedule.tsx', 'Last');
-    // A literal the rows cannot produce — the fixture calendar is September
-    // 2025 and today is not four days before it. Held, and now a defect on a
-    // live page rather than a fixture's: T25 saw it print under an event
-    // dated today (finding 1). It leaves this file when it leaves the
-    // component.
-    drawn(schedule, 'static-schedule.tsx', 'in 4 days');
+    // RETIRED 'in 4 days' — the literal left the component. Stage 06 derived
+    //   it: the row now prints `daysAway(next.startsOn, today)`, so it says
+    //   "today", "tomorrow" or "in N days" about the event it actually names,
+    //   and nothing at all beyond a month out. Held here through the whole
+    //   re-wiring and retired only once it stopped being drawn, which is what
+    //   this file's own rule asks.
     drawn(schedule, 'static-schedule.tsx', ' · lineup not set');
-    // The design's own claim, and not derivable from the nine lines beside it.
-    // Held for the same reason as "in 4 days": still drawn, and since T14 it
-    // sits directly under a computed "N of M lines analyzed" (T25, finding 1).
-    drawn(schedule, 'static-schedule.tsx', '· 8 of 9 lines analyzed');
+    // RETIRED '· 8 of 9 lines analyzed' — the literal left the component.
+    //   Stage 06 counted it, through the same `lineCoverageFrom` the season
+    //   strip sums, so the two figures on this pane can no longer disagree.
+    //   The design's own numbers were never derivable from the nine lines
+    //   beside them: three are doubles, which carry no video at all.
   });
 
   test("7e's day-zero pane", () => {

@@ -124,8 +124,8 @@ export default async function NewDualPage() {
 
   // The viewer's own row is in the conference table, flagged rather than
   // filtered — `getConferenceTable` says so. Step one wants it gone from the
-  // list (a program does not play itself) but wants its key and its division,
-  // which is the only place either is available without a second read.
+  // list (a program does not play itself) but wants its division, which the
+  // conference row is the only place to get without a second read.
   const self = conferenceTable.programs.find((program) => program.isSelf) ?? null;
 
   return (
@@ -135,7 +135,11 @@ export default async function NewDualPage() {
         defaultSurface: settings?.program.defaultSurface ?? null,
         ourConference: settings?.program.conference ?? null,
         ourDivision: divisionLabel(self?.division ?? null),
-        ourProgramKey: self?.programKey ?? null,
+        // Off the loader, not off `self`: the conference table is empty for a
+        // program with no `conference`, and a key read out of it would then be
+        // null — which makes step one's `programKey !== ourProgramKey` filter
+        // match every row and let a coach schedule a dual against themselves.
+        ourProgramKey: conferenceTable.ourProgramKey,
         conferencePrograms: conferenceTable.programs
           .filter((program) => !program.isSelf)
           .map((program) => toDirectoryRow(program, conferenceTable.conference)),

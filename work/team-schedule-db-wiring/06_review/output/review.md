@@ -25,26 +25,21 @@ they ran.
 | 1 | No route imports `fixtures.ts` at runtime | **met** — the spec is its only importer anywhere |
 | 2 | A coach with events sees them; a coach with none gets the `7e` day-zero frame | **met** — observed live (T15, T25) |
 | 3 | Builders persist a row the list shows and `[eventId]` opens | **met** — observed live end-to-end (T20, T23, T25), with two input paths that fail loudly; see findings 1 and 7 |
-| 4 | Every string on screen is derived, or is design chrome that names no fact | **NOT MET** — see below |
+| 4 | Every string on screen is derived, or is design chrome that names no fact | **met, after the fixes below** — both literals are now derived |
 | 5 | Two programs' schedules never bleed into each other | **met** — RLS verified live; both boundary reviewers cleared the range |
 | 6 | The screens still match their artboards, punctuation included, where the value is unchanged | **met** — 125 `drawn()` assertions hold; 4 retirements across fourteen tasks, each with a recorded reason |
 | 7 | Gates pass, and the spec's fate is a decision in the diff rather than a deleted failure | **met** — lint 0 errors / 37 warnings, `tsc` clean, 260 tests, build green; `expect()` count unchanged at 57 across the whole feature |
 | 8 | `README.md` describes the tree as it stands | **met** — entries spot-verified against the tree by the guardrails reviewer |
 
-### Criterion 4 is not met, and that is the one thing blocking a clean sign-off
+### Criterion 4 — how it came to be met
 
-`static-schedule.tsx`'s two Jump-to rows still print a hardcoded **`in 4 days`**
-and **`· 8 of 9 lines analyzed`**. Against fixtures these were flagged and
-harmless. Against the loader they are assertions about a real event, and they
-were observed live stating something false: "in 4 days" over an event dated
-*today*, and "8 of 9 lines analyzed" directly beneath the season strip's
-*computed* "1 of 41 lines analyzed" — two coverage figures on one screen, one of
-them invented. A third, `3 Big Ten programs are in this field` on the tournament
-builder, asserted Big Ten while the program under test was in the ACC.
+`static-schedule.tsx`'s two Jump-to rows printed a hardcoded **`in 4 days`** and
+**`· 8 of 9 lines analyzed`**. Against fixtures these were flagged and harmless;
+against the loader they asserted things about real events, and were observed
+doing so — "in 4 days" over an event dated *today*, and "8 of 9 lines analyzed"
+directly beneath the season strip's computed "1 of 41".
 
-This was flagged at T15 and never became a task. It is finding 3 below.
-
----
+Both are now derived. See **Fixed after review** below.
 
 ## What pr-check found, and what was done
 
@@ -166,28 +161,97 @@ the same way.
 
 ---
 
+## Fixed after review
+
+The four blocking findings were fixed after this report's first pass, on the
+human's instruction. Every fix re-ran the full gate, and
+`pipeline-guardrails-reviewer` re-reviewed them as a set — no violations.
+
+1. **A seed of `0` no longer fails the write** *(finding 1)*. The cell strips a
+   leading zero and caps at four digits, so it cannot hold a value the column
+   refuses; the submit guards on `Number(entry.seed) > 0` as a second lock.
+   Verified by evaluation: `""` and `"0"` both mean a null column, `"3"` and
+   `"03"` both mean 3.
+2. **`seedLineup()` no longer invents a ranking** *(finding 2)*. It now filters
+   to `ladderPosition !== null` before seeding, in both the singles and doubles
+   halves. The reviewer confirmed the filtered list stays in rank order (the
+   roster read already sorts ranked players ascending first), that a partial
+   ladder yields that many seeded courts and the rest empty rather than a
+   silent shift, and that unfilled courts are dropped at submit rather than
+   sent. Editing a court by hand still resolves against the *whole* roster —
+   naming an unranked player deliberately is a human choice, not an invented
+   seed.
+3. **Both literals are derived** *(finding 3)*. `daysAway()` prints "today",
+   "tomorrow", "in N days", or nothing beyond a month out, from a `today` prop
+   the server route supplies — a prop rather than a clock read, because this is
+   a `"use client"` component that also renders on the server, and a clock here
+   would be a hydration mismatch. The coverage figure comes from a new
+   `lineCoverageFrom()`, which `seasonSummaryFrom` now sums, so the pane's two
+   "analyzed" figures are one rule counted once.
+
+   That helper went into `src/lib/schedule/entry-state.ts`, **not**
+   `schedule-server.ts` — the latter imports the Supabase server client at
+   module scope, and a value import into a client component would have pulled
+   it into the browser bundle. Caught while wiring it, and confirmed by the
+   reviewer.
+4. **A program can no longer schedule a dual against itself** *(finding 4)*.
+   `getConferenceTable` now returns `ourProgramKey` from the row it already
+   reads, conference or not, so the self-exclusion filter works for a program
+   that never set one. Its other caller destructures around the added field and
+   is unaffected.
+
+**One further finding was fixed because fixing finding 3 exposed it.** The
+"Next" row selected on `playedCount === 0`, which a January dual nobody scored
+satisfies all year — so it offered the oldest unscored event. Harmless while the
+row printed a fixed string; with a derived label it would have read "4 months
+ago" under a heading that says Next. The predicate is now `startsOn >= today`
+(*finding 6*).
+
+**Two spec assertions retired**, under the rule that has governed all fourteen
+tasks: an assertion whose literal genuinely left the component is removed and
+the reason recorded. `in 4 days` and `· 8 of 9 lines analyzed` were held through
+the whole re-wiring precisely because they were still drawn; they left the
+component here, and only then left the spec. `drawn()` calls 125 → 123,
+`RETIRED` notes 4 → 6, `expect()` unchanged.
+
+**Six tests added** for `lineCoverageFrom`, since two surfaces now depend on it
+and this feature's pattern is that a shared derivation gets pure coverage. They
+earned their place immediately: the first run failed because they called a
+fixture with the wrong signature, rather than passing vacuously. Suite 260 → 266.
+
 ## Verdict
 
-**Not ready to merge as-is.** The gates are green and the feature works, but
-criterion 4 is not met and two findings are user-facing defects on paths a coach
-will hit:
+**All eight success criteria are met, and the four blocking findings are
+fixed.** Gates green throughout: lint 0 errors / 37 warnings, `tsc` clean, 266
+tests, `npm run build` green. Both boundary reviewers cleared the whole range,
+and the guardrails reviewer additionally cleared the fixes as a set.
 
-- the two false literals (criterion 4, finding 3)
-- a seed of `0` failing the write with a raw Postgres error (finding 1)
-- `seedLineup` presenting an unranked roster as a ladder (finding 2)
-- a program able to schedule a dual against itself (finding 4)
+**Six findings remain open**, none of them blocking, all recorded in the
+findings report:
 
-None of these is structural, and none needs the pipeline re-run — they are four
-small, well-localised fixes. The remaining seven findings are real but lower
-stakes and can be triaged normally.
+- `todayISO()` still computes the "local" date in the *server's* zone inside two
+  builders' `useState` initializers. The schedule pane no longer has this
+  problem — it takes `today` as a prop — but the two builders do.
+- A cleared Starts date reaches the tournament insert as `""` and surfaces a raw
+  Postgres error. The same class as the seed bug, one field over.
+- `seasonSummaryFrom` folds every event ever under a block labelled "Season".
+- An unhandled rejection on the opponent-roster fetch.
+- A dual line with only an opponent named is silently dropped at submit, along
+  with the name the popup just confirmed saving.
+- The rail and the header score would disagree if a dual entry ever carried two
+  matches; the matches read has no `ORDER BY`.
 
-**Consciously left, and why:** every finding above is left unfixed in this
-stage. Stage 06's job is to run the gate and record what it found, and this
-feature's whole discipline has been that the human's sign-off decides what ships
-— fixing eleven findings here, after fourteen gated tasks, would put unreviewed
-work into the range this very report attests to.
+One nuance the guardrails reviewer named and judged not a violation: with an odd
+number of ranked players, a doubles court can seed with a single player rather
+than a pair. That behaviour predates this feature — it came unchanged from the
+deleted `dual-form.tsx` — and the ids involved are real ranked players', never
+invented.
 
----
+**Consciously left:** the six above. They are real, they are recorded, and they
+are the kind of thing a follow-up queue is for — fixing them here would keep
+adding unreviewed work to the range this report attests to. The four that
+blocked were fixed because they were user-facing defects on paths a coach hits,
+and because criterion 4 could not be met without one of them.
 
 ## Also consulted
 

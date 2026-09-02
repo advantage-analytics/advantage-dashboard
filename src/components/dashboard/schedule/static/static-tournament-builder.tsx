@@ -208,8 +208,11 @@ export function StaticTournamentBuilder({
           position: index,
           draw: entry.draw,
           // "" is "nobody typed a seed", which is a null column — not a 0,
-          // which would print as an actual seeding.
-          seed: entry.seed ? Number(entry.seed) : null,
+          // which would print as an actual seeding. Guarded on the number
+          // rather than the string: `"0"` is truthy, and the column refuses it
+          // (`check (seed is null or seed > 0)`). The cell already strips a
+          // leading zero, so this is the second lock on the same door.
+          seed: Number(entry.seed) > 0 ? Number(entry.seed) : null,
           playerUserIds: [player.userId],
           playerLabels: [player.name],
         })),
@@ -813,8 +816,20 @@ function EntryRow({
           // Digits only, filtered on the way in rather than validated on the
           // way out — `Number("3rd")` is `NaN`, and a NaN seed reaches the
           // column as a write that fails long after the coach typed it.
+          //
+          // A leading zero goes the same way, and for the same reason: the
+          // column is `check (seed is null or seed > 0)`, so "0" is a value the
+          // database refuses. Stripping it here means the cell can never hold a
+          // seed the write will reject, rather than the coach discovering it as
+          // a raw constraint error under a tournament that failed to save. Four
+          // digits is past any real draw and keeps `Number()` inside `integer`.
           onChange={(event) =>
-            onAmend({ seed: event.target.value.replace(/[^0-9]/g, "") })
+            onAmend({
+              seed: event.target.value
+                .replace(/[^0-9]/g, "")
+                .replace(/^0+/, "")
+                .slice(0, 4),
+            })
           }
           onBlur={() => setEditingSeed(false)}
           onKeyDown={(event) => {
