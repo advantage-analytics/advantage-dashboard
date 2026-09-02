@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { programDisplayName } from "@/lib/data/programs-server";
 import type { ProgramOrgType } from "@/lib/workspace/types";
+import type { JoinRole } from "./join-role";
 import { hashToken } from "./tokens";
 
 /**
@@ -19,8 +20,12 @@ import { hashToken } from "./tokens";
  * instead of trusting whatever the browser posts back.
  */
 
-/** Mirrors `program_invites_role_check`. Owner moves by transfer, not invite. */
-export type JoinRole = "coach" | "staff" | "player";
+/**
+ * Re-exported from its leaf so existing importers keep working. The type lives
+ * in `join-role.ts` beside the noun that prints it, where client components
+ * can reach it without this server-only module.
+ */
+export type { JoinRole } from "./join-role";
 
 /**
  * The coach behind the invitation, as far as a screen is allowed to say it.
@@ -67,18 +72,13 @@ export type JoinState =
   /**
    * An account already exists for the invited address, and nobody is signed in.
    *
-   * They sign in with the password they already have. They are NOT offered a
-   * new one — see `createAccountAndAccept` for why that distinction is the
-   * most important line in this feature.
+   * No screen: the page sends them to `/login?next=` and they come back as
+   * `ready`. Nothing about the invitation rides on this state, because nothing
+   * renders it — and an existing account is never offered a password box here;
+   * see `createAccountAndAccept` for why that is the most important line in
+   * this feature.
    */
-  | {
-      kind: "sign_in";
-      programName: string;
-      programOrgType: ProgramOrgType;
-      role: JoinRole;
-      email: string;
-      inviterName: InviterName;
-    }
+  | { kind: "sign_in" }
   /** No account yet. Name and password, and they are in. */
   | {
       kind: "sign_up";
@@ -191,7 +191,7 @@ export async function loadInvite(token: string): Promise<InviteRecord | null> {
  * second sentence written for not knowing. "Coach wasn't notified" is worse
  * than "Nobody was notified" — it reads as a bug, and it is one.
  */
-function displayName(first: string | null, last: string | null): InviterName {
+export function displayName(first: string | null, last: string | null): InviterName {
   const name = [first, last]
     .map((part) => part?.trim() ?? "")
     .filter(Boolean)
@@ -266,8 +266,10 @@ export async function resolveJoinState(token: string): Promise<JoinState> {
     };
   }
 
+  if (await accountExists(email)) return { kind: "sign_in" };
+
   return {
-    kind: (await accountExists(email)) ? "sign_in" : "sign_up",
+    kind: "sign_up",
     programName,
     programOrgType,
     role,
@@ -297,6 +299,12 @@ export type AcceptOutcome =
        *   already_claimed  somebody else bound to that profile first
        *   player_gone      the row was archived or merged away
        *
+       * And one more when they learned to be accepted without the link
+       * (`acceptPendingWithSession`):
+       *
+       *   unconfirmed      the session's address is not yet confirmed, so
+       *                    nothing proves it is the invited one
+       *
        * Each has its own sentence and its own way forward, which is why they
        * come back as a status rather than as a raised exception.
        */
@@ -305,6 +313,7 @@ export type AcceptOutcome =
         | "expired"
         | "already_used"
         | "wrong_address"
+        | "unconfirmed"
         | "no_seats"
         | "already_claimed"
         | "player_gone";
@@ -325,23 +334,45 @@ export async function acceptWithSession(
   token: string,
   client?: Awaited<ReturnType<typeof createClient>>
 ): Promise<AcceptOutcome> {
-  const supabase = client ?? (await createClient());
+  return acceptVia(
+    client ?? (await createClient()),
+    "accept_program_invite",
+    { p_token_hash: hashToken(token.trim()) },
+    "[join] accept failed"
+  );
+}
 
-  const { data, error } = await supabase
-    .rpc("accept_program_invite", { p_token_hash: hashToken(token.trim()) })
-    .maybeSingle();
+const REFUSED: AcceptOutcome = {
+  ok: false,
+  status: "error",
+  message: "We couldn't finish that. Try again.",
+};
+
+/**
+ * The handshake both doors share.
+ *
+ * Both database functions return the same `(status, program_id)` row, so the
+ * row-to-outcome mapping — including the cast that keeps `AcceptOutcome`'s
+ * status list honest — lives here once. The log carries the message only: the
+ * token is a live credential to a program and the id is the key to a row that
+ * names an address, and neither belongs in the one place people paste into a
+ * ticket without thinking.
+ */
+async function acceptVia(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  rpc: "accept_program_invite" | "accept_pending_invite",
+  args: Record<string, string>,
+  logLabel: string
+): Promise<AcceptOutcome> {
+  const { data, error } = await supabase.rpc(rpc, args).maybeSingle();
 
   if (error) {
-    // Never logs the token. It is a live credential to a program, and a server
-    // log is the one place people paste into a ticket without thinking.
-    console.error("[join] accept failed", { message: error.message });
-    return { ok: false, status: "error", message: "We couldn't finish that. Try again." };
+    console.error(logLabel, { message: error.message });
+    return REFUSED;
   }
 
   const row = data as { status: string; program_id: string | null } | null;
-  if (!row) {
-    return { ok: false, status: "error", message: "We couldn't finish that. Try again." };
-  }
+  if (!row) return REFUSED;
 
   if (row.status === "ok" && row.program_id) {
     return { ok: true, programId: row.program_id };
@@ -354,4 +385,32 @@ export async function acceptWithSession(
       "error"
     >,
   };
+}
+
+/**
+ * The same handshake, by invitation id instead of by link.
+ *
+ * For the person who has a session but never had the link — or has one they
+ * cannot open any more. There is no token to hold up, so the proof of address
+ * is the session's own: `accept_pending_invite` refuses unless the caller's
+ * CONFIRMED address is the one on that row, and only then hands the row's own
+ * `token_hash` to `accept_program_invite`. Every check the link path runs
+ * runs here too, because both doors go through the one function that writes
+ * the membership — `unconfirmed` is the only outcome this door adds.
+ *
+ * The id is not a secret, and nothing about the row is disclosed until the
+ * address is proven: `not_found`, `unconfirmed` and `wrong_address` all come
+ * back without a `program_id`, unlike the link path, where holding the link
+ * earns the program's name. `client` for the same reason as above.
+ */
+export async function acceptPendingWithSession(
+  inviteId: string,
+  client?: Awaited<ReturnType<typeof createClient>>
+): Promise<AcceptOutcome> {
+  return acceptVia(
+    client ?? (await createClient()),
+    "accept_pending_invite",
+    { p_invite_id: inviteId },
+    "[join] accept by id failed"
+  );
 }

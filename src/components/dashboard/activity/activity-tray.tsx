@@ -25,21 +25,34 @@ import {
   uploadEtaSeconds,
 } from "@/lib/data/match-analysis";
 import { formatDisplayDate } from "@/lib/data/match-utils";
+import { invitationHref } from "@/lib/services/programs/join-links";
+import { inviteSubtitle } from "@/lib/services/programs/join-role";
+import { trayDetail } from "./tray-detail";
 import type { ActivityFeed, ActivityItem } from "@/lib/data/activity-server";
+// Type-only, and it has to stay that way: `pending-invites-server.ts` builds a
+// Supabase server client. This file is `"use client"`, so a value import would
+// drag the server module into the browser bundle.
+import type { PendingInvite } from "@/lib/data/pending-invites-server";
 import { cn } from "@/lib/utils";
 
 /** ETA refresh. The underlying percentage moves in 2-point steps, so anything
  *  faster re-renders without new information. */
 const ETA_TICK_MS = 15_000;
 
-/** The row chrome both kinds share. Only the body differs. */
+/**
+ * The row chrome every kind shares. Only the body and the destination differ.
+ *
+ * `href` rather than a match id, because an invitation row does not point at a
+ * match. Taking the whole path here keeps one set of row classes and one dot,
+ * instead of a near-copy that drifts the first time the hover wash changes.
+ */
 function ActivityRow({
-  matchId,
+  href,
   marked,
   className,
   children,
 }: {
-  matchId: string;
+  href: string;
   /** Unread dot. Settled rows keep the indent without the mark. */
   marked: boolean;
   className?: string;
@@ -47,7 +60,7 @@ function ActivityRow({
 }) {
   return (
     <Link
-      href={`/dashboard/matches/${matchId}`}
+      href={href}
       className={cn(
         "flex gap-2.5 rounded-[8px] px-2.5 transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none",
         className
@@ -70,7 +83,11 @@ function InFlightRow({ item, nowMs }: { item: ActivityItem; nowMs: number }) {
   const eta = uploadEtaSeconds(analysis, nowMs);
 
   return (
-    <ActivityRow matchId={item.matchId} marked className="py-2.5">
+    <ActivityRow
+      href={`/dashboard/matches/${item.matchId}`}
+      marked
+      className="py-2.5"
+    >
       <span className="flex min-w-0 flex-1 flex-col gap-1.5">
         <span className="min-w-0 text-[12px] text-[var(--ink-900)] [text-wrap:pretty]">
           {ANALYSIS_LABEL[analysis.status]} <b className="font-medium">{title}</b>
@@ -97,11 +114,44 @@ function InFlightRow({ item, nowMs }: { item: ActivityItem; nowMs: number }) {
   );
 }
 
+/**
+ * An invitation waiting on a decision.
+ *
+ * Marked, and above the work: this is the only row in the tray with something
+ * for the reader to *do*. Everything else resolves whether or not anybody
+ * opens the panel.
+ *
+ * The href carries the invite id and nothing else. The address the invitation
+ * was sent to never appears here — not in the path, not in the copy — because
+ * a URL is the one string in this component that gets logged, shared and
+ * pasted. `expiresAt` is deliberately absent too: a countdown in a 326px
+ * popover is pressure without a remedy, and the page behind the link says it
+ * properly.
+ */
+function InviteRow({ invite }: { invite: PendingInvite }) {
+  return (
+    <ActivityRow href={invitationHref(invite.id)} marked className="py-2.5">
+      <span className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="min-w-0 text-[12px] text-[var(--ink-900)] [text-wrap:pretty]">
+          Invitation — <b className="font-medium">{invite.programName}</b>
+        </span>
+        <span className="text-[11px] text-[var(--ink-500)]">
+          Join {inviteSubtitle(invite)}
+        </span>
+      </span>
+    </ActivityRow>
+  );
+}
+
 function SettledRow({ item }: { item: ActivityItem }) {
   const failed = isAnalysisFailed(item.analysis.status);
 
   return (
-    <ActivityRow matchId={item.matchId} marked={false} className="py-2">
+    <ActivityRow
+      href={`/dashboard/matches/${item.matchId}`}
+      marked={false}
+      className="py-2"
+    >
       <span className="flex min-w-0 flex-1 items-baseline gap-2">
         <span className="min-w-0 truncate text-[12px] text-[var(--ink-700)]">
           {failed ? "Analysis failed" : "Report ready"} —{" "}
@@ -115,7 +165,13 @@ function SettledRow({ item }: { item: ActivityItem }) {
   );
 }
 
-export function ActivityTray({ feed }: { feed: ActivityFeed }) {
+export function ActivityTray({
+  feed,
+  invites,
+}: {
+  feed: ActivityFeed;
+  invites: PendingInvite[];
+}) {
   const { viewer } = useWorkspace();
   const [isOpen, setIsOpen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -164,12 +220,17 @@ export function ActivityTray({ feed }: { feed: ActivityFeed }) {
     // RSC payload.
   }, [feed.items, patches]);
 
-  const unread = inFlight.length;
+  // Invitations count toward the dot but NOT toward the live subscription
+  // above: they arrive with the RSC payload and change only when a coach sends
+  // one, which no socket here would learn about anyway. Keeping them out of
+  // `hasLiveWork` is the point — the gate watches match analysis and must stay
+  // ignorant of anything else.
+  const unread = inFlight.length + invites.length;
 
   // The trigger carries a dot, not a number: the chrome has no numeric badges,
   // so the count lives here — in the tooltip and, word for word, in the
   // aria-label — and in the tray itself.
-  const detail = unread > 0 ? `${unread} in flight` : "Nothing in flight";
+  const detail = trayDetail(invites.length, inFlight.length);
 
   // Only tick while something can actually produce a new estimate.
   const hasUploading = inFlight.some(
@@ -225,12 +286,15 @@ export function ActivityTray({ feed }: { feed: ActivityFeed }) {
           </p>
         </div>
 
-        {feed.items.length === 0 ? (
+        {feed.items.length === 0 && invites.length === 0 ? (
           <p className="px-3.5 py-6 text-center text-[12px] text-[var(--ink-500)]">
             Nothing in flight.
           </p>
         ) : (
           <div className="flex max-h-[380px] flex-col overflow-y-auto p-1.5">
+            {invites.map((invite) => (
+              <InviteRow key={invite.id} invite={invite} />
+            ))}
             {inFlight.map((item) => (
               <InFlightRow key={item.matchId} item={item} nowMs={nowMs} />
             ))}

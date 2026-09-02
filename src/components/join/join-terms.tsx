@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { TermMark } from "@/components/claim/claim-shell";
 import { advButton } from "@/lib/ui/adv-button";
 
 /**
@@ -33,6 +34,24 @@ import { advButton } from "@/lib/ui/adv-button";
  * button is the commitment.
  */
 
+/**
+ * The one way this flow reports a refused action.
+ *
+ * Every join surface needs it, so it lives beside the other shared pieces
+ * rather than being exported out of one of them. (The role nouns used to sit
+ * here too; they moved to `services/programs/join-role.ts` once the dashboard
+ * header needed one, because importing this component module for a three-line
+ * record dragged its links and terms into every dashboard page's chunk.)
+ */
+export function Problem({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <p role="alert" className="text-[12px] leading-[18px] text-[var(--danger)]">
+      {message}
+    </p>
+  );
+}
+
 export interface JoinTermRow {
   text: string;
   /**
@@ -43,7 +62,7 @@ export interface JoinTermRow {
   emphasis?: string;
 }
 
-/** Left column. Blue ticks: what the program gains. */
+/** Left column. Blue checks: what the program gains. */
 export const JOIN_TERMS_SEEN: readonly JoinTermRow[] = [
   {
     text: "Matches uploaded to the team — video, stats and the full report",
@@ -53,7 +72,7 @@ export const JOIN_TERMS_SEEN: readonly JoinTermRow[] = [
   { text: "Any personal match you choose to share, one at a time" },
 ];
 
-/** Right column. Ink ticks: what does not move. */
+/** Right column. Ink checks: what does not move. */
 export const JOIN_TERMS_KEPT: readonly JoinTermRow[] = [
   { text: "Everything you've uploaded up to now" },
   { text: "Personal matches you upload later, unless you share them" },
@@ -61,24 +80,6 @@ export const JOIN_TERMS_KEPT: readonly JoinTermRow[] = [
     text: "Your account, if you leave the program — the team's matches stay with the team",
   },
 ];
-
-/**
- * The 2 × 12 mark the design system uses wherever a short list of facts has to
- * read as facts. Blue on the left column, ink on the right — the colour is the
- * only thing distinguishing "they gain this" from "you keep this", and it does
- * the work a paragraph of policy would do badly.
- */
-function Tick({ tone }: { tone: "blue" | "ink" }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="mt-[5px] h-3 w-0.5 shrink-0 rounded-full"
-      style={{
-        backgroundColor: tone === "blue" ? "var(--blue)" : "var(--ink-300)",
-      }}
-    />
-  );
-}
 
 function TermsColumn({
   title,
@@ -103,7 +104,7 @@ function TermsColumn({
 
           return (
             <li key={row.text} className="flex gap-2.5">
-              <Tick tone={tone} />
+              <TermMark tone={tone} />
               <span className="text-body-sm">
                 {before}
                 {row.emphasis !== undefined && after !== undefined && (
@@ -175,13 +176,15 @@ function formatHours(hours: number): string {
  * the same page with a flag on it cannot do any of those things by construction,
  * which is a stronger guarantee than an action that could and has been reviewed
  * for not doing so.
+ *
+ * The caller passes the whole href because there is no longer one shape for it:
+ * the token screens decline into `/join/<token>?not-now=1`, and the signed-in
+ * offer has no token to build that from. Composing the URL here would mean
+ * inventing a token for the surface that never had one.
  */
-export function NotNowLink({ token }: { token: string }) {
+export function NotNowLink({ href }: { href: string }) {
   return (
-    <Link
-      href={`/join/${encodeURIComponent(token)}?not-now=1`}
-      className={advButton("ghost")}
-    >
+    <Link href={href} className={advButton("ghost")}>
       Not now
     </Link>
   );
@@ -190,10 +193,10 @@ export function NotNowLink({ token }: { token: string }) {
 /**
  * The quota line, pushed to the far end of the actions row.
  *
- * Composed by each form rather than bundled with "Not now", because the three
- * screens do not agree on what sits between them: only the sign-in one carries
- * "Forgot your password?", and it belongs beside its own button, not after the
- * line that ends the row.
+ * Composed by each form rather than bundled with "Not now", because the two
+ * screens do not agree on what sits between them: only the sign-up one carries
+ * "Sign in with Google instead", and it belongs beside its own button, not
+ * after the line that ends the row.
  */
 export function JoinQuotaFooter(props: {
   programHours: number;

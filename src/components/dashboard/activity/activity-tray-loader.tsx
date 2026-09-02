@@ -2,6 +2,7 @@ import { Activity } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { getActivityFeed } from "@/lib/data/activity-server";
+import { getPendingInvites } from "@/lib/data/pending-invites-server";
 import { ActivityTray } from "./activity-tray";
 
 /**
@@ -15,15 +16,26 @@ import { ActivityTray } from "./activity-tray";
  * `getWorkspaceContext()` is React-`cache()`d, so resolving the workspace here
  * rather than threading it down costs nothing beyond the layout's own call —
  * and it keeps the feed's workspace scope next to the fetch that needs it.
+ *
+ * Pending invitations ride along on the same stream because they are scoped to
+ * the signed-in ADDRESS rather than to a workspace: an invitation to a program
+ * you have not joined belongs to no workspace at all, so it has to show in
+ * whichever one happens to be active or it shows nowhere. `getPendingInvites`
+ * returns `[]` on a read failure, so this second query cannot take the header
+ * down with it — and the two run together rather than in sequence, since the
+ * tray needs both before it renders either.
  */
 export async function ActivityTrayLoader() {
   const workspace = await getWorkspaceContext();
   if (!workspace) return <ActivityTrayFallback />;
 
   const supabase = await createClient();
-  const feed = await getActivityFeed(supabase, workspace.active);
+  const [feed, invites] = await Promise.all([
+    getActivityFeed(supabase, workspace.active),
+    getPendingInvites(supabase),
+  ]);
 
-  return <ActivityTray feed={feed} />;
+  return <ActivityTray feed={feed} invites={invites} />;
 }
 
 /**

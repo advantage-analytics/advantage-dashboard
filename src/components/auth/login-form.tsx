@@ -10,6 +10,11 @@ import AuthButton from "./auth-button";
 import AuthFooter, { AUTH_LINK } from "./auth-footer";
 import FormError from "./form-error";
 import { toAuthError, validateEmail, type AuthError } from "@/lib/auth/error-messages";
+import {
+  AUTH_NEXT_COOKIE,
+  AUTH_NEXT_MAX_AGE_SECONDS,
+} from "@/lib/auth/auth-next-cookie";
+import { safeNext } from "@/lib/auth/safe-next";
 
 /**
  * Google's brand mark. Hoisted out of the component because it is static and
@@ -45,12 +50,19 @@ const GOOGLE_MARK = (
   </svg>
 );
 
-export function LoginForm() {
+/**
+ * @param next Where to land after a successful sign-in — the login page reads
+ *   it from `?next=`. Clamped again here rather than trusted: `safeNext` is
+ *   idempotent, and both navigations below are same-file, so the guarantee
+ *   that no attacker-controlled origin reaches them should be too.
+ */
+export function LoginForm({ next }: { next?: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<AuthError | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const destination = safeNext(next ?? null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,8 +83,10 @@ export function LoginForm() {
         password,
       });
       if (signInError) throw signInError;
-      // Always land on the home dashboard, even if the profile is incomplete.
-      router.push("/dashboard");
+      // The requested destination if there was one — an invite link parks
+      // `/join/<token>` here so the accept page is what opens after sign-in —
+      // otherwise the home dashboard, even if the profile is incomplete.
+      router.push(destination);
     } catch (err: unknown) {
       setError(toAuthError(err));
     } finally {
@@ -82,6 +96,20 @@ export function LoginForm() {
 
   const handleGoogleOAuth = async () => {
     setError(null);
+    // The destination never rides in `redirectTo`. Supabase puts that URL in
+    // the authorize request it receives and logs, and an invitation's
+    // destination carries the invite token — a credential meant to exist in
+    // the email and nowhere else. A first-party cookie crosses the round trip
+    // on the browser's own navigation back to `/callback`, which reads it,
+    // clamps it and clears it. `redirectTo` stays the one fixed value it has
+    // always been, so the project's redirect allow-list is untouched.
+    //
+    // Written on EVERY attempt, cleared when there is nothing to carry: an
+    // attempt abandoned at Google's consent screen must not steer the next
+    // sign-in from this browser — on a shared machine, somebody else's.
+    const secure = window.location.protocol === "https:" ? "; Secure" : "";
+    const carry = destination !== "/dashboard";
+    document.cookie = `${AUTH_NEXT_COOKIE}=${carry ? encodeURIComponent(destination) : ""}; Path=/; Max-Age=${carry ? AUTH_NEXT_MAX_AGE_SECONDS : 0}; SameSite=Lax${secure}`;
     const supabase = createClient();
     const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",

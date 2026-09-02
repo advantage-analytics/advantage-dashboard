@@ -9,6 +9,7 @@ import { validatePassword } from "@/lib/auth/error-messages";
 import { WORKSPACE_COOKIE } from "@/lib/workspace/active-workspace-server";
 import { expiredInviteNudgeEmail, sendEmail } from "@/lib/services/email";
 import {
+  acceptPendingWithSession,
   acceptWithSession,
   accountExists,
   loadInvite,
@@ -16,14 +17,17 @@ import {
   type AcceptOutcome,
   type InviteRecord,
 } from "./invite-acceptance";
+import { joinHref, signInThenHref } from "./join-links";
 
 /**
- * The three ways an invitation is accepted, and the one that is refused.
+ * The ways an invitation is accepted, and the one that is refused.
  *
- * Which one a person takes depends on what they already have — a session, an
- * account, or neither — and `resolveJoinState` decides that. Every one of them
- * finishes through `acceptWithSession`, so the token is re-checked against the
- * live row at the moment of the write.
+ * Which one a person takes depends on what they already have — a session, or
+ * neither session nor account — and `resolveJoinState` decides that. The third
+ * case, an account with no session, is not served from this file at all: the
+ * page redirects it to `/login?next=`, and it comes back holding a session as
+ * the first case. Every accept finishes through `acceptWithSession` or its
+ * by-id twin, so the row is re-checked at the moment of the write.
  *
  * ── The rule that matters most ──────────────────────────────────────────────
  * An invitation link may create an account. It may NEVER change the password
@@ -31,9 +35,10 @@ import {
  * password" box and they are not: the second one is a password reset triggered
  * by anyone who can read the invited person's mail, forwarded mail included.
  * That is account takeover with a friendly wrapper, so an existing account is
- * sent to a sign-in field and nowhere else. Password resets have their own
- * flow, which proves control of the mailbox at the moment of the reset rather
- * than up to fourteen days earlier.
+ * sent to `/login` and nowhere else — this file no longer holds a password of
+ * theirs even for a moment, because the sign-in happens on the page that owns
+ * sessions. Password resets have their own flow, which proves control of the
+ * mailbox at the moment of the reset rather than up to fourteen days earlier.
  *
  * One action here accepts nothing: `requestFreshInvite` asks the coach who sent
  * an expired invitation to send another. It is the only one reachable without a
@@ -42,21 +47,31 @@ import {
 
 export type JoinActionResult = { ok: false; error: string };
 
-/** Everything a failed accept can say, in the words the screen should use. */
+/**
+ * Everything a failed accept can say, in the words the screen should use.
+ *
+ * Worded for both doors. The link door has a link and the id door — the
+ * header's tray, the onboarding intercept — never did, so nothing here tells
+ * the reader to open one.
+ */
 function describe(outcome: Extract<AcceptOutcome, { ok: false }>): string {
   switch (outcome.status) {
     case "not_found":
-      return "That invitation link isn't valid any more.";
+      return "That invitation isn't valid any more.";
     case "expired":
       return "That invitation has expired. Ask your coach to send another.";
     case "already_used":
       return "That invitation has already been used.";
     case "wrong_address":
       return "That invitation was sent to a different address.";
+    case "unconfirmed":
+      // Only the id door says this. The link is itself proof of the address;
+      // without one, the session's confirmation is the only proof there is.
+      return "Confirm your email address, then open this invitation again.";
     case "no_seats":
       // The one refusal the person reading it cannot act on themselves, so it
       // names who can.
-      return "This program has no seats free. Ask your coach to free one, then open this link again.";
+      return "This program has no seats free. Ask your coach to free one, then try again.";
     case "already_claimed":
       return "Somebody has already taken over that roster profile. Ask your coach to check the roster.";
     case "player_gone":
@@ -91,52 +106,157 @@ async function activate(programId: string): Promise<void> {
   revalidatePath("/dashboard", "layout");
 }
 
-/** Already signed in as the invited address. Nothing to collect. */
-export async function acceptInvite(token: string): Promise<JoinActionResult> {
-  const outcome = await acceptWithSession(token);
-  if (!outcome.ok) return { ok: false, error: describe(outcome) };
-
-  await activate(outcome.programId);
+/** Where every successful accept ends: inside the program, on the team page. */
+async function finishJoin(programId: string): Promise<never> {
+  await activate(programId);
   redirect("/dashboard/team");
 }
 
 /**
- * An account exists. Sign in with the password they already have, then join.
+ * The persona an invitation implies, for a profile that has not chosen one.
  *
- * The address comes from the invitation, never from the form. There is no
- * email field on this screen for exactly that reason: an invitation is bound
- * to one address, and letting the browser name a different one would turn a
- * join link into a generic sign-in form that happens to grant membership.
+ * `users.role` is a persona (`PERSONA_ROLES` in settings/actions.ts: player,
+ * coach, parent, academy), not a program role, so `staff` lands as "coach" —
+ * the persona the profile form offers someone who runs a program rather than
+ * plays for one. A `const` record, looked up by own property only: a bare
+ * index would resolve prototype keys, and a role the database grows later
+ * should write nothing rather than something.
  */
-export async function signInAndAccept(
-  token: string,
-  password: string
-): Promise<JoinActionResult> {
-  const state = await resolveJoinState(token);
-  if (state.kind !== "sign_in") {
-    return { ok: false, error: "That link can't be used that way." };
+const PERSONA_FOR_ROLE = {
+  player: "player",
+  coach: "coach",
+  staff: "coach",
+} as const;
+
+/**
+ * What a new membership settles about the profile, written once for every
+ * door.
+ *
+ * A membership answers both first-run questions, so a just-joined member is
+ * marked onboarded — otherwise the layout at `src/app/dashboard/layout.tsx`
+ * would bounce them into /onboarding to ask what the invitation already
+ * settled — and given the persona the invitation implies, each only where the
+ * profile has nothing yet. The persona is read back off the membership the
+ * database just wrote, never passed in: the row came from a SECURITY DEFINER
+ * function using the invitation's own `role`, so this is the one place the
+ * answer cannot have been chosen by the caller. All three doors call this, so
+ * an account joining through the link is not left with a persona it can only
+ * fill in by hand while one joining from the tray is not.
+ *
+ * Called only AFTER an accept confirmed the membership, never merely because
+ * an account was created: stamping earlier left an account whose accept then
+ * failed permanently marked onboarded with no membership behind it, and a
+ * failed accept should leave /onboarding reachable. A trusted server path
+ * holding the service role, not auth metadata a crafted signup could imitate.
+ * Best effort throughout: a miss costs one redundant onboarding screen or a
+ * blank persona field, never the membership.
+ */
+async function adoptMembership(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+  programId: string
+): Promise<void> {
+  // The stamp and the read-back share no data, so they go out together; only
+  // the persona write waits on the read.
+  const [{ error: stampError }, { data: membership, error: memberError }] =
+    await Promise.all([
+      admin
+        .from("users")
+        .update({ onboarded_at: new Date().toISOString() })
+        .eq("id", userId)
+        .is("onboarded_at", null),
+      admin
+        .from("program_members")
+        .select("role")
+        .eq("program_id", programId)
+        .eq("user_id", userId)
+        .maybeSingle(),
+    ]);
+  if (stampError) {
+    console.error("[join] could not mark the account onboarded", {
+      message: stampError.message,
+    });
+  }
+  if (memberError) {
+    console.error("[join] could not read the new membership", {
+      message: memberError.message,
+    });
   }
 
-  if (!password) return { ok: false, error: "Enter your password." };
+  const memberRole = (membership?.role as string | null | undefined) ?? null;
+  const persona =
+    memberRole !== null &&
+    Object.prototype.hasOwnProperty.call(PERSONA_FOR_ROLE, memberRole)
+      ? PERSONA_FOR_ROLE[memberRole as keyof typeof PERSONA_FOR_ROLE]
+      : null;
+  if (!persona) return;
 
+  const { error: roleError } = await admin
+    .from("users")
+    .update({ role: persona })
+    .eq("id", userId)
+    .is("role", null);
+  if (roleError) {
+    console.error("[join] could not set the account's persona", {
+      message: roleError.message,
+    });
+  }
+}
+
+/** Already signed in as the invited address. Nothing to collect. */
+export async function acceptInvite(token: string): Promise<JoinActionResult> {
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({
-    email: state.email,
-    password,
-  });
-
-  if (error) {
-    // Deliberately not "wrong password" versus "no such account" — the state
-    // machine already established the account exists, and echoing which half
-    // failed is a habit worth not forming.
-    return { ok: false, error: "That password doesn't match this account." };
-  }
-
-  const outcome = await acceptWithSession(token, supabase);
+  // The session read depends on nothing the accept returns, so the two
+  // round trips overlap rather than queue.
+  const [outcome, { data: { user } }] = await Promise.all([
+    acceptWithSession(token, supabase),
+    supabase.auth.getUser(),
+  ]);
   if (!outcome.ok) return { ok: false, error: describe(outcome) };
 
-  await activate(outcome.programId);
-  redirect("/dashboard/team");
+  if (user?.id) {
+    await adoptMembership(createAdminClient(), user.id, outcome.programId);
+  }
+  return finishJoin(outcome.programId);
+}
+
+/** RFC 4122 shape, any version — what `program_invites.id` is generated as. */
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Accept an invitation by id — the door for someone who is signed in and never
+ * had the link.
+ *
+ * One argument, on purpose. The program and the role both come from the
+ * database AFTER `accept_pending_invite` has bound the row to the caller's
+ * confirmed address: the program from the outcome, the role read back off the
+ * membership the function just wrote (see `adoptMembership`). A `role`
+ * argument here would let anyone who can call a server action pick their own
+ * persona, and this action is reachable by anybody with a session.
+ *
+ * The id is checked for shape before the database sees it. A malformed one
+ * would be refused there too — as a cast error, logged and reported as "we
+ * couldn't finish that", for something that was never our failure.
+ */
+export async function acceptPendingInvite(
+  inviteId: string
+): Promise<JoinActionResult> {
+  if (!UUID_PATTERN.test(inviteId)) {
+    return { ok: false, error: "That invitation isn't available." };
+  }
+
+  const supabase = await createClient();
+  const [outcome, { data: { user } }] = await Promise.all([
+    acceptPendingWithSession(inviteId, supabase),
+    supabase.auth.getUser(),
+  ]);
+  if (!outcome.ok) return { ok: false, error: describe(outcome) };
+
+  if (user?.id) {
+    await adoptMembership(createAdminClient(), user.id, outcome.programId);
+  }
+  return finishJoin(outcome.programId);
 }
 
 /**
@@ -217,30 +337,13 @@ export async function createAccountAndAccept(
   const outcome = await acceptWithSession(token, supabase);
   if (!outcome.ok) return { ok: false, error: describe(outcome) };
 
-  // A player whose acceptance JUST SUCCEEDED joined a program that answers
-  // both first-run questions, so bouncing them into /onboarding would ask what
-  // the invitation already settled. Stamp only now — after `acceptWithSession`
-  // confirmed the membership, never merely because `createUser` succeeded.
-  // Stamping earlier left an account whose accept then failed permanently
-  // marked onboarded with no membership behind it; a failed accept should
-  // leave /onboarding reachable. A trusted server path holding the service
-  // role, not auth metadata a crafted signup could imitate. Best effort: a
-  // miss costs one redundant onboarding screen, never the membership.
+  // Only now — after `acceptWithSession` confirmed the membership, never merely
+  // because `createUser` succeeded. See `adoptMembership` for why that order is
+  // the whole point.
   if (created?.user?.id) {
-    const { error: stampError } = await admin
-      .from("users")
-      .update({ onboarded_at: new Date().toISOString() })
-      .eq("id", created.user.id)
-      .is("onboarded_at", null);
-    if (stampError) {
-      console.error("[join] could not mark the account onboarded", {
-        message: stampError.message,
-      });
-    }
+    await adoptMembership(admin, created.user.id, outcome.programId);
   }
-
-  await activate(outcome.programId);
-  redirect("/dashboard/team");
+  return finishJoin(outcome.programId);
 }
 
 // ---------------------------------------------------------------------------
@@ -356,11 +459,32 @@ async function nudgeInviter(invite: InviteRecord): Promise<void> {
   }
 }
 
-/** Sign out, so a link opened under the wrong account can be opened again. */
+/**
+ * Sign out of the wrong account, and land on the step that fixes it.
+ *
+ * Signing out and returning to `/join/[token]` was a loop for an address that
+ * already had an account: the page would resolve `sign_in` for a person who
+ * now had no session, and tell them to sign in — which is what `/login?next=`
+ * does, one step earlier, with the token still attached so acceptance is
+ * waiting on the far side. But `wrong_account` is returned for ANY signed-in
+ * mismatch, including an invited address that has no account at all, and for
+ * that person `/login` is a wall: it cannot create an account and its sign-up
+ * link carries no token. So the sign-out runs first either way, and then the
+ * destination is chosen the way the page itself would choose it — an existing
+ * account goes to sign in, a new one goes straight back to this link, which
+ * now answers `sign_up` and offers the form. Only a token that no longer names
+ * an invitation loses the `next` and lands on a plain `/login`.
+ */
 export async function signOutForInvite(token: string): Promise<void> {
   const supabase = await createClient();
   await supabase.auth.signOut();
 
   const invite = await loadInvite(token);
-  redirect(invite ? `/join/${encodeURIComponent(token)}` : "/login");
+  if (!invite) redirect("/login");
+
+  redirect(
+    (await accountExists(invite.email))
+      ? signInThenHref(joinHref(token))
+      : joinHref(token)
+  );
 }

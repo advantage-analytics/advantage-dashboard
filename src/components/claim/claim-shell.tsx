@@ -284,6 +284,42 @@ export const CLAIM_LINK =
 export const CLAIM_MICRO = "text-micro";
 
 /**
+ * The mark before a row in a short list of facts read before a commitment —
+ * the join flow's sharing terms and the guardian consent acknowledgments.
+ *
+ * Shared for the reason `RadioDot` is: two flows draw the same mark, and a
+ * second copy is how one of them ends up a pixel and a shade off the other.
+ * Here rather than in `join-terms.tsx` because onboarding needs it too, and
+ * importing that module for one glyph would drag the sharing copy, the quota
+ * note and `NotNowLink` into onboarding's bundle with it.
+ *
+ * The glyph is fixed; the colour is the decision. `blue` marks a row where
+ * something is gained or granted, `ink` a row where nothing moves — the pairing
+ * is what lets the sharing terms' two columns read as "they gain this" versus
+ * "you keep this" without a sentence of policy explaining it.
+ *
+ * **Never `blue` in a list above a checkbox.** `AuthCheckbox` fills Signal Blue
+ * with a white check when set, so blue marks above it stack four blue
+ * checkmarks in one column with only the last one meaning anything. The
+ * guardian acknowledgments pass `ink` for exactly that reason.
+ *
+ * Not `CircleCheck`, which is `ResultMark`'s glyph and means a match outcome;
+ * not the claim flow's `ArrowRight` (`claim/sharing-rows.tsx`), which marks
+ * consequences that follow from an action rather than facts being read. It
+ * replaced a 2 × 12px bar that read as a rendering artefact at `--ink-300`.
+ */
+export function TermMark({ tone }: { tone: "blue" | "ink" }) {
+  return (
+    <Check
+      className="mt-[3px] size-3.5 shrink-0"
+      style={{ color: tone === "blue" ? "var(--blue)" : "var(--ink-500)" }}
+      strokeWidth={1.5}
+      aria-hidden="true"
+    />
+  );
+}
+
+/**
  * The design system's check-dot `Radio`: solid Signal Blue with a white check
  * when chosen, a 1px ink-300 ring otherwise. The dot marks the selected item —
  * it never appears on hover. Shared because the persona cards, the team-kind
