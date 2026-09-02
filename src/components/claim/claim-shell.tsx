@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Check, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, X } from "lucide-react";
 import { advButton } from "@/lib/ui/adv-button";
 
 /**
@@ -69,7 +69,9 @@ export function ClaimShell({
   /**
    * The right-hand panel on F3.2, F4 and F4.1. It carries what a narrow card
    * had to leave out — what ownership actually involves, what waits and what
-   * doesn't.
+   * doesn't. Centred on the column beside it rather than pinned to its top,
+   * so a short card sits level with the form instead of hanging off the
+   * eyebrow.
    */
   aside?: React.ReactNode;
   /** 300 on F3.2, 340 on the setup form. Both leave a 48px gutter. */
@@ -102,7 +104,7 @@ export function ClaimShell({
       <div className="mx-auto w-full" style={{ maxWidth: width }}>
         {aside ? (
           <div
-            className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_var(--claim-aside)] lg:gap-12"
+            className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_var(--claim-aside)] lg:gap-12"
             style={{ "--claim-aside": `${asideWidth}px` } as React.CSSProperties}
           >
             <ClaimColumn gap={gap}>{children}</ClaimColumn>
@@ -182,12 +184,20 @@ export function ClaimHeading({
 }
 
 /**
- * The aside's own heading + list. Used by F3.2, F4 and F4.1.
+ * The aside's own heading + list. Used by F3.2, the setup screens and F5.1.
  *
  * Rows are separated by rules rather than bullets or ticks — the same `.row`
  * the design uses everywhere a short list of facts has to read as a list of
  * facts and not as marketing. The first row drops its rule and its top padding
  * so the list starts flush against the eyebrow.
+ *
+ * Either one list under `title`, or several `groups` each under their own
+ * eyebrow (4.3b c: "Yours now" / "After we confirm"). The qualifier that
+ * separates the groups lives in the group label, not in every cell — the
+ * grouped form exists because the single list had to say "— now" twice.
+ *
+ * No border: the fill already separates the panel from the page, and a
+ * bordered card inside the shell's card is a nested card (4.3b's note on c).
  *
  * The rule is `--border-medium`, not the `--border-hairline` the frame names.
  * A hairline is `--ink-100` (#F3F3F3) and this panel's fill is
@@ -199,31 +209,49 @@ export function ClaimHeading({
 export function AsidePanel({
   title,
   items,
+  groups,
   footnote,
 }: {
-  title: string;
-  items: string[];
-  /** F4.1's one line: no red field, because plenty of programs have no
-      institutional address. */
+  title?: string;
+  items?: string[];
+  /** Several labeled lists in one panel, rule-separated. */
+  groups?: { title: string; items: string[] }[];
+  /** One quiet line under the list — "Pilot pricing applies." */
   footnote?: string;
 }) {
+  const sections = groups ?? (title ? [{ title, items: items ?? [] }] : []);
   return (
-    <div className="flex flex-col gap-3 rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-subtle)] p-5">
-      <span className="eyebrow">{title}</span>
-      <ul className="flex flex-col">
-        {items.map((item, index) => (
-          <li
-            key={item}
-            className={`text-body-sm py-[11px] ${
-              index === 0 ? "border-t-0 pt-0" : "border-t border-[var(--border-medium)]"
-            }`}
-          >
-            {item}
-          </li>
-        ))}
-      </ul>
+    <div className="flex flex-col gap-3.5 rounded-[var(--radius-card)] bg-[var(--surface-subtle)] p-5">
+      {sections.map((section, index) => (
+        <div
+          key={section.title}
+          className={`flex flex-col gap-2 ${
+            index === 0 ? "" : "border-t border-[var(--border-medium)] pt-3"
+          }`}
+        >
+          <span className="eyebrow">{section.title}</span>
+          <AsideRows items={section.items} />
+        </div>
+      ))}
       {footnote && <span className="text-micro">{footnote}</span>}
     </div>
+  );
+}
+
+function AsideRows({ items }: { items: string[] }) {
+  return (
+    <ul className="flex flex-col">
+      {items.map((item, index) => (
+        <li
+          key={item}
+          className={`text-body-sm py-[11px] last:pb-0 ${
+            index === 0 ? "border-t-0 pt-0" : "border-t border-[var(--border-medium)]"
+          }`}
+        >
+          {item}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -268,6 +296,39 @@ export const CLAIM_FIELD =
   "h-[38px] w-full rounded-[var(--radius-element)] border border-[var(--border-field)] bg-[var(--surface-card)] px-3 text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)]";
 
 export const CLAIM_LABEL = "mb-2 block text-[11px] text-[var(--ink-700)]";
+
+/**
+ * A `<select>` in the field chrome, with the design's chevron instead of the
+ * browser's.
+ *
+ * The native control draws its own arrow — a stacked pair on macOS — which is
+ * the one mark on these forms that no token describes. `appearance-none`
+ * removes it and a 13px Lucide chevron in `--ink-500` stands in, exactly as
+ * the frames draw it; the right padding keeps a long label from running under
+ * the glyph. The chevron ignores the pointer so a click on it still opens the
+ * select beneath.
+ */
+export function ClaimSelect({
+  className,
+  children,
+  ...props
+}: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <div className="relative">
+      <select
+        {...props}
+        className={`${CLAIM_FIELD} cursor-pointer appearance-none pr-9 ${className ?? ""}`}
+      >
+        {children}
+      </select>
+      <ChevronDown
+        className="pointer-events-none absolute right-3 top-1/2 size-[13px] -translate-y-1/2 text-[var(--ink-500)]"
+        strokeWidth={1.5}
+        aria-hidden="true"
+      />
+    </div>
+  );
+}
 
 /**
  * The quieter second action — "Someone else should own it", "This isn't right".

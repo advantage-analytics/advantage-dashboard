@@ -15,6 +15,7 @@ import {
   CLAIM_LINK,
   CLAIM_MICRO,
   ClaimActions,
+  ClaimSelect,
 } from "./claim-shell";
 
 /**
@@ -33,8 +34,8 @@ export function ContactOwnerForm({
   programKey,
   kind,
   ownerDisplay,
-  unclaimed = false,
   defaultName = "",
+  accountEmail,
   nameNote,
   terms,
   secondary,
@@ -45,14 +46,6 @@ export function ContactOwnerForm({
   /** "Elena V." — named so the confirmation can say who was told. */
   ownerDisplay?: string | null;
   /**
-   * True only when nobody owns this program at all — not merely when
-   * `ownerDisplay` is empty, which also happens on a real, claimed program
-   * whose owner never filled in a name. Changes the "sent" confirmation from
-   * "they add you" (a real, if unnamed, person) to language that does not
-   * imply anyone is currently reading requests.
-   */
-  unclaimed?: boolean;
-  /**
    * The signed-in requester's name, read from their profile server-side.
    *
    * A starting value, not a fixed one — the field stays an ordinary editable
@@ -61,6 +54,16 @@ export function ContactOwnerForm({
    * screen has always shown.
    */
   defaultName?: string;
+  /**
+   * The signed-in requester's verified account address.
+   *
+   * When present there is no email field: the address is a fact about the
+   * session, not a question for the form, and asking someone to retype it is
+   * the one input on this screen that carries no information. It is still
+   * what the action files and replies to — the page says so in its own line
+   * beside the button. Signed-out visitors get the input as before.
+   */
+  accountEmail?: string;
   /** The line under the name field — where the prefilled value came from. */
   nameNote?: React.ReactNode;
   /** What entering this program does, between the fields and the button. */
@@ -70,7 +73,7 @@ export function ContactOwnerForm({
   /** The line beside the button — what sending does and does not do. */
   micro?: React.ReactNode;
 }) {
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(accountEmail ?? "");
   const [name, setName] = useState(defaultName);
   const [role, setRole] = useState("");
   const [note, setNote] = useState("");
@@ -83,9 +86,7 @@ export function ContactOwnerForm({
       <div className="flex flex-col gap-5">
         <p className="text-body max-w-[62ch] rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-subtle)] px-5 py-4">
           {kind === "request"
-            ? unclaimed
-              ? "Filed. No account has been created for you — whoever sets this program up will see your request."
-              : `Sent${ownerDisplay ? ` to ${ownerDisplay}` : ""}. No account has been created for you, and nothing is queued — they add you when they're ready.`
+            ? `Sent${ownerDisplay ? ` to ${ownerDisplay}` : ""}. No account has been created for you, and nothing is queued — they add you when they're ready.`
             : "Thanks — we'll look into it. Nothing has been reversed automatically; a person checks first."}
         </p>
         <Link href="/claim/program" className={CLAIM_LINK}>
@@ -136,21 +137,23 @@ export function ContactOwnerForm({
           </div>
         )}
 
-        <div className={kind === "request" ? "" : "sm:col-span-2"}>
-          <label htmlFor="email" className={CLAIM_LABEL}>
-            Your email
-          </label>
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-            className={CLAIM_FIELD}
-          />
-        </div>
+        {!accountEmail && (
+          <div className={kind === "request" ? "" : "sm:col-span-2"}>
+            <label htmlFor="email" className={CLAIM_LABEL}>
+              Your email
+            </label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+              className={CLAIM_FIELD}
+            />
+          </div>
+        )}
 
-        {/* The same five answers the claim setup form offers — one vocabulary
+        {/* The same answers the claim setup form offers — one vocabulary
             product-wide, so "assistant coach" means the same thing whether it
             arrives on a claim or on a request. Optional, because a player
             asking to join fits none of the staff roles and should not be made
@@ -160,11 +163,10 @@ export function ContactOwnerForm({
             <label htmlFor="role" className={CLAIM_LABEL}>
               Your role (optional)
             </label>
-            <select
+            <ClaimSelect
               id="role"
               value={role}
               onChange={(e) => setRole(e.target.value)}
-              className={`${CLAIM_FIELD} cursor-pointer`}
             >
               <option value="">Choose one</option>
               {CLAIM_ROLES.map((r) => (
@@ -172,7 +174,7 @@ export function ContactOwnerForm({
                   {r.label}
                 </option>
               ))}
-            </select>
+            </ClaimSelect>
           </div>
         )}
       </div>
