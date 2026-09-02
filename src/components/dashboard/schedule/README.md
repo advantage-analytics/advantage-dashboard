@@ -1,60 +1,63 @@
-# `schedule/` — which tree is live, and which is dormant
+# `schedule/` — one tree, and where the old one's knowledge went
 
 **Written:** 2026-08-31, on the `events-lineups` full-page design-copy run.
+**Rewritten:** 2026-09-01, closing the `team-schedule-db-wiring` run (T13–T26).
 **Why this file exists:** [`docs/ui-revamp-guardrails.md`](../../../../docs/ui-revamp-guardrails.md)
 §3.5 — *a dead near-duplicate beside working code is how the wrong one gets
-edited later.* This directory held two implementations of the same four
-screens. This file says which one a user actually sees.
+edited later.* For one run this directory held two implementations of the
+same four screens, and this file labelled which one a user saw. It no longer
+does: the dormant tree is deleted. This file now says what is here, what was
+deleted, and where each deleted file's knowledge landed.
 
-> **Updated during the re-wiring, and again when it finished.** This file was
-> written to *label* the near-duplicate hazard, because deleting the dormant
-> tree was out of scope for the run that created it — those files were then
-> the only DB-wired implementation, and the re-wire read from them. That has
-> now happened in full: §2's list is empty, §4 says where each dormant file's
-> knowledge landed, and the last two files — a type-only lifeline that an
-> earlier §4 of this file documented — are gone, with `LineupLine` moved to
-> `src/lib/schedule/types.ts`. Nothing dormant remains in this directory.
+> **Nothing in this directory is dormant.** The `static/` subdirectory is a
+> name inherited from the design-copy run, when its files rendered
+> `src/lib/schedule/fixtures.ts` instead of the loaders. Every file under it
+> now reads the database through its route, and `fixtures.ts` has no importer
+> under `src/` at all — `tests/schedule-static-copy.spec.ts` is its only
+> reader, and that spec's header says what a green run of it does and does not
+> prove. Renaming `static/` is a separate decision; this note is so the name
+> is not read as a description.
 
 ---
 
 ## 1. The routes
 
-Seven route files render this directory. **Four were re-pointed this run** to
-`static/`, which draws from `src/lib/schedule/fixtures.ts` and touches no
-database. **Three were deliberately left out of scope** (stage 02) and still
-render the original DB-wired components.
+Seven route files render this directory, and all seven read the database.
 
-| Route | Renders | Tree |
+| Route | Renders | Reads |
 |---|---|---|
-| `/dashboard/team/schedule` | `static/static-schedule.tsx` | static |
-| `/dashboard/team/schedule/new` | `static/static-event-chooser.tsx` | static |
-| `/dashboard/team/schedule/new/dual` | `static/static-dual-builder.tsx` | static |
-| `/dashboard/team/schedule/new/tournament` | `static/static-tournament-builder.tsx` | static |
-| `/dashboard/team/schedule/[eventId]` | `dual-detail.tsx`, `tournament-detail.tsx` | **DB-wired, live** |
-| `/dashboard/team/schedule/single/[matchId]` | `single-detail.tsx` | **DB-wired, live** |
+| `/dashboard/team/schedule` | `static/static-schedule.tsx`, with `static/event-drawer.tsx` and `static/dual-widget.tsx` | `getProgramSchedule` → `scheduleRowsFrom`, `eventDetailFrom`, `seasonSummaryFrom` |
+| `/dashboard/team/schedule/new` | `static/static-event-chooser.tsx` | nothing — two links and one piece of local state |
+| `/dashboard/team/schedule/new/dual` | `static/static-dual-builder.tsx` → `static/dual-school-step.tsx`, then `static/dual-build-step.tsx` with `static/opponent-popup.tsx` | `getLadder`, `getTeamSettings`, `getConferenceTable`, `getProgramSchedule` → `opponentDualHistory`, a `programs` head count; `/api/programs/search` and `opponentRosterForDual` from the client; writes through `createDual` |
+| `/dashboard/team/schedule/new/tournament` | `static/static-tournament-builder.tsx` | `getLadder`, `getTeamSettings`; writes through `createTournament` |
+| `/dashboard/team/schedule/[eventId]` | `dual-detail.tsx`, `tournament-detail.tsx` | `getEventDetail` |
+| `/dashboard/team/schedule/single/[matchId]` | `single-detail.tsx` | `getTeamSingleMatch` |
 | `/dashboard/team/schedule/new/single` | `matches/new-match-wizard` (not this directory) | — |
 
-That split is the reason the map below is not simply "old tree dead, new tree
-live". Some of the original components lost their route; others kept one.
+The four `static/` routes were the design-copy run's; the three below them
+were never re-pointed and never dormant. Which task wired which — the commits
+carry the same numbers: T15 the schedule, T18 the chooser, T19–T20 the
+tournament builder, T21–T23 the dual builder. T25 then confirmed the schedule
+surfaces agree on the data of one event, and disagree on some words — §3.
 
 ---
 
-## 2. Dormant — unreachable from any route
+## 2. Deleted — the dormant tree, and what replaced each file
 
-**None left.** The re-wiring has caught up with the whole list this section
-used to hold, and every file that was on it is deleted:
+The re-wiring caught up with the whole list this section used to hold, and
+every file that was on it is deleted:
 
 | Was dormant | Deleted when the live route grew its behaviour |
 |---|---|
-| `schedule-list.tsx`, `event-detail-pane.tsx` | `static/static-schedule.tsx` + `static/event-drawer.tsx` read the database |
-| `new-event-chooser.tsx` | `static/static-event-chooser.tsx` took the route |
-| `tournament-form.tsx`, `entry-editor.tsx` | `static/static-tournament-builder.tsx` calls `createTournament` |
-| `dual-form.tsx` | `static/static-dual-builder.tsx` → `dual-school-step` + `dual-build-step`, which now call `createDual` |
-| `school-search.tsx` | `static/dual-school-step.tsx` |
-| `opponent-rail.tsx` | the left pane of `static/dual-build-step.tsx` |
-| `field-row.tsx` | nothing 1:1 — the static builders each draw their own defaults cells |
-| `lineup-editor.tsx` | the lineup half of `static/dual-build-step.tsx`; its `LineupLine` type moved to `lib/schedule/types.ts` |
-| `opponent-name-cell.tsx` | `static/opponent-popup.tsx`, plus the row key in `static/dual-build-step.tsx` — §4 on the `key` contract |
+| `schedule-list.tsx`, `event-detail-pane.tsx` | `static/static-schedule.tsx` + `static/event-drawer.tsx` read the database (T15; deleted T17) |
+| `new-event-chooser.tsx` | `static/static-event-chooser.tsx` took the route (T18) |
+| `tournament-form.tsx`, `entry-editor.tsx` | `static/static-tournament-builder.tsx` calls `createTournament` (T20) |
+| `dual-form.tsx` | `static/static-dual-builder.tsx` → `dual-school-step` + `dual-build-step`, the latter calling `createDual` (T23) |
+| `school-search.tsx` | `static/dual-school-step.tsx` searches the real directory (T21; deleted T23) |
+| `opponent-rail.tsx` | the left pane of `static/dual-build-step.tsx` (T23) |
+| `field-row.tsx` | nothing 1:1 — the builders each draw their own defaults cells (T23) |
+| `lineup-editor.tsx` | the lineup half of `static/dual-build-step.tsx`; its `LineupLine` type moved to `lib/schedule/types.ts` (T24) |
+| `opponent-name-cell.tsx` | `static/opponent-popup.tsx`, plus the row key in `static/dual-build-step.tsx` — §4 on the `key` contract (T24) |
 
 Only `dual-form.tsx`, `new-event-chooser.tsx` and `tournament-form.tsx` were
 ever mounted by a route directly. The rest were unreachable transitively:
@@ -74,30 +77,33 @@ that replaced it, and each porting commit names the file it read from.
 
 ---
 
-## 3. Live — leave these alone
+## 3. Live — all of it, and the one near-duplicate that remains
 
-`dual-detail.tsx`, `tournament-detail.tsx`, `single-detail.tsx`,
-`single-score-entry.tsx`, `event-shell.tsx`, `line-row.tsx`, `score-entry.tsx`,
-`add-result-row.tsx`, `run-strip.tsx`, `row-action.tsx`, and everything under
-`static/`.
+Everything here is reachable: `dual-detail.tsx`, `tournament-detail.tsx`,
+`single-detail.tsx`, `single-score-entry.tsx`, `event-shell.tsx`,
+`line-row.tsx`, `score-entry.tsx`, `add-result-row.tsx`, `run-strip.tsx`,
+`row-action.tsx`, and everything under `static/`.
 
-Note `event-shell.tsx` is shared by **both** trees — the live `[eventId]`
-detail screens and three files under `static/`. `row-action.tsx` is not
-imported under `static/` at all, but it is used from three separate live
-surfaces: `/dashboard/team/roster` directly, `line-row.tsx` (reachable via
-`dual-detail`/`tournament-detail`), and `team/dual-sheet.tsx` via
-`/dashboard/team`. Neither file belongs to either half of this directory, and
-both must survive any future deletion.
+Two files are shared across routes and must survive any future deletion.
+`event-shell.tsx` frames the three detail screens (`dual-detail`,
+`tournament-detail`, `single-detail`) and three files under `static/`
+(`dual-build-step`, `static-tournament-builder`, `static-event-chooser`).
+`row-action.tsx` is not imported under `static/` at all, but is used from
+three separate live surfaces: `/dashboard/team/roster` directly, `line-row.tsx`
+(reachable via `dual-detail`/`tournament-detail`), and `team/dual-sheet.tsx`
+via `/dashboard/team`.
 
-### The asymmetry that matters most
+### The near-duplicate that is still here
 
-One file has a static counterpart **and is still live**:
+- **`dual-detail.tsx`** and **`static/dual-widget.tsx`** both draw the
+  `7c`/`4c` dual card, and both are live, on different routes:
+  `[eventId]/page.tsx` renders `dual-detail.tsx`; the schedule page's selected
+  pane renders `dual-widget.tsx`. Editing one does not change the other. T25
+  found they already disagree on the words for one `no-video` state — nothing
+  or "Coming soon" on the widget, "Add video" / "Add file" on the event page —
+  while agreeing on every score and outcome.
 
-- **`dual-detail.tsx`** — `static/dual-widget.tsx` draws the same `7c`/`4c`
-  artboards, but `[eventId]/page.tsx` renders `dual-detail.tsx`. Editing the
-  static one will not change the event page; editing `dual-detail.tsx` will.
-
-Having a static counterpart is therefore **not** evidence that a file is dead.
+Having a counterpart is therefore **not** evidence that a file is dead.
 Reachability is, and only reachability is.
 
 ---
@@ -112,7 +118,7 @@ Where to read each one now:
   `submit()`. `createTournament`'s is `static/static-tournament-builder.tsx`'s.
 - **Roster matching and name splitting** — `lib/schedule/roster-match.ts` and
   `lib/schedule/format.ts`, which is where both already lived; the builder
-  calls `rosterIdsForLabels` rather than keeping a second rule.
+  imports `rosterIdsForLabels` rather than keeping a second rule.
 - **The ladder seed** — `seedLineup()` in `static/dual-build-step.tsx`, ported
   from `dual-form.tsx` unchanged.
 - **The lineup's line shape** — `LineupLine` in `lib/schedule/types.ts`, beside
@@ -139,10 +145,19 @@ Where to read each one now:
 - **Opponent-player contribution** — `createDual`'s own best-effort loop at
   submit, once the lines are safely written. The dormant cell also wrote
   per-pick, through `saveOpponentPlayer` in `lib/schedule/actions.ts`; the
-  static popup does not (its "saved" confirmation is a statement the design
+  live popup does not (its "saved" confirmation is a statement the design
   draws, not a server's answer — `opponent-popup.tsx`'s `saveNote` says what
   that costs), so **`saveOpponentPlayer` currently has no caller**. It is left
   in place as the ready-made write for a popup that earns a real confirmation.
+- **Bench substitution and drag-to-reorder — nowhere.** The deleted
+  `lineup-editor.tsx` could reorder lines by drag and substitute from a bench
+  built by `benchFromLines` (`lib/schedule/roster-match.ts`). `2b` draws
+  neither, so the live builder has neither: a sub goes on by typing over a
+  seeded name, and `rosterIdsForLabels` re-resolves the id in the same update.
+  `benchFromLines` has no caller under `src/` — `tests/person-name-matching.spec.ts`
+  still covers it — and stays as the ready-made rule for a bench that is
+  drawn. That editor was never rendered on any route, so the logic has never
+  run in production; this bullet is the only place that records it existed.
 - **The `"<bestOf>|<adScoring>"` format encoding** that
   [`docs/ui-revamp-guardrails.md`](../../../../docs/ui-revamp-guardrails.md)
   §3.1 and §4 govern — **gone, deliberately.** Both builders now carry `bestOf`

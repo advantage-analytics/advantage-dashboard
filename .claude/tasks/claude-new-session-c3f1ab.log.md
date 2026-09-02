@@ -2451,3 +2451,90 @@ noted under T21: that table moves for reasons outside this queue.)
 9. The stage-03 note claimed a fixture id "lands on the match route's existing
    not-found"; it actually throws and renders the error boundary. Moot now,
    but the note is wrong.
+
+## T26 · Correct the tests and the map — done
+
+**gate:** lint 0 errors / **37 warnings**, matching a freshly measured
+baseline (the queue preamble's 43 is stale) · `tsc --noEmit` clean ·
+`npm test` green (260) · `npm run build` green.
+`task-completion-reviewer` → **needs-work** on first pass, **VERDICT: pass**
+after a revert (below). Guardrails: `pipeline-guardrails-reviewer` **ran** and
+found no violations; `rls-boundary-reviewer` **skipped** — a spec and two
+documents, no query and no source component.
+
+**a scope violation was caught and reverted rather than argued away.** The
+first review returned `needs-work`: all four criteria met, but `files:`
+restricts `fixtures.ts` to "import graph only" and it had received 18
+doc-comment edits. The subagent had flagged the widening itself and offered a
+one-file revert. The runner took that revert rather than amending the task to
+fit the work — the deciding fact being that `fixtures.ts`'s header was
+**already stale at HEAD**, claiming "the static rebuild of those artboards
+renders from here" and naming the deleted `SchoolSearch`, `dual-form.tsx:52`
+and `tournament-form.tsx:40`. So reverting leaves a pre-existing wart, not a
+new contradiction, and the re-review confirmed the spec never reads
+`fixtures.ts` source at all — `screen()`'s root points only at `static/`.
+
+**criterion 2: zero retirements, and the sweep was real.** The subagent parsed
+all 125 `drawn()` calls and hunted the two classes that could pass **for the
+wrong reason**: six single-word literals that an identifier could satisfy
+(`Continue` vs `onContinue`, `Opponent` vs `OpponentPopup`, `Dual` vs
+`createDual`, `Format` vs `DualFormat`, `Forfeit`/`Forfeited` vs
+`setForfeited`), and sentences passing only after whitespace normalisation.
+The reviewer went further, instrumenting `drawn()` itself and finding **eight**
+normalisation-dependent assertions rather than the two reported — then
+verifying every one is genuine JSX text. No false-green exists. Verified
+independently: actual `drawn()` call lines 125 → 125, `expect()` 57 → 57, and
+no assertion line anywhere in the diff's deletions. The fidelity contract
+survives this task intact, which is the whole point of rule 9's second half.
+
+**the spec now says what it actually guards.** Its header states that a green
+run "does not mean a user sees the artboard — nothing here mounts a component
+— and `npm test` passing is not evidence that a screen matches its design. For
+that, open the route." That is the trap this task existed for, written down.
+Three literals it still pins are known-false on live pages and carry notes
+naming the T25 finding rather than being retired: `in 4 days`,
+`· 8 of 9 lines analyzed`, and `3 Big Ten programs are in this field`.
+
+**README §2 and §4 kept, every entry verified.** Criterion 3 permitted deleting
+them; the honest answer was that both still say something true once corrected.
+The guardrails reviewer checked a representative sample against the tree
+rather than reading it as prose: all eleven deleted files genuinely absent,
+`LineupLine` at `types.ts:117`, both action call sites, `rosterIdsForLabels`'s
+import, and the `FORMATS` tables that replaced the `"<bestOf>|<adScoring>"`
+encoding in both builders. The title, preamble, §1 (which still claimed the
+routes "draw from `fixtures.ts` and touch no database") and §3 were rewritten;
+numbering was kept because `new/page.tsx:17` cites "§2" by number. §4 gained a
+bullet recording that bench substitution and drag-reorder now exist nowhere —
+T24 noted nothing else recorded it.
+
+**the §3.5 hazard is closed.** Eleven dead near-duplicates are gone, and the
+one remaining pair (`dual-detail.tsx` / `static/dual-widget.tsx`) is correctly
+described as live on both routes rather than dormant — which is the accurate
+state, not an omission.
+
+**follow-ups — stale prose, all outside this task's `files:`:**
+1. `src/lib/schedule/fixtures.ts`'s header (reverted here): claims the static
+   rebuild renders from it, and names `SchoolSearch`, `dual-form.tsx:52`,
+   `tournament-form.tsx:40`, `entry-editor.tsx:27`, `lineup-editor.tsx` /
+   `LineupEditor` at 938–941, `opponent-name-cell.tsx`, a nonexistent
+   `getOpponentRoster()` and a phantom `DUAL_DRAFT_SCHOOL`. Pre-dates T26. The
+   corrected text exists in this run's history if someone wants it back.
+2. Two **route** doc-comments contradict the README:
+   `new/tournament/page.tsx:26–29` still says submitting "is not wired yet"
+   and the Create button "is still inert"; `new/dual/page.tsx:96–99` calls the
+   deleted `dual-form.tsx` and `school-search.tsx` "still dormant where they
+   were".
+3. More of the same in `static-event-chooser.tsx:17`,
+   `static-dual-builder.tsx:37,41`, `dual-school-step.tsx:573,590`,
+   `static-tournament-builder.tsx:24,47`, `opponent-popup.tsx:124`,
+   `roster-match.ts:52`, and `static-schedule.tsx:16` (which cites a README §4
+   that T24 renumbered).
+4. `.skills/advantage-analytics-design/SKILL.md:1087,1092` and
+   `src/styles/design-system/focus.css:53` point at the deleted
+   `lineup-editor.tsx` / `field-row.tsx`.
+5. `work/events-lineups/REGRESSION-NOTE.md` §4 still says the dormant tree is
+   retained. A point-in-time document, so arguably correct as history.
+6. `saveOpponentPlayer` (`actions.ts:619`) remains dead code — delete or wire
+   deliberately.
+
+**The queue is drained: T13–T26 all done, none blocked.**

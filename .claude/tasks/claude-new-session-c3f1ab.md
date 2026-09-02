@@ -423,7 +423,7 @@ list below instead.
 - **notes:** These two routes stayed DB-wired and live throughout the static rebuild; the check is that six routes now agree about one event. The 404 links were a deliberate stage-03 decision in the previous run — real `<Link>`s against fixture ids — chosen so this re-wiring would be a no-op rather than a rewrite.
 
 ## T26 · Correct the tests and the map
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T16, T18, T24, T25
 - **files:** `tests/schedule-static-copy.spec.ts`, `src/components/dashboard/schedule/README.md`, `src/lib/schedule/fixtures.ts` (import graph only)
