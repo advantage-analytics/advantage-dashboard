@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, Check, ChevronDown, X } from "lucide-react";
 import { advButton } from "@/lib/ui/adv-button";
+import { advField } from "@/lib/ui/adv-field";
 
 /**
  * The chrome every claim screen shares, transcribed from Stage E.
@@ -315,10 +316,18 @@ export const CLAIM_BUTTON = advButton("primary");
  * byte-identical copies of both, and this file is already where the flow's
  * shared styling lives.
  *
- * No focus treatment of its own — focus.css covers every tag this lands on.
+ * `advField("boxed")` — the design system's boxed field, at 36px and
+ * `radius-button` (6px) rather than the 38px / `radius-element` (8px) this
+ * constant used before that helper existed. No focus treatment of its own —
+ * focus.css resolves `input`/`select`/`textarea` to the neutral
+ * `--focus-ring-field` unlayered, which is why `advField()` emits no focus
+ * utility and this constant drops the `outline-none` it used to carry: that
+ * class only ever suppressed a browser default outline focus.css's own
+ * `:focus-visible` rule already overrides (author CSS beats the UA
+ * stylesheet regardless of specificity), so it was redundant, not load-
+ * bearing.
  */
-export const CLAIM_FIELD =
-  "h-[38px] w-full rounded-[var(--radius-element)] border border-[var(--border-field)] bg-[var(--surface-card)] px-3 text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)]";
+export const CLAIM_FIELD = `${advField("boxed")} w-full`;
 
 export const CLAIM_LABEL = "mb-2 block text-[11px] text-[var(--ink-700)]";
 

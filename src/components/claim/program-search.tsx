@@ -9,6 +9,7 @@ import type {
   PlayerProgramRow,
 } from "@/lib/data/programs-server";
 import { teamLabel, programSubtitle } from "@/lib/data/programs-server";
+import { advField } from "@/lib/ui/adv-field";
 
 /**
  * One row, in whichever of its two shapes the endpoint sent.
@@ -105,8 +106,19 @@ export function ProgramSearch({ intent = "claim" }: { intent?: SearchIntent }) {
     <div className="flex flex-col gap-5">
       {/* The box is the field; the input inside is only its text area, so the
           ring lands here. See focus.css for why a wrapper must opt its input
-          out. */}
-      <div className="flex h-[38px] items-center gap-2.5 rounded-[var(--radius-element)] border border-[var(--border-field)] bg-[var(--surface-card)] px-3 focus-within:shadow-[var(--focus-ring-field)]">
+          out.
+
+          `advField("boxed")` rather than the same four token values typed out
+          again: this box has to stay the same shape as every other field, and
+          this branch already proved that a copy does not. The geometry moved
+          three times while it was being built, and each move needed both this
+          file and adv-field.ts edited in lockstep, with nothing but attention
+          keeping them together. A few of the classes it emits — the
+          `placeholder:` and `disabled:` ones — cannot match on a `<div>` and
+          are simply inert; that is the cheaper half of the trade. */}
+      <div
+        className={`${advField("boxed")} flex items-center gap-2.5 focus-within:shadow-[var(--focus-ring-field)]`}
+      >
         <Search
           className="size-[15px] shrink-0 text-[var(--ink-600)]"
           strokeWidth={1.5}
