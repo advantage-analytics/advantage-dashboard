@@ -53,6 +53,26 @@ test.describe('titleCaseName re-cases what a human typed', () => {
     expect(titleCaseName('xii')).toBe('XII');
   });
 
+  test('a surname spelled from the same letters is NOT a suffix', () => {
+    // R1b's uniform-casing half, and the reason it exists. `Xi`, `Vi` and
+    // `Vivi` are built from i/v/x, and R1 cannot save a two-letter name — it
+    // needs an uppercase after the FIRST character, which `Xi` has nowhere to
+    // put. Without the uniform-casing guard every one of these came back
+    // shouted: a real owner surnamed Xi read as "Wei XI manages Advantage
+    // here" on a page anyone can open, signed out.
+    for (const typed of ['Xi', 'Vi', 'Ivi', 'Vivi', 'Ix', 'Iv']) {
+      expect(titleCaseName(typed), typed).toBe(typed);
+    }
+    expect(titleCaseName('Wei Xi')).toBe('Wei Xi');
+
+    // The residue, pinned so it is a decision and not a surprise: a uniformly
+    // cased token carries nothing that separates the two readings, so a name
+    // typed in one case throughout still reads as a suffix. Written the
+    // ordinary way — one capital, the rest lower — it is safe, which is the
+    // case that actually occurs.
+    expect(titleCaseName('wei xi')).toBe('Wei XI');
+  });
+
   test('deliberate casing is returned exactly as typed', () => {
     // R1, and the reason this function is not just `.toLowerCase()` plus a
     // capital. Each of these holds an uppercase after its first character AND

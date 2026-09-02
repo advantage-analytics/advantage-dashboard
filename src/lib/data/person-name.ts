@@ -78,9 +78,14 @@ export function normalizedPersonName(
  *   no lowercase, so an all-caps token is NOT deliberate casing — it falls
  *   through to R2, which is the whole point.
  * - **R1b — roman numerals.** A token made entirely of the letters `i`/`v`/`x`,
- *   in any case, two characters or more, is uppercased whole. Generational
- *   suffixes are all-caps, so R1 cannot protect them; without this, `III` would
- *   reach R2 and come back as `Iii`. `iii` becomes `III` for the same reason.
+ *   two characters or more, AND uniformly cased, is uppercased whole.
+ *   Generational suffixes are all-caps, so R1 cannot protect them; without this,
+ *   `III` would reach R2 and come back as `Iii`. `iii` becomes `III` for the
+ *   same reason. The uniform-casing half is what keeps real surnames out: `Xi`,
+ *   `Vi` and `Vivi` are spelled from the same three letters, and R1 cannot save
+ *   a two-letter name because it needs an uppercase after the FIRST character.
+ *   Written the way names are written — one capital, the rest lower — they are
+ *   not uniform, so they fall through to R2 and survive as typed.
  * - **R2 — otherwise, re-case.** Lowercase the token, then uppercase the first
  *   letter of each segment split on `-` and `'`, so `gimena` and `GIMENA` both
  *   land on `Gimena`, `o'brien` on `O'Brien`, `smith-jones` on `Smith-Jones`.
@@ -119,11 +124,12 @@ export function normalizedPersonName(
  * Never throws, and returns `""` for empty or whitespace-only input, so a
  * caller can render it straight into JSX without a guard.
  *
- * Known and accepted: a given name spelled only from the letters `i`, `v` and
- * `x` is read as a roman numeral by R1b and uppercased — `Vivi` and `Ivi` both
- * lose, while `Livi` is safe on the strength of its `l`. Nothing in the token
- * distinguishes the two readings, and a generational suffix is the far commoner
- * one on a tennis roster.
+ * Known and accepted, the residue of R1b: a name typed in one case throughout
+ * and spelled only from `i`, `v` and `x` still reads as a suffix — `XI` stays
+ * `XI`, and `xi` becomes `XI`. Nothing in a uniformly-cased token distinguishes
+ * the two readings, and on a tennis roster the suffix is the commoner one. What
+ * this costs is bounded: a name typed the ordinary way is safe, and an all-caps
+ * one was already going to be re-cased by some rule or other.
  */
 export function titleCaseName(value: string): string {
   return value.trim().split(/\s+/).map(titleCasedToken).join(" ");
@@ -156,8 +162,22 @@ const MC_SEGMENT = /^mc([a-z])([a-z]+)$/;
 
 function titleCasedToken(token: string): string {
   if (isDeliberatelyMixedCase(token)) return token;
-  if (ROMAN_NUMERAL_TOKEN.test(token)) return token.toUpperCase();
+  if (isUniformlyCased(token) && ROMAN_NUMERAL_TOKEN.test(token)) {
+    return token.toUpperCase();
+  }
   return token.toLowerCase().replace(/[^-']+/g, titleCasedSegment);
+}
+
+/**
+ * R1b's second half, and the thing that keeps a surname out of it.
+ *
+ * A suffix is written `III` or `iii` — never `Iii`. A name built from the same
+ * letters is written the way every name is, one capital and the rest lower:
+ * `Xi`, `Vi`, `Vivi`. So the case pattern, not the letters, is what separates
+ * them, and requiring a uniform one costs nothing a real suffix has.
+ */
+function isUniformlyCased(token: string): boolean {
+  return token === token.toUpperCase() || token === token.toLowerCase();
 }
 
 /**
