@@ -18,7 +18,7 @@ straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Re-space the college-step option rows
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/app/onboarding/onboarding-flow.tsx (college step, lines ~261–293: the `role="radiogroup"` container, the three `role="radio"` rows and their inner label/sub stack) — the only file the diff may touch. Read-only references: src/components/claim/claim-shell.tsx (`RadioDot`'s `align` prop), src/styles/design-system/spacing.css (the two-tier spacing rule), .skills/advantage-analytics-design/SKILL.md (gap scale, padding patterns, `Radio` card variant), DESIGN.md, .claude/skills/layout/SKILL.md (the `/impeccable layout` procedure). Guess — the runner may correct.
 - **done when:**
