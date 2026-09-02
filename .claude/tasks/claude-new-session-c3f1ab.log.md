@@ -2265,3 +2265,84 @@ all removed. Re-checked from this session: 1,941 programs, 4 owned, 5 events,
    "swap the popup's saved roster for the new school's" — is now resolved by
    `OpponentPool`, so a later task can make them live without re-deriving
    either half.
+
+## T24 · Resolve the type-only lifeline — done
+
+**gate:** lint clean (37 warnings, baseline) · `tsc --noEmit` clean ·
+`npm test` green (260) · `npm run build` green — and the completion reviewer
+additionally ran a **cold-cache `rm -rf .next && npm run build`**, which is the
+check that rules out a stale cache masking a dangling import after files move.
+`task-completion-reviewer` → **VERDICT: pass**. Guardrails:
+`pipeline-guardrails-reviewer` **ran** and found no violations;
+`rls-boundary-reviewer` **skipped** — deletions plus a type move, no query and
+no file under `src/lib/data/`, `src/lib/supabase/`, `src/app/api/` or
+`supabase/migrations/`.
+
+**outcome: both files deleted.** T23 removed the last renderer of
+`<LineupEditor>`, and through it `<OpponentNameCell>`, so once `LineupLine`
+moved the pair was genuinely unreferenced — no importer, type-only or
+otherwise, and no renderer anywhere in `src/` or `tests/`. 888 lines gone, and
+README §4's trap no longer exists to document.
+
+**`LineupLine` now lives in `src/lib/schedule/types.ts`**, not folded into
+`EventEntry` or `LineupLineInput`. The reviewer confirmed that is a real
+three-way distinction rather than an arbitrary placement: `EventEntry` is the
+persisted row (`id`, `matches`, a wider `forfeit`), `LineupLineInput` is the
+wire shape `createDual` accepts (`position`, no `key`), and `LineupLine` is the
+builder's editing state — `submit()` maps one onto the other explicitly.
+`types.ts` is a pure type module with only `import type` statements, so nothing
+about the move pulls a client- or server-only concern into the wrong bundle.
+
+**the inherited debt is answered.** Design open question 3 recorded that
+`opponent-name-cell.tsx`'s header had never been read. It was read here, and
+what it documents is this: an `OpponentTarget`'s `key` changes whenever the
+dual is re-targeted, each cell was keyed on it so a re-target remounted every
+popover, and the candidate list was empty on the render the target changed —
+because `contribute_opponent_player` matches by name *within* the target
+program, so carried-over state could silently attach a name to a real,
+different person there. A §4-shaped hazard.
+
+The contract survives the deletion in two halves, verified against the code by
+two reviewers independently rather than taken on report: `dual-build-step.tsx`
+computes `schoolKey` over the same two-case space (`program:<key>` /
+`text:<name>`) and keys every row `${pool.key}:${line.key}`; `opponent-popup.tsx`'s
+symbol-keyed `OpponentPool` hands candidates on only while
+`fetched.forKey === key`, so the pool is empty on the render the target
+changes. T23's trap-3 work and this contract turn out to be the same
+invariant, reached from two directions.
+
+**what the guardrails reviewer added.** It diffed both deleted files against
+the live tree and mapped every documented invariant to a live equivalent —
+`LineupLine`'s `forfeit` doc verbatim, the forfeit-clears-both-sides rule
+ported into `setForfeited()`, the drop-the-id-rather-than-misattribute rule in
+`editOurLabels`. It found one genuine gap: the deleted editor's
+**drag-to-reorder and bench drag-and-drop substitution have no live
+equivalent**. Correctly attributed to T23 rather than this diff — that file
+was never rendered on any route, so the logic has never run in production —
+but recorded below, since nothing else records it now.
+
+**README:** §4 deleted; the pair added to §2's deleted table with a paragraph
+on how the lifeline held them; §3's asymmetry list reduced to `dual-detail.tsx`
+alone; old §5 → §4 with its `key`-contract bullet re-pointed at `OpponentPool`
+and the row key, since it previously told readers to consult a header that no
+longer exists; old §6 → §5, keeping "an importer is not a renderer" and adding
+that domain types belong in `lib/schedule/types.ts`.
+
+**follow-ups:**
+1. **`saveOpponentPlayer` (`actions.ts:619`) now has no caller.** The deleted
+   cell wrote a picked opponent name per pick and toasted only on a confirmed
+   row; the static popup deliberately does not write, and `createDual`
+   contributes the names at submit instead, best-effort. Both reviewers judged
+   the shift harmless — the per-pick path was dead code that never ran for a
+   real user, and `contribute_opponent_player` never touches `matches`,
+   `match_stats`, `points` or `shots` — but the action is now dead code to
+   delete or wire deliberately.
+2. **No lineup reorder or bench substitution exists on the live builder.**
+   `2b` draws neither, so this may be intended, but the only implementation is
+   now deleted and nothing else records that it existed.
+3. Stale prose naming the deleted files remains in `dual-build-step.tsx`,
+   `opponent-popup.tsx`, `roster-match.ts` and `fixtures.ts` — notably
+   `fixtures.ts:941`, which still says the rows go "straight to
+   `LineupEditor`". Comments only; all compile.
+4. `.skills/advantage-analytics-design/SKILL.md:1087` has a table row
+   `| NameField | schedule/lineup-editor.tsx |` pointing at a deleted file.

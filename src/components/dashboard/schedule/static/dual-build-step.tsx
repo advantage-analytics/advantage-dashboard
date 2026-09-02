@@ -30,10 +30,9 @@ import {
 } from "@/lib/schedule/actions";
 import { splitNames } from "@/lib/schedule/format";
 import { rosterIdsForLabels } from "@/lib/schedule/roster-match";
-import type { LineupLine } from "@/components/dashboard/schedule/lineup-editor";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
-import type { EventSite } from "@/lib/schedule/types";
+import type { EventSite, LineupLine } from "@/lib/schedule/types";
 
 /**
  * The school step one chose, as step two receives it.

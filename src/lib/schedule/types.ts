@@ -102,6 +102,42 @@ export interface EventEntry {
   matches: EntryMatch[];
 }
 
+/**
+ * One line of a dual as the builder edits it — the draft that becomes an
+ * `EventEntry` once `createDual` writes it.
+ *
+ * The pre-persist shape, on purpose distinct from `EventEntry` above and from
+ * `LineupLineInput` in `actions.ts`: no id yet, a `key` for React, and both
+ * sides carried as typed labels because a coach types names, not rows.
+ * `static/dual-build-step.tsx` holds an array of these in state and its
+ * `submit()` maps each onto `LineupLineInput` — `ourIds` → `playerUserIds`,
+ * `ourLabels` → `playerLabels`, `theirLabels` → `opponentLabels`.
+ * `fixtures.ts` states design `2b`'s nine rows in this shape too.
+ */
+export interface LineupLine {
+  key: string;
+  slot: string;
+  discipline: Discipline;
+  /** Roster ids where we know them; empty for a name typed in place. */
+  ourIds: string[];
+  ourLabels: string[];
+  theirLabels: string[];
+  /**
+   * Which side forfeited this line, or null for a normal line.
+   *
+   * The builder can only ever set `"ours"`. A forfeit here means *we* cannot
+   * field a player — that is the only side knowable while writing our own
+   * lineup, and it is the one design 2b draws ("— no available player"). The
+   * opponent forfeiting is discovered on match day, so `line-row.tsx` on the
+   * event page carries the two-sided picker instead — which is why
+   * `EventEntry.forfeit` is wider than this.
+   *
+   * `"ours"` awards the point to THEM. Getting that backwards would hand a
+   * team a point it did not win with nothing on screen looking broken.
+   */
+  forfeit: "ours" | null;
+}
+
 /** One row on the schedule page. Everything here is computed, nothing stored. */
 export interface ScheduleRow {
   id: string;

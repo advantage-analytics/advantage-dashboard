@@ -400,7 +400,7 @@ list below instead.
 - **notes:** **Trap 3 of 3** — the popup's school and saved roster "must travel together or it dedupes against the wrong pool". `roster-match.ts` already holds the matching and name splitting, and `createDual` already exists; port both rather than re-implementing. `lineup-editor.tsx` and `opponent-name-cell.tsx` are NOT deleted here — they are T24.
 
 ## T24 · Resolve the type-only lifeline
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T23
 - **files:** `src/components/dashboard/schedule/lineup-editor.tsx`, `src/components/dashboard/schedule/opponent-name-cell.tsx`, and wherever `LineupLine` should now live; `README.md`
