@@ -1,9 +1,11 @@
 # Review — eyebrow-text-wrap
 
-Sign-off: pending
+Sign-off: approved
 
-*(The human edits this line to `approved` — or annotates it otherwise — and
-that word is stage 07's gate. Nothing merges until it changes.)*
+*(Approved by Clajerson Gimena on 2026-09-02, in session, after the two items
+under "Success criteria" were surfaced: the one-line guarantee holds at 768px
+and above rather than at every supported viewport, and four Glendale rows lose
+their only distinguishing field.)*
 
 Range reviewed: `fd13c75..HEAD`, the whole feature branch, picked because the
 working tree was clean. Five code files; everything else in the range is
