@@ -35,7 +35,13 @@ they were included in scope. Receipt recorded against `4f21fc4` as
 | `pipeline-guardrails-reviewer` | Clean, and ran for the same fail-closed reason even though no dashboard path is touched. Its verdict: the range does not engage the guardrails at all — no wizard input, no attribution path. |
 | `supabase:supabase-postgres-best-practices` | No findings. Reasoning below. |
 
-## Open finding — blocks sign-off
+## The finding that blocked sign-off — FIXED in `1a52db6`
+
+> Recorded after the fact, on the human's instruction to fix it. The
+> `Sign-off:` line above is untouched — that word stays theirs. What changed
+> here is only the status of the finding, because leaving it recorded as open
+> would make this file say something that is no longer true. The receipt still
+> reads `not-ready` and needs a fresh `/pr-check` run on the clean tree.
 
 **`src/lib/data/person-name.ts:159` — R1b uppercases short real surnames.**
 
@@ -68,9 +74,30 @@ Checked by running both variants: `III`→`III`, `iii`→`III`, `ii`→`II`,
 `xii`→`XII` all still hold, **all 15 cases pinned by the spec still pass**, and
 every name above is left as typed.
 
-This is left rather than applied because the roman-numeral rule was the human's
+This was left rather than applied because the roman-numeral rule was the human's
 explicit choice at stage 04, in answer to a direct question. The narrowing serves
-that choice more precisely rather than reversing it — but it is still their call.
+that choice more precisely rather than reversing it — but it was still their
+call, and they made it: **fix it.**
+
+### How it was fixed — `1a52db6`
+
+`titleCasedToken` now gates R1b behind a new `isUniformlyCased` predicate, so
+the rule fires only on a token that is all-upper or all-lower. `III` and `iii`
+are unaffected; `Xi`, `Vi`, `Ivi`, `Vivi`, `Ix` and `Iv` fall through to R2 and
+survive as typed. The R1b doc paragraph now states the uniform-casing half and
+why it exists.
+
+A new spec case, `a surname spelled from the same letters is NOT a suffix`, pins
+all six surnames as identity plus `Wei Xi`. Suite 315 → 316; lint, `tsc` and
+`npm run build` all green after the change.
+
+**The residue, pinned rather than papered over.** A uniformly cased token still
+carries nothing that separates the two readings, so a name typed in ONE CASE
+THROUGHOUT still reads as a suffix: `titleCaseName('wei xi')` returns
+`'Wei XI'`. The spec asserts exactly that, and the doc's "Known and accepted"
+paragraph was rewritten to describe this narrower residue instead of the old
+`Vivi`/`Ivi` claim, which is no longer true. Typed the ordinary way — one
+capital, the rest lower — the name is safe, and that is the case that occurs.
 
 ## Findings fixed during the review
 
