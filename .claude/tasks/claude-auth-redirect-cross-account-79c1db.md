@@ -54,7 +54,7 @@ ready).
 - **notes:** Closes the bounce at `src/app/dashboard/layout.tsx:45` for a Google-created account that joins via the link: it never passes through `/onboarding` before `/join`, so `onboarded_at` is null at accept time. Independent of T1/T2 but edits the same file as T2 — fine under the sequential runner.
 
 ## T4 · Add the pending-invite read and accept-by-id migration
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<stamp>_pending_invites.sql (new) — guess
 - **done when:**
