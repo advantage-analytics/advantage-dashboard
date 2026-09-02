@@ -452,3 +452,30 @@ is the runner's. Newest entries at the bottom.
   tones; the footer is `Width is how often`; the tooltip share is one-decimal.
   Points come from `scopePoints(points, activeSet)` via `useSetScope()`.
 - **follow-ups:** none.
+
+## T9 · How points ended card — done
+- **gate:** mechanical — `npm run lint` 0 errors / 37 warnings (baseline 43),
+  `npx tsc --noEmit` exit 0, `npm test` green. Completion review `VERDICT:
+  pass`. Guardrails — `pipeline-guardrails-reviewer` ran (one dashboard file)
+  and reported "no findings": the derived-match Aces drop
+  (`OUTCOMES.filter((o) => o.key !== "aces" || !isDerived)`) has zero diff
+  markers and still gates the bar segment, the legend square AND the row total
+  on `isDerived`, so a video match shows no fabricated ace; the `tally()` body
+  is byte-identical with only its input changed to `scopedPoints`, keyed on
+  `sides.you.isPlayer1` throughout, viewer row first. §3.2/§3.3 untouched, no
+  user-facing "splitstep". `rls-boundary-reviewer` skipped — no query or loader.
+- **changed:** header meta becomes `Own outcomes`; each player row is the name
+  at 11 px `ink-600` + a mono 10 px total; bars shrink to `h-2.5`; the legend
+  is 6 px squares labelled `Winners · Aces · Unforced · Double faults` ("Unforced",
+  not "Unforced errors", via an optional `legendLabel` so the tooltip keeps the
+  full wording); the footer sentence is gone; points come from
+  `scopePoints(points, activeSet)`.
+- **follow-ups:**
+  1. **Local 6 px legend swatch vs. a `size` prop on the shared `LegendSwatch`.**
+     The card needed a 6 px square; `legend-swatch.tsx` hard-codes 8 px with no
+     size prop and has two other callers (rally-length-card,
+     serve-zones-court), so touching it was out of T9's one-file scope. The
+     subagent inlined a local 6 px swatch reproducing the shared structure.
+     Both reviewers judged this reasonable in-scope, not creep. If a third card
+     ever needs a non-8 px swatch, adding a `size` prop and consolidating the
+     two is the cleanup — a `/simplify` candidate at branch end, not a defect.

@@ -115,7 +115,7 @@ ready).
 - **notes:** design § Components → `rally-length-card.tsx`; plan step 8a.
 
 ## T9 · How points ended card
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T3
 - **files:** src/components/dashboard/matches/match-detail/point-endings-card.tsx
