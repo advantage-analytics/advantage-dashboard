@@ -32,7 +32,7 @@ ready).
 - **notes:** design § Data flow; plan step 1. Factor the "player's matches → stat rows" fetch into a private helper both loaders share (rows now carry `match_id` and `matches.date`). Keep the arithmetic in exported pure functions — the `team-kpi.ts` split — so the spec runs without a database.
 
 ## T2 · Thread kpiHistory through getMatchDetailData and the provider
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1
 - **files:** src/lib/data/match-detail-server.ts, src/components/dashboard/matches/match-data-provider.tsx, src/app/dashboard/matches/[matchId]/layout.tsx

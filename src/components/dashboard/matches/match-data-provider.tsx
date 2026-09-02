@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import type { MatchStatisticsResult } from "@/lib/data/match-stats-server";
+import type { MatchKpiHistory, MatchStatisticsResult } from "@/lib/data/match-stats-server";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { Match } from "@/lib/data/types";
 
@@ -15,6 +15,7 @@ interface MatchDataContextValue {
     player2?: { strengths?: Array<{ name: string; value: number; description: string }>; weaknesses?: Array<{ name: string; value: number; description: string }> };
   } | null;
   playerAverages: Partial<import("@/lib/data/types").PlayerStatistics> | null;
+  kpiHistory: MatchKpiHistory | null;
 }
 
 const MatchDataContext = createContext<MatchDataContextValue | null>(null);
@@ -37,6 +38,7 @@ interface MatchDataProviderProps {
     player2?: { strengths?: Array<{ name: string; value: number; description: string }>; weaknesses?: Array<{ name: string; value: number; description: string }> };
   } | null;
   playerAverages?: Partial<import("@/lib/data/types").PlayerStatistics> | null;
+  kpiHistory?: MatchKpiHistory | null;
   children: React.ReactNode;
 }
 
@@ -47,10 +49,11 @@ export function MatchDataProvider({
   keyMoments = [],
   insights = null,
   playerAverages = null,
+  kpiHistory = null,
   children,
 }: MatchDataProviderProps) {
   return (
-    <MatchDataContext.Provider value={{ match, statsResult, points, keyMoments, insights, playerAverages }}>
+    <MatchDataContext.Provider value={{ match, statsResult, points, keyMoments, insights, playerAverages, kpiHistory }}>
       {children}
     </MatchDataContext.Provider>
   );

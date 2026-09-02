@@ -263,11 +263,11 @@ export interface MatchKpiHistory {
    * Whether the viewer IS the player these figures describe. It decides the
    * pronoun — "vs your avg 61%" against "vs avg 61%" — and nothing else.
    *
-   * Set by the CALLER, not here. This loader is handed one player id; a viewer
-   * holds several (their login, plus any roster profile they have claimed), and
-   * only the caller resolved both. `getMatchKpiHistory` therefore returns
-   * `false`, which is the value that degrades to the neutral wording rather
-   * than telling a coach that an athlete's average is their own.
+   * Set by the CALLER, not here. This loader is handed the ids of the player
+   * the figures describe and knows nothing about who is reading them; only the
+   * caller holds both. `getMatchKpiHistory` therefore returns `false`, which
+   * is the value that degrades to the neutral wording rather than telling a
+   * coach that an athlete's average is their own.
    */
   viewerIsPlayer: boolean;
   /**
@@ -408,18 +408,26 @@ export function buildKpiHistory(
  * statistic already contributes none.
  *
  * Null means "no history": the player has no stat rows at all, a first analyzed
- * match or an id with nothing behind it. The tile says that out loud. It is
+ * match or ids with nothing behind them. The tile says that out loud. It is
  * never a baseline of zero and never an invented delta.
  */
 export async function getMatchKpiHistory(
-  playerId: string,
+  /**
+   * Every id this player's matches may sit under. One person can hold two — a
+   * login on personal uploads, a roster profile on program ones — and a history
+   * read from either alone is half a season under a label that says "your
+   * avg". The same set `getPlayerAverageStats` takes, for the same reason; a
+   * caller that knows this player only by the id on the match row passes that
+   * one.
+   */
+  playerIds: readonly string[],
   matchId: string,
   matchDate: string,
 ): Promise<MatchKpiHistory | null> {
   // No `excludeMatchId`: this match has to be IN the set, because the series
   // ends on it. `buildKpiHistory` leaves it out of the baseline instead.
   const rows = await fetchPlayerStatRows(
-    [playerId],
+    playerIds,
     KPI_KEYS.map((key) => KPI_COLUMN[key]).join(", "),
   );
 

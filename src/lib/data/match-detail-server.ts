@@ -1,7 +1,12 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
-import { getMatchStatisticsFromSupabase, getPlayerAverageStats } from "@/lib/data/match-stats-server";
-import { getMyPlayerIds } from "@/lib/data/player-identity-server";
+import {
+  getMatchKpiHistory,
+  getMatchStatisticsFromSupabase,
+  getPlayerAverageStats,
+  type MatchKpiHistory,
+} from "@/lib/data/match-stats-server";
+import { getMyPlayerIds, isMe } from "@/lib/data/player-identity-server";
 import { getMatchPointsFromSupabase } from "@/lib/data/match-points-server";
 import { formatDuration } from "@/components/dashboard/matches/new-match-wizard/utils";
 import type { Match, SetScore } from "@/lib/data/types";
@@ -81,6 +86,42 @@ function determineWinner(sets: SetScore[]): "player1" | "player2" {
 
 type PlayerProfile = { hand: string | null; backhand: string | null };
 
+/**
+ * Which seat on the row is "you", and the id sitting in it.
+ *
+ * Decided here and nowhere else on this page. `transformDbMatchToMatch`
+ * orients everything the viewer sees from its `isUserPlayer1`, and the KPI
+ * history is drawn for its `playerId`; both ask this function so the average
+ * under a number cannot belong to a different person than the number does.
+ * That is the failure guardrails §4 describes — nothing on screen looks wrong,
+ * the baseline is simply someone else's — and two spellings of one test, kept
+ * in step by hand, is how it starts.
+ *
+ * The seat is tested against every id that names the viewer, never
+ * `=== userId`: a match recorded against a roster profile before the athlete
+ * claimed it carries the PROFILE's id, and a login-only comparison read all of
+ * those as somebody else's.
+ *
+ * It is the two-state test the page has always rendered from — seat one is
+ * the viewer's, or the page is oriented from seat two — and it is kept that
+ * way on purpose. A row that names the viewer on neither side (a coach reading
+ * an athlete's match, or a legacy row with no ids at all) orients from seat
+ * two today, and `getMatchSides` draws exactly that. `viewer-side.ts` is the
+ * three-state rule the Home page uses; adopting it here changes what those
+ * viewers see, so it is a rendering decision to take deliberately, not a
+ * refactor to slip in.
+ */
+function resolveYouSide(
+  row: Pick<DbMatch, "player1_id" | "player2_id">,
+  myPlayerIds: readonly string[],
+): { isUserPlayer1: boolean; playerId: string | null } {
+  const isUserPlayer1 = isMe(row.player1_id, myPlayerIds);
+  return {
+    isUserPlayer1,
+    playerId: isUserPlayer1 ? row.player1_id : row.player2_id,
+  };
+}
+
 function transformDbMatchToMatch(
   row: DbMatch,
   /**
@@ -94,13 +135,7 @@ function transformDbMatchToMatch(
   const sets = buildSets(row);
   const winner = determineWinner(sets);
   const finalScore = sets.map((s) => `${s.player1}-${s.player2}`).join(", ");
-  // Player two is tested explicitly rather than inferred from "not player one".
-  // Treating an unknown `player1_id` as proof the viewer was player two is the
-  // bug `statistics-server.ts` documents: it inverted every such row, and a
-  // match our side won was counted as a loss.
-  const isUserPlayer1 = Boolean(
-    row.player1_id && playerIds.includes(row.player1_id)
-  );
+  const { isUserPlayer1 } = resolveYouSide(row, playerIds);
   const userWon = isUserPlayer1 ? winner === "player1" : winner === "player2";
 
   const p1Profile = row.player1_id ? profiles.get(row.player1_id) : undefined;
@@ -266,6 +301,38 @@ async function resolveUploadedBy(
 }
 
 /**
+ * The KPI strip's baseline and sparklines, for whoever the page calls "you".
+ *
+ * Whose history this is comes from `resolveYouSide` and nowhere else, so it is
+ * the same person the tile's own number belongs to. The id is read off the
+ * already-authorised match row — never taken from the request — and RLS under
+ * the reads is what bounds the answer; this decides only who the figures are
+ * attributed to, never who may see them.
+ *
+ * `viewerIsPlayer` is the caller's to set (the loader says so): true exactly
+ * when the you-side id is one of the viewer's own. When it is, the history is
+ * drawn over the viewer's whole id set rather than the one id on the row. A
+ * claimed athlete's matches sit under two ids — their login on personal
+ * uploads, their roster profile on program ones — and a history read from one
+ * of them is half a season under a label that says "your avg";
+ * `getPlayerAverageStats` averages over the full set for the same reason.
+ * Anyone else — a coach — is known to this page only by the id on the row.
+ */
+async function resolveKpiHistory(
+  row: Pick<DbMatch, "id" | "date" | "player1_id" | "player2_id">,
+  myPlayerIds: readonly string[],
+): Promise<MatchKpiHistory | null> {
+  const { playerId } = resolveYouSide(row, myPlayerIds);
+  const viewerIsPlayer = isMe(playerId, myPlayerIds);
+  const history = await getMatchKpiHistory(
+    viewerIsPlayer ? myPlayerIds : playerId ? [playerId] : [],
+    row.id,
+    row.date,
+  );
+  return history ? { ...history, viewerIsPlayer } : null;
+}
+
+/**
  * Cached data fetcher for match detail pages.
  * React.cache deduplicates calls within the same request,
  * so both layout.tsx and page.tsx can call this without double-fetching.
@@ -314,7 +381,7 @@ export const getMatchDetailData = cache(async (matchId: string) => {
     }
   }
 
-  const [statsResult, points, playerAverages, eventId, uploadedBy] = await Promise.all([
+  const [statsResult, points, playerAverages, kpiHistory, eventId, uploadedBy] = await Promise.all([
     getMatchStatisticsFromSupabase(matchId),
     getMatchPointsFromSupabase(matchId),
     // The averages need to know which ids mean "me" — a coach may have recorded
@@ -323,6 +390,11 @@ export const getMatchDetailData = cache(async (matchId: string) => {
     // only this branch waits on the lookup.
     (async () =>
       getPlayerAverageStats(user?.id ? await getMyPlayerIds() : [], matchId))(),
+    // The history hangs off the same lookup, one step further: which seat on
+    // the row is "you" — and so whose baseline this is — is decided from the
+    // viewer's ids. Chained for the same reason as the averages.
+    (async () =>
+      resolveKpiHistory(dbRow, user?.id ? await getMyPlayerIds() : []))(),
     // The entry lookup rides this wave rather than following it: it needs only
     // `dbRow`, which is already in hand, and nothing else here reads its answer.
     // It resolves to null for every match with no line behind it, which is every
@@ -347,5 +419,6 @@ export const getMatchDetailData = cache(async (matchId: string) => {
     keyMoments: dbRow.key_moments?.length ? dbRow.key_moments : FILLER_KEY_MOMENTS,
     insights: dbRow.insights ?? FILLER_INSIGHTS,
     playerAverages,
+    kpiHistory,
   };
 });
