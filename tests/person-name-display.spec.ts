@@ -51,6 +51,10 @@ test.describe('titleCaseName re-cases what a human typed', () => {
     expect(titleCaseName('sam reid iii')).toBe('Sam Reid III');
     expect(titleCaseName('iv')).toBe('IV');
     expect(titleCaseName('xii')).toBe('XII');
+    // Typed all-caps too. This lives here rather than in the R1 loop below:
+    // `III` carries no lowercase, so R1 never sees it — it is an R1b case.
+    expect(titleCaseName('III')).toBe('III');
+    expect(titleCaseName('SAM REID III')).toBe('Sam Reid III');
   });
 
   test('a surname spelled from the same letters is NOT a suffix', () => {
@@ -65,19 +69,27 @@ test.describe('titleCaseName re-cases what a human typed', () => {
     }
     expect(titleCaseName('Wei Xi')).toBe('Wei Xi');
 
+    // Position is the second guard, and the one casing alone did not give.
+    // A suffix is terminal; a given name is not. Without this, `xi wei` came
+    // back `XI Wei` — the same shouted-name bug, surviving in the other slot.
+    expect(titleCaseName('xi wei')).toBe('Xi Wei');
+    expect(titleCaseName('vivi chen')).toBe('Vivi Chen');
+    expect(titleCaseName('VIVI CHEN')).toBe('Vivi Chen');
+
     // The residue, pinned so it is a decision and not a surprise: a uniformly
-    // cased token carries nothing that separates the two readings, so a name
-    // typed in one case throughout still reads as a suffix. Written the
-    // ordinary way — one capital, the rest lower — it is safe, which is the
-    // case that actually occurs.
+    // cased LAST token carries nothing that separates the two readings, so a
+    // surname spelled from i/v/x still reads as a suffix — in BOTH directions
+    // of uniform casing, not just the lowercase one. Typed the ordinary way it
+    // is safe, which is the case that actually occurs.
     expect(titleCaseName('wei xi')).toBe('Wei XI');
+    expect(titleCaseName('WEI XI')).toBe('Wei XI');
   });
 
   test('deliberate casing is returned exactly as typed', () => {
     // R1, and the reason this function is not just `.toLowerCase()` plus a
     // capital. Each of these holds an uppercase after its first character AND
     // a lowercase, which is what "somebody chose this" looks like.
-    for (const typed of ['McCarthy', "O'Brien", 'DeMarco', 'MacLeod', 'LaSalle', 'III']) {
+    for (const typed of ['McCarthy', "O'Brien", 'DeMarco', 'MacLeod', 'LaSalle']) {
       expect(titleCaseName(typed), typed).toBe(typed);
     }
     expect(titleCaseName('Fiona MacLeod')).toBe('Fiona MacLeod');

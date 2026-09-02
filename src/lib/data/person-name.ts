@@ -77,15 +77,27 @@ export function normalizedPersonName(
  *   what this excludes: `GIMENA` holds uppercase after its first character but
  *   no lowercase, so an all-caps token is NOT deliberate casing — it falls
  *   through to R2, which is the whole point.
- * - **R1b — roman numerals.** A token made entirely of the letters `i`/`v`/`x`,
- *   two characters or more, AND uniformly cased, is uppercased whole.
- *   Generational suffixes are all-caps, so R1 cannot protect them; without this,
- *   `III` would reach R2 and come back as `Iii`. `iii` becomes `III` for the
- *   same reason. The uniform-casing half is what keeps real surnames out: `Xi`,
- *   `Vi` and `Vivi` are spelled from the same three letters, and R1 cannot save
- *   a two-letter name because it needs an uppercase after the FIRST character.
- *   Written the way names are written — one capital, the rest lower — they are
- *   not uniform, so they fall through to R2 and survive as typed.
+ * - **R1b — roman numerals.** A token is uppercased whole when three things
+ *   hold at once: it is made entirely of `i`/`v`/`x`, two characters or more;
+ *   it is cased uniformly; and it is the LAST token. Generational suffixes are
+ *   all-caps, so R1 cannot protect them — without this, `III` would reach R2 and
+ *   come back as `Iii`, and `iii` likewise.
+ *
+ *   The other two conditions exist because `Xi`, `Vi`, `Vivi` and `Ix` are real
+ *   names spelled from those same three letters, and R1 cannot save a
+ *   two-letter one — it needs an uppercase after the FIRST character, and `Xi`
+ *   has nowhere to put it. Casing catches the common spelling: a name is
+ *   written with one capital and the rest lower, which is not uniform. Position
+ *   catches the rest: a suffix is terminal, so `xi wei` and `vivi chen` keep
+ *   their given names whatever case they arrive in. Neither condition alone is
+ *   enough — the first shipped without the second, and `xi wei` came back as
+ *   `XI Wei`.
+ *
+ *   The price of the position half, named so it is not mistaken for a bug: a
+ *   suffix with anything after it is no longer terminal and falls to R2, so
+ *   `sam reid iii jr` renders `Sam Reid Iii Jr`. That is the better trade —
+ *   a shouted given name is both commoner on a collegiate roster and worse to
+ *   read than a mis-cased suffix — but it is a real edge, not a clean win.
  * - **R2 — otherwise, re-case.** Lowercase the token, then uppercase the first
  *   letter of each segment split on `-` and `'`, so `gimena` and `GIMENA` both
  *   land on `Gimena`, `o'brien` on `O'Brien`, `smith-jones` on `Smith-Jones`.
@@ -124,15 +136,26 @@ export function normalizedPersonName(
  * Never throws, and returns `""` for empty or whitespace-only input, so a
  * caller can render it straight into JSX without a guard.
  *
- * Known and accepted, the residue of R1b: a name typed in one case throughout
- * and spelled only from `i`, `v` and `x` still reads as a suffix — `XI` stays
- * `XI`, and `xi` becomes `XI`. Nothing in a uniformly-cased token distinguishes
- * the two readings, and on a tennis roster the suffix is the commoner one. What
- * this costs is bounded: a name typed the ordinary way is safe, and an all-caps
- * one was already going to be re-cased by some rule or other.
+ * Known and accepted, the residue of R1b: a SURNAME spelled only from `i`, `v`
+ * and `x` and typed in one case throughout still reads as a suffix. Both
+ * `wei xi` and `WEI XI` render `Wei XI`. Nothing in a uniformly-cased terminal
+ * token separates the two readings, and on a tennis roster the suffix is the
+ * commoner one.
+ *
+ * Note what that does NOT let you assume, because the obvious bound is wrong:
+ * all-caps entry is not rescued by R2 here. R1b intercepts the token first, so
+ * `WEI XI` keeps its shouted surname even though `CLAJERSON GIMENA` — the case
+ * R2 exists for — is re-cased normally. The residue is narrow, but it covers
+ * both directions of uniform casing, not just the lowercase one.
+ *
+ * The escape hatch is the honest part: the bearer types `Wei Xi`, R1 sees
+ * deliberate casing, and it is protected permanently.
  */
 export function titleCaseName(value: string): string {
-  return value.trim().split(/\s+/).map(titleCasedToken).join(" ");
+  const tokens = value.trim().split(/\s+/);
+  return tokens
+    .map((token, i) => titleCasedToken(token, i === tokens.length - 1))
+    .join(" ");
 }
 
 /** R1's test: an uppercase after the first character, plus a lowercase somewhere. */
@@ -154,30 +177,20 @@ function isLowerCase(char: string): boolean {
   return char !== char.toUpperCase() && char === char.toLowerCase();
 }
 
-/** R1b: `III`, `iv`, `xii`. Length 2 or more, so a lone `V` is a name. */
-const ROMAN_NUMERAL_TOKEN = /^[ivx]{2,}$/i;
+/**
+ * R1b: `III`, `iv`, `xii`. Length 2 or more, so a lone `V` is a name, and ONE
+ * CASE throughout — the alternation is not an `i` flag, which would also admit
+ * `Xi` and `Vivi`. The caller adds the third condition, position.
+ */
+const ROMAN_NUMERAL_TOKEN = /^(?:[ivx]{2,}|[IVX]{2,})$/;
 
 /** R2a: `mccarthy` — `mc` plus at least two more letters. */
 const MC_SEGMENT = /^mc([a-z])([a-z]+)$/;
 
-function titleCasedToken(token: string): string {
+function titleCasedToken(token: string, isLastToken: boolean): string {
   if (isDeliberatelyMixedCase(token)) return token;
-  if (isUniformlyCased(token) && ROMAN_NUMERAL_TOKEN.test(token)) {
-    return token.toUpperCase();
-  }
+  if (isLastToken && ROMAN_NUMERAL_TOKEN.test(token)) return token.toUpperCase();
   return token.toLowerCase().replace(/[^-']+/g, titleCasedSegment);
-}
-
-/**
- * R1b's second half, and the thing that keeps a surname out of it.
- *
- * A suffix is written `III` or `iii` — never `Iii`. A name built from the same
- * letters is written the way every name is, one capital and the rest lower:
- * `Xi`, `Vi`, `Vivi`. So the case pattern, not the letters, is what separates
- * them, and requiring a uniform one costs nothing a real suffix has.
- */
-function isUniformlyCased(token: string): boolean {
-  return token === token.toUpperCase() || token === token.toLowerCase();
 }
 
 /**
