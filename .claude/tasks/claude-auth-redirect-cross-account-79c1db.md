@@ -66,7 +66,7 @@ ready).
 - **notes:** Plan step 1. Read `.claude/skills/create-migration/SKILL.md` first and follow its stamp, live-schema check (`list_tables` — the folder runs ~100 migrations behind) and apply steps. `program_invites` already carries `player_id` and `upload_enabled`, which the token function consumes — that is why the accept path delegates instead of re-implementing. No table policy changes: `program_invites` stays staff-read only. If the Supabase MCP is unreachable during the run, mark the task blocked rather than committing an unapplied file. The unconfirmed-caller branch is checked by hand at stage 05, not here. `rls-boundary-reviewer` runs on this diff.
 
 ## T5 · Server plumbing: pending-invite loader, outcome mapping, accept action
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T4
 - **files:** src/lib/data/pending-invites-server.ts (new), src/lib/services/programs/invite-acceptance.ts, src/lib/services/programs/join-actions.ts — guess

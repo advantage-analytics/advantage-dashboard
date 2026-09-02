@@ -191,7 +191,7 @@ export async function loadInvite(token: string): Promise<InviteRecord | null> {
  * second sentence written for not knowing. "Coach wasn't notified" is worse
  * than "Nobody was notified" — it reads as a bug, and it is one.
  */
-function displayName(first: string | null, last: string | null): InviterName {
+export function displayName(first: string | null, last: string | null): InviterName {
   const name = [first, last]
     .map((part) => part?.trim() ?? "")
     .filter(Boolean)
@@ -297,6 +297,12 @@ export type AcceptOutcome =
        *   already_claimed  somebody else bound to that profile first
        *   player_gone      the row was archived or merged away
        *
+       * And one more when they learned to be accepted without the link
+       * (`acceptPendingWithSession`):
+       *
+       *   unconfirmed      the session's address is not yet confirmed, so
+       *                    nothing proves it is the invited one
+       *
        * Each has its own sentence and its own way forward, which is why they
        * come back as a status rather than as a raised exception.
        */
@@ -305,6 +311,7 @@ export type AcceptOutcome =
         | "expired"
         | "already_used"
         | "wrong_address"
+        | "unconfirmed"
         | "no_seats"
         | "already_claimed"
         | "player_gone";
@@ -335,6 +342,57 @@ export async function acceptWithSession(
     // Never logs the token. It is a live credential to a program, and a server
     // log is the one place people paste into a ticket without thinking.
     console.error("[join] accept failed", { message: error.message });
+    return { ok: false, status: "error", message: "We couldn't finish that. Try again." };
+  }
+
+  const row = data as { status: string; program_id: string | null } | null;
+  if (!row) {
+    return { ok: false, status: "error", message: "We couldn't finish that. Try again." };
+  }
+
+  if (row.status === "ok" && row.program_id) {
+    return { ok: true, programId: row.program_id };
+  }
+
+  return {
+    ok: false,
+    status: row.status as Exclude<
+      Extract<AcceptOutcome, { ok: false }>["status"],
+      "error"
+    >,
+  };
+}
+
+/**
+ * The same handshake, by invitation id instead of by link.
+ *
+ * For the person who has a session but never had the link — or has one they
+ * cannot open any more. There is no token to hold up, so the proof of address
+ * is the session's own: `accept_pending_invite` refuses unless the caller's
+ * CONFIRMED address is the one on that row, and only then hands the row's own
+ * `token_hash` to `accept_program_invite`. Every check the link path runs
+ * runs here too, because both doors go through the one function that writes
+ * the membership — `unconfirmed` is the only outcome this door adds.
+ *
+ * The id is not a secret, and nothing about the row is disclosed until the
+ * address is proven: `not_found`, `unconfirmed` and `wrong_address` all come
+ * back without a `program_id`, unlike the link path, where holding the link
+ * earns the program's name. `client` for the same reason as above.
+ */
+export async function acceptPendingWithSession(
+  inviteId: string,
+  client?: Awaited<ReturnType<typeof createClient>>
+): Promise<AcceptOutcome> {
+  const supabase = client ?? (await createClient());
+
+  const { data, error } = await supabase
+    .rpc("accept_pending_invite", { p_invite_id: inviteId })
+    .maybeSingle();
+
+  if (error) {
+    // The message only. The id is not a credential, but it is the key to a
+    // row that names an address, and it does not belong in a log line either.
+    console.error("[join] accept by id failed", { message: error.message });
     return { ok: false, status: "error", message: "We couldn't finish that. Try again." };
   }
 

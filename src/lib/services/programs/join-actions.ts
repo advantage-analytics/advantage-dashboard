@@ -9,6 +9,7 @@ import { validatePassword } from "@/lib/auth/error-messages";
 import { WORKSPACE_COOKIE } from "@/lib/workspace/active-workspace-server";
 import { expiredInviteNudgeEmail, sendEmail } from "@/lib/services/email";
 import {
+  acceptPendingWithSession,
   acceptWithSession,
   accountExists,
   loadInvite,
@@ -56,6 +57,10 @@ function describe(outcome: Extract<AcceptOutcome, { ok: false }>): string {
       return "That invitation has already been used.";
     case "wrong_address":
       return "That invitation was sent to a different address.";
+    case "unconfirmed":
+      // Only the id door says this. The link is itself proof of the address;
+      // without one, the session's confirmation is the only proof there is.
+      return "Confirm your email address, then open this invitation again.";
     case "no_seats":
       // The one refusal the person reading it cannot act on themselves, so it
       // names who can.
@@ -126,6 +131,114 @@ export async function acceptInvite(token: string): Promise<JoinActionResult> {
       console.error("[join] could not mark the account onboarded", {
         message: stampError.message,
       });
+    }
+  }
+
+  await activate(outcome.programId);
+  redirect("/dashboard/team");
+}
+
+/** RFC 4122 shape, any version — what `program_invites.id` is generated as. */
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The persona an invitation implies, for a profile that has not chosen one.
+ *
+ * `users.role` is a persona (`PERSONA_ROLES` in settings/actions.ts: player,
+ * coach, parent, academy), not a program role, so `staff` lands as "coach" —
+ * the persona the profile form offers someone who runs a program rather than
+ * plays for one. A `const` record, looked up by own property only: a bare
+ * index would resolve prototype keys, and a role the database grows later
+ * should write nothing rather than something.
+ */
+const PERSONA_FOR_ROLE = {
+  player: "player",
+  coach: "coach",
+  staff: "coach",
+} as const;
+
+/**
+ * Accept an invitation by id — the door for someone who is signed in and never
+ * had the link.
+ *
+ * One argument, on purpose. The program and the role both come from the
+ * database AFTER `accept_pending_invite` has bound the row to the caller's
+ * confirmed address: the program from the outcome, the role read back off the
+ * membership the function just wrote. A `role` argument here would let anyone
+ * who can call a server action pick their own persona, and this action is
+ * reachable by anybody with a session.
+ *
+ * The id is checked for shape before the database sees it. A malformed one
+ * would be refused there too — as a cast error, logged and reported as "we
+ * couldn't finish that", for something that was never our failure.
+ *
+ * Then the same stamp as `acceptInvite`, for the same reason, plus one more:
+ * a membership answers both onboarding questions, so the person is marked
+ * onboarded and given the persona the invitation implies — each only where
+ * the profile has nothing yet. Both best effort: a miss costs a screen, never
+ * the membership.
+ */
+export async function acceptPendingInvite(
+  inviteId: string
+): Promise<JoinActionResult> {
+  if (!UUID_PATTERN.test(inviteId)) {
+    return { ok: false, error: "That invitation isn't available." };
+  }
+
+  const supabase = await createClient();
+  const outcome = await acceptPendingWithSession(inviteId, supabase);
+  if (!outcome.ok) return { ok: false, error: describe(outcome) };
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user?.id) {
+    const admin = createAdminClient();
+
+    const { error: stampError } = await admin
+      .from("users")
+      .update({ onboarded_at: new Date().toISOString() })
+      .eq("id", user.id)
+      .is("onboarded_at", null);
+    if (stampError) {
+      console.error("[join] could not mark the account onboarded", {
+        message: stampError.message,
+      });
+    }
+
+    // Read back, never passed in. The row was written by a SECURITY DEFINER
+    // function from the invitation's own `role`, so this is the one place the
+    // answer cannot have been chosen by the caller.
+    const { data: membership, error: memberError } = await admin
+      .from("program_members")
+      .select("role")
+      .eq("program_id", outcome.programId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (memberError) {
+      console.error("[join] could not read the new membership", {
+        message: memberError.message,
+      });
+    }
+
+    const memberRole = (membership?.role as string | null | undefined) ?? null;
+    const persona =
+      memberRole !== null &&
+      Object.prototype.hasOwnProperty.call(PERSONA_FOR_ROLE, memberRole)
+        ? PERSONA_FOR_ROLE[memberRole as keyof typeof PERSONA_FOR_ROLE]
+        : null;
+    if (persona) {
+      const { error: roleError } = await admin
+        .from("users")
+        .update({ role: persona })
+        .eq("id", user.id)
+        .is("role", null);
+      if (roleError) {
+        console.error("[join] could not set the account's persona", {
+          message: roleError.message,
+        });
+      }
     }
   }
 
