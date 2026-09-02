@@ -5,12 +5,85 @@ import { CircleCheck, Plus, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { normalizedPersonName } from "@/lib/data/person-name";
 import { splitNames } from "@/lib/schedule/format";
-import type { OpponentRosterCandidate } from "@/lib/schedule/fixtures";
+import type { OpponentRosterCandidate } from "@/lib/schedule/actions";
 
 /** How many close names the popup offers — `opponent-name-cell.tsx`'s number.
  *  More than a couple stops being "is this the same person?" and becomes a
  *  search result page. `2d` draws one. */
 const MAX_SUGGESTIONS = 3;
+
+/**
+ * Module-private, and that is the whole mechanism: no other file can write
+ * this key, so no other file can produce an `OpponentPool`.
+ *
+ * `const` on a `Symbol()` call gives TypeScript a `unique symbol`, which is
+ * what lets it appear as a computed key in the interface below. It is erased
+ * from nobody's bundle — it is a real runtime property — but it costs one
+ * symbol per pool and is never read at runtime.
+ */
+const POOL = Symbol("opponent-pool");
+
+/**
+ * A school and the saved roster that belongs to THAT school, as one value.
+ *
+ * ── The failure this shape exists to make unwriteable ───────────────────────
+ * The popup dedupes a typed name against a pool of saved names. If the pool it
+ * dedupes against belongs to a different school than the one on screen, it
+ * either merges two different people or fails to merge the same person — and
+ * the screen looks entirely correct either way. It is worse than a stray row:
+ * `contribute_opponent_player` matches by name WITHIN the target program, so a
+ * name resolved against the wrong pool can silently attach to a real,
+ * different person there (`opponent-name-cell.tsx`'s `OpponentTarget` header
+ * states the same rule for the DB-wired cell).
+ *
+ * Two props — a `schoolName` and a `candidates` — leave that mistake one
+ * transposed argument away at every call site, and nothing on screen would
+ * report it. So there are not two props. There is one object, it carries both
+ * halves, and `opponentPoolFor()` below is the only thing that can build one:
+ * the interface is keyed on a symbol this module does not export, so an
+ * object literal assembled anywhere else is not an `OpponentPool` and will not
+ * type-check as the popup's prop.
+ *
+ * `key` is the school's identity in the same key space the rows are keyed on
+ * (`program:<programKey>` or `text:<typed name>`), and it is what the factory
+ * checks the fetched roster against.
+ */
+export interface OpponentPool {
+  readonly [POOL]: true;
+  /** `program:<programKey>` for a directory pick, `text:<name>` for a typed
+   *  opponent. The rows' remount key, and the factory's gate. */
+  readonly key: string;
+  /** The school's own name, in full — every string the popup prints reads it
+   *  from here, so the toast and the prose cannot name different schools. */
+  readonly schoolName: string;
+  /** The saved names to dedupe against — this school's, or none. */
+  readonly candidates: readonly OpponentRosterCandidate[];
+}
+
+/**
+ * Build the pool for the school currently on screen.
+ *
+ * `fetched` is whatever the last completed `opponentRosterForDual()` returned,
+ * **stamped with the key it was fetched for**. The candidates are handed on
+ * only while that stamp still matches the school being drawn, so a change of
+ * school empties the pool in the same render that changes the name — not in an
+ * effect a tick later, and not after an in-flight request lands. A school with
+ * no directory row (a club side typed past the directory) has no roster to
+ * fetch and gets an empty pool, which is the popup's "nothing to warn about"
+ * state rather than an error.
+ */
+export function opponentPoolFor(
+  key: string,
+  schoolName: string,
+  fetched: { forKey: string; candidates: OpponentRosterCandidate[] } | null
+): OpponentPool {
+  return {
+    [POOL]: true,
+    key,
+    schoolName,
+    candidates: fetched?.forKey === key ? fetched.candidates : [],
+  };
+}
 
 /**
  * `2d` and `2e` — the add-opponent popup, in the two states of one component.
@@ -23,28 +96,33 @@ const MAX_SUGGESTIONS = 3;
  *
  * ── The one thing this must not do ─────────────────────────────────────────
  * Attach a name to a line other than the one it was typed on, or to a school
- * other than the one it was typed against. `dual-form.tsx:220`'s
- * `takeOpponent` and `OpponentTarget.key` (`opponent-name-cell.tsx`) exist for
- * the second half of that: `contribute_opponent_player` matches by name WITHIN
- * the target program, so a name carried across a re-target does not merely
- * create a stray row — it can silently attach to a real, different person.
+ * other than the one it was typed against. `OpponentTarget.key`
+ * (`opponent-name-cell.tsx`) and the deleted `dual-form.tsx`'s `takeOpponent`
+ * existed for the second half of that: `contribute_opponent_player` matches by
+ * name WITHIN the target program, so a name carried across a re-target does not
+ * merely create a stray row — it can silently attach to a real, different
+ * person.
  *
  * This component cannot address a line at all. It holds no line id, no index
  * and no map; `onCommit` is the only way out and it is a closure the owning
  * row builds over its own setter, so the one row that renders a popup is the
- * only row that popup can ever write to. The school half is settled upstream:
- * `dual-build-step.tsx` reads a module const, the rail is drawn rather than
- * clickable, and the row's React key carries the program key — so a re-target,
- * once one exists, remounts every popup and no draft, suggestion or pending
+ * only row that popup can ever write to.
+ *
+ * The school half is `OpponentPool` above: the name this popup prints and the
+ * roster it dedupes against arrive as ONE value that only `opponentPoolFor()`
+ * can build, so there is no call site at which they can be made to disagree.
+ * The row's React key carries the same `pool.key`, so a re-target — once the
+ * rail offers one — remounts every popup and no draft, suggestion or pending
  * confirmation survives it.
  *
- * ── Static ─────────────────────────────────────────────────────────────────
- * Nothing here fetches and nothing here writes. `candidates` is a fixture, not
- * `getOpponentRoster()`, and the confirmation is a statement the design makes
- * rather than a server's answer — see `saveNote` for what that costs.
- * `opponent-name-cell.tsx` is the DB-wired implementation of these same two
- * states and stays exactly where it is, dormant; this component imports none
- * of it.
+ * ── Reading, as of the schedule re-wiring ──────────────────────────────────
+ * `pool.candidates` is the opponent's real pooled roster, fetched by
+ * `dual-build-step.tsx` through `opponentRosterForDual()`. Nothing here still
+ * writes: the confirmation is a statement the design makes rather than a
+ * server's answer — see `saveNote` for what that costs — and the opposing
+ * names are contributed to that pool by `createDual` at submit, best-effort,
+ * once the lines are safely written. `opponent-name-cell.tsx` is the dormant
+ * cell that drew these same two states; this component imports none of it.
  *
  * ── Where the exact-vs-fuzzy line falls ────────────────────────────────────
  * The dormant cell's rule, unchanged, because the design draws its result:
@@ -69,9 +147,7 @@ export function OpponentPopup({
   value,
   addLabel,
   discipline,
-  schoolName,
-  schoolShortName,
-  candidates,
+  pool,
   draftName,
   onCommit,
   onActiveChange,
@@ -81,18 +157,26 @@ export function OpponentPopup({
   /** "Add name" or "Add pair" — the row's own trigger copy, from `2b`. */
   addLabel: string;
   discipline: "singles" | "doubles";
-  /** The school's own name, in full — `2e`'s toast writes it that way. */
-  schoolName: string;
-  /** The short form `2d` writes twice. See `DUAL_DRAFT_OPPONENT_SHORT`. */
-  schoolShortName: string;
-  /** The saved names to dedupe against. A fixture here; a fetch when re-wired. */
-  candidates: OpponentRosterCandidate[];
+  /** The school and ITS saved roster, inseparably — see `OpponentPool`. */
+  pool: OpponentPool;
   /** What `2d` has typed. Seeded on open for a line with nothing on it yet. */
   draftName: string;
   onCommit: (value: string) => void;
   /** Open, or holding the confirmation — the row lifts its stacking on it. */
   onActiveChange: (active: boolean) => void;
 }) {
+  // Destructured from the one object rather than taken as two props: this is
+  // the read side of the coupling, and it cannot pull a name and a roster from
+  // two different schools because there is only one school here to pull from.
+  //
+  // `2d` writes the school short ("Ridgeline") where `2e`'s toast writes it in
+  // full ("Ridgeline University"), which is the design's own inconsistency
+  // (`DUAL_DRAFT_OPPONENT_SHORT` records it). `programs` holds no short form
+  // and no rule the design states derives one — "Fairmont" for "Fairmont A&M"
+  // is wrong — so the live popup writes the full name in both places, which is
+  // what the dormant cell does too.
+  const { schoolName, candidates } = pool;
+
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [highlight, setHighlight] = useState(0);
@@ -354,7 +438,7 @@ export function OpponentPopup({
           {suggestions.length > 0 ? (
             <div className="p-3">
               <div className="text-micro" style={{ color: "var(--ink-600)" }}>
-                {schoolShortName} already has a close name saved. Pick one.
+                {schoolName} already has a close name saved. Pick one.
               </div>
               <div className="mt-2.5 flex flex-col gap-2">
                 {suggestions.map((candidate, index) => (
@@ -364,7 +448,7 @@ export function OpponentPopup({
                     onClick={() => pickSaved(candidate)}
                     title={candidate.name}
                     strong
-                    note={savedSubline(schoolShortName, candidate)}
+                    note={savedSubline(schoolName, candidate)}
                   />
                 ))}
 
@@ -474,9 +558,9 @@ function OptionCard({
  * `opponent-name-cell.tsx` builds it: spot and meetings only when known, since
  * a zero-meeting clause would be the card padding its own case.
  *
- * Note the school arrives SHORT here and in full in `2e`'s toast. That is the
- * design's inconsistency, held rather than smoothed — `DUAL_DRAFT_OPPONENT_SHORT`
- * says why, and the dormant cell writes the full name in both places.
+ * The school arrives in full, off `pool.schoolName`, as it does in `2e`'s
+ * toast — see the destructure at the top of `OpponentPopup` for why the
+ * design's short form has no live source to come from.
  */
 function savedSubline(
   school: string,

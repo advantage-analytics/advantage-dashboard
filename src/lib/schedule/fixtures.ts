@@ -50,16 +50,13 @@ import type {
   EventDetail,
   EventEntry,
   EventFormat,
+  LineupLine,
   ProgramEvent,
   ScheduleRow,
 } from "./types";
 import type { OpponentDualHistory } from "@/lib/schedule/opponent-history";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
 import type { LadderPlayer } from "@/lib/data/roster-server";
-// The dormant builder's own line shape, for `2b`'s nine lines at the foot of
-// this file. `import type`, like the two above — a type is erased, so nothing
-// about a `"use client"` module follows it in here.
-import type { LineupLine } from "@/components/dashboard/schedule/lineup-editor";
 // The pooled-roster row `2d`'s popup renders, for the saved-name list at the
 // foot of this file. `import type` again, and here it is load-bearing rather
 // than tidy: `lib/schedule/actions` is a `"use server"` module, so only an

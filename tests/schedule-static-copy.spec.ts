@@ -31,16 +31,47 @@ import { formatOpponentRecord } from '@/lib/schedule/opponent-history';
 import { divisionLabel, teamLabel } from '@/lib/data/programs-server';
 
 /**
- * The copy contract for the four static schedule routes.
+ * The copy record for the four rebuilt schedule routes — what it guards, and
+ * what it does not.
  *
  * `/dashboard/team/schedule`, `.../new`, `.../new/dual` and `.../new/tournament`
- * are a character-for-character rebuild of ten artboards in
- * `Events & Lineups.dc.html` — `7e 7d 7c 4c`, `3b`, `2c 2b 2d 2e` and `3c`. The
- * whole point of that run is the punctuation as much as the words: an en dash
- * between two figures, `·` between two clauses, a STRAIGHT apostrophe, `↵` on a
- * card, `—` where a value is absent. Every one of those is a character a
- * reviewer's eye slides straight over, and a fixture quietly emptied to `[]`
- * reads as "no rows today" rather than as a defect.
+ * were rebuilt character-for-character from ten artboards in
+ * `Events & Lineups.dc.html` — `7e 7d 7c 4c`, `3b`, `2c 2b 2d 2e` and `3c` —
+ * first against `src/lib/schedule/fixtures.ts`, the design's sample content as
+ * data, and then re-wired to the database one route at a time: T15 the
+ * schedule, T18 the chooser, T19–T20 the tournament builder, T21–T23 the dual
+ * builder. The whole point of the rebuild was the punctuation as much as the
+ * words: an en dash between two figures, `·` between two clauses, a STRAIGHT
+ * apostrophe, `↵` on a card, `—` where a value is absent. Every one of those is
+ * a character a reviewer's eye slides straight over.
+ *
+ * ── What this spec guards now: the design record, not the live screen ──────
+ * It asserts two ways, and neither is a rendered page.
+ *
+ *   1. Over `fixtures.ts`'s exports. No route renders that module any more —
+ *      this file is its only importer, anywhere — so those assertions pin the
+ *      design's content as transcribed: a 3–1 season, a Ridgeline dual on
+ *      09-26, five "Ridg" schools, nine stated lines. `PROGRAM_NAME`,
+ *      `USER_NAME` and `SEASON_LABEL` never had a consumer under `src/` at
+ *      all. They are kept because the record is worth keeping intact — it is
+ *      what the artboards say, in the app's own types, and the reference for
+ *      the next time a screen is held against its artboard — not because a
+ *      user sees any of it. Each block that reads the record says so.
+ *   2. Over component source text, through `screen()` / `drawn()` below.
+ *      Those pin the copy the live screens still draw as literals — section
+ *      labels, prompts, separators, the sentences the artboards wrote. Where a
+ *      route's re-wiring turned a drawn literal into a computed value, the
+ *      assertion was retired with a `RETIRED` note giving the reason (the
+ *      re-wiring's rule 9: retire, never weaken); where a literal is still
+ *      drawn but now known to be wrong for real data, it is held and its note
+ *      names the finding. Every `drawn()` here was re-checked against its
+ *      component at the end of the run, and each still lands on a rendered
+ *      text node, attribute or copy-table entry.
+ *
+ * So a green run means: the transcription is intact, and every pinned literal
+ * is still in its component's source. It does not mean a user sees the
+ * artboard — nothing here mounts a component — and `npm test` passing is not
+ * evidence that a screen matches its design. For that, open the route.
  *
  * ── Why every expected string below is written out by hand ─────────────────
  * **This spec is an independent second copy of the design's strings.** Each
@@ -146,6 +177,11 @@ test.describe('/dashboard/team/schedule · 7e 7d 7c 4c', () => {
   const widget = screen('dual-widget.tsx');
 
   test('the season this app is signed in to', () => {
+    // Design record, all four — see the header. The shell prints the real
+    // workspace and user, `7e`'s "0 events … 2026–27" topbar line is not drawn
+    // at all, and the season line has been `seasonSummaryFrom()`'s since T14;
+    // none of these has a consumer under `src/`. They pin the transcription,
+    // not a screen.
     expect(PROGRAM_NAME).toBe('Meridian State');
     expect(USER_NAME).toBe('Elena Vasquez');
     // En dash between the two years, in `7e`'s topbar count.
@@ -157,6 +193,8 @@ test.describe('/dashboard/team/schedule · 7e 7d 7c 4c', () => {
   });
 
   test("7d's four drawer rows", () => {
+    // Design record — see the header. `SCHEDULE_ROWS` stopped reaching the
+    // drawer when T15 re-pointed the route at `getProgramSchedule()`.
     expect(SCHEDULE_ROWS.map((row) => row.name)).toEqual([
       'Ridgeline University',
       'Fairmont A&M',
@@ -221,12 +259,26 @@ test.describe('/dashboard/team/schedule · 7e 7d 7c 4c', () => {
     drawn(schedule, 'static-schedule.tsx', 'Jump to');
     drawn(schedule, 'static-schedule.tsx', 'Next');
     drawn(schedule, 'static-schedule.tsx', 'Last');
-    // A literal the rows cannot produce — the fixture calendar is September
-    // 2025 and today is not four days before it.
-    drawn(schedule, 'static-schedule.tsx', 'in 4 days');
+    // RETIRED 'in 4 days' — the literal left the component. Stage 06 derived
+    //   it: the row now prints `daysAway(next.startsOn, today)`, so it says
+    //   "today", "tomorrow" or "in N days" about the event it actually names,
+    //   and nothing at all beyond a month out. Held here through the whole
+    //   re-wiring and retired only once it stopped being drawn, which is what
+    //   this file's own rule asks.
     drawn(schedule, 'static-schedule.tsx', ' · lineup not set');
-    // The design's own claim, and not derivable from the nine lines beside it.
-    drawn(schedule, 'static-schedule.tsx', '· 8 of 9 lines analyzed');
+    // The numbers left the component; the words did not. Retiring the whole
+    // phrase would have left "lines analyzed" — still drawn twice, on this row
+    // and in the season strip — pinned by nothing, and a reword to "lines
+    // processed" would have gone green. Narrowed, not dropped.
+    drawn(schedule, 'static-schedule.tsx', 'lines analyzed');
+    // The relative-day phrasing that replaced "in 4 days", pinned for the same
+    // reason: it is drawn copy now, and nothing else asserts it.
+    drawn(schedule, 'static-schedule.tsx', 'tomorrow');
+    // RETIRED '· 8 of 9 lines analyzed' — the literal left the component.
+    //   Stage 06 counted it, through the same `lineCoverageFrom` the season
+    //   strip sums, so the two figures on this pane can no longer disagree.
+    //   The design's own numbers were never derivable from the nine lines
+    //   beside them: three are doubles, which carry no video at all.
   });
 
   test("7e's day-zero pane", () => {
@@ -258,6 +310,8 @@ test.describe('/dashboard/team/schedule · 7e 7d 7c 4c', () => {
   });
 
   test("4c's nine lines, and the 5–2 they add up to", () => {
+    // Design record — see the header. `EVENT_DETAILS` is `eventDetailFrom()`'s
+    // shape over the design's Fairmont dual; the live pane reads the database.
     const fairmont = EVENT_DETAILS[SCHEDULE_ROWS[1].id];
     expect(fairmont, '4c has no detail to draw').toBeTruthy();
 
@@ -402,6 +456,11 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
   const popup = screen('opponent-popup.tsx');
 
   test("2c's directory, as the artboard states it", () => {
+    // Design record — see the header. Every expectation below reads
+    // `fixtures.ts`, so each is still true of the module it names; what
+    // changed is the audience. Step one has listed real programs and counted
+    // the real directory since T21, and the `seasonRecord` slot is not drawn
+    // at all — `programs` holds no such figure.
     expect(DIRECTORY_TERM).toBe('Ridg');
     // "5 of 1,940". A formatted string rather than a number, so the comma is
     // the design's and not the render locale's.
@@ -445,6 +504,12 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
 
     // The four head-to-head phrases the two artboards draw, each read off the
     // fixture row that draws it. En dash between the figures throughout.
+    //
+    // The formatter is live vocabulary; the rows it is read off are the design
+    // record — see the header. `2b`'s rail has listed the real conference and
+    // this program's real record since T22, so the phrases below pin the
+    // transcription, and `formatOpponentRecord()` is what the live sublines
+    // still go through.
     expect(formatOpponentRecord(CONFERENCE_SCHOOLS[0].history)).toBe(
       'never played'
     );
@@ -463,7 +528,10 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
   test("2c's own words", () => {
     drawn(step1, 'dual-school-step.tsx', 'New dual · step 1 of 2');
     drawn(step1, 'dual-school-step.tsx', 'Which school are you playing?');
-    drawn(step1, 'dual-school-step.tsx', 'Region');
+    // RETIRED 'Region' — the pill is gone from the screen, not renamed. Nothing
+    //   in `programs` backs a region and no mapping invents one, so the wired
+    //   step drops the control rather than drawing a filter that cannot filter.
+    //   The two pills beside it — conference and division — are now real.
     drawn(step1, 'dual-school-step.tsx', 'Clear');
     drawn(step1, 'dual-school-step.tsx', 'Your conference');
     drawn(step1, 'dual-school-step.tsx', 'All programs');
@@ -493,6 +561,13 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
   });
 
   test("2b's draft, as the fields print it", () => {
+    // Design record — see the header. Step two's date, site, surface and
+    // format are controlled inputs (T22), its rail lists the real conference,
+    // the school is whichever step one chose, and the nine lines are seeded
+    // from `getLadder` and edited in place (T23) — so `DUAL_DRAFT_EVENT`,
+    // `RAIL_SCHOOLS` and `DUAL_DRAFT_LINES` describe the artboard, and no
+    // `DUAL_DRAFT_*` export has a consumer under `src/`.
+    //
     // "09-26", month and day, the same slice `2c`'s last-played cell takes.
     expect(DUAL_DRAFT_EVENT.startsOn.slice(5)).toBe('09-26');
     expect(siteTitle(DUAL_DRAFT_EVENT.site)).toBe('Home');
@@ -597,7 +672,11 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
       },
     ]);
     // The short form `2d` writes twice, where `2e`'s toast writes the school
-    // in full. The design's own inconsistency, held rather than smoothed.
+    // in full. The design's own inconsistency — still recorded here, but no
+    // longer rendered: the wired popup reads one `OpponentPool.schoolName` in
+    // both places, because `programs` holds no short form and the rule that
+    // would derive one ("Fairmont" for "Fairmont A&M") is wrong for most rows.
+    // Held rather than retired: it is still true of `fixtures.ts`.
     expect(DUAL_DRAFT_OPPONENT_SHORT).toBe('Ridgeline');
 
     drawn(
@@ -626,6 +705,8 @@ test.describe('/dashboard/team/schedule/new/tournament · 3c', () => {
   const file = 'static-tournament-builder.tsx';
 
   test("3c's roster rail and the field it feeds", () => {
+    // Design record — see the header. The rail has listed `getLadder()` since
+    // T19; `TOURNAMENT_FIELD` has no consumer under `src/`.
     expect(TOURNAMENT_FIELD.map((row) => row.player.name)).toEqual([
       'Dana Brooks',
       'Marcus Reid',
@@ -666,18 +747,27 @@ test.describe('/dashboard/team/schedule/new/tournament · 3c', () => {
     drawn(builder, file, '${spot} · entered');
 
     drawn(builder, file, 'Tournament · name');
+    // Still drawn, as the name field's placeholder now rather than as text: a
+    // new tournament opens unnamed, and this is the string the empty cell shows.
     drawn(builder, file, 'Buckeye Fall Classic');
     drawn(builder, file, 'Starts');
     drawn(builder, file, 'Ends');
-    // Month and day, no year, on both date cells.
-    drawn(builder, file, '10-03');
-    drawn(builder, file, '10-05');
+    // RETIRED '10-03' — the Starts cell is an `<input type="date">` bound to the
+    //   draft now, so `3c`'s drawn sample date is no longer a literal in this
+    //   file. A date input has no placeholder to keep it in.
+    // RETIRED '10-05' — the same, on the Ends cell.
+    // Not moved onto `TOURNAMENT_DETAIL`, which still carries the design's
+    //   '2025-10-03'/'2025-10-05': nothing renders that fixture, so an
+    //   assertion over it could not fail for anything this screen does.
     drawn(builder, file, 'Neutral');
     // "Bo3 · ad" — best of 3, AD scoring, which is the opposite of the dual's.
     drawn(builder, file, 'Bo3 · ad');
 
     // A claim nothing in this app can compute: no table records which programs
-    // attend a tournament. Drawn because the artboard draws it.
+    // attend a tournament. Drawn because the artboard draws it — and held: it
+    // is still the component's literal, now printed for real programs in any
+    // conference (T25, finding 6). It leaves this file when it leaves the
+    // component.
     drawn(
       builder,
       file,

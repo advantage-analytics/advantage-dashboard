@@ -673,6 +673,7 @@ async function resolveAutoRetryWorkspace(params: {
       id: userId,
       kind: 'personal',
       name: 'Personal',
+      timeZone: 'UTC',
       team: null,
       orgType: null,
       role: 'owner',
@@ -709,6 +710,10 @@ async function resolveAutoRetryWorkspace(params: {
     kind: 'team',
     name: 'Program',
     team: null,
+    // Not read here: this workspace exists only to price a retry through
+    // `reserveQuota()`, which never asks what day it is. UTC rather than a
+    // second read for a field this path does not use.
+    timeZone: 'UTC',
     // The real value, not a guess: this workspace goes straight into
     // `reserveQuota()`, and a custom org auto-retrying must draw its reduced
     // tier exactly as a fresh manual submission would — see `quotaTierFor()`.

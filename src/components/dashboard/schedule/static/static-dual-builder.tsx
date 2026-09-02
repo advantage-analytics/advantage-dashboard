@@ -1,39 +1,45 @@
 "use client";
 
 import { useState } from "react";
-import { DualBuildStep } from "@/components/dashboard/schedule/static/dual-build-step";
+import {
+  DualBuildStep,
+  type ChosenSchool,
+} from "@/components/dashboard/schedule/static/dual-build-step";
 import { DualSchoolStep } from "@/components/dashboard/schedule/static/dual-school-step";
 
 /**
- * The new-dual flow's shell — `2c` then `2b`, rendered from fixtures.
+ * The new-dual flow's shell — `2c` then `2b`.
  *
  * Two steps and one piece of state to say which, because the design's own
  * eyebrow says "step 1 of 2" and because the second screen is a different
  * layout rather than the first with more fields: `2c` is one padded column,
  * `2b` is master–detail with the school pinned to a rail.
  *
- * ── Why the chosen school does not travel ──────────────────────────────────
- * A flag, not the picked row. An earlier pass threaded the chosen
- * `DirectorySchool` through to step two so its header could name it — and that
- * put one school's name over another school's data: `2b`'s date, site, format
- * and nine lines are Ridgeline's, drawn, and they do not vary, so picking
- * Ridgemont Tech on `2c` produced "vs Ridgemont Tech" above Ridgeline's
- * lineup. Reachable four of the five ways through step one.
+ * ── The school is the step ─────────────────────────────────────────────────
+ * The state is the school step one chose, or null while it is still being
+ * asked — not a flag beside it. Step two renders only once that answer
+ * exists, so it cannot open on a school nobody picked, and there is no second
+ * value to fall out of step with the first. Every path through step one ends
+ * in `onContinue` with what it chose: the directory row for a pick, the typed
+ * text and no row for a club side or a school the directory never had.
  *
- * `2b` draws Ridgeline throughout — header, rail check, subline, footer. The
- * artboard has one path, so the faithful reproduction of it has one path too;
- * making the header follow the selection was behaviour invented beyond the
- * design, and removing it is what fixes the defect. Selection still advances
- * the step, which is all `2c`'s Continue is drawn to do.
+ * ── Why the school travels now, and did not before ─────────────────────────
+ * An earlier pass threaded the picked row through while step two's date,
+ * site, format and nine lines were still Ridgeline's fixtures, drawn and
+ * unvarying — so picking Ridgemont Tech printed "vs Ridgemont Tech" above
+ * Ridgeline's lineup, four of the five ways through step one. The guard was
+ * to stop threading it. It comes out now because the data travels with the
+ * school rather than because the guard was unwanted: step two holds its own
+ * date, site, surface and format as controlled state, lists the real
+ * conference and this program's real head-to-head off `useNewDualData()`,
+ * and draws no opponent roster it did not get from this school. What is still
+ * the design's — the nine lines — is OUR side, which no school's name sits
+ * over wrongly; seeding it from the ladder is T23's, with `createDual`.
  *
- * Deliberately thin. The lineup editing over `2b` (T7) lands inside
+ * Deliberately thin. The lineup editing over `2b` lands inside
  * `DualBuildStep`, and should not need this file re-read to do it — the whole
- * of what is here is the branch.
- *
- * `dual-form.tsx` is the DB-wired implementation of the same two steps and
- * stays where it is, dormant, for the re-wiring. This shell does not import
- * it. Note that the re-wiring DOES have to make the school travel — see the
- * note on `DUAL_DRAFT_SCHOOL` in `dual-build-step.tsx`.
+ * of what is here is the branch. `dual-form.tsx` is the dormant DB-wired
+ * implementation of the same two steps and stays where it is until T23.
  *
  * ── No way back, on purpose ────────────────────────────────────────────────
  * Neither artboard draws one. `2b`'s Cancel goes to the schedule, which is a
@@ -42,11 +48,21 @@ import { DualSchoolStep } from "@/components/dashboard/schedule/static/dual-scho
  * all, and why that control leaves with it.
  */
 export function StaticDualBuilder() {
-  const [step, setStep] = useState<"find-school" | "build">("find-school");
+  const [school, setSchool] = useState<ChosenSchool | null>(null);
 
-  if (step === "find-school") {
-    return <DualSchoolStep onContinue={() => setStep("build")} />;
+  if (school === null) {
+    return (
+      <DualSchoolStep
+        onContinue={(name, program) =>
+          // The row alone for a pick — its name is read off it downstream —
+          // and the text alone otherwise, so the two can never disagree.
+          setSchool(
+            program ? { kind: "program", program } : { kind: "text", name }
+          )
+        }
+      />
+    );
   }
 
-  return <DualBuildStep />;
+  return <DualBuildStep school={school} />;
 }

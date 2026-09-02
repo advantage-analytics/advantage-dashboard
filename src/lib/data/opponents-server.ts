@@ -244,17 +244,33 @@ export function opponentPlayerMatches<T extends OpponentAttributedRow>(
  */
 export const getConferenceTable = cache(async function getConferenceTable(
   programId: string
-): Promise<{ conference: string | null; programs: ConferenceProgram[] }> {
+): Promise<{
+  conference: string | null;
+  /** `programs.program_key` for the viewer's own program, conference or not. */
+  ourProgramKey: string | null;
+  programs: ConferenceProgram[];
+}> {
   const supabase = await createClient();
 
   const { data: selfRow } = await supabase
     .from("programs")
-    .select("conference")
+    .select("conference, program_key")
     .eq("id", programId)
     .maybeSingle();
 
-  const conference = (selfRow as { conference: string | null } | null)?.conference ?? null;
-  if (!conference) return { conference: null, programs: [] };
+  const self = selfRow as
+    | { conference: string | null; program_key: string | null }
+    | null;
+  const conference = self?.conference ?? null;
+
+  // Carried out of this read whether or not a conference follows it. A caller
+  // that filters its own program out of a directory needs the key even when
+  // the table below is empty — deriving "us" from a row of `programs` that only
+  // exists when `conference` is set makes the filter silently match nothing for
+  // a program that never set one.
+  const ourProgramKey = self?.program_key ?? null;
+
+  if (!conference) return { conference: null, ourProgramKey, programs: [] };
 
   const { data } = await supabase
     .from("programs")
@@ -264,6 +280,7 @@ export const getConferenceTable = cache(async function getConferenceTable(
 
   return {
     conference,
+    ourProgramKey,
     programs: ((data ?? []) as DbProgramRow[]).map((row) => toProgram(row, programId)),
   };
 });

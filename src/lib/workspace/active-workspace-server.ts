@@ -38,6 +38,10 @@ function personalWorkspace(viewer: Viewer): Workspace {
     name: 'Personal',
     team: null,
     orgType: null,
+    // A personal workspace has no program row and so no stated zone; the
+    // server's own is UTC on Vercel and nobody's in particular anywhere else,
+    // so this says UTC rather than pretending to know.
+    timeZone: 'UTC',
     role: 'owner',
     mark: viewer.initials,
     canSubmitVideo: true,
@@ -78,7 +82,7 @@ async function listProgramWorkspaces(
   const { data, error } = await supabase
     .from('program_members')
     .select(
-      'role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload, org_type)'
+      'role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload, org_type, time_zone)'
     )
     .eq('user_id', userId)
     .order('joined_at');
@@ -103,6 +107,7 @@ async function listProgramWorkspaces(
           status: string;
           players_can_upload: boolean;
           org_type: string;
+          time_zone: string;
         }
       | undefined;
     if (!program) return [];
@@ -125,6 +130,13 @@ async function listProgramWorkspaces(
         // the value set, so the cast is a naming ceremony rather than a guess.
         // The quota tier hangs off this — see `quotaTierFor()`.
         orgType: program.org_type as ProgramOrgType,
+        // NOT NULL with default 'UTC', so a program that never set one still
+        // reads as a real zone. Rides on the workspace for the reason the
+        // fields around it do: "what day is it for this program" has to be
+        // answerable with only a `Workspace` in hand, and a page computing it
+        // from the server's own clock gets UTC on Vercel — which is nobody's
+        // today. See `zonedDayString` in `lib/data/match-utils.ts`.
+        timeZone: program.time_zone,
         role: row.role as ProgramRole,
         mark: program.school_name.trim().charAt(0).toUpperCase(),
         // 'active' means the claim settled. 'claim_pending' is a live workspace

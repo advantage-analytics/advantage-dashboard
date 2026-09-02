@@ -1,8 +1,14 @@
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import { zonedDayString } from "@/lib/data/match-utils";
 import { canUploadForProgram, isProgramStaff } from "@/lib/workspace/types";
+import {
+  getProgramSchedule,
+  scheduleRowsFrom,
+  seasonSummaryFrom,
+} from "@/lib/data/schedule-server";
 import { StaticSchedule } from "@/components/dashboard/schedule/static/static-schedule";
-import { POPULATED_SCHEDULE } from "@/lib/schedule/fixtures";
+import type { EventDetail } from "@/lib/schedule/types";
 
 /**
  * 25a / 4c -- the program's schedule, now a master-detail layout.
@@ -15,18 +21,23 @@ import { POPULATED_SCHEDULE } from "@/lib/schedule/fixtures";
  * Fetches once -- `getProgramSchedule` -- and passes the full data down so
  * selection in the list swaps the detail pane with no further round-trip.
  *
- * ── Static as of the events-lineups rebuild ────────────────────────────────
- * The two paragraphs above describe the DB-wired body, which `ScheduleList`
- * still implements and which this route no longer runs: nothing here fetches
- * any more. The body is `StaticSchedule`, rendering artboards `7e` and `7d`
- * from `src/lib/schedule/fixtures.ts` — swap `POPULATED_SCHEDULE` for
- * `EMPTY_SCHEDULE` to land on the day-zero frame. `schedule-list.tsx` and the
- * loaders it needs (`getProgramSchedule`, `scheduleRowsFrom`,
- * `eventDetailFrom`) stay exactly where they are, dormant, for the re-wiring.
+ * ── Back on the database, against the rebuilt body ─────────────────────────
+ * The `events-lineups` run re-pointed this route at `StaticSchedule` reading
+ * `src/lib/schedule/fixtures.ts`, so that the `7e`/`7d`/`7c`/`4c` artboards
+ * could be built without a query. The body stays; the fixtures go. Everything
+ * below `getWorkspaceContext` is the pre-static read verbatim — the same three
+ * loaders, the same details map — plus `seasonSummaryFrom` for `7d`'s season
+ * block, which the fixtures used to answer with one hard-coded sentence and
+ * four hard-coded marks.
  *
- * The guards below are untouched, and both permission answers still come from
- * the workspace rather than from the fixtures: `isProgramStaff` gates the
- * drawer's "New event" CTA, and `canUploadForProgram` gates 7e's "One-off
+ * `rows.length === 0` is what selects the `7e` day-zero frame, which is why
+ * nothing here branches on it: a program with no events hands the component an
+ * empty `rows` and the component already knows what that means. That is the
+ * branch `EMPTY_SCHEDULE` used to stand in for.
+ *
+ * The guards are untouched from both eras, and both permission answers still
+ * come from the workspace rather than from the schedule: `isProgramStaff` gates
+ * the drawer's "New event" CTA, and `canUploadForProgram` gates 7e's "One-off
  * match in Matches" — the same rule the DB-wired empty state applied to "Add
  * your own match".
  */
@@ -37,9 +48,39 @@ export default async function SchedulePage() {
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard");
 
+  const schedule = await getProgramSchedule(active.id);
+
+  const rows = scheduleRowsFrom(schedule);
+
+  // Build the detail map: every event's detail, keyed by id, so the client
+  // component can swap panes without a fetch.
+  // Built from the loop's own `event` rather than through `eventDetailFrom`,
+  // which re-`find()`s the very array this is iterating — an O(n²) walk over
+  // the season for a map we already hold both halves of.
+  const details: Record<string, EventDetail> = {};
+  for (const event of schedule.events) {
+    details[event.id] = {
+      event,
+      entries: schedule.entriesByEvent.get(event.id) ?? [],
+    };
+  }
+
   return (
     <StaticSchedule
-      schedule={POPULATED_SCHEDULE}
+      schedule={{ rows, details }}
+      season={seasonSummaryFrom(schedule)}
+      // Today in the PROGRAM's zone, not the server's. `starts_on` is a plain
+      // calendar date authored where the coach is, and the server is UTC on
+      // Vercel — comparing the two against a UTC "today" makes the Next row a
+      // day wrong for every western coach from late afternoon onward, which is
+      // the same class of false claim this row was fixed to stop making.
+      // `zonedDayString` is the app's one answer to "what day is it there",
+      // shared with Team Home's dual sheet and the roster's claimed-today pill.
+      //
+      // Passed as a prop rather than read from a clock in the pane: that
+      // component also renders on the server, and a `new Date()` there would
+      // give the two renders different answers.
+      today={zonedDayString(new Date(), active.timeZone)}
       canCreate={isProgramStaff(active)}
       canAddOwnMatch={canUploadForProgram(active)}
     />

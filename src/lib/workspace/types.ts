@@ -63,6 +63,17 @@ export interface Workspace {
    * three surfaces that must all name the same allowance.
    */
   orgType: ProgramOrgType | null;
+  /**
+   * IANA zone the program's calendar arithmetic runs in — `programs.time_zone`,
+   * NOT NULL with default `'UTC'`. "Personal" for a personal workspace reads as
+   * the server's, which is the only answer available there.
+   *
+   * Here rather than fetched per page because "is this event today" must be
+   * asked in the program's zone, not the server's: on Vercel the server is UTC,
+   * and a schedule computing "today" from its own clock is a day out for every
+   * coach west of Greenwich for the whole evening.
+   */
+  timeZone: string;
   /** The viewer's role here — drives what the workspace is allowed to show. */
   role: ProgramRole;
   /** One or two characters for the switcher's mark. */
