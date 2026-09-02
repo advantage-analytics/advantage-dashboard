@@ -347,16 +347,10 @@ export async function POST(request: NextRequest) {
       ? null
       : payload.trimmedVideoUrl;
 
-    // Which keys these assets land under, and whether the video is kept at all.
-    // The results JSON always gets a key. The trimmed video gets one whenever
-    // the match is nameable (`match_id`) — which INCLUDES a retained team match
-    // whose uploader deleted their account: `created_by` is null, but the video
-    // is still attributable via `match_id` and deletable via `purgeMatchStorage`
-    // (it reads `trimmed_object_key` off the row by `match_id`, never parsing
-    // the key), so it gets a `former-member` key rather than being dropped. Only
-    // a truly orphaned delivery — no job at all — skips the video, since a
-    // multi-gigabyte blob nothing can attribute is a storage bill with no owner.
-    // The branching is a pure helper so it can be unit-tested; see its doc.
+    // Pick this delivery's two storage keys. The results JSON is always keyed;
+    // the trimmed video is kept only when the match is nameable — which includes
+    // a retained match whose uploader deleted their account. The retain/orphan
+    // policy and its full rationale live in selectDeliveryStorageKeys.
     const { resultsKey, trimmedKey } = selectDeliveryStorageKeys({
       jobId,
       createdBy: record.created_by,
