@@ -10,6 +10,7 @@ import AuthButton from "./auth-button";
 import AuthFooter, { AUTH_LINK } from "./auth-footer";
 import FormError from "./form-error";
 import { toAuthError, validateEmail, type AuthError } from "@/lib/auth/error-messages";
+import { safeNext } from "@/lib/auth/safe-next";
 
 /**
  * Google's brand mark. Hoisted out of the component because it is static and
@@ -45,12 +46,19 @@ const GOOGLE_MARK = (
   </svg>
 );
 
-export function LoginForm() {
+/**
+ * @param next Where to land after a successful sign-in — the login page reads
+ *   it from `?next=`. Clamped again here rather than trusted: `safeNext` is
+ *   idempotent, and both navigations below are same-file, so the guarantee
+ *   that no attacker-controlled origin reaches them should be too.
+ */
+export function LoginForm({ next }: { next?: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<AuthError | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const destination = safeNext(next ?? null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,8 +79,10 @@ export function LoginForm() {
         password,
       });
       if (signInError) throw signInError;
-      // Always land on the home dashboard, even if the profile is incomplete.
-      router.push("/dashboard");
+      // The requested destination if there was one — an invite link parks
+      // `/join/<token>` here so the accept page is what opens after sign-in —
+      // otherwise the home dashboard, even if the profile is incomplete.
+      router.push(destination);
     } catch (err: unknown) {
       setError(toAuthError(err));
     } finally {
@@ -86,7 +96,7 @@ export function LoginForm() {
     const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/callback?next=/dashboard`,
+        redirectTo: `${window.location.origin}/callback?next=${encodeURIComponent(destination)}`,
         // Drive the redirect ourselves (below) so supabase-js does not ALSO
         // navigate the browser. Two navigations to the same authorize URL race
         // and abort each other (ERR_ABORTED) — mobile Safari is strict about it,

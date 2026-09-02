@@ -18,7 +18,7 @@ straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Honor a clamped `next` on both login paths
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/auth/login-form.tsx, src/app/(auth)/login/page.tsx, tests/safe-next.spec.ts (new) — guess
 - **done when:**
