@@ -201,3 +201,40 @@ is the runner's. Newest entries at the bottom.
      `{ statistics; shots; film }` object while the new prop uses
      `Record<MatchTab, …>`. Collapsing the two would keep them in step if a
      fourth tab ever appears.
+
+## T5 · KPI strip and the Statistics tab layout — blocked
+- **gate:** stage 5c, `pipeline-guardrails-reviewer`. Mechanical passed
+  (`npm run lint` 0 errors / 37 warnings, `npx tsc --noEmit` exit 0,
+  `npm test` green, subagent's `npm run build` clean) and the completion review
+  returned `VERDICT: pass` on all four criteria. The guardrails reviewer then
+  found a fabricated-data path the criteria did not cover, and the gate is
+  fail-closed on any finding.
+  (A first dispatch of this task was killed by a spend limit before writing
+  anything; the tree was clean and it was simply re-dispatched. Not the reason
+  for the block.)
+- **reason:** the sparkline can silently omit the very match it sits on, and
+  nothing on screen says so. `fetchPlayerStatRows` selects matches with
+  `.in("player1_id", playerIds)` and their `is_player1 = true` stat rows, so a
+  match where the viewer is stored as **player 2** is absent from the set
+  entirely. `getMatchKpiHistory` then appends a bare `{ match_id, date }`
+  anchor with no stat columns; `buildKpiHistory` drops it on its
+  `v !== null` filter, so `series` ends on the PREVIOUS qualifying match. The
+  strip suppresses the sparkline only when `value === null`, but `value` comes
+  from `you.stats` (this match's own published aggregates, correctly picked by
+  side) and is present — so the line renders, ending on an older match, under a
+  headline that is correct for this one. No `detail` prop is passed, so the
+  tile has no hover chart and no per-point labels: nothing distinguishes it
+  from a series ending at today. This hits a genuine participant, not only the
+  already-recorded "viewer is neither player" case.
+  Two fixes the reviewer offered, neither prescribed: gate the sparkline in the
+  component on its last plotted value matching the headline, or seed the
+  anchor row in the loader with the match's own known statistics instead of an
+  empty placeholder. The loader is `match-stats-server.ts` (T1's code), outside
+  T5's `files:` list, so a re-run may need that file added to the task.
+  This was foreseen: T2's log entry, follow-up 2, said "T5 should check this
+  against a real seat-two match." It did not, and the reviewer caught it.
+- **stash:** `4de079114543891fc9fb6e6a2e042ea365d67d3b` — the whole task's work,
+  which is otherwise sound and worth recovering rather than rewriting:
+  `match-kpi-strip.tsx` (new), the `statistics-tab.tsx` reflow, and `page.tsx`'s
+  prop change. Recover with
+  `git stash apply 4de079114543891fc9fb6e6a2e042ea365d67d3b`.
