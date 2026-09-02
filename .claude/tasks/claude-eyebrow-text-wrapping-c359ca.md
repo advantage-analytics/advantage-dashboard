@@ -55,7 +55,7 @@ ready).
 - **notes:** Plan step 3. Independent of T4 — either page adoption must be revertable without the other. Design: `work/eyebrow-text-wrap/02_design/output/design.md`, "Chosen design › Components".
 
 ## T4 · Adopt eyebrow helper and heading slot on the setup screen
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T1, T2
 - **files:** src/app/claim/[programKey]/setup/page.tsx (guess — the `eyebrow` composition ~L52–58 and the `ClaimShell` JSX)

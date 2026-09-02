@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { teamLabel, divisionLabel } from "@/lib/data/programs-server";
+import { teamLabel, programEyebrow } from "@/lib/data/programs-server";
 import { ClaimShell, ClaimHeading } from "@/components/claim/claim-shell";
 import {
   SetupEmailProvider,
@@ -45,13 +45,11 @@ export default async function SetupProgramPage({
   if (!program) notFound();
 
   const squad = teamLabel(program.team as string);
-  const eyebrow = [
+  const eyebrow = programEyebrow(
     program.school_name as string,
-    squad,
-    divisionLabel(program.division as string | null),
-  ]
-    .filter(Boolean)
-    .join(" · ");
+    program.team as string,
+    program.division as string | null
+  );
 
   return (
     <SetupEmailProvider>
@@ -61,13 +59,15 @@ export default async function SetupProgramPage({
         asideWidth={340}
         back={`/claim/${programKey}`}
         aside={<SetupAside />}
+        heading={
+          <ClaimHeading
+            gap={2}
+            eyebrow={eyebrow}
+            title={`Set up ${program.school_name} ${squad.toLowerCase()} tennis`}
+            titlePadTop={6}
+          />
+        }
       >
-        <ClaimHeading
-          gap={2}
-          eyebrow={eyebrow}
-          title={`Set up ${program.school_name} ${squad.toLowerCase()} tennis`}
-          titlePadTop={6}
-        />
         <SetupForm
           programKey={programKey}
           program={{
