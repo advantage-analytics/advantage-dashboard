@@ -103,10 +103,13 @@ export function LoginForm({ next }: { next?: string }) {
     // on the browser's own navigation back to `/callback`, which reads it,
     // clamps it and clears it. `redirectTo` stays the one fixed value it has
     // always been, so the project's redirect allow-list is untouched.
-    if (destination !== "/dashboard") {
-      const secure = window.location.protocol === "https:" ? "; Secure" : "";
-      document.cookie = `${AUTH_NEXT_COOKIE}=${encodeURIComponent(destination)}; Path=/; Max-Age=${AUTH_NEXT_MAX_AGE_SECONDS}; SameSite=Lax${secure}`;
-    }
+    //
+    // Written on EVERY attempt, cleared when there is nothing to carry: an
+    // attempt abandoned at Google's consent screen must not steer the next
+    // sign-in from this browser — on a shared machine, somebody else's.
+    const secure = window.location.protocol === "https:" ? "; Secure" : "";
+    const carry = destination !== "/dashboard";
+    document.cookie = `${AUTH_NEXT_COOKIE}=${carry ? encodeURIComponent(destination) : ""}; Path=/; Max-Age=${carry ? AUTH_NEXT_MAX_AGE_SECONDS : 0}; SameSite=Lax${secure}`;
     const supabase = createClient();
     const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",

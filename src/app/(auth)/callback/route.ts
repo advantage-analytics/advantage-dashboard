@@ -16,7 +16,8 @@ import { toAuthError } from "@/lib/auth/error-messages";
  * destination worth carrying — an invitation's `/join/<token>` — travels in
  * the `AUTH_NEXT_COOKIE` instead, so it never rides in the authorize URL that
  * Supabase's auth server logs. Both are clamped by `safeNext`, and the cookie
- * is cleared on the way out so it cannot steer a later sign-in.
+ * is cleared on every way out of this route, the failures included, so it
+ * cannot steer a later sign-in.
  */
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -24,8 +25,16 @@ export async function GET(request: NextRequest) {
   const carried = request.cookies.get(AUTH_NEXT_COOKIE)?.value ?? null;
   const next = safeNext(carried ?? searchParams.get("next"));
 
+  const leave = (url: string) => {
+    const response = NextResponse.redirect(url);
+    if (carried !== null) {
+      response.cookies.set(AUTH_NEXT_COOKIE, "", { path: "/", maxAge: 0 });
+    }
+    return response;
+  };
+
   if (!code) {
-    return NextResponse.redirect(`${origin}/error`);
+    return leave(`${origin}/error`);
   }
 
   const supabase = await createClient();
@@ -33,7 +42,7 @@ export async function GET(request: NextRequest) {
   if (error) {
     // Translated: /error renders what it is handed, and raw Supabase text is
     // what the rebuild set out to stop showing users.
-    return NextResponse.redirect(
+    return leave(
       `${origin}/error?error=${encodeURIComponent(toAuthError(error).message)}`,
     );
   }
@@ -42,13 +51,9 @@ export async function GET(request: NextRequest) {
   // forwarded host is the only one the browser can follow back.
   const forwardedHost = request.headers.get("x-forwarded-host");
   const isLocalEnv = process.env.NODE_ENV === "development";
-  const response = NextResponse.redirect(
+  return leave(
     !isLocalEnv && forwardedHost
       ? `https://${forwardedHost}${next}`
       : `${origin}${next}`
   );
-  if (carried !== null) {
-    response.cookies.set(AUTH_NEXT_COOKIE, "", { path: "/", maxAge: 0 });
-  }
-  return response;
 }
