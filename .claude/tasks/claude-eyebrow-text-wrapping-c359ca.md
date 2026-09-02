@@ -68,7 +68,7 @@ ready).
 - **notes:** Plan step 4. Independent of T3. The file's own doc comment already explains why conference is absent here; keep it — the reasoning now also lives in the helper. The title may still wrap at 24px for the longest school names; that is normal and not in scope.
 
 ## T5 · Add the eyebrow width-budget regression spec
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** tests/claim-eyebrow-width.spec.ts (new); pattern from tests/fixtures/live-db.ts and tests/schedule-static-copy.spec.ts (guess)
