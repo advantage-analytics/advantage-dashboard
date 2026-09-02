@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { advButton } from "@/lib/ui/adv-button";
+import type { JoinRole } from "@/lib/services/programs/invite-acceptance";
 
 /**
  * Screen 8.2 — what the program can see, before anyone joins it.
@@ -32,6 +33,34 @@ import { advButton } from "@/lib/ui/adv-button";
  * which is not true here, because on 8.2 the approval already happened and the
  * button is the commitment.
  */
+
+/**
+ * How a role is named to the person about to hold it.
+ *
+ * Here rather than in `join-forms.tsx` because two files now print it — the
+ * token screens and the signed-in `InviteOffer` — and a second copy is how
+ * "a coach" and "coach" end up on two screens of the same flow.
+ */
+export const ROLE_NOUN: Record<JoinRole, string> = {
+  coach: "a coach",
+  staff: "staff",
+  player: "a player",
+};
+
+/**
+ * The one way this flow reports a refused action.
+ *
+ * Same reason as `ROLE_NOUN`: every join surface needs it, so it lives beside
+ * the other shared pieces rather than being exported out of one of them.
+ */
+export function Problem({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <p role="alert" className="text-[12px] leading-[18px] text-[var(--danger)]">
+      {message}
+    </p>
+  );
+}
 
 export interface JoinTermRow {
   text: string;
@@ -175,13 +204,15 @@ function formatHours(hours: number): string {
  * the same page with a flag on it cannot do any of those things by construction,
  * which is a stronger guarantee than an action that could and has been reviewed
  * for not doing so.
+ *
+ * The caller passes the whole href because there is no longer one shape for it:
+ * the token screens decline into `/join/<token>?not-now=1`, and the signed-in
+ * offer has no token to build that from. Composing the URL here would mean
+ * inventing a token for the surface that never had one.
  */
-export function NotNowLink({ token }: { token: string }) {
+export function NotNowLink({ href }: { href: string }) {
   return (
-    <Link
-      href={`/join/${encodeURIComponent(token)}?not-now=1`}
-      className={advButton("ghost")}
-    >
+    <Link href={href} className={advButton("ghost")}>
       Not now
     </Link>
   );

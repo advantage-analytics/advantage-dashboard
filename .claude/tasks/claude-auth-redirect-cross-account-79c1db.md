@@ -92,7 +92,7 @@ ready).
 - **notes:** Plan step 3. `createLogins` creates confirmed users (`email_confirm: true`) and derives each address from the marker — read it back from the login, never hard-code one. `accept_program_invite` refuses with `no_seats` when a program is full, so build the program the way `tests/team-roster-progress.spec.ts` does. The unconfirmed branch is deliberately not covered here (a password login cannot reach it); stage 05 checks it by hand.
 
 ## T7 · Shared join components and the `InviteOffer` pane
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T5
 - **files:** src/components/join/join-terms.tsx, src/components/join/join-forms.tsx, src/app/join/[token]/page.tsx, src/components/join/nothing-sent.tsx (new), src/components/join/invite-offer.tsx (new), src/lib/services/programs/join-quota.ts (new) — guess

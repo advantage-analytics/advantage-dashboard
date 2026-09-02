@@ -1,23 +1,16 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import {
-  ClaimShell,
-  ClaimColumn,
-  ClaimHeading,
-  ClaimActions,
-  CLAIM_BUTTON,
-  CLAIM_LINK,
-} from "@/components/claim/claim-shell";
+import { ClaimActions, CLAIM_BUTTON } from "@/components/claim/claim-shell";
 import {
   JoinAskAgain,
   JoinReady,
   JoinSignUp,
   JoinWrongAccount,
 } from "@/components/join/join-forms";
+import { JoinPane } from "@/components/join/join-pane";
+import { NothingSent } from "@/components/join/nothing-sent";
 import { resolveJoinState } from "@/lib/services/programs/invite-acceptance";
-import { getMonthlyCapSeconds } from "@/lib/services/splitstep/config";
-import { monthlyCapSecondsFor } from "@/lib/services/splitstep/quota";
-import type { ProgramOrgType } from "@/lib/workspace/types";
+import { quotaHours } from "@/lib/services/programs/join-quota";
 
 export const metadata = { title: "Join your program" };
 
@@ -49,107 +42,6 @@ export const metadata = { title: "Join your program" };
  * depends on a session and on a row that changes underneath it.
  */
 export const dynamic = "force-dynamic";
-
-/** The chrome every state on this page shares. */
-function JoinPane({
-  width = 720,
-  eyebrow,
-  title,
-  body,
-  children,
-}: {
-  width?: 440 | 720;
-  eyebrow?: string;
-  title: string;
-  body?: React.ReactNode;
-  children?: React.ReactNode;
-}) {
-  return (
-    <ClaimShell width={width} gap={20} exitHref="/" exitLabel="Leave">
-      <ClaimColumn gap={20}>
-        <ClaimHeading
-          gap={2}
-          eyebrow={eyebrow}
-          title={title}
-          titlePadTop={8}
-          body={body}
-          bodyMax="58ch"
-        />
-        {children}
-      </ClaimColumn>
-    </ClaimShell>
-  );
-}
-
-/**
- * The two allowances 8.2's footer compares, in hours.
- *
- * Read here, on the server, from the function `reserveQuota()` asks when it
- * decides whether a submission is refused — so the number a player is shown at
- * the moment they agree to join is the number that will actually be enforced.
- * Which is why it takes the program's org type: a custom org's allowance is
- * the reduced tier (`quotaTierFor()`), and quoting a club's invitee the
- * collegiate 75 hours would break exactly the promise this comment makes.
- * The page hands the forms two plain numbers rather than letting them import
- * this: `splitstep/config` also carries the vendor's internal name, and none of
- * that belongs in a client bundle.
- */
-function quotaHours(orgType: ProgramOrgType): {
-  programHours: number;
-  personalHours: number;
-} {
-  return {
-    programHours: monthlyCapSecondsFor({ kind: "team", orgType }) / 3600,
-    personalHours: getMonthlyCapSeconds("individual") / 3600,
-  };
-}
-
-/**
- * 8.3a — declined, and kept open.
- *
- * Reached by a link, so there is nothing to undo: no row was written, the token
- * is unspent, and the coach who sent it has not been told. That last one is the
- * promise the screen makes out loud, and it is only worth making because the
- * route that renders it cannot write anything.
- */
-function NothingSent({
-  token,
-  programName,
-  inviterName,
-}: {
-  token: string;
-  programName: string;
-  inviterName: string | null;
-}) {
-  return (
-    <JoinPane
-      width={440}
-      eyebrow={programName}
-      title="Nothing was sent"
-      body={
-        <>
-          {inviterName ? `${inviterName} wasn't` : "Nobody was"} notified. The
-          invitation stays open until you use it or it expires.
-        </>
-      }
-    >
-      <div className="flex items-center gap-3 border-t border-[var(--border-hairline)] pt-4">
-        <span
-          aria-hidden="true"
-          className="flex size-8 shrink-0 items-center justify-center rounded-[var(--radius-element)] bg-[var(--surface-subtle)] text-[12px] font-medium text-[var(--ink-700)]"
-        >
-          {programName.trim().charAt(0).toUpperCase()}
-        </span>
-        <span className="text-body-sm min-w-0 flex-1 truncate">
-          Join {programName}
-        </span>
-        <Link href={`/join/${encodeURIComponent(token)}`} className={CLAIM_LINK}>
-          Review
-        </Link>
-      </div>
-    </JoinPane>
-  );
-}
 
 export default async function JoinPage({
   params,
@@ -248,7 +140,7 @@ export default async function JoinPage({
       if (declined) {
         return (
           <NothingSent
-            token={token}
+            reviewHref={`/join/${encodeURIComponent(token)}`}
             programName={state.programName}
             inviterName={state.inviterName}
           />
@@ -281,7 +173,7 @@ export default async function JoinPage({
       if (declined) {
         return (
           <NothingSent
-            token={token}
+            reviewHref={`/join/${encodeURIComponent(token)}`}
             programName={state.programName}
             inviterName={state.inviterName}
           />

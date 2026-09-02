@@ -14,6 +14,8 @@ import {
   JoinQuotaFooter,
   JoinSharingTerms,
   NotNowLink,
+  Problem,
+  ROLE_NOUN,
 } from "@/components/join/join-terms";
 import {
   acceptInvite,
@@ -37,24 +39,6 @@ import type { JoinRole } from "@/lib/services/programs/invite-acceptance";
  * and the server reads it from the invitation; a field here would imply the
  * person could change it, and the only thing changing it can do is fail.
  */
-
-const ROLE_NOUN: Record<JoinRole, string> = {
-  coach: "a coach",
-  staff: "staff",
-  player: "a player",
-};
-
-function Problem({ message }: { message: string | null }) {
-  if (!message) return null;
-  return (
-    <p
-      role="alert"
-      className="text-[12px] leading-[18px] text-[var(--danger)]"
-    >
-      {message}
-    </p>
-  );
-}
 
 /**
  * What the three accepting screens share.
@@ -110,7 +94,7 @@ export function JoinReady({
         >
           {pending ? "Joining…" : `Join ${programName}`}
         </button>
-        <NotNowLink token={token} />
+        <NotNowLink href={`/join/${encodeURIComponent(token)}?not-now=1`} />
         <JoinQuotaFooter
           programHours={programHours}
           personalHours={personalHours}
@@ -225,7 +209,7 @@ export function JoinSignUp({
         <button type="submit" disabled={pending} className={CLAIM_BUTTON}>
           {pending ? "Joining…" : `Join ${programName}`}
         </button>
-        <NotNowLink token={token} />
+        <NotNowLink href={`/join/${encodeURIComponent(token)}?not-now=1`} />
         {/* Some of the people reading this have never chosen a password for
             anything and are not about to start. Google is on `/login`, so the
             way to offer it here is to point at that page and come back — the
