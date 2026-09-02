@@ -391,3 +391,44 @@ is the runner's. Newest entries at the bottom.
      `page.tsx`'s updated comment already assumes the T10 end state.
   2. `insight-strip.tsx` is now orphaned (no importer). T10 deletes it. Left in
      place because deletion was never a T5 criterion.
+
+## T7 · Performance tracker: Expand, above-label, annotation — done
+- **gate:** mechanical — `npm run lint` 0 errors / 37 warnings (baseline 43),
+  `npx tsc --noEmit` exit 0, `npm test` green; the subagent also ran
+  `npm run build` clean. Completion review `VERDICT: pass`. Guardrails —
+  `pipeline-guardrails-reviewer` ran (one dashboard file) and reported "no
+  findings": it traced the differential sign arithmetic and confirmed a
+  player-2 viewer's streak still renders ABOVE the midline (the exact §4
+  mirror-flip this chart is most at risk of), the `{you} above` label and the
+  annotation leader both read `useMatchSides()`, and the game-score line stays
+  behind the unchanged `showScores` guard so no coerced `"0-0"` can surface
+  (flag #9). §3.2/§3.3 untouched; Expand genuinely inert. `rls-boundary-reviewer`
+  skipped — no query or loader in the diff.
+- **changed:** the tracker header drops both legends for an eyebrow + an inert
+  `Expand` (`aria-disabled`, `preventDefault`, dark tooltip "Expanded view
+  coming soon" — flag #11); a 10 px `ink-400` `{you.shortName} above` label
+  sits inside the chart on a `surface-card` backing. Chart is `viewBox 0 0
+  1000 96` at 104 px, dashed `ink-200` set dividers, `ink-200` midline,
+  0.14 area fills, 1.5 px lines, no `viz-key` break verticals, 10 px set
+  labels; series from `scopePoints(points, activeSet)` so the tab-row chips
+  narrow it. Hover: 1 px `ink-300` crosshair + three-line annotation — event
+  (Break of serve · Set N from `detectBreakIndices`, else Match/Set/Break
+  point, else Point N), margin (`{leader} +{n} on margin` / `Level`, game
+  score appended only under `showScores`), mono `{mm:ss} · point {n}` with the
+  time dropped when `videoTime` is null (`!== null`, so a real `0` → `0:00`).
+- **follow-ups (notes, not defects — carry to T12's visual pass):**
+  1. **"Point N" resets per game.** Both reviewers found `MatchPoint.pointNumber`
+     is game-local, not match-global — `video-filters.ts` names the same field
+     `pointNumberInGame` and takes `% 2` on it for Deuce/Ad, which only works if
+     it resets each game. So the annotation's "Point 3" is the 3rd point of its
+     game, not the 3rd of the match. Not a criterion miss (the done-when says
+     only "Point N"), but it may read oddly beside a match-global `videoTime` —
+     worth the designer's eye in T12, and a one-line change if a match-global
+     or set-local index reads better.
+  2. **Margin line shows game score only**, dropping the old `gameScore ·
+     pointScore` pair, per the done-when's singular "game score appended" (the
+     design says the same). If the point score is wanted back, it is one line.
+  3. No live browser check this run (auth-gated, no dev login in the worktree):
+     rests on tsc/build/lint. The plan's dev-server checks — derived match
+     shows a time and no score, a SwingVision import shows a score and no time,
+     `?set=2` draws one set — remain for T12 in a credentialed session.

@@ -91,7 +91,7 @@ ready).
 - **notes:** design § Components → `head-to-head-card.tsx` (the row table); plan step 6. Every you/opp read stays on `useMatchSides()`.
 
 ## T7 · Performance tracker: Expand, above-label, annotation
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3
 - **files:** src/components/dashboard/matches/match-detail/performance-tracker-chart.tsx
