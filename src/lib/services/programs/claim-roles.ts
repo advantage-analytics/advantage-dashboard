@@ -3,19 +3,25 @@
  *
  * Two forms ask "what's your role here" — the claim setup form (F4), where the
  * answer becomes `program_claims.claimant_role`, and the request-an-invite form
- * (6.4), where it becomes `program_requests.role`. The same five answers must
- * mean the same five things in both places, and in the admin queue that reads
+ * (6.4), where it becomes `program_requests.role`. The same six answers must
+ * mean the same six things in both places, and in the admin queue that reads
  * them back, so the list lives here rather than in either form.
  *
  * The database enforces the same set: `program_requests_role_check` on
- * `program_requests.role` names these values. Adding one here means adding it
- * there too, in the same change.
+ * `program_requests.role` and `program_claims_role_check` on
+ * `program_claims.claimant_role` name these values. Adding one here means
+ * adding it there too, in the same change.
+ *
+ * Ordered the way a program's staff page lists people — head coach first,
+ * then the associates and assistants — with "Player" ahead of "Other" because
+ * on the request form a player is the common case, not the exception. The
+ * setup form defaults to the first entry.
  */
 export const CLAIM_ROLES = [
   { value: "head_coach", label: "Head coach" },
+  { value: "associate_coach", label: "Associate coach" },
   { value: "assistant_coach", label: "Assistant coach" },
-  { value: "director_of_tennis", label: "Director of tennis" },
-  { value: "operations", label: "Operations" },
+  { value: "player", label: "Player" },
   { value: "other", label: "Other" },
 ] as const;
 

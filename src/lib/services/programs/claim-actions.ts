@@ -931,7 +931,7 @@ async function fileRequest(row: {
   name?: string | null;
   /**
    * Already allowlisted by the caller — this column is read back by admins,
-   * so it takes one of the five `CLAIM_ROLES` values or nothing, never free
+   * so it takes one of the `CLAIM_ROLES` values or nothing, never free
    * text. `program_requests_role_check` enforces the same set in the database.
    */
   role?: ClaimRoleValue | null;

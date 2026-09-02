@@ -109,7 +109,7 @@ invented:
 | Vocabulary | Values | Means |
 |---|---|---|
 | `ProgramRole` (`workspace/types.ts:20`) | `owner` `coach` `staff` `player` | Standing *inside one program*, from `program_members.role` |
-| Setup form (`setup-form.tsx:10-16`) | `head_coach` `assistant_coach` `director_of_tennis` `operations` `other` | Job title claimed at setup, stored on the claim |
+| Setup form (`setup-form.tsx:10-16`) | `head_coach` `associate_coach` `assistant_coach` `player` `other` | Job title claimed at setup, stored on the claim |
 | `users.role` | `player` `coach` `parent` `academy` | Profile persona — and, today, `founder` for Pro |
 
 The F2 answer belongs in the third once that column is safe to write.
