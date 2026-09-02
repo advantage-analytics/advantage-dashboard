@@ -41,10 +41,7 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { parseWebhookPayload } from '@/lib/services/splitstep/webhook-payload';
-import {
-  resultsObjectKey,
-  trimmedObjectKey,
-} from '@/lib/services/splitstep/object-keys';
+import { selectDeliveryStorageKeys } from '@/lib/services/splitstep/delivery-storage-keys';
 import { RESULTS_BUCKET } from '@/lib/services/splitstep/config';
 import {
   deleteVideoBlob,
@@ -350,26 +347,17 @@ export async function POST(request: NextRequest) {
       ? null
       : payload.trimmedVideoUrl;
 
-    const resultsKey = jobId
-      ? resultsObjectKey({
-          userId: record.created_by!,
-          matchId: record.match_id!,
-          jobId,
-        })
-      : `orphaned/${payload.externalJobId ?? 'unknown'}/${deliveryId}.json`;
-
-    // No orphan fallback for the video, unlike the results key above. The
-    // results JSON is small and worth keeping under any key just to have it; a
-    // multi-gigabyte video filed under a key nobody can attribute to a user is
-    // a storage bill with no owner and no deletion path.
-    const trimmedKey =
-      jobId && record.created_by && record.match_id
-        ? trimmedObjectKey({
-            userId: record.created_by,
-            matchId: record.match_id,
-            jobId,
-          })
-        : null;
+    // Pick this delivery's two storage keys. The results JSON is always keyed;
+    // the trimmed video is kept only when the match is nameable — which includes
+    // a retained match whose uploader deleted their account. The retain/orphan
+    // policy and its full rationale live in selectDeliveryStorageKeys.
+    const { resultsKey, trimmedKey } = selectDeliveryStorageKeys({
+      jobId,
+      createdBy: record.created_by,
+      matchId: record.match_id,
+      externalJobId: payload.externalJobId,
+      deliveryId,
+    });
 
     if (sasUrl || trimmedVideoUrl) {
       after(async () => {
