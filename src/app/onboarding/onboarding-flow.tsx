@@ -5,15 +5,16 @@ import Link from "next/link";
 import { Shield, User, Users } from "lucide-react";
 import AuthCheckbox from "@/components/auth/auth-checkbox";
 import {
-  ClaimActions,
-  ClaimHeading,
-  RadioDot,
-  TermMark,
   CLAIM_BUTTON,
   CLAIM_FIELD,
   CLAIM_LABEL,
   CLAIM_LINK,
   CLAIM_MICRO,
+  ClaimActions,
+  ClaimHeading,
+  ClaimSelect,
+  RadioDot,
+  TermMark,
 } from "@/components/claim/claim-shell";
 import { cn } from "@/lib/utils";
 import {
@@ -346,15 +347,11 @@ export function OnboardingFlow() {
                   <label htmlFor="guardian-class-year" className={CLAIM_LABEL}>
                     Graduating class
                   </label>
-                  <select
+                  <ClaimSelect
                     id="guardian-class-year"
                     value={classYear}
                     onChange={(e) => setClassYear(e.target.value)}
-                    className={cn(
-                      CLAIM_FIELD,
-                      "cursor-pointer",
-                      classYear === "" && "text-[var(--ink-400)]"
-                    )}
+                    className={cn(classYear === "" && "text-[var(--ink-400)]")}
                   >
                     <option value="" disabled>
                       Select year
@@ -364,7 +361,7 @@ export function OnboardingFlow() {
                         {year}
                       </option>
                     ))}
-                  </select>
+                  </ClaimSelect>
                 </div>
               </div>
 

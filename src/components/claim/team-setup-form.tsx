@@ -5,7 +5,12 @@ import { Loader2 } from "lucide-react";
 import { createCustomTeam } from "@/app/claim/team/actions";
 import { CLAIM_ROLES } from "@/lib/services/programs/claim-roles";
 import type { CustomOrgType } from "@/lib/services/programs/create-actions";
-import { CLAIM_BUTTON, CLAIM_FIELD, CLAIM_LABEL } from "./claim-shell";
+import {
+  CLAIM_BUTTON,
+  CLAIM_FIELD,
+  CLAIM_LABEL,
+  ClaimSelect,
+} from "./claim-shell";
 
 /**
  * Onboarding & Team Setup, screen 7.2 — you name it, you own it, no
@@ -142,18 +147,17 @@ export function TeamSetupForm({
             <label htmlFor="ownerRole" className={CLAIM_LABEL}>
               Your role
             </label>
-            <select
+            <ClaimSelect
               id="ownerRole"
               value={role}
               onChange={(e) => setRole(e.target.value)}
-              className={`${CLAIM_FIELD} cursor-pointer`}
             >
               {CLAIM_ROLES.map((r) => (
                 <option key={r.value} value={r.value}>
                   {r.label}
                 </option>
               ))}
-            </select>
+            </ClaimSelect>
           </div>
         </div>
 

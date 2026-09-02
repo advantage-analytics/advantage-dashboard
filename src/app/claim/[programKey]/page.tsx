@@ -143,6 +143,16 @@ export default async function ProgramStatusPage({
   // ── F3.2 · unclaimed ──────────────────────────────────────────────────────
   // The aside is what a narrow card had to leave out: ownership is a job, and
   // the page has room to say what the job is before anyone accepts it.
+  //
+  // The title names the school (4.3b b), so the eyebrow carries only the
+  // qualifiers — the same split as the referral and setup screens beside it.
+  const qualifiers = [
+    teamLabel(program.team),
+    programSubtitle(program.division, program.conference),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <ClaimShell
       width={840}
@@ -162,8 +172,8 @@ export default async function ProgramStatusPage({
     >
       <ClaimHeading
         gap={2}
-        eyebrow={eyebrow}
-        title="No one has set this up yet"
+        eyebrow={qualifiers}
+        title={`No one has set up ${program.schoolName} yet`}
         titlePadTop={8}
       />
       <p className="text-body max-w-[56ch]">
@@ -177,6 +187,9 @@ export default async function ProgramStatusPage({
           <Link href={`/claim/${programKey}/setup`} className={CLAIM_BUTTON}>
             Set up this program
           </Link>
+          {/* The referral screen (4.3b a). No marker on the link: who the
+              visitor is comes from their persona, not from the URL they
+              arrived by. */}
           <Link href={`/claim/${programKey}/request`} className={CLAIM_LINK}>
             Someone else should own it
           </Link>
