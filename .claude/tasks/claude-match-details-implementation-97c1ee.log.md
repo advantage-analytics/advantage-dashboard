@@ -238,3 +238,53 @@ is the runner's. Newest entries at the bottom.
   `match-kpi-strip.tsx` (new), the `statistics-tab.tsx` reflow, and `page.tsx`'s
   prop change. Recover with
   `git stash apply 4de079114543891fc9fb6e6a2e042ea365d67d3b`.
+
+## T6 · Head-to-head as a 15-row table — done
+- **gate:** mechanical — `npm run lint` 0 errors / 37 warnings (baseline 43),
+  `npx tsc --noEmit` exit 0, `npm test` green with the new spec's 18 tests; the
+  subagent also ran `npm run build` clean. Completion review `VERDICT: pass`,
+  having checked all 15 labels, their group membership and casing against the
+  design table itself rather than the subagent's summary. Guardrails —
+  `pipeline-guardrails-reviewer` ran and reported clean on the point that
+  matters most for this card: with two players' numbers in fixed columns, a
+  disagreement between column assignment and value lookup would swap every
+  statistic while all of them stayed real. It traced the binding end to end —
+  `useMatchSides()` is the only column source, `buildStatRows(configs, you,
+  opp)` never sees player order, `tallySide` is passed `sides.you.isPlayer1`
+  and its negation rather than a hardcoded side, the verified glyph is gated on
+  `match.verificationStatus` and sits on the viewer's column, and the leader
+  rule inverts correctly on the two lower-is-better rows. The new spec's
+  `orientation` test swaps you/opp and asserts the leader follows, which is the
+  test that would catch a future drift. `rls-boundary-reviewer` skipped — no
+  query, loader or migration.
+- **changed:** the card becomes the 47f two-column table: 15 rows in Serve 7 /
+  Return 4 / Points 4, sentence-case labels, `rowLeader()` exported pure with
+  `lowerIsBetter` on Double faults and Unforced errors, Break points saved
+  rendered as a percentage from `fractions.breakpointsSaved` with `9/12` in the
+  tooltip, and Return winners a keyless row that always renders the em dash.
+  Gone: the legend row, the local set chips and their state, the two-segment
+  share bars, and the 9 px fraction sub-figures. The per-set derivation is
+  kept and now reads `useSetScope()`/`scopePoints()`, with the header meta from
+  `scopeMeta()`. New `tests/match-h2h-rows.spec.ts`, 18 database-free tests.
+- **follow-ups:**
+  1. **A latent "absent is never zero" gap in the data layer, not in this
+     card.** `match-stats-server.ts` coalesces `winners`, `unforcedErrors`,
+     `totalPoints` and `totalPointsWon` with `?? 0`, while only the five
+     columns `suppress_derived_match_stats()` may null reach the card as real
+     nulls. If a future source ever withholds one of those four, the Winners,
+     Unforced errors or Total points won row prints a confident `0` instead of
+     an em dash. Identical in the old 46a card and outside this diff, so not a
+     regression — but it is the one place the card's honesty contract rests on
+     an assumption the loader does not enforce.
+  2. **Dead computation left in `tallySide`.** It still tallies
+     `servicePoints`, `returnPoints` and the three rally bands, which fed rows
+     the old 24-row config carried and no surviving row reads. The subagent
+     kept them reading "keep the derivation intact" literally; the completion
+     reviewer called that dead code rather than restraint, and it is a
+     `/simplify` candidate at branch end rather than a defect.
+  3. Two tooltips can overlap on an em-dash cell — the row's `ChartTooltip`
+     carrying label and fraction, and the cell's own missing-data tooltip. Both
+     were required by the criteria. Worth a look in T12 once the card can be
+     seen in the real two-column layout.
+  4. The third group is titled "Points" per the design, where the old card said
+     "Other". Nothing else referenced those titles.

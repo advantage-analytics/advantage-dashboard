@@ -79,7 +79,7 @@ ready).
 - **notes:** design § Components → `match-kpi-strip.tsx`, `statistics-tab.tsx`; plan step 5. `insight-strip.tsx` itself is deleted in T10.
 
 ## T6 · Head-to-head as a 15-row table
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3
 - **files:** src/components/dashboard/matches/match-detail/head-to-head-card.tsx, tests/match-h2h-rows.spec.ts
