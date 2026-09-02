@@ -67,7 +67,7 @@ ready).
 - **notes:** The most visible diff in the feature: 38px → 36px and 8px → 6px across every claim, join and onboarding field at once. Screenshot `/claim`, `/claim/team/setup` and one `/join/[token]` page before and after; tab through one form and confirm every field still shows the neutral focus ring (focus.css supplies it — nothing in the class string should try to).
 
 ## T4 · Verify the six CLAIM_FIELD consumers inherit T3 unchanged
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T3
 - **files:** `src/components/claim/setup-form.tsx`, `src/components/claim/team-setup-form.tsx`, `src/components/claim/unlisted-program-form.tsx`, `src/components/claim/contact-owner-form.tsx`, `src/components/join/join-forms.tsx`, `src/app/onboarding/onboarding-flow.tsx` — guess; all verified present and all consume `CLAIM_FIELD`
