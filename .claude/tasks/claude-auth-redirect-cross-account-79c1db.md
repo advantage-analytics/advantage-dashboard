@@ -79,7 +79,7 @@ ready).
 - **notes:** Plan step 2. Function names and return shapes are T4's. The action takes one argument on purpose: the role and program come from the database after the SECURITY DEFINER function has bound the row to the caller's confirmed address, and a `role` argument would let a raw-RPC caller pick their own persona. `rls-boundary-reviewer` runs (new query under `src/lib/data/`).
 
 ## T6 · Live-database spec for the pending-invite functions
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4
 - **files:** tests/pending-invites.spec.ts (new) — guess
