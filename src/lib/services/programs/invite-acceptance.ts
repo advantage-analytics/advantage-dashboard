@@ -193,11 +193,10 @@ export async function loadInvite(token: string): Promise<InviteRecord | null> {
  * than "Nobody was notified" — it reads as a bug, and it is one.
  */
 export function displayName(first: string | null, last: string | null): InviterName {
-  const name = [first, last]
-    .map((part) => part?.trim() ?? "")
-    .filter(Boolean)
-    .join(" ");
-  return name ? titleCaseName(name) : null;
+  // `titleCaseName` already trims and collapses internal whitespace, so a blank
+  // half arrives here as a leading or trailing space and leaves as nothing.
+  // Trimming the parts first would be the same work done twice.
+  return titleCaseName([first, last].join(" ")) || null;
 }
 
 /**

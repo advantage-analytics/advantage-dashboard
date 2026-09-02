@@ -48,7 +48,7 @@ export function normalizedPersonName(
 }
 
 /**
- * The one definition of "how a name is spelled on screen".
+ * How a name is spelled on screen, for the surfaces that call this.
  *
  * `normalizedPersonName` above answers "are these the same person"; this
  * answers the other half — what to print once you know. The two are
@@ -58,8 +58,15 @@ export function normalizedPersonName(
  *
  * The input is whatever a human typed into a roster form or an uploader typed
  * into the wizard, so it arrives in every case there is — `clajerson gimena`,
- * `CLAJERSON GIMENA`, `Clajerson Gimena`. Rendering those three side by side in
- * one roster is the thing this exists to stop.
+ * `CLAJERSON GIMENA`, `Clajerson Gimena`. Rendering those three side by side is
+ * the thing this exists to stop.
+ *
+ * Know what is NOT wired to it yet, because the gap is easy to misread as
+ * coverage: only the claim and join flows call this — `toResult` in
+ * `programs-server.ts` for every claim surface, and `displayName` in
+ * `invite-acceptance.ts` for the join half. The roster still renders
+ * `display_name` exactly as it was typed, and the invite email still prints the
+ * inviter's name raw. A new surface has to opt in; nothing forces the call.
  *
  * Applied per whitespace-separated token, first match wins:
  *
@@ -119,12 +126,7 @@ export function normalizedPersonName(
  * one on a tennis roster.
  */
 export function titleCaseName(value: string): string {
-  return value
-    .trim()
-    .split(/\s+/)
-    .filter((token) => token.length > 0)
-    .map(titleCasedToken)
-    .join(" ");
+  return value.trim().split(/\s+/).map(titleCasedToken).join(" ");
 }
 
 /** R1's test: an uppercase after the first character, plus a lowercase somewhere. */
@@ -158,6 +160,12 @@ function titleCasedToken(token: string): string {
   return token.toLowerCase().replace(/[^-']+/g, titleCasedSegment);
 }
 
+/**
+ * The last line is `capitalize()` from `@/lib/utils` spelled out rather than
+ * called, deliberately: that module pulls in `clsx` and `tailwind-merge`, and
+ * this one is a pure data module with no imports at all. One duplicated
+ * expression is the cheaper of the two costs.
+ */
 function titleCasedSegment(segment: string): string {
   const mc = MC_SEGMENT.exec(segment);
   if (mc) return `Mc${mc[1].toUpperCase()}${mc[2]}`;
