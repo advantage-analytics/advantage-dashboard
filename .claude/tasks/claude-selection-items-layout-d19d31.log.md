@@ -9,3 +9,7 @@ is the runner's. Newest entries at the bottom.
 - **follow-ups:**
   1. `src/components/claim/team-type-choice.tsx` (~65–80) is the byte-identical twin of these rows; the values above are its spec if brought along on its own branch.
   2. The guardian panel in step 3 of the same file (~371) still carries `px-[18px] py-4`, the last bracketed horizontal padding in the onboarding flow.
+
+## T2 · Re-space the org-type rows in team-type-choice.tsx — done
+- **gate:** lint OK · tsc OK · test OK · task-completion-reviewer `VERDICT: pass` (all five criteria met; twin-diff against the college block reports only the aria-label / `OPTIONS` / `type` / `setType` identifier lines) · pipeline-guardrails-reviewer skipped (diff touches no `src/app/dashboard/`, `src/components/dashboard/` or upload-wizard path) · rls-boundary-reviewer skipped (diff touches no `src/lib/supabase/`, `src/lib/data/`, `src/app/api/` or `supabase/migrations/` path, no new table/view/query).
+- **changed:** `src/components/claim/team-type-choice.tsx` only. Applied T1's values one-for-one: radiogroup container `gap-2.5` → `gap-2`; option row `gap-3.5 px-[18px] py-4` → `gap-2.5 px-5 py-4`; label/sub stack `gap-[3px]` → `gap-1`; label gains `leading-5`; `RadioDot` call now passes `align="mt-[3px]"` with T1's four-line JSX comment carried over verbatim. `RadioDot`'s default in claim-shell.tsx, team-kind-choice.tsx and role-choice.tsx untouched. Copy, roles, handlers and the `ClaimActions` row byte-identical.
