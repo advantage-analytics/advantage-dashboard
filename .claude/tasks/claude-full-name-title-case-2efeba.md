@@ -55,7 +55,7 @@ ready).
 - **notes:** The live database is the source of truth — the repo is ~100 migrations behind, so read both current definitions from live before writing, not from the migration folder. Sanity check after apply, reported not gated: `program_public_status()` for the ZZ Test Program returns the owner's full name with no trailing `.`, and `search_programs` on that school returns the same rather than `C. Gimena`. If the Supabase MCP is unavailable to the subagent, the file may be written but the task must end `blocked` — do not claim it was applied. Independent of T1 and T2: the SQL and the TypeScript are separate halves of one result.
 
 ## T4 · Live-database regression fence for both functions
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3
 - **files:** tests/program-owner-name-live.spec.ts (new), tests/fixtures/live-db.ts (read only) — guess
