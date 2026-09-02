@@ -411,7 +411,7 @@ list below instead.
 - **notes:** Deleting both is optional — the brief permits them to survive the run: leaving them is an acceptable outcome, deleting them while something still compiles against them is not. README §4 flags `opponent-name-cell.tsx`'s re-target `key` contract as required reading before touching it, and design open question 3 records that it was **not** read during design — that debt comes due here.
 
 ## T25 · Confirm the already-live routes still agree
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T20, T23
 - **files:** none expected — `src/app/dashboard/team/schedule/[eventId]/page.tsx`, `.../single/[matchId]/page.tsx` and their detail components, read-only

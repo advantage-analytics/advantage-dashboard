@@ -2346,3 +2346,108 @@ that domain types belong in `lib/schedule/types.ts`.
    `LineupEditor`". Comments only; all compile.
 4. `.skills/advantage-analytics-design/SKILL.md:1087` has a table row
    `| NameField | schedule/lineup-editor.tsx |` pointing at a deleted file.
+
+## T25 · Confirm the already-live routes still agree — done
+
+**gate:** lint clean (37 warnings, baseline) · `tsc --noEmit` clean ·
+`npm test` green (260) · `npm run build` green.
+`task-completion-reviewer` → **VERDICT: pass**. Guardrails: **both skipped** —
+this task changed no source file at all, so neither reviewer's trigger
+surfaces are touched. `git diff HEAD` is the runner's `status:` line and
+nothing else.
+
+**criterion 4 held: no source was changed.** A verification pass that found
+nine things and fixed none of them, which is what it was asked to do.
+
+**criteria 1–3, observed on screen.** A dual and a tournament were created
+**through the UI** — not by direct insert, so what the builders write is what
+the event page reads — and each opened at `/dashboard/team/schedule/<id>`:
+`DualDetail` drew "vs Duke University Men's Tennis", 0–0, "9 lines · no
+results yet"; `TournamentDetail` drew "2 entries · no results yet" and its run
+strips. The stored dual carried nine entries with `player_user_ids` resolved
+to real roster rows and `format {"best_of":3,"ad_scoring":false}`. A seeded
+single match rendered `SingleDetail` with a WON badge, and the **negative** was
+checked too — an event-linked match id at that route 404s, so the
+`event_entry_id is null` scoping holds. Both report links (`4c`'s "View
+report" and `[eventId]`'s "Report") produce a real uuid href and land on a real
+match page; a fixture id at the same route errors with Postgres `22P02`. The
+stage-03 bet paid off — real `<Link>`s against fixture ids became correct by
+re-pointing, with no rewrite.
+
+**do the six routes agree? On data, yes. On words, not entirely.** The
+schedule row, the `4c` widget and `[eventId]` read the same event through
+`readSchedule` and showed the same 5–2, the same per-line outcomes and the
+same S5 forfeit. The disagreements are all copy, and are findings 1, 3, 4 and
+7 below.
+
+**method note the reviewer examined and accepted.** Criterion 3 could only be
+reached by seeding a `processing_jobs` row owned by the ephemeral user,
+because that table's RLS is per-creator and a coach cannot see another
+account's jobs. The reviewer judged that a legitimate way to reach the state
+under test rather than a bypass — and observed that the seed creates an
+unrealistic has-video/no-stats combination, which may itself be part of what
+finding 4 describes.
+
+**Verification touched the live database and was cleaned up.** Two events and
+eleven entries created through the UI, eight seeded `program_players`, two
+seeded `processing_jobs`, the `A. Verifier` row `createDual` contributed to
+Duke, an ephemeral coach, and ZZ's lent conference/division — all removed.
+Re-verified from this session: 1,941 programs / 4 owned, 5 events, 33 entries,
+6 members, 4 players (0 for ZZ), conference and division null, zero rows
+matching this task's markers, zero dangling `program_members`. The single
+`contributed_by_program_id` row in the table is **Emily Baek on Columbia,
+created 2026-08-28** — days before this session, not ours.
+
+**`auth.users` reads 16, not the 14 this run has seen throughout.** The two
+extra are `jr-req-…-outsider@example.com` and `jr-req-…-a-player@example.com`,
+created 2026-09-02 00:33, matching the run marker in
+`tests/join-request*.spec.ts` — orphans from an interrupted test run, not this
+task's. Left in place deliberately rather than deleting rows the task did not
+create. Safe to remove by hand. (This also explains the earlier 15 → 14 drift
+noted under T21: that table moves for reasons outside this queue.)
+
+**findings — reported, not fixed. Several want tasks.**
+1. **`static-schedule.tsx` still prints two hardcoded artboard literals on a
+   now-live page.** The "Next" row said "in 4 days" for an event dated **today**,
+   and the "Last" row said "8 of 9 lines analyzed" directly under a season
+   block reading "1 of 41 lines analyzed" — the same words, twice, one
+   computed and one invented. Flagged since T15 and still unqueued; this is
+   the most visible leftover of the whole rebuild.
+2. **`processing_jobs` RLS is per-creator** (`auth.uid() = created_by`, no
+   program clause) unlike `matches`. Signed in as a ZZ **coach**, every Seed
+   State line read `no-video`: no report link on a `completed` job, no
+   "Analyzing" chip on a `processing` one, and the single-match route offered
+   "Upload video" for a match whose job is `uploaded`. A coach cannot see the
+   state of a job their own player uploaded. Confirms and sharpens the T15
+   note that the coverage figure is viewer-dependent.
+3. **`schedule-server.ts` selects `matches.source_provider` and drops it.**
+   `MATCH_COLUMNS` includes it, `DbEntryMatch` never declares it, and
+   `readSchedule` does `analysis?.status ?? "manual"` rather than calling
+   `analysisFor()` — whose own doc says it exists so both call sites resolve
+   "no job" identically. A SwingVision import reads `imported` on the matches
+   list and `manual` on all four schedule surfaces: guardrails §3.2 vocabulary
+   drift at a third call site. Same defect T14 logged, now confirmed live.
+4. **`/dashboard/matches/[matchId]` claims a point timeline exists for
+   matches that have none.** A hand-scored dual line with no job and no
+   `match_stats` printed "Point-by-point analysis is ready… Every point below
+   has been checked against the final score you entered". Nothing was checked
+   and no video was ever sent — and this is the page every schedule report
+   link lands on. **New, and the most serious of the nine.**
+5. Two stale route doc-comments: `new/tournament/page.tsx` still says
+   submitting "is not wired yet" and the Create button "is still inert";
+   `new/dual/page.tsx` still calls the deleted `dual-form.tsx` and
+   `school-search.tsx` "dormant where they were". Both contradict the README.
+6. The tournament builder's "3 Big Ten programs are in this field" callout
+   asserted Big Ten while the program under test was lent an **ACC**
+   conference. Defensible against fixtures; now a false claim about a real
+   program.
+7. `4c` and `[eventId]` use different words for the same `no-video` state —
+   nothing / "Coming soon" versus "Add video" / "Add file". States agree,
+   affordances do not.
+8. `createDual` stores the full display name, so a dual reads "vs Duke
+   University Men's Tennis" everywhere the seeded events and artboards use a
+   bare school name. Consistent across all six routes — verbose, not a
+   disagreement.
+9. The stage-03 note claimed a fixture id "lands on the match route's existing
+   not-found"; it actually throws and renders the error boundary. Moot now,
+   but the note is wrong.
