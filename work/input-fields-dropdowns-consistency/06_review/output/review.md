@@ -1,6 +1,6 @@
 # Review — input-fields-dropdowns-consistency
 
-Sign-off: pending
+Sign-off: approved
 
 *Edit that line to `approved` — or annotate it — to clear the pipeline's final
 gate. Stage 07 will not land a workspace whose sign-off still reads pending.*
