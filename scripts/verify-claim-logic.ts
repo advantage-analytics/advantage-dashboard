@@ -22,6 +22,7 @@ import {
   isAcademic,
   checkClaimEmail,
   NOTE_REVIEW,
+  NOTE_CONFIRM,
 } from '../src/lib/services/programs/domain-match';
 import {
   nextClaimStatus,
@@ -130,6 +131,24 @@ for (const [addr, wantMatch, wantSkip] of CASES) {
 const freemailResult = checkClaimEmail('coach@gmail.com', fake);
 check('freemail routes to review', freemailResult.reason.includes('review'), true);
 check('freemail gets the quiet note', freemailResult.inlineNote, NOTE_REVIEW);
+
+// The non-freemail note must be one string for every school address — the same
+// line whether the domain matches or not, so it can never be read as this
+// address being recognised, and never flips into an enumeration oracle.
+const matchedNote = checkClaimEmail('coach@utk.edu', fake).inlineNote;
+const unmatchedNote = checkClaimEmail('coach@example.com', fake).inlineNote;
+check('school address gets the confirm note', matchedNote, NOTE_CONFIRM);
+check('unmatched domain gets the same note', unmatchedNote, matchedNote);
+check(
+  'confirm note says a person may check it',
+  /a person will check it/.test(NOTE_CONFIRM),
+  true
+);
+check(
+  'confirm note never claims recognition',
+  /recogni[sz]ed|approved/i.test(NOTE_CONFIRM),
+  false
+);
 
 console.log('the guard must FAIL CLOSED on every non-true representation');
 for (const value of ['false', 'False', false, 0, null, '', 'no', 'maybe', 'TRUE_ISH']) {
