@@ -44,7 +44,7 @@ ready).
 - **notes:** plan step 2. Guardrails §4 — a wrong you-side id silently attributes the baseline to the wrong person, which is why this is routed up. Remove any temporary logging before committing.
 
 ## T3 · Set-scope primitive: hook, helpers, chips, spec
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/matches/match-detail/set-scope.tsx, tests/set-scope.spec.ts
 - **done when:**

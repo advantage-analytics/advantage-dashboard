@@ -110,3 +110,47 @@ is the runner's. Newest entries at the bottom.
      rendered output" claim rests on the verified predicate equivalence and on
      no component reading the new field — both independently confirmed by the
      completion reviewer.
+
+## T3 · Set-scope primitive: hook, helpers, chips, spec — done
+- **gate:** mechanical — `npm run lint` 0 errors / 37 warnings (baseline 43),
+  `npx tsc --noEmit` exit 0, `npm test` green with the new spec's 19 tests.
+  Completion review `VERDICT: pass`; it re-ran the spec itself and ruled on the
+  one judgement call below. Guardrails — `pipeline-guardrails-reviewer` ran
+  (both new files are untracked but land under `src/components/dashboard/`, so
+  the `git ls-files --others` half of the surface check is what caught it) and
+  reported clean: `useMatchSides().sets` is the sole, unbypassed orientation
+  source, the tiebreak games rule is right, and the design-system radius and
+  blue-accent rules hold. `rls-boundary-reviewer` skipped — no query, no
+  loader, no migration; the file reads context only.
+- **changed:** new `set-scope.tsx` with a pure layer (`selectableSets`,
+  `parseSetParam`, `setScopeQuery`, `scopePoints`, `scopeMeta`), the
+  `useSetScope()` hook over `?set=` writing with `router.replace` and
+  `scroll: false`, and the `SetScopeChips` segmented control. New
+  `tests/set-scope.spec.ts`, 19 database-free tests. Nothing mounts the chips
+  yet; T4 does that.
+- **follow-ups:**
+  1. **Sequencing risk the guardrails reviewer raised, worth acting on before
+     T4.** T4 mounts `SetScopeChips` in the tab row; T6 removes
+     `head-to-head-card.tsx`'s own local `activeSet` chips. Neither depends on
+     the other, and file order runs T4 first — so between them the Statistics
+     pane carries TWO unsynchronised set filters: selecting a set in one does
+     not filter the other, and the card's own "Whole match" reset does not
+     clear the URL param the tab-row chips read. Both derive orientation
+     correctly, so it is not a misattribution bug, just a visible split-brain
+     state in an intermediate commit. Marking T6 `next` before T4 runs, or
+     running T6 immediately after T4, closes the window. The queue is the
+     author's, so this run changed nothing.
+  2. `?set=` naming a set that exists but has no point rows reads as `null`
+     (whole match), not as an empty filter — stronger than the criterion's
+     "out-of-range", taken from the design's error-handling section, and
+     implemented as one `selectableSets` rule shared by the URL parse and the
+     chips' disabled state so the two cannot drift. The completion reviewer
+     ruled this faithful rather than an overreach. If T6 ever wants a
+     zero-row set selectable-but-empty, that rule is the single line to change.
+  3. `SetScopeChips` calls `useMatchData()`/`useMatchSides()` and then
+     `useSetScope()`, which calls both again. Harmless today (context reads,
+     `getMatchSides` is cheap), but memoize inside the hook if `useMatchSides`
+     ever grows real work.
+  4. `select()` has no "already there" guard, unlike `match-tabs.tsx`.
+     Unreachable through the UI, since re-selecting the active chip toggles to
+     null; a direct `select(activeSet)` would issue a no-op `replace`.
