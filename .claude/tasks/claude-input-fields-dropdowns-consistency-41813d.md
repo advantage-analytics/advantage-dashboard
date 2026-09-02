@@ -26,7 +26,7 @@ ready).
 > `node_modules` panics Turbopack.
 
 ## T1 · Add the advField() class helper
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** `src/lib/ui/adv-field.ts` (new; modelled file-for-file on `src/lib/ui/adv-button.ts`) — guess; may also touch `src/styles/design-system/colors.css` if `--bg-field` is defined there
 - **done when:**
