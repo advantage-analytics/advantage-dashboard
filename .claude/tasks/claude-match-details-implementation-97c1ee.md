@@ -67,7 +67,7 @@ ready).
 - **notes:** plan step 4.
 
 ## T5 · KPI strip and the Statistics tab layout
-- **status:** blocked
+- **status:** done
 - **model:** opus
 - **needs:** T2, T4
 - **files:** src/components/dashboard/matches/match-detail/match-kpi-strip.tsx (new), src/components/dashboard/matches/match-detail/statistics-tab.tsx, src/app/dashboard/matches/[matchId]/page.tsx

@@ -350,3 +350,44 @@ is the runner's. Newest entries at the bottom.
   status set to `todo` in this same commit, so the next `/task-next` re-runs it
   against this fixed loader; the strip code needs no edit and must clear the
   guardrails reviewer on the exact sparkline-ends-early finding.
+
+## T5 · KPI strip and the Statistics tab layout — done (re-run after T13)
+- **history:** first run BLOCKED (`adfbbeb`) on a guardrails finding — the
+  sparkline could end on an older match while the headline was correct for the
+  current one. Root cause was in the loader, not the strip; T13 (`e7ba057`)
+  fixed it. This run restored the identical, previously-completion-reviewed
+  strip code from stash `4de0791` and re-gated it against the fixed loader; the
+  strip itself needed no edit.
+- **gate:** mechanical — `npm run lint` 0 errors / 37 warnings (baseline 43),
+  `npx tsc --noEmit` exit 0, `npm test` green. Completion review `VERDICT:
+  pass` (re-run; also verified algebraically that a ≥2-point series cannot
+  exist while its baseline is absent, since both derive from the same `others`
+  rows). Guardrails — `pipeline-guardrails-reviewer` re-ran on the exact prior
+  finding and reported it **resolved**: `fetchPlayerStatRows` now fetches both
+  seats, `ownSeatRows` resolves the real seat, `buildKpiHistory` builds no
+  window when there is no own-seat anchor (the fabricated stand-in is gone),
+  and `resolveKpiHistory` derives the seat from the same `resolveYouSide` test
+  that feeds `useMatchSides().you`, so headline and series cannot diverge. It
+  re-confirmed §4 (strip reads `useMatchSides().you` only), §3.2/§3.3 untouched,
+  no fabricated numbers, correct "vs your avg"/"vs avg" pronoun, and "no new
+  findings, safe to unblock". `rls-boundary-reviewer` skipped — T5's own diff
+  is three dashboard files, no query or loader (the data change was T13's).
+- **changed:** new `match-kpi-strip.tsx` (four `KpiTile` from `shared/kpi-tile.tsx`,
+  values from `useMatchSides().you.stats`, break points saved from
+  `fractions.breakpointsSaved` made/attempts, `—`+"Not measured" on null or
+  zero attempts, trend `round(value − baseline)` only when both are present,
+  sparkline from `kpiHistory.series[key]`, "No earlier matches to compare" on
+  an absent baseline). `statistics-tab.tsx` props narrow to `{ statsPublished,
+  isDerived }` and it renders notice → strip → `grid xl:grid-cols-2` (H2H left;
+  tracker/rally/endings right), no longer importing `InsightStrip`. `page.tsx`
+  passes the two props.
+- **follow-ups (both surfaced by the completion reviewer, both belong to T10,
+  not T5):**
+  1. `match-rail.tsx` still gates the Advantage Intelligence summary on
+     `activeTab !== "statistics"` — so with `InsightStrip` now gone from the
+     Statistics pane, the summary shows on Shots/Film but NOWHERE on
+     Statistics. T10 reworks the rail to pin a `RailInsightCard` on every tab,
+     which closes this; until T10 lands, the Statistics tab has no AI summary.
+     `page.tsx`'s updated comment already assumes the T10 end state.
+  2. `insight-strip.tsx` is now orphaned (no importer). T10 deletes it. Left in
+     place because deletion was never a T5 criterion.

@@ -89,8 +89,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
 
   const userInsights = sides.pick(insights?.player1, insights?.player2);
   // Synthesized prose insight (home-quality), generated once at upload. The
-  // rail shows it on every tab but Statistics, where it is the pane's own
-  // insight strip instead (artboard 46a).
+  // rail is now its only home — the Statistics pane's own copy of it is gone,
+  // so this reads the same on every tab.
   const summary = userInsights?.summary?.trim() || null;
 
   const p1 = statsResult?.statistics?.player1Stats;
@@ -174,8 +174,6 @@ export default async function MatchDetailPage({ params }: PageProps) {
         tabs={{
           statistics: (
             <StatisticsTab
-              matchId={matchId}
-              summary={summary}
               statsPublished={statsPublished}
               isDerived={isDerived}
             />
