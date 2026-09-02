@@ -8,24 +8,24 @@ import { inviteSentence } from "@/lib/services/programs/join-role";
 import { createClient } from "@/lib/supabase/server";
 import { OnboardingFlow } from "./onboarding-flow";
 
-export const metadata = { title: "How do you use Advantage?" };
+export const metadata = { title: "What should we call you?" };
 
 /**
- * First-run onboarding — Onboarding & Team Setup screens 1.2 and 1.3, plus the
- * junior branch's guardian step, 3.1 (1.1, the account screen, is the existing
- * auth flow and out of scope).
+ * First-run onboarding — Onboarding & Team Setup screens 1.2 through 1.4, plus
+ * the junior branch's guardian step, 3.1 (1.1, the account screen, is the
+ * existing auth flow and out of scope).
  *
  * The dashboard layout redirects here while `users.onboarded_at` is null; the
  * mirror-image check below is what makes the flow unreachable once it is set,
  * so a bookmarked /onboarding can never re-run the questions. Signed-out
  * visitors go to login like any protected page.
  *
- * All three screens live in one client component — the step split is a branch
+ * All four screens live in one client component — the step split is a branch
  * in the flow, not a route — and the answers persist through
  * `finishOnboarding` and `finishGuardianOnboarding` in `actions.ts`, which is
  * also where the routing table lives.
  *
- * ── Step zero: a live invitation is offered before the persona question ─────
+ * ── Step zero: a live invitation is offered before the first question ───────
  * An account with a pending invitation is asked to accept it first, and only
  * the accounts with none are asked how they use Advantage. The invitation
  * already answers what those questions ask: who the person is on this
@@ -36,7 +36,7 @@ export const metadata = { title: "How do you use Advantage?" };
  * would be work nobody needs.
  *
  * "Not now" is a flag on a GET and writes nothing: `?not-now=1` falls straight
- * through to the persona question, and the next visit without the flag offers
+ * through to the name question, and the next visit without the flag offers
  * again. That is right rather than forgetful — the account is still
  * un-onboarded, so it is still being asked its first question, and the
  * invitation is still the better one.

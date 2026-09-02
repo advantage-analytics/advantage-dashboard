@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { parseTypedName } from "@/lib/data/person-name-case";
 import { createClient } from "@/lib/supabase/server";
 import {
   GUARDIAN_PLAYER_NAME_MAX,
@@ -9,10 +10,10 @@ import {
 } from "./guardian-options";
 
 /**
- * The three ways `finishOnboarding` resolves. Step 1's "I coach" finishes
- * immediately; "I play" branches into step 2, whose answers collapse to
- * `college` (on a roster) or `solo` (everything else, including Skip — a
- * recruit is a club player with a college in their future).
+ * The three ways `finishOnboarding` resolves. The persona step's "I coach"
+ * finishes immediately; "I play" branches into the college question, whose
+ * answers collapse to `college` (on a roster) or `solo` (everything else,
+ * including Skip — a recruit is a club player with a college in their future).
  *
  * "I manage a junior's account" is deliberately NOT here. That persona
  * continues into the guardian step (screen 3.1) and resolves only through
@@ -48,7 +49,33 @@ const RESOLUTION: Record<
 };
 
 /**
- * Persist the persona, stamp `onboarded_at`, and leave for the destination.
+ * The name step's two fields (screen 1.2), as both resolutions receive them.
+ *
+ * The name is carried in client state from the first screen and written by
+ * whichever action finishes the flow, never on its own: a person who types a
+ * name and closes the tab has changed nothing, and is asked again next visit
+ * with empty fields — the design's rule that the fields never prefill, from
+ * the OAuth profile or from anywhere else. `parseTypedName` re-applies the
+ * blur casing and rejects a blank, so what is stored is what was seen and a
+ * `""` never lands in a nullable column. Overwrites whatever
+ * `handle_new_user` split out of the Google profile at signup, which is the
+ * point: that string is the fallback for accounts that never see this screen.
+ */
+function parseNamePair(input: {
+  firstName?: unknown;
+  lastName?: unknown;
+}): { first_name: string; last_name: string } | null {
+  const first = parseTypedName(input?.firstName);
+  const last = parseTypedName(input?.lastName);
+  if (first === null || last === null) return null;
+  return { first_name: first, last_name: last };
+}
+
+const NAME_ERROR = "Enter your first and last name.";
+
+/**
+ * Persist the name and the persona, stamp `onboarded_at`, and leave for the
+ * destination.
  *
  * Every path stamps — including `college`, which continues into the claim
  * flow: the questions are answered, and leaving the stamp for the claim to set
@@ -58,19 +85,30 @@ const RESOLUTION: Record<
  * matched nothing would otherwise loop this person through the gate forever
  * while claiming success.
  */
-export async function finishOnboarding(
-  choice: OnboardingChoice
-): Promise<{ ok: false; error: string }> {
+export async function finishOnboarding(input: {
+  choice: OnboardingChoice;
+  firstName: string;
+  lastName: string;
+}): Promise<{ ok: false; error: string }> {
   // A Server Action is callable as a raw RPC no matter what the TS signature
-  // says, so `choice` can arrive as any string — including `"__proto__"`,
+  // says, so `choice` can arrive as any value — including `"__proto__"`,
   // `"constructor"` or `"toString"`, which a plain index lookup resolves
   // truthily through the prototype chain and would stamp `onboarded_at`
   // without an answer ever being given. Only an own, allowlisted key of
   // RESOLUTION names a resolution.
-  if (!Object.prototype.hasOwnProperty.call(RESOLUTION, choice)) {
+  const choice = input?.choice;
+  if (
+    typeof choice !== "string" ||
+    !Object.prototype.hasOwnProperty.call(RESOLUTION, choice)
+  ) {
     return { ok: false, error: "Pick an option to continue." };
   }
   const resolution = RESOLUTION[choice];
+
+  const name = parseNamePair(input);
+  if (name === null) {
+    return { ok: false, error: NAME_ERROR };
+  }
 
   const supabase = await createClient();
   const {
@@ -81,6 +119,7 @@ export async function finishOnboarding(
   const { data, error } = await supabase
     .from("users")
     .update({
+      ...name,
       role: resolution.role,
       onboarded_at: new Date().toISOString(),
     })
@@ -104,10 +143,10 @@ export async function finishOnboarding(
  *
  * This is the ONLY resolution for the junior persona, and the split with
  * `finishOnboarding` is deliberate: picking "I manage a junior's account" on
- * step 1 writes nothing, so a guardian who bails on the consent screen stays
- * un-onboarded and is bounced back into the flow next visit. Consent, the
- * player's details, the role and `onboarded_at` land together, here, or not
- * at all.
+ * the persona step writes nothing, so a guardian who bails on the consent
+ * screen stays un-onboarded and is bounced back into the flow next visit. The
+ * guardian's own name (from 1.2), consent, the player's details, the role and
+ * `onboarded_at` land together, here, or not at all.
  *
  * Trust boundaries, in order:
  *  - the payload is raw-RPC reachable, so every field is re-typed before use —
@@ -127,6 +166,8 @@ export async function finishOnboarding(
  * `academy` later, exactly as `finishOnboarding`'s mapping notes.
  */
 export async function finishGuardianOnboarding(input: {
+  firstName: string;
+  lastName: string;
   playerName: string;
   classYear: string;
   consent: boolean;
@@ -141,6 +182,10 @@ export async function finishGuardianOnboarding(input: {
 
   if (!consent) {
     return { ok: false, error: "Tick the consent box to continue." };
+  }
+  const name = parseNamePair(input);
+  if (name === null) {
+    return { ok: false, error: NAME_ERROR };
   }
   if (!playerName || playerName.length > GUARDIAN_PLAYER_NAME_MAX) {
     return { ok: false, error: "Enter the player's name." };
@@ -162,6 +207,7 @@ export async function finishGuardianOnboarding(input: {
   const { data, error } = await supabase
     .from("users")
     .update({
+      ...name,
       role: "parent",
       junior_player_name: playerName,
       junior_class_year: classYear,
