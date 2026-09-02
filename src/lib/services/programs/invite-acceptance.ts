@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { programDisplayName } from "@/lib/data/programs-server";
+import { titleCaseName } from "@/lib/data/person-name";
 import type { ProgramOrgType } from "@/lib/workspace/types";
 import type { JoinRole } from "./join-role";
 import { hashToken } from "./tokens";
@@ -196,7 +197,7 @@ export function displayName(first: string | null, last: string | null): InviterN
     .map((part) => part?.trim() ?? "")
     .filter(Boolean)
     .join(" ");
-  return name || null;
+  return name ? titleCaseName(name) : null;
 }
 
 /**
