@@ -105,7 +105,7 @@ ready).
 - **notes:** Plan step 4. `ROLE_NOUN` is private in `join-forms.tsx` — export it (or move it to `join-terms.tsx`) rather than duplicating. The design's "from Elena" is illustrative: `InviterName` is one string, so print it whole. `ClaimHeading` is rendered by the pages that host `InviteOffer`, not by the component.
 
 ## T8 · Add the `/invitations/[inviteId]` route
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T5, T7
 - **files:** src/app/invitations/[inviteId]/page.tsx (new), MAP.md (regenerated) — guess
