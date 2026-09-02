@@ -89,13 +89,19 @@ const ACADEMIC_SUFFIX = new Set<string>([
  * person — and freemail-ness is computed from the public list above, not from
  * anything of ours.
  *
- * Everything else gets a line that promises nothing, because for a school
- * address the honest answer is that this screen does not know.
+ * Everything else gets a line that states the rule without saying which side
+ * of it THIS address falls on, because for a school address the honest answer
+ * is that this screen does not know. It has to say the rule out loud: a bare
+ * "we'll send a link to confirm it's yours", read next to the personal
+ * address's "we'll confirm this one manually", was taken as recognition — a
+ * UCLA address typed on Michigan's form looked approved.
  */
 export const NOTE_REVIEW =
   'A personal address always needs a manual check. A school address is usually quicker.';
 
-export const NOTE_CONFIRM = "We'll send a link here to confirm it's yours.";
+export const NOTE_CONFIRM =
+  "We'll send a link here to confirm it's yours. Unless it's on the program's " +
+  "staff list, a person will check it.";
 
 /**
  * Hostname labels: letters, digits, hyphens; no empty labels, no leading or
