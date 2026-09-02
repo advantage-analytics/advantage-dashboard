@@ -8,6 +8,7 @@ import {
   ClaimActions,
   ClaimHeading,
   RadioDot,
+  TermMark,
   CLAIM_BUTTON,
   CLAIM_FIELD,
   CLAIM_LABEL,
@@ -369,8 +370,12 @@ export function OnboardingFlow() {
 
               <div className="flex flex-col gap-3 rounded-[var(--radius-element)] border border-[var(--border-hairline)] bg-[var(--surface-subtle)] px-[18px] py-4">
                 <span className="eyebrow">If the player is under 18</span>
-                {/* The design's honest rows: a 2px tick-bar, not a checkmark —
-                    these are facts being acknowledged, not features. */}
+                {/* The same 14px check the join page's sharing terms carry,
+                    in ink and never blue. `AuthCheckbox` below fills Signal
+                    Blue with a white check when it is set, and blue ticks here
+                    would put four blue checkmarks in one column with only the
+                    last one meaning anything. Ink keeps the accent on the one
+                    control that records consent. */}
                 <div className="flex flex-col">
                   {GUARDIAN_ACKNOWLEDGMENTS.map((row, index) => (
                     <div
@@ -383,10 +388,7 @@ export function OnboardingFlow() {
                         index === GUARDIAN_ACKNOWLEDGMENTS.length - 1 && "pb-0"
                       )}
                     >
-                      <span
-                        className="mt-1 h-3 w-[2px] shrink-0 bg-[var(--ink-300)]"
-                        aria-hidden="true"
-                      />
+                      <TermMark tone="ink" />
                       <span className="text-body-sm">{row}</span>
                     </div>
                   ))}

@@ -144,6 +144,7 @@ Two things in `effects.css` are **deliberately undocumented** as build guidance:
 ## Iconography
 
 - **Lucide only**, strokeWidth 1.5. Sizes: 14px inline/nav (`size-3.5`), 15px header chrome, 12/16/20px supporting, 32px empty states. Never emoji, never hand-rolled SVGs.
+- **A list of facts is marked with a 14px `Check`, not a bar.** The join flow's sharing terms and the guardian consent acknowledgments both draw one before each row (`TermMark` in SKILL.md's v3 primitives). They previously used a 2 × 12px rule, which read as a rendering artefact at `--ink-300` rather than as a mark. Blue where the row describes something gained, ink where nothing moves — and ink, never blue, in any list sitting above a checkbox, because `AuthCheckbox` sets Signal Blue with a white check and the accent has to stay on the control that records consent.
 - Product marks live in `/public/icons` (tennis-court, tournament, verified ×2). Provider logos: SwingVision, ATP.
 - Logos in `/public/logos`. The design project renames them; the art is the same and already here:
 

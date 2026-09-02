@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { TermMark } from "@/components/claim/claim-shell";
 import { advButton } from "@/lib/ui/adv-button";
 
 /**
@@ -61,7 +62,7 @@ export interface JoinTermRow {
   emphasis?: string;
 }
 
-/** Left column. Blue ticks: what the program gains. */
+/** Left column. Blue checks: what the program gains. */
 export const JOIN_TERMS_SEEN: readonly JoinTermRow[] = [
   {
     text: "Matches uploaded to the team — video, stats and the full report",
@@ -71,7 +72,7 @@ export const JOIN_TERMS_SEEN: readonly JoinTermRow[] = [
   { text: "Any personal match you choose to share, one at a time" },
 ];
 
-/** Right column. Ink ticks: what does not move. */
+/** Right column. Ink checks: what does not move. */
 export const JOIN_TERMS_KEPT: readonly JoinTermRow[] = [
   { text: "Everything you've uploaded up to now" },
   { text: "Personal matches you upload later, unless you share them" },
@@ -79,24 +80,6 @@ export const JOIN_TERMS_KEPT: readonly JoinTermRow[] = [
     text: "Your account, if you leave the program — the team's matches stay with the team",
   },
 ];
-
-/**
- * The 2 × 12 mark the design system uses wherever a short list of facts has to
- * read as facts. Blue on the left column, ink on the right — the colour is the
- * only thing distinguishing "they gain this" from "you keep this", and it does
- * the work a paragraph of policy would do badly.
- */
-function Tick({ tone }: { tone: "blue" | "ink" }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="mt-[5px] h-3 w-0.5 shrink-0 rounded-full"
-      style={{
-        backgroundColor: tone === "blue" ? "var(--blue)" : "var(--ink-300)",
-      }}
-    />
-  );
-}
 
 function TermsColumn({
   title,
@@ -121,7 +104,7 @@ function TermsColumn({
 
           return (
             <li key={row.text} className="flex gap-2.5">
-              <Tick tone={tone} />
+              <TermMark tone={tone} />
               <span className="text-body-sm">
                 {before}
                 {row.emphasis !== undefined && after !== undefined && (

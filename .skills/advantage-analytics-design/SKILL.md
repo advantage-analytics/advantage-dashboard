@@ -881,6 +881,28 @@ dot for single-choice (`Radio`), 4px-radius square for multi-select
 also sets border `--blue` + `--blue-tint-08` wash — the dot marks the
 selected item, it never appears on hover.
 
+**`TermMark`** — the mark before a row in a short list of facts a person is
+asked to read before they commit: the join flow's sharing terms
+(`components/join/join-terms.tsx`) and the guardian consent acknowledgments
+(`app/onboarding/onboarding-flow.tsx`). A Lucide `Check` at 14px, stroke 1.5,
+`mt-[3px]` against `text-body-sm`, `aria-hidden` — the sentence carries the
+meaning, the glyph only separates the rows. It replaced a 2 × 12px bar, which
+read as a rendering artefact rather than a mark.
+
+Colour is the rule, not the glyph. `--blue` marks a row where something is
+gained or granted and `--ink-500` a row where nothing moves — that pairing is
+what makes the sharing terms' two columns readable as "they gain this" versus
+"you keep this" without a second sentence of policy. **Never `--blue` in a
+list that sits above a checkbox**: `AuthCheckbox` fills Signal Blue with a
+white check when set, and blue marks above it stack four blue checkmarks in
+one column with only the last one meaning anything. The guardian
+acknowledgments are ink for exactly that reason. Never `--ink-300` — a stroked
+glyph at that weight disappears.
+
+Not `CircleCheck`, which is `ResultMark`'s and means a match outcome. Not the
+claim flow's `ArrowRight` (`components/claim/sharing-rows.tsx`), which marks
+consequences that follow from an action rather than facts being read.
+
 ---
 
 ## Personal Home Recipes (v3, Round 13)
@@ -1160,6 +1182,7 @@ trigger's `MoreHorizontal` (1.75, the one exception).
 |---|---|---|
 | `Home`, `Video`, `BarChart3`, `MessageSquare`, `Users`, `Swords`, `Settings`, `HelpCircle` | Nav — Home / Matches (both workspaces) / Statistics / Ask / Roster / Compare / Settings / Help | 16px (`size-4`) |
 | `PanelLeftClose`/`PanelLeftOpen`, `ChevronsUpDown`, `Activity`, `Search`, `ChevronDown`/`ChevronRight`, `Check`, `Plus`, `Loader2` | Chrome — rail toggle, workspace switcher, tray, search, menus | 15px header, 14px inline |
+| `Check` | Also `TermMark` — the row mark in the join sharing terms and the guardian acknowledgments. Blue where something is gained, ink where nothing moves, never blue above a checkbox | 14px, stroke 1.5 |
 | `MoreHorizontal`, `Pencil`, `Trash2` | Row actions | 14px / 1.75 stroke on `MoreHorizontal` |
 | `SlidersHorizontal`, `Timer`, `CircleHelp`, `LogOut` | Profile menu — Preferences / Usage / Help / Sign out | 13px |
 | `CircleCheck`, `CircleX` | `ResultMark` — match outcome ONLY, never repurposed for analysis lifecycle (that's `StatusChip`'s dot + text) | 14px |
