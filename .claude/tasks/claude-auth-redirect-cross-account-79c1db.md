@@ -118,7 +118,7 @@ ready).
 - **notes:** Plan step 5. The absent-id pane is one sentence on purpose — it must not distinguish "someone else's" from "accepted" or "expired". The dashboard's onboarding gate does not apply here (outside `/dashboard`); the action stamps onboarding either way. The header comment should say why this is a page and not a route handler — the same reason as `/join/[token]`: acceptance is a POST behind a button.
 
 ## T9 · Onboarding step zero
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T5, T7
 - **files:** src/app/onboarding/page.tsx — guess
