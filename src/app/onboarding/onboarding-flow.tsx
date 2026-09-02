@@ -373,7 +373,7 @@ export function OnboardingFlow() {
               <div
                 role="radiogroup"
                 aria-label="Do you play for a college program?"
-                className="flex flex-col gap-2.5"
+                className="flex flex-col gap-2"
               >
                 {COLLEGE_OPTIONS.map((option) => {
                   const selected = college === option.id;
@@ -385,16 +385,20 @@ export function OnboardingFlow() {
                       aria-checked={selected}
                       onClick={() => setCollege(option.id)}
                       className={cn(
-                        "flex cursor-pointer items-start gap-3.5 rounded-[var(--radius-element)] border px-[18px] py-4 text-left transition-colors duration-[var(--duration-fast)]",
+                        "flex cursor-pointer items-start gap-2.5 rounded-[var(--radius-element)] border px-5 py-4 text-left transition-colors duration-[var(--duration-fast)]",
                         "focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]",
                         selected
                           ? "border-[var(--blue)] bg-[var(--blue-tint-08)]"
                           : "border-[var(--border-field)] bg-[var(--surface-card)] hover:bg-[var(--surface-subtle)]"
                       )}
                     >
-                      <RadioDot selected={selected} />
-                      <span className="flex min-w-0 flex-col gap-[3px]">
-                        <span className="text-[14px] text-[var(--ink-900)]">
+                      {/* `leading-5` is load-bearing: Tailwind v4's
+                          `text-[14px]` sets no line-height, and the dot's
+                          `align` is that line box centred on the 14px mark —
+                          (20 − 14) / 2. Change one and the other follows. */}
+                      <RadioDot selected={selected} align="mt-[3px]" />
+                      <span className="flex min-w-0 flex-col gap-1">
+                        <span className="text-[14px] leading-5 text-[var(--ink-900)]">
                           {option.label}
                         </span>
                         <span className="text-body-sm">{option.sub}</span>
@@ -477,7 +481,7 @@ export function OnboardingFlow() {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-3 rounded-[var(--radius-element)] border border-[var(--border-hairline)] bg-[var(--surface-subtle)] px-[18px] py-4">
+              <div className="flex flex-col gap-3 rounded-[var(--radius-element)] border border-[var(--border-hairline)] bg-[var(--surface-subtle)] px-5 py-4">
                 <span className="eyebrow">If the player is under 18</span>
                 {/* The same 14px check the join page's sharing terms carry,
                     in ink and never blue. `AuthCheckbox` below fills Signal
