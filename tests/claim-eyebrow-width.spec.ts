@@ -64,6 +64,15 @@ import { programEyebrow } from '@/lib/data/programs-server';
  * Today's longest real eyebrow is 74 characters, so this is a genuine ceiling
  * with headroom, not a fence around the current data. It fires only when a
  * program arrives whose eyebrow would actually wrap.
+ *
+ * Three files have to move together and nothing links them automatically, so
+ * name them here: the type is `.eyebrow` in
+ * `src/styles/design-system/typography.css`, and the widths this budget
+ * assumes are the `width` props on `ClaimShell` in
+ * `src/app/claim/[programKey]/page.tsx` (840) and `.../setup/page.tsx` (1000).
+ * Change the token's size, weight or tracking, or narrow either shell, and
+ * this number is stale — the spec keeps passing on old arithmetic and cannot
+ * notice on its own.
  */
 const MAX_EYEBROW_CHARS = 97;
 
@@ -109,17 +118,30 @@ test.describe('claim eyebrow width budget (live DB)', () => {
 
   let rows: Row[];
   let exactCount: number;
+  /** Every row's eyebrow, derived once — both assertions below read it. */
+  let composed: { school: string; conference: string | null; eyebrow: string }[];
 
   test.beforeAll(async () => {
     const admin = createAdminClient();
 
-    const { count, error } = await admin
-      .from('programs')
-      .select('program_key', { count: 'exact', head: true });
-    if (error) throw new Error(`programs count: ${error.message}`);
-    exactCount = count ?? -1;
+    // The count and the paged read depend on nothing but each other's
+    // absence — they are only compared afterwards — so they go together.
+    const [countResult, allRows] = await Promise.all([
+      admin.from('programs').select('program_key', { count: 'exact', head: true }),
+      readAllPrograms(admin),
+    ]);
 
-    rows = await readAllPrograms(admin);
+    if (countResult.error) {
+      throw new Error(`programs count: ${countResult.error.message}`);
+    }
+    exactCount = countResult.count ?? -1;
+    rows = allRows;
+
+    composed = rows.map((row) => ({
+      school: row.school_name,
+      conference: row.conference,
+      eyebrow: programEyebrow(row.school_name, row.team, row.division),
+    }));
   });
 
   test('composes an eyebrow for every row in the table', () => {
@@ -129,15 +151,20 @@ test.describe('claim eyebrow width budget (live DB)', () => {
       rows.length,
       `paged ${rows.length} program rows but the table holds ${exactCount}`
     ).toBe(exactCount);
-    expect(rows.length).toBeGreaterThan(PAGE_SIZE); // the cap is real, not hypothetical
+    // Proof that the 1,000-row cap is really being crossed rather than
+    // theoretically handled — but only while the table is bigger than a page.
+    // Asserting it unconditionally would turn a smaller directory (a pruned
+    // table, a staging project) into a red suite with a healthy feature.
+    if (exactCount > PAGE_SIZE) {
+      expect(
+        rows.length,
+        `table holds ${exactCount} rows, so paging past the ${PAGE_SIZE}-row cap should have happened`
+      ).toBeGreaterThan(PAGE_SIZE);
+    }
   });
 
   test('every eyebrow fits on one line of the claim shell', () => {
-    const tooWide = rows
-      .map((row) => ({
-        school: row.school_name,
-        eyebrow: programEyebrow(row.school_name, row.team, row.division),
-      }))
+    const tooWide = composed
       .filter(({ eyebrow }) => eyebrow.length > MAX_EYEBROW_CHARS)
       .map(
         ({ school, eyebrow }) =>
@@ -154,13 +181,10 @@ test.describe('claim eyebrow width budget (live DB)', () => {
     // `programEyebrow` drops conference on purpose — school + squad +
     // division + conference runs to 136 characters for a real JUCO row, far
     // past the budget above. Adding it back is the regression this catches.
-    const leaked = rows
-      .filter((row) => Boolean(row.conference))
-      .map((row) => ({
-        school: row.school_name,
-        conference: row.conference as string,
-        eyebrow: programEyebrow(row.school_name, row.team, row.division),
-      }))
+    const leaked = composed
+      .filter(
+        (row): row is typeof row & { conference: string } => Boolean(row.conference)
+      )
       .filter(({ eyebrow, conference }) => eyebrow.includes(conference))
       .map(
         ({ school, conference, eyebrow }) =>

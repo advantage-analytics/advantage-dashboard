@@ -85,6 +85,20 @@ export function ClaimShell({
   /** 300 on F3.2, 340 on the setup form. Both leave a 48px gutter. */
   asideWidth?: 300 | 340;
 }) {
+  // The body is the same shape whether or not a heading is hoisted above it,
+  // so it is named once rather than written twice inside the branch below.
+  const body = aside ? (
+    <div
+      className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_var(--claim-aside)] lg:gap-12"
+      style={{ "--claim-aside": `${asideWidth}px` } as React.CSSProperties}
+    >
+      <ClaimColumn gap={gap}>{children}</ClaimColumn>
+      <aside className="min-w-0">{aside}</aside>
+    </div>
+  ) : (
+    <ClaimColumn gap={gap}>{children}</ClaimColumn>
+  );
+
   return (
     <div className="relative flex min-h-screen items-center bg-[var(--surface-card)] px-6 py-24 sm:px-10">
       {/* The escape chrome, floating over the page. Absolute rather than a
@@ -110,20 +124,18 @@ export function ClaimShell({
       </div>
 
       <div className="mx-auto w-full" style={{ maxWidth: width }}>
-        <div className="flex flex-col" style={{ gap }}>
-          {heading}
-          {aside ? (
-            <div
-              className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_var(--claim-aside)] lg:gap-12"
-              style={{ "--claim-aside": `${asideWidth}px` } as React.CSSProperties}
-            >
-              <ClaimColumn gap={gap}>{children}</ClaimColumn>
-              <aside className="min-w-0">{aside}</aside>
-            </div>
-          ) : (
-            <ClaimColumn gap={gap}>{children}</ClaimColumn>
-          )}
-        </div>
+        {/* The heading wrapper exists only for the screens that hoist one.
+            Two of sixteen callers pass `heading`; the rest render exactly the
+            markup they always did rather than paying for a wrapper whose gap
+            has nothing to space. */}
+        {heading ? (
+          <div className="flex flex-col" style={{ gap }}>
+            {heading}
+            {body}
+          </div>
+        ) : (
+          body
+        )}
       </div>
     </div>
   );
