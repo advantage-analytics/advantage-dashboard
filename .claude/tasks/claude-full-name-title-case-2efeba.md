@@ -30,7 +30,7 @@ ready).
 - **notes:** The design's R1 as written is contradicted by its own examples — `GIMENA` holds an uppercase after the first character, so literal R1 would leave it alone. The correct reading, confirmed with the human at stage 04: **R1 fires only on a MIXED-case token** (an uppercase after the first character AND at least one lowercase letter). That makes an all-caps suffix fall through to R2, so the human added **R1b**: a token made entirely of `i`/`v`/`x` letters, length 2 or more, is uppercased whole — `III` survives as typed and `iii` becomes `III`. Rule order is R1 → R1b → R2 (with R2a inside it). Nothing in the app calls this yet, so no screen changes.
 
 ## T2 · Wire the two choke points and correct the TypeScript-side stale comments
-- **status:** blocked
+- **status:** todo
 - **model:** sonnet
 - **needs:** T1
 - **files:** src/lib/data/programs-server.ts (`toResult` ~line 130, the file header ~line 7, the `ownerDisplay` doc ~line 29), src/lib/services/programs/invite-acceptance.ts (`displayName` ~line 194), src/app/api/programs/search/route.ts (doc block ~line 11) — guess
@@ -38,7 +38,7 @@ ready).
   - [ ] `toResult` returns `ownerDisplay: titleCaseName((row.owner_display as string | null) ?? "") || null` — the `|| null` survives, so a blank composes to `null` and never to `""`
   - [ ] `displayName` title-cases the composed name before returning and still returns `null`, not `""`, when both parts are blank; the rest of its doc comment is unchanged
   - [ ] In `route.ts` the sentence "the owner comes back as \"D. Wu\" with no address" now says the full name comes back and still never an address; the paragraph below it explaining the `?intent=join` redaction is byte-for-byte unchanged
-  - [ ] `grep -rn "First L\.\|D\. Wu\|Elena V\." src/` returns nothing — this covers the `ownerDisplay` doc at `programs-server.ts:29` and the file header at `:7-8`, both of which state the old abbreviation as a promise
+  - [ ] `grep -rn "First L\.\|D\. Wu\|Elena V\." src/lib/data/programs-server.ts` returns nothing — the `ownerDisplay` doc at `:29` and the file header at `:7-8` both state the old abbreviation as a promise, and are the only two occurrences this task owns. Scoped to that one file on purpose: a repo-wide grep also hits `src/components/claim/contact-owner-form.tsx:45`, which criterion 5 requires left untouched
   - [ ] `npm run lint` and `npm run build` pass; `redactForPlayer` and every file under `src/app/claim/`, `src/app/join/`, `src/components/claim/`, `src/components/join/` are untouched
 - **notes:** Two behavioural lines; the rest is comments. Known, approved spillover: `displayName` also feeds `/onboarding`, `/invitations/[inviteId]`, `components/join/invite-offer.tsx` and the dashboard activity tray, which inherit corrected casing only — do not touch those files. Until T3 lands, the claim surfaces still render `Clajerson G.` because the abbreviation is still in SQL; that is expected, not a failure.
 
