@@ -20,14 +20,14 @@ import {
 import { joinHref, signInThenHref } from "./join-links";
 
 /**
- * The two ways an invitation is accepted, and the one that is refused.
+ * The ways an invitation is accepted, and the one that is refused.
  *
  * Which one a person takes depends on what they already have — a session, or
  * neither session nor account — and `resolveJoinState` decides that. The third
  * case, an account with no session, is not served from this file at all: the
  * page redirects it to `/login?next=`, and it comes back holding a session as
- * the first case. Both of the ones left finish through `acceptWithSession`, so
- * the token is re-checked against the live row at the moment of the write.
+ * the first case. Every accept finishes through `acceptWithSession` or its
+ * by-id twin, so the row is re-checked at the moment of the write.
  *
  * ── The rule that matters most ──────────────────────────────────────────────
  * An invitation link may create an account. It may NEVER change the password
@@ -47,11 +47,17 @@ import { joinHref, signInThenHref } from "./join-links";
 
 export type JoinActionResult = { ok: false; error: string };
 
-/** Everything a failed accept can say, in the words the screen should use. */
+/**
+ * Everything a failed accept can say, in the words the screen should use.
+ *
+ * Worded for both doors. The link door has a link and the id door — the
+ * header's tray, the onboarding intercept — never did, so nothing here tells
+ * the reader to open one.
+ */
 function describe(outcome: Extract<AcceptOutcome, { ok: false }>): string {
   switch (outcome.status) {
     case "not_found":
-      return "That invitation link isn't valid any more.";
+      return "That invitation isn't valid any more.";
     case "expired":
       return "That invitation has expired. Ask your coach to send another.";
     case "already_used":
@@ -65,7 +71,7 @@ function describe(outcome: Extract<AcceptOutcome, { ok: false }>): string {
     case "no_seats":
       // The one refusal the person reading it cannot act on themselves, so it
       // names who can.
-      return "This program has no seats free. Ask your coach to free one, then open this link again.";
+      return "This program has no seats free. Ask your coach to free one, then try again.";
     case "already_claimed":
       return "Somebody has already taken over that roster profile. Ask your coach to check the roster.";
     case "player_gone":
@@ -107,55 +113,6 @@ async function finishJoin(programId: string): Promise<never> {
 }
 
 /**
- * A membership answers both first-run questions, so bouncing a just-joined
- * member into /onboarding would ask what the invitation already settled — and
- * a Google-created account that arrives through a link never passed through
- * /onboarding at all, so the layout at `src/app/dashboard/layout.tsx` would
- * send them there.
- *
- * Called only AFTER an accept confirmed the membership, never merely because
- * an account was created: stamping earlier left an account whose accept then
- * failed permanently marked onboarded with no membership behind it, and a
- * failed accept should leave /onboarding reachable. A trusted server path
- * holding the service role, not auth metadata a crafted signup could imitate.
- * Best effort: a miss costs one redundant onboarding screen, never the
- * membership.
- */
-async function markOnboarded(
-  admin: ReturnType<typeof createAdminClient>,
-  userId: string
-): Promise<void> {
-  const { error } = await admin
-    .from("users")
-    .update({ onboarded_at: new Date().toISOString() })
-    .eq("id", userId)
-    .is("onboarded_at", null);
-  if (error) {
-    console.error("[join] could not mark the account onboarded", {
-      message: error.message,
-    });
-  }
-}
-
-/** Already signed in as the invited address. Nothing to collect. */
-export async function acceptInvite(token: string): Promise<JoinActionResult> {
-  const supabase = await createClient();
-  const outcome = await acceptWithSession(token, supabase);
-  if (!outcome.ok) return { ok: false, error: describe(outcome) };
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (user?.id) await markOnboarded(createAdminClient(), user.id);
-
-  return finishJoin(outcome.programId);
-}
-
-/** RFC 4122 shape, any version — what `program_invites.id` is generated as. */
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/**
  * The persona an invitation implies, for a profile that has not chosen one.
  *
  * `users.role` is a persona (`PERSONA_ROLES` in settings/actions.ts: player,
@@ -172,25 +129,115 @@ const PERSONA_FOR_ROLE = {
 } as const;
 
 /**
+ * What a new membership settles about the profile, written once for every
+ * door.
+ *
+ * A membership answers both first-run questions, so a just-joined member is
+ * marked onboarded — otherwise the layout at `src/app/dashboard/layout.tsx`
+ * would bounce them into /onboarding to ask what the invitation already
+ * settled — and given the persona the invitation implies, each only where the
+ * profile has nothing yet. The persona is read back off the membership the
+ * database just wrote, never passed in: the row came from a SECURITY DEFINER
+ * function using the invitation's own `role`, so this is the one place the
+ * answer cannot have been chosen by the caller. All three doors call this, so
+ * an account joining through the link is not left with a persona it can only
+ * fill in by hand while one joining from the tray is not.
+ *
+ * Called only AFTER an accept confirmed the membership, never merely because
+ * an account was created: stamping earlier left an account whose accept then
+ * failed permanently marked onboarded with no membership behind it, and a
+ * failed accept should leave /onboarding reachable. A trusted server path
+ * holding the service role, not auth metadata a crafted signup could imitate.
+ * Best effort throughout: a miss costs one redundant onboarding screen or a
+ * blank persona field, never the membership.
+ */
+async function adoptMembership(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+  programId: string
+): Promise<void> {
+  // The stamp and the read-back share no data, so they go out together; only
+  // the persona write waits on the read.
+  const [{ error: stampError }, { data: membership, error: memberError }] =
+    await Promise.all([
+      admin
+        .from("users")
+        .update({ onboarded_at: new Date().toISOString() })
+        .eq("id", userId)
+        .is("onboarded_at", null),
+      admin
+        .from("program_members")
+        .select("role")
+        .eq("program_id", programId)
+        .eq("user_id", userId)
+        .maybeSingle(),
+    ]);
+  if (stampError) {
+    console.error("[join] could not mark the account onboarded", {
+      message: stampError.message,
+    });
+  }
+  if (memberError) {
+    console.error("[join] could not read the new membership", {
+      message: memberError.message,
+    });
+  }
+
+  const memberRole = (membership?.role as string | null | undefined) ?? null;
+  const persona =
+    memberRole !== null &&
+    Object.prototype.hasOwnProperty.call(PERSONA_FOR_ROLE, memberRole)
+      ? PERSONA_FOR_ROLE[memberRole as keyof typeof PERSONA_FOR_ROLE]
+      : null;
+  if (!persona) return;
+
+  const { error: roleError } = await admin
+    .from("users")
+    .update({ role: persona })
+    .eq("id", userId)
+    .is("role", null);
+  if (roleError) {
+    console.error("[join] could not set the account's persona", {
+      message: roleError.message,
+    });
+  }
+}
+
+/** Already signed in as the invited address. Nothing to collect. */
+export async function acceptInvite(token: string): Promise<JoinActionResult> {
+  const supabase = await createClient();
+  // The session read depends on nothing the accept returns, so the two
+  // round trips overlap rather than queue.
+  const [outcome, { data: { user } }] = await Promise.all([
+    acceptWithSession(token, supabase),
+    supabase.auth.getUser(),
+  ]);
+  if (!outcome.ok) return { ok: false, error: describe(outcome) };
+
+  if (user?.id) {
+    await adoptMembership(createAdminClient(), user.id, outcome.programId);
+  }
+  return finishJoin(outcome.programId);
+}
+
+/** RFC 4122 shape, any version — what `program_invites.id` is generated as. */
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
  * Accept an invitation by id — the door for someone who is signed in and never
  * had the link.
  *
  * One argument, on purpose. The program and the role both come from the
  * database AFTER `accept_pending_invite` has bound the row to the caller's
  * confirmed address: the program from the outcome, the role read back off the
- * membership the function just wrote. A `role` argument here would let anyone
- * who can call a server action pick their own persona, and this action is
- * reachable by anybody with a session.
+ * membership the function just wrote (see `adoptMembership`). A `role`
+ * argument here would let anyone who can call a server action pick their own
+ * persona, and this action is reachable by anybody with a session.
  *
  * The id is checked for shape before the database sees it. A malformed one
  * would be refused there too — as a cast error, logged and reported as "we
  * couldn't finish that", for something that was never our failure.
- *
- * Then the same stamp as `acceptInvite`, for the same reason, plus one more:
- * a membership answers both onboarding questions, so the person is marked
- * onboarded and given the persona the invitation implies — each only where
- * the profile has nothing yet. Both best effort: a miss costs a screen, never
- * the membership.
  */
 export async function acceptPendingInvite(
   inviteId: string
@@ -200,55 +247,15 @@ export async function acceptPendingInvite(
   }
 
   const supabase = await createClient();
-  const outcome = await acceptPendingWithSession(inviteId, supabase);
+  const [outcome, { data: { user } }] = await Promise.all([
+    acceptPendingWithSession(inviteId, supabase),
+    supabase.auth.getUser(),
+  ]);
   if (!outcome.ok) return { ok: false, error: describe(outcome) };
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
   if (user?.id) {
-    const admin = createAdminClient();
-
-    // The stamp and the read-back share no data, so they go out together;
-    // only the persona write waits on the read. The role is read back, never
-    // passed in: the row was written by a SECURITY DEFINER function from the
-    // invitation's own `role`, so this is the one place the answer cannot
-    // have been chosen by the caller.
-    const [, { data: membership, error: memberError }] = await Promise.all([
-      markOnboarded(admin, user.id),
-      admin
-        .from("program_members")
-        .select("role")
-        .eq("program_id", outcome.programId)
-        .eq("user_id", user.id)
-        .maybeSingle(),
-    ]);
-    if (memberError) {
-      console.error("[join] could not read the new membership", {
-        message: memberError.message,
-      });
-    }
-
-    const memberRole = (membership?.role as string | null | undefined) ?? null;
-    const persona =
-      memberRole !== null &&
-      Object.prototype.hasOwnProperty.call(PERSONA_FOR_ROLE, memberRole)
-        ? PERSONA_FOR_ROLE[memberRole as keyof typeof PERSONA_FOR_ROLE]
-        : null;
-    if (persona) {
-      const { error: roleError } = await admin
-        .from("users")
-        .update({ role: persona })
-        .eq("id", user.id)
-        .is("role", null);
-      if (roleError) {
-        console.error("[join] could not set the account's persona", {
-          message: roleError.message,
-        });
-      }
-    }
+    await adoptMembership(createAdminClient(), user.id, outcome.programId);
   }
-
   return finishJoin(outcome.programId);
 }
 
@@ -331,10 +338,11 @@ export async function createAccountAndAccept(
   if (!outcome.ok) return { ok: false, error: describe(outcome) };
 
   // Only now — after `acceptWithSession` confirmed the membership, never merely
-  // because `createUser` succeeded. See `markOnboarded` for why that order is
+  // because `createUser` succeeded. See `adoptMembership` for why that order is
   // the whole point.
-  if (created?.user?.id) await markOnboarded(admin, created.user.id);
-
+  if (created?.user?.id) {
+    await adoptMembership(admin, created.user.id, outcome.programId);
+  }
   return finishJoin(outcome.programId);
 }
 
@@ -452,19 +460,31 @@ async function nudgeInviter(invite: InviteRecord): Promise<void> {
 }
 
 /**
- * Sign out of the wrong account, and land on the sign-in that fixes it.
+ * Sign out of the wrong account, and land on the step that fixes it.
  *
- * Signing out and returning to `/join/[token]` was a loop: the page would
- * resolve `sign_in` for a person who now had no session, and tell them to sign
- * in — which is what `/login?next=` does, one step earlier, with the token
- * still attached so acceptance is waiting on the far side. The sign-out runs
- * first either way; only a token that no longer names an invitation loses the
- * `next` and lands on a plain `/login`.
+ * Signing out and returning to `/join/[token]` was a loop for an address that
+ * already had an account: the page would resolve `sign_in` for a person who
+ * now had no session, and tell them to sign in — which is what `/login?next=`
+ * does, one step earlier, with the token still attached so acceptance is
+ * waiting on the far side. But `wrong_account` is returned for ANY signed-in
+ * mismatch, including an invited address that has no account at all, and for
+ * that person `/login` is a wall: it cannot create an account and its sign-up
+ * link carries no token. So the sign-out runs first either way, and then the
+ * destination is chosen the way the page itself would choose it — an existing
+ * account goes to sign in, a new one goes straight back to this link, which
+ * now answers `sign_up` and offers the form. Only a token that no longer names
+ * an invitation loses the `next` and lands on a plain `/login`.
  */
 export async function signOutForInvite(token: string): Promise<void> {
   const supabase = await createClient();
   await supabase.auth.signOut();
 
   const invite = await loadInvite(token);
-  redirect(invite ? signInThenHref(joinHref(token)) : "/login");
+  if (!invite) redirect("/login");
+
+  redirect(
+    (await accountExists(invite.email))
+      ? signInThenHref(joinHref(token))
+      : joinHref(token)
+  );
 }

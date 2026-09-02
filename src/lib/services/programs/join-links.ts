@@ -26,7 +26,9 @@ export function invitationHref(inviteId: string): string {
  *
  * `/login` is the one form that knows every way into a session — password
  * today, Google beside it, whatever it grows next — and it clamps `next` with
- * `safeNext`, which any same-origin path passes unchanged.
+ * `safeNext`, which any same-origin path passes unchanged. The Google leg does
+ * not forward the path off-origin: see `handleGoogleOAuth` in
+ * `components/auth/login-form.tsx`.
  */
 export function signInThenHref(path: string): string {
   return `/login?next=${encodeURIComponent(path)}`;
@@ -46,8 +48,14 @@ export function notNowHref(path: string): string {
   return `${path}?${NOT_NOW_PARAM}=1`;
 }
 
+/**
+ * A repeated key arrives as an array from Next's `searchParams`; nothing the
+ * app emits repeats it, but a hand-edited URL should still read as a decline
+ * rather than quietly re-rendering the offer.
+ */
 export function isNotNow(query: {
   [key: string]: string | string[] | undefined;
 }): boolean {
-  return query[NOT_NOW_PARAM] === "1";
+  const value = query[NOT_NOW_PARAM];
+  return Array.isArray(value) ? value.includes("1") : value === "1";
 }

@@ -65,8 +65,8 @@ export default async function JoinPage({
   );
 
   // "Not now" is a query flag and nothing else — see `NotNowLink`. It only
-  // means anything on the three screens that were offering a Join button;
-  // everywhere else the state itself is the answer.
+  // means anything on the two screens that offer a Join button; everywhere
+  // else the state itself is the answer.
   const declined = isNotNow(query);
 
   switch (state.kind) {

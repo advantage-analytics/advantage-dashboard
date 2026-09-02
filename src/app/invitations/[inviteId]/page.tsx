@@ -1,10 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CLAIM_BUTTON, ClaimActions } from "@/components/claim/claim-shell";
+import {
+  CLAIM_BUTTON,
+  CLAIM_LINK,
+  ClaimActions,
+} from "@/components/claim/claim-shell";
 import { InviteOffer } from "@/components/join/invite-offer";
 import { JoinPane } from "@/components/join/join-pane";
 import { NothingSent } from "@/components/join/nothing-sent";
-import { getPendingInvites } from "@/lib/data/pending-invites-server";
+import { loadPendingInvites } from "@/lib/data/pending-invites-server";
 import {
   invitationHref,
   isNotNow,
@@ -24,14 +28,16 @@ export const metadata = { title: "Your invitation" };
  * mailed link; this is reached by someone already signed in — from the header's
  * activity tray, or from a link they kept — and there is no token to hold up.
  * So the proof is the session, and the id in the URL is not a secret and is not
- * treated as one: `getPendingInvites()` reads AS THE CALLER through
+ * treated as one: the list is read AS THE CALLER through
  * `pending_program_invites()`, and an id outside that list is simply not here.
  *
  * ── One sentence for every absence ──────────────────────────────────────────
  * Accepted, withdrawn, expired, and addressed to somebody else all render the
  * same pane, with the same body. Telling them apart would answer questions
  * about other people's invitations for anyone who pastes an id, and none of the
- * four readings is worth that.
+ * four readings is worth that. A database that did not answer is not a fifth
+ * reading of the row — it says nothing about any row — so it gets its own
+ * pane, with a way to try again, rather than a verdict the reader will believe.
  *
  * ── Deliberately not a route handler ────────────────────────────────────────
  * The same reason `/join/[token]` is a page rather than a GET that accepts on
@@ -61,8 +67,8 @@ export default async function InvitationPage({
   const query = await searchParams;
 
   // This page's own URL, composed once. The sign-in round trip, the decline
-  // flag and the way back from it are all the same address, and only the id
-  // ever travels in it — never the address it was sent to.
+  // flag, the way back from it and the retry are all the same address, and
+  // only the id ever travels in it — never the address it was sent to.
   const here = invitationHref(inviteId);
 
   const supabase = await createClient();
@@ -71,9 +77,29 @@ export default async function InvitationPage({
   } = await supabase.auth.getUser();
   if (!user) redirect(signInThenHref(here));
 
-  const invite = (await getPendingInvites(supabase)).find(
-    (row) => row.id === inviteId
-  );
+  const invites = await loadPendingInvites(supabase);
+
+  if (invites === null) {
+    return (
+      <JoinPane
+        width={440}
+        eyebrow="Invitation"
+        title="We couldn't load this invitation"
+        body="Nothing has changed on your side. Try again in a moment."
+      >
+        <ClaimActions>
+          <Link href={here} className={CLAIM_BUTTON}>
+            Try again
+          </Link>
+          <Link href="/dashboard" className={CLAIM_LINK}>
+            Go to dashboard
+          </Link>
+        </ClaimActions>
+      </JoinPane>
+    );
+  }
+
+  const invite = invites.find((row) => row.id === inviteId);
 
   if (!invite) {
     return (
@@ -104,8 +130,6 @@ export default async function InvitationPage({
     );
   }
 
-  const { programHours, personalHours } = quotaHours(invite.programOrgType);
-
   return (
     <JoinPane
       eyebrow={invite.programName}
@@ -113,9 +137,7 @@ export default async function InvitationPage({
       body={inviteSentence(invite)}
     >
       <InviteOffer
-        invites={[invite]}
-        programHours={programHours}
-        personalHours={personalHours}
+        invites={[{ ...invite, ...quotaHours(invite.programOrgType) }]}
         notNowHref={notNowHref(here)}
       />
     </JoinPane>

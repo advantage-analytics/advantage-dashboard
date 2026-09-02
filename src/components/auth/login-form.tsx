@@ -10,6 +10,10 @@ import AuthButton from "./auth-button";
 import AuthFooter, { AUTH_LINK } from "./auth-footer";
 import FormError from "./form-error";
 import { toAuthError, validateEmail, type AuthError } from "@/lib/auth/error-messages";
+import {
+  AUTH_NEXT_COOKIE,
+  AUTH_NEXT_MAX_AGE_SECONDS,
+} from "@/lib/auth/auth-next-cookie";
 import { safeNext } from "@/lib/auth/safe-next";
 
 /**
@@ -92,11 +96,22 @@ export function LoginForm({ next }: { next?: string }) {
 
   const handleGoogleOAuth = async () => {
     setError(null);
+    // The destination never rides in `redirectTo`. Supabase puts that URL in
+    // the authorize request it receives and logs, and an invitation's
+    // destination carries the invite token — a credential meant to exist in
+    // the email and nowhere else. A first-party cookie crosses the round trip
+    // on the browser's own navigation back to `/callback`, which reads it,
+    // clamps it and clears it. `redirectTo` stays the one fixed value it has
+    // always been, so the project's redirect allow-list is untouched.
+    if (destination !== "/dashboard") {
+      const secure = window.location.protocol === "https:" ? "; Secure" : "";
+      document.cookie = `${AUTH_NEXT_COOKIE}=${encodeURIComponent(destination)}; Path=/; Max-Age=${AUTH_NEXT_MAX_AGE_SECONDS}; SameSite=Lax${secure}`;
+    }
     const supabase = createClient();
     const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/callback?next=${encodeURIComponent(destination)}`,
+        redirectTo: `${window.location.origin}/callback?next=/dashboard`,
         // Drive the redirect ourselves (below) so supabase-js does not ALSO
         // navigate the browser. Two navigations to the same authorize URL race
         // and abort each other (ERR_ABORTED) — mobile Safari is strict about it,

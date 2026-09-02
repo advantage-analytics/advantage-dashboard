@@ -26,8 +26,14 @@ import type { ProgramOrgType } from "@/lib/workspace/types";
  * `auth.uid()`, so the service role — which has no uid — gets an empty list,
  * not everybody's. Wrong client, wrong answer, nothing disclosed.
  *
- * Same posture as `getPendingJoinRequests`: a failure to load is an empty
- * list, and withheld, absent and unconfirmed are deliberately one and the same.
+ * ── Two readers, two answers to failure ─────────────────────────────────────
+ * `getPendingInvites` folds a failed read into an empty list, the way
+ * `getPendingJoinRequests` does: the header tray and the onboarding intercept
+ * are chrome, and "no invitations" is the right thing for chrome to say when
+ * it cannot ask. `loadPendingInvites` keeps failure distinct, because a page
+ * that exists to show one invitation must not tell its reader the invitation
+ * is gone when the database merely did not answer. Withheld, absent and
+ * unconfirmed stay one and the same on both.
  */
 
 /**
@@ -66,18 +72,18 @@ export interface PendingInvite {
   inviterName: InviterName;
 }
 
-export async function getPendingInvites(
+/** The list, or `null` when the database did not answer. */
+export async function loadPendingInvites(
   supabase: SupabaseClient
-): Promise<PendingInvite[]> {
+): Promise<PendingInvite[] | null> {
   const { data, error } = await supabase.rpc("pending_program_invites");
 
   if (error) {
-    // Never fatal: the dashboard renders without the intercept rather than
-    // not at all. The message only — never an address, never an id.
+    // The message only — never an address, never an id.
     console.error("[invites] could not load pending invitations", {
       message: error.message,
     });
-    return [];
+    return null;
   }
 
   return ((data ?? []) as DbPendingInviteRow[]).map((row) => ({
@@ -87,4 +93,11 @@ export async function getPendingInvites(
     role: row.role as JoinRole,
     inviterName: displayName(row.inviter_first_name, row.inviter_last_name),
   }));
+}
+
+/** The list, never fatal: chrome renders without the intercept rather than not at all. */
+export async function getPendingInvites(
+  supabase: SupabaseClient
+): Promise<PendingInvite[]> {
+  return (await loadPendingInvites(supabase)) ?? [];
 }

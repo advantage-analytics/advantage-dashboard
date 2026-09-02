@@ -74,11 +74,12 @@ export default async function OnboardingPage({
     // Never with an empty list: this guard is what keeps `InviteOffer` from
     // rendering a pane with nothing in it.
     const single = invites.length === 1 ? invites[0] : null;
-    // Every invitation in the list carries the same footer numbers in
-    // practice, and the first one is the one the heading names.
-    const { programHours, personalHours } = quotaHours(
-      invites[0].programOrgType
-    );
+    // Each invitation carries its own allowance: a list can mix a college
+    // and a club, and they do not draw the same tier.
+    const offered = invites.map((invite) => ({
+      ...invite,
+      ...quotaHours(invite.programOrgType),
+    }));
 
     return (
       // `OnboardingFlow`'s own frame, reused rather than `ClaimShell`: this is
@@ -103,9 +104,7 @@ export default async function OnboardingPage({
               bodyMax="58ch"
             />
             <InviteOffer
-              invites={invites}
-              programHours={programHours}
-              personalHours={personalHours}
+              invites={offered}
               notNowHref={notNowHref("/onboarding")}
             />
           </div>

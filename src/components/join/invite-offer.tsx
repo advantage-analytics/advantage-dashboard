@@ -5,13 +5,31 @@ import { CLAIM_BUTTON, ClaimActions } from "@/components/claim/claim-shell";
 import { advButton } from "@/lib/ui/adv-button";
 import {
   JoinQuotaFooter,
+  JoinQuotaNote,
   JoinSharingTerms,
   NotNowLink,
   Problem,
 } from "@/components/join/join-terms";
-import { ROLE_NOUN } from "@/lib/services/programs/join-role";
+import { inviteSubtitle } from "@/lib/services/programs/join-role";
 import { acceptPendingInvite } from "@/lib/services/programs/join-actions";
 import type { PendingInvite } from "@/lib/data/pending-invites-server";
+
+/**
+ * An invitation with the two allowance figures its footer quotes.
+ *
+ * The figures ride on each invitation rather than on the pane, because a list
+ * can mix a collegiate program and a club: one draws the program tier, the
+ * other the individual one, and a single footer under both would promise one
+ * of them a number that will not be enforced. The page computes them server
+ * side with `quotaHours()` — the same function the spend asks — so the number
+ * shown is the number enforced, per row.
+ */
+export type OfferedInvite = PendingInvite & {
+  /** The program's real monthly allowance, in hours. See `JoinQuotaNote`. */
+  programHours: number;
+  /** The personal allowance the same person already has. */
+  personalHours: number;
+};
 
 /**
  * The invitations waiting for someone who is already signed in.
@@ -31,7 +49,8 @@ import type { PendingInvite } from "@/lib/data/pending-invites-server";
  * is "will you join this program", and gets the primary button and the
  * program's name on it. Several is "which of these", and a primary button on
  * any single row would answer it on the reader's behalf; so every row gets the
- * same quiet outline button and the screen keeps its hands off the choice.
+ * same quiet outline button and its own allowance line, and the screen keeps
+ * its hands off the choice.
  *
  * `ClaimHeading` is not rendered here. The pane and its title belong to the
  * page hosting this, which is the only thing that knows whether the person
@@ -39,27 +58,17 @@ import type { PendingInvite } from "@/lib/data/pending-invites-server";
  */
 export function InviteOffer({
   invites,
-  programHours,
-  personalHours,
   notNowHref,
 }: {
-  invites: PendingInvite[];
-  /** The program's real monthly allowance, in hours. See `JoinQuotaNote`. */
-  programHours: number;
-  /** The personal allowance the same person already has. */
-  personalHours: number;
+  invites: OfferedInvite[];
   /** Where declining goes. Composed by the caller — see `NotNowLink`. */
   notNowHref: string;
 }) {
-  const footer = (
-    <JoinQuotaFooter programHours={programHours} personalHours={personalHours} />
-  );
-
   return (
     <div className="flex flex-col gap-4">
       <JoinSharingTerms />
       {invites.length === 1 ? (
-        <SingleInvite invite={invites[0]} notNowHref={notNowHref} footer={footer} />
+        <SingleInvite invite={invites[0]} notNowHref={notNowHref} />
       ) : (
         <>
           <ul className="flex flex-col gap-3">
@@ -69,7 +78,6 @@ export function InviteOffer({
           </ul>
           <ClaimActions>
             <NotNowLink href={notNowHref} />
-            {footer}
           </ClaimActions>
         </>
       )}
@@ -104,11 +112,9 @@ function useAccept(inviteId: string) {
 function SingleInvite({
   invite,
   notNowHref,
-  footer,
 }: {
-  invite: PendingInvite;
+  invite: OfferedInvite;
   notNowHref: string;
-  footer: React.ReactNode;
 }) {
   const { pending, error, run } = useAccept(invite.id);
 
@@ -124,15 +130,18 @@ function SingleInvite({
           {pending ? "Joining…" : `Join ${invite.programName}`}
         </button>
         <NotNowLink href={notNowHref} />
-        {footer}
+        <JoinQuotaFooter
+          programHours={invite.programHours}
+          personalHours={invite.personalHours}
+        />
       </ClaimActions>
       <Problem message={error} />
     </>
   );
 }
 
-/** One row of several: the program, the role, who asked, and a quiet Join. */
-function InviteRow({ invite }: { invite: PendingInvite }) {
+/** One row of several: the program, the role, who asked, its allowance, and a quiet Join. */
+function InviteRow({ invite }: { invite: OfferedInvite }) {
   const { pending, error, run } = useAccept(invite.id);
 
   return (
@@ -140,10 +149,11 @@ function InviteRow({ invite }: { invite: PendingInvite }) {
       <div className="flex items-center gap-3">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="text-body-sm truncate">{invite.programName}</span>
-          <span className="text-micro truncate">
-            as {ROLE_NOUN[invite.role]}
-            {invite.inviterName ? ` · from ${invite.inviterName}` : ""}
-          </span>
+          <span className="text-micro truncate">{inviteSubtitle(invite)}</span>
+          <JoinQuotaNote
+            programHours={invite.programHours}
+            personalHours={invite.personalHours}
+          />
         </div>
         <button
           type="button"

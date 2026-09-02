@@ -25,7 +25,8 @@ import {
   uploadEtaSeconds,
 } from "@/lib/data/match-analysis";
 import { formatDisplayDate } from "@/lib/data/match-utils";
-import { ROLE_NOUN } from "@/lib/services/programs/join-role";
+import { invitationHref } from "@/lib/services/programs/join-links";
+import { inviteSubtitle } from "@/lib/services/programs/join-role";
 import { trayDetail } from "./tray-detail";
 import type { ActivityFeed, ActivityItem } from "@/lib/data/activity-server";
 // Type-only, and it has to stay that way: `pending-invites-server.ts` builds a
@@ -129,17 +130,13 @@ function InFlightRow({ item, nowMs }: { item: ActivityItem; nowMs: number }) {
  */
 function InviteRow({ invite }: { invite: PendingInvite }) {
   return (
-    <ActivityRow href={`/invitations/${invite.id}`} marked className="py-2.5">
+    <ActivityRow href={invitationHref(invite.id)} marked className="py-2.5">
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="min-w-0 text-[12px] text-[var(--ink-900)] [text-wrap:pretty]">
           Invitation — <b className="font-medium">{invite.programName}</b>
         </span>
-        {/* `inviterName` is null whenever the coach who sent it has left the
-            product — ordinary, not an error — so the clause drops rather than
-            printing "from —" or an invented sender. */}
         <span className="text-[11px] text-[var(--ink-500)]">
-          Join as {ROLE_NOUN[invite.role]}
-          {invite.inviterName !== null && ` · from ${invite.inviterName}`}
+          Join {inviteSubtitle(invite)}
         </span>
       </span>
     </ActivityRow>

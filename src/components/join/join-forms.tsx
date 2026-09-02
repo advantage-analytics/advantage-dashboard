@@ -45,12 +45,12 @@ import { PASSWORD_RULE } from "@/lib/auth/error-messages";
  */
 
 /**
- * What the three accepting screens share.
+ * What the two accepting screens share.
  *
- * The sharing terms and the quota line are the same on all three, and the
- * design's whole argument for 8.2 is that nobody reaches a Join button without
- * passing them. Threading the same two props through each form rather than
- * letting each one decide is what keeps that true when a fourth is added.
+ * The sharing terms and the quota line are the same on both, and the design's
+ * whole argument for 8.2 is that nobody reaches a Join button without passing
+ * them. Threading the same two props through each form rather than letting
+ * each one decide is what keeps that true when a third is added.
  */
 interface JoinTermsProps {
   /** The program's real monthly allowance, in hours. See `JoinQuotaNote`. */
@@ -305,9 +305,11 @@ export function JoinAskAgain({
  * One button, and it does the whole fix. Signing out used to drop them back
  * here signed in as nobody, holding an invitation and a screen that had just
  * told them to open the link again — the link they were already on.
- * `signOutForInvite` now hands the token to `/login?next=`, so the sign-in they
- * were always going to have to do next is the sign-in they land on, and the
- * invitation is waiting on the other side of it.
+ * `signOutForInvite` now decides where the next step is: `/login?next=` when
+ * the invited address already has an account, and straight back to this link
+ * when it does not, where the page offers the sign-up form. Either way the
+ * invitation is waiting on the other side, which is why the copy says
+ * "continue" rather than "sign in".
  */
 export function JoinWrongAccount({
   token,
@@ -327,7 +329,7 @@ export function JoinWrongAccount({
         <span className="text-[var(--ink-900)]">{invitedEmail}</span>, but
         you&apos;re signed in as{" "}
         <span className="text-[var(--ink-900)]">{signedInAs}</span>. Sign out,
-        sign in as {invitedEmail}, and you&apos;ll come straight back here.
+        continue as {invitedEmail}, and you&apos;ll come straight back here.
       </p>
       <ClaimActions>
         <button
@@ -336,7 +338,7 @@ export function JoinWrongAccount({
           className={CLAIM_BUTTON}
           onClick={() => start(() => signOutForInvite(token))}
         >
-          {pending ? "Signing out…" : "Sign out and sign in"}
+          {pending ? "Signing out…" : "Sign out and continue"}
         </button>
       </ClaimActions>
     </div>

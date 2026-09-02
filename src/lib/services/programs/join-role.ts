@@ -14,6 +14,12 @@ export const ROLE_NOUN: Record<JoinRole, string> = {
   player: "a player",
 };
 
+interface Introduced {
+  programName: string;
+  role: JoinRole;
+  inviterName: string | null;
+}
+
 /**
  * The one sentence an invitation is introduced with.
  *
@@ -23,13 +29,21 @@ export const ROLE_NOUN: Record<JoinRole, string> = {
  * "invited you to join" and "you've been invited to" end up on two screens of
  * the same flow.
  */
-export function inviteSentence(invite: {
-  programName: string;
-  role: JoinRole;
-  inviterName: string | null;
-}): string {
+export function inviteSentence(invite: Introduced): string {
   const noun = ROLE_NOUN[invite.role];
   return invite.inviterName
     ? `${invite.inviterName} invited you to join ${invite.programName} as ${noun}.`
     : `You've been invited to join ${invite.programName} as ${noun}.`;
+}
+
+/**
+ * The short form under a row: "as a player · from Elena Vasquez".
+ *
+ * The inviter clause drops when nobody is left to name — `invited_by` is
+ * `on delete set null` — rather than printing "from —" or an invented sender.
+ * One writer for the tray and the offer, which had drifted on exactly that.
+ */
+export function inviteSubtitle(invite: Introduced): string {
+  const base = `as ${ROLE_NOUN[invite.role]}`;
+  return invite.inviterName ? `${base} · from ${invite.inviterName}` : base;
 }
