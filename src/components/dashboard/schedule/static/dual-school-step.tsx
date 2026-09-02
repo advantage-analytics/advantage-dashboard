@@ -39,14 +39,12 @@ import type { ProgramSearchResult } from "@/lib/data/programs-server";
  * takes what it needs — step one the directory half, `ourConference` through
  * `directoryTotal`, and step two the rest.
  *
- * `ladder`, `defaultSurface`, `ourName` and `ourTeam` are therefore read on a
+ * `ladder` and `defaultSurface` are therefore read on a
  * screen that does not use them: they are step two's, and this route is the
  * flow's one read.
  */
 export interface NewDualData {
   /** The viewer's own program, for step two's header and its squad warning. */
-  ourName: string;
-  ourTeam: "mens" | "womens" | null;
   /** `getLadder` — step two's lineup. Step one does not read it. */
   ladder: LadderPlayer[];
   /** `getTeamSettings` — step two's surface default. */

@@ -10,6 +10,11 @@ import { EventShell } from "@/components/dashboard/schedule/event-shell";
 import { createTournament } from "@/lib/schedule/actions";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 import type { EventSite } from "@/lib/schedule/types";
+import {
+  EVENT_FORMATS,
+  todayISO,
+  type EventFormatValue,
+} from "@/lib/schedule/format";
 
 /**
  * `3c` — the new tournament, master and detail, against the program's roster.
@@ -471,7 +476,7 @@ interface TournamentDraft {
  */
 interface TournamentFormat {
   /** The `<select>` option's value — matched against, never split. */
-  value: string;
+  value: EventFormatValue;
   label: string;
   bestOf: number;
   adScoring: boolean;
@@ -485,15 +490,29 @@ interface TournamentFormat {
  * invented: "Bo3" is the artboard's own shorthand, and "no-ad" and "One set"
  * are `FORMATS`' words in both dormant forms. The order is those tables' order.
  */
-const FORMATS: readonly TournamentFormat[] = [
-  { value: "bo3-no-ad", label: "Bo3 · no-ad", bestOf: 3, adScoring: false },
-  { value: "bo3-ad", label: "Bo3 · ad", bestOf: 3, adScoring: true },
-  { value: "one-set-no-ad", label: "One set · no-ad", bestOf: 1, adScoring: false },
-  { value: "one-set-ad", label: "One set · ad", bestOf: 1, adScoring: true },
-];
+/**
+ * `3c`'s wording over the shared format table.
+ *
+ * Only the words live here — `3c` abbreviates where `2b` spells out. `bestOf`
+ * and `adScoring` come from `EVENT_FORMATS` in `lib/schedule/format.ts`, so the
+ * two builders cannot disagree about the pair that reaches the database. See
+ * that table's header, and `docs/ui-revamp-guardrails.md` §3.1 and §4.
+ */
+const FORMAT_LABELS: Record<EventFormatValue, string> = {
+  "bo3-no-ad": "Bo3 · no-ad",
+  "bo3-ad": "Bo3 · ad",
+  "one-set-no-ad": "One set · no-ad",
+  "one-set-ad": "One set · ad",
+};
+
+const FORMATS: readonly TournamentFormat[] = EVENT_FORMATS.map((format) => ({
+  ...format,
+  label: FORMAT_LABELS[format.value],
+}));
 
 /** What `3c` draws in the Format cell: best of 3, ad scoring. */
-const DEFAULT_FORMAT = FORMATS[1];
+const DEFAULT_FORMAT =
+  FORMATS.find((format) => format.value === "bo3-ad") ?? FORMATS[0];
 
 /**
  * The three sites an event can hold, labelled as both dormant forms label them.
@@ -509,16 +528,6 @@ const SITES: readonly { value: EventSite; label: string }[] = [
 
 /** What `3c` draws in the Site cell, and the usual answer for a tournament. */
 const DEFAULT_SITE: EventSite = "neutral";
-
-/** Local today, in the `YYYY-MM-DD` shape a date input and the column share. */
-function todayISO(): string {
-  const now = new Date();
-  return [
-    now.getFullYear(),
-    String(now.getMonth() + 1).padStart(2, "0"),
-    String(now.getDate()).padStart(2, "0"),
-  ].join("-");
-}
 
 /** The first of `DRAWS` — a stored value, not a label. */
 const MAIN_DRAW = "Main draw";

@@ -69,6 +69,55 @@ export function siteTitle(site: EventSite): string {
 }
 
 /**
+ * Today, as YYYY-MM-DD in the reader's own zone.
+ *
+ * Built from local components, never `toISOString().slice(0, 10)` — that is
+ * UTC, and it opens a coach's evening on tomorrow's date. Shared because both
+ * builders default a date field to today and two copies of this is two chances
+ * to reach for the UTC form.
+ */
+export function todayISO(): string {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+/**
+ * The four match formats, as the pair of values that actually reaches the
+ * database — and nothing else.
+ *
+ * ── Why this is shared and the labels are not ──────────────────────────────
+ * `2b` and `3c` word this cell differently ("Best of 3 sets · no-ad" against
+ * "Bo3 · no-ad"), so each builder keeps its own labels. What they must never
+ * word differently is `bestOf` and `adScoring`: those are the values
+ * `createDual` and `createTournament` store as `program_events.format`, which
+ * `docs/ui-revamp-guardrails.md` §3.1 and §4 govern, and which caused a real
+ * outage the last time a format reached the vendor wrong. Two hand-written
+ * copies of four boolean pairs is exactly the drift those sections warn about.
+ *
+ * `adScoring` is `boolean` here, never `boolean | null`: a null is a compile
+ * error rather than a convention, which is the whole reason the old
+ * `"<bestOf>|<adScoring>"` string encoding was removed from both screens.
+ */
+export type EventFormatValue =
+  | "bo3-no-ad"
+  | "bo3-ad"
+  | "one-set-no-ad"
+  | "one-set-ad";
+
+export const EVENT_FORMATS: readonly {
+  value: EventFormatValue;
+  bestOf: number;
+  adScoring: boolean;
+}[] = [
+  { value: "bo3-no-ad", bestOf: 3, adScoring: false },
+  { value: "bo3-ad", bestOf: 3, adScoring: true },
+  { value: "one-set-no-ad", bestOf: 1, adScoring: false },
+  { value: "one-set-ad", bestOf: 1, adScoring: true },
+];
+
+/**
  * "Brooks / Reid" → ["Brooks", "Reid"].
  *
  * Applied at the BOUNDARIES — on submit, and when comparing against the roster

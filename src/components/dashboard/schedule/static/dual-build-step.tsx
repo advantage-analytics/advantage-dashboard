@@ -28,7 +28,12 @@ import {
   opponentRosterForDual,
   type OpponentRosterCandidate,
 } from "@/lib/schedule/actions";
-import { splitNames } from "@/lib/schedule/format";
+import {
+  EVENT_FORMATS,
+  splitNames,
+  todayISO,
+  type EventFormatValue,
+} from "@/lib/schedule/format";
 import { rosterIdsForLabels } from "@/lib/schedule/roster-match";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
@@ -79,7 +84,7 @@ export type ChosenSchool =
  */
 interface DualFormat {
   /** The `<select>` option's value — matched against, never split. */
-  value: string;
+  value: EventFormatValue;
   /** What the dropdown lists, once open. */
   label: string;
   /** What the closed cell prints. */
@@ -99,44 +104,49 @@ interface DualFormat {
  * `FORMATS`' words, in that table's order. The first row is what the artboard
  * draws, and what a new dual opens on.
  */
-const FORMATS: readonly DualFormat[] = [
-  {
-    value: "bo3-no-ad",
+/**
+ * `2b`'s wording over the shared format table.
+ *
+ * Only the words live here. `bestOf` and `adScoring` come from
+ * `EVENT_FORMATS` in `lib/schedule/format.ts`, so the two builders cannot word
+ * the same option differently where it counts — see that table's header, and
+ * `docs/ui-revamp-guardrails.md` §3.1 and §4.
+ */
+const FORMAT_WORDS: Record<
+  EventFormatValue,
+  { label: string; sets: string; scoring: string }
+> = {
+  "bo3-no-ad": {
     label: "Best of 3 sets · no-ad",
     sets: "Best of 3 sets",
     scoring: "No-ad scoring",
-    bestOf: 3,
-    adScoring: false,
   },
-  {
-    value: "bo3-ad",
+  "bo3-ad": {
     label: "Best of 3 sets · ad",
     sets: "Best of 3 sets",
     scoring: "Ad scoring",
-    bestOf: 3,
-    adScoring: true,
   },
-  {
-    value: "one-set-no-ad",
+  "one-set-no-ad": {
     label: "One set · no-ad",
     sets: "One set",
     scoring: "No-ad scoring",
-    bestOf: 1,
-    adScoring: false,
   },
-  {
-    value: "one-set-ad",
+  "one-set-ad": {
     label: "One set · ad",
     sets: "One set",
     scoring: "Ad scoring",
-    bestOf: 1,
-    adScoring: true,
   },
-];
+};
+
+const FORMATS: readonly DualFormat[] = EVENT_FORMATS.map((format) => ({
+  ...format,
+  ...FORMAT_WORDS[format.value],
+}));
 
 /** What `2b` draws: best of 3, no-ad. Explicit — never a default standing in
  *  for a null. */
-const DEFAULT_FORMAT = FORMATS[0];
+const DEFAULT_FORMAT =
+  FORMATS.find((format) => format.value === "bo3-no-ad") ?? FORMATS[0];
 
 /**
  * The three sites a dual can be at, labelled as the dormant form labels them
@@ -177,21 +187,6 @@ interface DualDraft {
   /** One of `SURFACES`' values; `""` is none. */
   surface: string;
   format: DualFormat;
-}
-
-/**
- * Local today, in the `YYYY-MM-DD` shape a date input and the column share.
- * `static-tournament-builder.tsx`'s own, repeated rather than exported from a
- * screen: `toISOString()` is UTC and puts a dual on yesterday for anyone west
- * of Greenwich after dinner.
- */
-function todayISO(): string {
-  const now = new Date();
-  return [
-    now.getFullYear(),
-    String(now.getMonth() + 1).padStart(2, "0"),
-    String(now.getDate()).padStart(2, "0"),
-  ].join("-");
 }
 
 /** `2b`'s nine courts, in the order it draws them. */

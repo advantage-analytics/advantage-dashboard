@@ -93,10 +93,9 @@ async function directoryTotal(): Promise<number | null> {
  * `StaticDualBuilder` owns the step state and takes none. See `NewDualData` in
  * `dual-school-step.tsx`.
  *
- * `dual-form.tsx` and `school-search.tsx` are the previous DB-wired
- * implementation of these two steps and are still dormant where they were —
- * this route reads the same loaders they needed, and the static tree renders
- * the result.
+ * `dual-form.tsx` and `school-search.tsx` were the previous DB-wired
+ * implementation of these two steps and are deleted — this route reads the same
+ * loaders they needed, and the static tree renders the result.
  *
  * The guards below are untouched.
  */
@@ -132,8 +131,6 @@ export default async function NewDualPage() {
   return (
     <NewDualDataProvider
       data={{
-        ourName: active.name,
-        ourTeam: active.team,
         ladder,
         defaultSurface: settings?.program.defaultSurface ?? null,
         ourConference: settings?.program.conference ?? null,

@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canUploadForProgram, isProgramStaff } from "@/lib/workspace/types";
 import {
-  eventDetailFrom,
   getProgramSchedule,
   scheduleRowsFrom,
   seasonSummaryFrom,
@@ -54,10 +53,15 @@ export default async function SchedulePage() {
 
   // Build the detail map: every event's detail, keyed by id, so the client
   // component can swap panes without a fetch.
+  // Built from the loop's own `event` rather than through `eventDetailFrom`,
+  // which re-`find()`s the very array this is iterating — an O(n²) walk over
+  // the season for a map we already hold both halves of.
   const details: Record<string, EventDetail> = {};
   for (const event of schedule.events) {
-    const detail = eventDetailFrom(schedule, event.id);
-    if (detail) details[event.id] = detail;
+    details[event.id] = {
+      event,
+      entries: schedule.entriesByEvent.get(event.id) ?? [],
+    };
   }
 
   return (

@@ -23,10 +23,10 @@ import { StaticTournamentBuilder } from "@/components/dashboard/schedule/static/
  * `surface`, and the program's own answer is the only non-invented one
  * available. Nothing here defaults it to a court type the program never chose.
  *
- * Submitting is not wired yet — the builder holds its own draft and the Create
- * button is still inert. `tournament-form.tsx` and the `entry-editor.tsx` pair
- * it composes stay dormant where they are until that lands, along with the
- * `createTournament` action they write through.
+ * Submitting writes: the builder calls `createTournament` and navigates to the
+ * event it created. `tournament-form.tsx` and the `entry-editor.tsx` pair it
+ * composed were the previous DB-wired implementation of this screen and are
+ * deleted — the draw and seed vocabulary they owned was ported first.
  *
  * The guards below are untouched.
  */
