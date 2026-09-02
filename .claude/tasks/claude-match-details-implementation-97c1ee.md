@@ -149,7 +149,7 @@ ready).
 - **notes:** design § Flags-doc changes; plan step 10.
 
 ## T12 · Gate and visual pass against the 47f frame
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T11
 - **files:** any file from T1–T11, fixes only

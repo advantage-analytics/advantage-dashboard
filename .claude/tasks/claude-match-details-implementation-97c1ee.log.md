@@ -550,3 +550,61 @@ is the runner's. Newest entries at the bottom.
      this session that no match even has `player2_id` set; the result_type
      vocabulary claim rests on `result-type.ts`'s union, which is authoritative
      for derived matches. Solid enough for a flags-doc row.
+
+## T12 · Gate and visual pass against the 47f frame — done
+- **gate:** mechanical — `npm run lint` 0 errors / 37 warnings (baseline, none
+  new), `npx tsc --noEmit` exit 0, `npm run build` exit 0, `npm test` 323
+  passed (the completion reviewer independently re-ran and caught a transient
+  live-DB flake in `account-deletion-retention.spec.ts` unrelated to this diff,
+  re-ran to green). Completion review `VERDICT: pass`. Guardrails —
+  `pipeline-guardrails-reviewer` run on the WHOLE branch diff (`475f940..worktree`,
+  done-when 2): "No blocking findings. The branch is clean against every
+  applicable guardrail." It traced §4 attribution end to end (every you/opp
+  read flows from `useMatchSides()`; `resolveYouSide` is the one seat decision,
+  byte-equivalent to the old inline test, feeding both `match.isUserPlayer1`
+  and `kpiHistory` from one `React.cache()`d id set so they cannot diverge),
+  confirmed §3.3 short-circuit intact, §3.2 predicates and §3.1 wizard
+  untouched, `MatchDataBlock` + withheld Aces + em-dash suppression all still
+  render for a derived match, flag #9 closed at the tracker site, no
+  customer-facing "splitstep", and the both-seats loader reads nothing past the
+  viewer's RLS grant with no service-role client.
+- **changed (two fixes, "fixes only"):**
+  1. `match-detail-shell.tsx` — the `<aside>` loses its round-46 `p-6 gap-6`
+     (now `p-0`, `gap-6` dropped as inert with the rail as sole child), keeping
+     `overflow-y-auto`/`border-r`/`[flex:0_0_300px]`. This removes the rail
+     double-padding T10 flagged, so the rendered rail padding is the frame's
+     18/20 px.
+  2. `match-kpi-strip.tsx` — the "Known limitation" doc comment was stale
+     (T13's both-seats fix landed after T5 wrote it), describing a
+     seat-one-only truncation that no longer exists. Rewritten to state the
+     real residual: a coach's history is keyed to the single row id, not the
+     athlete's full claimed id set; a real participant always sees their own
+     history now. Flagged by the guardrails reviewer as worth fixing before
+     merge so a future reader does not hunt a bug that's gone.
+- **attribution audit (done-when 3):** recorded in the subagent's result and
+  independently re-derived by the guardrails reviewer — every `player1`/`player2`
+  occurrence in the changed files is a doc comment, a type, a symmetric sum, a
+  data-layer stat key (`is_player1`, `player1_id`), or a `sides.pick(...)`
+  translation point; no changed component reads player order to orient the UI.
+- **browser criteria (done-when 4):** criteria 1–7 recorded as verified-by-code
+  with browser-unverified reasons — the Statistics tab is auth-gated
+  (`/dashboard/matches → 307 → /login`) and this worktree has no dev-login, so
+  the subagent correctly declined to fake a screenshot. Done-when 4's own
+  wording accepts "explicitly unverified with the reason"; each criterion cites
+  the shipped code (four KPI tiles, H2H 15 rows / lower-leads / tooltip
+  fraction / tab-row chips, tracker-rally-endings deltas, rail card + dismissal
+  persistence + no film card, derived-match aces withheld + MatchDataBlock).
+  The one concrete pixel deviation (the rail double-pad) was fixed above; no
+  other could be listed without a render. A credentialed browser pass at
+  1512×982 against the 47f present view remains the one human step before or
+  during PR review.
+- **follow-ups:**
+  1. `docs/README.md` line 13 still carries the round-46 point-in-time blurb
+     (T11 follow-up) — a docs-freshness sync, its own small task.
+  2. Recorded across the branch, not built (all deliberate): the page-wide
+     three-state viewer rule (`viewer-side.ts`) for the neither-player case; the
+     now-dead `playerAverages` (no consumer); a `size` prop on `LegendSwatch` to
+     retire the local 6 px swatch in point-endings; whether a personal "your
+     avg" should exclude team matches; alumni/season archiving; the duplicate
+     `playerSide()`. These are the `/pr-check` and future-branch surface, not
+     this feature.

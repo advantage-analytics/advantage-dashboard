@@ -24,10 +24,15 @@ import type { PlayerStatistics } from "@/lib/data/types";
  * (guardrails §4: a silent flip attributes every number to the wrong player
  * with nothing looking broken on screen).
  *
- * Known limitation, already recorded for the human: `kpiHistory` counts only
- * matches where the player was stored as player 1, and a viewer who is neither
- * player is seated at player 2, so a coach can be shown an opponent's history
- * or none at all. The absent path above is what that degrades to.
+ * Known limitation: a viewer who is NEITHER player — a coach reading an
+ * athlete's match — is seated at player 2 by the page's two-state rule
+ * (`resolveYouSide`), so the history shown is that seat's, and the delta reads
+ * the neutral "vs avg" rather than "vs your avg" (point 3). `kpiHistory` itself
+ * now covers both seats — the seat-one-only fetch that once truncated a
+ * player-2 appearance's series was fixed in the loader — so a real participant
+ * always sees their own history; the residual gap is only that a coach's
+ * history is keyed to the single id on the row, not the athlete's full claimed
+ * id set. The absent path above is what the thin cases degrade to.
  */
 
 interface KpiSpec {
