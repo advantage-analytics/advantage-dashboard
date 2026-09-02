@@ -30,7 +30,7 @@ ready).
 - **notes:** The design's R1 as written is contradicted by its own examples — `GIMENA` holds an uppercase after the first character, so literal R1 would leave it alone. The correct reading, confirmed with the human at stage 04: **R1 fires only on a MIXED-case token** (an uppercase after the first character AND at least one lowercase letter). That makes an all-caps suffix fall through to R2, so the human added **R1b**: a token made entirely of `i`/`v`/`x` letters, length 2 or more, is uppercased whole — `III` survives as typed and `iii` becomes `III`. Rule order is R1 → R1b → R2 (with R2a inside it). Nothing in the app calls this yet, so no screen changes.
 
 ## T2 · Wire the two choke points and correct the TypeScript-side stale comments
-- **status:** todo
+- **status:** blocked
 - **model:** sonnet
 - **needs:** T1
 - **files:** src/lib/data/programs-server.ts (`toResult` ~line 130, the file header ~line 7, the `ownerDisplay` doc ~line 29), src/lib/services/programs/invite-acceptance.ts (`displayName` ~line 194), src/app/api/programs/search/route.ts (doc block ~line 11) — guess
