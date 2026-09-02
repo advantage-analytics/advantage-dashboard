@@ -41,10 +41,7 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { parseWebhookPayload } from '@/lib/services/splitstep/webhook-payload';
-import {
-  resultsObjectKey,
-  trimmedObjectKey,
-} from '@/lib/services/splitstep/object-keys';
+import { selectDeliveryStorageKeys } from '@/lib/services/splitstep/delivery-storage-keys';
 import { RESULTS_BUCKET } from '@/lib/services/splitstep/config';
 import {
   deleteVideoBlob,
@@ -350,26 +347,23 @@ export async function POST(request: NextRequest) {
       ? null
       : payload.trimmedVideoUrl;
 
-    const resultsKey = jobId
-      ? resultsObjectKey({
-          userId: record.created_by!,
-          matchId: record.match_id!,
-          jobId,
-        })
-      : `orphaned/${payload.externalJobId ?? 'unknown'}/${deliveryId}.json`;
-
-    // No orphan fallback for the video, unlike the results key above. The
-    // results JSON is small and worth keeping under any key just to have it; a
-    // multi-gigabyte video filed under a key nobody can attribute to a user is
-    // a storage bill with no owner and no deletion path.
-    const trimmedKey =
-      jobId && record.created_by && record.match_id
-        ? trimmedObjectKey({
-            userId: record.created_by,
-            matchId: record.match_id,
-            jobId,
-          })
-        : null;
+    // Which keys these assets land under, and whether the video is kept at all.
+    // The results JSON always gets a key. The trimmed video gets one whenever
+    // the match is nameable (`match_id`) — which INCLUDES a retained team match
+    // whose uploader deleted their account: `created_by` is null, but the video
+    // is still attributable via `match_id` and deletable via `purgeMatchStorage`
+    // (it reads `trimmed_object_key` off the row by `match_id`, never parsing
+    // the key), so it gets a `former-member` key rather than being dropped. Only
+    // a truly orphaned delivery — no job at all — skips the video, since a
+    // multi-gigabyte blob nothing can attribute is a storage bill with no owner.
+    // The branching is a pure helper so it can be unit-tested; see its doc.
+    const { resultsKey, trimmedKey } = selectDeliveryStorageKeys({
+      jobId,
+      createdBy: record.created_by,
+      matchId: record.match_id,
+      externalJobId: payload.externalJobId,
+      deliveryId,
+    });
 
     if (sasUrl || trimmedVideoUrl) {
       after(async () => {
