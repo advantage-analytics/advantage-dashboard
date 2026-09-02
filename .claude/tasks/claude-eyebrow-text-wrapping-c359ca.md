@@ -30,7 +30,7 @@ ready).
 - **notes:** Plan step 1. Bootstrap first: this worktree has no `node_modules` (`.env.local` is already symlinked from the main checkout). Run `npm ci` in the worktree before anything else and confirm `npm run lint` passes on the untouched tree — that proves the toolchain before any edit muddies the signal. Do NOT symlink `node_modules` from the main checkout; it panics Turbopack. `npm ci` produces no diff and is not gated.
 
 ## T2 · Add a full-width `heading` slot to `ClaimShell`
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/claim/claim-shell.tsx (guess — `ClaimShell` props and the `maxWidth` body wrapper, ~L36–115)
 - **done when:**

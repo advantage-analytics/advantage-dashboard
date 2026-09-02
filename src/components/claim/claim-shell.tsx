@@ -39,6 +39,7 @@ export function ClaimShell({
   exitHref = "/claim/exit",
   exitLabel = "Leave setup",
   children,
+  heading,
   aside,
   asideWidth = 300,
 }: {
@@ -66,6 +67,15 @@ export function ClaimShell({
   exitHref?: string;
   exitLabel?: string;
   children: React.ReactNode;
+  /**
+   * A `ClaimHeading` (or equivalent) hoisted above the aside grid instead of
+   * inside `children`. The grid narrows the body column to leave room for the
+   * aside, and an eyebrow line is the one piece of copy in this flow long
+   * enough to wrap inside that narrowed width — the longest program name
+   * alone renders wider than the 492px column F4 leaves it. Rendering it here
+   * gives it the shell's full `width` instead.
+   */
+  heading?: React.ReactNode;
   /**
    * The right-hand panel on F3.2, F4 and F4.1. It carries what a narrow card
    * had to leave out — what ownership actually involves, what waits and what
@@ -100,17 +110,20 @@ export function ClaimShell({
       </div>
 
       <div className="mx-auto w-full" style={{ maxWidth: width }}>
-        {aside ? (
-          <div
-            className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_var(--claim-aside)] lg:gap-12"
-            style={{ "--claim-aside": `${asideWidth}px` } as React.CSSProperties}
-          >
+        <div className="flex flex-col" style={{ gap }}>
+          {heading}
+          {aside ? (
+            <div
+              className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_var(--claim-aside)] lg:gap-12"
+              style={{ "--claim-aside": `${asideWidth}px` } as React.CSSProperties}
+            >
+              <ClaimColumn gap={gap}>{children}</ClaimColumn>
+              <aside className="min-w-0">{aside}</aside>
+            </div>
+          ) : (
             <ClaimColumn gap={gap}>{children}</ClaimColumn>
-            <aside className="min-w-0">{aside}</aside>
-          </div>
-        ) : (
-          <ClaimColumn gap={gap}>{children}</ClaimColumn>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
