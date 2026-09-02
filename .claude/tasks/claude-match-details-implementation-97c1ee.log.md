@@ -432,3 +432,23 @@ is the runner's. Newest entries at the bottom.
      rests on tsc/build/lint. The plan's dev-server checks — derived match
      shows a time and no score, a SwingVision import shows a score and no time,
      `?set=2` draws one set — remain for T12 in a credentialed session.
+
+## T8 · Rally length card — done
+- **gate:** mechanical — `npm run lint` 0 errors / 37 warnings (baseline 43),
+  `npx tsc --noEmit` exit 0, `npm test` green. Completion review `VERDICT: pass`.
+  Guardrails — `pipeline-guardrails-reviewer` ran (one dashboard file) and
+  reported "no findings": the leader-based tone swap was colour-only, so
+  removing it did not touch which side each segment represents — the top piece
+  is always sized to the viewer's `youShare` and the bottom is the remainder,
+  both before and after, and the won-test stays `wonByPlayer1 ===
+  sides.you.isPlayer1`. Tooltip and legend read from `sides`, §3.2/§3.3
+  untouched, no "splitstep" string. `rls-boundary-reviewer` skipped — no query
+  or loader.
+- **changed:** the mosaic drops the leader-based tone swap for fixed
+  `viz-you-mid` over `viz-opp-light`, removes the in-band percentage labels,
+  and becomes the right column's `flex-1 min-h-24` absorber under a `flex-1
+  min-h-0` root. Header meta is `{avg} shots average`; the label row reads
+  `Short 106` (11 px name + mono 10 px count); the legend matches the two
+  tones; the footer is `Width is how often`; the tooltip share is one-decimal.
+  Points come from `scopePoints(points, activeSet)` via `useSetScope()`.
+- **follow-ups:** none.

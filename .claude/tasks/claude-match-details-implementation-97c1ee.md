@@ -103,7 +103,7 @@ ready).
 - **notes:** design § Components → `performance-tracker-chart.tsx`; plan step 7. Flags #9 (score coercion) and #11 (Expand) apply.
 
 ## T8 · Rally length card
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T3
 - **files:** src/components/dashboard/matches/match-detail/rally-length-card.tsx
