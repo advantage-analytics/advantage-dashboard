@@ -1,6 +1,8 @@
 # Review — pending-invite-intercept
 
-Sign-off: pending
+Sign-off: approved — by the author, 2026-09-02, in chat ("set it to approved and land it"), recorded here by Claude on their
+instruction. The by-hand browser checks under "Left for the human" were
+not run before this approval.
 
 Reviewed range: the branch against `splitstep-integration`, `1b9a2c3...HEAD`,
 which carries T1–T3 (the join-page redirect fix), T4–T10 (this feature) and
