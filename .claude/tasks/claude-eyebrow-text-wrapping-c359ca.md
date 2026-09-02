@@ -18,7 +18,7 @@ straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Add `programEyebrow()` helper to programs-server
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/lib/data/programs-server.ts (guess — beside `divisionLabel`/`programSubtitle` at ~L105–116)
 - **done when:**
