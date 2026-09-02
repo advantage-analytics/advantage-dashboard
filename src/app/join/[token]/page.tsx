@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   ClaimShell,
   ClaimColumn,
@@ -10,7 +11,6 @@ import {
 import {
   JoinAskAgain,
   JoinReady,
-  JoinSignIn,
   JoinSignUp,
   JoinWrongAccount,
 } from "@/components/join/join-forms";
@@ -30,12 +30,15 @@ export const metadata = { title: "Join your program" };
  * would never hear anything — and could not have accepted if they had.
  *
  * Seven states, and every one of them is a real thing that happens rather than
- * a defensive branch. Three carry a form; four are ends with a way out, and
- * those are the ones worth designing, because an invitation that fails is the
- * moment somebody decides whether this product is worth the trouble. Two of
- * them are no longer dead: an expired link can ask the coach who sent it for
- * another (9.2a), and the three form states can be declined without spending
- * anything (8.3a) — `?not-now=1`, an eighth render of the same seven states.
+ * a defensive branch. Two carry a form; one carries no screen at all, because
+ * `sign_in` means the account exists and signing into an account that exists
+ * belongs to `/login?next=`, not to a password box grown on an invitation link;
+ * four are ends with a way out, and those are the ones worth designing, because
+ * an invitation that fails is the moment somebody decides whether this product
+ * is worth the trouble. Two of them are no longer dead: an expired link can ask
+ * the coach who sent it for another (9.2a), and the two form states can be
+ * declined without spending anything (8.3a) — `?not-now=1`, an eighth render of
+ * the same seven states.
  *
  * ── Deliberately not a route handler ────────────────────────────────────────
  * A GET that accepted the invitation on sight would be simpler, and wrong:
@@ -263,27 +266,15 @@ export default async function JoinPage({
         </JoinPane>
       );
 
+    // The account already exists, so signing in is auth's job and never this
+    // page's. `/login` is the one form that knows every way into a session —
+    // password today, Google beside it, whatever it grows next — and `?next=`
+    // brings them back to this token, by then answering `ready`. No "not now"
+    // branch: there is no Join button on this state to decline, and the
+    // invitation is untouched either way.
     case "sign_in":
-      if (declined) {
-        return (
-          <NothingSent
-            token={token}
-            programName={state.programName}
-            inviterName={state.inviterName}
-          />
-        );
-      }
-      return (
-        <JoinPane eyebrow={state.programName} title="Sign in to join">
-          <JoinSignIn
-            token={token}
-            programName={state.programName}
-            role={state.role}
-            email={state.email}
-            programHours={programHours}
-            personalHours={personalHours}
-          />
-        </JoinPane>
+      redirect(
+        `/login?next=${encodeURIComponent(`/join/${encodeURIComponent(token)}`)}`
       );
 
     case "sign_up":

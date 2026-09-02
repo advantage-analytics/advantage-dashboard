@@ -30,7 +30,7 @@ ready).
 - **notes:** `safeNext` is pure and already imported by `/callback` and `/confirm`; the client must clamp too because the password path navigates client-side. The login page must not receive or prefill the invitee's email — `next` carries a path only. Confirm in the Supabase dashboard (Authentication → URL Configuration) that the redirect allow-list entry for `/callback` tolerates an arbitrary `next` query value; it cannot be verified from the repo. Playwright here runs pure-logic specs with no browser or webServer (see `playwright.config.ts`), so the spec imports `safeNext` directly.
 
 ## T2 · Route join sign-in and wrong-account through `/login?next=`
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** src/app/join/[token]/page.tsx, src/components/join/join-forms.tsx, src/lib/services/programs/join-actions.ts — guess

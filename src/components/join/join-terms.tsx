@@ -190,10 +190,10 @@ export function NotNowLink({ token }: { token: string }) {
 /**
  * The quota line, pushed to the far end of the actions row.
  *
- * Composed by each form rather than bundled with "Not now", because the three
- * screens do not agree on what sits between them: only the sign-in one carries
- * "Forgot your password?", and it belongs beside its own button, not after the
- * line that ends the row.
+ * Composed by each form rather than bundled with "Not now", because the two
+ * screens do not agree on what sits between them: only the sign-up one carries
+ * "Sign in with Google instead", and it belongs beside its own button, not
+ * after the line that ends the row.
  */
 export function JoinQuotaFooter(props: {
   programHours: number;

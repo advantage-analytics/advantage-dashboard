@@ -18,12 +18,14 @@ import {
 } from "./invite-acceptance";
 
 /**
- * The three ways an invitation is accepted, and the one that is refused.
+ * The two ways an invitation is accepted, and the one that is refused.
  *
- * Which one a person takes depends on what they already have — a session, an
- * account, or neither — and `resolveJoinState` decides that. Every one of them
- * finishes through `acceptWithSession`, so the token is re-checked against the
- * live row at the moment of the write.
+ * Which one a person takes depends on what they already have — a session, or
+ * neither session nor account — and `resolveJoinState` decides that. The third
+ * case, an account with no session, is not served from this file at all: the
+ * page redirects it to `/login?next=`, and it comes back holding a session as
+ * the first case. Both of the ones left finish through `acceptWithSession`, so
+ * the token is re-checked against the live row at the moment of the write.
  *
  * ── The rule that matters most ──────────────────────────────────────────────
  * An invitation link may create an account. It may NEVER change the password
@@ -31,9 +33,10 @@ import {
  * password" box and they are not: the second one is a password reset triggered
  * by anyone who can read the invited person's mail, forwarded mail included.
  * That is account takeover with a friendly wrapper, so an existing account is
- * sent to a sign-in field and nowhere else. Password resets have their own
- * flow, which proves control of the mailbox at the moment of the reset rather
- * than up to fourteen days earlier.
+ * sent to `/login` and nowhere else — this file no longer holds a password of
+ * theirs even for a moment, because the sign-in happens on the page that owns
+ * sessions. Password resets have their own flow, which proves control of the
+ * mailbox at the moment of the reset rather than up to fourteen days earlier.
  *
  * One action here accepts nothing: `requestFreshInvite` asks the coach who sent
  * an expired invitation to send another. It is the only one reachable without a
@@ -94,45 +97,6 @@ async function activate(programId: string): Promise<void> {
 /** Already signed in as the invited address. Nothing to collect. */
 export async function acceptInvite(token: string): Promise<JoinActionResult> {
   const outcome = await acceptWithSession(token);
-  if (!outcome.ok) return { ok: false, error: describe(outcome) };
-
-  await activate(outcome.programId);
-  redirect("/dashboard/team");
-}
-
-/**
- * An account exists. Sign in with the password they already have, then join.
- *
- * The address comes from the invitation, never from the form. There is no
- * email field on this screen for exactly that reason: an invitation is bound
- * to one address, and letting the browser name a different one would turn a
- * join link into a generic sign-in form that happens to grant membership.
- */
-export async function signInAndAccept(
-  token: string,
-  password: string
-): Promise<JoinActionResult> {
-  const state = await resolveJoinState(token);
-  if (state.kind !== "sign_in") {
-    return { ok: false, error: "That link can't be used that way." };
-  }
-
-  if (!password) return { ok: false, error: "Enter your password." };
-
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({
-    email: state.email,
-    password,
-  });
-
-  if (error) {
-    // Deliberately not "wrong password" versus "no such account" — the state
-    // machine already established the account exists, and echoing which half
-    // failed is a habit worth not forming.
-    return { ok: false, error: "That password doesn't match this account." };
-  }
-
-  const outcome = await acceptWithSession(token, supabase);
   if (!outcome.ok) return { ok: false, error: describe(outcome) };
 
   await activate(outcome.programId);
@@ -356,11 +320,24 @@ async function nudgeInviter(invite: InviteRecord): Promise<void> {
   }
 }
 
-/** Sign out, so a link opened under the wrong account can be opened again. */
+/**
+ * Sign out of the wrong account, and land on the sign-in that fixes it.
+ *
+ * Signing out and returning to `/join/[token]` was a loop: the page would
+ * resolve `sign_in` for a person who now had no session, and tell them to sign
+ * in — which is what `/login?next=` does, one step earlier, with the token
+ * still attached so acceptance is waiting on the far side. The sign-out runs
+ * first either way; only a token that no longer names an invitation loses the
+ * `next` and lands on a plain `/login`.
+ */
 export async function signOutForInvite(token: string): Promise<void> {
   const supabase = await createClient();
   await supabase.auth.signOut();
 
   const invite = await loadInvite(token);
-  redirect(invite ? `/join/${encodeURIComponent(token)}` : "/login");
+  redirect(
+    invite
+      ? `/login?next=${encodeURIComponent(`/join/${encodeURIComponent(token)}`)}`
+      : "/login"
+  );
 }

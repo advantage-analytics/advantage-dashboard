@@ -19,7 +19,6 @@ import {
   acceptInvite,
   createAccountAndAccept,
   requestFreshInvite,
-  signInAndAccept,
   signOutForInvite,
 } from "@/lib/services/programs/join-actions";
 import { PASSWORD_RULE } from "@/lib/auth/error-messages";
@@ -118,88 +117,6 @@ export function JoinReady({
         />
       </ClaimActions>
     </div>
-  );
-}
-
-/** The account exists. Their existing password, and nothing else. */
-export function JoinSignIn({
-  token,
-  programName,
-  role,
-  email,
-  programHours,
-  personalHours,
-}: {
-  token: string;
-  programName: string;
-  role: JoinRole;
-  email: string;
-} & JoinTermsProps) {
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [pending, start] = useTransition();
-
-  return (
-    <form
-      noValidate
-      // The 380px cap moved off the form and onto the field below it. A
-      // password box is 380px because that is a comfortable length to read a
-      // masked value in; the sharing terms are two columns and need the pane.
-      // Capping the form capped both, and folded 8.2 into one narrow list.
-      className="flex flex-col gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        start(async () => {
-          setError(null);
-          const result = await signInAndAccept(token, password);
-          if (result && !result.ok) setError(result.error);
-        });
-      }}
-    >
-      <p className="text-body max-w-[58ch]">
-        You already have an Advantage account for{" "}
-        <span className="text-[var(--ink-900)]">{email}</span>. Sign in and
-        you&apos;ll join {programName} as {ROLE_NOUN[role]}.
-      </p>
-
-      <JoinSharingTerms />
-
-      <div className="max-w-[380px]">
-        <label className={CLAIM_LABEL} htmlFor="join-password">
-          Password
-        </label>
-        <input
-          id="join-password"
-          type="password"
-          autoComplete="current-password"
-          className={CLAIM_FIELD}
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-        />
-      </div>
-
-      <Problem message={error} />
-
-      <ClaimActions>
-        <button type="submit" disabled={pending} className={CLAIM_BUTTON}>
-          {pending ? "Joining…" : "Sign in and join"}
-        </button>
-        <NotNowLink token={token} />
-        {/* The way out for someone who has forgotten it. Resetting a password
-            is a different proof of the same mailbox, and it is the only path
-            that may change an existing account's password — never this one. */}
-        <a
-          href="/forgot-password"
-          className="text-[12px] text-[var(--blue)] hover:underline"
-        >
-          Forgot your password?
-        </a>
-        <JoinQuotaFooter
-          programHours={programHours}
-          personalHours={personalHours}
-        />
-      </ClaimActions>
-    </form>
   );
 }
 
@@ -309,6 +226,17 @@ export function JoinSignUp({
           {pending ? "Joining…" : `Join ${programName}`}
         </button>
         <NotNowLink token={token} />
+        {/* Some of the people reading this have never chosen a password for
+            anything and are not about to start. Google is on `/login`, so the
+            way to offer it here is to point at that page and come back — the
+            same `?next=` the `sign_in` state redirects through. They return
+            holding a session, and this screen becomes the Join button. */}
+        <Link
+          href={`/login?next=${encodeURIComponent(`/join/${encodeURIComponent(token)}`)}`}
+          className="text-[12px] text-[var(--blue)] hover:underline"
+        >
+          Sign in with Google instead
+        </Link>
         <JoinQuotaFooter
           programHours={programHours}
           personalHours={personalHours}
@@ -388,6 +316,13 @@ export function JoinAskAgain({
  * The commonest real case is a shared laptop or a personal account left open,
  * so the screen names both addresses rather than saying "wrong account" — the
  * fix is obvious the moment a person can see which one they are currently in.
+ *
+ * One button, and it does the whole fix. Signing out used to drop them back
+ * here signed in as nobody, holding an invitation and a screen that had just
+ * told them to open the link again — the link they were already on.
+ * `signOutForInvite` now hands the token to `/login?next=`, so the sign-in they
+ * were always going to have to do next is the sign-in they land on, and the
+ * invitation is waiting on the other side of it.
  */
 export function JoinWrongAccount({
   token,
@@ -406,8 +341,8 @@ export function JoinWrongAccount({
         This invitation was sent to{" "}
         <span className="text-[var(--ink-900)]">{invitedEmail}</span>, but
         you&apos;re signed in as{" "}
-        <span className="text-[var(--ink-900)]">{signedInAs}</span>. Sign out
-        and open the link again to accept it.
+        <span className="text-[var(--ink-900)]">{signedInAs}</span>. Sign out,
+        sign in as {invitedEmail}, and you&apos;ll come straight back here.
       </p>
       <ClaimActions>
         <button
@@ -416,7 +351,7 @@ export function JoinWrongAccount({
           className={CLAIM_BUTTON}
           onClick={() => start(() => signOutForInvite(token))}
         >
-          {pending ? "Signing out…" : "Sign out and continue"}
+          {pending ? "Signing out…" : "Sign out and sign in"}
         </button>
       </ClaimActions>
     </div>
