@@ -519,3 +519,34 @@ is the runner's. Newest entries at the bottom.
      T12's own done-when already covers "remaining pixel deviations… fixed in
      the owning file"; this is the specific one to fix, in
      `match-detail-shell.tsx`.
+
+## T11 · Flags doc rows for 47f — done
+- **gate:** mechanical — `npm test` green (323), the table is well-formed
+  (every row 8 pipe cells; the subagent caught and fixed a raw `||` it first
+  pasted into a cell, which had split row 9 into extra columns). Completion
+  review `VERDICT: pass`, having spot-checked every new row's claim against the
+  actual 47f code (#12 keyless with no `PlayerStatistics` field or
+  return-winner `result_type`; #10's `vs your avg`/`vs avg` label; #11's inert
+  Expand; #13's `KPI_SERIES_WINDOW = 8`; #9's `showScores` guard). Guardrails —
+  both skipped: the diff is one docs file, touching no dashboard, data-layer,
+  API or migration surface. `rls-boundary-reviewer` and
+  `pipeline-guardrails-reviewer` correctly do not apply.
+- **changed:** `docs/match-detail-v46-flags.md` — rows #1/#2/#3/#9 gain a `47f:`
+  note naming where each renders now (rail insight card; the reshaped tracker
+  annotation behind `showScores`); new rows #10 (KPI baseline ships as "vs your
+  avg"/"vs avg", not "vs season" — no season in the schema), #11 (tracker
+  Expand inert), #12 (Return winners always `—`, no source), #13 (eight-match
+  sparkline window, tied to #10), each with element/render site/suspected
+  source/unblock/status. The header's point-in-time line now names this branch
+  and 2026-09-02 for 47f while keeping the round-46 provenance.
+- **follow-ups:**
+  1. `docs/README.md` line 13 carries its own stale copy of this doc's
+     point-in-time blurb (still "as of task T6 on `claude/design-round-46-…`").
+     Out of T11's one-file scope; worth a small follow-up once 47f lands to sync
+     it. Not a `/simplify` or gate concern — a docs-freshness nit.
+  2. The subagent could not run the live-DB `points.result_type` distinct-value
+     check itself (no Supabase auth in its session), so #12 cites the design's
+     own 2026-09-02 live check rather than re-running it. I verified earlier
+     this session that no match even has `player2_id` set; the result_type
+     vocabulary claim rests on `result-type.ts`'s union, which is authoritative
+     for derived matches. Solid enough for a flags-doc row.

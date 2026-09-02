@@ -138,7 +138,7 @@ ready).
 - **notes:** design § Components → `match-rail.tsx`, `RailInsightCard`; plan step 9. Flags #1–#3 apply; the note strip's `Add video` link is unchanged.
 
 ## T11 · Flags doc rows for 47f
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T6, T7, T8, T9, T10
 - **files:** docs/match-detail-v46-flags.md
