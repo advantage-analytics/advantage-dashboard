@@ -116,6 +116,30 @@ export function programSubtitle(
   return [divisionLabel(division), conference].filter(Boolean).join(' · ');
 }
 
+/**
+ * "Stanford · Women's · D-I" — the claim flow's `.eyebrow` line (10px, 500
+ * weight, 2.5px letter-spacing, uppercase), which measures roughly 8.0–8.5px
+ * per character.
+ *
+ * Conference is deliberately left out. `programSubtitle` above shows it
+ * because that label sits on its own line with room to spare, but the
+ * eyebrow does not have that room: school + squad + division + conference
+ * can run to 136 characters for a real row in the dataset (a JUCO program
+ * with a long conference name), which renders at roughly 1,134px — wider
+ * than any column in the claim flow. Dropping conference here keeps the
+ * eyebrow to the fields that always fit. Do not add it back without first
+ * checking the longest row against the narrowest column that renders this.
+ */
+export function programEyebrow(
+  schoolName: string,
+  team: string,
+  division: string | null
+): string {
+  return [schoolName, teamLabel(team), divisionLabel(division)]
+    .filter(Boolean)
+    .join(' · ');
+}
+
 const SEARCH_LIMIT = 8;
 
 /** Shape both the search RPC and the status RPC return. */

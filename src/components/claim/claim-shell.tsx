@@ -39,6 +39,7 @@ export function ClaimShell({
   exitHref = "/claim/exit",
   exitLabel = "Leave setup",
   children,
+  heading,
   aside,
   asideWidth = 300,
 }: {
@@ -67,6 +68,15 @@ export function ClaimShell({
   exitLabel?: string;
   children: React.ReactNode;
   /**
+   * A `ClaimHeading` (or equivalent) hoisted above the aside grid instead of
+   * inside `children`. The grid narrows the body column to leave room for the
+   * aside, and an eyebrow line is the one piece of copy in this flow long
+   * enough to wrap inside that narrowed width — the longest program name
+   * alone renders wider than the 492px column F4 leaves it. Rendering it here
+   * gives it the shell's full `width` instead.
+   */
+  heading?: React.ReactNode;
+  /**
    * The right-hand panel on F3.2, F4 and F4.1. It carries what a narrow card
    * had to leave out — what ownership actually involves, what waits and what
    * doesn't. Centred on the column beside it rather than pinned to its top,
@@ -77,6 +87,20 @@ export function ClaimShell({
   /** 300 on F3.2, 340 on the setup form. Both leave a 48px gutter. */
   asideWidth?: 300 | 340;
 }) {
+  // The body is the same shape whether or not a heading is hoisted above it,
+  // so it is named once rather than written twice inside the branch below.
+  const body = aside ? (
+    <div
+      className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_var(--claim-aside)] lg:gap-12"
+      style={{ "--claim-aside": `${asideWidth}px` } as React.CSSProperties}
+    >
+      <ClaimColumn gap={gap}>{children}</ClaimColumn>
+      <aside className="min-w-0">{aside}</aside>
+    </div>
+  ) : (
+    <ClaimColumn gap={gap}>{children}</ClaimColumn>
+  );
+
   return (
     <div className="relative flex min-h-screen items-center bg-[var(--surface-card)] px-6 py-24 sm:px-10">
       {/* The escape chrome, floating over the page. Absolute rather than a
@@ -102,16 +126,17 @@ export function ClaimShell({
       </div>
 
       <div className="mx-auto w-full" style={{ maxWidth: width }}>
-        {aside ? (
-          <div
-            className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_var(--claim-aside)] lg:gap-12"
-            style={{ "--claim-aside": `${asideWidth}px` } as React.CSSProperties}
-          >
-            <ClaimColumn gap={gap}>{children}</ClaimColumn>
-            <aside className="min-w-0">{aside}</aside>
+        {/* The heading wrapper exists only for the screens that hoist one.
+            Two of sixteen callers pass `heading`; the rest render exactly the
+            markup they always did rather than paying for a wrapper whose gap
+            has nothing to space. */}
+        {heading ? (
+          <div className="flex flex-col" style={{ gap }}>
+            {heading}
+            {body}
           </div>
         ) : (
-          <ClaimColumn gap={gap}>{children}</ClaimColumn>
+          body
         )}
       </div>
     </div>
