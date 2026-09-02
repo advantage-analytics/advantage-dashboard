@@ -235,6 +235,7 @@ async function main(): Promise<void> {
     name: 'Resubmit test',
     team: null,
     orgType: null,
+    timeZone: 'UTC',
     role: 'owner',
     mark: 'T',
     canSubmitVideo: true,

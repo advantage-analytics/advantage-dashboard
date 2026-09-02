@@ -232,7 +232,13 @@ function seedLineup(ladder: LadderPlayer[]): LineupLine[] {
   });
 
   const doubles = DOUBLES_SLOTS.map((slot, index) => {
-    const pair = ranked.slice(index * 2, index * 2 + 2);
+    // A pair or nothing. An odd ranked count would otherwise leave one player
+    // alone on a doubles court, which submits as `discipline: "doubles"` with a
+    // single id and later mints a doubles match with one name — the same
+    // "claiming to know something nobody told it" the singles filter above
+    // refuses.
+    const slice = ranked.slice(index * 2, index * 2 + 2);
+    const pair = slice.length === 2 ? slice : [];
     return {
       key: slot,
       slot,

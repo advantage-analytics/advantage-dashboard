@@ -1,9 +1,10 @@
 # Review — team-schedule-db-wiring
 
-**Sign-off: pending**
+**Sign-off: approved**
 
-*(The human edits this line to `approved`, or annotates otherwise. That edit is
-the pipeline's final gate.)*
+*(Approved by the repo owner on 2026-09-02, instructing the runner to record it
+after the four blocking findings were fixed and re-gated. The six remaining
+findings below were read and accepted as non-blocking follow-ups.)*
 
 **Range reviewed:** `f97e236...HEAD` plus the uncommitted quality pass this
 stage applied. The scaffold commit's parent **is** the merge-base with

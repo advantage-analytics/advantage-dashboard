@@ -266,6 +266,14 @@ test.describe('/dashboard/team/schedule · 7e 7d 7c 4c', () => {
     //   re-wiring and retired only once it stopped being drawn, which is what
     //   this file's own rule asks.
     drawn(schedule, 'static-schedule.tsx', ' · lineup not set');
+    // The numbers left the component; the words did not. Retiring the whole
+    // phrase would have left "lines analyzed" — still drawn twice, on this row
+    // and in the season strip — pinned by nothing, and a reword to "lines
+    // processed" would have gone green. Narrowed, not dropped.
+    drawn(schedule, 'static-schedule.tsx', 'lines analyzed');
+    // The relative-day phrasing that replaced "in 4 days", pinned for the same
+    // reason: it is drawn copy now, and nothing else asserts it.
+    drawn(schedule, 'static-schedule.tsx', 'tomorrow');
     // RETIRED '· 8 of 9 lines analyzed' — the literal left the component.
     //   Stage 06 counted it, through the same `lineCoverageFrom` the season
     //   strip sums, so the two figures on this pane can no longer disagree.

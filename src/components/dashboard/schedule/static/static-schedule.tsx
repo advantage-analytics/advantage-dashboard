@@ -201,8 +201,13 @@ function SelectAnEventPane({
   // predicate offered the oldest unscored event as "Next" and never offered
   // the real one. The row now prints how far away it is, which would have made
   // that read "4 months ago" under a heading that says Next.
-  const next =
-    schedule.rows.findLast((row) => row.startsOn >= today) ?? null;
+  // `endsOn`, not `startsOn`: an event is a span, and a Friday-to-Sunday
+  // tournament viewed on the Saturday has started but is not over. On
+  // `startsOn` it fell out of Next (already begun) and out of Last (nothing
+  // played yet), so the pane pointed past the very thing the coach was standing
+  // at. `daysAway` then returns null for it and the row prints no phrase, which
+  // is the arm that exists for exactly this.
+  const next = schedule.rows.findLast((row) => row.endsOn >= today) ?? null;
   const last = schedule.rows.find((row) => row.playedCount > 0) ?? null;
 
   // "hard". A surface belongs to the event, not to the row the drawer lists,

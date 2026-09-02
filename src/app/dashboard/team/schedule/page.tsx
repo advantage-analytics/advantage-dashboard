@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import { zonedDayString } from "@/lib/data/match-utils";
 import { canUploadForProgram, isProgramStaff } from "@/lib/workspace/types";
 import {
   getProgramSchedule,
@@ -68,14 +69,18 @@ export default async function SchedulePage() {
     <StaticSchedule
       schedule={{ rows, details }}
       season={seasonSummaryFrom(schedule)}
-      // Today in UTC, so the pane's "Next" row can say how far off an event is
-      // without a clock read that would differ between the server and client
-      // renders of a `"use client"` component. UTC deliberately, and not
-      // `todayISO()`: `daysAway` differences UTC midnights, so both ends of the
-      // subtraction agree, and a server's own local zone is arbitrary anyway.
-      // `starts_on` is a plain date, so the worst case is a coarse label a day
-      // out near midnight rather than the fixed claim this replaces.
-      today={new Date().toISOString().slice(0, 10)}
+      // Today in the PROGRAM's zone, not the server's. `starts_on` is a plain
+      // calendar date authored where the coach is, and the server is UTC on
+      // Vercel — comparing the two against a UTC "today" makes the Next row a
+      // day wrong for every western coach from late afternoon onward, which is
+      // the same class of false claim this row was fixed to stop making.
+      // `zonedDayString` is the app's one answer to "what day is it there",
+      // shared with Team Home's dual sheet and the roster's claimed-today pill.
+      //
+      // Passed as a prop rather than read from a clock in the pane: that
+      // component also renders on the server, and a `new Date()` there would
+      // give the two renders different answers.
+      today={zonedDayString(new Date(), active.timeZone)}
       canCreate={isProgramStaff(active)}
       canAddOwnMatch={canUploadForProgram(active)}
     />
