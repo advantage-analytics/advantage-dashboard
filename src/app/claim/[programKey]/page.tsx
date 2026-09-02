@@ -7,6 +7,7 @@ import {
   claimAge,
   teamLabel,
   programSubtitle,
+  programEyebrow,
 } from "@/lib/data/programs-server";
 import {
   ClaimShell,
@@ -143,11 +144,32 @@ export default async function ProgramStatusPage({
   // ── F3.2 · unclaimed ──────────────────────────────────────────────────────
   // The aside is what a narrow card had to leave out: ownership is a job, and
   // the page has room to say what the job is before anyone accepts it.
+  //
+  // This state gets its own eyebrow rather than reusing the shared one above:
+  // the aside narrows this column, and the shared eyebrow's conference field
+  // made it wrap. `programEyebrow` drops conference and the heading now runs
+  // through `ClaimShell`'s `heading` slot, so it renders at the shell's full
+  // width instead of the narrowed column. The `active` and `claim_pending`
+  // branches above are out of scope for this change and keep the shared
+  // eyebrow untouched — hence two eyebrows in one file.
+  const unclaimedEyebrow = programEyebrow(
+    program.schoolName,
+    program.team,
+    program.division
+  );
   return (
     <ClaimShell
       width={840}
       gap={16}
       back="/claim/program"
+      heading={
+        <ClaimHeading
+          gap={2}
+          eyebrow={unclaimedEyebrow}
+          title="No one has set this up yet"
+          titlePadTop={8}
+        />
+      }
       aside={
         <AsidePanel
           title="What you take on"
@@ -160,12 +182,6 @@ export default async function ProgramStatusPage({
         />
       }
     >
-      <ClaimHeading
-        gap={2}
-        eyebrow={eyebrow}
-        title="No one has set this up yet"
-        titlePadTop={8}
-      />
       <p className="text-body max-w-[56ch]">
         Whoever sets up {program.schoolName}{" "}
         {teamLabel(program.team).toLowerCase()} tennis manages access for the

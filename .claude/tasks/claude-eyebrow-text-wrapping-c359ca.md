@@ -42,7 +42,7 @@ ready).
 - **notes:** Plan step 2. Independent of T1. If `node_modules` is absent when this runs first, follow the bootstrap note on T1. The deliberate visual consequence, once pages adopt the slot, is that the aside's `items-start` tops out against the body copy rather than the eyebrow — that is expected, not a regression.
 
 ## T3 · Adopt eyebrow helper and heading slot on the unclaimed status screen
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T1, T2
 - **files:** src/app/claim/[programKey]/page.tsx (guess — the F3.2 `return` at the end of the file only)
