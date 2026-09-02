@@ -4,11 +4,12 @@
  * Every function here runs BEFORE an account exists — screens F2 and F3 are
  * anonymous. `programs` is readable by `anon` for exactly that reason, and the
  * two things that are not (contact addresses, and the owner's identity) come
- * back through `program_public_status()`, which projects an owner as
- * "Elena V." and never an address.
+ * back through `program_public_status()`, which projects the owner's full
+ * name and never an address.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { titleCaseName } from '@/lib/data/person-name';
 
 /**
  * The published facts about a program — the columns every result row carries,
@@ -26,7 +27,7 @@ export interface ProgramDirectoryRow {
 /** Enough to render one row of the F3 result list, for the COACH intent. */
 export interface ProgramSearchResult extends ProgramDirectoryRow {
   status: ProgramStatus;
-  /** "Coach D. Wu" on a claimed row, null otherwise. */
+  /** "Coach Elena Vasquez" on a claimed row, null otherwise. */
   ownerDisplay: string | null;
 }
 
@@ -127,7 +128,7 @@ function toResult(row: Record<string, unknown>): ProgramSearchResult {
     conference: row.conference as string | null,
     state: row.state as string | null,
     status: row.status as ProgramStatus,
-    ownerDisplay: (row.owner_display as string | null) || null,
+    ownerDisplay: titleCaseName((row.owner_display as string | null) ?? "") || null,
   };
 }
 

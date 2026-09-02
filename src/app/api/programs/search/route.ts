@@ -8,7 +8,7 @@ import { searchPrograms, redactForPlayer } from "@/lib/data/programs-server";
  * PUBLIC on purpose — screens F2 and F3 run before an account exists, so
  * requiring auth here would invert the flow. Nothing it returns is sensitive:
  * school, squad, division, conference and whether the program is already taken
- * are published facts, and the owner comes back as "D. Wu" with no address.
+ * are published facts, and the owner's full name comes back with no address.
  * Contact addresses live in a table `anon` cannot read at all.
  *
  * `?intent=join` narrows that further. A coach is searching for their own

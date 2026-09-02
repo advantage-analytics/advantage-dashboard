@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { programDisplayName } from "@/lib/data/programs-server";
+import { titleCaseName } from "@/lib/data/person-name";
 import type { ProgramOrgType } from "@/lib/workspace/types";
 import type { JoinRole } from "./join-role";
 import { hashToken } from "./tokens";
@@ -192,11 +193,10 @@ export async function loadInvite(token: string): Promise<InviteRecord | null> {
  * than "Nobody was notified" — it reads as a bug, and it is one.
  */
 export function displayName(first: string | null, last: string | null): InviterName {
-  const name = [first, last]
-    .map((part) => part?.trim() ?? "")
-    .filter(Boolean)
-    .join(" ");
-  return name || null;
+  // `titleCaseName` already trims and collapses internal whitespace, so a blank
+  // half arrives here as a leading or trailing space and leaves as nothing.
+  // Trimming the parts first would be the same work done twice.
+  return titleCaseName([first, last].join(" ")) || null;
 }
 
 /**
