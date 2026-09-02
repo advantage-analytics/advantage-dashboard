@@ -130,7 +130,7 @@ ready).
 - **notes:** Plan step 6. "Not now" writes nothing; the next visit without the flag offers again, which is right while the account is still un-onboarded. `quotaHours` is server-only — call it in the page, never inside `InviteOffer`.
 
 ## T10 · Header activity tray invitation row
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T5, T8
 - **files:** src/components/dashboard/activity/activity-tray-loader.tsx, src/components/dashboard/activity/activity-tray.tsx, src/components/dashboard/activity/tray-detail.ts (new), tests/activity-tray-detail.spec.ts (new) — guess
