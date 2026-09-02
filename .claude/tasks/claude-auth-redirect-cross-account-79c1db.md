@@ -43,7 +43,7 @@ ready).
 - **notes:** Tokens are base64url (`tokens.ts`), so the double `encodeURIComponent` is belt-and-braces, not a fix. The one invariant to keep intact is the header of join-actions.ts: an invite link may create an account but never set an existing account's password — deleting `signInAndAccept` removes code, adds none. Do not pass the invited email to `/login` in any form. The stale "only the sign-in one carries Forgot your password?" remark in `join-terms.tsx` (~line 194) can be corrected in passing if touched.
 
 ## T3 · Stamp `onboarded_at` in `acceptInvite`
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/lib/services/programs/join-actions.ts — guess
 - **done when:**

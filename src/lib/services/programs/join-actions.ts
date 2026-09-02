@@ -94,10 +94,40 @@ async function activate(programId: string): Promise<void> {
   revalidatePath("/dashboard", "layout");
 }
 
-/** Already signed in as the invited address. Nothing to collect. */
+/**
+ * Already signed in as the invited address. Nothing to collect.
+ *
+ * Also stamps `onboarded_at`, mirroring `createAccountAndAccept` below: a
+ * Google-created account that lands here never passed through `/onboarding`
+ * before reaching `/join`, so without this the layout at
+ * `src/app/dashboard/layout.tsx` would bounce a just-joined member straight
+ * back to onboarding questions the invitation already answered.
+ */
 export async function acceptInvite(token: string): Promise<JoinActionResult> {
-  const outcome = await acceptWithSession(token);
+  const supabase = await createClient();
+  const outcome = await acceptWithSession(token, supabase);
   if (!outcome.ok) return { ok: false, error: describe(outcome) };
+
+  // A player whose acceptance JUST SUCCEEDED joined a program that answers
+  // both first-run questions, so bouncing them into /onboarding would ask what
+  // the invitation already settled. Stamp only now — after `acceptWithSession`
+  // confirmed the membership. Best effort: a miss costs one redundant
+  // onboarding screen, never the membership.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user?.id) {
+    const { error: stampError } = await createAdminClient()
+      .from("users")
+      .update({ onboarded_at: new Date().toISOString() })
+      .eq("id", user.id)
+      .is("onboarded_at", null);
+    if (stampError) {
+      console.error("[join] could not mark the account onboarded", {
+        message: stampError.message,
+      });
+    }
+  }
 
   await activate(outcome.programId);
   redirect("/dashboard/team");
