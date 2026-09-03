@@ -1,21 +1,25 @@
 "use client";
 
-import { InsightStrip } from "@/components/dashboard/matches/match-detail/insight-strip";
 import { HeadToHeadCard } from "@/components/dashboard/matches/match-detail/head-to-head-card";
+import { MatchKpiStrip } from "@/components/dashboard/matches/match-detail/match-kpi-strip";
 import { PerformanceTrackerChart } from "@/components/dashboard/matches/match-detail/performance-tracker-chart";
 import { RallyLengthCard } from "@/components/dashboard/matches/match-detail/rally-length-card";
 import { PointEndingsCard } from "@/components/dashboard/matches/match-detail/point-endings-card";
 import { UnpublishedStatsNotice } from "@/components/dashboard/matches/match-detail/unpublished-stats-notice";
 
 /**
- * The Statistics tab's panel (artboard 46a) — insight strip, head-to-head
- * card, then the three point-derived charts in the artboard's order
- * (performance tracker → rally length → how points ended), plus the
- * unpublished-stats notice the page has always shown above them.
+ * The Statistics tab's panel (47f) — KPI strip over a two-column grid: the
+ * head-to-head table beside the three point-derived charts (performance
+ * tracker → rally length → how points ended), plus the unpublished-stats
+ * notice the page has always shown above them.
  *
  * That notice's gating is carried over from `page.tsx` unchanged: a match with
  * a verified point timeline but no published aggregates says so rather than
- * printing zeroes.
+ * printing zeroes — and takes the strip's place rather than sitting above a
+ * row of dashes, since the strip has nothing but aggregates to show.
+ *
+ * The prose insight moved to the rail's own card, so this pane no longer
+ * carries a summary or a matchId; the charts below the fold are unchanged.
  *
  * The derived-match caveat that used to sit beside it (`DerivedStatsNotice`)
  * is gone from this pane, not dropped: the rail's `MatchDataBlock` is its
@@ -31,9 +35,6 @@ import { UnpublishedStatsNotice } from "@/components/dashboard/matches/match-det
  */
 
 interface StatisticsTabProps {
-  matchId: string;
-  /** The viewer's insight summary, already picked by side in `page.tsx`. */
-  summary: string | null;
   /** Whether both sides have published `match_stats` rows. */
   statsPublished: boolean;
   /** Video-derived match — some statistics are approximate, some absent. */
@@ -41,24 +42,30 @@ interface StatisticsTabProps {
 }
 
 export function StatisticsTab({
-  matchId,
-  summary,
   statsPublished,
   isDerived,
 }: StatisticsTabProps) {
   return (
     <>
-      <InsightStrip summary={summary} matchId={matchId} />
-
       {!statsPublished && <UnpublishedStatsNotice />}
 
-      <HeadToHeadCard />
+      {statsPublished && <MatchKpiStrip />}
 
-      <PerformanceTrackerChart />
+      {/*
+        One column below `xl`: the v3 rail collapses at 1280px, so a two-column
+        pane there is still ~916px wide — narrower viewports stack and scroll.
+      */}
+      <div className="grid xl:grid-cols-2 gap-3.5 flex-1 min-h-0">
+        <HeadToHeadCard />
 
-      <RallyLengthCard />
+        <div className="flex flex-col gap-3.5">
+          <PerformanceTrackerChart />
 
-      <PointEndingsCard isDerived={isDerived} />
+          <RallyLengthCard />
+
+          <PointEndingsCard isDerived={isDerived} />
+        </div>
+      </div>
     </>
   );
 }

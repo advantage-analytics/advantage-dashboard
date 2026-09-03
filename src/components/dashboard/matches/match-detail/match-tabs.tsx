@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +13,11 @@ import { cn } from "@/lib/utils";
  * view. Changes go through `router.push` deliberately — each selection is a
  * history entry, so the back button restores the prior tab. No new route
  * directory: the match page stays a single page (CLAUDE.md contract).
+ *
+ * `trailing` is the right edge of the row (artboard 47f) — the Statistics
+ * pane's set scope today. It is a slot rather than a fixed control because
+ * what belongs there is the active pane's business, not the frame's; the
+ * shell decides per tab.
  */
 
 export const MATCH_TABS = [
@@ -26,7 +32,13 @@ export function parseMatchTab(value: string | null | undefined): MatchTab {
   return value === "shots" || value === "film" ? value : "statistics";
 }
 
-export function MatchTabs({ active }: { active: MatchTab }) {
+export function MatchTabs({
+  active,
+  trailing,
+}: {
+  active: MatchTab;
+  trailing?: ReactNode;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -44,31 +56,41 @@ export function MatchTabs({ active }: { active: MatchTab }) {
   };
 
   return (
-    <div
-      role="tablist"
-      aria-label="Match report sections"
-      className="sticky top-0 z-[2] flex items-center gap-5 border-b border-[var(--border-hairline)] bg-[var(--surface-page)]"
-    >
-      {MATCH_TABS.map((tab) => {
-        const isActive = tab.value === active;
-        return (
-          <button
-            key={tab.value}
-            type="button"
-            role="tab"
-            aria-selected={isActive}
-            onClick={() => select(tab.value)}
-            className={cn(
-              "cursor-pointer pb-3 pt-4 text-[11px] font-medium",
-              isActive
-                ? "text-[var(--ink-900)] shadow-[inset_0_-2px_0_var(--blue)]"
-                : "text-[var(--ink-500)] hover:text-[var(--ink-700)]",
-            )}
-          >
-            {tab.label}
-          </button>
-        );
-      })}
+    // The strip is sticky, so this background is the one the pane's content
+    // scrolls under — it has to be the pane's own surface, or every row
+    // passing beneath shows through the row.
+    <div className="sticky top-0 z-[2] flex items-center bg-[var(--surface-card)] pt-1.5">
+      <div
+        role="tablist"
+        aria-label="Match report sections"
+        className="flex items-center gap-5"
+      >
+        {MATCH_TABS.map((tab) => {
+          const isActive = tab.value === active;
+          return (
+            <button
+              key={tab.value}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => select(tab.value)}
+              className={cn(
+                "cursor-pointer pb-[9px] pt-[11px] text-[11px] font-medium",
+                isActive
+                  ? "text-[var(--ink-900)] shadow-[inset_0_-2px_0_var(--blue)]"
+                  : "text-[var(--ink-500)] hover:text-[var(--ink-700)]",
+              )}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* A spacer rather than `justify-between`, which would also push the
+          tabs apart from each other. */}
+      <div className="flex-1" />
+      {trailing}
     </div>
   );
 }

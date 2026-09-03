@@ -17,6 +17,7 @@ import { MatchDetailShell } from "@/components/dashboard/matches/match-detail/ma
 import { MatchRail } from "@/components/dashboard/matches/match-detail/match-rail";
 import { getMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { StatisticsTab } from "@/components/dashboard/matches/match-detail/statistics-tab";
+import { SetScopeChips } from "@/components/dashboard/matches/match-detail/set-scope";
 import { getMatchVideo } from "@/lib/data/match-video-server";
 
 // Statistics is the default tab and loads eagerly with the page; Shots and
@@ -88,8 +89,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
 
   const userInsights = sides.pick(insights?.player1, insights?.player2);
   // Synthesized prose insight (home-quality), generated once at upload. The
-  // rail shows it on every tab but Statistics, where it is the pane's own
-  // insight strip instead (artboard 46a).
+  // rail is now its only home — the Statistics pane's own copy of it is gone,
+  // so this reads the same on every tab.
   const summary = userInsights?.summary?.trim() || null;
 
   const p1 = statsResult?.statistics?.player1Stats;
@@ -155,7 +156,10 @@ export default async function MatchDetailPage({ params }: PageProps) {
             isDerived={isDerived && statsPublished}
             film={
               video
-                ? "card"
+                // The rail's film cross-link card is gone in 47f — a match with
+                // video shows nothing in the note slot, and its Film tab is
+                // reached from the tab row instead.
+                ? "none"
                 // Allowlist, not "not splitstep": `sourceProvider` is also
                 // `null` for a match a coach typed in by hand (never
                 // imported, never analysed) — see the comment on
@@ -173,8 +177,6 @@ export default async function MatchDetailPage({ params }: PageProps) {
         tabs={{
           statistics: (
             <StatisticsTab
-              matchId={matchId}
-              summary={summary}
               statsPublished={statsPublished}
               isDerived={isDerived}
             />
@@ -186,6 +188,9 @@ export default async function MatchDetailPage({ params }: PageProps) {
           // whole tab needs exactly this one prop.
           film: <FilmTab video={video} />,
         }}
+        // Statistics only: the scope narrows that pane's point-derived cards,
+        // and Shots and Film room answer to their own filters.
+        tabBarTrailing={{ statistics: <SetScopeChips /> }}
       />
     </>
   );

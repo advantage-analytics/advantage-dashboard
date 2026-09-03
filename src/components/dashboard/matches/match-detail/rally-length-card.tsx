@@ -5,25 +5,36 @@ import { motion, useReducedMotion } from "framer-motion";
 
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
+import {
+  scopePoints,
+  useSetScope,
+} from "@/components/dashboard/matches/match-detail/set-scope";
 import { LegendSwatch } from "@/components/dashboard/matches/match-detail/legend-swatch";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import { cn } from "@/lib/utils";
 
 /**
- * The Statistics tab's rally-length marimekko (artboard 46a, lines 541–548).
+ * The Statistics tab's rally-length marimekko (artboard 47f).
  *
  * Three bands — 1–4 / 5–8 / 9+ shots. A band's WIDTH is its share of the
- * points, its vertical split is who won them: the viewer's share on top, the
- * opponent's underneath. Two dimensions, one figure: how often the match was
- * played at that length, and who it favoured.
+ * points; its vertical split is who won them, the viewer's share always on
+ * top. 47f fixes that top/bottom tone pair (`viz-you-mid` / `viz-opp-light`)
+ * regardless of which side led the band, and drops the in-band percentage —
+ * width alone answers "how often", the tooltip answers "who won".
  *
  * Every "won" test is `wonByPlayer1 === sides.you.isPlayer1` (guardrails §4).
  *
  * `rallyLength` is 0 when the source recorded no shot count — not a one-shot
  * rally — so those points fall outside all three bands, exactly as
- * `head-to-head-card.tsx` treats them. The header counts the banded points
- * rather than `points.length` so that the three hover tooltips still sum to
- * the number printed above them.
+ * `head-to-head-card.tsx` treats them.
+ *
+ * Scope-aware: `scopePoints(points, activeSet)` narrows the bands the same
+ * way every other point-derived card on this tab does
+ * (performance-tracker-chart.tsx makes the identical read).
+ *
+ * The card is the right column's `flex:1` absorber — its own height comes
+ * from the grid row, and the mosaic in turn claims whatever that leaves
+ * after the header, labels and legend take their natural height.
  */
 
 const EASE_CHART = [0.2, 0, 0.4, 1] as const;
@@ -32,7 +43,7 @@ interface Band {
   key: "short" | "medium" | "long";
   /** Tooltip heading, e.g. "Short rallies · 1–4 shots". */
   title: string;
-  /** Axis label under the bar, e.g. "Short · 1–4 shots". */
+  /** Band name under the bar, e.g. "Short". */
   label: string;
   count: number;
   youWon: number;
@@ -40,9 +51,9 @@ interface Band {
 }
 
 const BAND_META: { key: Band["key"]; title: string; label: string }[] = [
-  { key: "short", title: "Short rallies · 1–4 shots", label: "Short · 1–4 shots" },
-  { key: "medium", title: "Medium rallies · 5–8 shots", label: "Medium · 5–8" },
-  { key: "long", title: "Long rallies · 9+ shots", label: "Long · 9+" },
+  { key: "short", title: "Short rallies · 1–4 shots", label: "Short" },
+  { key: "medium", title: "Medium rallies · 5–8 shots", label: "Medium" },
+  { key: "long", title: "Long rallies · 9+ shots", label: "Long" },
 ];
 
 function pct(part: number, whole: number): number {
@@ -52,10 +63,19 @@ function pct(part: number, whole: number): number {
 export function RallyLengthCard() {
   const { points } = useMatchData();
   const sides = useMatchSides();
+  const { activeSet } = useSetScope();
   const shouldReduceMotion = useReducedMotion();
   const [hovered, setHovered] = useState<Band["key"] | null>(null);
 
   const youIsPlayer1 = sides.you.isPlayer1;
+
+  // Narrow to the chosen set through the shared helper — the same read every
+  // point-derived card on this tab makes, so the chip selection moves them
+  // in step. `null` is the whole match.
+  const scopedPoints = useMemo(
+    () => scopePoints(points, activeSet),
+    [points, activeSet],
+  );
 
   const { bands, total, avgShots } = useMemo(() => {
     const counters: Record<Band["key"], { count: number; youWon: number }> = {
@@ -65,7 +85,7 @@ export function RallyLengthCard() {
     };
 
     let shotSum = 0;
-    for (const p of points) {
+    for (const p of scopedPoints) {
       if (p.rallyLength < 1) continue;
       const key: Band["key"] =
         p.rallyLength >= 9 ? "long" : p.rallyLength >= 5 ? "medium" : "short";
@@ -87,7 +107,7 @@ export function RallyLengthCard() {
         oppWon: counters[meta.key].count - counters[meta.key].youWon,
       })),
     };
-  }, [points, youIsPlayer1]);
+  }, [scopedPoints, youIsPlayer1]);
 
   const visible = bands.filter((b) => b.count > 0);
   // Nothing in this match carries a shot count — a bar of three empty bands
@@ -97,7 +117,7 @@ export function RallyLengthCard() {
   return (
     <section
       aria-labelledby="rally-length-heading"
-      className="surface-card flex flex-col gap-3.5"
+      className="surface-card flex flex-1 min-h-0 flex-col gap-3.5"
       style={{ padding: "18px 20px 16px" }}
     >
       <div className="flex items-baseline gap-2">
@@ -106,20 +126,15 @@ export function RallyLengthCard() {
         </span>
         <div className="flex-1" />
         <span className="text-micro tabular whitespace-nowrap">
-          {total} points · {avgShots.toFixed(1)} avg shots
+          {avgShots.toFixed(1)} shots average
         </span>
       </div>
 
-      <div className="flex flex-col gap-2">
-        <div className="flex h-[156px] items-stretch">
+      <div className="flex flex-1 min-h-0 flex-col gap-2">
+        <div className="flex flex-1 min-h-24 items-stretch">
           {visible.map((band, i) => {
             const width = pct(band.count, total);
             const youShare = pct(band.youWon, band.count);
-            // The artboard gives the band's leader the deeper tone and the
-            // trailing side the light one, which is why its long-rally band is
-            // drawn viz-you-mid over viz-opp while the other two are viz-you
-            // over viz-opp-light. Same rule, read off the data.
-            const youLeads = youShare >= 50;
             const isFirst = i === 0;
             const isLast = i === visible.length - 1;
 
@@ -149,18 +164,19 @@ export function RallyLengthCard() {
                   align={isFirst ? "start" : isLast ? "end" : "center"}
                 />
 
+                {/* Fixed tones, never swapped by who led the band (47f drops
+                    round-46's leader-based tone) — width alone carries "how
+                    often", so the mosaic can't also be read as a scoreboard. */}
                 <motion.div
-                  className="box-border flex shrink-0 items-center overflow-hidden px-3"
+                  className="box-border shrink-0"
                   style={{
-                    background: youLeads
-                      ? "var(--viz-you)"
-                      : "var(--viz-you-mid)",
+                    background: "var(--viz-you-mid)",
                     borderBottom: "2px solid var(--surface-card)",
                     borderTopLeftRadius: isFirst
-                      ? "var(--radius-element)"
+                      ? "var(--radius-cell)"
                       : undefined,
                     borderTopRightRadius: isLast
-                      ? "var(--radius-element)"
+                      ? "var(--radius-cell)"
                       : undefined,
                   }}
                   initial={
@@ -177,25 +193,17 @@ export function RallyLengthCard() {
                     duration: shouldReduceMotion ? 0.2 : 0.55,
                     ease: EASE_CHART,
                   }}
-                >
-                  {youShare >= 18 && (
-                    <span className="tabular text-[15px] font-light text-white">
-                      {Math.round(youShare)}%
-                    </span>
-                  )}
-                </motion.div>
+                />
 
                 <div
                   className="flex-1"
                   style={{
-                    background: youLeads
-                      ? "var(--viz-opp-light)"
-                      : "var(--viz-opp)",
+                    background: "var(--viz-opp-light)",
                     borderBottomLeftRadius: isFirst
-                      ? "var(--radius-element)"
+                      ? "var(--radius-cell)"
                       : undefined,
                     borderBottomRightRadius: isLast
-                      ? "var(--radius-element)"
+                      ? "var(--radius-cell)"
                       : undefined,
                   }}
                 />
@@ -214,9 +222,14 @@ export function RallyLengthCard() {
               )}
               style={{ width: `${pct(band.count, total)}%` }}
             >
-              <span className="block truncate text-[11px] text-[var(--ink-700)]">
-                {band.label}
-              </span>
+              <div className="flex items-baseline gap-1 overflow-hidden whitespace-nowrap">
+                <span className="text-[11px] text-[var(--ink-700)]">
+                  {band.label}
+                </span>
+                <span className="mono tabular text-[10px] text-[var(--ink-400)]">
+                  {band.count}
+                </span>
+              </div>
             </div>
           ))}
         </div>
@@ -224,16 +237,16 @@ export function RallyLengthCard() {
 
       <div className="flex items-center gap-3.5">
         <LegendSwatch
-          color="var(--viz-you)"
+          color="var(--viz-you-mid)"
           label={`${sides.you.shortName} won`}
         />
         <LegendSwatch
-          color="var(--viz-opp)"
+          color="var(--viz-opp-light)"
           label={`${sides.opp.shortName} won`}
         />
         <div className="flex-1" />
         <span className="text-micro" style={{ color: "var(--ink-500)" }}>
-          Width is how often · hover a band for counts
+          Width is how often
         </span>
       </div>
     </section>
@@ -264,7 +277,7 @@ function BandTooltip({
     >
       <span className="text-[12px] font-medium text-white">{band.title}</span>
       <span className="tabular text-[11px] text-white/[0.64]">
-        {band.count} points · {Math.round(sharePct)}% of the match
+        {band.count} points · {sharePct.toFixed(1)}% of the match
       </span>
       <span className="tabular pt-0.5 text-[11px] text-white">
         {youName} {band.youWon} · {Math.round(pct(band.youWon, band.count))}%

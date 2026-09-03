@@ -5,26 +5,41 @@ import { motion, useReducedMotion } from "framer-motion";
 
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
-import { LegendSwatch } from "@/components/dashboard/matches/match-detail/legend-swatch";
+import {
+  scopePoints,
+  useSetScope,
+} from "@/components/dashboard/matches/match-detail/set-scope";
+import { formatClock } from "@/components/dashboard/matches/match-detail/format-clock";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 
 /**
- * The Statistics tab's performance tracker (artboard 46a, lines 519–539).
+ * The Statistics tab's performance tracker (artboard 47f).
  *
  * A mirrored momentum area: the running won-point differential drawn from the
- * VIEWER's side of the match, filled `viz-you` where it sits above the midline
- * and `viz-opp` where it sits below, with dashed set dividers and a
- * `viz-key` vertical at every break of serve.
+ * VIEWER's side of the match, filled `viz-you` above the midline and `viz-opp`
+ * below, with dashed set dividers. Breaks of serve are named in the hover
+ * annotation rather than drawn as verticals — the 47f chart drops the marks so
+ * the trend is the only line on screen.
  *
- * The series is `you − opp`, not `player1 − player2`: which side is "you" comes
- * from `useMatchSides()` and nothing else (guardrails §4). Drawing the
+ * The series is `you − opp`, never `player1 − player2`: which side is "you"
+ * comes from `useMatchSides()` and nothing else (guardrails §4). Drawing the
  * differential in player order would put a player-2 viewer's winning streak
  * below the line and colour it as the opponent's — a chart that reads as its
  * own mirror image, with nothing on screen indicating the flip.
+ *
+ * Scope-aware: the series is `scopePoints(points, activeSet)`, so a set chosen
+ * in the tab-row chips narrows the chart the same way it narrows every other
+ * point-derived card on this tab (head-to-head-card.tsx makes the identical
+ * `useSetScope()` / `scopePoints()` read).
  */
 
-const CHART_W = 600;
-const CHART_H = 200;
+const CHART_W = 1000;
+const CHART_H = 96;
 const MID = CHART_H / 2;
 /** Keeps the extreme of the series off the viewBox edge. */
 const Y_PAD = 6;
@@ -86,6 +101,7 @@ function detectBreakIndices(points: MatchPoint[]): number[] {
 export function PerformanceTrackerChart() {
   const { points } = useMatchData();
   const sides = useMatchSides();
+  const { activeSet } = useSetScope();
   const shouldReduceMotion = useReducedMotion();
 
   const rawId = useId();
@@ -100,21 +116,39 @@ export function PerformanceTrackerChart() {
 
   const youIsPlayer1 = sides.you.isPlayer1;
 
+  // Narrow to the chosen set through the shared helper — the same read every
+  // point-derived card on this tab makes, so the chip selection moves them in
+  // step. `null` is the whole match.
+  const scopedPoints = useMemo(
+    () => scopePoints(points, activeSet),
+    [points, activeSet],
+  );
+
   const samples: Sample[] = useMemo(() => {
     const out: Sample[] = [];
     let diff = 0;
-    for (const p of points) {
+    for (const p of scopedPoints) {
       diff += p.wonByPlayer1 === youIsPlayer1 ? 1 : -1;
       out.push({ diff, setNumber: p.setNumber });
     }
     return out;
-  }, [points, youIsPlayer1]);
+  }, [scopedPoints, youIsPlayer1]);
+
+  // Points that ended a game the server lost, as indices into the scoped
+  // series. The 47f chart draws no break verticals, so this feeds only the
+  // hover annotation's "Break of serve" line; a Set keeps that lookup O(1).
+  const breakIndexSet = useMemo(
+    () => new Set(detectBreakIndices(scopedPoints)),
+    [scopedPoints],
+  );
 
   // `match-points-server.ts` coerces a null `game_score`/`point_score` to
   // "0-0" — the Advantage Intelligence derivation writes neither, so an
-  // analyzed match would otherwise show a fabricated "0-0 · 0-0" on every
-  // hover. Same test `point-list.tsx`'s `columnHasValues()` uses: if the
-  // column is "0-0" match-wide there is nothing real behind it.
+  // analyzed match would otherwise show a fabricated "0-0" on every hover
+  // (flags-doc #9). Same test `point-list.tsx`'s `columnHasValues()` uses: if
+  // the column is "0-0" match-wide there is nothing real behind it. Read from
+  // the whole match, not the scope — the column's reality does not change with
+  // the set in view.
   const showScores = useMemo(
     () =>
       points.length > 0 &&
@@ -147,7 +181,7 @@ export function PerformanceTrackerChart() {
       }
     }
 
-    // Set widths come from real point counts, so the axis row underneath lines
+    // Set widths come from real point counts, so the label row underneath lines
     // up with the dividers above it rather than assuming even sets.
     const setCounts: { setNumber: number; count: number }[] = [];
     for (const s of samples) {
@@ -156,15 +190,8 @@ export function PerformanceTrackerChart() {
       else setCounts.push({ setNumber: s.setNumber, count: 1 });
     }
 
-    return {
-      coords,
-      polyline,
-      area,
-      setBoundaries,
-      setCounts,
-      breaks: detectBreakIndices(points).map((i) => x(i)),
-    };
-  }, [samples, points]);
+    return { coords, polyline, area, setBoundaries, setCounts };
+  }, [samples]);
 
   const selectFromClientX = useCallback(
     (clientX: number) => {
@@ -182,14 +209,42 @@ export function PerformanceTrackerChart() {
   // line that reads as "the match was level throughout".
   if (!geometry) return null;
 
-  const hovered = hoverIndex === null ? null : points[hoverIndex];
+  const hovered = hoverIndex === null ? null : scopedPoints[hoverIndex];
   const hoveredDiff = hoverIndex === null ? 0 : samples[hoverIndex].diff;
   const hoverCoord = hoverIndex === null ? null : geometry.coords[hoverIndex];
 
-  const leadLabel =
+  // Event line, in the spec's precedence: a break of serve outranks the point
+  // flags, then match/set/break point, then the bare point number.
+  const eventLine = hovered
+    ? hoverIndex !== null && breakIndexSet.has(hoverIndex)
+      ? `Break of serve · Set ${hovered.setNumber}`
+      : hovered.isMatchPoint
+        ? "Match point"
+        : hovered.isSetPoint
+          ? "Set point"
+          : hovered.isBreakPoint
+            ? "Break point"
+            : `Point ${hovered.pointNumber}`
+    : "";
+
+  // Margin line: the current lead, oriented by `sides` (never player order),
+  // with the game score appended ONLY where the column is real (flags-doc #9) —
+  // a derived match carries the coerced "0-0", which is not a score.
+  const marginBase =
     hoveredDiff === 0
       ? "Level"
-      : `${hoveredDiff > 0 ? sides.you.shortName : sides.opp.shortName} +${Math.abs(hoveredDiff)}`;
+      : `${hoveredDiff > 0 ? sides.you.shortName : sides.opp.shortName} +${Math.abs(hoveredDiff)} on margin`;
+  const marginLine =
+    showScores && hovered ? `${marginBase} · ${hovered.gameScore}` : marginBase;
+
+  // Mono line: time from `videoTime`, dropped when the point has none so the
+  // point number stands alone — a SwingVision import has no video, a
+  // derived match does.
+  const monoLine = hovered
+    ? hovered.videoTime !== null
+      ? `${formatClock(hovered.videoTime)} · point ${hovered.pointNumber}`
+      : `point ${hovered.pointNumber}`
+    : "";
 
   const lineTransition = shouldReduceMotion
     ? { duration: 0 }
@@ -206,39 +261,47 @@ export function PerformanceTrackerChart() {
           Performance tracker
         </span>
         <div className="flex-1" />
-        <LegendSwatch color="var(--viz-you)" label={sides.you.shortName} />
-        <LegendSwatch color="var(--viz-opp)" label={sides.opp.shortName} />
-        <span
-          aria-hidden="true"
-          className="h-3 w-px bg-[var(--border-hairline)]"
-        />
-        <span className="inline-flex items-center gap-1.5">
-          <svg width="12" height="10" aria-hidden="true" className="block">
-            <line
-              x1="6"
-              y1="0"
-              x2="6"
-              y2="10"
-              stroke="var(--viz-key)"
-              strokeWidth="1.5"
-              strokeDasharray="3 2"
-            />
-          </svg>
-          <span className="text-micro whitespace-nowrap">Break of serve</span>
-        </span>
+        {/* Drawn as the blue affordance it will become, wired to nothing yet
+            (flags-doc #11). `aria-disabled` rather than `disabled` so the
+            tooltip that explains the inert control still opens — a `disabled`
+            button swallows the pointer events the tooltip listens for. */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-disabled="true"
+              aria-label="Expand — not available yet"
+              onClick={(e) => e.preventDefault()}
+              className="cursor-default rounded-[2px] text-[11px] font-medium text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+            >
+              Expand
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top">Expanded view coming soon</TooltipContent>
+        </Tooltip>
       </div>
 
       <div
         className="relative"
         role="figure"
-        aria-label={`Momentum across ${points.length} points. ${sides.you.name} above the midline, ${sides.opp.name} below.`}
+        aria-label={`Momentum across ${scopedPoints.length} points. ${sides.you.name} above the midline, ${sides.opp.name} below.`}
       >
+        {/* Which half is the viewer's: the label carries a card backing so it
+            stays legible over the area fill it sits on. */}
+        <span
+          aria-hidden="true"
+          className="surface-card pointer-events-none absolute left-2 top-2 z-[2] whitespace-nowrap px-1.5 py-0.5 text-[10px]"
+          style={{ color: "var(--ink-400)" }}
+        >
+          {sides.you.shortName} above
+        </span>
+
         <svg
           ref={svgRef}
           viewBox={`0 0 ${CHART_W} ${CHART_H}`}
           preserveAspectRatio="none"
           className="block w-full"
-          style={{ height: 116 }}
+          style={{ height: 104 }}
           aria-hidden="true"
         >
           <defs>
@@ -257,22 +320,9 @@ export function PerformanceTrackerChart() {
               y1={0}
               x2={x}
               y2={CHART_H}
-              stroke="var(--border-hairline)"
+              stroke="var(--ink-200)"
               strokeWidth={1}
-              strokeDasharray="4 4"
-            />
-          ))}
-
-          {geometry.breaks.map((x) => (
-            <line
-              key={`break-${x}`}
-              x1={x}
-              y1={4}
-              x2={x}
-              y2={CHART_H - 4}
-              stroke="var(--viz-key)"
-              strokeWidth={1.5}
-              strokeDasharray="5 4"
+              strokeDasharray="3 3"
             />
           ))}
 
@@ -281,7 +331,7 @@ export function PerformanceTrackerChart() {
             y1={MID}
             x2={CHART_W}
             y2={MID}
-            stroke="var(--ink-300)"
+            stroke="var(--ink-200)"
             strokeWidth={1}
           />
 
@@ -293,7 +343,7 @@ export function PerformanceTrackerChart() {
           <motion.path
             d={geometry.area}
             fill="var(--viz-you)"
-            fillOpacity={0.2}
+            fillOpacity={0.14}
             clipPath={`url(#${clipAbove})`}
             initial={shouldReduceMotion ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -306,7 +356,7 @@ export function PerformanceTrackerChart() {
           <motion.path
             d={geometry.area}
             fill="var(--viz-opp)"
-            fillOpacity={0.2}
+            fillOpacity={0.14}
             clipPath={`url(#${clipBelow})`}
             initial={shouldReduceMotion ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -321,7 +371,7 @@ export function PerformanceTrackerChart() {
             points={geometry.polyline}
             fill="none"
             stroke="var(--viz-you)"
-            strokeWidth={2}
+            strokeWidth={1.5}
             strokeLinejoin="round"
             clipPath={`url(#${clipAbove})`}
             initial={shouldReduceMotion ? { opacity: 0 } : { pathLength: 0 }}
@@ -332,7 +382,7 @@ export function PerformanceTrackerChart() {
             points={geometry.polyline}
             fill="none"
             stroke="var(--viz-opp)"
-            strokeWidth={2}
+            strokeWidth={1.5}
             strokeLinejoin="round"
             clipPath={`url(#${clipBelow})`}
             initial={shouldReduceMotion ? { opacity: 0 } : { pathLength: 0 }}
@@ -346,7 +396,7 @@ export function PerformanceTrackerChart() {
               y1={0}
               x2={hoverCoord[0]}
               y2={CHART_H}
-              stroke="var(--ink-400)"
+              stroke="var(--ink-300)"
               strokeWidth={1}
             />
           )}
@@ -367,7 +417,7 @@ export function PerformanceTrackerChart() {
         {hovered && hoverCoord && (
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute z-[3] flex flex-col gap-1 whitespace-nowrap rounded-[12px] bg-[var(--ink-900)] px-3 py-2"
+            className="pointer-events-none absolute z-[3] flex flex-col gap-0.5 whitespace-nowrap rounded-[12px] bg-[var(--ink-900)] px-3 py-2"
             style={{
               boxShadow: "var(--shadow-dropdown)",
               left: `${(hoverCoord[0] / CHART_W) * 100}%`,
@@ -386,12 +436,13 @@ export function PerformanceTrackerChart() {
             }}
           >
             <span className="text-[12px] font-medium text-white">
-              {leadLabel}
+              {eventLine}
             </span>
-            <span className="tabular text-[11px] text-white/[0.64]">
-              {showScores
-                ? `Set ${hovered.setNumber} · ${hovered.gameScore} · ${hovered.pointScore}`
-                : `Set ${hovered.setNumber}`}
+            <span className="tabular text-[11px] text-white/[0.72]">
+              {marginLine}
+            </span>
+            <span className="mono tabular text-[10px] text-white/[0.52]">
+              {monoLine}
             </span>
           </div>
         )}
@@ -402,9 +453,12 @@ export function PerformanceTrackerChart() {
           <div
             key={s.setNumber}
             className="flex justify-center"
-            style={{ width: `${(s.count / points.length) * 100}%` }}
+            style={{ width: `${(s.count / scopedPoints.length) * 100}%` }}
           >
-            <span className="eyebrow-sm whitespace-nowrap">
+            <span
+              className="tabular whitespace-nowrap text-[10px]"
+              style={{ color: "var(--ink-400)" }}
+            >
               Set {s.setNumber}
             </span>
           </div>

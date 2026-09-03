@@ -5,7 +5,10 @@ import { motion, useReducedMotion } from "framer-motion";
 
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
-import { LegendSwatch } from "@/components/dashboard/matches/match-detail/legend-swatch";
+import {
+  scopePoints,
+  useSetScope,
+} from "@/components/dashboard/matches/match-detail/set-scope";
 import { ChartTooltip } from "@/components/dashboard/matches/match-detail/chart-tooltip";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 
@@ -39,6 +42,10 @@ import type { MatchPoint } from "@/lib/data/match-points-server";
  * points here would therefore print a confident 0, which is a claim about the
  * player rather than about the analysis. The segment is dropped on the same
  * provider test the SQL uses, not on the count being zero.
+ *
+ * Scope-aware: `scopePoints(points, activeSet)` narrows the tally to the
+ * selected set before bucketing, the same read every point-derived card on
+ * this tab makes (rally-length-card.tsx takes the identical dependency).
  */
 
 const EASE_CHART = [0.2, 0, 0.4, 1] as const;
@@ -48,6 +55,8 @@ type OutcomeKey = "winners" | "aces" | "unforcedErrors" | "doubleFaults";
 interface OutcomeMeta {
   key: OutcomeKey;
   label: string;
+  /** Shorter legend text — the 6px-swatch row has no room for "errors". */
+  legendLabel?: string;
   /** Fill for the viewer's bar. */
   you: string;
   /** Fill for the opponent's bar. */
@@ -65,6 +74,7 @@ const OUTCOMES: OutcomeMeta[] = [
   {
     key: "unforcedErrors",
     label: "Unforced errors",
+    legendLabel: "Unforced",
     you: "var(--viz-you-mid)",
     opp: "var(--viz-opp-mid)",
   },
@@ -84,8 +94,8 @@ function emptyTally(): Tally {
 
 /**
  * One pass, one bucket per point. The chain is exclusive on purpose: a point
- * counted in two segments would make the bar's own "N shot outcomes" header
- * disagree with the counts in its hovers.
+ * counted in two segments would make the bar's own total disagree with the
+ * counts in its segment hovers.
  */
 function tally(points: MatchPoint[], isPlayer1: boolean): Tally {
   const t = emptyTally();
@@ -118,17 +128,26 @@ interface PointEndingsCardProps {
 export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
   const { points } = useMatchData();
   const sides = useMatchSides();
+  const { activeSet } = useSetScope();
   const shouldReduceMotion = useReducedMotion();
   const [hovered, setHovered] = useState<string | null>(null);
 
   const youIsPlayer1 = sides.you.isPlayer1;
 
+  // Narrow to the chosen set through the shared helper — the same read every
+  // point-derived card on this tab makes, so the chip selection moves them
+  // in step. `null` is the whole match.
+  const scopedPoints = useMemo(
+    () => scopePoints(points, activeSet),
+    [points, activeSet],
+  );
+
   const { youTally, oppTally } = useMemo(
     () => ({
-      youTally: tally(points, youIsPlayer1),
-      oppTally: tally(points, !youIsPlayer1),
+      youTally: tally(scopedPoints, youIsPlayer1),
+      oppTally: tally(scopedPoints, !youIsPlayer1),
     }),
-    [points, youIsPlayer1],
+    [scopedPoints, youIsPlayer1],
   );
 
   const outcomes = OUTCOMES.filter((o) => o.key !== "aces" || !isDerived);
@@ -172,9 +191,7 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
           How points ended
         </span>
         <div className="flex-1" />
-        <span className="text-micro tabular whitespace-nowrap">
-          {points.length} points · hover a segment
-        </span>
+        <span className="text-micro whitespace-nowrap">Own outcomes</span>
       </div>
 
       {rows.map((row) => {
@@ -183,16 +200,16 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
         return (
           <div key={row.id} className="flex flex-col gap-[5px]">
             <div className="flex items-baseline gap-2">
-              <span className="truncate text-[11px] text-[var(--ink-700)]">
+              <span className="truncate text-[11px] text-[var(--ink-600)]">
                 {row.name}
               </span>
               <div className="flex-1" />
-              <span className="text-micro tabular whitespace-nowrap">
-                {row.total} shot outcomes
+              <span className="mono tabular text-[10px] text-[var(--ink-400)]">
+                {row.total}
               </span>
             </div>
 
-            <div className="flex h-4 w-full gap-0.5">
+            <div className="flex h-2.5 w-full gap-0.5">
               {segments.map((o, i) => {
                 const id = `${row.id}-${o.key}`;
                 const share = row.total > 0 ? (row.own[o.key] / row.total) * 100 : 0;
@@ -254,15 +271,21 @@ export function PointEndingsCard({ isDerived }: PointEndingsCardProps) {
       })}
 
       <div className="flex flex-wrap gap-x-4 gap-y-1.5 pt-0.5">
+        {/* Local swatch, not the shared `LegendSwatch` — this legend runs at
+            6px, smaller than that component's fixed 8px dot. */}
         {outcomes.map((o) => (
-          <LegendSwatch key={o.key} color={o.you} label={o.label} />
+          <span key={o.key} className="inline-flex items-center gap-1.5">
+            <span
+              aria-hidden="true"
+              className="h-1.5 w-1.5 shrink-0 rounded-[2px]"
+              style={{ background: o.you }}
+            />
+            <span className="text-micro whitespace-nowrap">
+              {o.legendLabel ?? o.label}
+            </span>
+          </span>
         ))}
       </div>
-
-      <span className="text-micro" style={{ color: "var(--ink-500)" }}>
-        Each bar is that player&rsquo;s own shot outcomes at 100% — segment
-        length is the share, counts in the hover.
-      </span>
     </section>
   );
 }

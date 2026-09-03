@@ -43,6 +43,12 @@ const eslintConfig = [
       // none of which belong to the branch you are on. Same reason .gitignore
       // does not save us: ESLint 9 does not read it.
       ".claude/worktrees/**",
+      // Feature-pipeline reference material. `work/<slug>/*/references/` holds
+      // artefacts copied in verbatim to be read, not run: Claude Design
+      // artboards and their `_ds_bundle.js`, which is a compiled React bundle
+      // with no import of React in scope — 337 `no-undef` errors from one file
+      // nobody wrote or ships. Same category as `.agents/**` above.
+      "work/**",
     ],
   },
 
