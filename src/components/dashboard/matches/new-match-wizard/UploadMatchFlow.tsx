@@ -13,7 +13,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { AlertTriangle, Check, CircleX, ExternalLink } from "lucide-react";
 import {
   Step,
@@ -48,7 +47,6 @@ import { FileStepContent } from "./FileStepContent";
 import { TrimStepContent } from "./TrimStepContent";
 import { DetailsContent } from "./DetailsContent";
 import { ConfirmContent } from "./ConfirmContent";
-import { primaryBtnCls, ghostBtnCls } from "./styles";
 
 /** Where the flow returns to when it is dismissed or finished. */
 const PERSONAL_EXIT_HREF = "/dashboard/matches";
@@ -383,35 +381,32 @@ function UploadMatchSuccess({
               new tab must be a full page load, which is what gives its wizard a
               hook with no memory of this one. */}
           {busy ? (
-            <Button asChild className={ghostBtnCls}>
-              <a
-                href={newTabHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Upload another match — opens in a new tab"
-              >
-                Upload another
-                <ExternalLink
-                  className="size-3.5 shrink-0"
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-              </a>
-            </Button>
-          ) : (
-            <Button onClick={onUploadAnother} className={ghostBtnCls}>
+            <a
+              href={newTabHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Upload another match — opens in a new tab"
+              className={advButton("ghost", "md")}
+            >
               Upload another
-            </Button>
+              <ExternalLink
+                className="size-3.5 shrink-0"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+            </a>
+          ) : (
+            <button type="button" onClick={onUploadAnother} className={advButton("ghost", "md")}>
+              Upload another
+            </button>
           )}
-          <Button asChild className={primaryBtnCls}>
-            <Link href={exitHref}>
-              {preset?.kind === "single"
-                ? "Open the match"
-                : preset
-                  ? "Back to the event"
-                  : "Back to matches"}
-            </Link>
-          </Button>
+          <Link href={exitHref} className={advButton("primary", "md")}>
+            {preset?.kind === "single"
+              ? "Open the match"
+              : preset
+                ? "Back to the event"
+                : "Back to matches"}
+          </Link>
         </div>
 
         {/* Beside the button that causes it. The amber banner above says to keep
@@ -1172,13 +1167,17 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
             Save draft
           </button>
 
-          {/* Always present; sleeps at 40% until the step's requirement is met. */}
+          {/* Always present; asleep at the design system's disabled state
+              (`advButton()`: opacity 0.5, no pointer) until the step's
+              requirement is met. 120px is the design's width for this
+              instance, so the label change to "Create match" does not move
+              the footer. */}
           <button
             type="button"
             onClick={continueHandler}
             disabled={continueDisabled}
             data-wizard-continue
-            className={`${advButton("primary", "sm")} min-w-[120px] disabled:opacity-40`}
+            className={`${advButton("primary", "sm")} min-w-[120px]`}
           >
             {isCreating ? "Creating…" : CONTINUE_LABEL[step]}
           </button>
