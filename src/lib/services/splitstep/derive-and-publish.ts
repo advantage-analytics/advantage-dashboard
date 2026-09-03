@@ -74,10 +74,19 @@ export async function deriveAndPublish(params: {
     // first_returns_in and second_returns_in with NO provider guard, so running
     // it after the suppression would silently un-suppress two columns built
     // entirely on phantom return strokes.
+    //
+    // SUPPRESSION SKIPPED (2026-09-02, product decision — "accept the data as
+    // truth for now"). `suppress_derived_match_stats` nulls aces, double
+    // faults, service winners, rally length and the whole return family for
+    // every Advantage Intelligence match, so they render as em dashes. With
+    // it commented out those families publish as computed. The RPC and its
+    // migration are untouched; restore by uncommenting the line and re-running
+    // deriveAndPublish (or the RPC by hand) for every match published since.
+    // docs/splitstep-derivation.md §4 explains what those numbers are worth.
     const steps: [string, Record<string, string>][] = [
       ['calculate_match_stats', { p_match_id: matchId }],
       ['backfill_returns_in_and_net_points', { p_match_id: matchId }],
-      ['suppress_derived_match_stats', { p_match_id: matchId }],
+      // ['suppress_derived_match_stats', { p_match_id: matchId }],
     ];
 
     for (const [fn, args] of steps) {
@@ -104,12 +113,19 @@ export async function deriveAndPublish(params: {
       .update({ status: 'completed', error_message: null })
       .eq('id', jobId);
 
-    console.log(`${LOG} published`, {
+    // `unreconciled` is reachable now (ACCEPT_UNRECONCILED_FOLD): the fold did
+    // not reproduce the entered score and the rows were written anyway, with
+    // player1 named by `player1Source`. Logged at warn so it is greppable.
+    const rec = written.transcript.reconciliation;
+    const log = rec.ok ? console.log : console.warn;
+    log(`${LOG} published`, {
       jobId,
       matchId,
       points: written.pointsWritten,
       shots: written.shotsWritten,
-      grade: written.transcript.reconciliation.ok ? 'reconciled' : 'unreconciled',
+      grade: rec.ok ? 'reconciled' : 'unreconciled',
+      player1Source: rec.player1Source,
+      reason: rec.ok ? undefined : rec.reason,
     });
 
     return {
