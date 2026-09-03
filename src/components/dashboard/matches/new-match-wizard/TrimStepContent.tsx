@@ -233,26 +233,27 @@ function TrimStepContentImpl({
   const playheadElRef = useRef<HTMLDivElement>(null);
   const clockElRef = useRef<HTMLSpanElement>(null);
 
-  // One object URL per file, revoked when the file changes or the step
-  // unmounts. Leaking these pins the file handle for the life of the page.
-  const objectUrl = useMemo(
-    () => (videoFile ? URL.createObjectURL(videoFile) : null),
-    [videoFile]
-  );
+  // One object URL per file, created AND revoked inside the effect, and the
+  // element's src set from there rather than rendered. Leaking these pins the
+  // file handle for the life of the page — but revoking a memoised URL from a
+  // cleanup is worse: React runs every effect twice on mount in development,
+  // and the second run found the URL already dead and the src already
+  // stripped, so the player sat black. Owning both ends here means each run
+  // gets a live URL of its own.
   useEffect(() => {
-    if (!objectUrl) return;
     const el = videoRef.current;
+    if (!el || !videoFile) return;
+    const url = URL.createObjectURL(videoFile);
+    el.src = url;
     return () => {
       // Detach from the element before revoking. Safari otherwise keeps a
       // handle on the source alive — the same teardown order probe.ts uses.
-      if (el) {
-        el.pause();
-        el.removeAttribute("src");
-        el.load();
-      }
-      URL.revokeObjectURL(objectUrl);
+      el.pause();
+      el.removeAttribute("src");
+      el.load();
+      URL.revokeObjectURL(url);
     };
-  }, [objectUrl]);
+  }, [videoFile]);
 
   const applyPlayhead = useCallback(() => {
     const clock = clockElRef.current;
@@ -284,7 +285,7 @@ function TrimStepContentImpl({
         rafRef.current = null;
       }
     };
-  }, [objectUrl]);
+  }, [videoFile]);
 
   // Rail width drives how many thumbnails tile across it.
   useEffect(() => {
@@ -616,21 +617,19 @@ function TrimStepContentImpl({
           maxWidth: `calc(${PLAYER_MAX_HEIGHT} * ${aspect})`,
         }}
       >
-        {objectUrl ? (
-          <video
-            ref={videoRef}
-            src={objectUrl}
-            playsInline
-            preload="metadata"
-            onLoadedMetadata={paintFirstFrame}
-            onSeeked={handleSeeked}
-            onTimeUpdate={handleTimeUpdate}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-            onClick={togglePlay}
-            className="block size-full cursor-pointer bg-black object-contain"
-          />
-        ) : null}
+        {/* No src here — the effect above sets it from the file. */}
+        <video
+          ref={videoRef}
+          playsInline
+          preload="metadata"
+          onLoadedMetadata={paintFirstFrame}
+          onSeeked={handleSeeked}
+          onTimeUpdate={handleTimeUpdate}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          onClick={togglePlay}
+          className="block size-full cursor-pointer bg-black object-contain"
+        />
 
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 bg-gradient-to-t from-black/55 to-transparent pb-2.5 pt-8">
           <div className="pointer-events-auto flex items-center gap-2">

@@ -16,7 +16,7 @@
  * beside a 7 GB file otherwise reads as "sent".
  */
 
-import { memo, useEffect, useId, useMemo, useRef } from "react";
+import { memo, useEffect, useId, useRef } from "react";
 import {
   FileSpreadsheet,
   Film,
@@ -150,24 +150,26 @@ function extensionList(acceptString: string): string {
  */
 function VideoStill({ file, durationSeconds }: { file: File; durationSeconds: number }) {
   const ref = useRef<HTMLVideoElement>(null);
-  const url = useMemo(() => URL.createObjectURL(file), [file]);
+  // URL created and revoked in the same effect, src set from it — see the
+  // same note in TrimStepContent: a memoised URL revoked from a cleanup is
+  // dead by the time development's second effect run looks for it.
   useEffect(() => {
     const el = ref.current;
+    if (!el) return;
+    const url = URL.createObjectURL(file);
+    el.src = url;
     return () => {
       // Detach before revoking — Safari otherwise keeps the handle alive.
-      if (el) {
-        el.pause();
-        el.removeAttribute("src");
-        el.load();
-      }
+      el.pause();
+      el.removeAttribute("src");
+      el.load();
       URL.revokeObjectURL(url);
     };
-  }, [url]);
+  }, [file]);
   const at = Math.min(5, durationSeconds * 0.05) || 0.001;
   return (
     <video
       ref={ref}
-      src={url}
       muted
       playsInline
       preload="metadata"
@@ -178,6 +180,32 @@ function VideoStill({ file, durationSeconds }: { file: File; durationSeconds: nu
       className="size-10 object-cover opacity-90"
     />
   );
+}
+
+/**
+ * The superscript for a set, or null when the set had no tiebreak.
+ *
+ * Two conditions, both required: the games say the set went to one (7-6, or
+ * a 1-0 match tiebreak in place of a set), and a recorded value above zero.
+ * An export carries a tiebreak column for every set, and a 0 in it — or a
+ * value left behind on a 6-3 — must not become a "⁰" or a "⁴" that claims a
+ * tiebreak nobody played. The loser's points are the number people write;
+ * when both are recorded that is the smaller one.
+ */
+function tiebreakFor(
+  a: number,
+  b: number,
+  aTiebreak: number | null | undefined,
+  bTiebreak: number | null | undefined
+): number | null {
+  const high = Math.max(a, b);
+  const low = Math.min(a, b);
+  const wentToTiebreak = (high >= 7 && high - low === 1) || (high === 1 && low === 0);
+  if (!wentToTiebreak) return null;
+  const points = [aTiebreak, bTiebreak].filter(
+    (n): n is number => typeof n === "number" && n > 0
+  );
+  return points.length > 0 ? Math.min(...points) : null;
 }
 
 /** One set from the winner's side, tiebreak as a superscript. */
@@ -213,12 +241,7 @@ function FoundInExport({ formData }: { formData: FormData }) {
     const p = formData.playerScores[i];
     const o = formData.opponentScores[i];
     if (p === null || p === undefined || o === null || o === undefined) continue;
-    const tbs = [formData.playerTiebreaks[i], formData.opponentTiebreaks[i]].filter(
-      (n): n is number => typeof n === "number"
-    );
-    // The loser's points are the number people write; when both are recorded
-    // that is the smaller one.
-    const tiebreak = tbs.length > 0 ? Math.min(...tbs) : null;
+    const tiebreak = tiebreakFor(p, o, formData.playerTiebreaks[i], formData.opponentTiebreaks[i]);
     sets.push(opponentWon ? { a: o, b: p, tiebreak } : { a: p, b: o, tiebreak });
   }
 
