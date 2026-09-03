@@ -16,8 +16,11 @@ export { StepIndicator } from "./StepIndicator";
 export { SourceStepContent } from "./SourceStepContent";
 export type { SourceStepContentProps } from "./SourceStepContent";
 
-export { UploadContent } from "./UploadContent";
-export type { UploadContentProps } from "./UploadContent";
+export { FileStepContent } from "./FileStepContent";
+export type { FileStepContentProps } from "./FileStepContent";
+
+export { TrimStepContent } from "./TrimStepContent";
+export type { TrimStepContentProps } from "./TrimStepContent";
 
 export { DetailsContent } from "./DetailsContent";
 export type { DetailsContentProps } from "./DetailsContent";

@@ -69,11 +69,10 @@ export const floatMenuCls =
   "rounded-[12px] border-[#E5E5EA] shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]";
 
 /**
- * Dashed drop zone surface. Shared by the file and video pick steps so their
- * idle / drag-over / busy states cannot drift apart.
+ * The note strip — one quiet sentence on a surface-subtle wash, 13px glyph
+ * beside it. The wizard's register for "here is the honest thing about this":
+ * what an export includes, that nothing is uploading yet, why a video was
+ * refused. Design: Upload Wizard v5 · 2b, 3b.
  */
-export function dropZoneCls(busy: boolean, isOver: boolean): string {
-  if (busy) return "bg-[#FAFAFA] border-[#F3F3F3]";
-  if (isOver) return "bg-[#EFF4FF] border-[#3B82F6]";
-  return "bg-[#FAFAFA] border-[#F3F3F3] hover:bg-[#EFF4FF] hover:border-[#3B82F6]/40";
-}
+export const noteStripCls =
+  "flex items-start gap-2 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3 py-2.5 text-[11px] leading-[1.6] text-[var(--ink-700)]";

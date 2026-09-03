@@ -251,6 +251,34 @@ export function formatClock(
 }
 
 /**
+ * Format a position in SECONDS as a full timecode — "0:03:41", "1:51:13".
+ *
+ * The trim step's register. `formatClock` drops the hour when there is none,
+ * which is right for a chip and wrong for a start and an end that sit on one
+ * line: the two readouts have to be the same width to read as a pair.
+ */
+export function formatTimecode(seconds: number | undefined): string {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return "0:00:00";
+  const whole = Math.floor(seconds);
+  const h = Math.floor(whole / 3600);
+  const m = Math.floor((whole % 3600) / 60);
+  const s = whole % 60;
+  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+/**
+ * A video's resolution the way a camera names it — "1080p", "4K".
+ *
+ * By the short side, so a portrait recording reads the same as the landscape
+ * one it came from.
+ */
+export function formatResolution(width: number, height: number): string {
+  const short = Math.min(width, height);
+  if (short >= 2160) return "4K";
+  return `${short}p`;
+}
+
+/**
  * Format duration from milliseconds to H:MM format
  * Returns "-:--" if duration is 0 or undefined
  */

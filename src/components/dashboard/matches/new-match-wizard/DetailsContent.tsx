@@ -9,26 +9,20 @@
  * empty form controls demanding to be filled. Nothing is hidden, because
  * hiding the optional half is what made people miss the required half.
  *
- * The two video answers live in the same grid, below a hairline, for processing
- * providers only. They used to be a separate segmented control above this
- * component; splitting them made the required fields look optional.
+ * The two video answers — camera and the player's end at the start — are asked
+ * on the trim step (`TrimStepContent`), beside the frame they describe. This
+ * grid only derives the duration from that step's window.
  *
  * `docs/ui-revamp-guardrails.md` §3.1 and §4 govern the five vendor-required
  * fields — both player names, a non-zero set score, the end at video start, the
- * camera answer and ad/no-ad. None of them may acquire a default, and the end
- * question is camera-relative at the FIRST FRAME; its wording is carried
- * verbatim into the menu hint.
+ * camera answer and ad/no-ad. None of them may acquire a default.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
-  ArrowDown,
-  ArrowUp,
   CircleMinus,
   CirclePlus,
-  Video,
-  VideoOff,
 } from "lucide-react";
 import { FormData, DetailField } from "./types";
 import {
@@ -70,7 +64,7 @@ export interface DetailsContentProps {
    * name, and the error copy follows the same distinction.
    */
   playerNameLabel?: string;
-  /** Video provider — show the two camera answers in the grid. */
+  /** Video provider — the duration is derived from the trim, not typed. */
   isProcessingProvider?: boolean;
   /** Set when Confirm wants Match to focus a specific detail cell. */
   pendingDetailFocus?: DetailField | null;
@@ -132,32 +126,6 @@ const SCORING_OPTIONS: readonly CellOption<boolean>[] = [
 const LETS_OPTIONS: readonly CellOption<boolean>[] = [
   { value: false, label: "Stop on Lets" },
   { value: true, label: "Play on Lets" },
-];
-
-const CAMERA_OPTIONS: readonly CellOption<boolean>[] = [
-  {
-    value: true,
-    label: "Fixed position",
-    icon: <Video className="size-3.5" strokeWidth={1.5} />,
-  },
-  {
-    value: false,
-    label: "Moved or panned",
-    icon: <VideoOff className="size-3.5" strokeWidth={1.5} />,
-  },
-];
-
-const END_OPTIONS: readonly CellOption<boolean>[] = [
-  {
-    value: true,
-    label: "Top of frame",
-    icon: <ArrowUp className="size-3.5" strokeWidth={1.5} />,
-  },
-  {
-    value: false,
-    label: "Bottom of frame",
-    icon: <ArrowDown className="size-3.5" strokeWidth={1.5} />,
-  },
 ];
 
 const editorInputCls = `h-8 w-full rounded-[6px] border border-[#EAECF0] bg-white px-2 text-[13px] text-[#0D0D0D] outline-none tabular-nums ${focusRingCls}`;
@@ -907,33 +875,8 @@ export function DetailsContent({
           />
         )}
 
-        {/* The two video answers. Same cells, own band — they are about the
-            recording, not the match, and both are required by the analysis. */}
-        {isProcessingProvider && (
-          <>
-            <div className="col-span-3 mx-3 mb-0.5 mt-1.5 h-px bg-[#F3F3F3]" />
-            <SelectCell
-              label="Camera"
-              required
-              placeholder="Choose"
-              value={formData.fixedCamera}
-              options={CAMERA_OPTIONS}
-              onChange={(v) => onInputChange("fixedCamera", v)}
-              menuWidth={260}
-              hint="A tripod or a phone propped against the fence is fixed. Handheld or following the play is not."
-            />
-            <SelectCell
-              label="Your position at video start"
-              required
-              placeholder="Choose"
-              value={formData.initialTopPlayerIsPlayer1}
-              options={END_OPTIONS}
-              onChange={(v) => onInputChange("initialTopPlayerIsPlayer1", v)}
-              menuWidth={260}
-              hint="Where you appear in the first frame of the video — top or bottom of the screen. This is about camera position, not who serves first. Players switch sides during the match; we only need where you start on screen."
-            />
-          </>
-        )}
+        {/* The two video answers — camera and the player's end at the start —
+            are asked on the trim step, beside the frame they describe. */}
       </div>
     </div>
   );

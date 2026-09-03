@@ -6,7 +6,14 @@ import type { ProviderKind } from "@/lib/services/upload";
 import type { VideoProbe } from "@/lib/video/probe";
 
 /** Wizard step identifiers */
-export type Step = "provider" | "video" | "match" | "confirm";
+/**
+ * Wizard step identifiers.
+ *
+ * `file` is the drop step for BOTH kinds — a video for a processing provider,
+ * an export for an import one. `trim` is the video check that only a
+ * processing provider needs. Design: Upload Wizard v5, frames 3a–3c · 5a–5b.
+ */
+export type Step = "provider" | "file" | "trim" | "match" | "confirm";
 
 /** Optional Match-step fields that the Confirm step can deep-link back to. */
 export type DetailField = "round" | "matchType" | "courtType";
@@ -188,15 +195,15 @@ export const DEFAULT_FORM_DATA: FormData = {
 /**
  * Step order, per provider kind.
  *
- * Import providers hand us a parseable file, so the file drop and the metadata
- * form share one step — the parser pre-fills the form. Processing providers
- * need a step of their own first: the video has to be validated and trimmed
- * before the metadata form means anything, and none of that can be inferred
- * from the file.
+ * Both kinds drop their file on a step of its own — step 2 asks for one thing.
+ * An import provider's export is read there, so the details step opens
+ * pre-filled. A processing provider's video then needs a check of its own:
+ * the trim window and the two camera answers, none of which can be inferred
+ * from the file, and all of which the vendor refuses a job without.
  */
 export const STEP_ORDER_BY_KIND: Record<ProviderKind, Step[]> = {
-  import: ["provider", "match", "confirm"],
-  processing: ["provider", "video", "match", "confirm"],
+  import: ["provider", "file", "match", "confirm"],
+  processing: ["provider", "file", "trim", "match", "confirm"],
 };
 
 /** Step configuration for titles and descriptions */
@@ -206,9 +213,17 @@ export const STEP_CONFIG: Record<Step, { title: string; description: string }> =
     description:
       "Three facts before the file. Once we know whose match it is, the schedule fills the rest."
   },
-  video: {
-    title: "Add your match video",
-    description: "Drop the file and trim to the first serve — details come last."
+  // The import copy; the video copy is the processing override below.
+  file: {
+    title: "The export.",
+    description:
+      "The XLSX the app shares. Its numbers are already computed — we read them, nothing is processed."
+  },
+  // Only a processing provider reaches this step, so there is no import copy.
+  trim: {
+    title: "Trim to the first serve.",
+    description:
+      "Start at the first point, end at the last. The window has to match the score you enter next."
   },
   match: {
     title: "Add your match",
@@ -231,6 +246,11 @@ export const STEP_CONFIG: Record<Step, { title: string; description: string }> =
 export const STEP_CONFIG_PROCESSING: Partial<
   Record<Step, Partial<{ title: string; description: string }>>
 > = {
+  file: {
+    title: "The file.",
+    description:
+      "One full match from one camera. Leave the warm-up in — you'll trim to the first serve next."
+  },
   match: {
     title: "Match details",
     description: "Everything the report needs — score, context, and the two video answers."
@@ -243,7 +263,8 @@ export const STEP_CONFIG_PROCESSING: Partial<
 /** Continue-button label per step. */
 export const CONTINUE_LABEL: Record<Step, string> = {
   provider: "Continue",
-  video: "Continue",
+  file: "Continue",
+  trim: "Continue",
   match: "Continue",
   confirm: "Create match",
 };

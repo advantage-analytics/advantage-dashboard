@@ -62,6 +62,7 @@ import {
   type Workspace,
 } from "@/lib/workspace/types";
 import type { MatchSubject, RosterOption } from "./useUploadMatchWizard";
+import { noteStripCls } from "./styles";
 
 export interface SourceStepContentProps {
   selectedProvider: ProviderId | null;
@@ -301,8 +302,7 @@ const MENU_CLS =
 
 const MENU_LABEL_CLS = "px-2.5 pb-1 pt-2 text-[11px] text-[var(--ink-400)]";
 
-const NOTE_CLS =
-  "flex items-start gap-2 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3 py-2.5 text-[11px] leading-[1.6] text-[var(--ink-700)]";
+const NOTE_CLS = noteStripCls;
 
 function SourceStepContentImpl({
   selectedProvider,

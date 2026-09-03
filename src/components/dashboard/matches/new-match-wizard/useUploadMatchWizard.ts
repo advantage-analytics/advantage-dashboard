@@ -324,6 +324,7 @@ export interface UseUploadMatchWizardReturn {
   quotaCapSeconds: number;
   /** When the allowance comes back, already formatted — "Sep 1". */
   quotaResetsOn: string;
+  /** What the file picker accepts, for whichever provider is selected. */
   acceptString: string;
   requirementChips: readonly string[];
   onVideoPick: (file: File | null) => void;
@@ -333,7 +334,9 @@ export interface UseUploadMatchWizardReturn {
   // Step navigation
   handleProviderSelect: (providerId: string | null) => void;
   handleProviderContinue: () => void;
-  handleVideoContinue: () => void;
+  /** Leaves the file step for whatever follows it in the kind's order. */
+  handleFileContinue: () => void;
+  handleTrimContinue: () => void;
   handleMatchContinue: () => void;
   handleBack: () => void;
   /** Deep-link from Confirm back to Match with a specific detail field focused. */
@@ -653,8 +656,8 @@ export function useUploadMatchWizard({
     }
 
     // Resume past Provider when the user previously got that far — otherwise an
-    // accidental close means a wasted click on reopen. Video flows resume on the
-    // Video step: the File can't be persisted, so it has to be picked again.
+    // accidental close means a wasted click on reopen. Both kinds resume on the
+    // file step: the File can't be persisted, so it has to be picked again.
     //
     // NOT in a team workspace: the who-played answer lives only in memory, so a
     // resumed draft that skipped the provider step would create a match with
@@ -823,8 +826,7 @@ export function useUploadMatchWizard({
     // this step's, and skipping it would fall back to attributing the match to
     // whoever is uploading.
     if (askWhoPlayed && !matchSubject) return;
-    // Processing providers get a video step before the form; import providers
-    // go straight to the merged file+details step.
+    // Both kinds drop their file next; the order decides what follows it.
     setProgressKind(providerKind);
     setStep(stepOrder[1]);
   }, [
@@ -838,7 +840,15 @@ export function useUploadMatchWizard({
     matchSubject,
   ]);
 
-  const handleVideoContinue = useCallback(() => {
+  // Where the file step goes depends on the kind: a video still needs its
+  // check, an export is already read. Derived from the order rather than
+  // hardcoded, like handleBack.
+  const handleFileContinue = useCallback(() => {
+    const index = stepOrder.indexOf("file");
+    if (index >= 0 && index + 1 < stepOrder.length) setStep(stepOrder[index + 1]);
+  }, [stepOrder]);
+
+  const handleTrimContinue = useCallback(() => {
     setStep("match");
   }, []);
 
@@ -1634,6 +1644,8 @@ export function useUploadMatchWizard({
     // Step navigation
     handleProviderSelect,
     handleProviderContinue,
+    handleFileContinue,
+    handleTrimContinue,
     handleMatchContinue,
     handleBack,
     goEditDetail,
@@ -1658,12 +1670,12 @@ export function useUploadMatchWizard({
     remainingQuotaSeconds,
     quotaCapSeconds,
     quotaResetsOn,
-    acceptString: processingStrategy?.getAcceptString() ?? "",
+    // Every strategy has one — the file picker on step 2 serves both kinds.
+    acceptString: selectedProvider ? getProviderStrategy(selectedProvider).getAcceptString() : "",
     requirementChips: processingStrategy?.requirementChips ?? [],
     onVideoPick,
     handleTrimChange,
     handleRemoveVideo,
-    handleVideoContinue,
 
     // Form handling
     handleInputChange,

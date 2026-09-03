@@ -44,8 +44,8 @@ import { usePublishHeaderStatus } from "@/components/dashboard/header-status";
 import { StepIndicator } from "./StepIndicator";
 import { SourceStepContent } from "./SourceStepContent";
 import { PinnedMatchContent } from "./PinnedMatchContent";
-import { UploadContent } from "./UploadContent";
-import { VideoStepContent } from "./VideoStepContent";
+import { FileStepContent } from "./FileStepContent";
+import { TrimStepContent } from "./TrimStepContent";
 import { DetailsContent } from "./DetailsContent";
 import { ConfirmContent } from "./ConfirmContent";
 import { primaryBtnCls, ghostBtnCls } from "./styles";
@@ -475,9 +475,10 @@ function isFormControl(el: EventTarget | null): boolean {
  *
  * Cancel · divider · 3px bar in `--viz-you-mid` with the mono readout. It
  * appears only where hours are spent and states the cost of the file in hand:
- * before a trim it is the allowance you have, after one it is what this video
- * spends out of it. Advisory — `reserve_processing_quota()` is the authority
- * and refuses at submit time.
+ * before a file it is the allowance you have, after one it is what this video
+ * spends out of it — the pending hours drawn as a lighter `--viz-you-light`
+ * segment after the used ones. Advisory — `reserve_processing_quota()` is the
+ * authority and refuses at submit time.
  */
 function FooterMeter({
   remainingSeconds,
@@ -493,21 +494,33 @@ function FooterMeter({
 }) {
   const priced = selectedSeconds !== undefined && selectedSeconds > 0;
   const usedSeconds = Math.max(0, capSeconds - remainingSeconds);
-  // The bar draws what will have been spent once Continue does its work, so a
-  // priced video moves it before the job does.
-  const fraction = usageFraction(usedSeconds + (priced ? selectedSeconds : 0), capSeconds);
+  const usedFraction = usageFraction(usedSeconds, capSeconds);
+  // The bar draws what will have been spent once the match is saved, so a
+  // priced video moves it before the job does — as its own segment, so the
+  // cost can be told from the balance.
+  const pendingFraction = priced
+    ? Math.max(0, usageFraction(usedSeconds + selectedSeconds, capSeconds) - usedFraction)
+    : 0;
   const cap = formatHoursCap(capSeconds);
 
   return (
     <span className="ml-3 inline-flex items-center gap-2.5 border-l border-[var(--border-medium)] pl-4">
       <span
         role="img"
-        aria-label={`${formatHoursTenths(usedSeconds)} of ${cap} hours used`}
+        aria-label={
+          priced
+            ? `${formatHoursTenths(usedSeconds)} of ${cap} hours used, ${formatHoursTenths(selectedSeconds)} pending`
+            : `${formatHoursTenths(usedSeconds)} of ${cap} hours used`
+        }
         className="inline-flex h-[3px] w-14 shrink-0 overflow-hidden rounded-[2px] bg-[var(--ink-100)]"
       >
         <span
-          className="h-full bg-[var(--viz-you-mid)] transition-[width] duration-300 ease-[var(--ease-chart)]"
-          style={{ width: `${fraction * 100}%` }}
+          className="h-full shrink-0 bg-[var(--viz-you-mid)] transition-[width] duration-300 ease-[var(--ease-chart)]"
+          style={{ width: `${usedFraction * 100}%` }}
+        />
+        <span
+          className="h-full shrink-0 bg-[var(--viz-you-light)] transition-[width] duration-300 ease-[var(--ease-chart)]"
+          style={{ width: `${pendingFraction * 100}%` }}
         />
       </span>
       <span className="mono tabular whitespace-nowrap text-[11px] text-[var(--ink-500)]">
@@ -576,7 +589,8 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     parsingState,
     handleProviderSelect,
     handleProviderContinue,
-    handleVideoContinue,
+    handleFileContinue,
+    handleTrimContinue,
     handleMatchContinue,
     handleBack,
     setIsOver,
@@ -603,7 +617,6 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     quotaCapSeconds,
     quotaResetsOn,
     acceptString,
-    requirementChips,
     onVideoPick,
     handleTrimChange,
     handleRemoveVideo,
@@ -650,7 +663,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
   );
   const onDragLeave = useCallback(() => setIsOver(false), [setIsOver]);
 
-  // Stable so memo(VideoStepContent) can actually skip renders — an inline
+  // Stable so memo(FileStepContent) can actually skip renders — an inline
   // arrow here made its shallow compare fail on every parent render.
   const onVideoDrop = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
@@ -660,10 +673,43 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     },
     [setIsOver, onVideoPick]
   );
+  const onVideoFileChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      onVideoPick(e.target.files?.[0] ?? null);
+      // So picking the same file again after Remove still fires a change.
+      e.target.value = "";
+    },
+    [onVideoPick]
+  );
+
+  // The two camera answers, from the trim step. Booleans only — the fields
+  // start undefined and nothing here may default them.
+  const onCameraAnswer = useCallback(
+    (field: "fixedCamera" | "initialTopPlayerIsPlayer1", value: boolean) => {
+      handleInputChange(field, value);
+    },
+    [handleInputChange]
+  );
+
+  /**
+   * Whose match this is, for "Drop Marcus's video here" and "Marcus at the
+   * start". Null when it is the uploader's own — the copy then says "your"
+   * and "You". A first name, because the sentence is spoken, not filed.
+   */
+  const subjectFirstName = useMemo(() => {
+    const name =
+      whoPlayed.subject?.kind === "roster"
+        ? whoPlayed.subject.name
+        : preset
+          ? formData.playerName
+          : "";
+    return name.trim().split(/\s+/)[0] || null;
+  }, [whoPlayed.subject, preset, formData.playerName]);
 
   const continueHandler =
     step === "provider" ? handleProviderContinue
-    : step === "video" ? handleVideoContinue
+    : step === "file" ? handleFileContinue
+    : step === "trim" ? handleTrimContinue
     : step === "match" ? handleMatchContinue
     : handleCreateMatch;
 
@@ -754,13 +800,20 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     // are the sentence. The hook refuses Continue on the same two conditions.
     provider:
       !selectedProvider || (whoPlayed.required && !whoPlayed.subject) ? "" : null,
-    video: isProbing
-      ? "Checking your video…"
-      : !uploadedFile
-      ? "Drop or browse a video"
-      : trimSelected < minTrimSeconds
-      ? "Widen the trim window"
-      : null,
+    // Steps 2 and 3 say nothing either: the zone, the row and the two
+    // questions carry their own state, and Continue sleeps at 40% until a file
+    // passes the check — and, on the trim step, until the window is wide
+    // enough and both camera answers are given.
+    file:
+      !uploadedFile || isProbing || isUploading || parsingState.isParsing ? "" : null,
+    trim:
+      !uploadedFile?.file ||
+      isProbing ||
+      trimSelected < minTrimSeconds ||
+      formData.fixedCamera === undefined ||
+      formData.initialTopPlayerIsPlayer1 === undefined
+        ? ""
+        : null,
     match: !uploadedFile
       ? "Drop or browse a file"
       : isUploading
@@ -942,66 +995,64 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
               />
             ))}
 
-          {step === "video" && (
-            <VideoStepContent
-              videoFile={uploadedFile?.file ?? null}
+          {/* Step 2 asks for one thing. The same component for both kinds;
+              the handlers differ because a video is probed locally and an
+              export is validated and read. */}
+          {step === "file" && (
+            <FileStepContent
+              kind={isProcessingProvider ? "processing" : "import"}
+              selectedProvider={selectedProvider}
+              subjectFirstName={subjectFirstName}
+              uploadedFile={uploadedFile}
               probe={videoProbe}
-              warnings={videoWarnings}
-              isProbing={isProbing}
+              warnings={isProcessingProvider ? videoWarnings : []}
+              busy={isProbing || isUploading || parsingState.isParsing}
               error={uploadError}
-              startSeconds={formData.videoStartSeconds}
-              endSeconds={formData.videoEndSeconds}
-              isOver={isOver}
-              minTrimSeconds={minTrimSeconds}
+              parsingState={parsingState}
+              formData={formData}
               acceptString={acceptString}
-              requirementChips={requirementChips}
+              isOver={isOver}
               onDragOver={onDragOver}
               onDragLeave={onDragLeave}
-              onDrop={onVideoDrop}
-              onPick={onVideoPick}
-              onTrimChange={handleTrimChange}
-              onRemove={handleRemoveVideo}
+              onDrop={isProcessingProvider ? onVideoDrop : handleDrop}
+              onFileChange={isProcessingProvider ? onVideoFileChange : handleFileChange}
+              onRemove={isProcessingProvider ? handleRemoveVideo : handleRemoveFile}
             />
           )}
 
+          {step === "trim" && (
+            <TrimStepContent
+              videoFile={uploadedFile?.file ?? null}
+              probe={videoProbe}
+              startSeconds={formData.videoStartSeconds}
+              endSeconds={formData.videoEndSeconds}
+              minTrimSeconds={minTrimSeconds}
+              subjectFirstName={subjectFirstName}
+              fixedCamera={formData.fixedCamera}
+              initialTopPlayerIsPlayer1={formData.initialTopPlayerIsPlayer1}
+              onTrimChange={handleTrimChange}
+              onAnswer={onCameraAnswer}
+            />
+          )}
+
+          {/* The file was dropped a step ago and, for an export, already read —
+              so this step is metadata only. */}
           {step === "match" && (
-            <div className="flex flex-col gap-6">
-              {/* Processing providers picked their video on the previous step,
-                  so this step is metadata only — including the two camera
-                  answers, which sit in the details grid rather than above it. */}
-              {!isProcessingProvider && (
-                <UploadContent
-                  selectedProvider={selectedProvider}
-                  uploadedFile={uploadedFile}
-                  isOver={isOver}
-                  isUploading={isUploading}
-                  uploadError={uploadError}
-                  parsingState={parsingState}
-                  onDragOver={onDragOver}
-                  onDragLeave={onDragLeave}
-                  onDrop={handleDrop}
-                  onFileChange={handleFileChange}
-                  onRemoveFile={handleRemoveFile}
-                />
-              )}
-              {uploadedFile && !parsingState.isParsing && (
-                <DetailsContent
-                  formData={formData}
-                  playerNameLabel={
-                    whoPlayed.subject?.kind === "roster"
-                      ? "Player name"
-                      : undefined
-                  }
-                  showOpponentProgram={workspaces.active.kind === "team"}
-                  onInputChange={handleInputChange}
-                  onScoreChange={handleScoreChange}
-                  onTiebreakChange={handleTiebreakChange}
-                  isProcessingProvider={isProcessingProvider}
-                  pendingDetailFocus={pendingDetailFocus}
-                  onPendingDetailFocusConsumed={consumePendingDetailFocus}
-                />
-              )}
-            </div>
+            <DetailsContent
+              formData={formData}
+              playerNameLabel={
+                whoPlayed.subject?.kind === "roster"
+                  ? "Player name"
+                  : undefined
+              }
+              showOpponentProgram={workspaces.active.kind === "team"}
+              onInputChange={handleInputChange}
+              onScoreChange={handleScoreChange}
+              onTiebreakChange={handleTiebreakChange}
+              isProcessingProvider={isProcessingProvider}
+              pendingDetailFocus={pendingDetailFocus}
+              onPendingDetailFocusConsumed={consumePendingDetailFocus}
+            />
           )}
 
           {step === "confirm" && (
@@ -1064,9 +1115,9 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
           )}
 
           {/* What the later steps are still waiting on — a list, not the first
-              offender. Step 1's fields carry their own state, so it says
-              nothing there. */}
-          {step !== "provider" &&
+              offender. Steps 1 to 3 carry their own state on the page, so it
+              says nothing there. */}
+          {(step === "match" || step === "confirm") &&
             (stepBusy ? (
               <span className="text-[11px] text-[var(--ink-500)]">{stepBusy}</span>
             ) : gatedByMissing ? (
