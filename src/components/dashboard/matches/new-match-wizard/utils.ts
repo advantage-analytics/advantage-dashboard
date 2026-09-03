@@ -430,7 +430,15 @@ export function setHasData(formData: FormData, index: number): boolean {
 export const STORAGE_KEYS = {
   FORM_DATA: "uploadFormData",
   UPLOADED_FILE: "uploadedFile",
-  SELECTED_PROVIDER: "selectedProvider"
+  SELECTED_PROVIDER: "selectedProvider",
+  /**
+   * Set by the footer's "Save draft", read by `DashboardShell`. The shell
+   * clears the three keys above the moment the path leaves the wizard, which
+   * is right for a Cancel and wrong for a draft the person asked to keep. The
+   * wizard removes this flag when it next mounts, so a later plain departure
+   * clears storage exactly as before.
+   */
+  DRAFT_KEPT: "uploadDraftKept"
 } as const;
 
 /**
@@ -440,6 +448,25 @@ export function clearStorageData(): void {
   localStorage.removeItem(STORAGE_KEYS.FORM_DATA);
   localStorage.removeItem(STORAGE_KEYS.UPLOADED_FILE);
   localStorage.removeItem(STORAGE_KEYS.SELECTED_PROVIDER);
+  localStorage.removeItem(STORAGE_KEYS.DRAFT_KEPT);
+}
+
+/**
+ * Seconds as hours to one decimal — "5.5", "71.8", "70.0".
+ *
+ * The footer meter's register: it prices a video against a monthly allowance,
+ * and tenths of an hour is the resolution a person can act on. Always one
+ * decimal for a remainder or a cost so the figures line up across steps; see
+ * `formatHoursCap` for the allowance itself.
+ */
+export function formatHoursTenths(seconds: number): string {
+  return (Math.max(0, seconds) / 3600).toFixed(1);
+}
+
+/** The allowance — "8", "75", or "2.5" where a cap is not whole hours. */
+export function formatHoursCap(seconds: number): string {
+  const hours = Math.max(0, seconds) / 3600;
+  return Number.isInteger(hours) ? String(hours) : hours.toFixed(1);
 }
 
 /**

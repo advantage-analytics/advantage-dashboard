@@ -202,8 +202,9 @@ export const STEP_ORDER_BY_KIND: Record<ProviderKind, Step[]> = {
 /** Step configuration for titles and descriptions */
 export const STEP_CONFIG: Record<Step, { title: string; description: string }> = {
   provider: {
-    title: "Choose your data source",
-    description: "Select where this match's numbers come from."
+    title: "Where this match lives, and what it's made from.",
+    description:
+      "Three facts before the file. Once we know whose match it is, the schedule fills the rest."
   },
   video: {
     title: "Add your match video",

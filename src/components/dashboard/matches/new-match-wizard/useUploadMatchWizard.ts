@@ -260,7 +260,17 @@ export type {
  * The shape (and the filter/name-fallback/sort that produces it) is
  * `roster-shared.ts`'s, shared with `getLadder()`.
  */
-export type RosterOption = RosterPlayerOption;
+export type RosterOption = RosterPlayerOption & {
+  /**
+   * The address an open invitation is waiting on, when the profile has one
+   * out. The roster picker draws that person as a dashed ring and their email
+   * until they claim the profile — the invite is the only thing that says who
+   * they are yet. Null with no open invite, and always null for a viewer the
+   * `program_invites` policy does not admit (players), who see the same row
+   * without the invite state.
+   */
+  invitedEmail: string | null;
+};
 
 /**
  * WHOSE match a team upload records.
@@ -610,6 +620,10 @@ export function useUploadMatchWizard({
       return;
     }
 
+    // A draft kept by "Save draft" has been picked back up, so the next
+    // departure from the wizard clears storage the ordinary way again.
+    localStorage.removeItem(STORAGE_KEYS.DRAFT_KEPT);
+
     const existingProvider = localStorage.getItem(STORAGE_KEYS.SELECTED_PROVIDER);
     let resumedProvider = false;
     if (existingProvider && isProviderSupported(existingProvider)) {
@@ -702,12 +716,30 @@ export function useUploadMatchWizard({
     let cancelled = false;
 
     (async () => {
-      const { data } = await supabase.rpc("program_roster_full", {
-        p_program_id: activeWorkspace.id,
-      });
+      // The open invitations ride along so the picker can show who has been
+      // asked but has not yet claimed their profile. Staff-only under RLS: a
+      // player's read returns nothing, and the rows render without the state.
+      const [{ data }, { data: invites }] = await Promise.all([
+        supabase.rpc("program_roster_full", { p_program_id: activeWorkspace.id }),
+        supabase
+          .from("program_invites")
+          .select("player_id, email")
+          .eq("program_id", activeWorkspace.id)
+          .is("accepted_at", null),
+      ]);
       if (cancelled) return;
 
-      setTeamRoster(rosterPlayerOptions((data ?? []) as RosterFullRow[]));
+      const invitedByPlayer = new Map<string, string>();
+      for (const invite of (invites ?? []) as { player_id: string | null; email: string }[]) {
+        if (invite.player_id) invitedByPlayer.set(invite.player_id, invite.email);
+      }
+
+      setTeamRoster(
+        rosterPlayerOptions((data ?? []) as RosterFullRow[]).map((row) => ({
+          ...row,
+          invitedEmail: invitedByPlayer.get(row.playerId) ?? null,
+        }))
+      );
     })();
 
     return () => {

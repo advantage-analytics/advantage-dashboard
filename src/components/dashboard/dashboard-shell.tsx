@@ -10,6 +10,10 @@ import { SidebarStateProvider } from "@/components/dashboard/sidebar/sidebar-sta
 import { UnsavedChangesProvider } from "@/components/dashboard/settings/unsaved-changes-context";
 import { LogoutProvider } from "@/components/dashboard/logout-dialog";
 import { HeaderStatusProvider } from "@/components/dashboard/header-status";
+import {
+  STORAGE_KEYS,
+  clearStorageData,
+} from "@/components/dashboard/matches/new-match-wizard/utils";
 
 /**
  * The client half of the dashboard layout.
@@ -46,9 +50,11 @@ export function DashboardShell({
    */
   useEffect(() => {
     if (!pathname.startsWith("/dashboard/matches/new")) {
-      localStorage.removeItem("selectedProvider");
-      localStorage.removeItem("uploadFormData");
-      localStorage.removeItem("uploadedFile");
+      // "Save draft" in the wizard's footer sets this flag, and it is the one
+      // departure that must NOT wipe the draft — that is the whole point of
+      // the button. The wizard removes the flag when it next mounts.
+      if (localStorage.getItem(STORAGE_KEYS.DRAFT_KEPT)) return;
+      clearStorageData();
     }
   }, [pathname]);
 

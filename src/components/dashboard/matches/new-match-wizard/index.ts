@@ -13,8 +13,8 @@ export { UploadMatchFlow } from "./UploadMatchFlow";
 export { StepIndicator } from "./StepIndicator";
 
 // Content components
-export { ProviderContent } from "./ProviderContent";
-export type { ProviderContentProps } from "./ProviderContent";
+export { SourceStepContent } from "./SourceStepContent";
+export type { SourceStepContentProps } from "./SourceStepContent";
 
 export { UploadContent } from "./UploadContent";
 export type { UploadContentProps } from "./UploadContent";

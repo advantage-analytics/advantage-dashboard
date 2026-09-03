@@ -24,23 +24,25 @@ import {
 } from "./types";
 import {
   useUploadMatchWizard,
-  type MatchSubject,
-  type RosterOption,
   type VideoUploadEvent,
   type VideoUploadProgress,
 } from "./useUploadMatchWizard";
 import {
   formatFileSize,
-  formatHoursMinutes,
+  formatHoursCap,
+  formatHoursTenths,
   formatTransferSpeed,
+  saveFormDataToStorage,
+  STORAGE_KEYS,
 } from "./utils";
 import { formatEta } from "@/lib/data/match-analysis";
 import { usageFraction } from "@/lib/data/usage-format";
+import { advButton } from "@/lib/ui/adv-button";
 import { AnalysisProgressTrack } from "../analysis-progress-track";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { usePublishHeaderStatus } from "@/components/dashboard/header-status";
 import { StepIndicator } from "./StepIndicator";
-import { ProviderContent } from "./ProviderContent";
+import { SourceStepContent } from "./SourceStepContent";
 import { PinnedMatchContent } from "./PinnedMatchContent";
 import { UploadContent } from "./UploadContent";
 import { VideoStepContent } from "./VideoStepContent";
@@ -51,8 +53,8 @@ import { primaryBtnCls, ghostBtnCls } from "./styles";
 /** Where the flow returns to when it is dismissed or finished. */
 const PERSONAL_EXIT_HREF = "/dashboard/matches";
 
-/** The design's column: 780px of content inside 56px gutters. */
-const CONTENT_CLS = "mx-auto w-full max-w-[780px] px-14";
+/** The design's column: 720px of content inside 56px gutters. */
+const CONTENT_CLS = "mx-auto w-full max-w-[832px] px-14";
 
 /**
  * The missing-field label for `initialTopPlayerIsPlayer1`, matching
@@ -471,178 +473,51 @@ function isFormControl(el: EventTarget | null): boolean {
 /**
  * The monthly allowance, in the footer beside the primary action.
  *
- * Advisory: `reserve_processing_quota()` is the authority and refuses at submit
- * time. It reads two ways depending on whether there is a window to price yet —
+ * Cancel · divider · 3px bar in `--viz-you-mid` with the mono readout. It
+ * appears only where hours are spent and states the cost of the file in hand:
  * before a trim it is the allowance you have, after one it is what this video
- * costs out of it. One ring cannot mean both at once, so the caption says which.
+ * spends out of it. Advisory — `reserve_processing_quota()` is the authority
+ * and refuses at submit time.
  */
-function QuotaMeter({
+function FooterMeter({
   remainingSeconds,
   capSeconds,
-  resetsOn,
   selectedSeconds,
+  suffix,
 }: {
   remainingSeconds: number;
   capSeconds: number;
-  resetsOn: string;
   selectedSeconds?: number;
+  /** "resets on the 1st" for a personal allowance, "team hours" for a program's. */
+  suffix: string;
 }) {
-  const CIRCUMFERENCE = 2 * Math.PI * 6;
   const priced = selectedSeconds !== undefined && selectedSeconds > 0;
-  const fraction = priced
-    ? // Share of what is LEFT that this video eats — "1h 12m for this video"
-      // reads against the remainder, not the cap. An empty remainder is a full
-      // ring rather than a divide-by-zero.
-      remainingSeconds > 0
-      ? usageFraction(selectedSeconds, remainingSeconds)
-      : 1
-    : usageFraction(remainingSeconds, capSeconds);
-  const arc = fraction * CIRCUMFERENCE;
+  const usedSeconds = Math.max(0, capSeconds - remainingSeconds);
+  // The bar draws what will have been spent once Continue does its work, so a
+  // priced video moves it before the job does.
+  const fraction = usageFraction(usedSeconds + (priced ? selectedSeconds : 0), capSeconds);
+  const cap = formatHoursCap(capSeconds);
 
   return (
-    <span className="inline-flex items-center gap-2">
-      <svg viewBox="0 0 16 16" aria-hidden="true" className="size-3.5 -rotate-90">
-        <circle cx="8" cy="8" r="6" fill="none" stroke="#F3F3F3" strokeWidth="3" />
-        <circle
-          cx="8"
-          cy="8"
-          r="6"
-          fill="none"
-          stroke="#3B82F6"
-          strokeWidth="3"
-          strokeDasharray={`${arc} ${CIRCUMFERENCE - arc}`}
+    <span className="ml-3 inline-flex items-center gap-2.5 border-l border-[var(--border-medium)] pl-4">
+      <span
+        role="img"
+        aria-label={`${formatHoursTenths(usedSeconds)} of ${cap} hours used`}
+        className="inline-flex h-[3px] w-14 shrink-0 overflow-hidden rounded-[2px] bg-[var(--ink-100)]"
+      >
+        <span
+          className="h-full bg-[var(--viz-you-mid)] transition-[width] duration-300 ease-[var(--ease-chart)]"
+          style={{ width: `${fraction * 100}%` }}
         />
-      </svg>
-      <span className="mono tabular text-[11px]" style={{ color: "#525252" }}>
-        {formatHoursMinutes(priced ? selectedSeconds! : remainingSeconds)}
       </span>
-      <span className="whitespace-nowrap text-[11px] text-[#888888]">
-        {priced ? (
-          <>
-            for this video ·{" "}
-            <span className="mono tabular">
-              {formatHoursMinutes(Math.max(0, remainingSeconds - selectedSeconds!))}
-            </span>{" "}
-            left after
-          </>
-        ) : (
-          <>
-            of {formatHoursMinutes(capSeconds)} left · resets {resetsOn}
-          </>
-        )}
+      <span className="mono tabular whitespace-nowrap text-[11px] text-[var(--ink-500)]">
+        {priced
+          ? `Spends ${formatHoursTenths(selectedSeconds)} h · ${formatHoursTenths(
+              Math.max(0, remainingSeconds - selectedSeconds)
+            )} of ${cap} h left after`
+          : `${formatHoursTenths(remainingSeconds)} of ${cap} h left · ${suffix}`}
       </span>
     </span>
-  );
-}
-
-/**
- * Who played this match — a team workspace's one extra question on step 1,
- * asked only when no preset already answered it.
- *
- * Every row carries its own id and the id travels with the CLICK, never the
- * text: `matches.player1_id` is half the SELECT policy on `matches`, so a
- * wrong id is not a mislabelled row — it hands read access to the wrong
- * person and silently attributes every statistic to them. "Myself" writes the
- * uploader's login id, which is exactly what the wizard wrote before this
- * control existed; a roster row writes that profile's `program_players.id`,
- * the same id the PinnedMatchContent picker hands the single-match rail.
- */
-function WhoPlayedPicker({
-  roster,
-  uploaderName,
-  subject,
-  onChoose,
-}: {
-  roster: RosterOption[] | null;
-  uploaderName: string | null;
-  subject: MatchSubject | null;
-  onChoose: (subject: MatchSubject) => void;
-}) {
-  const rowCls = (chosen: boolean) =>
-    `flex w-full cursor-pointer items-center gap-2.5 rounded-[8px] border px-3.5 py-2.5 text-left transition-colors duration-150 ${
-      chosen
-        ? "border-[#3B82F6] bg-[rgba(59,130,246,0.06)]"
-        : "border-[#EAECF0] hover:bg-[#FAFAFA]"
-    }`;
-
-  return (
-    <div className="flex flex-col gap-3">
-      <div>
-        <h2 className="text-[13px] font-medium text-[#0D0D0D]">
-          Who played this match?
-        </h2>
-        <p className="mt-0.5 text-[12px] leading-[1.5] text-[#525252]">
-          Stats and season records follow the player, not whoever uploads.
-        </p>
-      </div>
-
-      <div
-        role="radiogroup"
-        aria-label="Who played this match"
-        className="flex max-h-[320px] flex-col gap-1.5 overflow-y-auto"
-      >
-        <button
-          type="button"
-          role="radio"
-          aria-checked={subject?.kind === "self"}
-          onClick={() => onChoose({ kind: "self" })}
-          className={rowCls(subject?.kind === "self")}
-        >
-          <span className="flex-1 text-[13px] text-[#0D0D0D]">
-            {uploaderName ? `Myself — ${uploaderName}` : "Myself"}
-          </span>
-          {subject?.kind === "self" && (
-            <Check className="size-3.5 shrink-0 text-[#3B82F6]" strokeWidth={2} />
-          )}
-        </button>
-
-        {roster === null ? (
-          <span className="px-3.5 py-2 text-[12px] text-[#888888]">
-            Loading the roster…
-          </span>
-        ) : roster.length === 0 ? (
-          <span className="px-3.5 py-2 text-[12px] text-[#888888]">
-            Nobody else is on this program&rsquo;s roster yet.
-          </span>
-        ) : (
-          roster.map((player) => {
-            const chosen =
-              subject?.kind === "roster" && subject.playerId === player.playerId;
-            return (
-              <button
-                key={player.playerId}
-                type="button"
-                role="radio"
-                aria-checked={chosen}
-                onClick={() =>
-                  onChoose({
-                    kind: "roster",
-                    playerId: player.playerId,
-                    name: player.name,
-                  })
-                }
-                className={rowCls(chosen)}
-              >
-                <span className="flex-1 text-[13px] text-[#0D0D0D]">
-                  {player.name}
-                </span>
-                {player.ladderPosition !== null && (
-                  <span className="text-[10px] uppercase tracking-[1px] text-[#888888]">
-                    S{player.ladderPosition}
-                  </span>
-                )}
-                {chosen && (
-                  <Check
-                    className="size-3.5 shrink-0 text-[#3B82F6]"
-                    strokeWidth={2}
-                  />
-                )}
-              </button>
-            );
-          })
-        )}
-      </div>
-    </div>
   );
 }
 
@@ -742,10 +617,29 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
 
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // Every keystroke on the later steps is already written to localStorage, and
-  // the flow resumes from it. Saying so in the header is what makes leaving the
-  // page feel survivable. Not on step 1, where there is nothing to lose yet.
-  usePublishHeaderStatus(step === "provider" ? null : "Draft saved");
+  // Saving a draft is a fact, not an event: the wizard writes every answer to
+  // localStorage as it is given and the flow resumes from it, so the header's
+  // status slot says so throughout. Saying it is what makes leaving the page
+  // feel survivable — "Save draft" in the footer only decides where you go.
+  usePublishHeaderStatus("Draft saved");
+
+  /**
+   * Leave with the draft intact.
+   *
+   * The wizard was already saving; this persists whatever the current step has
+   * not yet written (the details form saves on Continue), pins the chosen
+   * source so the next visit resumes past step 1, and sets the flag that stops
+   * `DashboardShell` clearing storage on the way out. Then it goes where
+   * Cancel would.
+   */
+  const handleSaveDraft = useCallback(() => {
+    saveFormDataToStorage(formData);
+    if (selectedProvider) {
+      localStorage.setItem(STORAGE_KEYS.SELECTED_PROVIDER, selectedProvider);
+    }
+    localStorage.setItem(STORAGE_KEYS.DRAFT_KEPT, "1");
+    router.push(exitHref);
+  }, [formData, selectedProvider, router, exitHref]);
 
   const onDragOver = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
@@ -855,13 +749,11 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
   // Work in progress, per step. Separate from `missing` because these are
   // states to wait out rather than fields to fill, and they read differently.
   const busyLabel: Record<Step, string | null> = {
-    provider: !selectedProvider
-      ? "Make a selection"
-      : // The one team-workspace question. Continue is refused in the hook
-        // too; this is the sentence that says why.
-        whoPlayed.required && !whoPlayed.subject
-      ? "Choose who played this match"
-      : null,
+    // Step 1 says nothing in the footer: Continue sleeps at 40% until a source
+    // and — in a team workspace — a player are chosen, and the fields themselves
+    // are the sentence. The hook refuses Continue on the same two conditions.
+    provider:
+      !selectedProvider || (whoPlayed.required && !whoPlayed.subject) ? "" : null,
     video: isProbing
       ? "Checking your video…"
       : !uploadedFile
@@ -888,31 +780,6 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     step === "provider" &&
     !formData.playerName.trim();
   const continueDisabled = stepBusy !== null || gatedByMissing || awaitingPlayer;
-
-  // Platform detection for the right modifier glyph in the footer hint. Gated
-  // behind null until mounted so SSR doesn't render a Mac chord on a Linux box.
-  const [isMac, setIsMac] = useState<boolean | null>(null);
-  useEffect(() => {
-    const platform =
-      // @ts-expect-error - userAgentData is widely supported but not yet in lib.dom
-      navigator.userAgentData?.platform ?? navigator.platform ?? "";
-    setIsMac(/Mac|iPhone|iPad|iPod/i.test(platform));
-  }, []);
-
-  // Tracks whether focus currently lives inside a form control. Drives the
-  // footer hint swap — when the user is mid-typing, plain Enter is suppressed
-  // so we surface ⌘/Ctrl↵ instead.
-  const [focusInForm, setFocusInForm] = useState(false);
-  useEffect(() => {
-    const onFocusIn = (e: FocusEvent) => setFocusInForm(isFormControl(e.target));
-    const onFocusOut = () => setFocusInForm(false);
-    document.addEventListener("focusin", onFocusIn);
-    document.addEventListener("focusout", onFocusOut);
-    return () => {
-      document.removeEventListener("focusin", onFocusIn);
-      document.removeEventListener("focusout", onFocusOut);
-    };
-  }, []);
 
   // Keyboard:
   //   • Plain Enter advances the wizard when focus is outside form controls
@@ -1020,24 +887,33 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
           measuring the whole flow. */}
       <StepIndicator currentStep={currentStepIndex} totalSteps={progressTotalSteps} />
 
-      <div className={`${CONTENT_CLS} pb-10 pt-[26px]`}>
+      <div className={`${CONTENT_CLS} pb-10 pt-16`}>
         {/* Confirm opens on the match's own hero — a heading above it would
             say less than the name already does. */}
         {step !== "confirm" && (
-          <>
-            <h1 className="text-[24px] font-light leading-[30px] tracking-[-0.5px] text-[#1D1D1F]">
+          <div className="flex flex-col gap-3">
+            <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
+              Step {currentStepIndex + 1} of {progressTotalSteps}
+            </span>
+            <h1
+              className="max-w-[560px] text-[30px] font-light leading-[1.15] tracking-[-0.3px] text-[var(--ink-900)]"
+              style={{ textWrap: "pretty" }}
+            >
               {title}
             </h1>
-            <p className="mt-1.5 max-w-[460px] text-[12px] leading-[1.5] text-[#525252]">
+            <p
+              className="max-w-[480px] text-[13px] leading-[1.55] text-[var(--ink-600)]"
+              style={{ textWrap: "pretty" }}
+            >
               {description}
             </p>
-          </>
+          </div>
         )}
 
         <div
           ref={contentRef}
           key={step}
-          className={`animate-fadeIn ${step === "confirm" ? "" : "mt-7"}`}
+          className={`animate-fadeIn ${step === "confirm" ? "" : "mt-[52px]"}`}
         >
           {step === "provider" &&
             (preset ? (
@@ -1052,28 +928,17 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
                   setPickedPlayerUserId(pickedUserId);
                 }}
               />
-            ) : whoPlayed.required ? (
-              // A team workspace with no preset gets the personal wizard's
-              // source question PLUS the one thing the workspace cannot infer:
-              // whose match this is. The preset flows never reach this branch —
-              // a line already knows, and the single rail asks via
-              // PinnedMatchContent above.
-              <div className="flex flex-col gap-9">
-                <ProviderContent
-                  selectedProvider={selectedProvider}
-                  onProviderSelect={handleProviderSelect}
-                />
-                <WhoPlayedPicker
-                  roster={whoPlayed.roster}
-                  uploaderName={whoPlayed.uploaderName}
-                  subject={whoPlayed.subject}
-                  onChoose={whoPlayed.choose}
-                />
-              </div>
             ) : (
-              <ProviderContent
+              // Workspace · For · Source. In a personal workspace For is the
+              // uploader; in a team workspace it is the one thing the
+              // workspace cannot infer — whose match this is — and the hook
+              // refuses Continue until it is answered. The preset flows never
+              // reach this branch: a line already knows, and the single rail
+              // asks via PinnedMatchContent above.
+              <SourceStepContent
                 selectedProvider={selectedProvider}
                 onProviderSelect={handleProviderSelect}
+                whoPlayed={whoPlayed}
               />
             ))}
 
@@ -1153,109 +1018,41 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
       </div>
 
       {/* Footer sticks to the bottom of the viewport so the primary action is
-          reachable without scrolling to the end of a long form.
-
-          White on a hairline, matching the app header rather than the tinted
-          bar this had while it was a dialog footer. In a dialog the tint
-          separated the action row from the body; on a page it was a full-bleed
-          grey band under a centred column, weighted to nothing in the
-          composition. The header is the only other persistent chrome in the
-          dashboard and it is white, so this follows it. The border is
-          unconditional where the header's is scroll-triggered: the header at
-          scroll-top is genuinely part of the page, while an action bar is
-          always chrome and should always be delineated. */}
-      <div className="sticky bottom-0 mt-auto border-t border-[#F3F3F3] bg-white">
-        <div className={`${CONTENT_CLS} flex h-16 items-center gap-3.5`}>
+          reachable without scrolling to the end of a long form. 64px, white on
+          a hairline, matching the app header: Cancel · divider · meter, then
+          Save draft and Continue. It is the same on every step — only the
+          meter comes and goes, and it sits left of the spacer so nothing else
+          shifts when it does. */}
+      <div className="sticky bottom-0 mt-auto border-t border-[var(--border-hairline)] bg-white">
+        <div className={`${CONTENT_CLS} flex h-16 items-center gap-4`}>
           {currentStepIndex > 0 ? (
-            <Button onClick={handleBack} className={ghostBtnCls}>
+            <button
+              type="button"
+              onClick={handleBack}
+              className="cursor-pointer text-[12px] text-[var(--ink-600)] transition-colors duration-150 hover:text-[var(--ink-900)]"
+            >
               Back
-            </Button>
+            </button>
           ) : (
-            /* The frames leave this slot empty on step 1. Kept, because Esc is
-               deliberately inert there and the breadcrumb is not obviously an
-               exit — without it the flow has no way out that looks like one. */
-            <Button asChild className={ghostBtnCls}>
-              <Link href={exitHref}>Cancel</Link>
-            </Button>
+            /* Esc is deliberately inert on step 1 and the breadcrumb is not
+               obviously an exit — without this the flow has no way out that
+               looks like one. */
+            <Link
+              href={exitHref}
+              className="text-[12px] text-[var(--ink-600)] transition-colors duration-150 hover:text-[var(--ink-900)]"
+            >
+              Cancel
+            </Link>
           )}
 
-          {stepBusy !== null ? (
-            <span className="text-[11px] text-[#525252]">{stepBusy}</span>
-          ) : gatedByMissing ? (
-            step === "confirm" ? (
-              <span className="text-[11px] text-[#525252]">
-                Create waits on{" "}
-                {missing.onlyVideoAnswers
-                  ? "the video answers"
-                  : missing.labels.join(" · ")}{" "}
-                —{" "}
-                <button
-                  type="button"
-                  onClick={handleBack}
-                  className="text-[#3B82F6] underline-offset-2 transition-colors duration-150 hover:text-[#2563EB] hover:underline"
-                >
-                  answer them on Match details
-                </button>
-              </span>
-            ) : (
-              <span className="whitespace-nowrap text-[11px] text-[#525252]">
-                <span className="font-medium tabular-nums text-[#0D0D0D]">
-                  {missing.labels.length}
-                </span>{" "}
-                to go — {missing.labels.slice(0, 3).join(" · ")}
-                {/* Naming all six wrapped this bar onto two lines and squeezed
-                    the meter beside it. Three is enough to start on; the count
-                    carries the rest, and the fields themselves are marked. */}
-                {missing.labels.length > 3
-                  ? ` +${missing.labels.length - 3} more`
-                  : ""}
-              </span>
-            )
-          ) : step === "confirm" && workspaces.available.length > 1 ? (
-            /* Only when there is a choice to get wrong. `program_id` on the row
-               follows this exact workspace, and the jobs route bills whichever
-               one it names. */
-            <span className="text-[11px] text-[#525252]">
-              Creates in{" "}
-              <span className="font-medium text-[#0D0D0D]">
-                {workspaces.active.name}
-              </span>
-            </span>
-          ) : (
-            <div className="inline-flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[2.5px] text-[#AAAAAA]">
-              <span>Press</span>
-              {/* When focus is mid-form, plain Enter is suppressed so we surface
-                  the chord users can still rely on. Platform-detected per
-                  SKILL.md › Keyboard Shortcut Chip conventions: ⌘ on Mac
-                  concatenates without `+`, Ctrl+ elsewhere. Render is gated
-                  until isMac resolves to avoid SSR mismatches. */}
-              <kbd
-                aria-hidden="true"
-                className="inline-block rounded bg-[#F0F0F0] px-1 py-0.5 text-[10px] font-medium leading-none text-[#AAAAAA]"
-              >
-                {focusInForm && isMac !== null ? (isMac ? "⌘↵" : "Ctrl+↵") : "↵"}
-              </kbd>
-              <span>
-                {focusInForm
-                  ? "to next field"
-                  : step === "confirm"
-                  ? "to create"
-                  : "to continue"}
-              </span>
-            </div>
-          )}
-
-          <div className="flex-1" />
-
-          {/* Not on the source step: there is no video to price yet, and an
-              allowance shown before a file is picked reads as a warning. */}
-          {isProcessingProvider &&
-            step !== "provider" &&
-            remainingQuotaSeconds !== undefined && (
-            <QuotaMeter
+          {/* Only where hours are spent, and only once the allowance is known:
+              an export costs nothing, and a bar that has to explain itself is
+              a bar that shouldn't be there. */}
+          {isProcessingProvider && remainingQuotaSeconds !== undefined && (
+            <FooterMeter
               remainingSeconds={remainingQuotaSeconds}
               capSeconds={quotaCapSeconds}
-              resetsOn={quotaResetsOn}
+              suffix={workspaces.active.kind === "team" ? "team hours" : "resets on the 1st"}
               /* Only once there is a video to price. A resumed draft keeps its
                  trim window in localStorage but cannot keep the File, so the
                  handles alone would have the meter costing a video that is no
@@ -1266,14 +1063,74 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
             />
           )}
 
-          <Button
+          {/* What the later steps are still waiting on — a list, not the first
+              offender. Step 1's fields carry their own state, so it says
+              nothing there. */}
+          {step !== "provider" &&
+            (stepBusy ? (
+              <span className="text-[11px] text-[var(--ink-500)]">{stepBusy}</span>
+            ) : gatedByMissing ? (
+              step === "confirm" ? (
+                <span className="text-[11px] text-[var(--ink-500)]">
+                  Create waits on{" "}
+                  {missing.onlyVideoAnswers
+                    ? "the video answers"
+                    : missing.labels.join(" · ")}{" "}
+                  —{" "}
+                  <button
+                    type="button"
+                    onClick={handleBack}
+                    className="cursor-pointer text-[var(--blue-text)] underline-offset-2 transition-colors duration-150 hover:text-[var(--ink-900)] hover:underline"
+                  >
+                    answer them on Match details
+                  </button>
+                </span>
+              ) : (
+                <span className="whitespace-nowrap text-[11px] text-[var(--ink-500)]">
+                  <span className="font-medium tabular-nums text-[var(--ink-900)]">
+                    {missing.labels.length}
+                  </span>{" "}
+                  to go — {missing.labels.slice(0, 3).join(" · ")}
+                  {/* Naming all six wrapped this bar onto two lines and squeezed
+                      the meter beside it. Three is enough to start on; the count
+                      carries the rest, and the fields themselves are marked. */}
+                  {missing.labels.length > 3
+                    ? ` +${missing.labels.length - 3} more`
+                    : ""}
+                </span>
+              )
+            ) : step === "confirm" && workspaces.available.length > 1 ? (
+              /* Only when there is a choice to get wrong. `program_id` on the
+                 row follows this exact workspace, and the jobs route bills
+                 whichever one it names. */
+              <span className="text-[11px] text-[var(--ink-500)]">
+                Creates in{" "}
+                <span className="font-medium text-[var(--ink-900)]">
+                  {workspaces.active.name}
+                </span>
+              </span>
+            ) : null)}
+
+          <div className="flex-1" />
+
+          <button
+            type="button"
+            onClick={handleSaveDraft}
+            className="cursor-pointer text-[11px] text-[var(--ink-500)] transition-colors duration-150 hover:text-[var(--ink-900)]"
+          >
+            Save draft
+          </button>
+
+          {/* Always present; sleeps at 40% until the step's requirement is met. */}
+          <button
+            type="button"
             onClick={continueHandler}
             disabled={continueDisabled}
             data-wizard-continue
-            className={primaryBtnCls}
+            className={`${advButton("primary", "sm")} min-w-[120px] disabled:opacity-40`}
           >
             {isCreating ? "Creating…" : CONTINUE_LABEL[step]}
-          </Button>
+          </button>
         </div>
       </div>
     </div>

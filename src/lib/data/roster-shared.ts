@@ -22,6 +22,9 @@ export interface RosterFullRow {
   email: string | null;
   role: string;
   lineup_spot: number | null;
+  class_year?: string | null;
+  /** "coach" until the profile is claimed, then "self". */
+  managed_by?: string | null;
 }
 
 export interface RosterPlayerOption {
@@ -35,6 +38,16 @@ export interface RosterPlayerOption {
   name: string;
   /** Their rank, or null when the program has never set one. */
   ladderPosition: number | null;
+  /** "Junior", or null where nobody recorded one. */
+  classYear: string | null;
+  /** The profile's address, when one is on file. */
+  email: string | null;
+  /**
+   * Whether a coach still runs this profile. A claimed profile is `self`; an
+   * unclaimed one is `coach`, which the upload wizard's roster picker shows as
+   * the grey Coach-managed pill.
+   */
+  managedBy: 'coach' | 'self';
 }
 
 /** Players only, named, in ladder order (unranked last, then by name). */
@@ -55,6 +68,9 @@ export function rosterPlayerOptions(
         (row.email ?? '').split('@')[0] ||
         'Unnamed player',
       ladderPosition: row.lineup_spot,
+      classYear: row.class_year?.trim() || null,
+      email: row.email?.trim() || null,
+      managedBy: (row.managed_by === 'self' ? 'self' : 'coach') as 'coach' | 'self',
     }))
     .sort((a, b) => {
       if (a.ladderPosition === b.ladderPosition) return a.name.localeCompare(b.name);
