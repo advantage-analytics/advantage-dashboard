@@ -15,6 +15,12 @@
  * it spans: these clips are hours long, and at full extent one pixel is
  * several seconds — not a resolution you can place a cut against a serve with.
  *
+ * The other way to place a cut is the one editors actually use: play or scrub
+ * to the first serve, then set the start THERE — "set here" beside each
+ * readout, or I and O on the keyboard. Play previews the kept window: it
+ * starts from the start cut when the playhead is outside it and stops at the
+ * end cut, so what you hear is what will be analysed.
+ *
  * ── Attribution ─────────────────────────────────────────────────────────────
  * `initialTopPlayerIsPlayer1` is camera-relative and about the OPENING of the
  * video only — ends change every odd game. It is what maps the vendor's
@@ -482,12 +488,20 @@ function TrimStepContentImpl({
     [seekTo]
   );
 
+  // Play previews the kept window. Outside it, playback starts from the
+  // start cut; at the end cut it stops — see handleTimeUpdate.
   const togglePlay = useCallback(() => {
     const el = videoRef.current;
     if (!el) return;
-    if (el.paused) void el.play().catch(() => undefined);
-    else el.pause();
-  }, []);
+    if (el.paused) {
+      if (el.currentTime < start || el.currentTime >= end - frameStep) {
+        el.currentTime = start;
+      }
+      void el.play().catch(() => undefined);
+    } else {
+      el.pause();
+    }
+  }, [start, end, frameStep]);
 
   const toggleMute = useCallback(() => {
     const el = videoRef.current;
@@ -533,11 +547,109 @@ function TrimStepContentImpl({
 
   const handleTimeUpdate = useCallback(
     (e: React.SyntheticEvent<HTMLVideoElement>) => {
-      playheadRef.current = e.currentTarget.currentTime;
+      const el = e.currentTarget;
+      // The end cut is where the preview ends. Paused there rather than
+      // clamped silently, so the playhead is seen to stop on the cut.
+      if (!el.paused && end > 0 && el.currentTime >= end) {
+        el.pause();
+        el.currentTime = end;
+      }
+      playheadRef.current = el.currentTime;
       applyPlayhead();
     },
-    [applyPlayhead]
+    [applyPlayhead, end]
   );
+
+  /** Set a cut at the playhead — the editor's way to place one. */
+  const setHandleHere = useCallback(
+    (handle: Handle) => {
+      const el = videoRef.current;
+      moveHandle(handle, el ? el.currentTime : playheadRef.current);
+    },
+    [moveHandle]
+  );
+
+  /**
+   * Scrub by dragging along the rail, not only by clicking it. Captured on
+   * the rail so the drag survives leaving it; the handles stop propagation
+   * before this sees a press on them.
+   */
+  const startScrub = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      seekTo(positionFromEvent(e.clientX));
+      const rail = e.currentTarget;
+      rail.setPointerCapture(e.pointerId);
+      const onMove = (ev: PointerEvent) => seekTo(positionFromEvent(ev.clientX));
+      const onUp = () => {
+        rail.removeEventListener("pointermove", onMove);
+        rail.removeEventListener("pointerup", onUp);
+        rail.removeEventListener("pointercancel", onUp);
+      };
+      rail.addEventListener("pointermove", onMove);
+      rail.addEventListener("pointerup", onUp);
+      rail.addEventListener("pointercancel", onUp);
+    },
+    [seekTo, positionFromEvent]
+  );
+
+  // Keyboard, for the step as a whole: Space plays, the arrows step a frame
+  // (a second with Shift), J and L jump ten seconds, I and O set the cuts at
+  // the playhead, Home and End jump to them. Left alone when focus is in a
+  // control that owns the key — the handles nudge themselves on the arrows,
+  // a button takes Space, and the wizard's Enter is not ours.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target?.isContentEditable) return;
+      if (target?.getAttribute("role") === "slider") return;
+      if (document.querySelector('[aria-expanded="true"]')) return;
+      const isButton = tag === "BUTTON";
+
+      switch (e.key) {
+        case " ":
+          if (isButton) return;
+          e.preventDefault();
+          togglePlay();
+          return;
+        case "ArrowLeft":
+          e.preventDefault();
+          seekBy(e.shiftKey ? -1 : -frameStep);
+          return;
+        case "ArrowRight":
+          e.preventDefault();
+          seekBy(e.shiftKey ? 1 : frameStep);
+          return;
+        case "j":
+        case "J":
+          seekBy(-10);
+          return;
+        case "l":
+        case "L":
+          seekBy(10);
+          return;
+        case "i":
+        case "I":
+          setHandleHere("start");
+          return;
+        case "o":
+        case "O":
+          setHandleHere("end");
+          return;
+        case "Home":
+          e.preventDefault();
+          seekTo(start);
+          return;
+        case "End":
+          e.preventDefault();
+          seekTo(end);
+          return;
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [togglePlay, seekBy, seekTo, setHandleHere, frameStep, start, end]);
 
   // ---- Derived geometry ----
 
@@ -721,10 +833,10 @@ function TrimStepContentImpl({
             </div>
           ) : null}
 
-          {/* Rail. Click seeks; handles drag. */}
+          {/* Rail. Press or drag to scrub; the handles drag the cuts. */}
           <div
             ref={railRef}
-            onPointerDown={(e) => seekTo(positionFromEvent(e.clientX))}
+            onPointerDown={startScrub}
             className="relative cursor-pointer touch-none select-none rounded-[var(--radius-element)] bg-[var(--ink-900)]"
             style={{ height: RAIL_HEIGHT_PX }}
           >
@@ -829,25 +941,52 @@ function TrimStepContentImpl({
           </div>
         </div>
 
-        {/* START / END under the strip's own edges. */}
+        {/* START / END under the strip's own edges. The timecode jumps the
+            player to that cut; "set here" moves the cut to the playhead. */}
         <div className="flex items-baseline justify-between px-0.5 pt-0.5">
-          <span className="inline-flex items-baseline gap-1.5">
-            <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
-              Start
-            </span>
-            <span className="mono tabular text-[12px] font-medium text-[var(--ink-900)]">
-              {formatTimecode(start)}
-            </span>
-          </span>
-          <span className="inline-flex items-baseline gap-1.5">
-            <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
-              End
-            </span>
-            <span className="mono tabular text-[12px] font-medium text-[var(--ink-900)]">
-              {formatTimecode(end)}
-            </span>
-          </span>
+          {HANDLES.map((handle) => {
+            const value = handle === "start" ? start : end;
+            return (
+              <span key={handle} className="inline-flex items-baseline gap-1.5">
+                <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
+                  {handle === "start" ? "Start" : "End"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => seekTo(value)}
+                  title={handle === "start" ? "Jump to the start cut" : "Jump to the end cut"}
+                  className={`mono tabular cursor-pointer rounded-[3px] text-[12px] font-medium text-[var(--ink-900)] ${focusRingCls}`}
+                >
+                  {formatTimecode(value)}
+                </button>
+                <span className="text-[var(--ink-300)]" aria-hidden="true">
+                  ·
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setHandleHere(handle)}
+                  title={
+                    handle === "start"
+                      ? "Set the start at the playhead (I)"
+                      : "Set the end at the playhead (O)"
+                  }
+                  className={`cursor-pointer rounded-[3px] text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] ${focusRingCls}`}
+                >
+                  set here
+                </button>
+              </span>
+            );
+          })}
         </div>
+
+        {/* The keys, named once where the caret and the cuts actually are. */}
+        <span className="text-micro">
+          Space plays the window <span className="text-[var(--ink-300)]">·</span>{" "}
+          <span className="mono">← →</span> step a frame, <span className="mono">⇧</span> a second,{" "}
+          <span className="mono">J L</span> ten <span className="text-[var(--ink-300)]">·</span>{" "}
+          <span className="mono">I O</span> set the start and end at the playhead{" "}
+          <span className="text-[var(--ink-300)]">·</span> hold a handle to zoom
+        </span>
 
         {tooShort ? (
           <div className={noteStripCls}>
