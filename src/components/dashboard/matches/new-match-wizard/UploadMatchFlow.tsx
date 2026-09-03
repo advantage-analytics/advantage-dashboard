@@ -1169,15 +1169,15 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
 
           {/* Always present; asleep at the design system's disabled state
               (`advButton()`: opacity 0.5, no pointer) until the step's
-              requirement is met. 120px is the design's width for this
-              instance, so the label change to "Create match" does not move
-              the footer. */}
+              requirement is met. The same button as every other page-level
+              CTA — "New match", "Create dual", "Create tournament" — so `md`,
+              not the `sm` the row actions use, and no width of its own. */}
           <button
             type="button"
             onClick={continueHandler}
             disabled={continueDisabled}
             data-wizard-continue
-            className={`${advButton("primary", "sm")} min-w-[120px]`}
+            className={advButton("primary", "md")}
           >
             {isCreating ? "Creating…" : CONTINUE_LABEL[step]}
           </button>
