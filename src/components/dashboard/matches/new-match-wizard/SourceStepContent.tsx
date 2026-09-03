@@ -562,7 +562,7 @@ function SourceStepContentImpl({
                       />
                     ) : isActive ? (
                       <Check
-                        className="size-[13px] shrink-0 text-[var(--ink-900)]"
+                        className="size-[13px] shrink-0 text-[var(--blue)]"
                         strokeWidth={1.5}
                         aria-hidden="true"
                       />
@@ -818,7 +818,7 @@ function SourceStepContentImpl({
                   )}
                   {isCurrent ? (
                     <Check
-                      className="size-[13px] shrink-0 text-[var(--ink-900)]"
+                      className="size-[13px] shrink-0 text-[var(--blue)]"
                       strokeWidth={1.5}
                       aria-hidden="true"
                     />

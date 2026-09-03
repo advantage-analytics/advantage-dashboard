@@ -1,6 +1,7 @@
 "use client";
 
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
+import { DraftRow, type DraftRowData } from "./draft-row";
 import { MatchCardGallery } from "./match-card-gallery";
 import { MatchCardList, LIST_GRID_COLS, LIST_ROW_FRAME } from "./match-card-list";
 import { ArrowUp, ArrowDown } from "lucide-react";
@@ -10,12 +11,16 @@ export type SortDir = "asc" | "desc";
 
 interface MatchesGridProps {
   matches: DisplayMatch[];
+  /** Half-finished uploads, listed at the top with Resume (design 11c). */
+  drafts?: DraftRowData[];
   sortField: SortField;
   sortDir: SortDir;
   onSort: (field: SortField) => void;
   newMatchId?: string | null;
   /** Match ids never opened on this device — draws the "New" `StatePill`. */
   unseenIds?: Set<string>;
+  /** Which wizard a draft resumes in. */
+  scope?: "personal" | "team";
 }
 
 /**
@@ -41,11 +46,13 @@ function SortIcon({ field, sortField, sortDir }: { field?: SortField; sortField:
 
 export function MatchesGrid({
   matches,
+  drafts = [],
   sortField,
   sortDir,
   onSort,
   newMatchId,
   unseenIds,
+  scope = "personal",
 }: MatchesGridProps): React.JSX.Element {
   /* Which layout shows is a width question, so Tailwind answers it rather than
      React. Held in state it could only be read after mount, so the server — which
@@ -101,6 +108,9 @@ export function MatchesGrid({
               animation frame to become visible; PageTransition already carries
               the route-level entrance. */}
           <div className="pt-1">
+            {drafts.map((draft) => (
+              <DraftRow key={draft.id} draft={draft} scope={scope} />
+            ))}
             {matches.map((match) => (
               <MatchCardList
                 key={match.id}

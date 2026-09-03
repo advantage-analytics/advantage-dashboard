@@ -1,26 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
-import { Check, CornerDownRight, Layers, Search } from "lucide-react";
+import { Check, Layers, Search } from "lucide-react";
 import { normalizedPersonName } from "@/lib/data/person-name";
-import { formatScoreText, scoreSetsFrom } from "@/lib/ui/score-format";
 import type { EventPreset } from "./types";
 
 /**
- * Step 1, in a team workspace.
+ * Step 1, for a single match in a team workspace.
  *
- * The personal wizard asks "where do the numbers come from?" here. A team
- * workspace already knows — so this slot answers a different question depending
- * on what kind of match it is:
- *
- *   line   — 22f's pinned destination. The lineup minted this court and the
- *            result named the players, so there is nothing to ask at all.
- *   single — 25h's one team question. A challenge, practice set or outside
- *            event has no lineup, so the only thing the workspace cannot infer
- *            is WHOSE match it is.
- *
- * Either way steps 2–4 are the personal wizard's own, unchanged.
+ * A challenge, practice set or outside event has no lineup, so the only
+ * thing the workspace cannot infer is WHOSE match it is. (A line preset never
+ * shows step 1 at all: it arrives answered and opens on the file step, with
+ * the line pinned in a bar — see `PinnedLineBar`.)
  */
 export function PinnedMatchContent({
   preset,
@@ -32,16 +23,13 @@ export function PinnedMatchContent({
   playerName: string;
   onPickPlayer: (name: string, userId: string | null) => void;
 }) {
-  if (preset.kind === "single") {
-    return (
-      <SinglePlayerPicker
-        roster={preset.roster ?? []}
-        playerName={playerName}
-        onPick={onPickPlayer}
-      />
-    );
-  }
-  return <PinnedLine preset={preset} />;
+  return (
+    <SinglePlayerPicker
+      roster={preset.roster ?? []}
+      playerName={playerName}
+      onPick={onPickPlayer}
+    />
+  );
 }
 
 /** 25h — whose match is this? */
@@ -203,91 +191,5 @@ function Known({ done, children }: { done?: boolean; children: React.ReactNode }
       )}
       {children}
     </span>
-  );
-}
-
-/** 22f — the destination, already known. */
-function PinnedLine({ preset }: { preset: EventPreset }) {
-  const known: { label: string; value: string }[] = [
-    { label: "Match", value: `${preset.playerName} vs ${preset.opponentName}` },
-    ...(preset.eventName ? [{ label: "Event", value: preset.eventName }] : []),
-    ...(preset.round ? [{ label: "Line", value: preset.round }] : []),
-    { label: "Date", value: preset.date },
-    ...(preset.surface ? [{ label: "Surface", value: preset.surface }] : []),
-    {
-      label: "Format",
-      value: `Best of ${preset.bestOf}, ${
-        preset.adScoring === null ? "scoring unset" : preset.adScoring ? "ad" : "no-ad"
-      }`,
-    },
-    ...(preset.score
-      ? [
-          {
-            label: "Score",
-            // The one spelling, from `@/lib/ui/score-format` — this line used
-            // to hand-roll a sixth ("6–4 6–2", en dash, space-joined).
-            value: formatScoreText(scoreSetsFrom(preset.score)),
-          },
-        ]
-      : []),
-  ];
-
-  return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-2.5 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3.5 py-2.5">
-        <CornerDownRight
-          strokeWidth={1.5}
-          className="size-[13px] shrink-0 text-[var(--ink-600)]"
-        />
-        <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink-900)]">
-          {preset.round ? `${preset.round} · ` : ""}
-          {preset.playerName} vs {preset.opponentName}
-          {preset.eventName ? ` · ${preset.eventName}` : ""}
-        </span>
-        <Link
-          href={preset.eventHref}
-          className="shrink-0 text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-        >
-          Change
-        </Link>
-      </div>
-
-      <div className="flex flex-col gap-3">
-        <span className="eyebrow">What the event already knows</span>
-        <div className="grid grid-cols-2 gap-x-8 gap-y-2.5">
-          {known.map((fact) => (
-            <div key={fact.label} className="flex items-baseline gap-2">
-              <Check
-                strokeWidth={2}
-                className="size-3 shrink-0 translate-y-0.5 text-[var(--ink-600)]"
-              />
-              <span
-                className="text-micro w-[62px] shrink-0"
-                style={{ color: "var(--ink-500)" }}
-              >
-                {fact.label}
-              </span>
-              <span className="min-w-0 truncate text-[12px] text-[var(--ink-900)]">
-                {fact.value}
-              </span>
-            </div>
-          ))}
-        </div>
-        <p
-          className="text-[12px] leading-[1.55]"
-          style={{ color: "var(--ink-700)" }}
-        >
-          None of it is re-asked here. If something is wrong, correct it on the
-          event — a value typed twice is a value that can disagree with itself.
-        </p>
-      </div>
-
-      {preset.supportsVideo ? null : (
-        <p className="text-[12px] leading-[1.55]" style={{ color: "var(--danger)" }}>
-          This is a doubles line, and video analysis is singles only. Import a
-          SwingVision export from the event instead.
-        </p>
-      )}
-    </div>
   );
 }

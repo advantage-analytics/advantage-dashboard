@@ -22,11 +22,10 @@ export type { FileStepContentProps } from "./FileStepContent";
 export { TrimStepContent } from "./TrimStepContent";
 export type { TrimStepContentProps } from "./TrimStepContent";
 
-export { DetailsContent } from "./DetailsContent";
-export type { DetailsContentProps } from "./DetailsContent";
+export { DetailsStepContent } from "./DetailsStepContent";
+export type { DetailsStepContentProps } from "./DetailsStepContent";
 
-export { ConfirmContent } from "./ConfirmContent";
-export type { ConfirmContentProps } from "./ConfirmContent";
+export { PinnedLineBar } from "./PinnedLineBar";
 
 // Types
 export type {
@@ -34,7 +33,11 @@ export type {
   FormData,
   UploadedFile,
   WinnerLoserResult,
-  MatchData
+  MatchData,
+  EventPreset,
+  LineChoice,
+  LineOffer,
+  MatchDraft,
 } from "./types";
 
 export {

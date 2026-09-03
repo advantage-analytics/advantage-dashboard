@@ -48,12 +48,14 @@ import {
   FormData as MatchFormData,
   UploadedFile,
   ParsingState,
-  DetailField,
   VideoProbeSummary,
   DEFAULT_FORM_DATA,
   STEP_ORDER_BY_KIND,
-  type EventPreset
+  type EventPreset,
+  type LineOffer,
+  type MatchDraft,
 } from "./types";
+import { deleteMatchDraft, saveMatchDraft } from "@/lib/wizard/actions";
 import {
   determineWinner,
   buildMatchData,
@@ -235,6 +237,11 @@ export interface UseUploadMatchWizardProps {
    * the video and the two questions no lineup can know.
    */
   preset?: EventPreset | null;
+  /**
+   * A saved draft to resume. Seeds the form, the source and the step; the
+   * file has to be picked again, so a video flow lands on the file step.
+   */
+  draft?: MatchDraft | null;
 }
 
 /**
@@ -337,14 +344,27 @@ export interface UseUploadMatchWizardReturn {
   /** Leaves the file step for whatever follows it in the kind's order. */
   handleFileContinue: () => void;
   handleTrimContinue: () => void;
-  handleMatchContinue: () => void;
   handleBack: () => void;
-  /** Deep-link from Confirm back to Match with a specific detail field focused. */
-  goEditDetail: (field: DetailField) => void;
-  /** When set, DetailsContent should auto-expand details and focus this field. */
-  pendingDetailFocus: DetailField | null;
-  /** Clears pendingDetailFocus once consumed by DetailsContent. */
-  consumePendingDetailFocus: () => void;
+  /**
+   * The first step this flow shows. A line preset arrives with step 1
+   * answered, so it opens on the file step and Back there is Cancel.
+   */
+  firstStep: Step;
+
+  // The schedule offer on the details step (design 3d/7a)
+  /** The lineup slot accepted with Attach, or null. */
+  attachedLine: LineOffer | null;
+  /** Accept an offer: fills opponent, date, court, format, scoring, event. */
+  attachLine: (offer: LineOffer) => void;
+  /** Empty those fields again, touching nothing typed by hand. */
+  detachLine: () => void;
+
+  // Drafts (design 11c)
+  /** Write the draft row. Returns false when it could not be saved. */
+  saveDraft: () => Promise<boolean>;
+  draftSaving: boolean;
+  /** When the form last changed — for "Draft saved · 2 min ago". */
+  lastChangedAt: number | null;
 
   // File handling
   setIsOver: (isOver: boolean) => void;
@@ -353,7 +373,7 @@ export interface UseUploadMatchWizardReturn {
   handleRemoveFile: () => void;
 
   // Form handling
-  handleInputChange: (field: keyof MatchFormData, value: string | number | boolean | undefined) => void;
+  handleInputChange: (field: keyof MatchFormData, value: string | number | boolean | null | undefined) => void;
   /**
    * Set alongside `playerName` whenever a roster row is picked, and set to null
    * for a name typed by hand. Not part of `MatchFormData` because it is not a
@@ -389,6 +409,19 @@ export interface UseUploadMatchWizardReturn {
 // Helper to get current date in YYYY-MM-DD format.
 // Use LOCAL date components (not toISOString, which is UTC) so the default date matches
 // the user's local day — otherwise an evening upload behind UTC defaults to tomorrow.
+/**
+ * The schedule's surface ("hard", "clay", "grass", or a court option already
+ * spelled out) to the value the details step's Court field stores.
+ */
+function surfaceToCourtType(surface: string): string {
+  const s = surface.trim().toLowerCase();
+  if (s.includes("indoor")) return "Indoor Hard Court";
+  if (s.includes("clay")) return "Clay Court";
+  if (s.includes("grass")) return "Grass Court";
+  if (s.includes("hard")) return "Outdoor Hard Court";
+  return surface;
+}
+
 function getCurrentDate(): string {
   const now = new Date();
   const y = now.getFullYear();
@@ -418,6 +451,7 @@ export function useUploadMatchWizard({
   onCreated,
   onVideoUpload,
   preset,
+  draft,
 }: UseUploadMatchWizardProps): UseUploadMatchWizardReturn {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -477,9 +511,16 @@ export function useUploadMatchWizard({
    * filtering their own roster profile out of the list. */
   const [uploaderName, setUploaderName] = useState<string | null>(null);
   const [uploaderId, setUploaderId] = useState<string | null>(null);
-  // Set when Confirm asks Match to focus a specific detail field. DetailsContent
-  // reads this on mount, focuses the matching cell, and clears the request.
-  const [pendingDetailFocus, setPendingDetailFocus] = useState<DetailField | null>(null);
+  // The lineup slot the schedule offered and the person accepted (3d/7a).
+  // Its fields are filled into the form, and the values they replaced are
+  // kept so Detach can put them back without touching anything typed since.
+  const [attachedLine, setAttachedLine] = useState<LineOffer | null>(null);
+  const detachSnapshot = useRef<Partial<MatchFormData> | null>(null);
+  // The draft row this flow writes to. Minted on the first Save draft, or
+  // carried in by a resume.
+  const [draftId, setDraftId] = useState<string | null>(draft?.id ?? null);
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [lastChangedAt, setLastChangedAt] = useState<number | null>(null);
   const [parsingState, setParsingState] = useState<ParsingState>({
     isParsing: false,
     parseError: null,
@@ -586,6 +627,45 @@ export function useUploadMatchWizard({
   // at click time. Why: getUser() can take 100–300ms over the network and the
   // user has been authenticated since they opened the dashboard.
   const cachedUserIdRef = useRef<string | null>(null);
+  /** Whether a preset has seeded the step yet — see the preset branch below. */
+  const seededRef = useRef(false);
+
+  // The wizard autosaves as you answer (design 11c): every change lands in
+  // localStorage a moment later, and the header says so. A draft ROW is
+  // written only by Save draft — the footer action decides where you go, not
+  // whether the answers are kept.
+  useEffect(() => {
+    if (!open) return;
+    const handle = window.setTimeout(() => {
+      saveFormDataToStorage(formData);
+      setLastChangedAt(Date.now());
+    }, 400);
+    return () => window.clearTimeout(handle);
+  }, [open, formData]);
+
+  const saveDraft = useCallback(async (): Promise<boolean> => {
+    const id = draftId ?? crypto.randomUUID();
+    const order = STEP_ORDER_BY_KIND[progressKind];
+    setDraftSaving(true);
+    try {
+      const saved = await saveMatchDraft({
+        id,
+        step,
+        stepIndex: Math.max(0, order.indexOf(step)),
+        stepCount: order.length,
+        provider: selectedProvider,
+        formData,
+        fileName: uploadedFile?.name ?? null,
+        preset: preset ?? null,
+        attachedLine,
+      });
+      if (!saved) return false;
+      setDraftId(saved.id);
+      return true;
+    } finally {
+      setDraftSaving(false);
+    }
+  }, [draftId, progressKind, step, selectedProvider, formData, uploadedFile, preset, attachedLine]);
 
   // Load data from localStorage when modal opens
   useEffect(() => {
@@ -605,20 +685,32 @@ export function useUploadMatchWizard({
       // The line already knows whose match it is; a single match learns it when
       // somebody picks from the roster. Both land in the same piece of state.
       setPickedPlayerUserId(preset.playerUserId);
-      setSelectedProvider(
-        preset.supportsVideo ? DEFAULT_PROVIDER_ID : DEFAULT_IMPORT_PROVIDER_ID
-      );
+      const presetProvider = preset.supportsVideo ? DEFAULT_PROVIDER_ID : DEFAULT_IMPORT_PROVIDER_ID;
+      setSelectedProvider(presetProvider);
       setFormData((prev) => ({
         ...prev,
+        ...(draft?.formData ?? {}),
         eventName: preset.eventName ?? "",
+        eventKind: preset.eventKind ?? prev.eventKind,
         round: preset.round ?? "",
         playerName: preset.playerName,
         opponentName: preset.opponentName,
+        opponentSource: preset.opponentName ? ("event" as const) : undefined,
         date: preset.date,
-        courtType: preset.surface ?? prev.courtType,
+        dateSource: preset.kind === "line" ? ("event" as const) : prev.dateSource,
+        courtType: preset.surface ? surfaceToCourtType(preset.surface) : prev.courtType,
         bestOf: String(preset.bestOf),
         adScoring: preset.adScoring ?? undefined,
-        matchType: preset.supportsVideo ? "Singles" : "Doubles",
+        matchType:
+          preset.eventKind === "dual"
+            ? "Dual Match"
+            : preset.eventKind === "tournament"
+              ? "Tournament"
+              : preset.supportsVideo
+                ? "Singles"
+                : "Doubles",
+        opponentProgramKey: preset.opponentProgramKey ?? undefined,
+        opponentSchool: preset.opponentSchool ?? undefined,
         ...(preset.score
           ? {
               playerScores: preset.score.player1,
@@ -627,6 +719,37 @@ export function useUploadMatchWizard({
             }
           : {}),
       }));
+      // A line arrives with step 1 answered, so the flow opens on the file
+      // (design 7b). Only on the first seed: switching lines from the pinned
+      // bar re-runs this effect and must leave the step where it is.
+      if (!seededRef.current) {
+        seededRef.current = true;
+        if (preset.kind === "line") {
+          const kind = preset.supportsVideo ? "processing" : "import";
+          setProgressKind(kind);
+          setStep("file");
+        }
+      }
+      return;
+    }
+
+    // A draft being resumed outranks whatever localStorage has: it is the
+    // explicit thing the person clicked Resume on.
+    if (draft) {
+      const draftProvider =
+        draft.provider && isProviderSupported(draft.provider)
+          ? (draft.provider as ProviderId)
+          : DEFAULT_PROVIDER_ID;
+      setSelectedProvider(draftProvider);
+      setFormData({ ...getDefaultFormData(), ...draft.formData });
+      if (draft.attachedLine) setAttachedLine(draft.attachedLine);
+      if (draftProvider) {
+        const kind = getProviderKind(draftProvider);
+        setProgressKind(kind);
+        // The file never survives a draft, so resume lands where it is picked
+        // again — never past it, whatever step the draft recorded.
+        setStep("file");
+      }
       return;
     }
 
@@ -685,7 +808,7 @@ export function useUploadMatchWizard({
         setUploaderId(user.id);
         const { data: profile } = await supabase
           .from("users")
-          .select("first_name, last_name")
+          .select("first_name, last_name, hand, backhand")
           .eq("id", user.id)
           .single();
         if (cancelled) return;
@@ -696,8 +819,22 @@ export function useUploadMatchWizard({
         // Kept regardless of whether the prefill below applies — the
         // who-played picker's "Myself" row reads it back.
         setUploaderName(fullName || null);
-        if (!fullName) return;
-        setFormData((prev) => (prev.playerName.trim() ? prev : { ...prev, playerName: fullName }));
+        // The uploader's own hand and backhand, "from your profile". Only
+        // where the form has none yet, and only for the uploader's own match
+        // — a coach's profile says nothing about the athlete they upload for,
+        // which chooseMatchSubject handles when a roster row is picked.
+        const hand = profile?.hand === "right" || profile?.hand === "left" ? profile.hand : undefined;
+        const backhand =
+          profile?.backhand === "one-handed" || profile?.backhand === "two-handed"
+            ? profile.backhand
+            : undefined;
+        setFormData((prev) => ({
+          ...prev,
+          playerName: prev.playerName.trim() || !fullName ? prev.playerName : fullName,
+          ...(prev.playerHand === undefined && prev.playerBackhand === undefined && (hand || backhand)
+            ? { playerHand: hand, playerBackhand: backhand, playerStyleSource: "profile" as const }
+            : {}),
+        }));
       } catch {
         // Profile prefill is purely a convenience — a fetch failure shouldn't surface.
       }
@@ -705,7 +842,7 @@ export function useUploadMatchWizard({
     return () => {
       cancelled = true;
     };
-  }, [open, supabase, preset, askWhoPlayed]);
+  }, [open, supabase, preset, draft, askWhoPlayed]);
 
   /**
    * The roster behind the who-played picker.
@@ -791,6 +928,12 @@ export function useUploadMatchWizard({
         ...prev,
         playerName:
           subject.kind === "roster" ? subject.name : uploaderName ?? "",
+        // A profile's hand and backhand belong to the uploader. Picking a
+        // teammate drops them; picking "Myself" back leaves them unset until
+        // the details step reads the profile again.
+        ...(prev.playerStyleSource === "profile" && subject.kind === "roster"
+          ? { playerHand: undefined, playerBackhand: undefined, playerStyleSource: undefined }
+          : {}),
       }));
     },
     [uploaderName]
@@ -889,6 +1032,18 @@ export function useUploadMatchWizard({
         type: file.type,
       });
 
+      // The recording's own timestamp is the match's date, labelled "from the
+      // file" on the details step. Only where nothing more authoritative set
+      // it: an event line's date outranks the camera's clock.
+      const recorded = new Date(file.lastModified);
+      const fileDate =
+        Number.isFinite(file.lastModified) && file.lastModified > 0
+          ? {
+              date: `${recorded.getFullYear()}-${String(recorded.getMonth() + 1).padStart(2, "0")}-${String(recorded.getDate()).padStart(2, "0")}`,
+              time: `${String(recorded.getHours()).padStart(2, "0")}:${String(recorded.getMinutes()).padStart(2, "0")}`,
+            }
+          : null;
+
       // Default the trim to the whole video. The user narrows it on the rail;
       // starting at the full extent means a straight-through flow still submits
       // a valid window.
@@ -896,6 +1051,9 @@ export function useUploadMatchWizard({
         const end = summary?.durationSeconds ?? prev.videoEndSeconds;
         return {
           ...prev,
+          ...(fileDate && prev.dateSource !== "event"
+            ? { ...fileDate, dateSource: "file" as const }
+            : {}),
           videoStartSeconds: 0,
           videoEndSeconds: end,
           // Same rule as handleTrimChange: the untrimmed clip is the starting
@@ -939,28 +1097,68 @@ export function useUploadMatchWizard({
     }));
   }, []);
 
-  const handleMatchContinue = useCallback(() => {
-    saveFormDataToStorage(formData);
-    setStep("confirm");
-  }, [formData]);
-
-  const goEditDetail = useCallback((field: DetailField) => {
-    setPendingDetailFocus(field);
-    setStep("match");
+  /**
+   * Accept the schedule's offer (design 7a). Six fields fill from the line
+   * and the event; what they replace is kept for Detach. The line's identity
+   * rides on `attachedLine`, which handleCreateMatch reads exactly as it reads
+   * a preset — `event_entry_id` on insert, the existing match on update.
+   */
+  const attachLine = useCallback((offer: LineOffer) => {
+    setFormData((prev) => {
+      detachSnapshot.current = {
+        opponentName: prev.opponentName,
+        opponentSource: prev.opponentSource,
+        date: prev.date,
+        dateSource: prev.dateSource,
+        courtType: prev.courtType,
+        bestOf: prev.bestOf,
+        adScoring: prev.adScoring,
+        eventName: prev.eventName,
+        eventKind: prev.eventKind,
+        round: prev.round,
+        matchType: prev.matchType,
+        opponentProgramKey: prev.opponentProgramKey,
+        opponentSchool: prev.opponentSchool,
+      };
+      return {
+        ...prev,
+        opponentName: offer.opponentName || prev.opponentName,
+        opponentSource: offer.opponentName ? ("event" as const) : prev.opponentSource,
+        date: offer.date,
+        dateSource: "event" as const,
+        courtType: offer.surface ? surfaceToCourtType(offer.surface) : prev.courtType,
+        bestOf: String(offer.bestOf),
+        // Null stays undefined: the pipeline refuses a job without a real
+        // answer, and a dual that declared nothing has not answered.
+        adScoring: offer.adScoring ?? prev.adScoring,
+        eventName: offer.eventName,
+        eventKind: offer.eventKind,
+        round: offer.slot ?? prev.round,
+        matchType: offer.eventKind === "dual" ? "Dual Match" : "Tournament",
+        opponentProgramKey: offer.opponentProgramKey ?? undefined,
+        opponentSchool: offer.opponentSchool ?? undefined,
+      };
+    });
+    setAttachedLine(offer);
   }, []);
 
-  const consumePendingDetailFocus = useCallback(() => {
-    setPendingDetailFocus(null);
+  const detachLine = useCallback(() => {
+    const snapshot = detachSnapshot.current;
+    detachSnapshot.current = null;
+    setAttachedLine(null);
+    if (snapshot) setFormData((prev) => ({ ...prev, ...snapshot }));
   }, []);
 
   // Derived from the active order rather than a hardcoded map, so adding a step
   // to STEP_ORDER_BY_KIND is the only edit a new flow needs.
+  const firstStep: Step = preset?.kind === "line" ? "file" : "provider";
+
   const handleBack = useCallback(() => {
     const index = stepOrder.indexOf(step);
-    if (index > 0) {
+    if (index > stepOrder.indexOf(firstStep)) {
       setStep(stepOrder[index - 1]);
     }
-  }, [step, stepOrder]);
+  }, [step, stepOrder, firstStep]);
 
   // Close keeps localStorage intact so an accidental ✕ doesn't destroy in-flight
   // typing. Storage is cleared only after a successful create (see handleCreateMatch)
@@ -1211,7 +1409,7 @@ export function useUploadMatchWizard({
   }, []);
 
   // Form handling
-  const handleInputChange = useCallback((field: keyof MatchFormData, value: string | number | boolean | undefined) => {
+  const handleInputChange = useCallback((field: keyof MatchFormData, value: string | number | boolean | null | undefined) => {
     setFormData((prev) => {
       const next = { ...prev, [field]: value };
       // When bestOf changes, reset numberOfSets so it uses the new format's default
@@ -1299,8 +1497,11 @@ export function useUploadMatchWizard({
       // Minting a second would give one court two results and count it twice in
       // the dual's team score, which is the duplicate 22e's "fills 3 of 9"
       // receipt exists to rule out.
-      const matchId = preset?.matchId ?? crypto.randomUUID();
-      const reusingMatch = Boolean(preset?.matchId);
+      // A line reached either way — pinned by the page, or offered on the
+      // details step and accepted — is the same destination.
+      const line = preset ?? attachedLine;
+      const matchId = line?.matchId ?? crypto.randomUUID();
+      const reusingMatch = Boolean(line?.matchId);
 
       const adjustedPlayerScores = getAdjustedScores(
         formData.playerScores,
@@ -1350,8 +1551,10 @@ export function useUploadMatchWizard({
       // when that program manages its own roster — correctly, since an outsider
       // must not write to a live roster — and a refusal costs an opponent
       // profile a data point, not the upload. The match is the record.
-      let opponentPlayerId: string | null = null;
-      if (activeWorkspace.kind === "team" && formData.opponentProgramKey) {
+      // A row picked from the opponent's roster already IS an identity, and it
+      // travelled with the click. Only a typed name goes through the RPC.
+      let opponentPlayerId: string | null = formData.opponentPlayerId ?? null;
+      if (!opponentPlayerId && activeWorkspace.kind === "team" && formData.opponentProgramKey) {
         try {
           const { data: program } = await supabase
             .from("programs")
@@ -1445,7 +1648,7 @@ export function useUploadMatchWizard({
             .select("id")
         : await supabase
             .from("matches")
-            .insert({ ...matchRow, event_entry_id: preset?.entryId ?? null })
+            .insert({ ...matchRow, event_entry_id: line?.entryId ?? null })
             .select("id");
 
       if (matchError) {
@@ -1469,6 +1672,9 @@ export function useUploadMatchWizard({
       // driven by the match-created event + sessionStorage flag, so this is the
       // user's signal that work is in flight.
       clearStorageData();
+      // The draft, if one was saved, is done with. Best-effort: a row left
+      // behind is a stale Resume in the list, not a wrong match.
+      if (draftId) void deleteMatchDraft(draftId).catch(() => undefined);
       // Store the real matchId (recent-activity reads this back as the id to poll for
       // processing completion). Storing a literal "true" made the first-upload poll
       // target a bogus id and never detect completion.
@@ -1625,7 +1831,7 @@ export function useUploadMatchWizard({
     }
     // activeWorkspace is in here on purpose: a coach who switches workspaces
     // with the wizard open must not create the match against the one they left.
-  }, [formData, uploadedFile, selectedProvider, isProcessingProvider, supabase, isPrivateMatch, onOpenChange, onCreated, router, activeWorkspace.id, activeWorkspace.kind, preset, pickedPlayerUserId, askWhoPlayed, matchSubject]);
+  }, [formData, uploadedFile, selectedProvider, isProcessingProvider, supabase, isPrivateMatch, onOpenChange, onCreated, router, activeWorkspace.id, activeWorkspace.kind, preset, attachedLine, draftId, pickedPlayerUserId, askWhoPlayed, matchSubject]);
 
   return {
     // State
@@ -1639,17 +1845,24 @@ export function useUploadMatchWizard({
     uploadError,
     formData,
     parsingState,
-    pendingDetailFocus,
 
     // Step navigation
     handleProviderSelect,
     handleProviderContinue,
     handleFileContinue,
     handleTrimContinue,
-    handleMatchContinue,
     handleBack,
-    goEditDetail,
-    consumePendingDetailFocus,
+    firstStep,
+
+    // The schedule offer
+    attachedLine,
+    attachLine,
+    detachLine,
+
+    // Drafts
+    saveDraft,
+    draftSaving,
+    lastChangedAt,
 
     // File handling
     setIsOver,

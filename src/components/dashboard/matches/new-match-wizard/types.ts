@@ -4,6 +4,7 @@
 
 import type { ProviderKind } from "@/lib/services/upload";
 import type { VideoProbe } from "@/lib/video/probe";
+import type { EventSite } from "@/lib/schedule/types";
 
 /** Wizard step identifiers */
 /**
@@ -11,12 +12,14 @@ import type { VideoProbe } from "@/lib/video/probe";
  *
  * `file` is the drop step for BOTH kinds — a video for a processing provider,
  * an export for an import one. `trim` is the video check that only a
- * processing provider needs. Design: Upload Wizard v5, frames 3a–3c · 5a–5b.
+ * processing provider needs. `match` is the last step: there is no confirm
+ * step — Save match writes the record, and the match's own page says the rest
+ * better than a summary above it could. Design: Upload Wizard v5.
  */
-export type Step = "provider" | "file" | "trim" | "match" | "confirm";
+export type Step = "provider" | "file" | "trim" | "match";
 
-/** Optional Match-step fields that the Confirm step can deep-link back to. */
-export type DetailField = "round" | "matchType" | "courtType";
+/** Where a pre-filled value came from, for the "from …" provenance tag. */
+export type ValueSource = "file" | "export" | "event" | "profile" | "history" | "roster" | "new";
 
 /** Form data structure for match details */
 export interface FormData {
@@ -83,6 +86,25 @@ export interface FormData {
   videoStartSeconds?: number;
   /** Trim end, seconds into the original video. */
   videoEndSeconds?: number;
+
+  // --- Provenance and identity, so the details step can say where a value
+  // came from and the save can attribute the opponent. None are typed.
+
+  /** Where `date`/`time` came from. Undefined when nothing set it. */
+  dateSource?: ValueSource;
+  /** Where the opponent's name came from. Undefined for a typed name. */
+  opponentSource?: ValueSource;
+  /**
+   * The opponent's pooled identity when a roster row was picked or a program
+   * player was created. Travels with the CLICK, never the text.
+   */
+  opponentPlayerId?: string | null;
+  /** Where the player's hand and backhand came from. */
+  playerStyleSource?: ValueSource;
+  /** Where the opponent's hand and backhand came from. */
+  opponentStyleSource?: ValueSource;
+  /** Tournament, dual or a one-off — decides whether Round is asked. */
+  eventKind?: "tournament" | "dual" | "other";
 }
 
 /**
@@ -175,10 +197,12 @@ export const DEFAULT_FORM_DATA: FormData = {
   time: "",
   playerName: "",
   opponentName: "",
-  playerHand: "right",
-  opponentHand: "right",
-  playerBackhand: "two-handed",
-  opponentBackhand: "two-handed",
+  // Unset, not defaulted: the details step reads "Not set" and offers Add.
+  // A defaulted right hand claimed a fact about a player nobody had stated.
+  playerHand: undefined,
+  opponentHand: undefined,
+  playerBackhand: undefined,
+  opponentBackhand: undefined,
   playerScores: [null, null, null],
   opponentScores: [null, null, null],
   playerTiebreaks: [null, null, null],
@@ -202,8 +226,8 @@ export const DEFAULT_FORM_DATA: FormData = {
  * from the file, and all of which the vendor refuses a job without.
  */
 export const STEP_ORDER_BY_KIND: Record<ProviderKind, Step[]> = {
-  import: ["provider", "file", "match", "confirm"],
-  processing: ["provider", "file", "trim", "match", "confirm"],
+  import: ["provider", "file", "match"],
+  processing: ["provider", "file", "trim", "match"],
 };
 
 /** Step configuration for titles and descriptions */
@@ -225,15 +249,10 @@ export const STEP_CONFIG: Record<Step, { title: string; description: string }> =
     description:
       "Start at the first point, end at the last. The window has to match the score you enter next."
   },
+  // The import copy; the video copy is the processing override below.
   match: {
-    title: "Add your match",
-    description: "Drop your file — we'll auto-fill the details for you to review."
-  },
-  // Not rendered: the confirm step opens on the match's own hero, which says
-  // all of this better than a heading above it could.
-  confirm: {
-    title: "Ready to save",
-    description: "A final review before this match is saved to your dashboard."
+    title: "Score and context.",
+    description: "Read from the export. Change anything that's wrong — the file won't be."
   }
 };
 
@@ -252,11 +271,8 @@ export const STEP_CONFIG_PROCESSING: Partial<
       "One full match from one camera. Leave the warm-up in — you'll trim to the first serve next."
   },
   match: {
-    title: "Match details",
-    description: "Everything the report needs — score, context, and the two video answers."
-  },
-  confirm: {
-    description: "A final review before this match is queued for analysis."
+    title: "Score and context.",
+    description: "The score is the one thing the video can't tell us. The rest fills what it can."
   }
 };
 
@@ -265,8 +281,7 @@ export const CONTINUE_LABEL: Record<Step, string> = {
   provider: "Continue",
   file: "Continue",
   trim: "Continue",
-  match: "Continue",
-  confirm: "Create match",
+  match: "Save match",
 };
 
 /** File parsing state for auto-population */
@@ -347,4 +362,80 @@ export interface EventPreset {
   supportsVideo: boolean;
   /** Where Cancel and success return to. */
   eventHref: string;
+  /** Home, away or neutral — the bar's map-pin fact. Null for a single. */
+  site: EventSite | null;
+  /** What kind of event the line belongs to. Null for a single. */
+  eventKind: "dual" | "tournament" | null;
+  /**
+   * The opponent program behind a dual, so the opponent picker can offer its
+   * roster and a new name can be saved to it. Null where the event named no
+   * program, and for every tournament and single.
+   */
+  opponentProgramKey: string | null;
+  opponentSchool: string | null;
+  /**
+   * The event's other lines, for the pinned bar's Change menu — picking one
+   * rewrites the bar and nothing else, so the file already dropped stays.
+   * Only on a `line` preset that came from an event.
+   */
+  lineup?: LineChoice[];
+}
+
+/** One row of the pinned bar's lineup menu (design 10a). */
+export interface LineChoice {
+  /** 'S1'…'D3', or a tournament round. */
+  slot: string;
+  /** Who holds the line. Null where nobody is assigned. */
+  playerName: string | null;
+  /** The slot's own state, as the row's trailing word. */
+  state: "result" | "video" | "open" | "unset";
+  /** The preset to switch to. Null for an unset line, which cannot be picked. */
+  preset: EventPreset | null;
+}
+
+/**
+ * A saved draft, as `match_drafts` holds it and the Matches table lists it.
+ *
+ * The File never survives — it is re-picked on resume — so `fileName` is only
+ * a label. `preset` is carried whole so a draft started from an event line
+ * resumes with its bar; `attachedLine` is the schedule offer the person
+ * accepted on the details step.
+ */
+export interface MatchDraft {
+  id: string;
+  step: Step;
+  stepCount: number;
+  stepIndex: number;
+  provider: string | null;
+  formData: FormData;
+  fileName: string | null;
+  preset: EventPreset | null;
+  attachedLine: LineOffer | null;
+  updatedAt: string;
+}
+
+/**
+ * A lineup slot the schedule OFFERS on the details step — the file's date
+ * matched an open line for this player within two days (design 3d/7a).
+ * Accepting fills opponent, date, court, format and scoring from the line and
+ * the event; Detach empties them again.
+ */
+export interface LineOffer {
+  entryId: string;
+  /** The match this line already produced, when somebody scored it. */
+  matchId: string | null;
+  eventId: string;
+  eventName: string;
+  eventKind: "dual" | "tournament";
+  slot: string | null;
+  playerName: string;
+  opponentName: string;
+  opponentProgramKey: string | null;
+  opponentSchool: string | null;
+  /** YYYY-MM-DD. */
+  date: string;
+  site: EventSite;
+  surface: string | null;
+  bestOf: number;
+  adScoring: boolean | null;
 }

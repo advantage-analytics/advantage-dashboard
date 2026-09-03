@@ -521,7 +521,7 @@ cannot break the integration.
 
 | Layer | Files | Safe to redesign? |
 |---|---|---|
-| Wizard presentation | `new-match-wizard/{ConfirmContent,DetailsContent,FileStepContent,SourceStepContent,ScoreCell,StepIndicator,TrimStepContent,styles}.tsx` | **Yes, freely** |
+| Wizard presentation | `new-match-wizard/{DetailsStepContent,FileStepContent,PinnedLineBar,SourceStepContent,ScoreCell,StepIndicator,TrimStepContent,styles}.tsx` | **Yes, freely** |
 | Matches list & detail | everything under `components/dashboard/matches/` except the wizard hook | **Yes, freely** |
 | Wizard orchestration | `new-match-wizard/useUploadMatchWizard.ts` | **Careful — see below** |
 | Everything server-side | `api/splitstep/`, `api/webhooks/splitstep/`, `lib/services/splitstep/`, `lib/services/upload/`, `supabase/functions/` | Untouched by UI work |

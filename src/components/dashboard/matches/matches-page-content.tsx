@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Search, ChevronLeft, ChevronRight, ChevronDown, Filter as FilterIcon } from "lucide-react";
 import { EmptyMatches } from "./empty-matches";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
+import type { DraftRowData } from "./draft-row";
 import {
   isAnalysisFailed,
   isAnalysisReady,
@@ -33,6 +34,8 @@ function providerName(id: string): string {
 
 interface MatchesPageContentProps {
   matches: DisplayMatch[];
+  /** The viewer's saved drafts in this workspace, newest first. */
+  drafts?: DraftRowData[];
   /** Signed-in user, for the live job subscription. Absent = no subscription. */
   userId?: string;
   /** Which workspace this list belongs to. Only the empty state reads it. */
@@ -388,6 +391,7 @@ function SortDropdown({
 /* ─── Main content ─── */
 export function MatchesPageContent({
   matches: serverMatches,
+  drafts = [],
   userId,
   scope = "personal",
 }: MatchesPageContentProps): React.JSX.Element {
@@ -902,6 +906,8 @@ export function MatchesPageContent({
       ) : (
         <MatchesGrid
           matches={paginatedMatches}
+          drafts={drafts}
+          scope={scope}
           sortField={sortField}
           sortDir={sortDir}
           onSort={toggleSort}

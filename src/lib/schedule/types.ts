@@ -86,6 +86,12 @@ export interface EventEntry {
   opponentLabels: string[];
   opponentSchool: string | null;
   /**
+   * The opponent's program, where the event resolved one. Optional only so
+   * fixtures and specs written before it need not state it; the loader
+   * always sets it.
+   */
+  opponentProgramId?: string | null;
+  /**
    * Which side forfeited this line.
    *
    * `'ours'` — our player forfeited; the point goes to THEM.

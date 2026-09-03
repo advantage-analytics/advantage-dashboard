@@ -60,15 +60,6 @@ export const dangerIconBtnCls =
   `h-7 w-7 rounded-lg flex items-center justify-center text-[#888888] hover:bg-[#F5F5F5] hover:text-[#E51837] transition-colors duration-200 ${focusRingCls}`;
 
 /**
- * The floating menu surface — the repo's popover spec, spelled once.
- *
- * #E5E5EA hairline, 12px radius and a two-layer float shadow. Overrides
- * `ui/popover.tsx`'s own defaults, which are a different radius and shadow.
- */
-export const floatMenuCls =
-  "rounded-[12px] border-[#E5E5EA] shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]";
-
-/**
  * The note strip — one quiet sentence on a surface-subtle wash, 13px glyph
  * beside it. The wizard's register for "here is the honest thing about this":
  * what an export includes, that nothing is uploading yet, why a video was
@@ -76,3 +67,19 @@ export const floatMenuCls =
  */
 export const noteStripCls =
   "flex items-start gap-2 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3 py-2.5 text-[11px] leading-[1.6] text-[var(--ink-700)]";
+
+/**
+ * The float menu — EntitySelect grammar: radius 12, 6px padding, hairline,
+ * dropdown shadow. Rows are 38px with an 8px radius and a surface-subtle
+ * wash on hover; the current row keeps the wash and a Signal Blue check.
+ * Design: Upload Wizard v5 — 2a, 6b, 10a, 11a, 11b, 11d.
+ */
+export const floatMenuCls =
+  "rounded-[var(--radius-dropdown)] border-[var(--border-hairline)] bg-white p-1.5 shadow-[var(--shadow-dropdown)] flex flex-col";
+
+export const floatMenuLabelCls = "px-2.5 pb-1 pt-1.5 text-[11px] text-[var(--ink-400)]";
+
+export const floatMenuRowCls =
+  "flex h-[38px] w-full cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] px-2.5 text-left transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] focus-visible:outline-none focus-visible:bg-[var(--surface-subtle)]";
+
+export const floatMenuDividerCls = "my-[5px] h-px bg-[var(--border-hairline)]";

@@ -62,6 +62,10 @@ export default async function NewSingleMatchPage() {
     adScoring: null,
     score: null,
     supportsVideo: true,
+    site: null,
+    eventKind: null,
+    opponentProgramKey: null,
+    opponentSchool: null,
     eventHref: "/dashboard/team/schedule",
   };
 

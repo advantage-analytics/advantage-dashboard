@@ -11,6 +11,7 @@ import {
 import { MatchesPageContent } from "@/components/dashboard/matches/matches-page-content";
 import { MatchesTitleRow } from "@/components/dashboard/matches/matches-title-row";
 import { MatchesSkeleton } from "@/components/dashboard/matches/matches-skeleton";
+import { listMatchDrafts } from "@/lib/wizard/actions";
 
 /**
  * The matches list, scoped to whichever workspace is active.
@@ -54,6 +55,12 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
 
   const isTeam = workspace?.active.kind === "team";
   let matches: DisplayMatch[] = [];
+  // The viewer's own half-finished uploads, listed at the top (design 11c).
+  // Scoped like the matches beside them: a team draft under the program, a
+  // personal one under nothing.
+  const drafts = user
+    ? await listMatchDrafts({ programId: isTeam ? workspace!.active.id : null })
+    : [];
 
   if (user) {
     const query = supabase
@@ -134,6 +141,7 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
                 header for what that means inside a team workspace. */}
             <MatchesPageContent
               matches={matches}
+              drafts={drafts}
               userId={user?.id}
               scope={isTeam ? "team" : "personal"}
             />

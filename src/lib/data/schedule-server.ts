@@ -32,7 +32,7 @@ const EVENT_COLUMNS =
   "id, program_id, kind, name, starts_on, ends_on, site, surface, host, format";
 
 const ENTRY_COLUMNS =
-  "id, event_id, discipline, slot, position, draw, seed, player_user_ids, player_labels, opponent_labels, opponent_school, forfeit";
+  "id, event_id, discipline, slot, position, draw, seed, player_user_ids, player_labels, opponent_labels, opponent_school, opponent_program_id, forfeit";
 
 const MATCH_COLUMNS =
   "id, event_entry_id, round, score, player2_name, source_provider";
@@ -62,6 +62,7 @@ interface DbEntry {
   player_labels: string[] | null;
   opponent_labels: string[] | null;
   opponent_school: string | null;
+  opponent_program_id: string | null;
   forfeit: string | null;
 }
 
@@ -204,6 +205,7 @@ async function readSchedule(
       playerLabels: row.player_labels ?? [],
       opponentLabels: row.opponent_labels ?? [],
       opponentSchool: row.opponent_school,
+      opponentProgramId: row.opponent_program_id,
       forfeit: (row.forfeit as EventEntry["forfeit"]) ?? null,
       // Sorted by the round ladder: `matches` has no created_at, so without
       // this a tournament run renders in whatever order Postgres returned.

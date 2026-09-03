@@ -20,6 +20,7 @@ import {
   STEP_CONFIG_PROCESSING,
   CONTINUE_LABEL,
   type EventPreset,
+  type MatchDraft,
 } from "./types";
 import {
   useUploadMatchWizard,
@@ -45,8 +46,8 @@ import { SourceStepContent } from "./SourceStepContent";
 import { PinnedMatchContent } from "./PinnedMatchContent";
 import { FileStepContent } from "./FileStepContent";
 import { TrimStepContent } from "./TrimStepContent";
-import { DetailsContent } from "./DetailsContent";
-import { ConfirmContent } from "./ConfirmContent";
+import { DetailsStepContent } from "./DetailsStepContent";
+import { PinnedLineBar } from "./PinnedLineBar";
 
 /** Where the flow returns to when it is dismissed or finished. */
 const PERSONAL_EXIT_HREF = "/dashboard/matches";
@@ -111,7 +112,16 @@ const PHASE_LABEL: Record<Exclude<UploadState["phase"], "uploading">, string> = 
   failed: "Failed",
 };
 
-export function UploadMatchFlow({ preset }: { preset?: EventPreset | null } = {}) {
+export function UploadMatchFlow({
+  preset: initialPreset,
+  draft,
+}: { preset?: EventPreset | null; draft?: MatchDraft | null } = {}) {
+  // The line this flow is filling. State rather than the prop because the
+  // pinned bar's Change menu swaps it for another line of the same event
+  // (design 10a) without leaving the page — the file already dropped stays.
+  const [preset, setPreset] = useState<EventPreset | null>(
+    initialPreset ?? draft?.preset ?? null
+  );
   // A team upload came from a line and goes back to it. A personal one has the
   // matches list, which is where its match will appear.
   const EXIT_HREF = preset?.eventHref ?? PERSONAL_EXIT_HREF;
@@ -202,7 +212,9 @@ export function UploadMatchFlow({ preset }: { preset?: EventPreset | null } = {}
       onCreated={setCreatedMatchId}
       onVideoUpload={handleVideoUpload}
       exitHref={EXIT_HREF}
-      preset={preset ?? null}
+      preset={preset}
+      onSwitchPreset={setPreset}
+      draft={draft ?? null}
     />
   );
 }
@@ -543,11 +555,15 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
   onVideoUpload,
   exitHref,
   preset,
+  onSwitchPreset,
+  draft,
 }: {
   onCreated: (matchId: string) => void;
   onVideoUpload: (event: VideoUploadEvent) => void;
   exitHref: string;
   preset: EventPreset | null;
+  onSwitchPreset: (next: EventPreset) => void;
+  draft: MatchDraft | null;
 }) {
   const router = useRouter();
   // Which workspace this match will be created in, and billed against.
@@ -586,8 +602,14 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     handleProviderContinue,
     handleFileContinue,
     handleTrimContinue,
-    handleMatchContinue,
     handleBack,
+    firstStep,
+    attachedLine,
+    attachLine,
+    detachLine,
+    saveDraft,
+    draftSaving,
+    lastChangedAt,
     setIsOver,
     handleDrop,
     handleFileChange,
@@ -598,9 +620,6 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     handleScoreChange,
     handleTiebreakChange,
     handleCreateMatch,
-    pendingDetailFocus,
-    goEditDetail,
-    consumePendingDetailFocus,
     stepOrder,
     progressTotalSteps,
     isProcessingProvider,
@@ -621,33 +640,46 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     onCreated: handleCreated,
     onVideoUpload,
     preset,
+    draft,
   });
 
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // Saving a draft is a fact, not an event: the wizard writes every answer to
-  // localStorage as it is given and the flow resumes from it, so the header's
-  // status slot says so throughout. Saying it is what makes leaving the page
-  // feel survivable — "Save draft" in the footer only decides where you go.
-  usePublishHeaderStatus("Draft saved");
+  // Saving a draft is a fact, not an event: the wizard autosaves as you answer
+  // and says so in the header's status slot — the same slot that later carries
+  // the upload. The timestamp appears once you have been idle a minute;
+  // "Saving…" only while a draft row is genuinely in flight (design 11c).
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+  const idleMinutes = lastChangedAt ? Math.floor((now - lastChangedAt) / 60_000) : 0;
+  usePublishHeaderStatus(
+    draftSaving
+      ? "Saving…"
+      : idleMinutes >= 1
+        ? `Draft saved · ${idleMinutes} min ago`
+        : "Draft saved"
+  );
 
   /**
    * Leave with the draft intact.
    *
-   * The wizard was already saving; this persists whatever the current step has
-   * not yet written (the details form saves on Continue), pins the chosen
-   * source so the next visit resumes past step 1, and sets the flag that stops
-   * `DashboardShell` clearing storage on the way out. Then it goes where
-   * Cancel would.
+   * The wizard was already saving; this writes the draft row the Matches
+   * table lists with Resume, pins the chosen source so the next visit resumes
+   * past step 1, and sets the flag that stops `DashboardShell` clearing
+   * storage on the way out. Then it goes where Cancel would.
    */
-  const handleSaveDraft = useCallback(() => {
+  const handleSaveDraft = useCallback(async () => {
     saveFormDataToStorage(formData);
     if (selectedProvider) {
       localStorage.setItem(STORAGE_KEYS.SELECTED_PROVIDER, selectedProvider);
     }
     localStorage.setItem(STORAGE_KEYS.DRAFT_KEPT, "1");
+    await saveDraft();
     router.push(exitHref);
-  }, [formData, selectedProvider, router, exitHref]);
+  }, [formData, selectedProvider, saveDraft, router, exitHref]);
 
   const onDragOver = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
@@ -705,28 +737,32 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     step === "provider" ? handleProviderContinue
     : step === "file" ? handleFileContinue
     : step === "trim" ? handleTrimContinue
-    : step === "match" ? handleMatchContinue
     : handleCreateMatch;
 
   const currentStepIndex = stepOrder.indexOf(step);
+  const line = preset?.kind === "line" ? preset : null;
   const { title, description } = {
     ...STEP_CONFIG[step],
     ...(isProcessingProvider ? STEP_CONFIG_PROCESSING[step] : undefined),
-    // A pinned line changes what step 1 asks, so it has to change what step 1
-    // is called. "Choose your data source" above a match that is already chosen
-    // is the heading contradicting the panel underneath it.
-    ...(preset && step === "provider"
-      ? preset.kind === "single"
-        ? {
-            title: "Whose match is this?",
-            description:
-              "The one question the personal wizard can't answer in a team workspace. Everything else — opponent, date, surface, score — is the details step, unchanged.",
-          }
-        : {
-            title: "Which match is this?",
-            description:
-              "The event answered everything but the video. Check it, then add the file.",
-          }
+    // A single match in a team workspace changes what step 1 asks, so it has
+    // to change what step 1 is called.
+    ...(preset?.kind === "single" && step === "provider"
+      ? {
+          title: "Whose match is this?",
+          description:
+            "The one question the personal wizard can't answer in a team workspace. Everything else — opponent, date, surface, score — is the details step, unchanged.",
+        }
+      : undefined),
+    // When the slot was the starting point there is nothing to offer, so the
+    // title tells the truth of the step: the score is the only thing left to
+    // type, and the subline credits the lineup (design 7c).
+    ...(line && step === "match"
+      ? {
+          title: "The score.",
+          description: `${subjectFirstName ?? line.playerName}'s${
+            line.round ? ` ${line.round}` : ""
+          } line${line.eventName ? ` at ${line.eventName}` : ""} — the lineup filled the rest.`,
+        }
       : undefined),
   };
 
@@ -757,14 +793,16 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
    */
   const missing = useMemo(() => {
     const labels: string[] = [];
-    if (!formData.eventName.trim()) labels.push("name");
+    // The opponent, the score and the day are what every match needs; the
+    // rest is the video job's.
+    if (!formData.opponentName.trim()) labels.push("opponent");
+    if (!hasAnySetScore) labels.push("score");
+    if (!formData.date) labels.push("date");
     if (isProcessingProvider) {
       if (!formData.playerName.trim())
         labels.push(
           whoPlayed.subject?.kind === "roster" ? "player name" : "your name"
         );
-      if (!formData.opponentName.trim()) labels.push("opponent");
-      if (!hasAnySetScore) labels.push("score");
       if (formData.adScoring === undefined) labels.push("scoring");
       if (formData.fixedCamera === undefined) labels.push("camera");
       if (formData.initialTopPlayerIsPlayer1 === undefined) labels.push(CAMERA_POSITION_LABEL);
@@ -776,7 +814,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
       labels.length > 0 && labels.every((l) => l === "camera" || l === CAMERA_POSITION_LABEL);
     return { labels, onlyVideoAnswers };
   }, [
-    formData.eventName,
+    formData.date,
     formData.playerName,
     formData.opponentName,
     formData.adScoring,
@@ -810,17 +848,16 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
         ? ""
         : null,
     match: !uploadedFile
-      ? "Drop or browse a file"
+      ? "Pick the file again on step 2"
       : isUploading
       ? "Validating file…"
+      : isCreating
+      ? "Saving…"
       : null,
-    confirm: isCreating ? "Creating match…" : null,
   };
 
   const stepBusy = busyLabel[step];
-  // Both of the last two steps can see the same answers, so both wait on them.
-  const gatedByMissing =
-    (step === "match" || step === "confirm") && missing.labels.length > 0;
+  const gatedByMissing = step === "match" && missing.labels.length > 0;
   // Step 1 on the single rail waits for a player. It is the one fact the
   // workspace cannot supply, and a match created without it belongs to nobody.
   const awaitingPlayer =
@@ -905,7 +942,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
         return;
       }
 
-      if (e.key === "Escape" && step !== "provider") {
+      if (e.key === "Escape" && step !== firstStep) {
         e.preventDefault();
         e.stopPropagation();
         handleBack();
@@ -926,7 +963,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [continueDisabled, continueHandler, step, handleBack]);
+  }, [continueDisabled, continueHandler, step, firstStep, handleBack]);
 
   return (
     <div className="flex min-h-[calc(100vh-44px)] flex-col">
@@ -935,33 +972,38 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
           measuring the whole flow. */}
       <StepIndicator currentStep={currentStepIndex} totalSteps={progressTotalSteps} />
 
+      {/* Step 1, already answered: the line this flow is filling, pinned. */}
+      {line && (
+        <PinnedLineBar
+          preset={line}
+          onSwitch={onSwitchPreset}
+          outsideHref="/dashboard/matches/new"
+        />
+      )}
+
       <div className={`${CONTENT_CLS} pb-10 pt-16`}>
-        {/* Confirm opens on the match's own hero — a heading above it would
-            say less than the name already does. */}
-        {step !== "confirm" && (
-          <div className="flex flex-col gap-3">
-            <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
-              Step {currentStepIndex + 1} of {progressTotalSteps}
-            </span>
-            <h1
-              className="max-w-[560px] text-[30px] font-light leading-[1.15] tracking-[-0.3px] text-[var(--ink-900)]"
-              style={{ textWrap: "pretty" }}
-            >
-              {title}
-            </h1>
-            <p
-              className="max-w-[480px] text-[13px] leading-[1.55] text-[var(--ink-600)]"
-              style={{ textWrap: "pretty" }}
-            >
-              {description}
-            </p>
-          </div>
-        )}
+        <div className="flex flex-col gap-3">
+          <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
+            Step {currentStepIndex + 1} of {progressTotalSteps}
+          </span>
+          <h1
+            className="max-w-[560px] text-[30px] font-light leading-[1.15] tracking-[-0.3px] text-[var(--ink-900)]"
+            style={{ textWrap: "pretty" }}
+          >
+            {title}
+          </h1>
+          <p
+            className="max-w-[480px] text-[13px] leading-[1.55] text-[var(--ink-600)]"
+            style={{ textWrap: "pretty" }}
+          >
+            {description}
+          </p>
+        </div>
 
         <div
           ref={contentRef}
           key={step}
-          className={`animate-fadeIn ${step === "confirm" ? "" : "mt-[52px]"}`}
+          className={`animate-fadeIn ${step === "match" ? "mt-9" : "mt-[52px]"}`}
         >
           {step === "provider" &&
             (preset ? (
@@ -1031,33 +1073,31 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
           )}
 
           {/* The file was dropped a step ago and, for an export, already read —
-              so this step is metadata only. */}
+              so this step is the score, the players and the context, and Save
+              match is the last thing on the page. */}
           {step === "match" && (
-            <DetailsContent
+            <DetailsStepContent
               formData={formData}
-              playerNameLabel={
-                whoPlayed.subject?.kind === "roster"
-                  ? "Player name"
-                  : undefined
-              }
-              showOpponentProgram={workspaces.active.kind === "team"}
               onInputChange={handleInputChange}
               onScoreChange={handleScoreChange}
               onTiebreakChange={handleTiebreakChange}
               isProcessingProvider={isProcessingProvider}
-              pendingDetailFocus={pendingDetailFocus}
-              onPendingDetailFocusConsumed={consumePendingDetailFocus}
-            />
-          )}
-
-          {step === "confirm" && (
-            <ConfirmContent
-              formData={formData}
-              uploadedFile={uploadedFile}
+              workspaceKind={workspaces.active.kind === "team" ? "team" : "personal"}
+              subject={{
+                name: formData.playerName || whoPlayed.uploaderName || "You",
+                isSelf: !preset && whoPlayed.subject?.kind !== "roster",
+                playerId:
+                  whoPlayed.subject?.kind === "roster"
+                    ? whoPlayed.subject.playerId
+                    : preset?.playerUserId ?? null,
+                userId: workspaces.viewer.id,
+              }}
+              preset={preset}
+              attachedLine={attachedLine}
+              onAttach={attachLine}
+              onDetach={detachLine}
+              exportRead={parsingState.parseSuccess}
               error={error}
-              onEditDetail={goEditDetail}
-              isProcessingProvider={isProcessingProvider}
-              sourceDurationSeconds={videoProbe?.durationSeconds}
             />
           )}
         </div>
@@ -1071,7 +1111,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
           shifts when it does. */}
       <div className="sticky bottom-0 mt-auto border-t border-[var(--border-hairline)] bg-white">
         <div className={`${CONTENT_CLS} flex h-16 items-center gap-4`}>
-          {currentStepIndex > 0 ? (
+          {step !== firstStep ? (
             <button
               type="button"
               onClick={handleBack}
@@ -1109,48 +1149,31 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
             />
           )}
 
-          {/* What the later steps are still waiting on — a list, not the first
-              offender. Steps 1 to 3 carry their own state on the page, so it
-              says nothing there. */}
-          {(step === "match" || step === "confirm") &&
+          {/* What the last step is still waiting on — a list, not the first
+              offender. The earlier steps carry their own state on the page, so
+              it says nothing there. */}
+          {step === "match" &&
             (stepBusy ? (
               <span className="text-[11px] text-[var(--ink-500)]">{stepBusy}</span>
             ) : gatedByMissing ? (
-              step === "confirm" ? (
-                <span className="text-[11px] text-[var(--ink-500)]">
-                  Create waits on{" "}
-                  {missing.onlyVideoAnswers
-                    ? "the video answers"
-                    : missing.labels.join(" · ")}{" "}
-                  —{" "}
-                  <button
-                    type="button"
-                    onClick={handleBack}
-                    className="cursor-pointer text-[var(--blue)] underline-offset-2 transition-colors duration-150 hover:text-[var(--blue-hover)] hover:underline"
-                  >
-                    answer them on Match details
-                  </button>
-                </span>
-              ) : (
-                <span className="whitespace-nowrap text-[11px] text-[var(--ink-500)]">
-                  <span className="font-medium tabular-nums text-[var(--ink-900)]">
-                    {missing.labels.length}
-                  </span>{" "}
-                  to go — {missing.labels.slice(0, 3).join(" · ")}
-                  {/* Naming all six wrapped this bar onto two lines and squeezed
-                      the meter beside it. Three is enough to start on; the count
-                      carries the rest, and the fields themselves are marked. */}
-                  {missing.labels.length > 3
-                    ? ` +${missing.labels.length - 3} more`
-                    : ""}
-                </span>
-              )
-            ) : step === "confirm" && workspaces.available.length > 1 ? (
+              <span className="whitespace-nowrap text-[11px] text-[var(--ink-500)]">
+                <span className="font-medium tabular-nums text-[var(--ink-900)]">
+                  {missing.labels.length}
+                </span>{" "}
+                to go — {missing.labels.slice(0, 3).join(" · ")}
+                {/* Naming all six wrapped this bar onto two lines and squeezed
+                    the meter beside it. Three is enough to start on; the count
+                    carries the rest, and the fields themselves are marked. */}
+                {missing.labels.length > 3
+                  ? ` +${missing.labels.length - 3} more`
+                  : ""}
+              </span>
+            ) : workspaces.available.length > 1 ? (
               /* Only when there is a choice to get wrong. `program_id` on the
                  row follows this exact workspace, and the jobs route bills
                  whichever one it names. */
               <span className="text-[11px] text-[var(--ink-500)]">
-                Creates in{" "}
+                Saves in{" "}
                 <span className="font-medium text-[var(--ink-900)]">
                   {workspaces.active.name}
                 </span>
@@ -1161,10 +1184,11 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
 
           <button
             type="button"
-            onClick={handleSaveDraft}
-            className="cursor-pointer text-[11px] text-[var(--ink-500)] transition-colors duration-150 hover:text-[var(--ink-900)]"
+            onClick={() => void handleSaveDraft()}
+            disabled={draftSaving}
+            className="cursor-pointer text-[11px] text-[var(--ink-500)] transition-colors duration-150 hover:text-[var(--ink-900)] disabled:cursor-default"
           >
-            Save draft
+            {draftSaving ? "Saving…" : "Save draft"}
           </button>
 
           {/* Always present; asleep at the design system's disabled state
@@ -1179,7 +1203,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
             data-wizard-continue
             className={advButton("primary", "md")}
           >
-            {isCreating ? "Creating…" : CONTINUE_LABEL[step]}
+            {isCreating ? "Saving…" : CONTINUE_LABEL[step]}
           </button>
         </div>
       </div>

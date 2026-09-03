@@ -491,10 +491,12 @@ export function formatHoursTenths(seconds: number): string {
   return (Math.max(0, seconds) / 3600).toFixed(1);
 }
 
-/** The allowance — "8", "75", or "2.5" where a cap is not whole hours. */
+/**
+ * The allowance — "8.0", "75.0". One decimal like the remainder beside it,
+ * so "69.9 of 75.0" reads as two figures of one kind.
+ */
 export function formatHoursCap(seconds: number): string {
-  const hours = Math.max(0, seconds) / 3600;
-  return Number.isInteger(hours) ? String(hours) : hours.toFixed(1);
+  return (Math.max(0, seconds) / 3600).toFixed(1);
 }
 
 /**
