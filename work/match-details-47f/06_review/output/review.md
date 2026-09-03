@@ -1,10 +1,10 @@
 # Review — match-details-47f
 
-Sign-off: **pending** — edit this line to `approved` (or annotate) to gate
-stage 07. This review ran `/pr-check` over the feature's commit range
-`475f940...HEAD`; the one thing it cannot close from here is the auth-gated
-visual pass (criterion 1 below), which is the human step this sign-off should
-confirm.
+Sign-off: **approved** (user, 2026-09-02) — via PR rather than a local land;
+branch pushed and PR opened against `splitstep-integration` for review there.
+The auth-gated visual pass (criterion 1 below) remains open and is expected to
+be confirmed during PR review, not as a precondition of opening it. This
+review ran `/pr-check` over the feature's commit range `475f940...HEAD`.
 
 Range reviewed: `475f940` (base, `splitstep-integration`) → `384b381` (HEAD,
 including the quality-pass commit this stage added). pr-check receipt:
