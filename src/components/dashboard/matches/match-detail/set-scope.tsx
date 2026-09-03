@@ -56,6 +56,12 @@ export interface SetScope {
   activeSet: number | null;
   /** Write the scope to the URL. `null` clears it. */
   select: (set: number | null) => void;
+  /**
+   * The set numbers a reader may actually scope to — the same rule the `?set=`
+   * parse used, handed back so a consumer (the chips' disabled state) reads it
+   * instead of recomputing it and risking a drift from what the URL accepts.
+   */
+  selectable: ReadonlySet<number>;
 }
 
 /* ── Pure rules ─────────────────────────────────────────────────────────────
@@ -176,7 +182,7 @@ export function useSetScope(): SetScope {
     [router, pathname, searchParams],
   );
 
-  return { activeSet, select };
+  return { activeSet, select, selectable };
 }
 
 /* ── Control ────────────────────────────────────────────────────────────── */
@@ -190,12 +196,7 @@ export function useSetScope(): SetScope {
 export function SetScopeChips() {
   const { points } = useMatchData();
   const sides = useMatchSides();
-  const { activeSet, select } = useSetScope();
-
-  const selectable = useMemo(
-    () => selectableSets(sides.sets, points),
-    [sides.sets, points],
-  );
+  const { activeSet, select, selectable } = useSetScope();
 
   // A match with no sets on its score row would otherwise leave an empty 4 px
   // pill sitting in the tab row.

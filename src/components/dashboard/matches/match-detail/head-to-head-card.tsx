@@ -603,10 +603,17 @@ export function HeadToHeadCard() {
     });
   }, [youStats, oppStats, youIsPlayer1, activeSet, scopedPoints]);
 
+  // Memoized rather than recomputed inline: the card re-renders on every row
+  // hover, and `scopeMeta` allocates a scoped-points array just to count it —
+  // work that has nothing to do with which row the cursor is on.
+  const meta = useMemo(
+    () => scopeMeta(sides.sets, points, activeSet),
+    [sides.sets, points, activeSet],
+  );
+
   if (sections.length === 0) return null;
 
   const scoped = activeSet !== null;
-  const meta = scopeMeta(sides.sets, points, activeSet);
 
   return (
     <section
