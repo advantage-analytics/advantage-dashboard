@@ -588,6 +588,13 @@ export function useUploadMatchWizard({
   useEffect(() => {
     if (!open) return;
 
+    // A draft kept by "Save draft" has been picked back up, so the next
+    // departure from the wizard clears storage the ordinary way again. Before
+    // the preset early-return below: the footer offers Save draft on a preset
+    // flow too, and a flag left standing there would stop the shell clearing
+    // storage on every later exit.
+    localStorage.removeItem(STORAGE_KEYS.DRAFT_KEPT);
+
     // A team upload never resumes a personal draft. The line it is filling is
     // named in the URL, and restoring a half-finished personal match over it
     // would put another player's opponent and score on somebody else's court.
@@ -619,10 +626,6 @@ export function useUploadMatchWizard({
       }));
       return;
     }
-
-    // A draft kept by "Save draft" has been picked back up, so the next
-    // departure from the wizard clears storage the ordinary way again.
-    localStorage.removeItem(STORAGE_KEYS.DRAFT_KEPT);
 
     const existingProvider = localStorage.getItem(STORAGE_KEYS.SELECTED_PROVIDER);
     let resumedProvider = false;
