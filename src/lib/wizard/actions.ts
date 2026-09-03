@@ -364,15 +364,21 @@ export async function playerStyleFromMatches(input: {
   const workspace = await getWorkspaceContext();
   if (!workspace) return null;
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
   let query = supabase
     .from("matches")
     .select("player_hand, player_backhand")
     .order("date", { ascending: false })
     .limit(1);
+  // Scoped like opponentsPlayed above: this workspace's matches, never a
+  // row RLS happens to show from another program the viewer belongs to.
   query =
     workspace.active.kind === "team"
       ? query.eq("program_id", workspace.active.id)
-      : query;
+      : query.eq("created_by", user.id).is("program_id", null);
   query = input.playerId
     ? query.eq("player1_id", input.playerId)
     : query.ilike("player1_name", input.playerName.trim());
