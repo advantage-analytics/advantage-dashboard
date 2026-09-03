@@ -101,11 +101,6 @@
   --color-blue-ring-30: rgba(59, 130, 246, 0.30);
   --color-blue-ring-40: rgba(59, 130, 246, 0.40);
 
-  /* Tonal blue ink — for headings/body sitting on blue-tint backgrounds.
-     Avoids the gray-on-color washout. Verified ≥4.5:1 on blue-tint-08 over white. */
-  --color-blue-ink-deep: oklch(0.36 0.13 263);
-  --color-blue-ink-mid: oklch(0.55 0.10 263);
-
   /* Success tints */
   --color-success-hover: #4EA84A;
   --color-success-tint-04: rgba(93, 185, 85, 0.04);
@@ -165,10 +160,6 @@
   --color-blue-tint-12: rgba(96, 165, 250, 0.16);
   --color-blue-ring-30: rgba(96, 165, 250, 0.30);
   --color-blue-ring-40: rgba(96, 165, 250, 0.40);
-
-  /* Tonal blue ink — lifted so it reads on the dark blue-tint background */
-  --color-blue-ink-deep: oklch(0.88 0.06 263);
-  --color-blue-ink-mid: oklch(0.72 0.08 263);
 
   --shadow-card: 0px 2px 8px 0px rgba(0, 0, 0, 0.45);
   --shadow-selected: 0px 2px 8px 0px rgba(0, 0, 0, 0.45);

@@ -68,7 +68,7 @@ export function AddResultRow({ entry }: { entry: EventEntry }) {
     <button
       type="button"
       onClick={openForm}
-      className="inline-flex cursor-pointer items-center gap-1.5 py-2.5 text-[11px] font-medium text-[var(--blue-text)]"
+      className="inline-flex cursor-pointer items-center gap-1.5 py-2.5 text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
     >
       <Plus strokeWidth={2} className="size-3" />
       {entry.matches.length === 0 ? "Add first result" : "Add result"}

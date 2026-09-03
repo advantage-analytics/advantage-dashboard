@@ -319,11 +319,10 @@ export function DualSchoolStep({
                 />
               ) : null}
               <div className="flex-1" />
-              {/* `--blue`, not `--blue-text`. The artboard states this colour
-                  outright (`color:var(--blue)`), where `7e`'s links only set
-                  size and weight and inherited theirs from a stylesheet this
-                  app does not load. 11px blue on white measures 3.68:1 and
-                  fails WCAG 1.4.3 AA; drawn as drawn, and reported. */}
+              {/* `--blue` at rest, `--blue-hover` on hover — the rule for every
+                  blue word since the darker resting `--blue-text` was
+                  retired. 11px blue on white measures 3.68:1 and fails WCAG
+                  1.4.3 AA; drawn as drawn, and recorded on the token. */}
               {chipsOn ? (
                 <button
                   type="button"

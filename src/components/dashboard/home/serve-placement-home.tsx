@@ -161,8 +161,7 @@ export default function ServePlacementHome({ userId }: { userId: string }) {
         <button
           type="button"
           onClick={load}
-          className="self-start text-[11px] font-medium"
-          style={{ color: "var(--blue-text)" }}
+          className="self-start text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
         >
           Retry
         </button>

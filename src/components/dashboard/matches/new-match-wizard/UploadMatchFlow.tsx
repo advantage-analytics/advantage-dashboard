@@ -1131,7 +1131,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
                   <button
                     type="button"
                     onClick={handleBack}
-                    className="cursor-pointer text-[var(--blue-text)] underline-offset-2 transition-colors duration-150 hover:text-[var(--ink-900)] hover:underline"
+                    className="cursor-pointer text-[var(--blue)] underline-offset-2 transition-colors duration-150 hover:text-[var(--blue-hover)] hover:underline"
                   >
                     answer them on Match details
                   </button>

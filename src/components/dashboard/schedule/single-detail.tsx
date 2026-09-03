@@ -166,7 +166,7 @@ export function SingleDetail({
                 <button
                   type="button"
                   onClick={() => setScoring(true)}
-                  className="cursor-pointer text-[11px] font-medium text-[var(--blue-text)]"
+                  className="cursor-pointer text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
                 >
                   Add score
                 </button>
@@ -182,7 +182,7 @@ export function SingleDetail({
             ) : canEdit ? (
               <Link
                 href={`/dashboard/team/upload?match=${match.id}`}
-                className="text-[11px] font-medium text-[var(--blue-text)]"
+                className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
               >
                 Upload video
               </Link>
@@ -202,7 +202,7 @@ export function SingleDetail({
           <Row label="Video">
             <Link
               href={`/dashboard/team/upload?match=${match.id}`}
-              className="text-[11px] font-medium text-[var(--blue-text)]"
+              className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
             >
               Upload video
             </Link>

@@ -355,15 +355,14 @@ function LineAction({
 }
 
 /**
- * `--blue-text`, not `--blue`.
- *
- * The artboard sets only size and weight and inherits colour from DS v3's
- * `tokens/base.css` (`a{color:var(--blue)}`), a file this app does not import.
- * `--blue` is 3.68:1 on white and fails WCAG 1.4.3 AA below 24px; `--blue-text`
- * exists for exactly this and is what every other 11px action link in the
- * schedule already uses. The focus ring comes from `focus.css`'s `a[href]`
- * rule, which is unlayered and cannot be overridden by a utility — the radius
- * here is only so that ring is not drawn square.
+ * `--blue` at rest, `--blue-hover` on hover — the one rule for a blue word
+ * (colors.css, `--blue-text`). This link once rested on the darker
+ * `--blue-text` for WCAG 1.4.3 AA at 11px; the design owner retired that
+ * because it read as a second, off blue beside the regular one everywhere
+ * else, and the contrast note now lives on the token. The focus ring comes
+ * from `focus.css`'s `a[href]` rule, which is unlayered and cannot be
+ * overridden by a utility — the radius here is only so that ring is not drawn
+ * square.
  */
 const REPORT_LINK =
-  "justify-self-start rounded-[3px] text-[11px] font-medium text-[var(--blue-text)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)]";
+  "justify-self-start rounded-[3px] text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]";

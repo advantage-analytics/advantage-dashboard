@@ -25,6 +25,8 @@ import { cn } from "@/lib/utils";
 const ACTION_CLS = cn(
   "relative inline-flex cursor-pointer items-center rounded-[4px]",
   "text-[11px] font-medium leading-none",
+  // A blue word: --blue at rest, --blue-hover on hover (colors.css).
+  "text-[var(--blue)] hover:text-[var(--blue-hover)]",
   "outline-none transition-colors duration-[var(--duration-hover)]",
   "focus-visible:shadow-[var(--focus-ring)]",
   // Invisible target centred on the label. The label itself renders 11px tall
@@ -53,15 +55,12 @@ export function RowAction({
    */
   ariaLabel?: string;
 }) {
-  const style = { color: "var(--blue)" };
-
   if (href) {
     return (
       <Link
         href={href}
         aria-label={ariaLabel}
         className={cn(ACTION_CLS, className)}
-        style={style}
       >
         {children}
       </Link>
@@ -74,7 +73,6 @@ export function RowAction({
       onClick={onClick}
       aria-label={ariaLabel}
       className={cn(ACTION_CLS, className)}
-      style={style}
     >
       {children}
     </button>

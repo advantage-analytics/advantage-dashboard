@@ -55,13 +55,18 @@
   /* Signal Blue — the single accent. Two washes + rings; nothing in between. */
   --blue:#3B82F6;
   --blue-hover:#2563EB;
-  /* Signal Blue AS TEXT on a white surface. Same hex as --blue-hover, named
-     separately because here it is a resting colour, not a hover state.
-     --blue itself measures 3.68:1 on #FFFFFF, which fails WCAG 1.4.3 AA for
-     anything under 24px — and every inline action in this app ("Add score",
-     "Report", "Change") is 11px. This measures 5.17:1. Use --blue for fills,
-     borders and icons; use this the moment blue becomes a word. */
-  --blue-text:#2563EB;
+  /* A blue WORD rests on --blue and hovers to --blue-hover — the same pair a
+     filled button uses, so a link and a button read as one accent.
+
+     --blue-text was the darker #2563EB as a RESTING colour for text, added
+     because --blue measures 3.68:1 on #FFFFFF and fails WCAG 1.4.3 AA under
+     24px while every inline action here ("Add score", "Report", "Change") is
+     11px. Retired 2026-09-03, design owner's explicit call: two blues side by
+     side read as a second, off tone, not as one accent with a contrast fix.
+     The 3.68:1 figure stands and is accepted; if AA on an 11px link matters,
+     raise its size rather than darken its blue. Kept as an alias so nothing
+     breaks — write --blue, never this. */
+  --blue-text:var(--blue);
   --blue-tint-08:rgba(59,130,246,0.08); /* wash — nav active, tinted footnotes */
   --blue-tint-12:rgba(59,130,246,0.12); /* selection — ::selection, active chips */
   --blue-tint-04:var(--blue-tint-08); /* deprecated alias — 4% was indistinguishable from 8% */
@@ -91,9 +96,9 @@
   --field-ring:var(--blue);
   --field-ring-30:var(--blue-ring-30);
   /* Text-on-tint retired (review): informational capsules are neutral —
-     surface-subtle bg + ink text. Aliases kept so nothing breaks. */
-  --blue-ink-deep:var(--ink-900);
-  --blue-ink-mid:var(--ink-700);
+     surface-subtle bg + ink text. The --blue-ink-* aliases that stood in for
+     it were removed 2026-09-03 along with the tonal blue ink in globals.css:
+     nothing used either, and "ink blue" is not a colour this product has. */
 
   /* Outcome — win/loss only, never mood or decoration */
   --success:#5DB955;

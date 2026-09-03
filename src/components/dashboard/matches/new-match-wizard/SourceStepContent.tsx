@@ -482,7 +482,7 @@ function SourceStepContentImpl({
           clips, no video review, and no hours spent. Singles only for now.{" "}
           <Link
             href="/dashboard/help#swingvision"
-            className="font-medium text-[var(--blue-text)] transition-colors duration-150 hover:text-[var(--ink-900)]"
+            className="font-medium text-[var(--blue)] transition-colors duration-150 hover:text-[var(--blue-hover)]"
           >
             What an export includes
           </Link>
@@ -599,7 +599,7 @@ function SourceStepContentImpl({
                     setOpenMenu("workspace");
                   }
                 }}
-                className="cursor-pointer whitespace-nowrap text-[11px] font-medium text-[var(--blue-text)] transition-colors duration-150 hover:text-[var(--ink-900)] disabled:cursor-not-allowed disabled:opacity-60"
+                className="cursor-pointer whitespace-nowrap text-[11px] font-medium text-[var(--blue)] transition-colors duration-150 hover:text-[var(--blue-hover)] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {switchingTo ? "Switching…" : "Upload for a teammate"}
               </button>

@@ -120,14 +120,29 @@ Use `tabular-nums` for all numeric data (stats, scores, percentages) to ensure a
 | text-muted | `text-[#888888]` | Placeholders, disabled text |
 | text-label | `text-[#AAAAAA]` | Section labels, timestamps |
 | text-disabled | `text-[#CCCCCC]` | Dividers, minimal text |
-| text-accent | `text-[#3B82F6]` | Links, active nav, primary actions |
-| text-accent-hover | `text-[#2563EB]` | Hover state for accent text |
+| text-accent | `text-[#3B82F6]` | Links, active nav, primary actions — the ONLY resting blue for a word |
+| text-accent-hover | `text-[#2563EB]` | Hover state for accent text, and nothing else |
 | text-success | `text-[#5DB955]` | Wins, positive changes |
 | text-error | `text-[#E51837]` | Losses, negative changes |
 | text-inverse | `text-white` | Text on dark backgrounds |
 | text-muted-alt | `text-[#71717A]` | Tertiary metadata, match detail timestamps |
 | text-muted-dim | `text-[#777777]` | KPI change labels |
 | text-inverse-muted | `text-white/50` | Muted text on dark backgrounds |
+
+> **A blue word rests on `--blue` and hovers to `--blue-hover`.** Same pair
+> as a filled button, so a link and a button read as one accent. Never a
+> darker blue at rest: `--blue-text` (#2563EB as a resting colour, added for
+> WCAG AA at 11px) was retired on 2026-09-03 at the design owner's call —
+> two blues side by side read as a second, off tone. It survives only as an
+> alias of `--blue`; write `text-[var(--blue)]`. And never ink on hover: a
+> blue word that turns black on hover stops being the accent the moment you
+> reach for it. The pattern, in full:
+>
+> ```
+> text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]
+> ```
+>
+> Grey text that hovers to blue (filter chips) is a different thing and stays.
 
 ### Background Colors
 
@@ -996,7 +1011,7 @@ flex items-center gap-2.5
 
 ### Hover
 
-- Text: `hover:text-[#2563EB]` or `hover:text-[#525252]`
+- Text: blue words `hover:text-[#2563EB]` (`--blue-hover`, from a `--blue` rest — see Text Colors); ink text `hover:text-[#525252]` or `hover:text-[#0D0D0D]`. A blue word never hovers to ink.
 - Background: `hover:bg-[#F5F5F5]` or `hover:bg-[#FAFAFA]`
 - Duration: `duration-200`
 

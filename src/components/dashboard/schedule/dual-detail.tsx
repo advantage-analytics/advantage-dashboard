@@ -144,7 +144,7 @@ export function DualDetail({
           canEdit ? (
             <Link
               href="/dashboard/team/upload"
-              className="text-[11px] font-medium text-[var(--blue-text)]"
+              className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
             >
               Upload match video
             </Link>

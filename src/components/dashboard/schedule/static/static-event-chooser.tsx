@@ -287,7 +287,7 @@ export function StaticEventChooser() {
               Flagged, not reworded: a team workspace's rail has no Matches
               entry, so this label names a place the coach cannot navigate to
               from here. The design wins; the falsehood is T12's to record. */}
-          <span className="text-[11px] font-medium text-[var(--blue-text)]">
+          <span className="text-[11px] font-medium text-[var(--blue)]">
             {COPY.asideLink}
           </span>
         </div>

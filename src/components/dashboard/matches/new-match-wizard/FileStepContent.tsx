@@ -467,7 +467,7 @@ function FileStepContentImpl({
             <button
               type="button"
               onClick={browse}
-              className="cursor-pointer text-[11px] font-medium text-[var(--blue)] transition-colors duration-150 hover:text-[var(--ink-900)]"
+              className="cursor-pointer text-[11px] font-medium text-[var(--blue)] transition-colors duration-150 hover:text-[var(--blue-hover)]"
             >
               Replace
             </button>

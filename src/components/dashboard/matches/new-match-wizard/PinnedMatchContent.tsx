@@ -246,7 +246,7 @@ function PinnedLine({ preset }: { preset: EventPreset }) {
         </span>
         <Link
           href={preset.eventHref}
-          className="shrink-0 text-[11px] font-medium text-[var(--blue-text)]"
+          className="shrink-0 text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
         >
           Change
         </Link>

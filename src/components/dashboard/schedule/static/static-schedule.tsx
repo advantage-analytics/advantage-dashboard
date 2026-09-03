@@ -510,18 +510,18 @@ function ScaffoldSlot({
 }
 
 /**
- * `--blue-text`, not the `--blue` the design file's `a` rule resolves to.
+ * `--blue` at rest, `--blue-hover` on hover — the one rule for a blue word.
  *
  * The artboard sets only size and weight on these links and inherits colour
  * from DS v3's `tokens/base.css` (`a{color:var(--blue)}`) — a file
  * `src/styles/design-system/index.css` deliberately does not import, because
- * globals.css owns the anchor reset. `--blue` measures 3.68:1 on white and
- * fails WCAG 1.4.3 AA under 24px; `colors.css` added `--blue-text` for exactly
- * this ("use this the moment blue becomes a word") and twelve surfaces already
- * use it. Same hover target the rest of them take.
+ * globals.css owns the anchor reset. These rested on the darker `--blue-text`
+ * for a while, for WCAG 1.4.3 AA at this size; the design owner retired that
+ * resting colour because it read as a second blue beside the regular one, and
+ * the contrast note now lives on the token in `colors.css`.
  */
 const LINK_CLASS =
-  "text-[12px] font-medium text-[var(--blue-text)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)]";
+  "text-[12px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]";
 
 function Separator() {
   return <span className="text-[12px] text-[var(--ink-300)]">·</span>;
