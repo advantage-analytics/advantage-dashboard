@@ -2,16 +2,23 @@
 
 > **v3 exists and is the current authority on component behaviour.** Claude
 > Design project `abcb65f6-4e66-44bc-b9de-b3b47f4313c1` — *Advantage Design
-> System v3*. It ships 30 primitives against v2's 21 — the 9 additions are
-> `DataTable`, `Delta`, `ResultMark`, `InsightCard` (+ `EngineChip`), `Notice`,
-> `Avatar` (+ `StatePill`), `Radio`, `EntitySelect`, `ActivityTray` — plus
-> `guidelines/*.card.html` and its own `SKILL.md`. This document still describes
-> the v2 import, which is what the repo's tokens came from; where v3 and v2
-> disagree about a component, **v3 wins**. The full round-by-round rule set
-> (icon-rail chrome, dark tooltip, table laws, new primitives) is transcribed
-> into [`.skills/advantage-analytics-design/SKILL.md`](.skills/advantage-analytics-design/SKILL.md)'s
+> System v3*. It ships 36 primitives against v2's 21 — the 15 additions are
+> `DataTable`, `Score`, `Delta`, `ResultMark`, `InsightCard` (+ `EngineChip`),
+> `Notice`, `Avatar` (+ `StatePill`), `Radio`, `EntitySelect`, `ActivityTray`,
+> `SlotLine`, `ScoreGrid`, `FieldRow`, `StepBar`, `InlineFacts` — plus
+> `guidelines/*.card.html`, an importable app-shell template and its own
+> `SKILL.md`. In the project, `readme.md` is the current-state rulebook and
+> `CHANGELOG.md` the decision trail (Rounds 10–20 and a platform audit as of
+> 2026-09-04). This document still describes the v2 import, which is what the
+> repo's tokens came from; where v3 and v2 disagree about a component, **v3
+> wins** — and v3 changes no token value, so the ledger below stands. The full
+> rule set (icon-rail chrome, dark tooltip, the table laws and peek drawer, the
+> wizard primitives) is transcribed into
+> [`.skills/advantage-analytics-design/SKILL.md`](.skills/advantage-analytics-design/SKILL.md)'s
 > practical sections rather than duplicated here — this file stays the token
-> ledger.
+> ledger. Four v2 statements below are superseded and marked in place: nav
+> active state, hairlines between rows, the Statistics → Trends rename, and
+> where the Home greeting lives.
 >
 > Corrections already taken from v3:
 >
@@ -67,12 +74,12 @@ v2 is rebuilt from the live product code on the `splitstep-integration` branch �
 2. **A numbered ink scale.** v1's ad-hoc named grays (ink-secondary/tertiary/muted/label) became a formal ramp — `--ink-900 … --ink-100` — that inverts cleanly in dark mode. Review decisions: `ink-600` #71717A added as the muted-but-readable step (any gray that must be read is ≥600 — 4.5:1+; 500/400 are decorative); `ink-border` merged into `ink-200` (near-twins); legacy names (`ink-dialog`, `ink-tertiary`, `ink-faint`) survive as aliases of 900/600/300.
 3. **A second typeface.** v1: "Inter only." v2 adds **Roboto Mono** (400–700) for timestamps, quota readouts and job IDs. Clash Display exists in the code as an unused vestige — intentionally not shipped.
 4. **The async lifecycle is component vocabulary.** Advantage Intelligence introduces states v1 never needed: uploading → uploaded → queued → processing → analyzing → ready | failed, plus the real "video processed, analysis pending" state and confidence surfacing (high = silent, medium = one quiet line, low = banner + Review score). `StatusChip` and the Matches-list progress rows encode this. Rule inherited from the spec: **never promise an ETA** — show state or nothing.
-5. **One sanctioned gradient.** v1 banned gradient surfaces outright. v2 keeps the ban with a single exception the product shipped: the auth brand panel's blue mesh (`.brand-mesh-gradient`). It appears nowhere else.
+5. **One sanctioned gradient.** v1 banned gradient surfaces outright. v2 keeps the ban with a single exception the product shipped: the auth brand panel's blue mesh (`.brand-mesh-gradient`). It appears nowhere else. *(v3 adds one chart-only exception: the sparkline's area fill, the stroke colour fading 18%→0 under the line — never on chrome.)*
 6. **Tint ramps replace one-off hexes.** A deliberately small blue set — wash 8% + selection 12% (4% retired as an alias) + 30/40% rings — success 4/12/20%, danger 15/70%. Blue tints are for interactive states only (nav active, selection); informational capsules are neutral — surface-subtle + ink text (the `--blue-ink-*` aliases and globals.css's tonal blue ink were removed 2026-09-03; nothing used them).
 7. **Keycap kbd + raised surface.** `--surface-raised` + `--shadow-keycap` give shortcut chips a physical keycap treatment (v1's kbd was a flat gray chip).
 8. **Elevation as four roles.** rest → lift → float → top (review S2): card / card-emphasis / dropdown / floating. `card-elevated` and `tooltip` retired into lift/float (legacy names alias); keycap + cta-glow reclassified as component details, not elevation.
 9. **Player attribution formalized.** You own Signal Blue; the opponent recedes to cool slate #64748B (violet retired from attribution in review — it survives only in multi-series viz ramps). Each side has bar-tint + AA text values; legends are the 2×12 tick + ink name (the system's one mark vocabulary), comparison bars are 4px (review L3+B2).
-10. **IA direction (from the UX brief, recommended not shipped):** Statistics → **Trends**, new **Ask** surface, jobs tray, workspace switcher for teams. Components here (SidebarNav, StatusChip) are built to serve that roadmap; the UI kit replicates what exists today.
+10. **IA direction (from the UX brief, recommended not shipped):** Statistics → **Trends**, new **Ask** surface, jobs tray, workspace switcher for teams. Components here (SidebarNav, StatusChip) are built to serve that roadmap; the UI kit replicates what exists today. *(v3 records the outcome: the Trends rename did not ship — Statistics is Statistics, wired under its old name; Ask shipped as a first-class nav destination; the activity tray and the workspace switcher shipped as chrome.)*
 
 ## Content fundamentals
 
@@ -82,24 +89,24 @@ v2 is rebuilt from the live product code on the `splitstep-integration` branch �
 - **Second person**, present tense: "Your first-serve percentage dropped six points."
 - **No emoji, ever.** Unicode arrows (↑ ↓ →) only as trend glyphs.
 - **Honest uncertainty.** Low-confidence stats are labeled estimates with a path to correct ("Review score"); failures get plain language + a support path, never raw vendor errors. Waiting states say "in line — we'll notify you", never fake progress.
-- **Naming:** the analysis engine is **"Advantage Intelligence"** in every user-visible string. The vendor (SplitStep) is internal-only. Greeting: "Good afternoon, {first name}". Auth flavor line: "Built by former collegiate players. Designed for competitive advantage."
+- **Naming:** the analysis engine is **"Advantage Intelligence"** in every user-visible string. The vendor (SplitStep) is internal-only. Greeting: "Good afternoon, {first name}" *(v3: on Home it lives in the header's breadcrumb slot, and the body opens on "Your season")*. Auth flavor line: "Built by former collegiate players. Designed for competitive advantage."
 
 ## Visual foundations
 
 - **Monochrome with one chromatic voice.** Cool neutrals #FAFAFA→#0D0D0D carry every surface and word. Signal Blue #3B82F6 = action/emphasis only, ≤10% of any screen (one CTA, one active nav, one focus ring). Win Green #5DB955 / Loss Red #E51837 = match outcome ONLY — never mood, success toasts excepted (a save "wins the point"). Form errors use iOS-red #FF453A, not Loss Red — a typo never feels like losing; the two reds never share a surface (both confirmed in review). Avoid bare win-green under 12px (2.5:1 on white) — keep it on tints or beside neutral text.
-- **Backgrounds:** flat #FAFAFA page, white cards. No imagery, no textures, no patterns. The one gradient is the auth mesh panel. Surface slots consolidated in review (U2): seven distinct — page/card (+ muted/raised, which diverge in dark), subtle (hover + disabled fills), ink-100 (hairline/borders/skeleton/chart grid), medium (menu borders); field/skeleton/radar-grid are aliases now.
-- **Hairlines divide rows** (#F3F3F3) inside cards and tables — not borders or shadows. Card headers are quiet (review H3): eyebrow + optional 11px blue text action, no rule below — whitespace separates header from content. Signature pattern: a standalone 10px/2.5px-tracked uppercase eyebrow opens every section (no rule; whitespace does the separating).
+- **Backgrounds:** flat #FAFAFA page, white cards. No imagery, no textures, no patterns. The one gradient is the auth mesh panel. *(v3 states the rule that was implicit: grey is a page you scan, white is chrome or a task you're inside — `--surface-page` for browsing surfaces, `--surface-card` for the rail, header, a fixed context column, the peek drawer, dialogs, the wizard and the cards themselves. Cards never nest.)* Surface slots consolidated in review (U2): seven distinct — page/card (+ muted/raised, which diverge in dark), subtle (hover + disabled fills), ink-100 (hairline/borders/skeleton/chart grid), medium (menu borders); field/skeleton/radar-grid are aliases now.
+- **Hairlines divide rows** (#F3F3F3) inside cards and tables — not borders or shadows. *(Superseded in v3: hairlines sit under table **headers** only, never between rows and never around a cell to signal importance; rows separate by the rounded hover wash — SKILL.md → Data Table rule 9.)* Card headers are quiet (review H3): eyebrow + optional 11px blue text action, no rule below — whitespace separates header from content. Signature pattern: a standalone 10px/2.5px-tracked uppercase eyebrow opens every section (no rule; whitespace does the separating).
 - **Type:** Inter 300 for heroes and big numbers — the display ladder is five twin-free steps (review D2): 16 title · 24 title-lg · 30 display (headline merged in) · 40 score · 56 brand-hero. 400 body at 13px, 500 eyebrows. Scoreboards and stat values are 400 (review W3) — ink contrast (900 vs 500/300) separates lead from trail, never weight; numerals never exceed 400. Roboto Mono (confirmed in review) for machine values only — timestamps, quotas, job IDs — never stats. `tabular-nums` on any number compared to another. Body copy ≤75ch. No weight above 600.
 - **Elevation:** flat by default — four roles: rest (shadow-card, 2/8 · 6%) · lift (emphasis — hover/selection) · float (dropdown — menus, tooltips, modals) · top (floating — dark toasts, dragged). Shadow is earned, never decoration. Cards never nest.
 - **Radii:** six shapes (review R2) — 4 cell · 6 button/badge · 8 element · 12 floating (dropdowns, tooltips, video) · 14 surface (cards AND modals) · pill (chips, filter pills, avatars — never standard CTAs or icon buttons). Score-card 10 and modal 16 retired into 12/14; legacy names alias.
 - **Motion:** three ease-out curves (`--ease-primary` .25,.46,.45,.94 · `--ease-out-expo` .23,1,.32,1 · `--ease-chart` .2,0,.4,1). 200ms hovers, 300ms page-enter (+8px rise), 400–600ms reveals. Press = scale 0.97 (buttons) / 0.998 (rows). No bounce, no elastic. Reduced motion: keep opacity, drop transforms.
 - **Spacing (review P2):** two tiers — the 4px grid (4/8/12/16/20/24/32/40) is layout spacing (12 eyebrow→title, 20 card padding, 24 sections, 32/40 page x/y); half-steps 2/6/10 are component-internal only (10 toggle→label; label→input moved to grid 8 in review F2), never between elements on a page. Never invent new spacers — combine.
-- **Hover:** background washes (#F5F5F5 controls, #FAFAFA rows) and text darkening — a blue word rests on `--blue` and darkens to `--blue-hover`, the same pair as a filled button; never ink on hover. `--blue-text`, the darker resting blue for words, was retired 2026-09-03 (design owner's call: two blues read as an off tone) and is now an alias of `--blue`. Never underlines, never color inversions. Nav active = blue-soft wash + blue label (confirmed in review); tabs/switchers are underline style — 2px blue rule, same vocabulary as Input focus.
+- **Hover:** background washes (#F5F5F5 controls, #FAFAFA rows) and text darkening — a blue word rests on `--blue` and darkens to `--blue-hover`, the same pair as a filled button; never ink on hover. `--blue-text`, the darker resting blue for words, was retired 2026-09-03 (design owner's call: two blues read as an off tone) and is now an alias of `--blue`. Never underlines, never color inversions. Nav active = blue-soft wash + blue label (confirmed in review) — *superseded in v3: active nav is a neutral `surface-subtle` wash + ink-900 glyph and label, no stripe, no blue; blue is for actions and where you already are is not one. The rule is shipped in `sidebar/rail-item.tsx`.* Tabs/switchers are unchanged — underline style, 2px blue rule, same vocabulary as Input focus (a tab is a choice, not a location).
 - **Focus:** `--focus-ring` = `0 0 0 2px var(--blue-ring-40)` on buttons, links, tabs and pills. `<input>`, `<textarea>` and native `<select>` take `--focus-ring-field` = `0 0 0 1px var(--field-ring), 0 0 0 2px var(--field-ring-30)` — a separate token so fields and actionable controls *can* diverge, not because they currently do: as of **2026-08-26 both resolve to the same blue** (`--field-ring` aliases `--blue-ring-*`). A neutral grey (`--ink-500`) sat here briefly and was reverted at the design owner's explicit call — one consistent focus colour across every control outweighed conserving the accent per field. The reversion owed no new contrast work: `--blue` already clears WCAG 1.4.11's 3:1 floor against both surfaces the old grey was measured on — 3.68:1 on white, 3.38:1 on #F5F5F5 (`--surface-field`) — independent of why it sits here now. Two layers on the field ring regardless of colour, because the 30% band alone composites too faint to read alone; the opaque 1px layer is what you actually see, the band only softens its edge. `design-system/focus.css` applies both rings automatically by tag, so a field needs no focus class of its own; Radix's `SelectTrigger` is a `<button>` and so takes the ring via the button path, not the field one — same colour today, but a different token, so a future split still works. The file is imported outside any `@layer`, so a Tailwind `focus-visible:ring-*` utility never overrides it — it is discarded. Override by token, not by class.
 - **Underline inputs opt out of the ring, not into a second vocabulary.** A field whose own rule visibly changes on focus (thickens, recolours, or both) needs no ring on top of it — that change is already the one indicator WCAG 2.4.7 (AA) requires, and a surrounding ring is explicitly *not* required once something else on the control clearly shows focus. These opt out with `data-focus-ring="none"`, same as the wrapper-ring case below: auth's `form-field.tsx`, the settings underline input (`SettingsUnderlineInput` / `UnderlineSelect` / `ProfileSelect`), the schedule lineup editor's `NameField`, and the match-edit dialog's underline fields. The opt-out is earned by an actual on-focus change, not by looking like an underline — `schedule/field-row.tsx`'s defaults row draws a hairline that never changes, so it keeps the neutral ring; that ring is the only indicator it has.
 - **The wrapper-ring pattern:** where an input sits inside a bordered box and the box is what reads as the field, the ring is drawn on the box — otherwise it lands inset, floating inside the border. The inner control opts out with `data-focus-ring="none"`, a rule inside `focus.css` scoped to `:focus-visible` rather than an inline `style={{ boxShadow: "none" }}`: inline would suppress the focus ring *and* any shadow the component ever sets for its own reasons, unconditionally, and invisibly to anyone grepping for focus. Which selector draws the ring depends on what else the box holds, and one of the three live cases is a deliberate exception — SKILL.md → Focus specifies all three, and is the copy to follow.
 - **Transparency/blur:** none decoratively; blur only as a rare sticky-bar legibility shield.
-- **Data-viz:** role-based palette in `src/styles/design-system/colors.css` (review M1) — You = blue steps (`--viz-you*`), Opponent/context = slate steps (`--viz-opp*`), Good/Bad = the outcome pair (`--viz-good/bad` + softs), amber `--viz-key` for key moments ONLY (break points, momentum shifts), heatmap #F2F2F2→#3B82F6, court fill #D6E4F9. Violet and surface hues retired — categories (e.g. by-surface breakdowns) are text labels + your blue, never hue-coded. Charts only, never chrome.
+- **Data-viz:** role-based palette in `src/styles/design-system/colors.css` (review M1) — You = blue steps (`--viz-you*`), Opponent/context = slate steps (`--viz-opp*`), Good/Bad = the outcome pair (`--viz-good/bad` + softs), amber `--viz-key` for key moments ONLY (break points, momentum shifts), heatmap #F2F2F2→#3B82F6, court fill #D6E4F9. Violet and surface hues retired — categories (e.g. by-surface breakdowns) are text labels + your blue, never hue-coded. Charts only, never chrome — v3's one exception is the upload wizard's quota meter, whose `--viz-you-mid` fill is data-viz (the hours are the player's own), not action.
 - **Anti-patterns (banned):** glassmorphism, neon, gradient text, warm/earthy tones, bouncy animation, badges/streaks/confetti, colored left-border stripes, nested cards, emoji icons, weights 800+, hero-metric cards outside the KPI strip.
 
 ## Effects tokens — the shipped set
@@ -170,6 +177,17 @@ v2 ships 21 React primitives with `.d.ts` + `.prompt.md` per component:
 
 Plus 18 specimen cards under `guidelines/` and an interactive UI kit
 (`ui_kits/dashboard/` — login → home → matches → match report).
+
+v3 keeps all 21 and adds 15 (36 total), each with the same `.jsx` + `.d.ts` +
+`.prompt.md` trio: `Radio`, `EntitySelect`, `ScoreGrid`, `InlineFacts`
+(`forms/`) · `Notice`, `Avatar` (+ `StatePill`), `FieldRow` (`display/`) ·
+`StepBar` (`navigation/`) · `ActivityTray` (`overlays/`) · `DataTable`,
+`Score`, `ResultMark`, `Delta`, `InsightCard` (+ `EngineChip`), `SlotLine`
+(`data/`) — plus `templates/dashboard/`, an importable app shell composed from
+the bundle. Spec'd but not yet primitives there: the peek drawer, status pills,
+the segmented set switcher, the quota meter. The repo's transcriptions so far:
+`ui/badge.tsx`, `ui/state-pill.tsx`, `ui/status-chip.tsx`, `ui/kbd.tsx`,
+`lib/ui/adv-button.ts`, `lib/ui/adv-field.ts`.
 
 These overlap the existing shadcn primitives in `src/components/ui/`, so they
 are **not** imported wholesale. Port them one at a time as surfaces are

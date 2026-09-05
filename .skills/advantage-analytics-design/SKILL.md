@@ -18,17 +18,30 @@ The canonical source of truth for all UI across the app. Read this before buildi
 > **v3 note.** Claude Design project *Advantage Design System v3*
 > (`abcb65f6-4e66-44bc-b9de-b3b47f4313c1`) reverse-documents the icon-first
 > chrome that shipped after v2 — collapsible icon-rail sidebar, dark tooltips,
-> the activity tray, workspace switcher — plus locked rules for future work
-> (the Round 15 table laws, new data primitives). **It changes no existing
-> token value**; the only additions are five chrome-dimension tokens
-> (`--rail-width`, `--panel-width`, `--rail-row`, `--rail-icon-col`,
-> `--header-h`, in [`spacing.css`](../../src/styles/design-system/spacing.css))
-> and 9 new component primitives (`DataTable`, `Delta`, `ResultMark`,
-> `InsightCard`+`EngineChip`, `Notice`, `Avatar`+`StatePill`, `Radio`,
-> `EntitySelect`, `ActivityTray`). Rules folded in below are marked **(v3)**;
-> where a v3 rule contradicts a pattern printed elsewhere in this file (nav
-> active state, notably), **v3 wins** — the contradicted pattern has been
-> corrected in place, not left standing.
+> the activity tray, workspace switcher — plus locked rules for future work:
+> the table laws, the row-click law and peek drawer, the list-page shape, the
+> upload-wizard anatomy, and 15 primitives v2 did not have. **It changes no
+> existing token value**; the only token additions are five chrome-dimension
+> tokens (`--rail-width`, `--panel-width`, `--rail-row`, `--rail-icon-col`,
+> `--header-h`, in [`spacing.css`](../../src/styles/design-system/spacing.css)).
+> v3 ships 36 primitives against v2's 21: `DataTable`, `Score`, `Delta`,
+> `ResultMark`, `InsightCard`+`EngineChip`, `Notice`, `Avatar`+`StatePill`,
+> `Radio`, `EntitySelect`, `ActivityTray`, `SlotLine`, `ScoreGrid`, `FieldRow`,
+> `StepBar`, `InlineFacts`.
+>
+> In the project, `readme.md` is the current-state rulebook and `CHANGELOG.md`
+> the decision trail (the v2→v3 diff, then Rounds 10–20 and a platform audit;
+> last read 2026-09-04). Round numbers are that changelog's own sequence and
+> live only there — this file cites v3 rules marked **(v3)** without them.
+> Where a v3 rule contradicts a pattern printed elsewhere in this file, **v3
+> wins** and the contradicted pattern has been corrected in place, not left
+> standing. The supersessions so far: nav active is a neutral wash; the
+> Matches column order is Date-first; container rows (events, players) peek in
+> a drawer and carry no chevron; "New" is the one blue-tinted state pill;
+> status pills carry no counts; the page title is the first thing in the
+> scroll body with no eyebrow above it; the selected-row check is Signal Blue
+> site-wide. Where the shipped code still draws the old pattern, the section
+> says so under *Shipped:* — that is drift to migrate, not a second style.
 
 ---
 
@@ -51,8 +64,9 @@ The canonical source of truth for all UI across the app. Read this before buildi
 3. **Quiet confidence** — Light font weights, subtle borders, restrained color. Confidence through clarity, not volume.
 4. **Pro-level exclusivity** — Design for the player who knows what second-serve percentage means. Density is acceptable when it serves understanding.
 5. **One accent, one purpose** — Blue (#3B82F6) = action/emphasis. Green (#5DB955) = winning/positive. Red (#E51837) = losing/negative. No other semantic colors. No decoration colors.
+6. **Grey is a page you scan, white is chrome or a task you're inside** (v3) — `--surface-page` for browsing surfaces with several things to separate (Home, Matches, Roster, Schedule, the report body); `--surface-card` for chrome (rail, header, a fixed context column, the peek drawer) and for focused tasks (wizard, dialogs, and the cards themselves). A fixed context column may be white beside a grey body. Cards never nest.
 
-**Banned**: Bounce/elastic animations, glassmorphism, neon accents, gradient-heavy surfaces, playful illustrations, gamification badges, warm/earthy tones, non-Inter fonts, non-Lucide icons. **(v3)** Colored left-border stripes, nested cards, font weights 800+, hover-peek sidebars (the rail toggles, it never expands on hover), bare unlabeled icon buttons (every icon-only control needs an `aria-label` **and** a dark tooltip), invented ETAs or fake progress, center-aligned table cells, tinted/bannered result cells, filter chips (a filter cut reads as one sentence in a strip, never a chip row).
+**Banned**: Bounce/elastic animations, glassmorphism, neon accents, gradient-heavy surfaces, playful illustrations, gamification badges, warm/earthy tones, non-Inter fonts, non-Lucide icons. **(v3)** Colored left-border stripes, nested cards, font weights 800+, hover-peek panels of any kind (the rail toggles and the drawer opens on click — nothing expands under a crossing cursor), bare unlabeled icon buttons (every icon-only control needs an `aria-label` **and** a dark tooltip), invented ETAs or fake progress, numeric badges anywhere in the chrome, center-aligned table cells, tinted/bannered result cells, type swatches (an event's type is a word; its mark is the program's or the tournament's), accumulating filter chips (a filter cut reads as one sentence in a strip — a fixed 3–4-view status-pill row is a view switcher and is allowed), a second search on any screen.
 
 ---
 
@@ -165,6 +179,14 @@ Use `tabular-nums` for all numeric data (stats, scores, percentages) to ensure a
 | bg-error-soft | `bg-[rgba(229,24,55,0.06)]` | Subtle loss background tint |
 | bg-accent-15 | `rgba(59,130,246,0.15)` | Blue tint backgrounds |
 
+**Surfaces (v3).** The page/card split is a rule, not a habit: grey
+(`--surface-page`) is a page you scan, white (`--surface-card`) is chrome or a
+task you're inside — Design Principles §6. Six of the eight surfaces the
+platform audit read already comply (Home in both workspaces, Matches, Roster,
+both wizards); the report's pinned rail is the sanctioned white context column
+beside a grey body. No imagery, textures or patterns; the only gradients are
+the auth mesh and the sparkline's area fill (stroke colour 18%→0, chart-only).
+
 ### Border Colors
 
 | Token | Value | Use |
@@ -185,7 +207,7 @@ Use `tabular-nums` for all numeric data (stats, scores, percentages) to ensure a
 
 - Court fill: `#D6E4F9`
 - First serve dot: `rgba(59,130,246,0.5)`
-- Second serve dot: `rgba(129,140,248,0.5)` — **retired (v3, Round 14).** Second
+- Second serve dot: `rgba(129,140,248,0.5)` — **retired (v3).** Second
   serves wear `--viz-you-mid` (`#60A5FA`) everywhere, matching the you/opp
   role-based palette instead of a one-off violet. `statistics/serve-placement-stats.tsx`
   still carries the old value and needs the swap — not done as part of this
@@ -210,6 +232,12 @@ Match detail and video sections use additional colors for multi-player different
 | warning-bg | `#FFFBEB` | Warning banner background |
 | warning-border | `#FDE68A` | Warning banner border |
 | warning-text | `#92400E` | Warning banner text |
+
+> The tokens retired violet from player attribution (v2 review decision C):
+> `--player-2` is cool slate `#64748B` in `colors.css`, with `-text` `#475569`,
+> `-soft` `#F1F5F9` and `-bar-tint` `#CBD5E1`. The purple values above are what
+> `src/lib/design/player-colors.ts` and `visuals/court-visualization.tsx` still
+> ship — drift to migrate surface by surface, not a second palette.
 
 ---
 
@@ -239,6 +267,7 @@ Match detail and video sections use additional colors for multi-player different
 - List item vertical: `py-2.5` to `py-3`
 - Button: `px-3 py-1.5`
 - Card header: `h-14 px-5` or `px-6 py-4`
+- Full-viewport size class **(v3)**: 1512×982 personal pages pad `32px 56px` with 22px section gaps; the default page container stays `px-8 py-10`
 
 ### Chrome Dimensions (v3)
 
@@ -321,12 +350,17 @@ Four named tokens in `effects.css` cover the CSS side. Prefer them in new
 work; the `duration-200` / `duration-150` utilities in the recipes below are the
 same values written the older way, and are not a defect to go fix ad hoc.
 
+**(v3)** 200ms for hovers, the rail width and the drawer slide; the rail
+collapse is choreographed (labels out in 80ms, then the edge travels); 300ms
+page-enter with an 8px rise; 400ms is the dark tooltip's deliberate reveal.
+Press = scale 0.97 on buttons, 0.998 on rows.
+
 | Token | Value | Use |
 |---|---|---|
 | `--duration-fast` | 150ms | Micro-feedback, colour swaps |
 | `--duration-hover` | 200ms | Hover and colour transitions (`advButton()` uses this; its press is a separate hard-coded 80ms — 200ms there reads as a bounce) |
-| `--duration-enter` | 300ms | Page and section enter — reserved, no call sites yet |
-| `--duration-reveal` | 400ms | Larger reveals — reserved, no call sites yet |
+| `--duration-enter` | 300ms | Page and section enter (+8px rise) — reserved, no `var()` call sites yet |
+| `--duration-reveal` | 400ms | The dark tooltip's reveal and larger reveals — one call site, `globals.css`'s fadeIn |
 
 The wider scale below is the Framer Motion side, where durations are numbers:
 
@@ -404,6 +438,13 @@ the transcription. Use it; do not hand-roll a near-miss.
 Sizes sm/md/lg = 32/36/44px. Press is `scale(0.97)`, suppressed under reduced
 motion. Focus is `--focus-ring`. One primary per surface — a dialog carries one,
 never two.
+
+`secondary` is not a variant — a design doc that writes `variant="secondary"`
+means `outline`. **(v3)** A page header carries at most one primary; its
+companion is `ghost`, never `outline` on a grey page (an outline's white fill
+reads as a second card). Task footers use a text-only secondary. `pill`
+switches to the 10px uppercase chip form below — filters and "Recommended"
+tags, never a CTA.
 
 > **Hover on a secondary button is a wash, never blue.** `outline` and `ghost`
 > both shipped turning their border and label blue on hover, which made every
@@ -509,23 +550,33 @@ text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2.5px]
 text-[13px] font-light text-[#0D0D0D] tabular-nums
 ```
 
-### Status Badge (Win/Loss)
+### Outcome Word (`Badge`)
+
+Bare tracked uppercase text in the outcome colour, **no container** —
+`src/components/ui/badge.tsx` is the transcription (`win` / `loss` / `blue` /
+`neutral`):
 
 ```
-px-1.5 py-1 rounded-[6px] text-[10px] font-semibold
-// Win
-bg-[rgba(115,230,104,0.15)] text-[#5DB955]
-// Loss
-bg-[rgba(229,24,55,0.15)] text-[#E51837]
+text-[10px] font-medium uppercase leading-none tracking-[2.5px]
+// Win: color var(--success) · Loss: color var(--danger) — set in style, not a utility
 ```
 
-### Form Pill (Win/Loss)
+Sentence-case children ("Won", not "WON"); the CSS uppercases. This is the
+**word register** — only under a labeled Result column header; dense headerless
+rows take `ResultMark`'s glyph, never both in one row, never a bare W/L letter.
+**(v3)** The tinted result cell was built, evaluated and rejected — Data Table
+rule 2. The old tinted badge (`bg-[rgba(115,230,104,0.15)]` /
+`bg-[rgba(229,24,55,0.15)]` on 10px semibold) survives only in the command
+palette's W/L chips (`search/search-command-palette.tsx`) — drift, not a
+second register.
 
-```
-w-5 h-5 rounded-[3px] flex items-center justify-center text-[9px] font-semibold
-// Win: bg-[rgba(115,230,104,0.15)] text-[#5DB955]
-// Loss: bg-[rgba(229,24,55,0.15)] text-[#E51837]
-```
+### Form Ticks (`FormPills`)
+
+**(v3)** The last five results as bars, not lettered squares: 2.5×12px, 3px
+gap, 1px radius, oldest left, `--viz-good` / `--viz-bad`. Shipped as
+`FormTicks` in `team/roster-table.tsx`; pair with a muted summary ("5–2 last
+7") where there is room. The pre-v3 treatment — a 20px `rounded-[3px]` square
+with a 9px semibold letter on the 15% tint — is retired.
 
 ### Activity Indicator Line
 
@@ -547,7 +598,7 @@ w-px h-10 rounded-full shrink-0
 
 ### Data Tooltip
 
-Tooltips over visualizations (court dots, heatmap cells, serve zones) use a consistent floating box — no caret/arrow.
+Tooltips over visualizations (court dots, heatmap cells, serve zones) use a consistent floating box — no caret/arrow. This is the chart-hover box only: every icon-only *control* answers hover with the dark `Tooltip` (Navigation → Dark Tooltip), never this one.
 
 ```
 bg-white border border-[#F3F3F3] rounded-xl
@@ -656,7 +707,9 @@ location.
 (initials on a 6px-radius square — blue fill for personal, ink-900 for team),
 sub-label flips to "Switch workspace" on hover. Team workspaces swap the nav
 list entirely (Team Home · Roster · Compare — no team "Matches" until that
-page scopes itself).
+page scopes itself). The collapsed rail shows the workspace mark, not the
+logo. Entities are squares, people are circles: workspace, program and engine
+marks sit on 6px-radius squares; the `Avatar` is the one circle.
 
 ### Dark Tooltip (v3)
 
@@ -676,10 +729,20 @@ Replaces v2's white floating box — v2's `label`+`content` API becomes
 `label`+`detail`. At 64px the icons ARE the interface, not a puzzle; the
 tooltip is how a collapsed rail keeps every label without keeping the space.
 
+**Icon-first, three rules:** every icon-only control has an `aria-label` and
+a dark `Tooltip`; glyphs sit in fixed square hit targets (28 / 32 / 40px) so
+nothing shifts when labels come and go; the label is never gone — collapsed,
+it moves into the tooltip. `SidebarNav`, `ActivityTray`, `DataTable`'s row
+actions and `EngineChip` ship the treatment built in: import the primitive,
+never redraw the dark box, never double-wrap those. `side`: top (default) ·
+bottom (header chrome) · right (rail rows). It names; it doesn't explain
+paragraphs — stat definitions may use `label` + `detail`, and nothing
+essential lives only in a tooltip.
+
 ### Activity Tray (v3)
 
-Header icon (Lucide `activity`, 15px) + 6px Signal-Blue dot at top-right —
-presence, not arithmetic: **no numeric badges anywhere in the chrome**, the
+Header icon (Lucide `activity`, 15px ink-700 in a 28px radius-8 square) + 6px
+Signal-Blue dot at top 3px / right 3px — presence, not arithmetic: **no numeric badges anywhere in the chrome**, the
 count lives only in the tooltip ("2 in flight") and matching `aria-label`.
 Opens a 326px "Notifications" panel: unread-dot rows, 3px progress tracks
 (live sheen only while something is actually running), settled
@@ -709,9 +772,21 @@ what it searches; naming it does.
 
 **Account**: 26px initials avatar (the chrome's one circle — icon buttons
 elsewhere are 8px-radius squares) + 12px chevron rotating 180° on open, pill
-hover wash, 260px menu.
+hover wash, 260px menu. The profile menu carries quiet role/plan capsules
+(grey — neither is an action) and the workspace list again.
 
-**Workspace title** (Round 11g) — the header's leading slot on
+**On Home the breadcrumb slot carries the greeting:** "Good morning, Jordan"
+12/500 + `text-micro` "Personal · Monday, Aug 24" — so the body can open on a
+number (Layout Patterns → Title Slot). *Shipped:* the greeting is still the
+body's `text-display` h1 (`home/welcome-message.tsx`); moving it is part of
+the Home rework, not a token change.
+
+**One search per screen:** the header owns `⌘K`; a list page never adds a
+second search box. Keyboard map: `⌘K` search (the header's one binding) ·
+`⌘\` rail collapse (the sidebar's) · `⌘U` upload · `⌘S` save settings. Keep
+the `isMac` detection — it feeds the tooltip string, not a keycap.
+
+**Workspace title** (v3) — the header's leading slot on
 workspace-level pages: school 12px/500 ink-900 + sport `text-micro`,
 baseline-aligned, 8px gap, no dash/dot/divider ("Meridian State · Men's
 tennis" is wrong — no separator at all). Used when the leading slot IS the
@@ -727,9 +802,12 @@ text-[11px] font-normal
 // Separator: ChevronRight text-[#CCCCCC]
 ```
 
+The breadcrumb is the return path from a record page: back from a report
+restores the list it came from, with its drawer still open **(v3)**.
+
 ---
 
-## Dialog (v3 — Round 11 anatomy)
+## Dialog (v3)
 
 ```
 w-[440px]           // forms — w-[520px] for compare dialogs
@@ -767,30 +845,48 @@ h-px bg-[#E5E5EA] mx-2 my-1
 
 **EntitySelect (v3)** — the "For" field, picking a person or someone new.
 Float menu radius 12, 6px padding; rows 38px (radius 8, hover surface-subtle,
-selected keeps the wash + a 13px ink-900 check). Person row = 22px avatar +
+selected keeps the wash + a 13px `--blue` check — Signal Blue is the one
+colour that means "chosen", in menus and cards alike; the earlier ink-900
+menu check is superseded). Person row = 22px avatar +
 12/500 name + 11px ink-500 middot-joined meta. "Someone new" is always first,
 above a hairline, dashed-ring avatar. Section labels are quiet sentence case
 (11px ink-400) — no uppercase eyebrows inside menus, no nested menus.
 
 ---
 
-## Data Table (v3 — the Round 15 table laws)
+## Data Table (v3 — the table laws)
 
 Governs **every** table in the product — Matches, Roster, Events, Schedule —
 not a page-specific treatment. Generalizes `matches/match-card-list.tsx` +
-`match-actions/match-actions-menu.tsx`.
+`match-actions/match-actions-menu.tsx`. The full laws and the column recipes
+live in the design project's `components/data/DataTable.prompt.md`.
 
-1. **Column order is a decision sequence, left to right: outcome → who →
-   measure → context → when.** Never fence a column with rules or washes to
-   signal importance — priority is position, not a border. Canonical orders:
-   Matches = Result · Opponent · Score · Event · Analysis · Date · chevron;
-   Roster = ResultMark · Opponent · Score · Date · Delta; Schedule = Date ·
-   Event · Site · State · Team score. Text and its header flush left;
-   numeric measures and headers flush right; scores flush left in one fixed
-   column (116px in Matches) at one precision, tabular. **Never
-   center-align anything.** Exactly one fluid cell per table (Analysis in
-   Matches, State in Schedule) — everything else fixed/bounded so scores and
-   dates start at the same x on every row.
+**One list-page shape** — Matches, Roster and Schedule share it, so a coach
+moving between them re-learns nothing: title slot · ghost + primary · filter
+row (status pills · Filters · sort) · one white full-width table card on the
+grey page · optional footer line ("Season 3–1 in duals · 31 of 36 lines
+analyzed" + one blue link). Schedule is a list page too — the all-white
+master-detail split is retired; its detail is the peek drawer below.
+
+1. **Column order is a decision sequence, never fenced.** Priority is
+   position — never a rule or wash around a column to signal importance. One
+   reading order for every list: lists are newest-first, so **Date leads**
+   (12px tabular ink-700, 72px) · the name at 13/500 ink-900 with its 26px
+   mark (program initials for a dual, the tournament mark for a tournament) ·
+   context at 12px ink-600 · numbers and outcome **right-aligned at the
+   edge**. Canonical orders: **Matches** = Date · Opponent · Event (+ mono
+   round) · Analysis · Score · Result · chevron; **Roster** = # · Player ·
+   Form · Record · Last match; **Schedule** = Date · Event · Type · Venue ·
+   Lines `n / 9` · Score · Result. Text and its header flush left; numeric
+   measures and headers flush right; scores in one fixed column (116px in
+   Matches) at one precision, tabular. **Never center-align anything.**
+   Exactly one fluid cell per table (Analysis in Matches) — everything else
+   fixed or bounded so scores and dates start at the same x on every row. No
+   column a filter or sort acts on may be merged into another cell; no
+   repeated words — noun in the header, qualifier in the cell. Not-yet values
+   are an ink-400 em dash; a future event's Result reads "Not played" (11px
+   ink-500), never a Badge. Type is a plain word — no type swatch (amber stays
+   chart-only).
 2. **The result cell has no container.** A tinted "banner" was built and
    rejected. `Badge` stays bare tracked uppercase text (10/500, 2.5px
    tracking, success/danger) — the word already carries the meaning, and a
@@ -799,21 +895,40 @@ not a page-specific treatment. Generalizes `matches/match-card-list.tsx` +
    headerless dense rows. Word under a labeled "Result" header, glyph in
    headerless rows — **never both in one row, never a bare W/L letter** (it's
    standings shorthand and doesn't translate).
-3. **The row end encodes behavior.** The 13px trailing column is never
-   empty: `chevron-right` (ink-300) when the row opens a destination;
-   `chevron-down` when it expands in place, rotating 180° on open (200ms).
-   Held resting AND hovered — it never moves or hides, so nothing shifts
-   between states.
-4. **Row state pills.** "New" joins Shared/Private as a grey 18px `StatePill`
-   (10/500 ink-700 on surface-subtle) beside the row's primary name.
-   **Unread is not a dot and not a column** — the dot-column pattern retired
-   from data tables (the 6px blue dot stays the activity tray's mark alone).
-   Mark the exception, not the norm. Max one state pill per row.
+3. **The row-click law — containers peek, records open.** Decided by the
+   noun, not the page. **Record rows** (matches, wherever they appear — Home,
+   Matches, inside an event drawer, a player's match list) navigate to the
+   report: trailing `chevron-right` 13px, ink-300 → ink-900 on hover, held
+   resting and hovered so nothing shifts; the hover wash is transient.
+   **Container rows** (events on Schedule, players on Roster) open the peek
+   drawer (below) and carry **no chevron** — there is nothing to travel to;
+   the wash persists on the selected row. `chevron-down` only when a row
+   expands in place, rotating 180° on open (200ms). The same noun never opens
+   two ways, and the report's pinned left column is chrome, not a peek. *The
+   hover wash and cursor say a row is clickable, but not whether clicking
+   leaves the page.*
+4. **Row state pills.** Shared / Private / Draft are grey 18px `StatePill`s
+   (10/500 ink-700 on surface-subtle) beside the row's primary name — mark
+   the exception, not the norm ("Private" under a share-everything policy,
+   "Shared" under private-by-default). **"New" is the one blue-tinted pill**:
+   18px, 10/500, `--blue` text on a 10% blue tint — emphasis, not neutral
+   status; never filled blue (it would compete with the Result badge); gone
+   once the report is opened. **Unread is not a dot and not a column** — the
+   dot column retired from data tables (the 6px blue dot stays the activity
+   tray's mark alone). Max one state pill per row. A pill never truncates:
+   the name span takes `min-width:0; overflow:hidden; text-overflow:ellipsis`
+   and the pill `flex-shrink:0` — a clipped pill reads like the banned W/L
+   letter. *Shipped:* `ui/state-pill.tsx` is grey-only and
+   `match-card-list.tsx` draws "New" through it — the blue tint is the one
+   part of this rule not yet built.
 5. **Row actions on hover:** surface-muted wash on the rounded
    `radius-element` row, inset 8px from the card edge; the lifecycle cell
    swaps for a `⋯` trigger (`MoreHorizontal`, stroke 1.75 — the one
    exception to strokeWidth 1.5 in the product) in a 28px radius-element
-   square, opening a 12px-radius float menu with destructive last.
+   square, opening a 12px-radius float menu with destructive last and a
+   `detail` line on consequential items ("Coach and teammates lose this
+   match"). Keep to 2–3, revealed on hover / focus-within. Container rows
+   have no action gutter — the Roster's Upload lives in the drawer.
 6. **Filter panel + applied strip.** One panel, sectioned: facets about the
    record first, facets about the counterparty below a hairline under an
    "Opponent" heading. 2–3 options → segmented row with an "Any" default;
@@ -821,32 +936,124 @@ not a page-specific treatment. Generalizes `matches/match-card-list.tsx` +
    "Clear all". On apply the panel **closes** and a note strip states the cut
    in words — plain sentence · middot · "N of M" · one quiet "Clear filter" —
    **never chips, never a badge**. Engaged trigger uses the nav-active
-   grammar (surface-subtle wash + ink-900, no border/dot/count).
-7. **Table page states.** Day zero renders title, primary action and usage
-   footer identically to the populated page — the frame never moves; chips
+   grammar (surface-subtle wash + ink-900, no border/dot/count). Lifecycle
+   pills stay independent of the panel — a filter cut is not a lifecycle
+   bucket. Pagination reads against the filtered set ("4 of 4 in this
+   filter") plus an escape link to the full library.
+7. **Status pills are a view switcher, not a filter.** A fixed 3–4 set (All ·
+   New · In progress · Estimates), 26px, hairline border, **no counts, no
+   dots**; active = `--border-medium` + surface-subtle + ink-900. Counts live
+   in the title slot's summary line ("6 players · 2 invites pending"), never
+   on a pill. The chip ban covers chips that accumulate from user choices;
+   this fixed row is sanctioned. Its multi-select cousin on reports is the
+   **segmented set switcher**: 22px segments labeled by the set score itself,
+   selected = surface-muted, unselected at 42% opacity; scope readout left,
+   "Whole match" reset right, both only while filtered.
+8. **Table page states.** Day zero renders title, primary action and usage
+   footer identically to the populated page — the frame never moves; pills
    and table are absent, not skeletoned; the middle carries one 24px light
    line, one sentence, two quiet paths. The resting view is never
-   pre-filtered — it carries lifecycle chips (All · New · In progress ·
-   Estimates) **with counts inside the chip itself** (this is the one place
-   a count lives outside a tooltip — it's page content, not chrome), and the
-   long tail lives in the filter panel. A filtered view is its own screen,
-   never a mutation of the resting one — the resting frame must keep
-   showing its in-flight and estimate rows regardless of what's filtered.
-   Lifecycle cell copy:
-   "View report" when ready · `StatusChip` while running (no elapsed time —
-   the tray owns progress) · "Estimate · Review data" for low confidence
-   (grey fact + blue action, never yellow, never red).
-8. **8a is the default row treatment** — 52px fixed rows, hairline under the
+   pre-filtered; a filtered view is its own screen, never a mutation of the
+   resting one — the resting frame keeps showing its in-flight and estimate
+   rows regardless of what's filtered. Lifecycle cell copy: "View report"
+   when ready · `StatusChip` while running (no elapsed time — the tray owns
+   progress) · "Estimate · Review data" for low confidence (grey fact + blue
+   action, never yellow, never red).
+9. **8a is the default row treatment** — 52px fixed rows, hairline under the
    header only, none between rows; hover = surface-muted wash on a rounded
    radius-element row inset 8px. Eyebrow headers over 8a rows is the
-   sanctioned combination. *(Erratum, Aug 24 2026: an earlier v3 DataTable
-   spec called for hairlines between every row — 8a's site-wide lock above
-   supersedes that for every dense result list; the labeled Result-header
-   register survives only where a table keeps column headers at all.)*
+   sanctioned combination. *(Erratum: an earlier v3 DataTable spec called for
+   hairlines between every row — 8a's site-wide lock above supersedes that for
+   every dense result list; the labeled Result-header register survives only
+   where a table keeps column headers at all.)*
+10. **Quiet ≠ empty.** Quiet is earned by removing redundancy (a legend under
+    every bar), never information: Home result rows keep their three mini
+    stats, event headers their 13px metadata glyphs, the KPI strip its five
+    tiles.
+
+### Peek Drawer (v3)
+
+The container-row destination — one 340px shell for Roster and Schedule.
+`--surface-card`, hairline left edge, `--shadow-dropdown`; slides in 200ms
+`--ease-primary` while the table reflows to the remaining width (the flexible
+name column absorbs the loss — nothing else moves). **Opens on click, never
+hover**: a panel opening under a crossing cursor shifts the table and is
+unreachable from a keyboard. Click opens and selects (the wash persists); `↑↓`
+step to the next record; Esc, the X, or re-clicking the selected row closes.
+No URL of its own — `?player=` / `?event=` deep links are the one case that
+lands open. **Closed is the resting state**: full-width table, nothing
+selected, no chevrons, no gutter.
+
+- **Header, 44px, 20px inset:** counter "Player 3 / 6" · ‹ › stepping · "Open
+  profile ↗" / "Open event ↗" (11px blue, `ArrowUpRight`) · divider · X. The
+  record's **name is a link** to its page (blue on hover) and ⌘-click on the
+  row does the same. The body scrolls; a full-width primary pins to the
+  bottom ("Upload for Rafael" · "Enter results").
+- **Player body:** identity → six-match sparkline with a stat header → four
+  24px stat pills that switch the chart → three recent matches as record rows
+  (with chevrons — these navigate) → Upload. Upload is never event-level.
+- **Event body:** program mark + name + conference → glyph row (date · venue ·
+  surface) → score row (28/300 tabular, winner ink-900, loser ink-500) + nine
+  4×18px outcome ticks (singles · gap · doubles) → all nine lines at 36px as
+  record rows ("Awaiting result" lines have no chevron; an unset line is a
+  blue "+ Set line" row) → Enter results.
+- *Shipped:* `schedule/static/event-drawer.tsx` is the 340px event drawer.
+  The Roster still renders its pre-v3 columns (# · Player · Form · Last match
+  · 1st serve · actions) — the Record column, the drawer, and the retirement
+  of the stat column and action gutter are the roster's open delta.
+
+### Roster Row (v3) — the row compares, the drawer reads
+
+`#` (12px tabular ink-500, "—" when unranked) · Player (26px `Avatar` + name
+13/500 ink-900 — a link, blue on hover) · Form (`FormPills`) · Record (13px
+tabular — what coaches rank by) · Last match (`ResultMark` 13px · "def./l." +
+opponent 12px ink-700 · date `text-micro` tabular — **no score**; the score
+moves to the drawer's recent matches). No stat column: one stat picked from
+four claims to be the one that matters, and the drawer shows all four with
+deltas. Invited people share the table: dashed-ring avatar, position "—",
+email as the name, "Invited Aug 4 by you · player role", Resend (11px blue) ·
+Revoke (11px ink-500) inline.
 
 ---
 
-## New Data Primitives (v3)
+## Events & Matches — the Vocabulary (v3)
+
+Two nouns, and the copy in every list follows from them. A **match** is the
+unit: one player, one opponent, one score, one video. An **event** is an
+optional container — Dual · Tournament · Other (opponent program, date range,
+home/away) — and a match belongs to 0 or 1. There is no "dual match" record:
+a dual is 6 singles + 3 doubles sharing an event.
+
+- **Dual:** creating the event builds the lineup — `S1`–`S6`, `D1`–`D3`, mono
+  line labels. Slots are real matches once the lineup is set; an unfilled one
+  reads **"Awaiting result"** (5px ink-300 dot + 11px ink-600), an unassigned
+  one "Line not set" (a blue "+ Set line" row in the event drawer). The team
+  score adds itself up — nobody types 4–3. Video attaches to a line, never to
+  the event.
+- **Tournament:** no lineup — matches added as played (player · round ·
+  opponent), grouped by player in round order, rounds in mono (`R32 · R16 ·
+  QF · SF · F`).
+- **One-off:** the upload wizard asks "Event — optional"; events are created
+  from Schedule, never inside the wizard.
+- **No duplicates:** video for a scored line attaches to that match; a player
+  uploading their own dual video is offered their open slot. Whoever fills a
+  slot is credited. Doubles are SwingVision-only for now.
+- **Opponents are scoped to what names them:** personal = a private label
+  from your own history; team in a dual = a program-scoped player under the
+  opposing school (`opponent_player_id`, name only), reused by every later
+  match so head-to-heads aggregate; outside a dual, free text. Named once in
+  the Players block, never repeated as a Context field. Program players are
+  edited from the roster, never from a match.
+
+Copy conventions the lists lean on: sentence case; middots join suffixes and
+counts ("Cardinal · M", "12 matches · 8 won"); waiting states say "In line —
+we'll notify you", **never an invented ETA**; chrome copy is one word where
+one will do (Profile · Account · Preferences · Usage · Plan · Team). The design
+project's sample personas: Jordan Lee · Elena Vargas · Meridian State.
+
+---
+
+## v3 Primitives
 
 **`Score`** — tiebreak scores are superscripts, never parentheses: `7-6⁴`,
 digit at 0.6em raised 1.05em, 0.5px off the score. Applies to any score
@@ -860,7 +1067,9 @@ survives translation.
 
 **`Delta`** — compared-number changes color by direction: `↑` viz-good ·
 `↓` viz-bad · `→` ink-500. The numeral itself stays ink-900 — direction
-carries the color, not the number.
+carries the color, not the number. Unicode arrows, never icons, and the arrow
+always travels with the colour. `Delta` is the bare in-row form; labeled
+evidence stats use `InsightStatChip`.
 
 **`InsightCard` + `EngineChip`** — the one AI-authored card format. Header:
 eyebrow "Focus" left + `EngineChip` right (20px ink-900 square, radius-button,
@@ -878,15 +1087,19 @@ icon max, 11px text, optional quiet blue action — never buttons. Suggestion:
 the system proposes an action — blue-tint-08 wash, bold lead names the
 finding, body states the consequence, Accept (blue 500) + Decline (quiet,
 never red). A suggestion earns its tint by carrying an action; a passive fact
-never gets one.
+never gets one. The same object hosts the applied-filter strip (Data Table
+rule 6) and the wizard's slot suggestion (`SlotLine`, below) — the latter as a
+grey strip, not a suggestion tint, since attaching to a line is reversible.
 
 **`Avatar` + `StatePill`** — profile ≠ account, and the avatar says which:
 self-managed = unmarked initials (default, no chip); coach-managed = border
 ring + grey pill; invited = dashed ring (no person yet, only an email);
 "Claimed today" = a transition-receipt pill that decays after a session (a
 one-time acknowledgment, not a permanent state). State chips are 18px pill,
-10/500 ink-700 on surface-subtle — **never blue**. The avatar is the system's
-one circle everywhere except the account menu.
+10/500 ink-700 on surface-subtle — grey, never an outcome colour; "New" is the
+one blue-tinted exception (Data Table rule 4). 26px in rows, 22px in menus.
+The avatar is the system's one circle — entities are squares, people are
+circles.
 
 **`Radio`** (check-dot) — single-choice selection is a solid Signal Blue 14px
 dot + white 9px check (stroke 2.5); unselected is a 1px ink-300 ring; disabled
@@ -895,6 +1108,22 @@ dot for single-choice (`Radio`), 4px-radius square for multi-select
 (`Checkbox`). `card` variant renders the option as a full card; selection
 also sets border `--blue` + `--blue-tint-08` wash — the dot marks the
 selected item, it never appears on hover.
+
+**`SlotLine`** — one sentence, two hosts. When a match belongs to a lineup
+slot the product says so as: line label (11px ink-500; mono only inside a
+lineup list) → `chevron-right` 12px ink-300 → the matchup (12px; the
+workspace's own player at 500, the opponent at 400) → a 1×14 `--border-medium`
+rule → fixture facts (11px ink-600 with 13px ink-400 glyphs: `calendar` date,
+`map-pin` site). The event's name is never in the line — the host already
+carries it. Nothing in it is blue. Its two hosts stay separate components:
+the **chrome band** (a fact you supplied — 36px, full pane width,
+surface-subtle with a hairline bottom, pinned under the step bar, persisting
+across the whole flow; trailing "Change" opens the lineup as a float menu) and
+the **inline `Notice`** (a guess the system made — "Looks like" lead or a
+check receipt, trailing Attach · Not this match, then Detach; grey, not
+blue-tint, since it's reversible). They differ in lifetime, width authority
+and what the trailing action does (navigate vs mutate). Personal workspaces
+render neither — no schedule, no slot to state.
 
 **`TermMark`** — the mark before a row in a short list of facts a person is
 asked to read before they commit: the join flow's sharing terms
@@ -920,10 +1149,90 @@ consequences that follow from an action rather than facts being read.
 
 ---
 
-## Personal Home Recipes (v3, Round 13)
+## Wizard & Task Primitives (v3)
+
+Locked from the upload wizard. Everything reuses the tokens above — no new
+colours, radii or type.
+
+**Required mark — mark what IS required, never what's optional.** A 12px
+`--error` asterisk 4px after the eyebrow, `aria-label="Required"`; the
+"— optional" suffix retires everywhere, since an unmarked label is optional by
+definition. `Input`, `Select`, `Textarea` and `EntitySelect` all take
+`required`. The mark is the only red on a form until an error appears, and
+form red (`--error`) and Loss Red never share a surface.
+
+**Fields.** Field text is 13px across `Input`, `Select`, `EntitySelect` and
+`Textarea` — never 14px. The rule is the focus indicator (1px hairline → 2px
+`--blue`; see Focus → the underline opt-out); `emphasis` keeps a standing 2px
+blue rule for the one field a page is asking for; disabled drops the label to
+ink-300 and the text to ink-500 with the rule at 1px. `Textarea` is the one
+boxed input — everything single-line stays underline.
+
+**`FieldRow`** — one fact with a face: a 40px lead (entity square or person
+circle), label, sub-label and a trailing control on a 1px hairline. It is
+`EntitySelect`'s menu row grown to field scale, so the row you pick *from* in
+a menu and the row you land *on* in the form read as one object at two sizes.
+The active row thickens its rule to 2px `--blue` (one active row at a time);
+unresolved shows a muted circle/square lead + ink-400 placeholder value.
+`chevron="double"` (`ChevronsUpDown`) when the row switches between peers,
+`chevron="single"` (`ChevronDown`) when it opens a list — never mixed for one
+kind of row. Provenance is a tag, stated once: `text-micro` at the field's
+right edge, or in the section subline when a whole section shares a source —
+never both.
+
+**`StepBar`** — 2px tall, one flex child per step, never a fixed count with
+greyed segments; done and current render Signal Blue, remaining stay
+`--border-hairline`.
+
+**`InlineFacts`** — a read-back sentence whose 2–3-option facts become
+tappable words (surface-subtle wash + 13px chevron, darkening to `--ink-100`
+on hover). The row never grows; Change/Done swap the words, not the layout;
+no Cancel — every pick is already saved, so reopening the word is the undo.
+
+**`ScoreGrid`** — the one way a score is typed, anywhere. The header states
+the format as a plain fact, never a control (Format / Scoring / Lets are their
+own required Context fields upstream). 40×40 `--radius-cell` cells, 16px
+tabular; focus = 1.5px blue + 2px `--blue-tint-12` ring; a digit advances
+focus you → opponent → next set; a dashed ghost column (13px plus) adds a set
+while the format allows one; a `TB` column appears only for a set that needs
+a tiebreak score and never auto-advances. `Score`'s superscripts remain the
+read-back form; `ScoreGrid` is the entry form.
+
+**Quota meter, footer host.** A 56×3 segmented track (`--ink-100` track;
+fills in order `--viz-you-mid` used, `--viz-you-light` this file) + an 11px
+mono tabular readout, present **only** in a footer where hours are actually
+at stake — never on the export path, never on Team Home. The fill is the one
+`--viz-*` use outside a chart (the hours are the player's own); Continue stays
+the only Signal-Blue object on the row. Settings · Usage is the ledger; the
+footer is the receipt.
+
+**Four rules, written down so they aren't re-decided.** *Dashed means waiting
+for something real* (drop zone, invited avatar, ghost column — never for
+errors, never decorative). *Provenance is a tag, stated once* (above). *A
+draft is a row, not a toast* — a grey Draft `StatePill` beside the name, em
+dashes in Result/Score, "Resume · step 3 of 4" in the lifecycle cell; the
+header's status slot alone says "Draft saved" (`matches/draft-row.tsx` ships
+this). *Opponents are scoped to what names them* (Events & Matches above).
+
+**Selected-row check is Signal Blue, site-wide.** The 13px Lucide `check`
+that marks "chosen" in a menu or card is `--blue` everywhere — the same glyph
+the check-dot `Radio` carries in white. One colour means "chosen", in menus
+and cards alike; the earlier ink-900 menu check is superseded. Single choice
+= the check-dot `Radio`, multi-select = the square `Checkbox`; a dialog
+carries one primary, never two.
+
+---
+
+## Personal Home Recipes (v3)
 
 Page-specific recipes from the Personal Home & Matches canvas — not general
 primitives, but locked patterns for that page's own cards.
+
+**Home opens on numbers.** The greeting moves into the header's breadcrumb
+slot; the body opens with "Your season" at 24px (`.text-title-lg`), so the
+first screen's display type is a KPI number, not a title — Home is the one
+exception to the title slot's 30px. *Shipped:* `home/welcome-message.tsx`
+still opens the body with a `text-display` greeting.
 
 **Next fixture card** — the claimed player's one forward-looking object.
 Eyebrow middot-joins the stakes ("Next · B1G Conference" only when it's
@@ -964,21 +1273,36 @@ own the two reds). Cross-workspace scope is named out loud in greeting
 sublines ("Friday's dual is in your team workspace") and KPI subtexts
 ("personal matches only").
 
+**Reports (draft — placement not locked).** The Focus insight follows the
+match block in the report's context column — identity → details → claim, from
+the top, never `margin-top:auto`. `InsightCard` is the engine's one card on
+Home; on a report the evidence stats are bare type (`InsightStatChip`).
+
 ---
 
 ## Layout Patterns
 
-### Page Heading (Label + Title)
+### Title Slot (v3)
+
+The page title is the **first element in the scroll body** — `.text-display`
+(30/300 on a 36px line; the rulebook quotes −0.4px tracking, the class ships
+−0.6px) with a 32px top margin and **never an eyebrow above it**. The summary
+line and the actions sit on its baseline; counts live in the summary line
+("6 players · 2 invites pending"), never on pills. A header carries at most
+one primary, its companion `ghost`. Home is the exception: it opens on "Your
+season" at 24px so the first display type is a KPI number (Personal Home
+Recipes). Shipped on `settings/layout.tsx`, `team/page.tsx`,
+`team/roster/page.tsx`, `help/page.tsx` and the opponents pages.
 
 ```
-flex flex-col gap-3
-// Label
-text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px]
-// Title
-font-light text-[30px] text-[#0D0D0D] tracking-[-0.6px] leading-[36px]
+// Title — first in the scroll body, 32px above it
+text-display   // = font-light text-[30px] leading-9 tracking-[-0.6px] text-[var(--ink-900)]
+// Summary line, on the title's baseline
+text-[13px] text-[var(--ink-600)]
 ```
 
-Used on Home (date + greeting), Matches (count + title), Statistics (count + title). The `gap-3` (12px) between label and title is required.
+The pre-v3 page heading — a 10px eyebrow (a date, a count) 12px above the
+title — is retired. Where a page still draws one, it is drift.
 
 ### Page Container
 
@@ -1012,7 +1336,8 @@ flex items-center gap-2.5
 ### Hover
 
 - Text: blue words `hover:text-[#2563EB]` (`--blue-hover`, from a `--blue` rest — see Text Colors); ink text `hover:text-[#525252]` or `hover:text-[#0D0D0D]`. A blue word never hovers to ink.
-- Background: `hover:bg-[#F5F5F5]` or `hover:bg-[#FAFAFA]`
+- Background: `hover:bg-[#F5F5F5]` or `hover:bg-[#FAFAFA]` — washes and text darkening only; never underlines, never inversions
+- Row actions and menus reveal on hover / `focus-within`, 200ms opacity **(v3)**
 - Duration: `duration-200`
 
 ### Active / Press
@@ -1186,7 +1511,9 @@ delete the only indicator a control has.
 <Icon className="size-3.5 text-[#8A8A8E]" strokeWidth={1.5} />
 ```
 
-Common sizes: `size-3` (12px), `size-3.5` (14px), `size-4` (16px), `size-5` (20px), `size-8` (32px empty states).
+Sizes **(v3)**: 16px rail nav (`size-4`) · 15px header chrome · 14px
+inline/actions (`size-3.5`) · 13px menu items and metadata glyphs (ink-400) ·
+12px chevrons (`size-3`) · 28–32px empty states (`size-8`).
 
 ### Glyph Registry (v3)
 
@@ -1195,10 +1522,10 @@ trigger's `MoreHorizontal` (1.75, the one exception).
 
 | Glyph | Use | Size |
 |---|---|---|
-| `Home`, `Video`, `BarChart3`, `MessageSquare`, `Users`, `Swords`, `Settings`, `HelpCircle` | Nav — Home / Matches (both workspaces) / Statistics / Ask / Roster / Compare / Settings / Help | 16px (`size-4`) |
-| `PanelLeftClose`/`PanelLeftOpen`, `ChevronsUpDown`, `Activity`, `Search`, `ChevronDown`/`ChevronRight`, `Check`, `Plus`, `Loader2` | Chrome — rail toggle, workspace switcher, tray, search, menus | 15px header, 14px inline |
+| `Home`, `Video`, `Calendar`, `BarChart3`, `MessageSquare`, `Users`, `Swords`, `Settings`, `HelpCircle` | Nav — Home / Matches (both workspaces) / Schedule / Statistics / Ask / Roster / Compare / Settings / Help | 16px (`size-4`) |
+| `PanelLeftClose`/`PanelLeftOpen`, `ChevronsUpDown`, `Activity`, `Search`, `ChevronDown`/`ChevronRight`/`ChevronLeft`, `ArrowUpRight`, `Check`, `Plus`, `X`, `Loader2` | Chrome — rail toggle, workspace switcher, tray, search, menus, drawer stepping and close; `ArrowUpRight` = "open as page" in a drawer header | 15px header, 14px inline, 12px chevrons |
 | `Check` | Also `TermMark` — the row mark in the join sharing terms and the guardian acknowledgments. Blue where something is gained, ink where nothing moves, never blue above a checkbox | 14px, stroke 1.5 |
-| `MoreHorizontal`, `Pencil`, `Trash2` | Row actions | 14px / 1.75 stroke on `MoreHorizontal` |
+| `MoreHorizontal`, `Pencil`, `Trash2`, `Upload` | Row and drawer actions | 14px / 1.75 stroke on `MoreHorizontal` |
 | `SlidersHorizontal`, `Timer`, `CircleHelp`, `LogOut` | Profile menu — Preferences / Usage / Help / Sign out | 13px |
 | `CircleCheck`, `CircleX` | `ResultMark` — match outcome ONLY, never repurposed for analysis lifecycle (that's `StatusChip`'s dot + text) | 14px |
 | `Calendar`, `MapPin`, `Swords`, `Film`, `Target` | Fixture/event metadata (`Target` = practice; the crosshair icon it replaced is retired) | 13px, `--ink-400` |
