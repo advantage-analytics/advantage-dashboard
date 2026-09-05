@@ -20,10 +20,12 @@ import type { EventGroup, MatchRow } from "@/app/dashboard/(home)/recent-activit
 
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
+// 64 / 56 / 52 — the cell widths Pa2 draws (the eyebrow-sm label is the
+// widest thing in each, so the width is the label's, not the number's).
 const STAT_CELLS: Array<{ label: string; width: string; format: (m: MatchRow) => string }> = [
-  { label: "1st serve", width: "76px", format: (m) => (m.firstServePct != null ? `${m.firstServePct}%` : "—") },
-  { label: "Winners", width: "68px", format: (m) => (m.winners != null ? `${m.winners}` : "—") },
-  { label: "Errors", width: "58px", format: (m) => (m.errors != null ? `${m.errors}` : "—") },
+  { label: "1st serve", width: "64px", format: (m) => (m.firstServePct != null ? `${m.firstServePct}%` : "—") },
+  { label: "Winners", width: "56px", format: (m) => (m.winners != null ? `${m.winners}` : "—") },
+  { label: "Errors", width: "52px", format: (m) => (m.errors != null ? `${m.errors}` : "—") },
 ];
 
 interface RecentMatchesProps {
@@ -97,7 +99,8 @@ function InFlightLink({ match }: { match: MatchRow }) {
               // spinner turning for `uploaded` or `processed` claims work is
               // happening when nothing is; both are idle until something
               // outside the pipeline moves them.
-              isWorking(status) && "animate-spin"
+              // 1.2s per turn, the frame's `advspin`; Tailwind's default spin is 1s.
+              isWorking(status) && "animate-[spin_1.2s_linear_infinite]"
             )}
             strokeWidth={1.5}
             aria-hidden="true"
@@ -205,9 +208,11 @@ export default function RecentMatches({ event, isNewEvent = false }: RecentMatch
   let newIndex = 0;
 
   return (
-    <div className="flex flex-col gap-1 border-t border-[var(--border-hairline)] pt-3.5 first:border-t-0">
+    // Pa2's event block: 14px above the name, 5px to the metadata row, 4px to
+    // the first match row, a hairline between groups.
+    <div className="flex flex-col border-t border-[var(--border-hairline)] pt-3.5 first:border-t-0">
       <motion.div
-        className="flex flex-col gap-1.5 pb-1"
+        className="flex flex-col gap-[5px] pb-1"
         initial={isNewEvent && !shouldReduceMotion ? { opacity: 0, y: 8 } : false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: EASE_OUT }}

@@ -691,7 +691,7 @@ Empty state: "Nothing in flight."
 ### Header (v3)
 
 ```
-sticky top-0 z-30 h-[var(--header-h)] px-4 bg-white
+sticky top-0 z-30 h-[var(--header-h)] px-6 bg-white
 border-b transition-colors duration-200
 // Default: border-transparent
 // Scrolled: border-[#EBEBEB]
@@ -956,7 +956,9 @@ practice, crosshair retired · court mark · verified), 13px glyphs.
 **Small locks** — personal-Home KPI strip defaults to the repo's five serve
 cards (1st serve · 1st serve won · 2nd serve won · service games won · break
 points saved), each with trend chip + sparkline; customize popover picks 4–5
-across Serve/Return/Other. Card-header counts retire — no bare numeral beside
+across Serve/Return/Other — its trigger is hover-revealed (and shown on
+focus / while open), because Platform Audit Pa2 draws the strip with an
+empty corner and v3 reveals icon actions on hover. Card-header counts retire — no bare numeral beside
 an eyebrow, no count inside an "All matches" link; counts live in sublines
 and tooltips only. Low-confidence path: "Estimate · Review data" — grey fact
 + blue action, never yellow (charts-only amber) or red (outcomes/form errors

@@ -82,7 +82,16 @@ export interface OverallPerformanceData {
   kpiCards: KpiCardData[];
   winRate: { value: number; change: number; sparkline: number[] };
   form: ("W" | "L")[];
+  /** Every match the viewer filed, including video still being analysed. */
   matchCount: number;
+  /**
+   * Matches that carry a `match_stats` row on the viewer's side — the ones a
+   * report actually exists for. The Home title's "N matches analyzed" and the
+   * Focus card's "from N analyzed matches" read this, not `matchCount`: the
+   * two differ on exactly the days the difference matters, when a video is in
+   * the pipeline and its stats have not landed yet.
+   */
+  analyzedMatchCount: number;
   heatmap: HeatmapDay[];
   performanceProfile: PerformanceProfileDimension[];
 }
@@ -142,6 +151,7 @@ const DEFAULT_PERFORMANCE: OverallPerformanceData = {
   winRate: { value: 0, change: 0, sparkline: [] },
   form: [],
   matchCount: 0,
+  analyzedMatchCount: 0,
   heatmap: [],
   performanceProfile: [
     { label: "SERVE", current: 0, previous: 0 },
@@ -466,7 +476,9 @@ const KPI_SPECS: KpiSpec[] = [
   // Serve
   {
     key: "first-serve-pct",
-    label: "1ST SERVE PERCENTAGE",
+    // "1st serve", as the Home strip's frame (Platform Audit Pa2) labels it —
+    // the tile's value is the percentage, the label need not say so twice.
+    label: "1ST SERVE",
     category: "Serve",
     format: "percent",
     description: "Percentage of first serves that landed in the service box",
@@ -498,7 +510,8 @@ const KPI_SPECS: KpiSpec[] = [
   },
   {
     key: "breakpoints-saved",
-    label: "BREAKPOINTS SAVED",
+    // Two words, as everywhere else the product writes it.
+    label: "BREAK POINTS SAVED",
     category: "Serve",
     format: "percent",
     description: "Percentage of break points defended on serve",
@@ -876,6 +889,16 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
     orderedMatchIds
   );
 
+  // A match is analysed when a stats row exists for the side the viewer played.
+  // Keyed by match id, not counted per row, so a match that somehow carries
+  // both sides' rows for the viewer still counts once.
+  const analyzedMatchIds = new Set<string>();
+  for (const stat of typedStats) {
+    if (matchPlayerMap.get(stat.match_id) === stat.is_player1) {
+      analyzedMatchIds.add(stat.match_id);
+    }
+  }
+
   return {
     views: [
       { ...overall, label: "Overall Record" },
@@ -897,6 +920,7 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
     winRate: calculateWinRateSparkline(typedMatches, myPlayerIds, user.id),
     form: calculateForm(typedMatches, myPlayerIds, user.id, 5),
     matchCount: typedMatches.length,
+    analyzedMatchCount: analyzedMatchIds.size,
     heatmap: calculateHeatmap(typedMatches, myPlayerIds, user.id),
     performanceProfile: calculatePerformanceProfile(
       typedStats,

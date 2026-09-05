@@ -109,7 +109,7 @@ export function ServePlacementQuietStrip({
           </div>
           <a
             href={statisticsHref}
-            className="text-[11px] font-medium"
+            className="text-[11px] font-medium transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
             style={{ color: "var(--blue)" }}
           >
             Open placement view

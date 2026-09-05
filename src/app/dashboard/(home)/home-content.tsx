@@ -3,7 +3,7 @@
 import { useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
-import WelcomeMessage from "@/components/dashboard/home/welcome-message";
+import { SeasonTitle } from "@/components/dashboard/home/season-title";
 import EmptyDashboard, {
   type SetupProgress,
 } from "@/components/dashboard/home/empty-dashboard";
@@ -11,7 +11,6 @@ import RecentActivity from "./recent-activity";
 import ServePlacementHome from "@/components/dashboard/home/serve-placement-home";
 import { FocusCard } from "@/components/dashboard/home/focus-card";
 import HomeAiInsight from "@/components/dashboard/home/home-ai-insight";
-import { NewReportsSubline } from "@/components/dashboard/home/new-reports-subline";
 import { UsageFooter } from "@/components/dashboard/shared/usage-footer";
 import { ActivityWidget } from "@/components/dashboard/home/activity-widget";
 import type { EvidencePart } from "@/lib/ui/insight-evidence";
@@ -24,15 +23,16 @@ const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
 let hasAnimatedOnce = false;
 
 interface HomeContentProps {
-  displayName: string;
-  greeting: string;
   hasMatches: boolean;
   userId: string;
   /** Which ids mean "me" on a match row — login plus claimed roster profiles. */
   playerIds: string[];
   kpiStrip?: ReactNode;
   usage: PersonalUsage;
+  /** Every match filed — the insight cache's signature. */
   matchCount: number;
+  /** Matches a report exists for — what the title and the Focus card count. */
+  analyzedMatchCount: number;
   /** Computed evidence for the Focus card, or null when there is none to state. */
   insightEvidence: EvidencePart[] | null;
   insightSignature: string;
@@ -48,14 +48,13 @@ interface HomeContentProps {
 }
 
 export default function HomeContent({
-  displayName,
-  greeting,
   hasMatches,
   userId,
   playerIds,
   kpiStrip,
   usage,
   matchCount,
+  analyzedMatchCount,
   insightEvidence,
   insightSignature,
   activity,
@@ -76,19 +75,14 @@ export default function HomeContent({
   }, []);
 
   return (
-    <div className="flex flex-1 flex-col gap-6">
-      <WelcomeMessage
-        name={displayName}
-        greeting={greeting}
-        subline={
-          hasMatches ? (
-            <NewReportsSubline userId={userId} fallback="" />
-          ) : (
-            <span className="text-body-sm">
-              Send a match and the analysis comes back to this page.
-            </span>
-          )
-        }
+    // 16px between the title row, the strip, the grid and the footer — Pa2's
+    // column gap (21a ran 22px; the audit's 1440×900 frames tightened it).
+    <div className="flex flex-1 flex-col gap-4">
+      <SeasonTitle
+        hasMatches={hasMatches}
+        analyzedMatchCount={analyzedMatchCount}
+        usage={usage}
+        userId={userId}
       />
 
       {!hasMatches ? (
@@ -97,12 +91,14 @@ export default function HomeContent({
         <>
           {kpiStrip}
 
-          <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+          {/* 348px right column and a 24px gutter, as 21a and Pa2 draw it;
+              the cards inside each column sit 20px apart. */}
+          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_348px]">
             <motion.div
               initial={skipAnimation ? false : { opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, ease: EASE_CURVE, delay: 0.15 }}
-              className="flex min-w-0 flex-col gap-4"
+              className="flex min-w-0 flex-col gap-5"
             >
               <RecentActivity userId={userId} playerIds={playerIds} />
               {/* Under the matches card in the main column — the design's
@@ -123,7 +119,7 @@ export default function HomeContent({
                   <HomeAiInsight
                     evidence={insightEvidence}
                     cacheSignature={insightSignature}
-                    matchCount={matchCount}
+                    matchCount={analyzedMatchCount}
                   />
                 </FocusCard>
               )}

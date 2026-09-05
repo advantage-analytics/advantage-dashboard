@@ -128,7 +128,7 @@ export default function HomeAiInsight({
       <div className="mt-0.5 flex items-center gap-2.5">
         <Link
           href="/dashboard/statistics"
-          className="text-[11px] font-medium"
+          className="text-[11px] font-medium transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
           style={{ color: "var(--blue)" }}
         >
           Open Statistics

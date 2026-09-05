@@ -224,7 +224,8 @@ function groupMatchesIntoEvents(
       date: formatDisplayDate(first.date),
       matchType: first.match_type ?? null,
       courtType: first.court_type ?? null,
-      verificationStatus: first.verified ? "Verified Result" : null,
+      // Sentence case — the DS's one register for labels, and how Pa2 spells it.
+      verificationStatus: first.verified ? "Verified result" : null,
       matches: mapped,
     });
   }
@@ -501,22 +502,23 @@ export default function RecentActivity({
 
   return (
     <>
-    <div className="surface-card" style={{ padding: "8px 24px 12px" }}>
+    <div className="surface-card" style={{ padding: "8px 24px 14px" }}>
       {/* Header */}
       <div className="flex items-center gap-3" style={{ padding: "12px 0 2px" }}>
         <span className="eyebrow">Recent matches</span>
         <div className="flex-1" />
         <Link
           href="/dashboard/matches"
-          className="text-[11px] font-medium transition-colors duration-200 focus-visible:outline-none rounded-sm"
+          className="text-[11px] font-medium transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:outline-none rounded-sm"
           style={{ color: "var(--blue)" }}
         >
           All matches
         </Link>
       </div>
 
-      {/* Content */}
-      <div className="pb-2">
+      {/* Content — no padding of its own; the card's 14px bottom (Pa2) is the
+          whole gap under the last row. */}
+      <div>
         {loading && (
           <div className="flex flex-col gap-8 py-4">
             {[0, 1].map((i) => (

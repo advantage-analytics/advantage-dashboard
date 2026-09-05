@@ -60,7 +60,11 @@ export function NewReportsSubline({
   if (!count) return fallback ? <span className="text-body-sm">{fallback}</span> : null;
 
   return (
-    <Link href="/dashboard/matches" className="text-[11px] font-medium" style={{ color: "var(--blue)" }}>
+    <Link
+      href="/dashboard/matches"
+      className="text-[11px] font-medium transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+      style={{ color: "var(--blue)" }}
+    >
       {count} new report{count === 1 ? "" : "s"} →
     </Link>
   );

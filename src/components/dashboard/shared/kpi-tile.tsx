@@ -232,7 +232,8 @@ export function KpiTile({
       : `${label}: ${value}`,
   } as const;
 
-  const baseClass = "flex-1 flex flex-col gap-3 px-5 py-5 min-w-0";
+  // `.adv-kpi`: flex:1, min-width 0, 12px gap, 20px padding, overflow hidden.
+  const baseClass = "flex-1 flex flex-col gap-3 px-5 py-5 min-w-0 overflow-hidden";
   const linkClass = href
     ? "cursor-pointer hover:bg-[#FAFAFA] transition-colors duration-200 focus-visible:outline-none"
     : hasDetail
@@ -265,16 +266,22 @@ export function KpiTile({
         </ValueTransition>
         {sparkline && sparkline.length >= 2 && (
           <>
-            <div aria-hidden className="flex-1 max-w-12" />
+            {/* Uncapped: the DS's `.adv-kpi-spark{margin-left:auto}` pushes the
+                sparkline to the tile's right edge. A 48px cap used to hold it
+                beside the value, which only coincided with the design at one
+                tile width. */}
+            <div aria-hidden className="flex-1" />
             <Sparkline data={sparkline} positive={isGood} />
           </>
         )}
       </div>
       {trend ? (
         <div className="flex items-center gap-1.5 overflow-hidden">
+          {/* Arrow and magnitude share one 11px/500 run (`.adv-kpi-trend`);
+              the glyph was a separate 10px/600 weight before. */}
           <ValueTransition
             valueKey={arrow}
-            className={`text-[10px] font-semibold inline-block ${trendColor}`}
+            className={`text-[11px] font-medium inline-block ${trendColor}`}
             delay={0.1}
           >
             {arrow}

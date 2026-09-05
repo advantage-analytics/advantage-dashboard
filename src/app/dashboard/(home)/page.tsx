@@ -29,12 +29,13 @@ export default async function Home() {
     { data: savedPreferences },
     activity,
   ] = await Promise.all([
-    // `hand` and `backhand` ride along on the row the greeting already needs —
-    // they are the checklist's first answer, and a second query for two columns
-    // of a row already in hand would be a round trip for nothing.
+    // `hand` and `backhand` are the getting-set-up checklist's first answer.
+    // The name used to ride along here for the page's greeting; that greeting
+    // now lives in the header (Platform Audit Pa2), which reads the viewer the
+    // layout already resolved.
     supabase
       .from("users")
-      .select("first_name, last_name, hand, backhand")
+      .select("hand, backhand")
       .eq("id", userId)
       .single(),
     getOverallPerformance(),
@@ -60,13 +61,8 @@ export default async function Home() {
     getPersonalActivity(userId),
   ]);
 
-  // Real name only — when absent, the greeting drops the name rather than
-  // showing a "Player" placeholder.
-  const displayName = [user?.first_name, user?.last_name]
-    .filter(Boolean)
-    .join(" ");
-
-  const { kpiCards, winRate, form, matchCount } = performanceData;
+  const { kpiCards, winRate, form, matchCount, analyzedMatchCount } =
+    performanceData;
   const hasMatches = matchCount > 0;
 
   const allKpiCards: KpiCardData[] = [
@@ -108,25 +104,26 @@ export default async function Home() {
     notifications: Boolean(savedPreferences),
   };
 
-  // Compute greeting server-side to avoid hydration flash
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-
   return (
     <div className="flex flex-1 w-full flex-col bg-white">
       {/* `w-full` alongside `mx-auto`: auto side margins on a column flex item
           switch off the stretch that would otherwise size it, so without an
-          explicit width the container would shrink to fit its content. */}
-      <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-6 sm:px-8 py-8 sm:py-10">
+          explicit width the container would shrink to fit its content.
+
+          20px 56px 10px — the content column of Platform Audit Pa2 (and Pa,
+          the audit's as-built mirror), which tightened 21a's 32px vertical
+          padding so the usage footer sits above the fold at 1440×900. The
+          max-width never binds at that size; it only stops the column
+          running edge to edge on a much wider monitor. */}
+      <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-14 pt-5 pb-2.5">
         <HomeContent
-          displayName={displayName}
-          greeting={greeting}
           hasMatches={hasMatches}
           userId={userId}
           playerIds={myPlayerIds}
           kpiStrip={allKpiCards.length > 0 ? <KpiCards cards={allKpiCards} matchCount={matchCount} /> : undefined}
           usage={usage}
           matchCount={matchCount}
+          analyzedMatchCount={analyzedMatchCount}
           insightEvidence={insightEvidence}
           insightSignature={insightSignature}
           activity={activity}
