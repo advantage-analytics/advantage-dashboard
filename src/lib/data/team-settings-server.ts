@@ -24,6 +24,8 @@ export interface TeamInvite {
   email: string;
   role: MemberRole;
   createdAt: string;
+  /** `program_invites.invited_by` — a `users.id`, or null once that account is gone. */
+  invitedBy: string | null;
 }
 
 export interface TeamIdentity {
@@ -68,7 +70,7 @@ export async function getTeamSettings(
     supabase.rpc("program_roster", { p_program_id: programId }),
     supabase
       .from("program_invites")
-      .select("id, email, role, created_at")
+      .select("id, email, role, created_at, invited_by")
       .eq("program_id", programId)
       .is("accepted_at", null)
       .order("created_at", { ascending: false }),
@@ -108,12 +110,14 @@ export async function getTeamSettings(
       email: string;
       role: string;
       created_at: string;
+      invited_by: string | null;
     }[]
   ).map((invite) => ({
     id: invite.id,
     email: invite.email,
     role: invite.role as MemberRole,
     createdAt: invite.created_at,
+    invitedBy: invite.invited_by,
   }));
 
   return {

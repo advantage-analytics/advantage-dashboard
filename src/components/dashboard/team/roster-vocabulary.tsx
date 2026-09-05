@@ -57,6 +57,34 @@ export function invitedLine(invitedOn: string, role: MemberRole): string {
 }
 
 /**
+ * The same fact as the Roster table draws it — Platform Audit `Tb4`:
+ * "Invited <mono>Aug 4</mono> by you · player role".
+ *
+ * The date is machine text and takes the mono face; "by you" appears only when
+ * `program_invites.invited_by` is the person looking, because the design draws
+ * a coach reading their own invitations and the row must not claim somebody
+ * else's outreach as theirs. Team Home's card keeps the string form above —
+ * that page's design is still being decided, so its words are not this
+ * task's to change.
+ */
+export function InvitedLine({
+  invitedOn,
+  role,
+  byViewer,
+}: {
+  invitedOn: string;
+  role: MemberRole;
+  byViewer: boolean;
+}) {
+  return (
+    <>
+      Invited <span className="mono">{invitedOn}</span>
+      {byViewer ? " by you" : ""} · {role} role
+    </>
+  );
+}
+
+/**
  * The role a resend sends under.
  *
  * `create_program_invite` will not mint an owner invitation — a program has one

@@ -419,6 +419,19 @@
 }
 
 /* New match highlight pulse */
+/* The roster's player drawer — Updated Design System 20f: "the drawer slides in
+   from the right edge over 200ms (--ease-primary), the table reflows to the
+   remaining width". Width is what animates, because the reflow is the point:
+   a transform would slide the panel over a table that had already jumped. */
+@keyframes roster-drawer-in {
+  from { width: 0; }
+  to { width: 340px; }
+}
+@keyframes roster-drawer-out {
+  from { width: 340px; }
+  to { width: 0; }
+}
+
 @keyframes highlight-new-match {
   0% { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3); }
   100% { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0); }

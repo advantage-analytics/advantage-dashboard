@@ -41,3 +41,28 @@ export const PLAYER_MEASURES: PlayerMeasureDef[] = [
   { key: "break_points_converted_pct", label: "Break points taken", hint: "Break chances converted" },
   { key: "total_points_won_pct", label: "Total points won", hint: "Share of all points won" },
 ];
+
+/**
+ * The four the roster drawer shows — Platform Audit `Tb4` / Updated Design
+ * System `20c`: "1st serve · 1st won · 2nd won · BP saved".
+ *
+ * A subset of `PLAYER_MEASURES` by key, so the drawer and the profile page can
+ * never disagree about what a number is; only the labels differ, because a
+ * 26px pill has room for "1st won" and not for "First serve won". `label` is
+ * what the drawer's one-line stat header prints above the sparkline, `pill`
+ * what the chip beneath it carries.
+ */
+export interface RosterDrawerMeasureDef {
+  key: string;
+  /** "1st serve in" — the stat header's label. */
+  label: string;
+  /** "1st serve" — the pill's label. */
+  pill: string;
+}
+
+export const ROSTER_DRAWER_MEASURES: RosterDrawerMeasureDef[] = [
+  { key: "first_serve_pct", label: "1st serve in", pill: "1st serve" },
+  { key: "first_serve_won_pct", label: "1st serve won", pill: "1st won" },
+  { key: "second_serve_won_pct", label: "2nd serve won", pill: "2nd won" },
+  { key: "break_points_saved_pct", label: "Break points saved", pill: "BP saved" },
+];

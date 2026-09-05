@@ -970,6 +970,7 @@ function rosterCard(
     email: invite.email,
     role: invite.role,
     invitedOn: shortDate(invite.createdAt),
+    invitedBy: invite.invitedBy,
   }));
 
   // Nobody, nothing outstanding, no news: the card is absent rather than empty.
