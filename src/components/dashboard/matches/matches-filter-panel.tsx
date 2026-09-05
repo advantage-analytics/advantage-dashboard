@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
@@ -22,11 +22,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
  *   Source, Analysis, Player), unbounded in size, so it stays a list of
  *   checkbox rows. Multi-select, unchanged from before this design pass.
  *
- * The trigger carries no count badge — 18a and 18c both put the "how many
- * does this leave" answer in the panel's own footer and the applied-filter
- * strip below the toolbar, never on the button itself. Matches SKILL.md's
- * retired-badge rule elsewhere on this page ("no bare numeral beside an
- * eyebrow, no count inside a link").
+ * The trigger is a 14px `SlidersHorizontal` and the word "Filters" — no
+ * chevron, no count badge (Platform Audit Pb2). 18a and 18c both put the "how
+ * many does this leave" answer in the panel's own footer and the applied-filter
+ * strip below the toolbar, never on the button itself. Engaged — open, or with
+ * a cut applied — it takes the nav-active grammar: surface-subtle wash, ink-900,
+ * no border, no dot, no count (Data Table law 6).
  */
 
 export interface FilterOption {
@@ -126,6 +127,8 @@ export function MatchesFilterPanel<K extends string>({
   // A panel with nothing in it is a button that does nothing when pressed.
   if (sections.length === 0) return null;
 
+  const engaged = open || hasActive;
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -135,21 +138,21 @@ export function MatchesFilterPanel<K extends string>({
           aria-expanded={open}
           className={cn(
             "flex h-7 items-center gap-1.5 rounded-[var(--radius-element)] px-2 text-[12px] transition-colors duration-150",
-            open ? "" : "hover:bg-[var(--surface-subtle)]"
+            engaged ? "" : "hover:bg-[var(--surface-subtle)]"
           )}
           style={{
-            background: open ? "var(--surface-subtle)" : undefined,
-            color: open ? "var(--ink-900)" : "var(--ink-600)",
-            fontWeight: open ? 500 : 400,
+            background: engaged ? "var(--surface-subtle)" : undefined,
+            color: engaged ? "var(--ink-900)" : "var(--ink-600)",
+            fontWeight: engaged ? 500 : 400,
           }}
         >
-          Filters
-          <ChevronDown
-            className="size-3"
+          <SlidersHorizontal
+            className="size-3.5"
             strokeWidth={1.5}
-            style={{ color: open ? "var(--ink-500)" : "var(--ink-400)" }}
+            style={{ color: engaged ? "var(--ink-700)" : "var(--ink-500)" }}
             aria-hidden="true"
           />
+          Filters
         </button>
       </PopoverTrigger>
 
