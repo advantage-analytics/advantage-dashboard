@@ -152,7 +152,11 @@ before writing a template or wiring a send.**
 **Read `.skills/advantage-analytics-design/SKILL.md` before building any UI** — it is the
 authoritative build reference. `DESIGN.md` documents v2 provenance and what was
 deliberately deferred (dark mode, v2 shadows). Tokens live in
-`src/styles/design-system/`, imported by `globals.css`.
+`src/styles/design-system/`, imported by `globals.css`. The Claude Design project
+*Advantage Design System v3* (`abcb65f6-4e66-44bc-b9de-b3b47f4313c1`) is the current
+authority on component behaviour; SKILL.md transcribes its rules, marked **(v3)**, and
+flags where shipped code still draws the old pattern. Re-sync from its `CHANGELOG.md`
+(read via DesignSync, not the web) when it moves — it changes no token value.
 
 Inter only (300/400/500/600), type scale 9–56px, blue accent `#3B82F6`, success `#5DB955`,
 error `#E51837`, Lucide icons only, three Framer Motion curves
