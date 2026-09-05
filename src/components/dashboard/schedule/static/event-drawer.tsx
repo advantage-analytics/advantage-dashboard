@@ -1,237 +1,577 @@
 "use client";
 
 import Link from "next/link";
+import {
+  ArrowUpRight,
+  Calendar,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  MapPin,
+  Plus,
+  X,
+} from "lucide-react";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { StatusChip } from "@/components/ui/status-chip";
+import {
+  ChromeTooltip,
+  CHROME_TOOLTIP_DELAY_MS,
+} from "@/components/dashboard/shared/chrome-tooltip";
+import { ResultMark } from "@/components/dashboard/result-mark";
+import { ScoreLine } from "@/components/dashboard/score-line";
+import { EventMark } from "@/components/dashboard/schedule/static/event-mark";
 import { advButton } from "@/lib/ui/adv-button";
+import { scoreSetsFrom } from "@/lib/ui/score-format";
+import { dualScore, lineWon, matchWon } from "@/lib/schedule/entry-state";
+import { LINE_STATUS } from "@/lib/schedule/line-status";
+import {
+  formatEventDatesLong,
+  siteTitle,
+  surfaceTitle,
+} from "@/lib/schedule/format";
 import { cn } from "@/lib/utils";
-import { formatEventDay, siteTitle } from "@/lib/schedule/format";
-import type { ScheduleRow } from "@/lib/schedule/types";
+import type { OpponentProgram } from "@/lib/data/schedule-server";
+import type { EntryMatch, EventDetail, EventEntry } from "@/lib/schedule/types";
 
 /**
- * The schedule's 340px drawer — `7d` with events, `7e` without.
+ * `Tc2` — the selected event's detail, as a dismissable right rail.
  *
- * Static: it renders whatever `ScheduleRow[]` it is handed and never reads the
- * database. `StaticSchedule` hands it `POPULATED_SCHEDULE.rows` (`7d`) or
- * `EMPTY_SCHEDULE.rows` (`7e`) from `src/lib/schedule/fixtures.ts`.
+ * Same shell as the Roster's drawer: 340px, the float shadow, a 44px header
+ * with ‹ › event stepping, "Event n / N", "Open event ↗" as the peek-to-page
+ * bridge, and a close that also answers Esc. Body, top to bottom: program
+ * mark and conference; one nowrap glyph row — date, venue, court surface; the
+ * score row, where the nine ticks ARE the score (singles, then doubles) with
+ * the figures confirming at the left, winner's number in ink-900; then every
+ * line — played lines with their score, a line awaiting its result, an unset
+ * line as a blue "+ Set line"; and "Enter results" full width while lines are
+ * still open.
  *
- * ── What is NOT in here ────────────────────────────────────────────────────
- * The artboards draw a 232px sidebar and a 44px breadcrumb topbar above this
- * drawer. Both are the app's own chrome (`app-sidebar.tsx`, `header.tsx`'s
- * `h-11`) and are already on screen by the time this renders — reproducing
- * them from the artboard would draw the shell twice.
+ * ── Row-click law, the other half ──────────────────────────────────────────
+ * Lineup lines GAIN the chevron the event rows lost: each is a match and opens
+ * the match page. A line without a match yet has nowhere to go and draws
+ * none. Upload is never event-level — video attaches to a line — so nothing
+ * here offers it.
  *
- * That leaves one drawn element with nowhere to go: the topbar's right-hand
- * count, "6 events · 2 upcoming" on `7d` and "0 events · nothing scheduled for
- * 2026–27" on `7e`. The app's header has a one-line status slot
- * (`usePublishHeaderStatus`), but it is a plain string in a differently-styled
- * position and no artboard in this run's set draws the app's header carrying
- * it. Left unrendered rather than approximated; reported as a divergence.
+ * ── A tournament, which the artboard does not draw ─────────────────────────
+ * The legend gives the tournament its mark (the DS glyph, "no program to
+ * show") and nothing more. The body keeps the dual's shape: the host under
+ * the name where the conference would be, the same glyph row, and one row per
+ * entry — its last round in the slot column, the last match's score and
+ * outcome beside the name. The score row is a dual's and is not drawn.
  *
- * ── Grouping is by played lines, not by the clock ──────────────────────────
- * `7d` puts the 26 Sep dual under Upcoming and the three older ones under
- * Completed. The fixture calendar is September 2025 (that is the only year the
- * design's own weekday labels land on), so a `startsOn >= today` split would
- * file every drawn row under Completed and the artboard would be
- * unreproducible. `playedCount` is the durable signal — an event with no line
- * played has not happened — and it costs the component a clock read it would
- * otherwise have to guard for hydration.
+ * ── Nothing here fetches ───────────────────────────────────────────────────
+ * It renders the `EventDetail` the page already holds, so stepping through
+ * the season with ‹ › is a state change and no round trip.
  */
 export function EventDrawer({
-  rows,
-  selectedId,
-  onSelect,
-  canCreate,
+  detail,
+  opponent,
+  index,
+  total,
+  onStep,
+  onClose,
+  canEdit,
 }: {
-  rows: ScheduleRow[];
-  selectedId: string | null;
-  onSelect: (eventId: string) => void;
-  /** `isProgramStaff` upstream. False hides the drawer-footed CTA entirely. */
-  canCreate: boolean;
+  detail: EventDetail;
+  /** The opponent's program record, where the dual resolved one. */
+  opponent: OpponentProgram | null;
+  /** Position within the list on screen — "2 / 8" counts what the filters left. */
+  index: number;
+  total: number;
+  onStep: (delta: -1 | 1) => void;
+  onClose: () => void;
+  /** `isProgramStaff` upstream — gates every write the rail points at. */
+  canEdit: boolean;
 }) {
-  const upcoming = rows.filter((row) => row.playedCount === 0);
-  const completed = rows.filter((row) => row.playedCount > 0);
+  const { event, entries } = detail;
+  const isDual = event.kind === "dual";
+  const singles = entries.filter((entry) => entry.discipline === "singles");
+  const doubles = entries.filter((entry) => entry.discipline === "doubles");
+  const eventHref = `/dashboard/team/schedule/${event.id}`;
 
-  // `7e` is the whole-drawer empty state, not merely "this section has no
-  // rows": it is the branch that adds the hint line under the sections and
-  // drops the CTA block's top padding. The two artboards also space the
-  // "Completed" label differently (18px on `7e`, 14px on `7d`), which is an
-  // artboard-level difference rather than a per-section one.
-  const isDayZero = rows.length === 0;
+  // "While lines are open": a line that is neither forfeited nor decided. A
+  // tournament stays open — rounds get added as they are played.
+  const linesOpen = isDual
+    ? entries.some(
+        (entry) =>
+          entry.forfeit === null &&
+          !entry.matches.some((match) => matchWon(match) !== null)
+      )
+    : true;
+
+  const subline = isDual ? (opponent?.conference ?? null) : event.host;
+  // The pin names where the event is. A dual's host is its venue when the
+  // builder recorded one; otherwise the side of the trip is all we know.
+  const venue = isDual ? (event.host ?? siteTitle(event.site)) : siteTitle(event.site);
 
   return (
-    <div className="flex w-[340px] shrink-0 flex-col border-r border-[var(--border-hairline)]">
-      <div className="min-h-0 flex-1 overflow-auto pb-2 pt-3">
-        <SectionLabel className="pt-2.5">Upcoming</SectionLabel>
-        <EventGroup
-          label="Upcoming"
-          rows={upcoming}
-          selectedId={selectedId}
-          onSelect={onSelect}
-        />
-
-        <SectionLabel className={isDayZero ? "pt-[18px]" : "pt-3.5"}>
-          Completed
-        </SectionLabel>
-        <EventGroup
-          label="Completed"
-          rows={completed}
-          selectedId={selectedId}
-          onSelect={onSelect}
-        />
-      </div>
-
-      {isDayZero ? (
-        <div className="shrink-0 px-5 pb-3.5">
-          <span
-            className="text-micro text-pretty"
-            style={{ color: "var(--ink-400)" }}
+    <div
+      role="dialog"
+      aria-label={isDual ? `vs ${event.name}` : event.name}
+      className="relative z-[2] flex w-[340px] shrink-0 flex-col self-stretch border-l border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-dropdown)]"
+    >
+      {/* One provider over the header's cluster, as the app header does, so
+          moving between the four controls pays the reveal delay once. */}
+      <TooltipProvider delayDuration={CHROME_TOOLTIP_DELAY_MS}>
+        <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-[var(--border-hairline)] px-5">
+          <RailButton
+            label="Previous event"
+            onClick={() => onStep(-1)}
+            disabled={index <= 0}
           >
-            Duals and tournaments list here, newest first.
+            <ChevronUp className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+          </RailButton>
+          <RailButton
+            label="Next event"
+            onClick={() => onStep(1)}
+            disabled={index >= total - 1}
+          >
+            <ChevronDown className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+          </RailButton>
+
+          <span className="ml-1 inline-flex shrink-0 items-baseline gap-1.5 whitespace-nowrap">
+            <span className="text-[12px]" style={{ color: "var(--ink-600)" }}>
+              Event
+            </span>
+            <span className="mono tabular text-[11px]" style={{ color: "var(--ink-400)" }}>
+              {index + 1} / {total}
+            </span>
           </span>
-        </div>
-      ) : null}
 
-      {canCreate ? (
-        <div className={cn("shrink-0 px-4 pb-4", !isDayZero && "pt-3")}>
-          {/* Drawn as a `<button>`, which is how a design file draws a CTA.
-              It is a link here because the artboard's own caption says this
-              button opens the choose-type screen — `3b`, which is
-              `/dashboard/team/schedule/new`, inside this run's rebuilt set.
-              `advButton("primary", "md")` is the same 36px blue button the
-              artboard draws, glow included; its `px-4` is inert on a
-              full-width, centred label. */}
+          <div className="min-w-2 flex-1" />
+
+          {/* The doc's own anchor rule — blue at rest, ink-900 on hover — with
+              the wash the artboard gives every 28px control in this bar. */}
           <Link
-            href="/dashboard/team/schedule/new"
-            className={cn(advButton("primary", "md"), "w-full")}
+            href={eventHref}
+            className="inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-[var(--radius-element)] px-2 text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]"
           >
-            New event
+            Open event
+            <ArrowUpRight className="size-3" strokeWidth={1.5} aria-hidden="true" />
           </Link>
+
+          <span aria-hidden="true" className="mx-0.5 h-3.5 w-px bg-[var(--border-medium)]" />
+
+          <ChromeTooltip label="Close" shortcut="Esc" side="bottom">
+            <RailButton label="Close" onClick={onClose}>
+              <X className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+            </RailButton>
+          </ChromeTooltip>
         </div>
-      ) : null}
+      </TooltipProvider>
+
+      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pb-[22px] pt-6">
+        <div className="flex shrink-0 items-center gap-3.5">
+          <EventMark kind={event.kind} name={event.name} size={48} />
+          <div className="flex min-w-0 flex-col gap-1">
+            <div
+              className="text-[22px] font-light leading-[1.1] tracking-[-0.2px]"
+              style={{ color: "var(--ink-900)" }}
+            >
+              {event.name}
+            </div>
+            {subline ? (
+              <span className="text-[12px]" style={{ color: "var(--ink-600)" }}>
+                {subline}
+              </span>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="-mt-2.5 flex shrink-0 flex-nowrap items-center gap-3 overflow-hidden">
+          <span className="text-micro inline-flex items-center gap-[5px] whitespace-nowrap">
+            <Calendar className="size-3" strokeWidth={1.5} style={{ color: "var(--ink-400)" }} aria-hidden="true" />
+            <span className="tabular">{formatEventDatesLong(event.startsOn, event.endsOn)}</span>
+          </span>
+          <span className="text-micro inline-flex items-center gap-[5px] whitespace-nowrap">
+            <MapPin className="size-3" strokeWidth={1.5} style={{ color: "var(--ink-400)" }} aria-hidden="true" />
+            {venue}
+          </span>
+          {event.surface ? (
+            <span className="text-micro inline-flex items-center gap-[5px] whitespace-nowrap">
+              {/* eslint-disable-next-line @next/next/no-img-element -- a static SVG in /public */}
+              <img
+                src="/icons/tennis-court-icon.svg"
+                alt=""
+                className="block size-3 opacity-90"
+              />
+              {surfaceTitle(event.surface)}
+            </span>
+          ) : null}
+        </div>
+
+        {isDual ? <ScoreRow singles={singles} doubles={doubles} /> : null}
+
+        {isDual ? (
+          <>
+            <Section label="Singles">
+              {singles.map((entry) => (
+                <DualLine key={entry.id} entry={entry} eventHref={eventHref} canEdit={canEdit} />
+              ))}
+              {/* A dual with no lines at all: one row where the lineup would
+                  start, pointing at the event page — the same shape as an
+                  unset line, one level up. */}
+              {entries.length === 0 ? (
+                <SetLineRow slot="S1" eventHref={eventHref} canEdit={canEdit} label="Set lineup" />
+              ) : null}
+            </Section>
+            {doubles.length > 0 ? (
+              <Section label="Doubles">
+                {doubles.map((entry) => (
+                  <DualLine key={entry.id} entry={entry} eventHref={eventHref} canEdit={canEdit} />
+                ))}
+              </Section>
+            ) : null}
+          </>
+        ) : (
+          <>
+            {singles.length > 0 ? (
+              <Section label="Singles">
+                {singles.map((entry) => (
+                  <TournamentLine key={entry.id} entry={entry} />
+                ))}
+              </Section>
+            ) : null}
+            {doubles.length > 0 ? (
+              <Section label="Doubles">
+                {doubles.map((entry) => (
+                  <TournamentLine key={entry.id} entry={entry} />
+                ))}
+              </Section>
+            ) : null}
+            {entries.length === 0 ? (
+              <Section label="Entries">
+                <div className={cn(ROW, "cursor-default")}>
+                  <span className="mono text-[11px]" style={{ color: "var(--ink-500)" }}>
+                    —
+                  </span>
+                  <span className="text-[12px]" style={{ color: "var(--ink-700)" }}>
+                    No entries yet
+                  </span>
+                </div>
+              </Section>
+            ) : null}
+          </>
+        )}
+
+        <div className="min-h-0 flex-1" />
+
+        {canEdit && linesOpen ? (
+          <Link href={eventHref} className={cn(advButton("primary", "md"), "w-full shrink-0")}>
+            Enter results
+          </Link>
+        ) : null}
+      </div>
     </div>
   );
 }
 
-/** "Upcoming" / "Completed". Top padding differs per artboard, so it is a prop. */
-function SectionLabel({
-  className,
+/** The header's 28px square control — chevrons and the close. */
+function RailButton({
+  label,
+  onClick,
+  disabled = false,
   children,
 }: {
-  className?: string;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
   children: React.ReactNode;
 }) {
-  return <div className={cn("eyebrow-sm px-5 pb-1", className)}>{children}</div>;
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      aria-disabled={disabled || undefined}
+      onClick={disabled ? undefined : onClick}
+      className={cn(
+        "inline-flex size-7 shrink-0 items-center justify-center rounded-[var(--radius-element)] outline-none",
+        "transition-colors duration-[var(--duration-hover)] focus-visible:shadow-[var(--focus-ring)]",
+        disabled ? "cursor-default" : "cursor-pointer hover:bg-[var(--surface-subtle)]"
+      )}
+      style={{ color: disabled ? "var(--ink-300)" : "var(--ink-500)" }}
+    >
+      {children}
+    </button>
+  );
 }
 
 /**
- * One section's rows, or `7e`'s "None yet" when it has none.
+ * The score row — figures at the left, the nine ticks at the right.
  *
- * `role="listbox"` per section rather than one over the whole drawer: the
- * eyebrow labels sit between the groups, and they are not valid children of a
- * listbox. Carries forward the a11y intent the DB-wired `schedule-list.tsx`
- * documented — a screen reader should announce which event is active rather
- * than read a column of identical rows.
+ * Every tick and the two figures come off `lineWon()` / `dualScore()`, the
+ * same answers the rows below draw, so the rail and the lines cannot disagree
+ * about one court. A forfeit is a decided line and takes a colour; an
+ * undecided one keeps the artboard's grey. The winner's figure sits in
+ * ink-900 and the other in ink-500; before anything is on the board both are
+ * ink-300, because a 0–0 in full ink reads as a result.
  */
-function EventGroup({
+function ScoreRow({
+  singles,
+  doubles,
+}: {
+  singles: EventEntry[];
+  doubles: EventEntry[];
+}) {
+  const score = dualScore([...singles, ...doubles]);
+  const nothingYet = score.us === 0 && score.them === 0;
+  const usColor = nothingYet
+    ? "var(--ink-300)"
+    : score.us >= score.them
+      ? "var(--ink-900)"
+      : "var(--ink-500)";
+  const themColor = nothingYet
+    ? "var(--ink-300)"
+    : score.them > score.us
+      ? "var(--ink-900)"
+      : "var(--ink-500)";
+
+  return (
+    <div className="flex shrink-0 items-center justify-between gap-3.5 border-y border-[var(--border-hairline)] py-3.5">
+      <span className="tabular whitespace-nowrap text-[28px] font-light leading-none tracking-[-0.4px]">
+        <span style={{ color: usColor }}>{score.us}</span>
+        <span className="mx-[3px]" style={{ color: "var(--ink-300)" }}>
+          –
+        </span>
+        <span style={{ color: themColor }}>{score.them}</span>
+      </span>
+      <div className="flex items-center gap-1" aria-hidden="true">
+        {singles.map((entry) => (
+          <Tick key={entry.id} entry={entry} />
+        ))}
+        {singles.length > 0 && doubles.length > 0 ? <span className="w-2" /> : null}
+        {doubles.map((entry) => (
+          <Tick key={entry.id} entry={entry} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Tick({ entry }: { entry: EventEntry }) {
+  const won = lineWon(entry, entry.matches[0] ?? null);
+  return (
+    <span
+      className="h-[18px] w-1 rounded-[1.5px]"
+      style={{
+        background:
+          won === null
+            ? "var(--ink-300)"
+            : won
+              ? "var(--success)"
+              : "var(--danger)",
+      }}
+    />
+  );
+}
+
+/** "Singles" / "Doubles" — the eyebrow and the 2px-gapped rows under it. */
+function Section({
   label,
-  rows,
-  selectedId,
-  onSelect,
+  children,
 }: {
   label: string;
-  rows: ScheduleRow[];
-  selectedId: string | null;
-  onSelect: (eventId: string) => void;
+  children: React.ReactNode;
 }) {
-  if (rows.length === 0) {
+  return (
+    <div className="flex shrink-0 flex-col gap-0.5">
+      <div className="flex items-center pb-1.5">
+        <span className="eyebrow-sm flex-1">{label}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** The artboard's line grid: slot · name · score · outcome · chevron. */
+const ROW =
+  "-mx-2 grid h-9 grid-cols-[30px_minmax(0,1fr)_66px_14px_12px] items-center gap-2.5 rounded-[var(--radius-element)] px-2";
+
+const ROW_LINK = cn(
+  ROW,
+  "cursor-pointer transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)]",
+  "outline-none focus-visible:shadow-[var(--focus-ring)]"
+);
+
+/**
+ * One line of a dual, in the state the data puts it in:
+ *
+ *   played      → score, outcome glyph, chevron; the row opens the match page
+ *   awaiting    → players named, no match yet: "Awaiting result"
+ *   forfeited   → the shared vocabulary's chip, spanning the score columns
+ *   unset       → nobody named: the blue "+ Set line", pointing at the event
+ *
+ * Names join with the artboard's middle dot — "Lee · Chen" — rather than the
+ * event page's slash. It is a drawn separator; the page's is the other one.
+ */
+function DualLine({
+  entry,
+  eventHref,
+  canEdit,
+}: {
+  entry: EventEntry;
+  eventHref: string;
+  canEdit: boolean;
+}) {
+  const match = entry.matches[0] ?? null;
+  const name = entry.playerLabels.join(" · ");
+
+  if (entry.forfeit !== null) {
+    const status = LINE_STATUS.forfeited!;
     return (
-      <div className="text-micro px-5 pt-1" style={{ color: "var(--ink-400)" }}>
-        None yet
+      <div className={ROW}>
+        <Slot>{entry.slot}</Slot>
+        <span className="truncate text-[12px]" style={{ color: "var(--ink-700)" }}>
+          {name || "—"}
+        </span>
+        <StatusChip tone={status.tone} className="col-span-3 justify-self-end">
+          {status.label}
+        </StatusChip>
+      </div>
+    );
+  }
+
+  if (match) {
+    return <PlayedLine slot={entry.slot} name={name} entry={entry} match={match} />;
+  }
+
+  if (entry.playerLabels.length === 0) {
+    return (
+      <SetLineRow slot={entry.slot} eventHref={eventHref} canEdit={canEdit} label="Set line" />
+    );
+  }
+
+  return (
+    <div className={ROW}>
+      <Slot>{entry.slot}</Slot>
+      <span className="truncate text-[12px]" style={{ color: "var(--ink-700)" }}>
+        {name}
+      </span>
+      <span
+        className="text-micro col-span-3 whitespace-nowrap text-right"
+        style={{ color: "var(--ink-600)" }}
+      >
+        <span className="mr-1.5 inline-block size-[5px] rounded-full bg-[var(--ink-300)]" />
+        Awaiting result
+      </span>
+    </div>
+  );
+}
+
+/**
+ * One tournament entry: its last round in the slot column, the last match's
+ * score and outcome beside the name. An entry with no match yet is awaiting
+ * its first result.
+ */
+function TournamentLine({ entry }: { entry: EventEntry }) {
+  const last = entry.matches[entry.matches.length - 1] ?? null;
+  const name = entry.playerLabels.join(" · ");
+
+  if (!last) {
+    return (
+      <div className={ROW}>
+        <Slot>—</Slot>
+        <span className="truncate text-[12px]" style={{ color: "var(--ink-700)" }}>
+          {name || "—"}
+        </span>
+        <span
+          className="text-micro col-span-3 whitespace-nowrap text-right"
+          style={{ color: "var(--ink-600)" }}
+        >
+          <span className="mr-1.5 inline-block size-[5px] rounded-full bg-[var(--ink-300)]" />
+          Awaiting result
+        </span>
+      </div>
+    );
+  }
+
+  return <PlayedLine slot={last.round ?? "—"} name={name} entry={entry} match={last} />;
+}
+
+/** A line with a match under it — the one row shape that opens somewhere. */
+function PlayedLine({
+  slot,
+  name,
+  entry,
+  match,
+}: {
+  slot: string | null;
+  name: string;
+  entry: EventEntry;
+  match: EntryMatch;
+}) {
+  const won = lineWon(entry, match);
+  return (
+    <Link href={`/dashboard/matches/${match.id}`} className={ROW_LINK}>
+      <Slot>{slot}</Slot>
+      <span className="truncate text-[12px]" style={{ color: "var(--ink-900)" }}>
+        {name || "—"}
+      </span>
+      <ScoreLine
+        sets={scoreSetsFrom(match.score)}
+        className="tabular text-right text-[11px]"
+        style={{ color: "var(--ink-600)" }}
+      />
+      {won === null ? <span /> : <ResultMark won={won} />}
+      <ChevronRight className="size-3" strokeWidth={1.5} style={{ color: "var(--ink-300)" }} aria-hidden="true" />
+    </Link>
+  );
+}
+
+/**
+ * "+ Set line" — the blue row for a slot nobody is named on. Points at the
+ * event page, where the line is edited; a reader who cannot edit sees the
+ * slot standing empty instead of an action they are not allowed to take.
+ */
+function SetLineRow({
+  slot,
+  eventHref,
+  canEdit,
+  label,
+}: {
+  slot: string | null;
+  eventHref: string;
+  canEdit: boolean;
+  label: string;
+}) {
+  const notSet = (
+    <span
+      className="text-micro col-span-3 whitespace-nowrap text-right"
+      style={{ color: "var(--ink-400)" }}
+    >
+      Not set
+    </span>
+  );
+
+  if (!canEdit) {
+    return (
+      <div className={ROW}>
+        <Slot>{slot}</Slot>
+        <span className="text-[12px]" style={{ color: "var(--ink-700)" }}>
+          —
+        </span>
+        {notSet}
       </div>
     );
   }
 
   return (
-    <div
-      role="listbox"
-      aria-label={`${label} events`}
-      className="flex flex-col gap-0.5 px-3"
-    >
-      {rows.map((row) => (
-        <EventRow
-          key={row.id}
-          row={row}
-          isSelected={row.id === selectedId}
-          onSelect={onSelect}
-        />
-      ))}
-    </div>
+    <Link href={eventHref} className={ROW_LINK}>
+      <Slot>{slot}</Slot>
+      <span className="inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ color: "var(--blue)" }}>
+        <Plus className="size-3" strokeWidth={1.5} aria-hidden="true" />
+        {label}
+      </span>
+      {notSet}
+    </Link>
   );
 }
 
-/**
- * One drawer row.
- *
- * `7d` draws two shapes — a column of two lines for the upcoming dual, and the
- * same two lines beside a team score for the completed ones. They are one
- * element here: a single stretched child in a centred flex row lays out
- * identically to a column, so the score is the only difference and it follows
- * the data (`teamScore`) rather than a second component.
- *
- * Every row the design draws is a dual, hence the bare "vs" prefix. A
- * tournament row has no drawn treatment; none is invented here.
- *
- * ── The selected row, reconciled against `7c` ──────────────────────────────
- * `7d` has nothing selected, so T3 stood the selected state up as the same
- * `--surface-muted` wash the artboard gives hover. `7c` and `4c` draw it
- * settled, and the wash was right — but it is not the whole treatment. Both
- * artboards also raise the selected row's name to `font-weight:500` and its
- * team score from `--ink-700` to `--ink-900`, so the row reads as current even
- * where the wash is subtle. All three now follow `isSelected`.
- */
-function EventRow({
-  row,
-  isSelected,
-  onSelect,
-}: {
-  row: ScheduleRow;
-  isSelected: boolean;
-  onSelect: (eventId: string) => void;
-}) {
+function Slot({ children }: { children: React.ReactNode }) {
   return (
-    <button
-      type="button"
-      role="option"
-      aria-selected={isSelected}
-      onClick={() => onSelect(row.id)}
-      className={cn(
-        "flex cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] px-3 py-2.5 text-left",
-        "transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)]",
-        isSelected && "bg-[var(--surface-muted)]"
-      )}
-    >
-      <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-        <span className="mono text-[11px] text-[var(--ink-600)]">
-          {formatEventDay(row.startsOn)} · {siteTitle(row.site)}
-        </span>
-        <span
-          className={cn(
-            "text-[13px] text-[var(--ink-900)]",
-            isSelected && "font-medium"
-          )}
-        >
-          vs {row.name}
-        </span>
-      </span>
-      {row.teamScore ? (
-        <span
-          className={cn(
-            "tabular text-[14px]",
-            isSelected ? "text-[var(--ink-900)]" : "text-[var(--ink-700)]"
-          )}
-        >
-          {row.teamScore.us}–{row.teamScore.them}
-        </span>
-      ) : null}
-    </button>
+    <span className="mono text-[11px]" style={{ color: "var(--ink-500)" }}>
+      {children}
+    </span>
   );
 }

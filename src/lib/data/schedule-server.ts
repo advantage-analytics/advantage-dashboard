@@ -474,3 +474,49 @@ export async function getUploadQueue(
     })
     .filter((group) => group.entries.length > 0);
 }
+
+/**
+ * What the schedule's drawer prints under an opponent's name — the program
+ * record behind a dual, where the event resolved one (design `Tc2`: "program
+ * mark + conference").
+ *
+ * Read off `programs`, which any signed-in reader can select for college rows
+ * (the public directory) and only members can for a custom org. An opponent
+ * the policy withholds simply has no line — which is also what an unlisted
+ * school typed by hand gets, since it has no `opponent_program_id` at all.
+ * Keyed by program id so a caller can look one up off an entry's
+ * `opponentProgramId` without a second walk.
+ *
+ * A plain function, and deliberately NOT folded into `readSchedule`: the
+ * schedule page is the only surface that prints the conference, and Team Home
+ * reads the same `getProgramSchedule` — a fourth round trip in there would be
+ * paid on every render of a page that never shows the result.
+ */
+export interface OpponentProgram {
+  id: string;
+  conference: string | null;
+  division: string | null;
+}
+
+export async function getOpponentPrograms(
+  programIds: readonly (string | null | undefined)[]
+): Promise<Record<string, OpponentProgram>> {
+  const ids = [...new Set(programIds.filter((id): id is string => Boolean(id)))];
+  if (ids.length === 0) return {};
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("programs")
+    .select("id, conference, division")
+    .in("id", ids);
+
+  const programs: Record<string, OpponentProgram> = {};
+  for (const row of (data ?? []) as OpponentProgram[]) {
+    programs[row.id] = {
+      id: row.id,
+      conference: row.conference,
+      division: row.division,
+    };
+  }
+  return programs;
+}

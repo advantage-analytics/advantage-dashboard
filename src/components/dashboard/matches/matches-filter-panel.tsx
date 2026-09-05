@@ -66,6 +66,14 @@ interface MatchesFilterPanelProps<K extends string> {
   /** For the footer's "N of M matches" — the live count this panel's own selection leaves. */
   resultCount: number;
   totalCount: number;
+  /**
+   * What the trigger says it filters, for its title and the panel's accessible
+   * name. "Filter matches" unless the list is of something else — the Schedule
+   * filters events through this same panel.
+   */
+  label?: string;
+  /** The footer's noun, singular and plural. Matches by default. */
+  noun?: { singular: string; plural: string };
 }
 
 const SEGMENT_ROW =
@@ -121,6 +129,8 @@ export function MatchesFilterPanel<K extends string>({
   onClear,
   resultCount,
   totalCount,
+  label = "Filter matches",
+  noun = { singular: "match", plural: "matches" },
 }: MatchesFilterPanelProps<K>): React.JSX.Element | null {
   const [open, setOpen] = useState(false);
   // A panel with nothing in it is a button that does nothing when pressed.
@@ -131,7 +141,7 @@ export function MatchesFilterPanel<K extends string>({
       <PopoverTrigger asChild>
         <button
           type="button"
-          title="Filter matches"
+          title={label}
           aria-expanded={open}
           className={cn(
             "flex h-7 items-center gap-1.5 rounded-[var(--radius-element)] px-2 text-[12px] transition-colors duration-150",
@@ -156,7 +166,7 @@ export function MatchesFilterPanel<K extends string>({
       <PopoverContent
         sideOffset={6}
         align="start"
-        aria-label="Filter matches"
+        aria-label={label}
         className="flex max-h-[calc(100vh-180px)] w-[272px] flex-col overflow-y-auto rounded-xl border-[var(--border-medium)] p-1.5 shadow-[var(--shadow-dropdown)]"
       >
         {sections.map((section, i) => (
@@ -237,7 +247,7 @@ export function MatchesFilterPanel<K extends string>({
           </button>
           <div className="flex-1" />
           <span className="text-micro tabular">
-            {resultCount} of {totalCount} {totalCount === 1 ? "match" : "matches"}
+            {resultCount} of {totalCount} {totalCount === 1 ? noun.singular : noun.plural}
           </span>
         </div>
       </PopoverContent>

@@ -171,30 +171,33 @@ function drawn(source: string, file: string, expected: string): void {
 
 /* ────────────────────────────────────────────────────────────────────────── */
 
-test.describe('/dashboard/team/schedule · 7e 7d 7c 4c', () => {
+test.describe('/dashboard/team/schedule · Tc2 Tc2c', () => {
+  // The page was redrawn from `Platform Audit.dc.html` — `Tc2` (an event
+  // selected, its detail as a right rail) and `Tc2c` (the resting state, no
+  // drawer). The `7e 7d 7c 4c` frames this block used to guard drew a left
+  // drawer of events beside a lineup pane; that shape is gone, and with it
+  // `dual-widget.tsx`. Every `drawn()` below was transcribed from the two
+  // new artboards; each retired string carries the reason.
   const schedule = screen('static-schedule.tsx');
+  const table = screen('schedule-table.tsx');
   const drawer = screen('event-drawer.tsx');
-  const widget = screen('dual-widget.tsx');
 
   test('the season this app is signed in to', () => {
     // Design record, all four — see the header. The shell prints the real
-    // workspace and user, `7e`'s "0 events … 2026–27" topbar line is not drawn
-    // at all, and the season line has been `seasonSummaryFrom()`'s since T14;
-    // none of these has a consumer under `src/`. They pin the transcription,
-    // not a screen.
+    // workspace and user, and the season line has been `seasonSummaryFrom()`'s
+    // since T14; none of these has a consumer under `src/`. They pin the
+    // transcription, not a screen.
     expect(PROGRAM_NAME).toBe('Meridian State');
     expect(USER_NAME).toBe('Elena Vasquez');
-    // En dash between the two years, in `7e`'s topbar count.
     expect(SEASON_LABEL).toBe('2026–27');
-    // `7d`'s season line — en dash between the figures, `·` between the
-    // clauses. It claims a fourth completed dual no artboard names; that is
-    // the design's, reproduced, and pinned here so it cannot quietly change.
+    // The footer's sentence — en dash between the figures, `·` between the
+    // clauses. `Tc2` draws the same four figures `7d` did.
     expect(SEASON_FACTS).toBe('3–1 in duals · 31 of 36 lines analyzed');
   });
 
-  test("7d's four drawer rows", () => {
-    // Design record — see the header. `SCHEDULE_ROWS` stopped reaching the
-    // drawer when T15 re-pointed the route at `getProgramSchedule()`.
+  test("Tc2's rows, as the design record states them", () => {
+    // Design record — see the header. `SCHEDULE_ROWS` stopped reaching any
+    // component when T15 re-pointed the route at `getProgramSchedule()`.
     expect(SCHEDULE_ROWS.map((row) => row.name)).toEqual([
       'Ridgeline University',
       'Fairmont A&M',
@@ -202,14 +205,15 @@ test.describe('/dashboard/team/schedule · 7e 7d 7c 4c', () => {
       'Harlow Valley',
     ]);
 
-    // The mono line above each name, as the formatter actually renders it. The
-    // design's weekday labels are what fix the fixture calendar to 2025.
+    // The Date cell, as the formatter actually renders it. The design's
+    // weekday labels are what fix the fixture calendar to 2025.
     expect(SCHEDULE_ROWS.map((row) => formatEventDay(row.startsOn))).toEqual([
       'Fri 26 Sep',
       'Sat 20 Sep',
       'Sat 13 Sep',
       'Sat 6 Sep',
     ]);
+    // The Venue cell.
     expect(SCHEDULE_ROWS.map((row) => siteTitle(row.site))).toEqual([
       'Home',
       'Away',
@@ -218,7 +222,7 @@ test.describe('/dashboard/team/schedule · 7e 7d 7c 4c', () => {
     ]);
 
     // The upcoming dual carries no score; the three completed ones carry the
-    // team scores `7d` draws.
+    // team scores the Score column draws.
     expect(SCHEDULE_ROWS.map((row) => row.teamScore)).toEqual([
       null,
       { us: 5, them: 2 },
@@ -227,96 +231,57 @@ test.describe('/dashboard/team/schedule · 7e 7d 7c 4c', () => {
     ]);
   });
 
-  test("the drawer's own words", () => {
-    drawn(drawer, 'event-drawer.tsx', 'Upcoming');
-    drawn(drawer, 'event-drawer.tsx', 'Completed');
-    // `7e`: both sections, when there is nothing in either.
-    drawn(drawer, 'event-drawer.tsx', 'None yet');
-    drawn(
-      drawer,
-      'event-drawer.tsx',
-      'Duals and tournaments list here, newest first.'
-    );
-    drawn(drawer, 'event-drawer.tsx', 'New event');
-    // `·` between day and site on every drawn row.
-    drawn(
-      drawer,
-      'event-drawer.tsx',
-      '{formatEventDay(row.startsOn)} · {siteTitle(row.site)}'
-    );
-    // EN DASH between the halves of a team score, not a hyphen.
-    drawn(drawer, 'event-drawer.tsx', '{row.teamScore.us}–{row.teamScore.them}');
-  });
-
-  test("7d's prompt pane", () => {
-    drawn(schedule, 'static-schedule.tsx', 'Select an event');
-    drawn(
-      schedule,
-      'static-schedule.tsx',
-      "Pick a dual or tournament on the left to see its lineup, every line's result and the report behind each one."
-    );
-    drawn(schedule, 'static-schedule.tsx', 'Season');
-    drawn(schedule, 'static-schedule.tsx', 'Jump to');
-    drawn(schedule, 'static-schedule.tsx', 'Next');
-    drawn(schedule, 'static-schedule.tsx', 'Last');
-    // RETIRED 'in 4 days' — the literal left the component. Stage 06 derived
-    //   it: the row now prints `daysAway(next.startsOn, today)`, so it says
-    //   "today", "tomorrow" or "in N days" about the event it actually names,
-    //   and nothing at all beyond a month out. Held here through the whole
-    //   re-wiring and retired only once it stopped being drawn, which is what
-    //   this file's own rule asks.
-    drawn(schedule, 'static-schedule.tsx', ' · lineup not set');
-    // The numbers left the component; the words did not. Retiring the whole
-    // phrase would have left "lines analyzed" — still drawn twice, on this row
-    // and in the season strip — pinned by nothing, and a reword to "lines
-    // processed" would have gone green. Narrowed, not dropped.
+  test("the page's own words", () => {
+    drawn(schedule, 'static-schedule.tsx', 'Schedule');
+    // The summary line: workspace · season · events · upcoming, `·` throughout.
+    drawn(schedule, 'static-schedule.tsx', ' season');
+    drawn(schedule, 'static-schedule.tsx', '"event" : "events"');
+    drawn(schedule, 'static-schedule.tsx', ' upcoming');
+    drawn(schedule, 'static-schedule.tsx', 'Import');
+    drawn(schedule, 'static-schedule.tsx', 'New event');
+    // The three lifecycle pills, with their counts inside.
+    drawn(schedule, 'static-schedule.tsx', '"All"');
+    drawn(schedule, 'static-schedule.tsx', '"Upcoming"');
+    drawn(schedule, 'static-schedule.tsx', '"Completed"');
+    drawn(schedule, 'static-schedule.tsx', 'Newest first');
+    drawn(schedule, 'static-schedule.tsx', 'Oldest first');
+    // The footer: "Season 3–1 in duals · 31 of 36 lines analyzed".
+    drawn(schedule, 'static-schedule.tsx', 'Season ');
+    drawn(schedule, 'static-schedule.tsx', ' in duals · ');
     drawn(schedule, 'static-schedule.tsx', 'lines analyzed');
-    // The relative-day phrasing that replaced "in 4 days", pinned for the same
-    // reason: it is drawn copy now, and nothing else asserts it.
-    drawn(schedule, 'static-schedule.tsx', 'tomorrow');
-    // RETIRED '· 8 of 9 lines analyzed' — the literal left the component.
-    //   Stage 06 counted it, through the same `lineCoverageFrom` the season
-    //   strip sums, so the two figures on this pane can no longer disagree.
-    //   The design's own numbers were never derivable from the nine lines
-    //   beside them: three are doubles, which carry no video at all.
+    drawn(schedule, 'static-schedule.tsx', 'Set next lineup');
+    // RETIRED 'Select an event', 'Pick a dual or tournament on the left…',
+    //   'Jump to', 'Next', 'Last', ' · lineup not set', 'tomorrow' — `7d`'s
+    //   prompt pane left the page with the left drawer it prompted about. The
+    //   resting state is now `Tc2c`: the table itself, nothing selected.
   });
 
-  test("7e's day-zero pane", () => {
-    drawn(schedule, 'static-schedule.tsx', 'No events yet');
-    drawn(
-      schedule,
-      'static-schedule.tsx',
-      'Create a dual and the lineup card builds itself — every slot becomes a real match the moment you set the line.'
-    );
-    drawn(schedule, 'static-schedule.tsx', 'New dual');
-    drawn(schedule, 'static-schedule.tsx', 'New tournament');
-    drawn(schedule, 'static-schedule.tsx', 'One-off match in Matches');
-    drawn(schedule, 'static-schedule.tsx', 'What a dual creates');
-    drawn(schedule, 'static-schedule.tsx', '9 lines · none set');
-    drawn(schedule, 'static-schedule.tsx', 'Singles');
-    drawn(schedule, 'static-schedule.tsx', 'Doubles');
-    drawn(
-      schedule,
-      'static-schedule.tsx',
-      'Opponent, format and lets are typed once and inherit down every line.'
-    );
-    drawn(
-      schedule,
-      'static-schedule.tsx',
-      'The team score adds itself up as lines resolve.'
-    );
-    // The separator between the three empty-state links.
-    drawn(schedule, 'static-schedule.tsx', '·');
+  test("the table's own words", () => {
+    // The seven eyebrow headers, in the date-first grammar.
+    for (const header of ['Date', 'Event', 'Type', 'Venue', 'Lines', 'Score', 'Result']) {
+      drawn(table, 'schedule-table.tsx', header);
+    }
+    drawn(table, 'schedule-table.tsx', '"Dual" : "Tournament"');
+    // A dual whose lineup has no lines yet.
+    drawn(table, 'schedule-table.tsx', '"Not set"');
+    // Lines with a result over lines on the card — "8 / 9", spaces and all.
+    drawn(table, 'schedule-table.tsx', '${row.playedCount} / ${row.entryCount}');
+    // EN DASH between the halves of a team score, not a hyphen.
+    drawn(table, 'schedule-table.tsx', '${us}–${them}');
+    drawn(table, 'schedule-table.tsx', 'Won');
+    drawn(table, 'schedule-table.tsx', 'Lost');
+    drawn(table, 'schedule-table.tsx', 'Not played');
+    // The em dash a cell with no value draws.
+    drawn(table, 'schedule-table.tsx', '—');
   });
 
   test("4c's nine lines, and the 5–2 they add up to", () => {
     // Design record — see the header. `EVENT_DETAILS` is `eventDetailFrom()`'s
-    // shape over the design's Fairmont dual; the live pane reads the database.
+    // shape over the design's Fairmont dual; the live rail reads the database.
     const fairmont = EVENT_DETAILS[SCHEDULE_ROWS[1].id];
     expect(fairmont, '4c has no detail to draw').toBeTruthy();
 
     expect(fairmont.event.name).toBe('Fairmont A&M');
-    // The pane's eyebrow: "Sat 20 Sep · Away · hard".
     expect(formatEventDay(fairmont.event.startsOn)).toBe('Sat 20 Sep');
     expect(siteTitle(fairmont.event.site)).toBe('Away');
     expect(fairmont.event.surface).toBe('hard');
@@ -340,7 +305,8 @@ test.describe('/dashboard/team/schedule · 7e 7d 7c 4c', () => {
         'L. Moreau',
         'S. Tanaka',
         'K. Sato',
-        // A pair is one entry; " / " is the design's separator.
+        // A pair is one entry; " / " is the event page's separator. The rail
+        // joins the same two labels with the `Tc2` middle dot instead.
         'Brooks / Osei',
         'Reid / Tanaka',
         'Moreau / Sato',
@@ -371,30 +337,61 @@ test.describe('/dashboard/team/schedule · 7e 7d 7c 4c', () => {
       player2_tiebreaks: [null, null],
     });
 
-    // The header score `7c` and `4c` both draw.
+    // The score the rail's score row draws.
     const score = dualScore(fairmont.entries);
     expect(score.us).toBe(5);
     expect(score.them).toBe(2);
   });
 
-  test("the dual widget's own words", () => {
-    drawn(widget, 'dual-widget.tsx', 'Singles');
-    drawn(widget, 'dual-widget.tsx', 'Doubles');
-    drawn(widget, 'dual-widget.tsx', 'View report');
-    // The three doubles rows. The vendor rejects doubles outright, so this
-    // promises something no roadmap carries — drawn, so reproduced.
-    drawn(widget, 'dual-widget.tsx', 'Coming soon');
-    // EN DASH in the header score.
-    drawn(widget, 'dual-widget.tsx', '{score.us}–{score.them}');
-    // " / " between a pair's two names, and "vs" before theirs.
-    drawn(widget, 'dual-widget.tsx', '{entry.playerLabels.join(" / ")}');
-    drawn(widget, 'dual-widget.tsx', 'vs {entry.opponentLabels.join(" / ")}');
-    // The footer line, whose counts are computed and whose separators are not.
-    drawn(widget, 'dual-widget.tsx', ' matches · ');
-    drawn(widget, 'dual-widget.tsx', ' singles, ');
-    // S2's chip. The artboard draws the DS component with `status="analyzing"`
-    // and no text of its own, so the word itself is `LINE_STATUS`'s.
-    expect(LINE_STATUS.working?.label).toBe('Analyzing');
+  test("the drawer's own words", () => {
+    // The 44px header: ‹ › stepping, "Event 2 / 8", "Open event ↗", close.
+    drawn(drawer, 'event-drawer.tsx', 'Previous event');
+    drawn(drawer, 'event-drawer.tsx', 'Next event');
+    drawn(drawer, 'event-drawer.tsx', 'Event');
+    drawn(drawer, 'event-drawer.tsx', '{index + 1} / {total}');
+    drawn(drawer, 'event-drawer.tsx', 'Open event');
+    drawn(drawer, 'event-drawer.tsx', 'Close');
+    drawn(drawer, 'event-drawer.tsx', 'Esc');
+    drawn(drawer, 'event-drawer.tsx', 'Singles');
+    drawn(drawer, 'event-drawer.tsx', 'Doubles');
+    // " · " between a pair's two names — the rail's separator, not the page's.
+    drawn(drawer, 'event-drawer.tsx', 'entry.playerLabels.join(" · ")');
+    // The three states a line can be in besides played.
+    drawn(drawer, 'event-drawer.tsx', 'Awaiting result');
+    drawn(drawer, 'event-drawer.tsx', 'Set line');
+    drawn(drawer, 'event-drawer.tsx', 'Not set');
+    drawn(drawer, 'event-drawer.tsx', 'Enter results');
+    // EN DASH between the two figures of the score row.
+    drawn(drawer, 'event-drawer.tsx', '–');
+    // A forfeited line's chip is `LINE_STATUS`'s word, not the rail's own.
+    expect(LINE_STATUS.forfeited?.label).toBe('Forfeited');
+    // RETIRED 'View report', 'Coming soon', ' matches · ', ' singles, ' —
+    //   `dual-widget.tsx` is deleted with the pane it drew. Each line in the
+    //   rail is a match and opens the match page itself (row-click law 19a–c),
+    //   so no cell carries a report link or a promise about doubles video.
+    // RETIRED 'Upcoming' / 'Completed' / 'None yet' / 'Duals and tournaments
+    //   list here, newest first.' — the left drawer is gone; Upcoming and
+    //   Completed survive as the page's lifecycle pills, asserted above.
+  });
+
+  test("day zero's own words", () => {
+    drawn(schedule, 'static-schedule.tsx', 'No events yet');
+    drawn(
+      schedule,
+      'static-schedule.tsx',
+      'Create a dual and the lineup card builds itself — every slot becomes a real match the moment you set the line.'
+    );
+    drawn(schedule, 'static-schedule.tsx', 'New dual');
+    drawn(schedule, 'static-schedule.tsx', 'New tournament');
+    drawn(schedule, 'static-schedule.tsx', 'One-off match in Matches');
+    // The separator between the empty-state links.
+    drawn(schedule, 'static-schedule.tsx', '·');
+    // RETIRED 'What a dual creates', '9 lines · none set', 'Opponent, format
+    //   and lets are typed once and inherit down every line.', 'The team score
+    //   adds itself up as lines resolve.' — `7e`'s nine-line scaffold was drawn
+    //   for the old half-width pane. The table-page law that governs day zero
+    //   now (title, primary, footer unchanged; chips and table absent; one
+    //   light line, one sentence, the quiet paths) has no room for it.
   });
 });
 
