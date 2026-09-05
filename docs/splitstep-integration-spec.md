@@ -101,7 +101,8 @@ Browser
   ├─ status=queued  → record ack, no-op otherwise
   ├─ status=job_failed → mark failed, release quota reservation, surface to user
   └─ status=job_completed
-       ├─ download sas_url JSON immediately (7-day expiry)
+       ├─ download strokes_url JSON immediately (7-day expiry; was sas_url until Sept 2026)
+       ├─ then players_url / trajectories_url, best-effort (Sept 2026 API)
        ├─ persist raw JSON to Supabase Storage (audit + reprocessing)
        └─ reconcile quota, mark job complete
              │
@@ -163,8 +164,10 @@ Write migrations under `supabase/migrations/`. Migration-first: no code that rea
 | `video_object_key` | text | R2 key of source video |
 | `video_url_expires_at` | timestamptz | for re-signing on retry |
 | `results_object_key` | text | R2 key of persisted raw JSON |
-| `sas_url` | text | as received |
+| `sas_url` | text | the strokes url, as received (`strokes_url` in the payload since Sept 2026; `sas_url` before) |
 | `sas_expires_at` | timestamptz | received_at + 7d |
+| `players_url`, `trajectories_url` | text | per-frame tracking urls, as received (Sept 2026 API; trajectories nullable) |
+| `players_object_key`, `trajectories_object_key` | text | `match-results` keys once downloaded |
 | `trimmed_video_url` | text | as received; we do not adopt it as playback asset, but record it |
 | `submitted_at`, `queued_ack_at`, `completed_at` | timestamptz | |
 | `attempt_count` | integer | default 0 |
@@ -263,7 +266,7 @@ Critical details:
 - Signature verification: **unknown, see §5.** Until confirmed, implement a shared-secret header check against `SPLITSTEP_WEBHOOK_SECRET` and structure the code so a real HMAC scheme drops in without refactoring. Do not ship an unauthenticated endpoint.
 - Idempotent on `(external_job_id, status)`. Duplicate deliveries must be no-ops.
 - Return 200 fast. Download and derivation happen out of band — a Supabase Edge Function or a queued background job, not inline in the Next.js route handler.
-- On `job_completed`, download `sas_url` **immediately** and persist to R2. It expires in 7 days and there is no documented way to re-request it.
+- On `job_completed`, download `strokes_url` (`sas_url` before September 2026) **immediately** and persist. It expires in 7 days and there is no documented way to re-request it. `players_url` / `trajectories_url` follow, best-effort.
 - Append every payload to `raw_webhook_payload`. During the pilot this is the only forensic record we have.
 - No polling or re-send endpoint is documented. If a job sits in `queued` past a configurable threshold (start at 72h), mark it stalled and alert — silent job loss is a known gap.
 

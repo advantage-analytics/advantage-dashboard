@@ -137,8 +137,10 @@ export async function adoptOrphanedDeliveries(params: {
         p_external_job_id: externalJobId,
         p_event: payload.event,
         p_next_status: payload.nextStatus,
-        p_sas_url: payload.sasUrl,
+        p_sas_url: payload.strokesUrl,
         p_trimmed_video_url: payload.trimmedVideoUrl,
+        p_players_url: payload.playersUrl,
+        p_trajectories_url: payload.trajectoriesUrl,
         p_error_message: payload.errorMessage,
         p_match_id: payload.matchId,
         p_error_code: payload.errorCode,
@@ -176,7 +178,7 @@ export async function adoptOrphanedDeliveries(params: {
       // recent state, matching what a live-delivered job_failed would carry.
       errorCode = payload.errorCode;
       errorStep = payload.errorStep;
-      if (payload.sasUrl && !record.already_stored) owedResultsDownload = true;
+      if (payload.strokesUrl && !record.already_stored) owedResultsDownload = true;
     }
   }
 

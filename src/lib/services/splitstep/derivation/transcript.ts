@@ -8,11 +8,23 @@
  * A transcript is either complete or refused. There is no partial mode — see
  * reconcile.ts for why a fold that misses the entered score by a game is not
  * "close enough".
+ *
+ * TEMPORARILY RELAXED (2026-09-02): under ACCEPT_UNRECONCILED_FOLD a fold that
+ * misses the entered score still yields a complete transcript, with player1
+ * named by geometry or score distance (see reconcile.ts). `ok` on the
+ * transcript then means "rows were built"; `reconciliation.ok` says whether
+ * they were verified, and `reason` carries why not.
  */
 
 import { metersToCourtFrame, kmhToMph, serveZone, directionZone, serveCourtSide } from './court';
 import { flagPoint, flagStroke } from './flags';
-import { reconcile, scoreIsSelfMirroring, type MatchScore, type Reconciliation } from './reconcile';
+import {
+  ACCEPT_UNRECONCILED_FOLD,
+  reconcile,
+  scoreIsSelfMirroring,
+  type MatchScore,
+  type Reconciliation,
+} from './reconcile';
 import { classifyPoint, lastServeIndex, shotNumber, shotResult, type ResultType } from './result-type';
 import { resolvePointWinners } from './winners';
 import { pressureFor } from './pressure';
@@ -182,6 +194,7 @@ export function buildTranscript(options: BuildOptions): Transcript {
     reconciliation: {
       ok: false,
       player1Label: null,
+      player1Source: null,
       foldedSets: [],
       games: [],
       reason: null,
@@ -227,7 +240,9 @@ export function buildTranscript(options: BuildOptions): Transcript {
     }
   }
 
-  if (!rec.ok) {
+  // ---- Gate 1 bypass: an unreconciled fold that still named player1 builds
+  // rows anyway. Restore by deleting the second clause. ----------------------
+  if (!rec.ok && !(ACCEPT_UNRECONCILED_FOLD && rec.player1Label)) {
     return { ...empty, reconciliation: rec, reason: rec.reason };
   }
 
@@ -387,7 +402,9 @@ export function buildTranscript(options: BuildOptions): Transcript {
 
   return {
     ok: true,
-    reason: null,
+    // Carries the unreconciled reason on the bypass path, so the CLI and the
+    // publish log say why the fold missed even though rows were written.
+    reason: rec.ok ? null : rec.reason,
     reconciliation: rec,
     points,
     winnerShare: rallyEnders === 0 ? 0 : winnerStruckLast / rallyEnders,

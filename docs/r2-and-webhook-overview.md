@@ -88,10 +88,14 @@ you read the payload before anything is spent.
 |---|---|---|
 | Original video, 1–8 GB | **Azure Blob** `advantage-videos`, `videos/…` | the only host the vendor's `VideoUrl` accepts (§3) |
 | **Trimmed video**, returned by the vendor | **Azure Blob** `advantage-videos`, `trimmed/…` | copied server-side from their SAS; the only video that outlives the job |
-| Raw results JSON, ~1 MB | **Supabase Storage** `match-results` (private) | beside `match-data`, and next to the Edge Function that will read it |
+| Raw strokes JSON, ~1 MB | **Supabase Storage** `match-results` (private) | beside `match-data`, and next to the Edge Function that will read it |
+| Per-frame players / trajectories JSON (Sept 2026 API), tens of MB | **Supabase Storage** `match-results`, `…/{job}.players.json` / `…/{job}.trajectories.json` | fetched last in `after()`, best-effort; nothing reads them yet |
 | Webhook envelopes, ~1 KB | Postgres `splitstep_webhook_deliveries` | needs to be transactional with the job row |
 
-The vendor hands their processed video back on `trimmed_video_url` beside `sas_url`. We
+The vendor hands their processed video back on `trimmed_video_url` beside `strokes_url`
+(named `sas_url` until September 2026 — the parser accepts both, and the column is still
+`processing_jobs.sas_url`). Two more urls arrived with that rename: `players_url` and
+`trajectories_url` (nullable), per-frame tracking that lands beside the strokes file. We
 ignored that field until 2026-08-13 while also deleting our own source video, so a
 successful job ended with **no video anywhere**. `startTrimmedVideoCopy()` now issues
 Azure's async Copy Blob, which means Azure pulls the bytes directly and none pass
@@ -250,10 +254,13 @@ What it does, in order:
    compared with a constant-time digest compare. This is the vendor's documented
    scheme — "encryption" in their email was loose phrasing for it.
 3. **Record durably** via `record_splitstep_webhook()` before attempting anything else.
-   That is what makes the envelope, and the `sas_url` inside it, recoverable by hand.
+   That is what makes the envelope, and the urls inside it, recoverable by hand.
 4. **Return 200.**
-5. **On `job_completed`, in `after()`**: fetch `sas_url`, write the JSON verbatim to
-   `match-results`, then `finalize_splitstep_results()`.
+5. **On `job_completed`, in `after()`**: fetch `strokes_url`, write the JSON verbatim to
+   `match-results`, then `finalize_splitstep_results()`; start the trimmed-video copy;
+   grade and derive; and only then fetch `players_url` / `trajectories_url` into
+   `players_object_key` / `trajectories_object_key`, best-effort in whatever budget is
+   left.
 
 ### Authentication, in detail
 
@@ -299,13 +306,13 @@ anything, logging a warning on every delivery.
 
 It used to fetch the results JSON inline and only then respond. With a 30s vendor
 timeout and no retries, a slow vendor host could hold our response past their deadline
-and the delivery would be lost — carrying the `sas_url` with it. Now the 200 goes out as
+and the delivery would be lost — carrying the `strokes_url` with it. Now the 200 goes out as
 soon as the envelope is durable and the fetch runs in `after()` from `next/server`,
 still inside the same invocation's `maxDuration`.
 
 The old code also returned **500 on a failed download "to invite a retry"**. That was
 wrong twice: no retry policy exists, so the 500 bought nothing, and it risked the
-timeout. Recovery is now by hand from the stored `sas_url` (valid ~7 days), or via
+timeout. Recovery is now by hand from the stored url on `processing_jobs.sas_url` (valid ~7 days), or via
 `GET {BASE_URL}/jobs/{job_id}`.
 
 ### Why the database functions
@@ -417,7 +424,7 @@ Best-effort by construction: every failure logs and returns.
 
 `splitstep_webhook_deliveries.job_id` was `ON DELETE SET NULL`, which left the envelope
 behind with no owner. `raw_body` is the vendor's full payload, and on a completion it
-contains `sas_url` — **a working credential to the results for about a week**. Retaining
+contains `strokes_url` — **a working credential to the results for about a week**. Retaining
 that after a user deletes the match was a retention decision nobody made. It is now
 `ON DELETE CASCADE`.
 
@@ -658,7 +665,7 @@ branch. The three that block Phase 2 are **Q8** (what `in` means on a serve), **
 
 | Variable | Where | Notes |
 |---|---|---|
-| `AZURE_STORAGE_ACCOUNT` | Vercel, **per environment** | storage account name |
+| `AZURE_STORAGE_ACCOUNT` | Vercel, **per environment** | storage account name. `advantagedashboardca` (**Canada East**) since 2026-09-03: the vendor's GPU workers are local machines in Montreal and a West US 2 download of a 1 GB match timed out 19 minutes in (job 74cea58e); they will not add retries, so the bytes moved next to them instead. `advantagedashboard` (West US 2) is the retired predecessor — keep it until every job whose 14-day `VideoUrl` was signed against it has finished |
 | `AZURE_STORAGE_KEY` | Vercel, **per environment** | account key. Signs **both** the browser's write SAS and the vendor's read SAS |
 | `AZURE_STORAGE_CONTAINER` | Vercel, **per environment** | `advantage-videos` |
 | `NEXT_PUBLIC_SITE_URL` | Vercel, **per environment** | builds the vendor's WebhookUrl. One value shared across Production and Preview means a preview hands them the production origin, where the route does not exist |
