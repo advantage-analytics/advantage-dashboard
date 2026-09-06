@@ -94,7 +94,7 @@ ready).
 - **notes:** Component stays mounted across opens — read the existing `close()` commentary before choosing the effect trigger. Header file uses `inviting`/`addingPlayer` names, not `inviteOpen`/`addOpen` as the plan writes.
 
 ## T7 · Invite → Add Player email hand-off
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T6
 - **files:** `src/components/dashboard/team/roster-invite-dialog.tsx`, `src/components/dashboard/team/roster-header-buttons.tsx`, `src/components/dashboard/team/invite-target-picker.tsx` (only if the affordance must sit inside the picker), new `tests/invite-add-handoff.spec.ts` (guess)

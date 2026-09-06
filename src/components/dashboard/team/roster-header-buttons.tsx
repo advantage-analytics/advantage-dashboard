@@ -45,13 +45,33 @@ export function RosterHeaderButtons({
    *
    * Held here rather than inside the dialog because the hand-off comes from a
    * sibling: Invite is where a coach discovers the athlete has no account yet,
-   * and this is the one place that can see both dialogs. Nothing sets it today
-   * — the dialog's prefill path exists first so the hand-off has somewhere to
-   * land.
+   * and this is the one place that can see both dialogs.
    */
   const [addInitial, setAddInitial] = useState<AddPlayerInitial | undefined>(
     undefined
   );
+
+  /**
+   * Invite's offer, taken: close Invite, and open Add player holding the
+   * address that was typed there.
+   *
+   * Only the address. Invite collects one, never a name, so nothing else is
+   * carried and nothing is invented to fill the other two fields.
+   *
+   * Nothing is sent, and nothing about the invitation path changes — a coach
+   * who does not take the offer still picks "Someone new" and presses Send.
+   *
+   * The no-op guard is for the case where Add player is already open behind
+   * this: stealing the form out from under a coach mid-typing, to prefill it
+   * with an address from a dialog they are no longer looking at, is worse than
+   * doing nothing.
+   */
+  function handOffToAddPlayer(email: string) {
+    if (addingPlayer) return;
+    setAddInitial({ email });
+    setInviting(false);
+    setAddingPlayer(true);
+  }
 
   const remaining = Math.max(0, seats.seats - seats.used - seats.pending);
   const seatNote =
@@ -87,11 +107,29 @@ export function RosterHeaderButtons({
         managedPlayers={managedPlayers}
         seats={seats}
         playersCanUpload={playersCanUpload}
+        onHandOffToAddPlayer={handOffToAddPlayer}
       />
 
       <AddPlayerDialog
         open={addingPlayer}
-        onOpenChange={setAddingPlayer}
+        /**
+         * Clear the hand-off when Add player closes.
+         *
+         * `addInitial` describes ONE opening — "the coach came here from Invite
+         * holding this address" — and that stops being true the moment the
+         * dialog closes. Left standing, it would be re-applied by the dialog's
+         * open-edge effect on the next plain "Add player" click, prefilling an
+         * address from a conversation that ended, possibly days earlier.
+         *
+         * Cleared here rather than on the header button because closing is the
+         * one event both openings pass through: the button is not the only way
+         * in any more, and a guard on it would still leave the stale value
+         * alive in between.
+         */
+        onOpenChange={(next) => {
+          setAddingPlayer(next);
+          if (!next) setAddInitial(undefined);
+        }}
         seatNote={seatNote}
         roster={roster}
         initial={addInitial}

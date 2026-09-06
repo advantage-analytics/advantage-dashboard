@@ -114,6 +114,20 @@ export function RosterInviteDialog({
    * two different addresses must remount it (`key`) rather than swap the prop.
    */
   initialEmail = "",
+  /**
+   * Offer the coach the other capability, when the address they have typed is
+   * not going to anybody this dialog can bind to.
+   *
+   * An invitation and a coach-managed profile are different things — email and
+   * a login and a seat, against a row that exists now with none of the three —
+   * and a coach who wanted the second one should not have to send the first and
+   * wait. It is an OFFER beside the existing path, never a redirect: "Someone
+   * new" plus Send still sends the invitation, unchanged.
+   *
+   * Only the address crosses over. This dialog collects an address, not a name,
+   * so there is no name to carry and none is invented.
+   */
+  onHandOffToAddPlayer,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -127,6 +141,7 @@ export function RosterInviteDialog({
   playersCanUpload: boolean;
   initialTarget?: ManagedPlayer | null;
   initialEmail?: string;
+  onHandOffToAddPlayer?: (email: string) => void;
 }) {
   const [target, setTarget] = useState<ManagedPlayer | null>(initialTarget);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -536,6 +551,33 @@ export function RosterInviteDialog({
               }}
             />
           </SettingsField>
+
+          {/* The hand-off. Quiet blue text in the DS's footer-left register,
+              sat under the field whose contents it would carry, because that
+              address is the only reason it is on screen.
+    
+              Three conditions, and each one is the same rule from a different
+              side: it is only ever offered when this invitation would MINT a
+              profile rather than bind one.
+                · `!linked`   — a chosen profile already exists; adding a second
+                                coach-managed row for that person is the exact
+                                duplicate the picker exists to prevent.
+                · `draft`     — with nothing typed there is no address to carry,
+                                and Add player is one click away in the header.
+                · `!listed`   — a pasted squad is many people; handing one draft
+                                address to a form that creates ONE row would
+                                silently drop the rest.
+              Nothing here touches `addresses`, `ready` or `submit`: Send still
+              does what it did. */}
+          {onHandOffToAddPlayer && !linked && !listed && draft !== "" && (
+            <button
+              type="button"
+              onClick={() => onHandOffToAddPlayer(draft)}
+              className="-mt-1 cursor-pointer self-start text-left text-[11px] font-medium text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)]"
+            >
+              Add a coach-managed profile instead &rarr;
+            </button>
+          )}
 
           {linked ? (
             /* 7b: the role is a fact, not a choice. */
