@@ -98,11 +98,14 @@ export async function getActivityFeed(
   query =
     workspace.kind === 'team'
       ? query.eq('matches.program_id', workspace.id)
-      : // Personal: the jobs this person submitted. Not `program_id is null` —
-        // that column does not exist until the program migrations land in an
-        // environment, and a filter on a missing column is an error rather
-        // than an empty result.
-        query.eq('created_by', workspace.id);
+      : // Personal: the jobs this person submitted, on matches of their own.
+        // Both halves are needed. `created_by` keeps the tray scoped on the
+        // job (see the header) so a submitter never loses sight of their own
+        // upload; the null `program_id` keeps a coach's team uploads out of
+        // their personal header. RLS cannot supply that second half — its
+        // program policy is a UNION, so it would happily return the program's
+        // rows here.
+        query.eq('created_by', workspace.id).is('matches.program_id', null);
 
   const { data, error } = await query;
 

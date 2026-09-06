@@ -58,3 +58,37 @@ is the runner's. Newest entries at the bottom.
   browser-client `matches` query gains `.is("program_id", null)` after
   `.eq("created_by", userId)` and before `.order(...).limit(4)`, with T1's
   comment. The `shots` read and the empty-result early return are untouched.
+
+## T4 · Add program clause to the personal activity-tray branch — done
+- **gate:** lint clean · `tsc --noEmit` clean · `npm test` clean (includes
+  `tests/activity-tray-detail.spec.ts`, 7 passed; no stale `.next/` re-run
+  needed). `task-completion-reviewer`: VERDICT: pass — it verified the first
+  criterion from the post-diff source rather than the diff, confirming
+  `created_by` survives. `rls-boundary-reviewer`: ran (diff touches
+  `src/lib/data/`) — no issues in the diff; it confirmed the change is
+  additive not substitutive, that the embedded-resource `.is()` filter matches
+  the mechanism the team branch already uses one line above, and that the
+  `!inner` join's row-dropping semantics are unchanged.
+  `pipeline-guardrails-reviewer`: skipped — the diff touches neither
+  `src/app/dashboard/`, `src/components/dashboard/`, nor the upload wizard.
+- **changed:** `src/lib/data/activity-server.ts` — `getActivityFeed()`'s personal
+  branch is now `.eq('created_by', workspace.id).is('matches.program_id', null)`.
+  The program clause is ADDED to the job scope, not substituted for it, which
+  is the trap this task was written around. The stale comment claiming
+  `program_id` "does not exist until the program migrations land" is gone
+  (`grep -n "does not exist until"` returns nothing); its replacement states
+  what the two clauses mean together and notes RLS cannot supply the second.
+  The team branch and the `matches!inner(...)` projection are byte-identical.
+- **follow-ups:**
+  1. The RLS reviewer could not close one point without DB access: whether the
+     one live job whose submitter differs from its match owner still survives
+     the new filter. **The runner closed it directly against the live database**
+     — that job is `2a11168d-9021-4822-9b40-c1afe7cddf82`, its match carries
+     `program_id IS NULL`, so it is not re-hidden from its submitter. Verified,
+     not inferred; recorded here because it is the exact failure the file's
+     header comment exists to prevent.
+  2. `tests/activity-tray-detail.spec.ts` covers only `trayDetail`'s
+     pluralization — nothing exercises `getActivityFeed()`'s workspace scoping.
+     A test with a fake query builder asserting both clauses land on the
+     personal branch would make a future substitution catchable; today only a
+     human reading the query would notice.

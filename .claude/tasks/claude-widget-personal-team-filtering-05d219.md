@@ -63,7 +63,7 @@ ready).
 - **notes:** This is `home/serve-placement-home.tsx` — serve placement exists four times in the repo; the other three are out of scope. Plan step 3.
 
 ## T4 · Add program clause to the personal activity-tray branch
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/data/activity-server.ts (guess — `getActivityFeed()`, personal branch at ~L100-105)
 - **done when:**
