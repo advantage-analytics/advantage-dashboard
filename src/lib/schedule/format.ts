@@ -172,3 +172,29 @@ export function drawOfRound(round: string | null): string | null {
   if (/^(R\d+|QF|SF|F)$/.test(upper)) return "Main draw";
   return null;
 }
+
+/**
+ * "Sat, Sep 20" — the schedule drawer's date glyph (design `Tc2`), which
+ * words the day differently from the row beside it ("Sat 20 Sep"). Both are
+ * the design's; this one carries the comma and puts the month first.
+ *
+ * A tournament is a span, so it prints both ends: "Fri, Jan 16 – Sun, Jan 18".
+ */
+export function formatEventDayLong(iso: string): string {
+  const date = localDate(iso);
+  return `${WEEKDAYS[date.getDay()]}, ${MONTHS[date.getMonth()]} ${date.getDate()}`;
+}
+
+export function formatEventDatesLong(startsOn: string, endsOn: string): string {
+  if (startsOn === endsOn) return formatEventDayLong(startsOn);
+  return `${formatEventDayLong(startsOn)} – ${formatEventDayLong(endsOn)}`;
+}
+
+/**
+ * "Hard" — a surface as the drawer prints it. The column holds whatever a
+ * builder wrote ("hard", "Hard", "Indoor Hard"), so only the first letter is
+ * touched: enough to read as a label, without re-casing a value someone typed.
+ */
+export function surfaceTitle(surface: string): string {
+  return surface.charAt(0).toUpperCase() + surface.slice(1);
+}

@@ -26,7 +26,7 @@ Seven route files render this directory, and all seven read the database.
 
 | Route | Renders | Reads |
 |---|---|---|
-| `/dashboard/team/schedule` | `static/static-schedule.tsx`, with `static/event-drawer.tsx` and `static/dual-widget.tsx` | `getProgramSchedule` → `scheduleRowsFrom`, `eventDetailFrom`, `seasonSummaryFrom` |
+| `/dashboard/team/schedule` | `static/static-schedule.tsx`, with `static/schedule-table.tsx`, `static/event-drawer.tsx` and `static/event-mark.tsx` (Platform Audit `Tc2`/`Tc2c`) | `getProgramSchedule` → `scheduleRowsFrom`, `seasonSummaryFrom`; `getOpponentPrograms` |
 | `/dashboard/team/schedule/new` | `static/static-event-chooser.tsx` | nothing — two links and one piece of local state |
 | `/dashboard/team/schedule/new/dual` | `static/static-dual-builder.tsx` → `static/dual-school-step.tsx`, then `static/dual-build-step.tsx` with `static/opponent-popup.tsx` | `getLadder`, `getTeamSettings`, `getConferenceTable`, `getProgramSchedule` → `opponentDualHistory`, a `programs` head count; `/api/programs/search` and `opponentRosterForDual` from the client; writes through `createDual` |
 | `/dashboard/team/schedule/new/tournament` | `static/static-tournament-builder.tsx` | `getLadder`, `getTeamSettings`; writes through `createTournament` |
@@ -93,15 +93,14 @@ three separate live surfaces: `/dashboard/team/roster` directly, `line-row.tsx`
 (reachable via `dual-detail`/`tournament-detail`), and `team/dual-sheet.tsx`
 via `/dashboard/team`.
 
-### The near-duplicate that is still here
+### The near-duplicate that was here
 
-- **`dual-detail.tsx`** and **`static/dual-widget.tsx`** both draw the
-  `7c`/`4c` dual card, and both are live, on different routes:
-  `[eventId]/page.tsx` renders `dual-detail.tsx`; the schedule page's selected
-  pane renders `dual-widget.tsx`. Editing one does not change the other. T25
-  found they already disagree on the words for one `no-video` state — nothing
-  or "Coming soon" on the widget, "Add video" / "Add file" on the event page —
-  while agreeing on every score and outcome.
+- **`dual-detail.tsx`** and **`static/dual-widget.tsx`** both drew the
+  `7c`/`4c` dual card, live on different routes. The Platform Audit redesign
+  (`Tc2`/`Tc2c`, 2026-09-04) deleted `dual-widget.tsx`: the schedule page's
+  selected pane became a 340px right rail, `static/event-drawer.tsx`, whose
+  lineup rows are links to each match rather than a second copy of the event
+  page's line table. `dual-detail.tsx` is the only dual card now.
 
 Having a counterpart is therefore **not** evidence that a file is dead.
 Reachability is, and only reachability is.

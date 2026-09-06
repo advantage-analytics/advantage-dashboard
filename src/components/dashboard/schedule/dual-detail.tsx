@@ -1,9 +1,10 @@
 /*
  * LIVE — do not mistake this for part of the dormant tree.
  * `app/dashboard/team/schedule/[eventId]/page.tsx` renders it, and that route
- * was deliberately left out of scope this run. `static/dual-widget.tsx` draws
- * the same `7c`/`4c` artboards from fixtures, but it is a second copy, not a
- * replacement: this one is the DB-wired event page.
+ * was deliberately left out of scope this run. The schedule page's rail,
+ * `static/event-drawer.tsx`, summarises the same dual in 340px and links each
+ * line to its match; this one is the DB-wired event page, where lines are
+ * scored.
  *
  * See `./README.md` for the full live/dormant map.
  */
