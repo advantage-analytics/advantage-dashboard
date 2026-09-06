@@ -18,7 +18,7 @@ straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Nav data: ChartLine, UsersRound, comingSoon flag + spec
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/lib/dashboard/nav.ts, tests/nav-icons.spec.ts (new) — guess
 - **done when:**

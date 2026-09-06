@@ -2,3 +2,7 @@
 
 Written by `/task-next`. Do not hand-edit — the queue file is yours, this one
 is the runner's. Newest entries at the bottom.
+
+## T1 · Nav data: ChartLine, UsersRound, comingSoon flag + spec — done
+- **gate:** mechanical — lint 0 errors (32 pre-existing warnings, untouched files), `tsc --noEmit` clean, `npm test` green. Completion review — `VERDICT: pass`, all five criteria met, no out-of-scope changes. Guardrails — `pipeline-guardrails-reviewer` run deliberately even though `src/lib/dashboard/` is outside its trigger list (the file drives `app-sidebar.tsx`): clear on every guardrailed surface (misattribution inputs, workspace scoping, role gating, `canSubmitVideo`, analysis short-circuit, provider naming). It raised one non-guardrail note — the new `comingSoon` doc comment says the flag surfaces in the rail tooltip and `aria-label`, which nothing reads yet — recorded rather than blocked: that wording is what this task's own criterion 2 required, and T2 (`needs: T1`) is the reader. `rls-boundary-reviewer` skipped — the diff touches no Supabase client, data loader, API route, migration, table, view or query.
+- **changed:** `src/lib/dashboard/nav.ts` — `BarChart3 → ChartLine` on both Statistics entries, `Users → UsersRound` on Roster, old imports dropped; `NavLink` gains optional `comingSoon?: true` with a doc comment; the flag set on exactly four entries (personal + team Statistics and Ask), Opponents deliberately unflagged. New `tests/nav-icons.spec.ts` asserts both icon swaps and the exact `comingSoon` href set — 3 assertions, passing.

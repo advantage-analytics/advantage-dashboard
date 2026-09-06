@@ -2,9 +2,9 @@ import {
   Home,
   Calendar,
   GalleryHorizontalEnd,
-  BarChart3,
+  ChartLine,
   MessageSquare,
-  Users,
+  UsersRound,
   Brain,
   Settings,
   HelpCircle,
@@ -28,13 +28,30 @@ export type NavLink = {
   icon: React.ComponentType<
     React.SVGProps<SVGSVGElement> & { strokeWidth?: number }
   >;
+  /**
+   * Marks a route whose page renders `ComingSoonPage` rather than the real
+   * feature. The flag surfaces in the collapsed rail's tooltip and in the
+   * row's `aria-label` — a collapsed rail has no room for a second cue — but
+   * the expanded label stays clean text with no badge or suffix.
+   */
+  comingSoon?: true;
 };
 
 export const PERSONAL_NAV: readonly NavLink[] = [
   { name: "Home", href: "/dashboard", icon: Home },
   { name: "Matches", href: "/dashboard/matches", icon: GalleryHorizontalEnd },
-  { name: "Statistics", href: "/dashboard/statistics", icon: BarChart3 },
-  { name: "Ask", href: "/dashboard/ask", icon: MessageSquare },
+  {
+    name: "Statistics",
+    href: "/dashboard/statistics",
+    icon: ChartLine,
+    comingSoon: true,
+  },
+  {
+    name: "Ask",
+    href: "/dashboard/ask",
+    icon: MessageSquare,
+    comingSoon: true,
+  },
 ];
 
 /**
@@ -85,10 +102,20 @@ export const TEAM_NAV: readonly NavLink[] = [
   { name: "Team Home", href: "/dashboard/team", icon: Home },
   { name: "Schedule", href: "/dashboard/team/schedule", icon: Calendar },
   { name: "Matches", href: "/dashboard/matches", icon: GalleryHorizontalEnd },
-  { name: "Roster", href: "/dashboard/team/roster", icon: Users },
+  { name: "Roster", href: "/dashboard/team/roster", icon: UsersRound },
   { name: "Opponents", href: "/dashboard/opponents", icon: Brain },
-  { name: "Statistics", href: "/dashboard/team/statistics", icon: BarChart3 },
-  { name: "Ask", href: "/dashboard/team/ask", icon: MessageSquare },
+  {
+    name: "Statistics",
+    href: "/dashboard/team/statistics",
+    icon: ChartLine,
+    comingSoon: true,
+  },
+  {
+    name: "Ask",
+    href: "/dashboard/team/ask",
+    icon: MessageSquare,
+    comingSoon: true,
+  },
 ];
 
 export const PERSONAL_BOTTOM: readonly NavLink[] = [
