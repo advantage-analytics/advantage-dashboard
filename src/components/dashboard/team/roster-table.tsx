@@ -78,7 +78,7 @@ import type {
  * blue rule at the destination slot, but the held row already sits at that
  * slot under the pointer, so rule and row overlapped and it read as a cut
  * through the card. The gap the siblings slide open is a better indicator than
- * a line, and it costs nothing to draw. See `SpotBadge` and `LINEUP_GUTTER`.
+ * a line, and it costs nothing to draw. See `SpotBadge`.
  *
  * ── How the drag moves ──────────────────────────────────────────────────────
  * Pointer-driven, via framer-motion's `Reorder`, not HTML5 drag-and-drop. The
@@ -130,20 +130,6 @@ const ROW = "flex items-center gap-4";
  */
 const ROW_BOX = "-mx-4 h-[52px] rounded-[var(--radius-element)] px-4";
 
-/**
- * The room the table makes down its left edge while a lineup is being set, so
- * the held row's line number has somewhere to sit beside it (`SpotBadge`).
- *
- * At rest a row's box starts 8px inside the card — the card's 24px of padding
- * less the 16px each row pulls back for its wash. A 20px disc with a 10px gap
- * needs 30, so the mode adds 24 and the table slides right as it opens. That
- * is a real shift, and it is deliberate rather than overlooked: entering the
- * mode already moves the table, because the instruction banner appears above
- * it. Both move together, on one curve, and read as the table opening up to be
- * edited. Nothing about the COLUMNS changes — the grip still borrows the `#`
- * cell rather than taking a column, so no cell moves relative to its heading.
- */
-const LINEUP_GUTTER = "pl-12";
 
 export function rosterRowId(playerId: string): string {
   return `roster-row-${playerId}`;
@@ -191,7 +177,7 @@ function Avatar({ name }: { name: string }) {
  */
 function FormTicks({ form }: { form: RosterMember["form"] }) {
   if (form.length === 0) {
-    return <span className="text-[12px] text-[var(--ink-400)]">—</span>;
+    return <EmptyMark />;
   }
   return (
     <>
@@ -214,15 +200,26 @@ function FormTicks({ form }: { form: RosterMember["form"] }) {
   );
 }
 
-/** "4–1", or a quiet dash for somebody with nothing decided yet. */
+/**
+ * The one glyph every empty cell shows. Record, Form and Last match each had
+ * their own — a 13px dash, a 12px dash, a sentence — at different sizes and
+ * weights, so a player with no matches read as three unrelated absences.
+ * One mark, one size, one colour, on each column's left edge under its
+ * heading: the eye reads "nothing yet" once and moves on.
+ */
+function EmptyMark() {
+  return (
+    <span aria-hidden className="text-[13px] leading-none text-[var(--ink-300)]">
+      —
+    </span>
+  );
+}
+
+/** "4–1", or the empty mark for somebody with nothing decided yet. */
 function Record({ wins, losses }: { wins: number; losses: number }) {
   return (
-    <span className={cn(COL.record, "tabular text-[13px] text-[var(--ink-900)]")}>
-      {wins + losses === 0 ? (
-        <span className="text-[var(--ink-400)]">—</span>
-      ) : (
-        `${wins}–${losses}`
-      )}
+    <span className={cn(COL.record, "tabular flex items-center text-[13px] text-[var(--ink-900)]")}>
+      {wins + losses === 0 ? <EmptyMark /> : `${wins}–${losses}`}
     </span>
   );
 }
@@ -244,9 +241,14 @@ function LastMatchCell({ member }: { member: RosterMember }) {
   const { lastMatch } = member;
 
   if (lastMatch === null) {
+    // The mark, then the words where the opponent's name would be — so the
+    // three empty cells line up on their headings and the sentence explains
+    // all of them once.
     return (
-      <span className={cn(COL.last, "flex items-center")}>
+      <span className={cn(COL.last, "flex items-center gap-2.5")}>
+        <EmptyMark />
         <span className="text-[12px] text-[var(--ink-400)]">No matches yet</span>
+        <span className="sr-only">No record, no form.</span>
       </span>
     );
   }
@@ -362,25 +364,27 @@ function SpotCell({
 }
 
 /**
- * The line the held row takes if it is let go here — a blue disc in the gutter
- * the table opens along its left edge while a lineup is being set.
+ * The line the held row takes if it is let go here — a blue disc in the page
+ * margin beside the card, level with the row, 10px clear of its outline.
  *
- * It sits OUTSIDE the row, clear of the blue outline by 10px, rather than
- * inside the `#` cell. Beside the row it is unmistakably about the row in
- * hand and not one more value in a column of five, and the grip keeps the cell
- * it borrowed. It replaced a blue rule drawn across the list at the
- * destination slot: with a pointer drag the held row is already at that slot,
- * riding the hand a few pixels off it, so rule and row overlapped and it read
- * as a cut through the card.
+ * OUTSIDE the card on purpose (design option 2C). Beside the row it is
+ * unmistakably about the row in hand and not one more value in a column of
+ * five; the grip keeps the `#` cell it borrowed; and the table does not have
+ * to open a gutter to make room, so nothing inside the card moves when the
+ * mode begins. A row's box starts 8px inside the card, the outline adds 2, the
+ * gap 10, the disc 20 — so it sits 4px past the card's border, in the 32px
+ * page margin. The card stops clipping while the mode is on (see the wrapper
+ * in `RosterTable`), which is what lets it show.
  *
- * The gutter is why `LINEUP_GUTTER` exists — a row's box begins only 8px
- * inside the card at rest, which is not room for a 20px disc and a gap.
+ * It replaced a blue rule drawn across the list at the destination slot: with
+ * a pointer drag the held row is already at that slot, riding the hand a few
+ * pixels off it, so rule and row overlapped and read as a cut through the card.
  */
 function SpotBadge({ spot }: { spot: number | null }) {
   return (
     <span
       aria-hidden
-      className="mono tabular absolute top-1/2 -left-[30px] inline-flex size-5 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--blue)] text-[10px] font-medium text-white"
+      className="mono tabular absolute top-1/2 -left-8 inline-flex size-5 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--blue)] text-[10px] font-medium text-white"
     >
       {spot ?? "—"}
     </span>
@@ -662,14 +666,20 @@ export function RosterTable({
   };
 
   return (
-    <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
-      <div
-        className={cn(
-          "min-w-[760px] px-6 pt-0.5 pb-1.5",
-          "transition-[padding] duration-200 ease-[var(--ease-out-expo)] motion-reduce:transition-none",
-          lineup && LINEUP_GUTTER
-        )}
-      >
+    <div
+      className={cn(
+        "rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]",
+        /* At rest the card scrolls sideways when the viewport is narrower than
+           the table. In the mode it must not clip: the held row's line number
+           sits OUTSIDE the card, in the page margin beside it (`SpotBadge`),
+           and a scroll box clips on both axes whatever its `overflow-x` says.
+           Setting a lineup is a desk job, and the page's own scroll takes the
+           narrow case for the minute the mode is on. Nothing else moves —
+           no padding opens, no column shifts — which is the point. */
+        lineup ? "overflow-visible" : "overflow-x-auto"
+      )}
+    >
+      <div className="min-w-[760px] px-6 pt-0.5 pb-1.5">
         {/* Set lineup rides this row rather than a card header of its own —
             the eyebrow row already spans the table. */}
         <div
@@ -683,17 +693,24 @@ export function RosterTable({
           <span className="flex-1" />
           <span className={cn(COL.record, "eyebrow-sm")}>Record</span>
           <span className={cn(COL.form, "eyebrow-sm")}>Form</span>
-          <span className={cn(COL.last, "eyebrow-sm")}>Last match</span>
-          {canManage && !lineup && members.length > 1 && (
-            <button
-              type="button"
-              onClick={onStartLineup}
-              className="ml-4 inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-[var(--radius-cell)] text-[11px] font-medium text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-            >
-              <GripVertical className="size-3" strokeWidth={1.5} aria-hidden />
-              Set lineup
-            </button>
-          )}
+          <span className={cn(COL.last, "eyebrow-sm flex items-center")}>
+            Last match
+            {/* Inside the last column, not after it. As a sibling it took a
+                column's worth of the row and pushed every heading ~100px left
+                of the cells beneath — Record sat over the spacer. The column
+                is 250px and its label is short, so the action rides its far
+                end and the headings stay over their values. */}
+            {canManage && !lineup && members.length > 1 && (
+              <button
+                type="button"
+                onClick={onStartLineup}
+                className="ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-[var(--radius-cell)] text-[11px] font-medium tracking-normal normal-case text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+              >
+                <GripVertical className="size-3" strokeWidth={1.5} aria-hidden />
+                Set lineup
+              </button>
+            )}
+          </span>
         </div>
 
         <Reorder.Group
