@@ -43,7 +43,7 @@ ready).
 - **notes:** Plan Step 2. The `detail` slot already exists on `RailTooltip` and flips `align` to `start` on its own. The `aria-label` widening is the accessibility half of the marker and is not optional.
 
 ## T3 · Sign-out row on Settings → Account
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/app/dashboard/settings/account/page.tsx, src/components/dashboard/logout-dialog.tsx — guess
 - **done when:**

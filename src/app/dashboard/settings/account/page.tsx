@@ -2,7 +2,7 @@
 
 import { useCallback, useState, useTransition } from "react";
 import Link from "next/link";
-import { Monitor, Users } from "lucide-react";
+import { Monitor, MonitorSmartphone, Users } from "lucide-react";
 import { SettingsAlert } from "@/components/dashboard/settings/settings-alert";
 import { SettingsButton } from "@/components/dashboard/settings/settings-button";
 import { SettingsSectionHeading } from "@/components/dashboard/settings/settings-card";
@@ -10,6 +10,7 @@ import {
   deleteAccount,
   requestPasswordReset,
 } from "@/components/dashboard/settings/actions";
+import { useRequestLogout } from "@/components/dashboard/logout-dialog";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { createClient } from "@/lib/supabase/client";
 import { SUPPORT_EMAIL } from "@/lib/constants";
@@ -29,6 +30,9 @@ import { cn } from "@/lib/utils";
  */
 export default function AccountPage() {
   const { available, viewer } = useWorkspace();
+  // Same confirmation the header profile menu opens — one dialog, one place
+  // the unsaved-changes warning has to stay correct.
+  const requestLogout = useRequestLogout();
 
   const [confirmText, setConfirmText] = useState("");
   const [message, setMessage] = useState<{
@@ -146,34 +150,62 @@ export default function AccountPage() {
 
       {/* 02 · Sessions.
 
-          One row, not a device list: nothing in the app records where an
-          account has been signed in, and a list assembled from the current
-          session would show one device while implying it was all of them. The
-          action below is genuinely global. */}
+          Two rows — this device and everywhere — not a device list: nothing in
+          the app records where an account has been signed in, and a list
+          assembled from the current session would show one device while
+          implying it was all of them. The second action is genuinely global. */}
       <section className="flex flex-col gap-[18px]">
         <SettingsSectionHeading number="02" title="Where you're signed in" />
-        <div className="flex items-center gap-3.5 border-y border-[var(--border-hairline)] py-3">
-          <Monitor
-            className="size-3.5 shrink-0 text-[var(--ink-600)]"
-            strokeWidth={1.5}
-            aria-hidden="true"
-          />
-          <div className="min-w-0">
-            <div className="text-[12px] text-[var(--ink-900)]">This device</div>
-            <div className="mt-0.5 text-[11px] text-[var(--ink-500)]">
-              Signing out everywhere ends every other session too — phones
-              included.
+        <div className="flex flex-col border-y border-[var(--border-hairline)]">
+          <div className="flex items-center gap-3.5 py-3">
+            <Monitor
+              className="size-3.5 shrink-0 text-[var(--ink-600)]"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+            <div className="min-w-0">
+              <div className="text-[12px] text-[var(--ink-900)]">
+                This device
+              </div>
+              <div className="mt-0.5 text-[11px] text-[var(--ink-500)]">
+                Ends this session only. Other devices stay signed in.
+              </div>
             </div>
+            <SettingsButton
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              onClick={requestLogout}
+            >
+              Sign out
+            </SettingsButton>
           </div>
-          <SettingsButton
-            variant="outline"
-            size="sm"
-            className="ml-auto"
-            onClick={handleSignOutEverywhere}
-            loading={isSigningOut}
-          >
-            Sign out everywhere
-          </SettingsButton>
+
+          <div className="flex items-center gap-3.5 border-t border-[var(--border-hairline)] py-3">
+            <MonitorSmartphone
+              className="size-3.5 shrink-0 text-[var(--ink-600)]"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+            <div className="min-w-0">
+              <div className="text-[12px] text-[var(--ink-900)]">
+                Every device
+              </div>
+              <div className="mt-0.5 text-[11px] text-[var(--ink-500)]">
+                Signing out everywhere ends every other session too — phones
+                included.
+              </div>
+            </div>
+            <SettingsButton
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              onClick={handleSignOutEverywhere}
+              loading={isSigningOut}
+            >
+              Sign out everywhere
+            </SettingsButton>
+          </div>
         </div>
       </section>
 
