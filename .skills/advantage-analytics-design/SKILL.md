@@ -675,8 +675,10 @@ flex flex-col items-center justify-center py-12 px-6 text-center
 ```
 
 This centred recipe is the **small-region** form — a card or a list with
-nothing in it, reached from a populated page. A whole page with no data is a
-different composition: Personal Home Recipes → Day zero.
+nothing in it, reached from a populated page. A whole personal page with no
+data is a different composition — the offer over the page's own dimmed shape:
+Personal Home Recipes → Day zero for Home, Data Table → Table page states for
+a list.
 
 ### Keyboard Shortcut Chip (`<kbd>`)
 
@@ -1006,9 +1008,20 @@ master-detail split is retired; its detail is the peek drawer below.
    shipped form carried two blue links to the same URL. What is dimmed is the
    list's real anatomy with its labels intact, never grey stand-ins for
    labels; the column headers are the payload (Empty State → labels). The
-   **team** list keeps the older shape until its own day zero ("Set up your
-   program") is designed. Once populated, the frame never moves again: the
-   resting view is never pre-filtered, and a filtered view is its own screen. The resting view is never
+   **team** list keeps the older shape (`matches/matches-empty.tsx`) until its
+   own day zero ("Set up your program") is designed.
+
+   *Shipped:* `matches/matches-day-zero.tsx` — the shared `DayZeroOffer` with
+   the page's own sentence ("Every match you send lands here." on a 30ch
+   measure, so it holds one line), then the real `LifecycleChips` at zero, a
+   drawn toolbar, and the list card with its six column labels over **five**
+   ghost rows stepping 1 → 0.8 → 0.6 → 0.45 → 0.3. Five rather than Home's
+   three because this card is the whole page below the offer, where Home's
+   shares a column; three left it a stub. It renders only when there is
+   neither a match nor a draft — a draft is a match in flight and keeps the
+   list.
+
+   Once populated the frame never moves again. The resting view is never
    pre-filtered; a filtered view is its own screen, never a mutation of the
    resting one — the resting frame keeps showing its in-flight and estimate
    rows regardless of what's filtered. Lifecycle cell copy: "View report"
@@ -1317,17 +1330,14 @@ button stopped the blue one reading as the main action; "Import instead" sits
 at 124px, against the primary's 146, and leaves naming the source to the
 conditions line beneath — "A SwingVision export needs none of that."
 
-*The same offer on Matches.* `matches/matches-day-zero.tsx` renders the same
-`DayZeroOffer` with the page's own sentence — "Every match you send lands
-here." on a 30ch measure, so it sits on one line — over the list's shape: the
-real `LifecycleChips` at zero, a drawn toolbar, and the table card with its six
-column labels over **five** ghost rows stepping 1 → 0.8 → 0.6 → 0.45 → 0.3.
-Five rather than Home's three because this card is the whole page below the
-offer, where Home's shares a column; three left it a stub. Personal scope only,
-and only when there is neither a match nor a draft — a draft is a match in
-flight and keeps the list. Onboarding has already asked about a team and
-routed coaches and rostered players elsewhere, so no "Join a team" belongs
-here; the switcher's "Create team workspace" is where that lives.
+Onboarding has already asked about a team and routed coaches and rostered
+players elsewhere, so no "Join a team" belongs on either day-zero page; the
+switcher's "Create team workspace" is where that lives.
+
+*`DayZeroOffer` is shared.* Matches renders the same component with its own
+sentence and measure — everything under the sentence is byte-identical, so a
+player who lands on either page meets one offer. The list page's own recipe
+lives with the rule that governs it: Data Table → Table page states.
 
 The generous version is the shipped one. A height study got the same three
 elements to 214px by closing the padding to 36px and the gaps to 14px, but
