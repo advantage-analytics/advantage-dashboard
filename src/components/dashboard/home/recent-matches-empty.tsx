@@ -91,8 +91,10 @@ export function RecentMatchesEmpty({
        * same session, so it stays on the page; it stops pretending to be a
        * separate destination.
        *
-       * If the wizard ever accepts `?provider=swing-vision` and skips the
-       * picker, this earns a real second control again.
+       * The wizard now accepts `?source=swing-vision`, and the day-zero offer
+       * carries that as a link. It stayed a link rather than becoming a second
+       * button: the param preselects the Source field but cannot skip step
+       * one, which also asks whose match this is.
        */}
       {showAction && (
       <div className="mt-3.5 flex items-center gap-5 border-t border-[var(--border-hairline)] pt-[22px] pb-1">

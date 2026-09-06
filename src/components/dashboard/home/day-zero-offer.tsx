@@ -39,12 +39,33 @@ export function DayZeroOffer() {
       <Link href="/dashboard/matches/new" className={advButton("primary")}>
         Send a match
       </Link>
+      {/*
+       * The import path, as a link rather than a second button.
+       *
+       * It was a sentence until the wizard could tell the two apart: both
+       * controls opened the same URL on the same step, so the second was
+       * promising a door that did not exist. `?source=swing-vision`
+       * preselects the Source field, so the link now lands somewhere the
+       * button does not.
+       *
+       * Still a link, not a button. It does not skip step one — that step
+       * also asks whose match this is, and nothing may carry a viewer past
+       * that unreviewed — so it is a shorter way in, not a second route. And
+       * it is the one path that reaches a report inside the same session,
+       * for the only segment none of the video requirements apply to.
+       */}
       <p
         className="text-micro text-center"
         style={{ maxWidth: "52ch", textWrap: "pretty" }}
       >
-        One singles match, 1080p or better, camera fixed for the whole thing.
-        Or import a SwingVision export, which needs none of that.
+        One singles match, 1080p or better, camera fixed for the whole thing.{" "}
+        <Link
+          href="/dashboard/matches/new?source=swing-vision"
+          className="rounded-sm font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:outline-none"
+        >
+          Or import a SwingVision export
+        </Link>
+        , which needs none of that.
       </p>
     </div>
   );

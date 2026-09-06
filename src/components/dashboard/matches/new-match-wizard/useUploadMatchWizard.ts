@@ -242,6 +242,22 @@ export interface UseUploadMatchWizardProps {
    * file has to be picked again, so a video flow lands on the file step.
    */
   draft?: MatchDraft | null;
+  /**
+   * A source named by the link that opened the wizard (`?source=`).
+   *
+   * It preselects the Source field and **does not skip step one**. That step
+   * is not a provider picker — it asks three things, and one of them is For,
+   * the field that decides `matches.player1_id`. A wrong id there does not
+   * mislabel a row, it hands read access to the wrong person and attributes
+   * every statistic to them (see `SourceStepContent`'s Attribution note), so
+   * nothing may carry a viewer past it unreviewed.
+   *
+   * Ranked below a preset and a draft, which each carry a whole match, and
+   * above the stored provider, which is a stale choice where this is a fresh
+   * one. Not persisted, for the same reason the default is not: arriving by
+   * link is not the same as having chosen in the picker.
+   */
+  initialProvider?: ProviderId | null;
 }
 
 /**
@@ -452,6 +468,7 @@ export function useUploadMatchWizard({
   onVideoUpload,
   preset,
   draft,
+  initialProvider,
 }: UseUploadMatchWizardProps): UseUploadMatchWizardReturn {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -474,10 +491,16 @@ export function useUploadMatchWizard({
    * So the bar measures the flow you have ENTERED: committed by the step
    * transition that leaves the provider step, which is the only place the kind
    * can still change.
+   *
+   * A preset and a `?source=` link are the two exceptions, and they are the
+   * same exception: both decide the flow before the first paint, so the bar
+   * can be built at the right length instead of resizing into it.
    */
-  const [progressKind, setProgressKind] = useState<ProviderKind>(() =>
-    preset && !preset.supportsVideo ? "import" : DEFAULT_PROVIDER_KIND
-  );
+  const [progressKind, setProgressKind] = useState<ProviderKind>(() => {
+    if (preset && !preset.supportsVideo) return "import";
+    if (initialProvider) return getProviderKind(initialProvider);
+    return DEFAULT_PROVIDER_KIND;
+  });
   const [selectedProvider, setSelectedProvider] = useState<ProviderId | null>(null);
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
   const [isOver, setIsOver] = useState(false);
@@ -755,7 +778,14 @@ export function useUploadMatchWizard({
 
     const existingProvider = localStorage.getItem(STORAGE_KEYS.SELECTED_PROVIDER);
     let resumedProvider = false;
-    if (existingProvider && isProviderSupported(existingProvider)) {
+    if (initialProvider) {
+      // The link named a source. It outranks the stored one — that is a stale
+      // choice, this is the one just made — and the step still opens, because
+      // it carries two answers besides this one. The progress bar was already
+      // built at this kind's length in the initialiser above, so nothing here
+      // resizes it.
+      setSelectedProvider(initialProvider);
+    } else if (existingProvider && isProviderSupported(existingProvider)) {
       setSelectedProvider(existingProvider as ProviderId);
       resumedProvider = true;
     } else if (DEFAULT_PROVIDER_ID) {
@@ -792,7 +822,13 @@ export function useUploadMatchWizard({
       setProgressKind(resumedKind);
       setStep(STEP_ORDER_BY_KIND[resumedKind][1]);
     } else {
-      setProgressKind(DEFAULT_PROVIDER_KIND);
+      // A `?source=` link keeps the kind the initialiser already built the bar
+      // at; everything else starts on the default flow. Writing the default
+      // unconditionally here was what made a linked import wizard count four
+      // steps and then drop to three on the first Continue.
+      setProgressKind(
+        initialProvider ? getProviderKind(initialProvider) : DEFAULT_PROVIDER_KIND
+      );
       setStep("provider");
     }
 

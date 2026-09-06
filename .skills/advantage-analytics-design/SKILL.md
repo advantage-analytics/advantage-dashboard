@@ -1294,6 +1294,15 @@ above, 24px gaps, 38px below.** **30px is a deliberate exception** — every
 other page title runs 24px, and this is the one screen with nothing competing
 for the first glance.
 
+*One primary, and one link.* The conditions line carries "Or import a
+SwingVision export" as a link to `/dashboard/matches/new?source=swing-vision`,
+which preselects the wizard's Source field. It stays a link rather than a
+second button because it cannot skip step one — that step also asks which
+workspace the match is filed under and who played it — so it is a shorter way
+in, not a second route. Onboarding has already asked about a team and routed
+coaches and rostered players elsewhere, so no "Join a team" belongs here; the
+switcher's "Create team workspace" is where that lives.
+
 The generous version is the shipped one. A height study got the same three
 elements to 214px by closing the padding to 36px and the gaps to 14px, but
 the air is what the block is for: the gap between the sentence and the button
