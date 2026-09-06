@@ -61,7 +61,7 @@ ready).
   `FactRow` has a 130px label column and did not fit the glyph + two-line + button shape on the first attempt, so that run repeated the existing section-02 row markup instead — allowed by the plan. Update the section comment's "One row, not a device list" wording to match two rows. The second row needs a title of its own once "This device" moves up; the first attempt used "Every device".
 
 ## T4 · Remove sign-out from the sidebar footer
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T2, T3
 - **files:** src/components/dashboard/app-sidebar.tsx — guess
