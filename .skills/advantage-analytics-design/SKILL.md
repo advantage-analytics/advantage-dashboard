@@ -727,29 +727,39 @@ All three share the offer's own words wherever a match is what is missing:
 `DayZeroOffer` takes a headline and measure, and everything beneath the
 sentence is byte-identical across Home, Matches and Statistics.
 
-### Keyboard Shortcut Chip (`<kbd>`)
+### Keyboard Shortcut Chip (`Kbd`)
 
-Always render keyboard hints inside a semantic `<kbd>` element, marked `aria-hidden="true"` when an `aria-label` already conveys the shortcut. Use `inline-flex` so the chip aligns with adjacent text/icons.
+`ui/kbd.tsx` is the only keyboard chip in the product. It is a **keycap, not
+a code tag**: `--surface-raised` fill, 1px `--ink-200` border, and a 1px
+bottom shadow (`--shadow-keycap`) so it reads as a key you could press. Two
+fixed sizes, and nothing else:
 
-**Light surface (default)** — search trigger, dismiss hints, back-to-list affordances:
+| Size | Geometry | Where |
+|---|---|---|
+| `sm` | 16px tall, min-width 16, `px-1`, 10px text, radius 3 | inside a sentence — a mode banner, an inline hint |
+| `md` (default) | 24px tall, min-width 24, `px-1.5`, 11px text, radius 5 | a shortcut table or legend, where the chip is the content |
 
-```
-inline-block px-1 py-0.5 rounded
-text-[10px] font-medium leading-none text-[#AAAAAA] bg-[#F0F0F0]
-```
+Always a semantic `<kbd>`, `aria-hidden="true"` where an `aria-label` already
+says the shortcut. `inline-flex`, so a chip sits on the text baseline beside
+the words around it. Combos are separate adjacent chips with a 4px gap
+(`⌘` `K`), never one chip containing both — the gap is what makes them read
+as two keys.
 
-Let the chip auto-size from its text + padding rather than imposing a fixed height. This is what makes the contents sit in their natural type-metric position — fixed heights center the line-box geometrically, but lowercase letters with no ascenders/descenders (like `esc`) appear visually low inside that box. With `py-0.5` the chip hugs the actual cap-height/x-height of the rendered text, matching the cadence of `⌘K` and `esc` chips throughout the app.
+*This retires the earlier flat recipe* (`bg-[#F0F0F0]`, no border, no shadow,
+auto-height, small-caps for lowercase word keys), along with the argument
+that fixed heights make `esc` sit low. The keycap centres its legend in a
+fixed box and needs no variant trick, and the flat chip had no call sites
+left when this was written — `src/` carries `Kbd` alone. Do not reintroduce
+a second chip: a keyboard hint that looks like inline code reads as a value
+to type rather than a key to press.
 
-**Inverted surface** — on accent (`#3B82F6`) buttons or other dark backgrounds:
+**A keyboard path is stated once, where the mode is stated** — in the mode
+banner (`Notice` → mode register), never as a hint repeated on every row it
+applies to. Sentence and chips share one line: "Drag a row, or focus one and
+press `space` then `↑` `↓`".
 
-```
-inline-block px-1 py-0.5 rounded
-text-[10px] font-medium leading-none bg-white/20 text-white
-```
-
-**Lowercase word-named keys** (`esc`, `tab`, `enter`) — append `[font-variant-caps:small-caps]` to the chip className. Inter at 10px renders lowercase letters at x-height only, which sit visually low inside the chip because they don't fill the line-box like cap-height letters do; small-caps renders them as small uppercase glyphs at cap-height so they center alongside modifier+letter combos like `⌘K`. Source text stays lowercase; the variant only changes the visual form.
-
-**Inline (in body copy)** — for "or press ⌘S" style hints, no chip background:
+**Inline (in body copy)** — for "or press ⌘S" style hints where a chip would
+be too heavy, no background:
 
 ```
 text-[#525252] font-medium
@@ -761,6 +771,7 @@ text-[#525252] font-medium
 - Windows/Linux modifiers: spell out and join with `+` (`Ctrl+S`, `Alt+K`).
 - **Letter keys in modifier combos stay UPPERCASE** (`⌘U`, `⌘K`, `⌘S`, `Ctrl+S`). They read as a hotkey, not a label.
 - **Standalone word-named keys are lowercase** (`esc`, `enter`, `tab`, `space`). They read as a label, not a glyph.
+- **Arrow keys are glyphs, never words** (`↑`, `↓`, `←`, `→`).
 - Punctuation keys render as-is (`/`, `?`).
 - Detect platform via `navigator.userAgentData?.platform ?? navigator.platform` and gate render behind `if (isMac !== null)` to avoid SSR mismatches.
 
@@ -1249,6 +1260,19 @@ everything else must not move.
 `set_program_lineup` RPC, where the order given IS the numbering and anyone
 absent from it is taken out of the lineup.
 
+**What this binds elsewhere.** These are table laws, not a roster treatment,
+so the next re-rankable order takes them rather than inventing a second
+grammar — **Schedule** is the one on the map: its event drawer holds nine
+lines in a fixed order, and the day that order becomes editable it is this
+mode (toggle on the header row, grip borrowing the leading cell, one sequence,
+the same keyboard gesture), not a drag handle column or a set of up/down
+arrows. Three of the rules bind Schedule already, whatever it does about
+ordering: law 10 (its table-level actions live inside a column, not beside
+the headings), law 1's empty mark (Lines `n / 9`, Score and Result all have a
+not-yet state), and the disabled-until-dirty rule below — "Enter results" is
+a draft-committing primary and should be dead until the draft differs from
+what is stored.
+
 ---
 
 ## Events & Matches — the Vocabulary (v3)
@@ -1325,6 +1349,22 @@ never red). A suggestion earns its tint by carrying an action; a passive fact
 never gets one. The same object hosts the applied-filter strip (Data Table
 rule 6) and the wizard's slot suggestion (`SlotLine`, below) — the latter as a
 grey strip, not a suggestion tint, since attaching to a line is reversible.
+
+**Mode** — the third register, and the only one that is not about a record:
+the surface below has temporarily become an editor, and this says which
+editor and how to work it. `--blue-tint-08` wash inside a `--blue-tint-12`
+border at `radius-element`, one line, `px-3.5 py-2.5`: the mode's own 14px
+glyph · a bold lead naming the mode ("Setting the lineup.") · the gesture in
+plain words with the keyboard path in real `Kbd` chips · and, pushed right, a
+quiet 11px line saying what is **not** committed yet ("Nothing is saved until
+Save lineup."). It earns the tint the way a suggestion does — by being about
+an action — but it proposes nothing and has no buttons of its own; the mode's
+Cancel and primary live in the page's action slot, which they have taken over
+for the duration. It arrives with the mode from just above its slot and
+leaves faster than it came, and the surface below is a layout-animated
+sibling so it slides rather than jumps. **Stated once, above the thing it
+changes** — never a hint per row, and never a second banner for the same
+mode. Reorder Mode's banner is the shipped case.
 
 **`Avatar` + `StatePill`** — profile ≠ account, and the avatar says which:
 self-managed = unmarked initials (default, no chip); coach-managed = border

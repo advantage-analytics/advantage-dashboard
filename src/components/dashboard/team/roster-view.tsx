@@ -413,7 +413,10 @@ export function RosterView({
                 <span className="text-[var(--ink-700)]">
                   Drag a row, or focus one and press
                 </span>
-                <Kbd size="sm">Space</Kbd>
+                {/* Lowercase: the system writes standalone word-named keys
+                    as labels (`esc`, `space`), and Help's shortcut table
+                    already does. Letters in combos stay uppercase. */}
+                <Kbd size="sm">space</Kbd>
                 <span className="text-[var(--ink-700)]">then</span>
                 <Kbd size="sm">↑</Kbd>
                 <Kbd size="sm">↓</Kbd>
