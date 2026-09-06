@@ -8,6 +8,7 @@ import {
   type MatchScore,
 } from "@/lib/data/match-utils";
 import { meanOfPresent, pct, statKey } from "@/lib/data/aggregate";
+import { ROSTER_DRAWER_MEASURES } from "@/lib/data/player-measures";
 import { canonicalRosterIds } from "@/lib/data/roster-ids";
 import { normalizedPersonName } from "@/lib/data/person-name";
 import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
@@ -73,6 +74,54 @@ export interface RosterMatch {
   date: string;
 }
 
+/**
+ * One of a member's last six matches, as the roster drawer draws it.
+ *
+ * Platform Audit `Tb4`: the drawer is "identity → one-line stat header with a
+ * six-match sparkline → four stat pills that switch the chart → three recent
+ * matches". Every one of those reads from this list — the sparkline plots
+ * `values[key]` across it, the pills average the same field, and the recent
+ * list is its first three — so the chart, the chip and the row can never
+ * describe three different sets of matches.
+ */
+export interface RosterRecentMatch {
+  id: string;
+  /** Already shortened: "Ana Castillo" → "A. Castillo". */
+  opponent: string;
+  /** The tournament or dual it belonged to, when the row recorded one. */
+  event: string | null;
+  /** Oriented so `player1` is this member — see `RosterMatch.sets`. */
+  sets: ScoreLineSet[];
+  won: boolean | null;
+  /** "Aug 8". */
+  date: string;
+  /**
+   * This member's side of each drawer measure for this match, keyed by
+   * `ROSTER_DRAWER_MEASURES[].key`. Null where the match carries no stats —
+   * a video still in analysis, a hand-entered result — and the sparkline
+   * skips the point rather than drawing a zero.
+   */
+  values: Record<string, number | null>;
+}
+
+/**
+ * One of the drawer's four figures.
+ *
+ * `value` is the mean over the member's last six matches — the same six the
+ * sparkline plots, which is why the stat header can print "1st serve in ·
+ * last 6" over it. `trend` is that mean against the mean of everything
+ * earlier, in points: the shape the profile page's trend already has, over
+ * the window the design names. Null where nothing supplied the figure, or
+ * where there is no earlier season to compare against.
+ */
+export interface RosterMeasure {
+  key: string;
+  label: string;
+  pill: string;
+  value: number | null;
+  trend: number | null;
+}
+
 export interface RosterMember {
   /**
    * The id this person's matches carry — a `program_players.id` for a player,
@@ -116,13 +165,20 @@ export interface RosterMember {
    */
   duplicateOfPlayerId: string | null;
   matchesPlayed: number;
+  /**
+   * Decided matches, each way. The Record column — "4–1" — is what a coach
+   * ranks the list by (Platform Audit `Tb4`), and it was already counted for
+   * the profile page; the roster just stopped throwing it away.
+   */
+  wins: number;
+  losses: number;
   /** The last five results, oldest first. Unscored matches are left out. */
   form: ("win" | "loss")[];
   lastMatch: RosterMatch | null;
-  /** Mean first-serve percentage across their matches, or null with no stats. */
-  firstServePct: number | null;
-  /** Recent form against the rest, in points. Null with nothing to compare. */
-  firstServeDelta: number | null;
+  /** Newest first, at most `DRAWER_WINDOW`. What the drawer reads. */
+  recent: RosterRecentMatch[];
+  /** Always the four in `ROSTER_DRAWER_MEASURES`, in that order. */
+  measures: RosterMeasure[];
 }
 
 export interface RosterInvite {
@@ -131,6 +187,13 @@ export interface RosterInvite {
   role: MemberRole;
   /** "Aug 4" — formatted here so the list does not run Intl per render. */
   invitedOn: string;
+  /**
+   * Who sent it — `program_invites.invited_by`, a `users.id` or null once
+   * that account is gone. The Roster table prints "by you" when it is the
+   * viewer's, and nothing when it is not: the design draws a coach reading
+   * their own invitations, and a row must not credit somebody else's.
+   */
+  invitedBy: string | null;
 }
 
 export interface RosterData {
@@ -178,13 +241,19 @@ interface DbMatchRow {
   player2_name: string | null;
   score: MatchScore | null;
   date: string | null;
+  tournament_name: string | null;
 }
 
+/**
+ * One side of one match from `match_stats_with_percentages`, carrying the
+ * drawer's four measure columns. Indexed rather than named because the
+ * column list is `ROSTER_DRAWER_MEASURES`, and a `numeric` column arrives
+ * from PostgREST as a string — `pct()` parses each one at the read.
+ */
 interface DbStatRow {
   match_id: string;
   is_player1: boolean;
-  /** A `numeric` column: PostgREST hands it over as a string. */
-  first_serve_pct: string | number | null;
+  [measure: string]: unknown;
 }
 
 /**
@@ -210,11 +279,26 @@ interface MemberResult {
   match: DbMatchRow;
   isPlayer1: boolean;
   won: boolean | null;
-  firstServePct: number | null;
+  /** This side's drawer measures, keyed like `RosterRecentMatch.values`. */
+  values: Record<string, number | null>;
 }
 
-/** How many recent matches the form ticks and the serve trend look at. */
+/** How many recent matches the form ticks look at. */
 const FORM_WINDOW = 5;
+
+/**
+ * How many matches the drawer plots, lists from, and averages over.
+ *
+ * Six, from the design — the sparkline is "six-match" by name and its stat
+ * header says "last 6" out loud, which is what lets this window differ from
+ * `FORM_WINDOW` without two numbers silently claiming to be the same one.
+ */
+const DRAWER_WINDOW = 6;
+
+/** No stats for a side: every drawer measure null, in one object. */
+function emptyValues(): Record<string, number | null> {
+  return Object.fromEntries(ROSTER_DRAWER_MEASURES.map((m) => [m.key, null]));
+}
 
 /**
  * "ana.vasquez@school.edu" → "ana.vasquez", for a seat-holder with no name yet.
@@ -281,7 +365,7 @@ export const getRosterData = cache(async function getRosterData(
       supabase.rpc("program_seat_usage", { p_program_id: programId }),
       supabase
         .from("program_invites")
-        .select("id, email, role, created_at")
+        .select("id, email, role, created_at, invited_by")
         .eq("program_id", programId)
         .is("accepted_at", null)
         .order("created_at", { ascending: false }),
@@ -290,13 +374,15 @@ export const getRosterData = cache(async function getRosterData(
         .select("players_can_upload, time_zone")
         .eq("id", programId)
         .maybeSingle(),
-      // First serve needs the match ids, so it cannot join the siblings above —
-      // but it has no reason to wait on them either. Chained inside the
-      // `Promise.all` it costs `matches + stats`, not `all five + stats`.
+      // The measures need the match ids, so they cannot join the siblings
+      // above — but they have no reason to wait on them either. Chained inside
+      // the `Promise.all` it costs `matches + stats`, not `all five + stats`.
       (async () => {
         const { data } = await supabase
           .from("matches")
-          .select("id, player1_id, player2_id, player1_name, player2_name, score, date")
+          .select(
+            "id, player1_id, player2_id, player1_name, player2_name, score, date, tournament_name"
+          )
           .eq("program_id", programId)
           // `nullsFirst` is not a detail here: Postgres puts NULLs first on a
           // DESC sort, so an undated row would take the front of every member's
@@ -306,14 +392,24 @@ export const getRosterData = cache(async function getRosterData(
         const rows = (data ?? []) as DbMatchRow[];
         if (rows.length === 0) return { matches: rows, stats: [] as DbStatRow[] };
 
+        // The drawer's four columns, and only those — `PLAYER_MEASURES` has
+        // ten, and the other six belong to the profile page.
+        const columns = [
+          "match_id",
+          "is_player1",
+          ...ROSTER_DRAWER_MEASURES.map((m) => m.key),
+        ];
         const { data: stats } = await supabase
           .from("match_stats_with_percentages")
-          .select("match_id, is_player1, first_serve_pct")
+          .select(columns.join(", "))
           .in(
             "match_id",
             rows.map((m) => m.id)
           );
-        return { matches: rows, stats: (stats ?? []) as DbStatRow[] };
+        return {
+          matches: rows,
+          stats: (stats ?? []) as unknown as DbStatRow[],
+        };
       })(),
     ]);
 
@@ -327,9 +423,17 @@ export const getRosterData = cache(async function getRosterData(
 
   // Keyed on the view's natural key, the way every other reader of this table
   // does — one `set` per row rather than a read-modify-write of a pair.
-  const serveByPlayer = new Map<string, number | null>();
+  const valuesByPlayer = new Map<string, Record<string, number | null>>();
   for (const row of stats) {
-    serveByPlayer.set(statKey(row.match_id, row.is_player1), pct(row.first_serve_pct));
+    valuesByPlayer.set(
+      statKey(row.match_id, row.is_player1),
+      Object.fromEntries(
+        ROSTER_DRAWER_MEASURES.map((m) => [
+          m.key,
+          pct(row[m.key] as string | number | null | undefined),
+        ])
+      )
+    );
   }
 
   // One pass, indexed by player, rather than a scan of every program match per
@@ -359,7 +463,7 @@ export const getRosterData = cache(async function getRosterData(
         match,
         isPlayer1,
         won: matchOutcome(match.score, isPlayer1),
-        firstServePct: serveByPlayer.get(statKey(match.id, isPlayer1)) ?? null,
+        values: valuesByPlayer.get(statKey(match.id, isPlayer1)) ?? emptyValues(),
       });
       resultsByMember.set(userId, list);
     }
@@ -380,11 +484,36 @@ export const getRosterData = cache(async function getRosterData(
     const results = resultsByMember.get(row.player_id) ?? [];
 
     const decided = results.filter((r) => r.won !== null);
-    const serves = results.map((r) => r.firstServePct);
-    // Whole points: this sits beside a set score, and "63.4%" claims a
-    // precision a five-match window does not have.
-    const recentServe = meanOfPresent(serves.slice(0, FORM_WINDOW), 0);
-    const earlierServe = meanOfPresent(serves.slice(FORM_WINDOW), 0);
+    let wins = 0;
+    let losses = 0;
+    for (const result of decided) {
+      if (result.won) wins++;
+      else losses++;
+    }
+
+    // `results` is newest first, so the first slice is what the drawer plots
+    // and the rest is the season it is measured against.
+    const recentResults = results.slice(0, DRAWER_WINDOW);
+    const earlierResults = results.slice(DRAWER_WINDOW);
+    const measures: RosterMeasure[] = ROSTER_DRAWER_MEASURES.map((measure) => {
+      // Whole points: this sits beside a set score, and "63.4%" claims a
+      // precision a six-match window does not have.
+      const value = meanOfPresent(
+        recentResults.map((r) => r.values[measure.key]),
+        0
+      );
+      const earlier = meanOfPresent(
+        earlierResults.map((r) => r.values[measure.key]),
+        0
+      );
+      return {
+        key: measure.key,
+        label: measure.label,
+        pill: measure.pill,
+        value,
+        trend: value === null || earlier === null ? null : value - earlier,
+      };
+    });
 
     const latest = results[0];
     const latestJob = latest ? analysisByMatch.get(latest.match.id) : undefined;
@@ -405,6 +534,8 @@ export const getRosterData = cache(async function getRosterData(
       // Filled in below, once every row is known.
       duplicateOfPlayerId: null,
       matchesPlayed: results.length,
+      wins,
+      losses,
       // Reversed so the strip reads left to right in the order the season was
       // played, which is how a coach reads a run of results out loud.
       form: decided
@@ -426,11 +557,18 @@ export const getRosterData = cache(async function getRosterData(
             date: latest.match.date ? shortDate(latest.match.date) : "",
           }
         : null,
-      firstServePct: recentServe,
-      firstServeDelta:
-        recentServe === null || earlierServe === null
-          ? null
-          : recentServe - earlierServe,
+      recent: recentResults.map((r) => ({
+        id: r.match.id,
+        opponent: shortName(
+          (r.isPlayer1 ? r.match.player2_name : r.match.player1_name) ?? "Unknown"
+        ),
+        event: r.match.tournament_name,
+        sets: scoreSetsFrom(r.match.score, { swap: !r.isPlayer1 }),
+        won: r.won,
+        date: r.match.date ? shortDate(r.match.date) : "",
+        values: r.values,
+      })),
+      measures,
     };
   });
 
@@ -476,6 +614,7 @@ export const getRosterData = cache(async function getRosterData(
       email: row.email as string,
       role: row.role as MemberRole,
       invitedOn: shortDate(row.created_at as string),
+      invitedBy: (row.invited_by as string | null) ?? null,
     })),
     playersCanUpload: Boolean(programResult.data?.players_can_upload),
     // A row-returning function: PostgREST hands back an array of one.

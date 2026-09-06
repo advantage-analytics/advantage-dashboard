@@ -1,40 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
-import {
-  ChevronRight,
-  GitMerge,
-  MoreHorizontal,
-  Upload,
-} from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { AdvSwitch } from "@/components/ui/adv-switch";
+import { useRef } from "react";
+import { useRouter } from "next/navigation";
+import { Reorder, useReducedMotion } from "framer-motion";
+import { GitMerge, GripVertical } from "lucide-react";
+import { BENCH, sequenceFrom } from "@/lib/data/lineup-draft";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ResultMark } from "@/components/dashboard/result-mark";
-import { ScoreLine } from "@/components/dashboard/score-line";
-import { capitalize } from "@/lib/utils";
-import { formatDelta, getInitials } from "@/lib/data/match-utils";
-import {
-  archiveProgramPlayer,
-  setMemberUploadEnabled,
-} from "@/components/dashboard/team/roster-actions";
+import { cn } from "@/lib/utils";
+import { getInitials } from "@/lib/data/match-utils";
 import {
   inviteMember,
-  removeMember,
   revokeInvite,
   type InviteResult,
 } from "@/components/dashboard/settings/team-actions";
 import type { ActionResult } from "@/components/dashboard/settings/actions";
-import { EditPlayerDialog } from "@/components/dashboard/team/edit-player-dialog";
-import { MergeProfilesDialog } from "@/components/dashboard/team/merge-profiles-dialog";
 import {
-  ClaimedTodayPill,
   InviteRing,
+  InvitedLine,
+  SUBTLE_PILL,
   RESEND_CLASS,
   RESEND_LABEL,
   REVOKE_LABEL,
-  invitedLine,
   resendRole,
 } from "@/components/dashboard/team/roster-vocabulary";
 import type {
@@ -43,122 +31,124 @@ import type {
 } from "@/lib/data/team-roster-server";
 
 /**
- * Everyone on the program, and how each of them is playing.
+ * The players on the program, and the order they play in.
  *
- * Design 9a. Two audiences on one component, because they are looking at the
- * same list. Staff get the controls; a player gets the list, and the database
- * has already decided what they see — `program_roster_full` carries the
- * membership check, and the match policy gives every member the squad's
- * results.
+ * Platform Audit `Tb4`/`Tb4c`, as revised in review. Four rules decide
+ * everything below, and each replaced something that was there first:
  *
- * ── Two kinds of row, one shape ─────────────────────────────────────────────
- * A coach-managed player has no login and no seat. They are not a lesser row:
- * they carry matches, form and a first-serve rate exactly like anyone else,
- * because their profile id is what those matches were recorded against. The
- * only thing they cannot have is permission to spend the program's budget,
- * since there is nobody to sign in and spend it.
+ * ── 1. Players only ─────────────────────────────────────────────────────────
+ * Staff used to sit in this same table, told apart only by the words under
+ * their name — which made a coach read as a player ranked #7. They are named
+ * in a sentence under the table now, and managed in Settings › Team. The page
+ * filters them out; this component never sees one.
  *
- * ── The columns ─────────────────────────────────────────────────────────────
- * Lineup #, player, form, last match, first serve. No match count: it belongs
- * on the profile, and a coach scanning the roster is asking who is playing
- * well, not how many times.
+ * ── 2. The name takes the slack ─────────────────────────────────────────────
+ * `#`, Player, then a spacer, then Record, Form, Last match. Every metric is
+ * fixed-width and packs to the right, so the only gap in the row falls on a
+ * column boundary. Before this, Last match was the flexible cell with the date
+ * pinned to its far edge, which opened ~600px of nothing mid-row and left
+ * "A. Castillo" and "Aug 8" — one fact — reading as two.
  *
- * The leading # is a label for an order the list is already in — `getRosterData`
- * sorts staff first, then players by lineup spot — not a sort this table
- * applies. The header's arrow says which way that reads; nothing here reorders
- * anything, so the column costs one field already on the row and no query.
+ * Record leads Form: the number a coach ranks by first, the five-tick trail
+ * that qualifies it second.
  *
- * "Can send" lives in the row's overflow menu rather than as a column. It is a
- * permission — consulted rarely, changed more rarely still — and this page is
- * the only caller `set_member_upload_enabled` has ever had, so it could not
- * simply go.
+ * ── 3. One trailing token ───────────────────────────────────────────────────
+ * The last-match cell was answering two questions at once — what happened, and
+ * what state the analysis is in — so every state grew its own trailing element
+ * and the column lost its shape. Now: mark, opponent, and exactly ONE token in
+ * the same place. A settled row shows its date, a running row shows Analyzing,
+ * an unscored row shows Review score. The elapsed clock is gone entirely; the
+ * activity tray is where a running job is tracked.
  *
- * ── Widths ──────────────────────────────────────────────────────────────────
- * Fixed, and the whole grid scrolls sideways under ~880px rather than
- * reflowing. A run of form ticks and a set score stop meaning anything once
- * they wrap, so a narrow screen gets the same table moved, not a different one.
+ * The two token treatments are deliberately different, and the difference is
+ * the rule rather than an oversight: `StatusChip` is a flat dot-and-label with
+ * no container (its own note: a filled pill in a table cell "competes with the
+ * number for the eye"), and it means *nothing to do*. The filled grey pill is
+ * this table's existing clickable-question treatment — the same one
+ * "Possible duplicate" wears — and it means *your move*.
+ *
+ * ── 4. Set lineup is a mode, not a column ───────────────────────────────────
+ * The action rides the column-header row. Pressing it turns this table into
+ * the editor: rows become draggable, the grip borrows the `#` cell of the row
+ * under the pointer, and a click no longer opens the drawer — which is why it
+ * is a mode with its own Cancel rather than a handle sitting there always.
+ * `RosterView` owns that state and the save.
+ *
+ * ── 5. The row in hand carries its own marks ────────────────────────────────
+ * A blue outline says WHICH row; a blue disc in the gutter beside it says
+ * WHERE it lands. Nothing is drawn between the rows: an earlier cut drew a
+ * blue rule at the destination slot, but the held row already sits at that
+ * slot under the pointer, so rule and row overlapped and it read as a cut
+ * through the card. The gap the siblings slide open is a better indicator than
+ * a line, and it costs nothing to draw. See `SpotBadge`.
+ *
+ * ── How the drag moves ──────────────────────────────────────────────────────
+ * Pointer-driven, via framer-motion's `Reorder`, not HTML5 drag-and-drop. The
+ * first cut used the native drag events and could not be made smooth: they
+ * fire at a throttled rate, the held row only ever jumps between slots, and a
+ * displaced row sliding under the cursor re-fires `dragover` mid-slide and
+ * swaps straight back — a flicker loop no easing curve can fix. With
+ * `Reorder` the held row follows the pointer as a transform, siblings slide
+ * aside on `--ease-out-expo`, and touch comes for free.
+ *
+ * The lineup and the bench are ONE reorderable sequence with a sentinel
+ * (`BENCH`) between them: everything above it holds a line, everything below
+ * does not. Dragging a row across the sentinel is how it enters or leaves the
+ * lineup — one gesture, no second control, and the keyboard's ↑/↓ cross it the
+ * same way.
  */
 
+/**
+ * The system's confident arrival: `--ease-out-expo`. Rows displaced by a drag
+ * slide on it; the held row's shadow eases on `--duration-fast`. Nothing here
+ * bounces — the design system bans it, and a lineup is not a toy.
+ */
+const EASE_OUT_EXPO = [0.23, 1, 0.32, 1] as const;
+const ROW_SLIDE = { duration: 0.22, ease: EASE_OUT_EXPO };
+
+/**
+ * How a released row settles into its slot. framer's default is an inertia
+ * spring at stiffness 500 / damping 25 — under-damped, so a row let go with
+ * any hand velocity overshoots its slot and bounces back. Critically damped
+ * instead: it arrives once, in about the time a sibling takes to slide.
+ */
+const ROW_SETTLE = { bounceStiffness: 600, bounceDamping: 50 };
+
+/** Column widths. Only the spacer flexes. */
 const COL = {
-  /** Just wide enough for a two-digit line and the em dash that replaces it. */
   spot: "w-6 shrink-0",
-  player: "w-[220px] shrink-0",
-  form: "w-[80px] shrink-0",
-  last: "min-w-0 flex-1",
-  serve: "w-[110px] shrink-0 text-right",
-  actions: "w-[64px] shrink-0",
+  player: "w-[230px] shrink-0",
+  record: "w-14 shrink-0",
+  form: "w-20 shrink-0",
+  last: "w-[250px] shrink-0",
 } as const;
 
-/**
- * Horizontal padding belongs to the CARD, and each row pulls its own back out
- * again with a negative margin (design 9a, row treatment from 8a). That is what
- * makes a hover a rounded panel inset from the card's edge rather than a band
- * running wall to wall — which is also why the rows need no hairline between
- * them: the wash itself is the row boundary.
- */
-const ROW = "flex items-center gap-3";
-
-/** 12/16 padding, pulled back 16px so the wash sits inside the card's 24px. */
-/**
- * The wash a row paints on hover AND on focus.
- *
- * 9a is "6a's columns with 5a's `#` column and 8a's row treatment", and 8a's
- * treatment is both halves: the pointer gets a wash, and so does the keyboard.
- * The merge that brought this file to 9a carried the hover half inline and lost
- * the focus half, which left the Roster table the one result list on the product
- * where tabbing moves focus with nothing following it — `match-rows.tsx` and
- * `dual-sheet.tsx` both highlight.
- *
- * `has-[:focus-visible]` rather than `focus-visible`, and the distinction is
- * real: this compiles to `&:has(:focus-visible)`, which matches a DESCENDANT
- * taking focus. That is right here, where the row is a container and the name
- * link, Upload and the row menu are the things that focus — and it is wrong in
- * `match-rows.tsx`, where the row itself is the anchor, which is why that file
- * spells it `focus-visible:` instead. Same rule, two spellings, because the two
- * rows are built differently.
- */
-const ROW_WASH =
-  "transition-colors duration-150 hover:bg-[var(--surface-muted)] has-[:focus-visible]:bg-[var(--surface-muted)]";
-
-const ROW_INSET = "-mx-4 rounded-[var(--radius-element)] px-4 py-3";
+const ROW = "flex items-center gap-4";
 
 /**
- * The trailing controls, so both read as one class of thing — bar their resting
- * ink. Design 9a draws the upload glyph one step darker (`--ink-500`) than the
- * quieter menu trigger (`--ink-400`); everything else is shared, and both wake to
- * `--ink-700` on hover.
+ * Horizontal padding belongs to the card; each row pulls 16px of it back so a
+ * wash reads as a rounded panel inset from the card's edge rather than a band
+ * running wall to wall. No hairlines between rows — the wash is the boundary.
  */
-const ROW_ICON_BASE =
-  "flex size-6 items-center justify-center rounded-[var(--radius-button)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none";
-const ROW_ICON = `${ROW_ICON_BASE} text-[var(--ink-400)]`;
-const UPLOAD_ICON = `${ROW_ICON_BASE} text-[var(--ink-500)]`;
+const ROW_BOX = "-mx-4 h-[52px] rounded-[var(--radius-element)] px-4";
 
-/**
- * The identifying line under a name.
- *
- * A coach-managed player may have no email at all, so the old fallback — render
- * the address when there is no lineup spot — could produce an empty string
- * where an address used to be. Class year is the next most useful true thing,
- * and "No email on file" states the gap rather than hiding it.
- */
-function memberLine(member: RosterMember): string {
-  if (member.role !== "player") return capitalize(member.role);
 
-  const parts: string[] = [];
-  if (member.classYear) parts.push(member.classYear);
-  if (member.lineupSpot !== null) parts.push(`#${member.lineupSpot} singles`);
-  if (parts.length > 0) return parts.join(" · ");
-
-  return member.email ?? "No email on file";
+export function rosterRowId(playerId: string): string {
+  return `roster-row-${playerId}`;
 }
 
-function Problem({ message }: { message: string | null }) {
-  if (!message) return null;
-  return (
-    <p role="alert" className="text-[12px] leading-[18px] text-[var(--danger)]">
-      {message}
-    </p>
-  );
+export function profileHref(playerId: string): string {
+  return `/dashboard/team/roster/${playerId}`;
+}
+
+/** What `RosterView` hands down while Set lineup is on. */
+export interface LineupDraft {
+  /** Player ids with one `BENCH` between them, in display order. */
+  sequence: string[];
+  /** The row a keyboard user has lifted, or null. */
+  lifted: string | null;
+  /** The row under the pointer, or null — so it can draw itself held. */
+  dragging: string | null;
 }
 
 function Avatar({ name }: { name: string }) {
@@ -173,26 +163,6 @@ function Avatar({ name }: { name: string }) {
 }
 
 /**
- * Where this person sits in the lineup, or an em dash where nobody has said.
- *
- * Rendering only. `getRosterData` already orders the list by this field, so the
- * column names an order the rows arrive in — it does not impose one, and there
- * is nothing to click. A null is "we have not decided", not "line zero", and it
- * is one tier quieter than a real line so a run of dashes does not read as data.
- */
-function LineupSpot({ spot }: { spot: number | null }) {
-  return (
-    <span
-      className={`${COL.spot} mono tabular text-[11px] ${
-        spot === null ? "text-[var(--ink-400)]" : "text-[var(--ink-500)]"
-      }`}
-    >
-      {spot ?? "—"}
-    </span>
-  );
-}
-
-/**
  * The last five results as a strip, oldest at the left.
  *
  * Colour alone would carry this to a red/green-blind reader, so the strip has
@@ -200,7 +170,7 @@ function LineupSpot({ spot }: { spot: number | null }) {
  */
 function FormTicks({ form }: { form: RosterMember["form"] }) {
   if (form.length === 0) {
-    return <span className="text-[12px] text-[var(--ink-400)]">—</span>;
+    return <EmptyMark under="Form" />;
   }
   return (
     <>
@@ -224,386 +194,427 @@ function FormTicks({ form }: { form: RosterMember["form"] }) {
 }
 
 /**
- * The per-row menu: the permission, the correction, and the way off the roster.
+ * The one glyph every empty cell shows. Record, Form and Last match each had
+ * their own — a 13px dash, a 12px dash, a sentence — at different sizes and
+ * weights, so a player with no matches read as three unrelated absences. One
+ * mark, one size, and centred under its own heading rather than left-aligned
+ * in the cell.
  *
- * None of them is something to put a click away from a row a coach is scanning.
- * Owners are absent from the removal case: ownership moves by transfer, and a
- * roster screen is not where a program should be able to lose the only person
- * who runs it.
+ * The centring is derived, not measured. An earlier cut hardcoded each
+ * heading's rendered width and told the next person to re-measure after a copy
+ * edit — a coupling to font, weight and tracking that nothing would have
+ * caught when it drifted. Instead the cell lays out the heading's OWN string,
+ * invisible, in the heading's own class, and centres the dash over it: the
+ * width is the same text in the same font by construction. The negative right
+ * margin drops the trailing letter-space `eyebrow-sm` adds after the last
+ * character, which is real width the heading itself does not show.
  */
-function RowMenu({
-  member,
-  isViewer,
-  onEdit,
-  onError,
-  run,
-  pending,
-}: {
-  member: RosterMember;
-  isViewer: boolean;
-  onEdit: () => void;
-  onError: (message: string | null) => void;
-  run: (action: () => Promise<ActionResult | InviteResult>) => void;
-  pending: boolean;
-}) {
-  const [enabled, setEnabled] = useState(member.uploadEnabled);
-  const [sending, startSend] = useTransition();
-  /**
-   * Controlled so Edit can close the menu itself.
-   *
-   * Both the popover and the dialog trap focus, so the two must not overlap.
-   * Left uncontrolled, the popover only closes when the click outside it lands
-   * — which, for a click on its own item, is never — and the dialog would open
-   * inside a live focus trap. Setting this false in the same event as `onEdit`
-   * puts both in one commit: the popover unmounts and returns focus, then the
-   * dialog mounts and takes it.
-   */
-  const [menuOpen, setMenuOpen] = useState(false);
+function EmptyMark({ under }: { under: "Record" | "Form" | "Last match" }) {
+  return (
+    <span aria-hidden className="relative inline-block">
+      <span className="eyebrow-sm invisible -mr-[2.5px] block">{under}</span>
+      <span className="absolute inset-0 flex items-center justify-center text-[13px] leading-none text-[var(--ink-400)]">
+        —
+      </span>
+    </span>
+  );
+}
 
-  // Players only, and not merely the owner. `canUploadForProgram()` answers
-  // for owner, coach and staff before it reads `upload_enabled`, so on a staff
-  // row this switch would move, write, and change nothing anyone could
-  // observe — the position it appears to set is not a position the upload page
-  // has. Staff are exempt on purpose: a program's own coaches must not be
-  // lockable out of its budget by a switch. A coach-managed player has no
-  // account to grant it to.
-  const canToggleSend = member.userId !== null && member.role === "player";
-  const canRemove = member.role !== "owner" && !isViewer;
-  // Gated on there being a profile row to write, and on nothing else. A coach
-  // and a claimed player both have one; staff seats do not, because
-  // `program_roster_full` only fills `profile_id` from `program_players`. Role
-  // is the wrong test: it would either drop the claimed players — the rows most
-  // likely to carry a stale spot — or offer the item on a coach whose name
-  // lives in `users` and which this dialog cannot write.
-  const canEdit = member.profileId !== null;
-  // Whether anything renders in the grant slot at all. Both arms of it are
-  // player-only — the switch, and the "no account yet" note — so a coach or
-  // staff row fills nothing, and the divider below would open the popover with
-  // a rule drawn across the top of nothing.
-  const grantSlotFilled = canToggleSend || member.role === "player";
+/** "4–1", or the empty mark for somebody with nothing decided yet. */
+function Record({ wins, losses }: { wins: number; losses: number }) {
+  return (
+    <span className={cn(COL.record, "tabular flex items-center text-[13px] text-[var(--ink-900)]")}>
+      {wins + losses === 0 ? <EmptyMark under="Record" /> : `${wins}–${losses}`}
+    </span>
+  );
+}
 
-  // An owner has none of the three, but the slot still has to exist. Returning
-  // null let the upload icon slide right into the space where the menu would
-  // be, so the one row without a menu had its icon a step out of line with
-  // every other row's. A column of icons that does not line up reads as a
-  // rendering fault.
-  if (!canToggleSend && !canRemove && !canEdit) {
-    return <span aria-hidden className="size-6 shrink-0" />;
+/**
+ * The 14px slot every last-match row opens with, so the opponent sits on the
+ * same x whatever the row's state.
+ */
+function MarkSlot({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="flex w-3.5 shrink-0 items-center justify-center">
+      {children}
+    </span>
+  );
+}
+
+/** Mark, opponent, and exactly one trailing token. See rule 3 above. */
+function LastMatchCell({ member }: { member: RosterMember }) {
+  const { lastMatch } = member;
+
+  if (lastMatch === null) {
+    // The mark alone. Three dashes under three headings already say "nothing
+    // yet" once; a sentence beside the third said it a second time, in a
+    // different voice, and pulled the eye to the one row with the least in
+    // it. The words stay for a screen reader, which cannot read a dash.
+    return (
+      <span className={cn(COL.last, "flex items-center")}>
+        <EmptyMark under="Last match" />
+        <span className="sr-only">No matches yet</span>
+      </span>
+    );
+  }
+
+  if (lastMatch.analyzing) {
+    return (
+      <span className={cn(COL.last, "flex items-center gap-2.5")}>
+        <MarkSlot>
+          <span aria-hidden className="size-[5px] rounded-full bg-[var(--ink-300)]" />
+        </MarkSlot>
+        <span className="truncate text-[12px] text-[var(--ink-700)]">
+          {lastMatch.opponent}
+        </span>
+        <StatusChip tone="blue" live className="ml-auto shrink-0">
+          Analyzing
+        </StatusChip>
+      </span>
+    );
+  }
+
+  if (lastMatch.won === null) {
+    return (
+      <span className={cn(COL.last, "flex items-center gap-2.5")}>
+        <MarkSlot>
+          <span aria-hidden className="text-[11px] text-[var(--ink-400)]">
+            –
+          </span>
+          <span className="sr-only">Result unrecorded against</span>
+        </MarkSlot>
+        <span className="truncate text-[12px] text-[var(--ink-700)]">
+          {lastMatch.opponent}
+        </span>
+        <span className={cn(SUBTLE_PILL, "ml-auto shrink-0")}>Review score</span>
+      </span>
+    );
   }
 
   return (
-    <Popover open={menuOpen} onOpenChange={setMenuOpen}>
-      <PopoverTrigger
-        aria-label={`Options for ${member.name}`}
-        title="Options"
-        className={ROW_ICON}
-      >
-        <MoreHorizontal className="size-3.5" strokeWidth={1.5} aria-hidden />
-      </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        sideOffset={6}
-        className="w-[248px] rounded-[var(--radius-dropdown)] p-2"
-      >
-        {canToggleSend ? (
-          <div className="flex items-start gap-3 rounded-[var(--radius-element)] px-2 py-2">
-            <span className="min-w-0 flex-1">
-              <span className="block text-[12px] font-medium text-[var(--ink-900)]">
-                Can send video
-              </span>
-              <span className="block text-[11px] leading-[1.5] text-[var(--ink-500)]">
-                Spends the program&apos;s analysis time
-              </span>
-            </span>
-            <AdvSwitch
-              checked={enabled}
-              disabled={sending}
-              label={`Let ${member.name} send video`}
-              onCheckedChange={(next) => {
-                // Moved before the await so the switch answers the press
-                // immediately, and put back if the server refuses. A permission
-                // toggle that waits on a round trip reads as broken on a slow
-                // connection.
-                setEnabled(next);
-                onError(null);
-                startSend(async () => {
-                  const result = await setMemberUploadEnabled(
-                    member.userId as string,
-                    next
-                  );
-                  if (!result.ok) {
-                    setEnabled(!next);
-                    onError(result.error);
-                  }
-                });
-              }}
-            />
-          </div>
-        ) : (
-          member.role === "player" && (
-            <p className="px-2 py-2 text-[11px] leading-[1.5] text-[var(--ink-500)]">
-              No account yet, so there is no analysis time to grant. Invite them
-              to hand over their own uploads.
-            </p>
-          )
-        )}
+    <span className={cn(COL.last, "flex items-center gap-2.5")}>
+      <MarkSlot>
+        <ResultMark won={lastMatch.won} />
+      </MarkSlot>
+      <span className="truncate text-[12px] text-[var(--ink-700)]">
+        {lastMatch.opponent}
+      </span>
+      <span className="text-micro tabular ml-auto shrink-0 whitespace-nowrap">
+        {lastMatch.date}
+      </span>
+    </span>
+  );
+}
 
-        {/* One rule, above the action group rather than inside Remove: with
-            Edit player present there are two actions under it, and a divider
-            owned by Remove would draw a second one between them. */}
-        {grantSlotFilled && (canEdit || canRemove) && (
-          <span className="my-1 block h-px bg-[var(--border-hairline)]" />
-        )}
-
-        {canEdit && (
-          <button
-            type="button"
-            onClick={() => {
-              // Close first. See `menuOpen` above for why the two cannot
-              // overlap — and no `run()` here, because this opens a dialog
-              // rather than performing a write.
-              setMenuOpen(false);
-              onError(null);
-              onEdit();
-            }}
-            className="block w-full rounded-[var(--radius-element)] px-2 py-2 text-left text-[12px] text-[var(--ink-700)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]"
+/**
+ * The leading cell: a line number at rest, the drag grip while a lineup is
+ * being set and this row is the one under the pointer or holding focus.
+ *
+ * The grip swaps in rather than taking a column of its own, so entering the
+ * mode moves no column — and it swaps in for ONE row at a time, so every other
+ * line keeps the number that says what the order currently is.
+ *
+ * The held row's own line is NOT drawn here. It rides in the gutter beside the
+ * row (`SpotBadge`), which is what keeps the grip and the number on screen at
+ * the same time — they answer different questions, and the row in hand is the
+ * one moment both are worth asking.
+ */
+function SpotCell({
+  spot,
+  draggable,
+  lifted,
+}: {
+  spot: number | null;
+  draggable: boolean;
+  lifted: boolean;
+}) {
+  if (draggable) {
+    return (
+      <span className={cn(COL.spot, "flex items-center justify-center")}>
+        <GripVertical
+          aria-hidden
+          strokeWidth={1.5}
+          className={cn(
+            "size-3.5",
+            lifted
+              ? "text-[var(--ink-900)]"
+              : "text-[var(--ink-400)] opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+          )}
+        />
+        {!lifted && (
+          <span
+            aria-hidden
+            className="mono tabular absolute text-[11px] text-[var(--ink-500)] transition-opacity group-hover:opacity-0 group-focus-within:opacity-0"
           >
-            Edit player
-          </button>
+            {spot ?? "—"}
+          </span>
         )}
+      </span>
+    );
+  }
 
-        {canRemove && (
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() =>
-              run(() =>
-                // A coach-managed player has no membership row to remove, so
-                // the profile is archived instead — which also keeps their
-                // matches attributable. Archiving releases the seat when the
-                // profile had been claimed, so the claimed case goes the same
-                // way rather than through `removeMember`.
-                member.profileId
-                  ? archiveProgramPlayer(member.profileId)
-                  : removeMember(member.userId as string)
-              )
-            }
-            className="block w-full rounded-[var(--radius-element)] px-2 py-2 text-left text-[12px] text-[var(--ink-700)] transition-colors hover:bg-[var(--surface-subtle)] hover:text-[var(--danger)] disabled:opacity-50"
-          >
-            Remove from roster
-          </button>
-        )}
-      </PopoverContent>
-    </Popover>
+  return (
+    <span
+      className={cn(
+        COL.spot,
+        "mono tabular text-center text-[11px]",
+        spot === null ? "text-[var(--ink-400)]" : "text-[var(--ink-500)]"
+      )}
+    >
+      {spot ?? "—"}
+    </span>
+  );
+}
+
+/**
+ * The line the held row takes if it is let go here — a blue disc in the page
+ * margin beside the card, level with the row, 10px clear of its outline.
+ *
+ * OUTSIDE the card on purpose (design option 2C). Beside the row it is
+ * unmistakably about the row in hand and not one more value in a column of
+ * five; the grip keeps the `#` cell it borrowed; and the table does not have
+ * to open a gutter to make room, so nothing inside the card moves when the
+ * mode begins. A row's box starts 8px inside the card, the outline adds 2, the
+ * gap 10, the disc 20 — so it sits 4px past the card's border, in the 32px
+ * page margin. The card stops clipping while the mode is on (see the wrapper
+ * in `RosterTable`), which is what lets it show.
+ *
+ * It replaced a blue rule drawn across the list at the destination slot: with
+ * a pointer drag the held row is already at that slot, riding the hand a few
+ * pixels off it, so rule and row overlapped and read as a cut through the card.
+ */
+function SpotBadge({ spot }: { spot: number | null }) {
+  return (
+    <span
+      aria-hidden
+      className="mono tabular absolute top-1/2 -left-8 inline-flex size-5 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--blue)] text-[10px] font-medium text-white"
+    >
+      {spot ?? "—"}
+    </span>
   );
 }
 
 function MemberRow({
   member,
+  spot,
   canManage,
   isViewer,
-  onEdit,
-  onError,
+  selected,
+  onToggle,
   onMerge,
-  run,
-  pending,
+  lineup,
+  listRef,
+  onLift,
+  onMove,
+  onDragStartRow,
+  onDragEndRow,
+  onFocusStep,
 }: {
   member: RosterMember;
+  /** The line this row currently holds — live while dragging. */
+  spot: number | null;
   canManage: boolean;
   isViewer: boolean;
-  onEdit: (member: RosterMember) => void;
-  onError: (message: string | null) => void;
+  selected: boolean;
+  onToggle: (member: RosterMember, viaKeyboard: boolean) => void;
   onMerge: (member: RosterMember) => void;
-  run: (action: () => Promise<ActionResult | InviteResult>) => void;
-  pending: boolean;
+  lineup: LineupDraft | null;
+  /** The list — what a drag is constrained to. */
+  listRef: React.RefObject<HTMLUListElement | null>;
+  onLift: (playerId: string | null) => void;
+  onMove: (playerId: string, direction: 1 | -1) => void;
+  onDragStartRow: (playerId: string) => void;
+  onDragEndRow: () => void;
+  /** Move focus to the neighbouring row — the arrows' job while nothing is lifted. */
+  onFocusStep: (playerId: string, direction: 1 | -1) => void;
 }) {
-  const { lastMatch, firstServePct, firstServeDelta } = member;
+  const router = useRouter();
+  const reduceMotion = useReducedMotion();
+  const href = profileHref(member.playerId);
+  const inLineupMode = lineup !== null;
+  // Held by either hand: lifted with Space, or under the pointer mid-drag.
+  const lifted =
+    lineup?.lifted === member.playerId || lineup?.dragging === member.playerId;
 
-  // 7d's "claimed today" is carried by the pill in the last-match cell and by
-  // NOTHING else. The row used to also tint itself `--surface-muted`, which is
-  // the exact token the hover state uses — so it sat there looking permanently
-  // moused-over, and a row that looks stuck is a bug report, not a highlight.
-  // The pill already says it in words.
   return (
-    <li
-      className={`${ROW} ${ROW_INSET} relative ${ROW_WASH}`}
-    >
-      <LineupSpot spot={member.lineupSpot} />
+    <Reorder.Item
+      as="li"
+      value={member.playerId}
+      id={rosterRowId(member.playerId)}
+      tabIndex={0}
+      aria-current={selected ? "true" : undefined}
+      /* Only the mode makes a row a handle. Outside it the item is inert and
+         the click below opens the drawer. */
+      dragListener={inLineupMode}
+      /* The row cannot leave the list. The card clips at its edge — its
+         `overflow-x-auto` makes it a scroll box in both axes — so a row
+         dragged past the last slot was cut off, outline and all, and the card
+         grew a scrollbar. There is nothing below the last slot to drop on
+         anyway. A little give at the ends, so the boundary feels like a
+         boundary and not a wall. */
+      dragConstraints={listRef}
+      dragElastic={0.08}
+      dragTransition={ROW_SETTLE}
+      onDragStart={() => onDragStartRow(member.playerId)}
+      onDragEnd={onDragEndRow}
+      /* A pointer grab is also a selection: the row under the hand is the
+         one the keys act on next, so it takes focus and shows it. */
+      onPointerDown={(event) => {
+        if (inLineupMode) event.currentTarget.focus({ preventScroll: true });
+      }}
+      /* `position` only: nothing here changes size, and animating size would
+         re-layout the whole card each frame. The held row is exempt from the
+         slide — it is under the pointer, not on its way somewhere. */
+      layout="position"
+      transition={{ layout: reduceMotion ? { duration: 0 } : ROW_SLIDE }}
+      onClick={(event) => {
+        // In lineup mode the row is a handle, not a link. Without this the
+        // drawer would open every time a drag ended a pixel from where it
+        // started.
+        if (inLineupMode) return;
+        if (event.metaKey || event.ctrlKey) {
+          router.push(href);
+          return;
+        }
+        onToggle(member, false);
+      }}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
 
-      <span className={`${COL.player} flex items-center gap-2.5`}>
+        if (inLineupMode) {
+          // Space lifts; Space again sets down. Between the two, the arrows
+          // move the row. Outside them, the arrows move *you* — from row to
+          // row — so the whole lineup is reachable without a pointer: walk,
+          // lift, move, drop, walk on.
+          if (event.key === " " || event.key === "Enter") {
+            event.preventDefault();
+            onLift(lifted ? null : member.playerId);
+            return;
+          }
+          if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+            event.preventDefault();
+            const direction = event.key === "ArrowDown" ? 1 : -1;
+            if (lifted) {
+              onMove(member.playerId, direction);
+              // Focus follows the row it moved with.
+              requestAnimationFrame(() => {
+                document.getElementById(rosterRowId(member.playerId))?.focus();
+              });
+            } else {
+              onFocusStep(member.playerId, direction);
+            }
+          }
+          return;
+        }
+
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onToggle(member, true);
+        }
+      }}
+      className={cn(
+        ROW,
+        ROW_BOX,
+        "group relative transition-[background-color,box-shadow] duration-[var(--duration-fast)] ease-[var(--ease-out-expo)]",
+        "focus-visible:outline-none",
+        !lifted &&
+          "focus-visible:bg-[var(--surface-muted)] has-[:focus-visible]:bg-[var(--surface-muted)]",
+        inLineupMode ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
+        /* The wash is for rows still on the surface. A held row is off it —
+           opaque and shadowed — so it must not take the hover tint the
+           pointer sitting on top of it would otherwise give it. */
+        !lifted && "hover:bg-[var(--surface-muted)]",
+        selected && !inLineupMode && "bg-[var(--surface-muted)]",
+        /* One outline, two weights of it.
+
+           FOCUSED is the system's own ring, by value — the same
+           `--focus-ring` `focus.css` gives every tabbable control, so a row
+           reads as focused the way a button does and this table invents no
+           second focus colour. It is written on plain `:focus` rather than
+           `:focus-visible` because in this mode a mouse click IS a selection,
+           and a row focused programmatically on pointerdown does NOT match
+           `:focus-visible` (measured) — so without this rule a coach who
+           clicks a row sees nothing. On a keyboard the design system's own
+           rule matches too and wins the cascade, but it sets this same value,
+           so the two agree and nothing is competing. That is why no
+           `!important` is needed here, and `advButton()` takes the same
+           approach.
+
+           HELD is a product state the system has no token for: the row is in
+           your hand. Solid `--blue`, opaque fill, raised card. This one is
+           `!important` because it must beat `focus.css` — that file is
+           imported OUTSIDE Tailwind's layers, so an ordinary utility loses to
+           it whatever its specificity, and a held row silently wore the 40%
+           ring instead. Inline style would also win, but framer-motion owns
+           this element's `style` attribute and does not clear a key that
+           stops being passed, which stranded the outline on rows focus had
+           left. The stacking is flagged for the same layering reason: framer
+           writes `z-index` inline on every item, and without `!` the row
+           below painted its hover wash over this row's bottom 2px. */
+        inLineupMode &&
+          !lifted &&
+          "focus:z-[2]! focus:shadow-[var(--focus-ring)] focus:outline-none",
+        lifted &&
+          "z-[3]! bg-[var(--surface-card)] shadow-[0_0_0_2px_var(--blue),var(--shadow-card-emphasis)]!",
+        inLineupMode && "select-none"
+      )}
+    >
+      {lifted && <SpotBadge spot={spot} />}
+      <SpotCell spot={spot} draggable={inLineupMode} lifted={lifted} />
+
+      <span className={cn(COL.player, "flex min-w-0 items-center gap-2.5")}>
         <Avatar name={member.name} />
-        <span className="min-w-0">
-          <span className="block truncate text-[13px] font-medium text-[var(--ink-900)]">
-            {/* Stretched rather than wrapping the row: the trailing cell holds
-                controls, and a link around a button is not a thing a keyboard
-                or a screen reader can take apart. */}
+        <span className="flex min-w-0 items-baseline gap-1.5">
+          {inLineupMode ? (
+            <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
+              {member.name}
+            </span>
+          ) : (
             <Link
-              href={`/dashboard/team/roster/${member.playerId}`}
-              className="rounded-[var(--radius-cell)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none after:absolute after:inset-0 after:content-['']"
+              href={href}
+              /* No `title`. A 52px row cannot give a long name the height, so
+                 it truncates — but the tooltip that used to disclose it drew
+                 in the OS's own style, and the full name is already one click
+                 away in the drawer, which wraps it. CSS truncation hides
+                 nothing from a screen reader either: the text stays in the
+                 DOM and is read in full. */
+              onClick={(event) => event.stopPropagation()}
+              className="block truncate rounded-[var(--radius-cell)] text-[13px] font-medium text-[var(--ink-900)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
             >
               {member.name}
             </Link>
-            {/* ink-500, the same tier as every other piece of metadata on
-                the row. At ink-400 it was the faintest thing on the page —
-                the one row a person scans for first, whispering. */}
-            {isViewer && (
-              <span className="ml-1.5 text-[11px] font-normal text-[var(--ink-500)]">
-                you
-              </span>
-            )}
-          </span>
-          {/* Titled as well as truncated. When two rows are duplicates of
-              each other the address is the ONLY thing that tells them apart,
-              and 220px is not always enough of it. */}
-          <span
-            title={memberLine(member)}
-            className="block truncate text-[11px] text-[var(--ink-500)]"
-          >
-            {memberLine(member)}
-          </span>
+          )}
+          {isViewer && (
+            <span className="shrink-0 text-[11px] text-[var(--ink-500)]">you</span>
+          )}
         </span>
       </span>
 
-      <span className={`${COL.form} flex items-center`}>
+      {/* The slack. Everything after it packs to the right. */}
+      <span className="flex-1" />
+
+      {/* The merge repair is entered from the row, because a duplicate is
+          found by looking at the list. Quiet — a question, not an alarm. */}
+      {canManage && !inLineupMode && member.duplicateOfPlayerId && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onMerge(member);
+          }}
+          className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-2 py-0.5 text-[10px] font-medium text-[var(--ink-600)] transition-colors hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+        >
+          <GitMerge className="size-2.5" strokeWidth={1.5} aria-hidden />
+          Possible duplicate
+        </button>
+      )}
+
+      <Record wins={member.wins} losses={member.losses} />
+      <span className={cn(COL.form, "flex items-center gap-[3px]")}>
         <FormTicks form={member.form} />
       </span>
-
-      <span className={`${COL.last} flex items-center gap-2.5`}>
-        {/* The merge repair is entered from the row, not from a menu a coach
-            would have to know about: a duplicate is found by looking at the
-            list. Quiet, because it is a question and not an alarm — and here
-            rather than beside the name, where it was squeezing out the very
-            address that tells the two rows apart. */}
-        {canManage && member.duplicateOfPlayerId && (
-          <button
-            type="button"
-            onClick={() => onMerge(member)}
-            className="relative z-10 inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-2 py-0.5 text-[10px] font-medium text-[var(--ink-600)] transition-colors hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-          >
-            <GitMerge className="size-2.5" strokeWidth={1.5} aria-hidden />
-            Possible duplicate
-          </button>
-        )}
-        {lastMatch ? (
-          lastMatch.analyzing ? (
-            /* Their newest match is a video still in analysis. The mark slot
-               keeps a quiet placeholder so the opponent stays on the same x as
-               the settled rows, and the live chip — the matches list's own
-               "Analyzing", same status vocabulary — carries the state where the
-               score would be. */
-            <>
-              <span
-                aria-hidden
-                className="flex w-4 shrink-0 items-center justify-center"
-              >
-                <span className="size-[5px] rounded-full bg-[var(--ink-300)]" />
-              </span>
-              <span className="w-[92px] shrink-0 truncate text-[12px] text-[var(--ink-700)]">
-                {lastMatch.opponent}
-              </span>
-              <StatusChip tone="blue" live className="shrink-0">
-                Analyzing
-              </StatusChip>
-              {member.claimedToday && <ClaimedTodayPill />}
-              <span className="text-micro tabular ml-auto shrink-0">
-                {lastMatch.date}
-              </span>
-            </>
-          ) : (
-            <>
-              {/* The outcome as a glyph, not a "W"/"L" letter: the Round 15
-                  table law bans the bare letter (standings shorthand that does
-                  not translate), and `ResultMark` is the same green/red pair
-                  the matches list draws. An unscored settled match keeps the em
-                  dash — right opponent, nothing claiming a result. */}
-              {lastMatch.won === null ? (
-                <>
-                  <span
-                    aria-hidden
-                    className="w-4 shrink-0 text-center text-[11px] text-[var(--ink-400)]"
-                  >
-                    –
-                  </span>
-                  <span className="sr-only">Result unrecorded against</span>
-                </>
-              ) : (
-                <ResultMark
-                  won={lastMatch.won}
-                  className="w-4 shrink-0 justify-center"
-                />
-              )}
-              <span className="w-[92px] shrink-0 truncate text-[12px] text-[var(--ink-700)]">
-                {lastMatch.opponent}
-              </span>
-              <ScoreLine
-                sets={lastMatch.sets}
-                className="text-scoreboard-sm shrink-0"
-              />
-              {member.claimedToday && <ClaimedTodayPill />}
-              <span className="text-micro tabular ml-auto shrink-0">
-                {lastMatch.date}
-              </span>
-            </>
-          )
-        ) : (
-          <>
-            <span className="text-[12px] text-[var(--ink-400)]">
-              No matches yet
-            </span>
-            {member.claimedToday && <ClaimedTodayPill />}
-          </>
-        )}
-      </span>
-
-      <span className={`${COL.serve} tabular text-[13px] text-[var(--ink-900)]`}>
-        {firstServePct === null ? (
-          <span className="text-[var(--ink-400)]">—</span>
-        ) : (
-          <>
-            {firstServePct}%{" "}
-            {firstServeDelta !== null && (
-              <span
-                className="text-[11px]"
-                style={{ color: formatDelta(firstServeDelta).color }}
-              >
-                {formatDelta(firstServeDelta).label}
-              </span>
-            )}
-          </>
-        )}
-      </span>
-
-      <span
-        className={`${COL.actions} relative z-10 flex items-center justify-end gap-1`}
-      >
-        {canManage ? (
-          <>
-            <Link
-              href={`/dashboard/team/upload?player=${member.playerId}`}
-              aria-label={`Upload a match for ${member.name}`}
-              title="Upload a match for this player"
-              className={UPLOAD_ICON}
-            >
-              <Upload className="size-3.5" strokeWidth={1.5} aria-hidden />
-            </Link>
-            <RowMenu
-              member={member}
-              isViewer={isViewer}
-              onEdit={() => onEdit(member)}
-              onError={onError}
-              run={run}
-              pending={pending}
-            />
-          </>
-        ) : (
-          <ChevronRight
-            className="size-3.5 text-[var(--ink-300)]"
-            strokeWidth={1.5}
-            aria-hidden
-          />
-        )}
-      </span>
-    </li>
+      <LastMatchCell member={member} />
+    </Reorder.Item>
   );
 }
 
@@ -612,112 +623,204 @@ export function RosterTable({
   invites,
   canManage,
   viewerId,
+  selectedId,
+  onToggle,
+  onMerge,
+  run,
+  pending,
+  lineup,
+  onStartLineup,
+  onLift,
+  onMove,
+  onReorder,
+  onDragStartRow,
+  onDragEndRow,
 }: {
+  /** Players only — the page keeps staff out of this list entirely. */
   members: RosterMember[];
   invites: RosterInvite[];
   canManage: boolean;
-  /** So the viewer's own row cannot offer to remove itself. */
   viewerId: string;
+  selectedId: string | null;
+  onToggle: (member: RosterMember, viaKeyboard: boolean) => void;
+  onMerge: (member: RosterMember) => void;
+  run: (action: () => Promise<ActionResult | InviteResult>) => void;
+  pending: boolean;
+  /** Non-null while Set lineup is on. */
+  lineup: LineupDraft | null;
+  onStartLineup: () => void;
+  onLift: (playerId: string | null) => void;
+  onMove: (playerId: string, direction: 1 | -1) => void;
+  /** The whole sequence after a drag — ids and the sentinel, in new order. */
+  onReorder: (sequence: string[]) => void;
+  onDragStartRow: (playerId: string) => void;
+  onDragEndRow: () => void;
 }) {
-  const [error, setError] = useState<string | null>(null);
-  const [merging, setMerging] = useState<[RosterMember, RosterMember] | null>(
-    null
-  );
-  /**
-   * The row whose editor is open, held here rather than in the row.
-   *
-   * Same reason as `merging`: one dialog for the whole table, so the popover it
-   * was opened from can unmount without taking it with it, and dropping the
-   * member on close is what resets the form.
-   */
-  const [editing, setEditing] = useState<RosterMember | null>(null);
-  const [pending, start] = useTransition();
+  const reduceMotion = useReducedMotion();
+  const listRef = useRef<HTMLUListElement>(null);
+  const byId = new Map(members.map((member) => [member.playerId, member]));
 
-  /**
-   * Every write on this page reports the same way, so they run the same way.
-   * `inviteMember` has a third outcome — saved but not delivered — and it
-   * surfaces here rather than being swallowed as a success.
-   */
-  function run(action: () => Promise<ActionResult | InviteResult>) {
-    start(async () => {
-      setError(null);
-      const result = await action();
-      if (!result.ok) setError(result.error);
-      else if ("warning" in result && result.warning) setError(result.warning);
-    });
-  }
+  // At rest the server's order is the order, and the sentinel appears only
+  // if somebody is actually out of the lineup. In the mode the draft is the
+  // order and the sentinel is always there — it is the drop target for
+  // benching somebody.
+  const sequence: string[] = lineup
+    ? lineup.sequence
+    : sequenceFrom(members, { sentinel: "if-needed" });
+  const benchAt = sequence.indexOf(BENCH);
+
+  /** ↑/↓ with nothing lifted: focus walks the players, skipping the sentinel. */
+  const focusStep = (playerId: string, direction: 1 | -1) => {
+    const players = sequence.filter((id) => id !== BENCH);
+    const next = players[players.indexOf(playerId) + direction];
+    if (next) document.getElementById(rosterRowId(next))?.focus();
+  };
 
   return (
-    <div className="flex flex-col gap-4">
-      <Problem message={error} />
+    <div
+      className={cn(
+        "rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]",
+        /* At rest the card scrolls sideways when the viewport is narrower than
+           the table. In the mode it must not clip: the held row's line number
+           sits OUTSIDE the card, in the page margin beside it (`SpotBadge`),
+           and a scroll box clips on both axes whatever its `overflow-x` says.
+           Setting a lineup is a desk job, and the page's own scroll takes the
+           narrow case for the minute the mode is on. Nothing else moves —
+           no padding opens, no column shifts — which is the point. */
+        lineup ? "overflow-visible" : "overflow-x-auto"
+      )}
+    >
+      <div className="min-w-[760px] px-6 pt-0.5 pb-1.5">
+        {/* Set lineup rides this row rather than a card header of its own —
+            the eyebrow row already spans the table. */}
+        <div
+          className={cn(
+            ROW,
+            "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5"
+          )}
+        >
+          <span className={cn(COL.spot, "eyebrow-sm text-center")}>#</span>
+          <span className={cn(COL.player, "eyebrow-sm")}>Player</span>
+          <span className="flex-1" />
+          <span className={cn(COL.record, "eyebrow-sm")}>Record</span>
+          <span className={cn(COL.form, "eyebrow-sm")}>Form</span>
+          <span className={cn(COL.last, "eyebrow-sm flex items-center")}>
+            Last match
+            {/* Inside the last column, not after it. As a sibling it took a
+                column's worth of the row and pushed every heading ~100px left
+                of the cells beneath — Record sat over the spacer. The column
+                is 250px and its label is short, so the action rides its far
+                end and the headings stay over their values. */}
+            {canManage && !lineup && members.length > 1 && (
+              <button
+                type="button"
+                onClick={onStartLineup}
+                className="ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-[var(--radius-cell)] text-[11px] font-medium tracking-normal normal-case text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+              >
+                <GripVertical className="size-3" strokeWidth={1.5} aria-hidden />
+                Set lineup
+              </button>
+            )}
+          </span>
+        </div>
 
-      {/* 9a: the card carries the horizontal padding and every row pulls its
-          own back out again, which is what makes a hover a rounded panel inset
-          from the card's edge rather than a band running wall to wall. */}
-      <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-medium)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
-        <div className="min-w-[880px] px-6 pt-0.5 pb-1.5">
-          <div
-            className={`${ROW} border-b border-[var(--border-hairline)] pt-3 pb-2.5`}
-          >
-            {/* The list is already in lineup order; the header just names the
-                column. No sort arrow — there is no sort to offer, and the glyph
-                read as an affordance that did nothing. */}
-            <span className={`${COL.spot} inline-flex items-center`}>
-              <span className="eyebrow-sm">#</span>
-              <span className="sr-only">Lineup order, lowest first</span>
-            </span>
-            <span className={`${COL.player} eyebrow-sm`}>Player</span>
-            <span className={`${COL.form} eyebrow-sm`}>Form</span>
-            <span className={`${COL.last} eyebrow-sm`}>Last match</span>
-            <span className={`${COL.serve} eyebrow-sm`}>1st serve</span>
-            <span className={COL.actions} />
-          </div>
-
-          <ul>
-            {members.map((member) => (
+        <Reorder.Group
+          ref={listRef}
+          as="ul"
+          axis="y"
+          values={sequence}
+          onReorder={onReorder}
+        >
+          {sequence.map((id, index) => {
+            if (id === BENCH) {
+              return (
+                /* The bench divider is itself an item in the sequence — that is
+                   what lets a row be dragged across it — but not a handle. */
+                <Reorder.Item
+                  key={BENCH}
+                  as="li"
+                  value={BENCH}
+                  dragListener={false}
+                  layout="position"
+                  transition={{ layout: reduceMotion ? { duration: 0 } : ROW_SLIDE }}
+                  className="flex select-none items-center gap-2.5 pt-4 pb-2"
+                >
+                  <span className="eyebrow-sm">Not in the lineup</span>
+                  {lineup && (
+                    <span className="text-[11px] text-[var(--ink-400)]">
+                      — drag a row below this line to bench them
+                    </span>
+                  )}
+                </Reorder.Item>
+              );
+            }
+            const member = byId.get(id);
+            if (!member) return null;
+            // In the mode the number is what Save will write; at rest it is
+            // what the server holds, which can differ when two players share a
+            // line from the Edit player form.
+            const spot = lineup
+              ? benchAt < 0 || index < benchAt
+                ? index + 1
+                : null
+              : member.lineupSpot;
+            return (
               <MemberRow
                 key={member.playerId}
                 member={member}
+                spot={spot}
                 canManage={canManage}
                 isViewer={member.userId === viewerId}
-                onEdit={setEditing}
-                onError={setError}
-                onMerge={(row) => {
-                  const other = members.find(
-                    (m) => m.playerId === row.duplicateOfPlayerId
-                  );
-                  if (other) setMerging([row, other]);
-                }}
-                run={run}
-                pending={pending}
+                selected={member.playerId === selectedId}
+                onToggle={onToggle}
+                onMerge={onMerge}
+                lineup={lineup}
+                listRef={listRef}
+                onLift={onLift}
+                onMove={onMove}
+                onDragStartRow={onDragStartRow}
+                onDragEndRow={onDragEndRow}
+                onFocusStep={focusStep}
               />
-            ))}
+            );
+          })}
 
-            {/* Invitations belong in this list, not under it. Someone a coach
-                emailed on Monday is on the roster as far as the coach is
-                concerned; a second table below the first makes them look like
-                a different kind of thing. */}
-            {invites.map((invite) => (
-              <li key={invite.id} className={`${ROW} ${ROW_INSET}`}>
-                {/* No lineup line to give somebody who has not arrived, and no
-                    hairline above the first of them either: an invitation is
-                    another row in this list, not a second section. */}
-                <LineupSpot spot={null} />
-
-                <span className={`${COL.player} flex items-center gap-2.5`}>
-                  <InviteRing />
-                  <span className="min-w-0 truncate text-[12px] text-[var(--ink-500)]">
-                    {invite.email}
-                  </span>
+          {/* Invitations belong in this list, not under it: somebody a coach
+              emailed on Monday is on the roster as far as the coach is
+              concerned. They hold no line, so a lineup ignores them. */}
+          {invites.length > 0 && (
+            <li className="flex items-center gap-2.5 border-t border-[var(--border-hairline)] pt-3.5 pb-1.5">
+              <span className="eyebrow-sm">Invited</span>
+              {lineup && (
+                <span className="text-[11px] text-[var(--ink-400)]">
+                  — not part of a lineup
                 </span>
-                <span className={`${COL.last} text-[11px] text-[var(--ink-500)]`}>
-                  {invitedLine(invite.invitedOn, invite.role)}
+              )}
+            </li>
+          )}
+          {invites.map((invite) => (
+            <li
+              key={invite.id}
+              className={cn(ROW, ROW_BOX, lineup && "opacity-40")}
+            >
+              <span className={cn(COL.spot, "mono text-center text-[11px] text-[var(--ink-400)]")}>
+                —
+              </span>
+              <span className={cn(COL.player, "flex min-w-0 items-center gap-2.5")}>
+                <InviteRing />
+                <span className="min-w-0 truncate text-[12px] text-[var(--ink-500)]">
+                  {invite.email}
                 </span>
-                {/* The pair reads as one control: send it again, or take it
-                    back. Resend is the same call as invite —
-                    `create_program_invite` upserts on the one-open-invite
-                    index, so it refreshes the row and mints a fresh token
-                    rather than leaving two live links into one program. */}
+              </span>
+              <span className="ml-4 truncate text-[11px] whitespace-nowrap text-[var(--ink-500)]">
+                <InvitedLine
+                  invitedOn={invite.invitedOn}
+                  role={invite.role}
+                  byViewer={invite.invitedBy === viewerId}
+                />
+              </span>
+              <span className="flex-1" />
+              {canManage && !lineup && (
                 <span className="flex shrink-0 items-center gap-3.5">
                   <button
                     type="button"
@@ -734,11 +837,10 @@ export function RosterTable({
                   >
                     {RESEND_LABEL}
                   </button>
-                  {/* Revoke hovers to `--danger`, not to the `--ink-900` that
-                      9a's markup draws. Deliberate divergence: this is the one
-                      destructive action in the row, and the tint is the only
-                      thing distinguishing it from Resend beside it. Do not
-                      "restore" it to ink on a later fidelity pass. */}
+                  {/* Revoke hovers to `--danger`, not the ink the frame draws.
+                      Deliberate: it is the one destructive action in the row,
+                      and the tint is all that separates it from Resend. Do not
+                      "restore" it on a later fidelity pass. */}
                   <button
                     type="button"
                     disabled={pending}
@@ -748,29 +850,11 @@ export function RosterTable({
                     {REVOKE_LABEL}
                   </button>
                 </span>
-              </li>
-            ))}
-          </ul>
-        </div>
+              )}
+            </li>
+          ))}
+        </Reorder.Group>
       </div>
-
-      {/* `members` unfiltered, so the lineup-spot note can name whoever else
-          is on the line the coach picks. The dialog drops the edited row from
-          that list itself. */}
-      <EditPlayerDialog
-        member={editing}
-        roster={members}
-        onOpenChange={(open) => {
-          if (!open) setEditing(null);
-        }}
-      />
-
-      <MergeProfilesDialog
-        pair={merging}
-        onOpenChange={(open) => {
-          if (!open) setMerging(null);
-        }}
-      />
     </div>
   );
 }

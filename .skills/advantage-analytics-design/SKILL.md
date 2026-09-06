@@ -727,29 +727,39 @@ All three share the offer's own words wherever a match is what is missing:
 `DayZeroOffer` takes a headline and measure, and everything beneath the
 sentence is byte-identical across Home, Matches and Statistics.
 
-### Keyboard Shortcut Chip (`<kbd>`)
+### Keyboard Shortcut Chip (`Kbd`)
 
-Always render keyboard hints inside a semantic `<kbd>` element, marked `aria-hidden="true"` when an `aria-label` already conveys the shortcut. Use `inline-flex` so the chip aligns with adjacent text/icons.
+`ui/kbd.tsx` is the only keyboard chip in the product. It is a **keycap, not
+a code tag**: `--surface-raised` fill, 1px `--ink-200` border, and a 1px
+bottom shadow (`--shadow-keycap`) so it reads as a key you could press. Two
+fixed sizes, and nothing else:
 
-**Light surface (default)** — search trigger, dismiss hints, back-to-list affordances:
+| Size | Geometry | Where |
+|---|---|---|
+| `sm` | 16px tall, min-width 16, `px-1`, 10px text, radius 3 | inside a sentence — a mode banner, an inline hint |
+| `md` (default) | 24px tall, min-width 24, `px-1.5`, 11px text, radius 5 | a shortcut table or legend, where the chip is the content |
 
-```
-inline-block px-1 py-0.5 rounded
-text-[10px] font-medium leading-none text-[#AAAAAA] bg-[#F0F0F0]
-```
+Always a semantic `<kbd>`, `aria-hidden="true"` where an `aria-label` already
+says the shortcut. `inline-flex`, so a chip sits on the text baseline beside
+the words around it. Combos are separate adjacent chips with a 4px gap
+(`⌘` `K`), never one chip containing both — the gap is what makes them read
+as two keys.
 
-Let the chip auto-size from its text + padding rather than imposing a fixed height. This is what makes the contents sit in their natural type-metric position — fixed heights center the line-box geometrically, but lowercase letters with no ascenders/descenders (like `esc`) appear visually low inside that box. With `py-0.5` the chip hugs the actual cap-height/x-height of the rendered text, matching the cadence of `⌘K` and `esc` chips throughout the app.
+*This retires the earlier flat recipe* (`bg-[#F0F0F0]`, no border, no shadow,
+auto-height, small-caps for lowercase word keys), along with the argument
+that fixed heights make `esc` sit low. The keycap centres its legend in a
+fixed box and needs no variant trick, and the flat chip had no call sites
+left when this was written — `src/` carries `Kbd` alone. Do not reintroduce
+a second chip: a keyboard hint that looks like inline code reads as a value
+to type rather than a key to press.
 
-**Inverted surface** — on accent (`#3B82F6`) buttons or other dark backgrounds:
+**A keyboard path is stated once, where the mode is stated** — in the mode
+banner (`Notice` → mode register), never as a hint repeated on every row it
+applies to. Sentence and chips share one line: "Drag a row, or focus one and
+press `space` then `↑` `↓`".
 
-```
-inline-block px-1 py-0.5 rounded
-text-[10px] font-medium leading-none bg-white/20 text-white
-```
-
-**Lowercase word-named keys** (`esc`, `tab`, `enter`) — append `[font-variant-caps:small-caps]` to the chip className. Inter at 10px renders lowercase letters at x-height only, which sit visually low inside the chip because they don't fill the line-box like cap-height letters do; small-caps renders them as small uppercase glyphs at cap-height so they center alongside modifier+letter combos like `⌘K`. Source text stays lowercase; the variant only changes the visual form.
-
-**Inline (in body copy)** — for "or press ⌘S" style hints, no chip background:
+**Inline (in body copy)** — for "or press ⌘S" style hints where a chip would
+be too heavy, no background:
 
 ```
 text-[#525252] font-medium
@@ -761,6 +771,7 @@ text-[#525252] font-medium
 - Windows/Linux modifiers: spell out and join with `+` (`Ctrl+S`, `Alt+K`).
 - **Letter keys in modifier combos stay UPPERCASE** (`⌘U`, `⌘K`, `⌘S`, `Ctrl+S`). They read as a hotkey, not a label.
 - **Standalone word-named keys are lowercase** (`esc`, `enter`, `tab`, `space`). They read as a label, not a glyph.
+- **Arrow keys are glyphs, never words** (`↑`, `↓`, `←`, `→`).
 - Punctuation keys render as-is (`/`, `?`).
 - Detect platform via `navigator.userAgentData?.platform ?? navigator.platform` and gate render behind `if (isMac !== null)` to avoid SSR mismatches.
 
@@ -832,6 +843,25 @@ never redraw the dark box, never double-wrap those. `side`: top (default) ·
 bottom (header chrome) · right (rail rows). It names; it doesn't explain
 paragraphs — stat definitions may use `label` + `detail`, and nothing
 essential lives only in a tooltip.
+
+**The dark `Tooltip` is the product's only tooltip.** It names a **control**
+whose label is not on screen — icon-only chrome, and nothing else. Never
+wrap a text link in one: it would sit inches from real ones on icon buttons
+and turn the pattern into decoration.
+
+**A native `title` is not a design element and mostly should not be there.**
+The browser draws it in the OS's own style — a pale box on one machine, a
+dark rounded one on the next — so it lands on a considered page as a foreign
+object, and it does not exist at all on touch. Never use it to say what a
+control does; a link's destination is carried by the link (ink → blue). For
+clipped text, **remove the clipping instead of explaining it**: a name in a
+340px drawer wraps to two lines, and the panel scrolls anyway. Where the
+frame genuinely cannot give the height — a 52px table row — let it truncate
+bare: CSS truncation hides nothing from a screen reader, the text stays in
+the DOM and is read in full, and the record's own drawer is one click away
+with the name entire. That leaves `title` for the case with no such route,
+where the clipped string is the only copy on screen and nothing can open it
+— a raw email on an invite row is the shipped example.
 
 ### Activity Tray (v3)
 
@@ -969,15 +999,28 @@ master-detail split is retired; its detail is the peek drawer below.
    context at 12px ink-600 · numbers and outcome **right-aligned at the
    edge**. Canonical orders: **Matches** = Date · Opponent · Event (+ mono
    round) · Analysis · Score · Result · chevron; **Roster** = # · Player ·
-   Form · Record · Last match; **Schedule** = Date · Event · Type · Venue ·
+   Record · Form · Last match (Record leads Form: the number a coach ranks
+   by first, the five-tick trail that qualifies it second); **Schedule** = Date · Event · Type · Venue ·
    Lines `n / 9` · Score · Result. Text and its header flush left; numeric
    measures and headers flush right; scores in one fixed column (116px in
    Matches) at one precision, tabular. **Never center-align anything.**
    Exactly one fluid cell per table (Analysis in Matches) — everything else
-   fixed or bounded so scores and dates start at the same x on every row. No
+   fixed or bounded so scores and dates start at the same x on every row.
+   Where every measure is fixed, **the name takes the slack**: one flex
+   spacer after it and the metrics packed to the right, so the only gap in
+   the row falls on a column boundary. A flexible last cell with its date
+   pinned to the far edge opens ~600px of nothing mid-row and splits one fact
+   — opponent and date — into two. No
    column a filter or sort acts on may be merged into another cell; no
    repeated words — noun in the header, qualifier in the cell. Not-yet values
-   are an ink-400 em dash; a future event's Result reads "Not played" (11px
+   are an ink-400 em dash — **one mark, one size, and centred under its own
+   heading**, never left-aligned in the cell and never a per-column invention
+   (a 13px dash, a 12px dash and a sentence read as three unrelated absences
+   on one row). A dash carries no words beside it: three across a row already
+   say "nothing yet" once, and a sentence in the last column says it a second
+   time in a different voice while pulling the eye to the row with the least
+   in it. Keep the sentence as `sr-only` — a dash reads as nothing to
+   assistive technology. A future event's Result reads "Not played" (11px
    ink-500), never a Badge. Type is a plain word — no type swatch (amber stays
    chart-only).
 2. **The result cell has no container.** A tinted "banner" was built and
@@ -1082,7 +1125,16 @@ master-detail split is retired; its detail is the peek drawer below.
    hairlines between every row — 8a's site-wide lock above supersedes that for
    every dense result list; the labeled Result-header register survives only
    where a table keeps column headers at all.)*
-10. **Quiet ≠ empty.** Quiet is earned by removing redundancy (a legend under
+10. **A table-level action lives INSIDE a column, never beside the
+    headings.** As a flex sibling in the header row it takes a column's worth
+    of the row and pushes every heading off the cells beneath it — the
+    Roster's "Set lineup" moved Record, Form and Last match ~100px left of
+    their values, and only when a coach was the one looking, so it read as a
+    data problem. Put it at the far end of the last column (`ml-auto` inside
+    that column's span, `tracking-normal normal-case` so it does not inherit
+    the eyebrow), and measure a heading against its own cell before believing
+    it.
+11. **Quiet ≠ empty.** Quiet is earned by removing redundancy (a legend under
     every bar), never information: Home result rows keep their three mini
     stats, event headers their 13px metadata glyphs, the KPI strip its five
     tiles.
@@ -1100,35 +1152,177 @@ No URL of its own — `?player=` / `?event=` deep links are the one case that
 lands open. **Closed is the resting state**: full-width table, nothing
 selected, no chevrons, no gutter.
 
-- **Header, 44px, 20px inset:** counter "Player 3 / 6" · ‹ › stepping · "Open
-  profile ↗" / "Open event ↗" (11px blue, `ArrowUpRight`) · divider · X. The
-  record's **name is a link** to its page (blue on hover) and ⌘-click on the
-  row does the same. The body scrolls; a full-width primary pins to the
-  bottom ("Upload for Rafael" · "Enter results").
+- **Header, 44px, 20px inset:** ‹ › stepping · counter "Player 3 / 6" · ⋯ ·
+  divider · X — and nothing else. The bridge to the record's page is the
+  **name in the body**, ink-900 at rest and blue on hover, the same
+  affordance the roster row's name carries; ⌘-click on the row does the same.
+  The body scrolls; a full-width primary pins to the bottom ("Upload for
+  Rafael" · "Enter results").
+
+  *This retires the header's "Open profile ↗" chip.* Two routes to one page
+  cost a 340px header its last breathing room: measured at 340, the flexible
+  gap had collapsed to its 8px floor and the chip was the widest item in the
+  row at 97px — a third of the header spent on a duplicate. Removing it
+  returns the gap to 69px. The name is the better of the two anyway: it is
+  the record itself, it costs the header nothing, and it puts the link where
+  a reader already looks. **A drawer header holds navigation, position and
+  dismissal only** — anything that travels somewhere belongs in the body.
+- **The record's name wraps; it never truncates.** A 340px rail clips plenty
+  of real names at 22px, and the answer is two lines, not a tooltip — the
+  panel scrolls anyway, and a person's name in their own drawer is as
+  essential as this surface gets ("nothing essential lives only in a
+  tooltip", Empty State). The identity row is therefore `items-start`, so the
+  avatar stays level with the first line rather than centring against a block
+  that grew. The table row is the opposite case and truncates bare: 52px
+  cannot give the height, and this drawer is the one click that shows the
+  name whole.
 - **Player body:** identity → six-match sparkline with a stat header → four
   24px stat pills that switch the chart → three recent matches as record rows
   (with chevrons — these navigate) → Upload. Upload is never event-level.
+  **With no measured figure the chart and the pills are absent, not empty.**
+  Gate on "is there a value", never on "has matches" — a player whose only
+  match is still analysing has a row and no numbers, which is the same
+  nothing to chart. Left in, the header read "—", the sparkline drew empty
+  air between two blank dates, and the four pills stayed clickable: a coach
+  could press one, watch it select, and watch nothing happen. **A control
+  that responds and does nothing is worse than an absent one**, and it is the
+  one case where honest-zero's "render the region's own anatomy" loses —
+  anatomy is labels and axes, not live buttons wired to nothing. What the
+  pills would have told you moves into the empty line under Recent matches
+  ("Serve and pressure numbers appear here once one is analyzed"), and the
+  way to make it appear is the drawer's own primary. A count link to an empty
+  page ("All 0") goes too.
 - **Event body:** program mark + name + conference → glyph row (date · venue ·
   surface) → score row (28/300 tabular, winner ink-900, loser ink-500) + nine
   4×18px outcome ticks (singles · gap · doubles) → all nine lines at 36px as
   record rows ("Awaiting result" lines have no chevron; an unset line is a
   blue "+ Set line" row) → Enter results.
-- *Shipped:* `schedule/static/event-drawer.tsx` is the 340px event drawer.
-  The Roster still renders its pre-v3 columns (# · Player · Form · Last match
-  · 1st serve · actions) — the Record column, the drawer, and the retirement
-  of the stat column and action gutter are the roster's open delta.
+- *Shipped:* `schedule/static/event-drawer.tsx` and
+  `team/player-drawer.tsx` — the roster's v3 delta (the Record column, the
+  drawer, the retirement of the stat column and the action gutter) is closed.
+  Both rails use one shell: a CSS width keyframe, never an animated inline
+  width, which left the rail invisible.
 
 ### Roster Row (v3) — the row compares, the drawer reads
 
-`#` (12px tabular ink-500, "—" when unranked) · Player (26px `Avatar` + name
-13/500 ink-900 — a link, blue on hover) · Form (`FormPills`) · Record (13px
-tabular — what coaches rank by) · Last match (`ResultMark` 13px · "def./l." +
-opponent 12px ink-700 · date `text-micro` tabular — **no score**; the score
-moves to the drawer's recent matches). No stat column: one stat picked from
-four claims to be the one that matters, and the drawer shows all four with
-deltas. Invited people share the table: dashed-ring avatar, position "—",
-email as the name, "Invited Aug 4 by you · player role", Resend (11px blue) ·
-Revoke (11px ink-500) inline.
+`#` (11px mono tabular ink-500, "—" when unranked) · Player (26px `Avatar` +
+name 13/500 ink-900 — a link, blue on hover) · spacer · Record (13px tabular
+— what coaches rank by) · Form (`FormPills`) · Last match. Invited people
+share the table: dashed-ring avatar, position "—", email as the name,
+"Invited Aug 4 by you · player role", Resend (11px blue) · Revoke (11px
+ink-500) inline.
+
+**The table is players only.** Staff sat in it once, told apart from players
+only by the words under their name, which made a coach read as a player
+ranked #7 and put dashes in the `#` column. They are named in a sentence
+under the card — "Coached by Elena Vasquez and Jon Abara." + "Manage staff →"
+— and managed in Settings › Team. A player sees the sentence and not the
+link: knowing who coaches the program is fair, managing them is not theirs,
+and a link that refuses on click is worse than no link.
+
+**Last match carries exactly ONE trailing token.** The cell was answering two
+questions at once — what happened, and what state the analysis is in — so
+every state grew its own trailing element and the column lost its shape. Now:
+`ResultMark`, opponent (12px ink-700), and one token in the same place. A
+settled row shows its date (`text-micro` tabular), a running row shows a
+`StatusChip`, an unscored row shows a "Review score" pill. No score — that
+moves to the drawer's recent matches. No elapsed clock — the activity tray
+owns running progress.
+
+The two token treatments differ on purpose, and the difference is the rule:
+**`StatusChip` is a flat dot-and-label with no container and means *nothing
+to do*; the filled grey pill is this table's clickable-question treatment —
+the same one "Possible duplicate" wears — and means *your move*.**
+
+### Reorder Mode (v3) — a table that can be re-ranked
+
+Where the order of a table IS the record it holds — the singles lineup — the
+table becomes its own editor rather than sending a coach to a form. One mode,
+entered from the column-header row. Everything it changes is listed here;
+everything else must not move.
+
+- **The toggle rides the column-header row**, not the title slot. It is a
+  different kind of verb from Invite / Add player — it changes the page you
+  are on rather than adding a person — and the header row already spans the
+  card it modifies. 11px blue with a 12px grip glyph, inside the last column
+  (law 10). A mode with its own Cancel, not a handle sitting there always,
+  because in it a row click grabs instead of opening the drawer.
+- **The mode swaps the page's actions, not its shape.** Ghost + primary
+  crossfade to Cancel + Save (`AnimatePresence mode="popLayout"`, 120ms) so
+  the primary never moves. A banner in the inline-notice register states the
+  mode and its keys once, above the table — never a hint per row. Nothing
+  else moves: no column shifts, no padding opens, no gutter appears.
+- **The grip borrows the `#` cell** of the row under the pointer or holding
+  focus — one row at a time, so every other line keeps the number that says
+  what the order currently is, and entering the mode moves no column. A grip
+  column of its own shifts the whole table on entry; a grip on every row
+  hides the thing being edited behind a column of identical glyphs.
+- **The row in hand carries its own marks.** A solid 2px `--blue` outline
+  says WHICH row; a 20px blue disc in the page margin beside the card, level
+  with the row and 10px clear of the outline, says WHERE it lands — the line
+  it would take on release, live as the siblings swap. The held row also
+  takes `--surface-card` and `--shadow-card-emphasis` so it reads as lifted
+  off the list, and it must not take the hover wash the pointer sitting on it
+  would otherwise give it.
+- **Nothing is drawn between the rows.** A blue rule at the destination slot
+  was built and rejected: with a pointer drag the held row already sits at
+  that slot, riding the hand a few pixels off it, so rule and row overlapped
+  and it read as a cut through the card. The gap the siblings slide open is
+  the destination, and costs nothing to draw.
+- **Focused and held are two weights of one outline, and only one of them is
+  yours to invent.** Focused is the system's `--focus-ring` — this table does
+  not get a second focus colour — written on plain `:focus`, not
+  `:focus-visible`, because here a mouse click IS a selection and a selection
+  nobody can see is the row the keyboard then acts on "for no reason". Held
+  is solid `--blue` and rises inside that same outline. The step between the
+  two is what tells them apart; making both solid left the difference resting
+  entirely on the shadow.
+- **The lineup and the bench are ONE sequence** with a sentinel between them
+  ("Not in the lineup"). Dragging across it is how somebody enters or leaves
+  the lineup — one gesture, no second control, and ↑/↓ cross it the same way.
+- **The keyboard is the whole gesture, not an afterthought.** Arrows walk
+  focus row to row; Space (or Enter) lifts; the arrows then move the lifted
+  row; Space sets it down; Esc cancels the mode before it closes anything
+  else. Space is the convention every drag library documents — Enter means
+  "open", which is what it does on this row outside the mode. Every move is
+  announced on an `aria-live="polite"` line ("Rafael Osei, line 2 of 6").
+- **Pointer drag, never HTML5 drag-and-drop.** Native drag events fire at a
+  throttled rate, the held row only jumps between slots, and a displaced row
+  sliding under the cursor re-fires `dragover` and swaps straight back — a
+  flicker loop no easing curve fixes. framer-motion's `Reorder` gives a
+  transform that follows the pointer, siblings sliding on `--ease-out-expo`,
+  and touch for free.
+- **Constrain the drag to the list** (`dragConstraints` + `dragElastic`
+  0.08). A table card is a scroll box — `overflow-x-auto` clips on both axes
+  — so an unconstrained row dragged past the last slot is cut off outright,
+  outline and all, while the card grows a scrollbar. There is nothing below
+  the last slot to drop on.
+- **A released row settles without a bounce.** framer's default drag snap is
+  an under-damped inertia spring, so a row let go with any hand velocity
+  overshoots its slot and springs back. `{ bounceStiffness: 600,
+  bounceDamping: 50 }` arrives once, in ~130ms. The system bans bounce, and a
+  lineup is not a toy.
+- **Save is live only when saving would change something** — Interaction
+  States → Disabled.
+- Two cascade hazards bite any custom row state built this way, and neither
+  fails loudly: Interaction States → Focus.
+
+*Shipped:* `team/roster-table.tsx` + `team/roster-view.tsx`; the write is one
+`set_program_lineup` RPC, where the order given IS the numbering and anyone
+absent from it is taken out of the lineup.
+
+**What this binds elsewhere.** These are table laws, not a roster treatment,
+so the next re-rankable order takes them rather than inventing a second
+grammar — **Schedule** is the one on the map: its event drawer holds nine
+lines in a fixed order, and the day that order becomes editable it is this
+mode (toggle on the header row, grip borrowing the leading cell, one sequence,
+the same keyboard gesture), not a drag handle column or a set of up/down
+arrows. Three of the rules bind Schedule already, whatever it does about
+ordering: law 10 (its table-level actions live inside a column, not beside
+the headings), law 1's empty mark (Lines `n / 9`, Score and Result all have a
+not-yet state), and the disabled-until-dirty rule below — "Enter results" is
+a draft-committing primary and should be dead until the draft differs from
+what is stored.
 
 ---
 
@@ -1206,6 +1400,22 @@ never red). A suggestion earns its tint by carrying an action; a passive fact
 never gets one. The same object hosts the applied-filter strip (Data Table
 rule 6) and the wizard's slot suggestion (`SlotLine`, below) — the latter as a
 grey strip, not a suggestion tint, since attaching to a line is reversible.
+
+**Mode** — the third register, and the only one that is not about a record:
+the surface below has temporarily become an editor, and this says which
+editor and how to work it. `--blue-tint-08` wash inside a `--blue-tint-12`
+border at `radius-element`, one line, `px-3.5 py-2.5`: the mode's own 14px
+glyph · a bold lead naming the mode ("Setting the lineup.") · the gesture in
+plain words with the keyboard path in real `Kbd` chips · and, pushed right, a
+quiet 11px line saying what is **not** committed yet ("Nothing is saved until
+Save lineup."). It earns the tint the way a suggestion does — by being about
+an action — but it proposes nothing and has no buttons of its own; the mode's
+Cancel and primary live in the page's action slot, which they have taken over
+for the duration. It arrives with the mode from just above its slot and
+leaves faster than it came, and the surface below is a layout-animated
+sibling so it slides rather than jumps. **Stated once, above the thing it
+changes** — never a hint per row, and never a second banner for the same
+mode. Reorder Mode's banner is the shipped case.
 
 **`Avatar` + `StatePill`** — profile ≠ account, and the avatar says which:
 self-managed = unmarked initials (default, no chip); coach-managed = border
@@ -1632,6 +1842,33 @@ write unlayered CSS. `advButton()` agrees by value rather than by utility — it
 sets `focus-visible:shadow-[var(--focus-ring)]`, the same property the file
 uses, so nothing is competing.
 
+**A programmatically focused element does NOT match `:focus-visible`**
+(measured on a row focused from its own `pointerdown` handler). Anywhere a
+click is a *selection* rather than a navigation — the lineup's rows are the
+shipped case — the ring the system gives you never fires, and the component
+must write `focus:shadow-[var(--focus-ring)]` on plain `:focus` itself. Do
+that **by value, not by invention**: on a keyboard both rules match, the
+unlayered one wins, and since it carries the same token nothing is competing
+and no `!important` is needed. This is `advButton()`'s approach applied to a
+row.
+
+**A third override exists for a state the system has no token for:
+`!important`.** An important declaration in a stylesheet beats an unlayered
+*normal* one, so `shadow-[0_0_0_2px_var(--blue)]!` lands where the same
+utility without the `!` is silently discarded. Reach for it only where the
+component genuinely needs a value the system does not define — the lineup's
+**held** row, which is a product state and not a focus state — never to
+restyle the standard ring, which is a token edit, and never for a focused
+state, which should agree by value as above.
+
+**Inline `style` is NOT a safe override on a `motion` component**, though
+inline normally wins. framer-motion owns that element's `style` attribute and
+does not clear a key that stops being passed: a row that stopped being
+focused kept the outline it was last given, and two rows read as selected at
+once. framer also writes `z-index` inline on every `Reorder.Item`, which
+beats a `z-*` class — flag that too, or the row below paints its hover wash
+over the bottom 2px of your outline.
+
 Treat that as a known defect rather than as settled design — it fails silently,
 which is how 209 such declarations accumulated across 61 files before anyone
 noticed. A few encoded a *different* ring than the system's: `ui/input.tsx` set
@@ -1729,6 +1966,18 @@ delete the only indicator a control has.
 
 - Background: `bg-[#F7F7F7]`
 - Text: `text-[#888888]`
+
+**A primary that commits a draft stays disabled until committing would change
+something**, and the database is not the reason. An enabled primary is the
+page's promise that there is something to save, and a page making that
+promise from the moment a mode opens teaches people to ignore the button; and
+a no-op commit still writes an audit row for an edit nobody made, so the
+trail grows phantom entries. Measure against the **saved record, field by
+field**, never draft against draft: a draft that normalises a malformed
+record (two players parked on one line, a gap in the numbering) IS a change
+though nothing was dragged, and a row dragged away and back is not. Keep that
+arithmetic in a pure module so a test can hold it. *Shipped:*
+`lib/data/lineup-draft.ts` → `lineupChanged`, gating Save lineup.
 
 ---
 

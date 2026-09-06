@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import type { MemberRole } from "@/lib/data/team-settings-server";
 
 /**
@@ -43,9 +44,19 @@ export function InviteRing() {
  * hover token, so a tinted row sat there looking permanently moused-over. The
  * pill says it in words instead.
  */
+/**
+ * The roster's quiet grey pill — a claim receipt, a score waiting to be
+ * reviewed. One string, because it was three: the same 20px pill was typed out
+ * in this file and twice in the table, already drifting on height and ink.
+ * `ui/state-pill.tsx` is the system's 18px cousin and the eventual home; it is
+ * two pixels shorter, so converging is a visual change rather than a tidy-up.
+ */
+export const SUBTLE_PILL =
+  "inline-flex h-5 items-center whitespace-nowrap rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-2 text-[10px] font-medium text-[var(--ink-700)]";
+
 export function ClaimedTodayPill() {
   return (
-    <span className="inline-flex h-5 shrink-0 items-center rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-2 text-[10px] font-medium text-[var(--ink-700)]">
+    <span className={cn(SUBTLE_PILL, "shrink-0")}>
       Claimed today
     </span>
   );
@@ -54,6 +65,34 @@ export function ClaimedTodayPill() {
 /** "Invited Aug 4 as player" — what an outstanding invitation says about itself. */
 export function invitedLine(invitedOn: string, role: MemberRole): string {
   return `Invited ${invitedOn} as ${role}`;
+}
+
+/**
+ * The same fact as the Roster table draws it — Platform Audit `Tb4`:
+ * "Invited <mono>Aug 4</mono> by you · player role".
+ *
+ * The date is machine text and takes the mono face; "by you" appears only when
+ * `program_invites.invited_by` is the person looking, because the design draws
+ * a coach reading their own invitations and the row must not claim somebody
+ * else's outreach as theirs. Team Home's card keeps the string form above —
+ * that page's design is still being decided, so its words are not this
+ * task's to change.
+ */
+export function InvitedLine({
+  invitedOn,
+  role,
+  byViewer,
+}: {
+  invitedOn: string;
+  role: MemberRole;
+  byViewer: boolean;
+}) {
+  return (
+    <>
+      Invited <span className="mono">{invitedOn}</span>
+      {byViewer ? " by you" : ""} · {role} role
+    </>
+  );
 }
 
 /**
@@ -116,6 +155,24 @@ export function requesterName(request: {
   // An address with no local part is not a thing the form can file, but a
   // blank name is worse than a whole address, so the address is the floor.
   return request.email.split("@")[0] || request.email;
+}
+
+/**
+ * "Coached by Elena Vasquez and Jon Abara." — the roster's staff line.
+ *
+ * Staff left the table when it was reserved to players, and this sentence is
+ * what replaced them: names rather than a count, because a count cannot tell
+ * an assistant coach that they are one of the two. It sits in the page footer
+ * with the way through to Settings › Team beside it.
+ *
+ * The serial comma is deliberate on three or more; the last separator is a
+ * word because the line is a sentence, not a list.
+ */
+export function coachedByLine(names: string[]): string {
+  if (names.length === 0) return "";
+  if (names.length === 1) return `Coached by ${names[0]}.`;
+  if (names.length === 2) return `Coached by ${names[0]} and ${names[1]}.`;
+  return `Coached by ${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}.`;
 }
 
 /** "8 players" — the first clause of the Roster page's standing line. */

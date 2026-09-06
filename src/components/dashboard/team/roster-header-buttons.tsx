@@ -49,10 +49,13 @@ export function RosterHeaderButtons({
 
   return (
     <>
-      <div className="flex shrink-0 items-center gap-2">
+      {/* 10px between the pair, and Invite is the DS `ghost` — Platform Audit
+          `Tb4c`: "ghost Invite beside primary Add player". It was `outline`,
+          which the v3 readme rules out beside a primary on a grey page. */}
+      <div className="flex shrink-0 items-center gap-2.5">
         <button
           type="button"
-          className={advButton("outline")}
+          className={advButton("ghost")}
           onClick={() => setInviting(true)}
         >
           Invite
