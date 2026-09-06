@@ -162,22 +162,20 @@ test.describe('personal home scoping (live DB)', () => {
     // Prove the teardown actually emptied: nothing under this run's marker may
     // survive. `programs` is the marker-bearing table; matches and jobs are
     // reachable only through ids we just deleted, so re-query those by id.
-    const leftoverPrograms = await admin
-      .from('programs')
-      .select('id')
-      .like('program_key', `${MARK}-%`);
+    // The three reads are independent, so they overlap rather than stack —
+    // this runs on every `npm test`.
+    // `filter(Boolean)` is not defensive noise: `afterAll` runs even when
+    // `beforeAll` threw before assigning these, and `.in('id', [undefined])`
+    // fails the uuid cast, returns `data: null`, and coalesces to `[]` below —
+    // so the leftover check would pass vacuously on the one path it exists for.
+    const matchIds = [personalMatchId, programMatchId].filter(Boolean);
+    const [leftoverPrograms, leftoverMatches, leftoverJobs] = await Promise.all([
+      admin.from('programs').select('id').like('program_key', `${MARK}-%`),
+      admin.from('matches').select('id').in('id', matchIds),
+      admin.from('processing_jobs').select('id').in('match_id', matchIds),
+    ]);
     expect(leftoverPrograms.data ?? []).toEqual([]);
-
-    const leftoverMatches = await admin
-      .from('matches')
-      .select('id')
-      .in('id', [personalMatchId, programMatchId].filter(Boolean));
     expect(leftoverMatches.data ?? []).toEqual([]);
-
-    const leftoverJobs = await admin
-      .from('processing_jobs')
-      .select('id')
-      .in('match_id', [personalMatchId, programMatchId].filter(Boolean));
     expect(leftoverJobs.data ?? []).toEqual([]);
   });
 
