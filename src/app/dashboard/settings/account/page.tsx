@@ -156,56 +156,31 @@ export default function AccountPage() {
           implying it was all of them. The second action is genuinely global. */}
       <section className="flex flex-col gap-[18px]">
         <SettingsSectionHeading number="02" title="Where you're signed in" />
-        <div className="flex flex-col border-y border-[var(--border-hairline)]">
-          <div className="flex items-center gap-3.5 py-3">
-            <Monitor
-              className="size-3.5 shrink-0 text-[var(--ink-600)]"
-              strokeWidth={1.5}
-              aria-hidden="true"
-            />
-            <div className="min-w-0">
-              <div className="text-[12px] text-[var(--ink-900)]">
-                This device
-              </div>
-              <div className="mt-0.5 text-[11px] text-[var(--ink-500)]">
-                Ends this session only. Other devices stay signed in.
-              </div>
-            </div>
-            <SettingsButton
-              variant="outline"
-              size="sm"
-              className="ml-auto"
-              onClick={requestLogout}
-            >
+        <div className="flex flex-col border-y border-[var(--border-hairline)] [&>*+*]:border-t [&>*+*]:border-[var(--border-hairline)]">
+          <SessionRow
+            icon={Monitor}
+            title="This device"
+            detail="Ends this session only. Other devices stay signed in."
+          >
+            <SettingsButton variant="outline" size="sm" onClick={requestLogout}>
               Sign out
             </SettingsButton>
-          </div>
+          </SessionRow>
 
-          <div className="flex items-center gap-3.5 border-t border-[var(--border-hairline)] py-3">
-            <MonitorSmartphone
-              className="size-3.5 shrink-0 text-[var(--ink-600)]"
-              strokeWidth={1.5}
-              aria-hidden="true"
-            />
-            <div className="min-w-0">
-              <div className="text-[12px] text-[var(--ink-900)]">
-                Every device
-              </div>
-              <div className="mt-0.5 text-[11px] text-[var(--ink-500)]">
-                Signing out everywhere ends every other session too — phones
-                included.
-              </div>
-            </div>
+          <SessionRow
+            icon={MonitorSmartphone}
+            title="Every device"
+            detail="Signing out everywhere ends every other session too — phones included."
+          >
             <SettingsButton
               variant="outline"
               size="sm"
-              className="ml-auto"
               onClick={handleSignOutEverywhere}
               loading={isSigningOut}
             >
               Sign out everywhere
             </SettingsButton>
-          </div>
+          </SessionRow>
         </div>
       </section>
 
@@ -287,6 +262,40 @@ export default function AccountPage() {
           </SettingsButton>
         </form>
       </section>
+    </div>
+  );
+}
+
+/**
+ * A session row: glyph, what it is, what ending it costs, and the button that
+ * ends it. Sibling to `FactRow` below, which cannot serve here — its fixed
+ * 130px label column has no room for a two-line body beside a glyph.
+ */
+function SessionRow({
+  icon: Icon,
+  title,
+  detail,
+  children,
+}: {
+  icon: React.ComponentType<
+    React.SVGProps<SVGSVGElement> & { strokeWidth?: number }
+  >;
+  title: string;
+  detail: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3.5 py-3">
+      <Icon
+        className="size-3.5 shrink-0 text-[var(--ink-600)]"
+        strokeWidth={1.5}
+        aria-hidden="true"
+      />
+      <div className="min-w-0">
+        <div className="text-[12px] text-[var(--ink-900)]">{title}</div>
+        <div className="mt-0.5 text-[11px] text-[var(--ink-500)]">{detail}</div>
+      </div>
+      <div className="ml-auto shrink-0">{children}</div>
     </div>
   );
 }

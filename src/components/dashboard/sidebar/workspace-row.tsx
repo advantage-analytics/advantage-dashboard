@@ -212,6 +212,16 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
                   else rowRefs.current.delete(workspace.id);
                 }}
                 disabled={pendingId !== null}
+                // Hover opens this row's tooltip; focus must not. Radix's
+                // TooltipTrigger opens with no delay on focus, so the menu's
+                // own focus work — landing on the active row when it opens,
+                // ArrowUp/ArrowDown walking the list — would pop a dark label
+                // over the menu on every keystroke, and each open tooltip then
+                // swallows an Escape that was meant for the menu. Radix
+                // composes this handler ahead of its own and skips its own
+                // once the event is defaultPrevented, which leaves the pointer
+                // path (where the role and squad are actually wanted) intact.
+                onFocus={(event) => event.preventDefault()}
                 onClick={() => switchTo(workspace)}
                 className={cn(
                   "flex w-full items-center gap-2.5 rounded-[8px] px-2 py-2 text-left transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer",

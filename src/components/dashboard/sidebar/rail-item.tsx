@@ -97,12 +97,15 @@ export function RailItem({
       : "text-[var(--nav-fg)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]"
   );
 
+  /** The marker is invisible in the expanded panel, so the name carries it. */
+  const ariaLabel = comingSoon ? `${label}, coming soon` : label;
+
   const row =
     as === "button" ? (
       <button
         type="button"
         onClick={onClick}
-        aria-label={comingSoon ? `${label}, coming soon` : label}
+        aria-label={ariaLabel}
         aria-expanded={ariaExpanded}
         className={className}
       >
@@ -113,7 +116,7 @@ export function RailItem({
         href={href ?? "#"}
         onClick={onClick}
         aria-current={active ? "page" : undefined}
-        aria-label={comingSoon ? `${label}, coming soon` : label}
+        aria-label={ariaLabel}
         className={className}
       >
         {body}
