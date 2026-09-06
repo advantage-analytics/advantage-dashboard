@@ -5,7 +5,7 @@ import { useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Reorder, useReducedMotion } from "framer-motion";
 import { GitMerge, GripVertical } from "lucide-react";
-import { BENCH } from "@/lib/data/lineup-draft";
+import { BENCH, sequenceFrom } from "@/lib/data/lineup-draft";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { cn } from "@/lib/utils";
@@ -19,6 +19,7 @@ import type { ActionResult } from "@/components/dashboard/settings/actions";
 import {
   InviteRing,
   InvitedLine,
+  SUBTLE_PILL,
   RESEND_CLASS,
   RESEND_LABEL,
   REVOKE_LABEL,
@@ -140,11 +141,6 @@ export function profileHref(playerId: string): string {
   return `/dashboard/team/roster/${playerId}`;
 }
 
-/* The sequence arithmetic lives in `lib/data/lineup-draft` so a spec can
-   import it without this file's client-only dependencies; re-exported here
-   because the table is where callers meet it. */
-export { BENCH, lineupOrder } from "@/lib/data/lineup-draft";
-
 /** What `RosterView` hands down while Set lineup is on. */
 export interface LineupDraft {
   /** Player ids with one `BENCH` between them, in display order. */
@@ -174,7 +170,7 @@ function Avatar({ name }: { name: string }) {
  */
 function FormTicks({ form }: { form: RosterMember["form"] }) {
   if (form.length === 0) {
-    return <EmptyMark under="form" />;
+    return <EmptyMark under="Form" />;
   }
   return (
     <>
@@ -200,30 +196,26 @@ function FormTicks({ form }: { form: RosterMember["form"] }) {
 /**
  * The one glyph every empty cell shows. Record, Form and Last match each had
  * their own — a 13px dash, a 12px dash, a sentence — at different sizes and
- * weights, so a player with no matches read as three unrelated absences.
- * One mark, one size, one colour, and each CENTRED under its heading: the
- * mark is given the heading's own text width and centres the dash in it, so
- * the dash sits under the middle of the word rather than under its first
- * letter. The widths are the rendered eyebrow labels less their trailing
- * letter-spacing (measured: Record 52, Form 36, Last match 83, each carrying
- * 2.5px of tracking after the last letter). Change a heading, re-measure.
+ * weights, so a player with no matches read as three unrelated absences. One
+ * mark, one size, and centred under its own heading rather than left-aligned
+ * in the cell.
+ *
+ * The centring is derived, not measured. An earlier cut hardcoded each
+ * heading's rendered width and told the next person to re-measure after a copy
+ * edit — a coupling to font, weight and tracking that nothing would have
+ * caught when it drifted. Instead the cell lays out the heading's OWN string,
+ * invisible, in the heading's own class, and centres the dash over it: the
+ * width is the same text in the same font by construction. The negative right
+ * margin drops the trailing letter-space `eyebrow-sm` adds after the last
+ * character, which is real width the heading itself does not show.
  */
-const EMPTY_UNDER = {
-  record: "w-[50px]",
-  form: "w-[34px]",
-  last: "w-[80px]",
-} as const;
-
-function EmptyMark({ under }: { under: keyof typeof EMPTY_UNDER }) {
+function EmptyMark({ under }: { under: "Record" | "Form" | "Last match" }) {
   return (
-    <span
-      aria-hidden
-      className={cn(
-        EMPTY_UNDER[under],
-        "block text-center text-[13px] leading-none text-[var(--ink-400)]"
-      )}
-    >
-      —
+    <span aria-hidden className="relative inline-block">
+      <span className="eyebrow-sm invisible -mr-[2.5px] block">{under}</span>
+      <span className="absolute inset-0 flex items-center justify-center text-[13px] leading-none text-[var(--ink-400)]">
+        —
+      </span>
     </span>
   );
 }
@@ -232,7 +224,7 @@ function EmptyMark({ under }: { under: keyof typeof EMPTY_UNDER }) {
 function Record({ wins, losses }: { wins: number; losses: number }) {
   return (
     <span className={cn(COL.record, "tabular flex items-center text-[13px] text-[var(--ink-900)]")}>
-      {wins + losses === 0 ? <EmptyMark under="record" /> : `${wins}–${losses}`}
+      {wins + losses === 0 ? <EmptyMark under="Record" /> : `${wins}–${losses}`}
     </span>
   );
 }
@@ -260,7 +252,7 @@ function LastMatchCell({ member }: { member: RosterMember }) {
     // it. The words stay for a screen reader, which cannot read a dash.
     return (
       <span className={cn(COL.last, "flex items-center")}>
-        <EmptyMark under="last" />
+        <EmptyMark under="Last match" />
         <span className="sr-only">No matches yet</span>
       </span>
     );
@@ -294,9 +286,7 @@ function LastMatchCell({ member }: { member: RosterMember }) {
         <span className="truncate text-[12px] text-[var(--ink-700)]">
           {lastMatch.opponent}
         </span>
-        <span className="ml-auto inline-flex h-5 shrink-0 items-center rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-2 text-[10px] font-medium text-[var(--ink-700)]">
-          Review score
-        </span>
+        <span className={cn(SUBTLE_PILL, "ml-auto shrink-0")}>Review score</span>
       </span>
     );
   }
@@ -676,11 +666,7 @@ export function RosterTable({
   // benching somebody.
   const sequence: string[] = lineup
     ? lineup.sequence
-    : (() => {
-        const ranked = members.filter((m) => m.lineupSpot !== null).map((m) => m.playerId);
-        const rest = members.filter((m) => m.lineupSpot === null).map((m) => m.playerId);
-        return rest.length > 0 ? [...ranked, BENCH, ...rest] : ranked;
-      })();
+    : sequenceFrom(members, { sentinel: "if-needed" });
   const benchAt = sequence.indexOf(BENCH);
 
   /** ↑/↓ with nothing lifted: focus walks the players, skipping the sentinel. */

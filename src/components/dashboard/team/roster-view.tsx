@@ -7,7 +7,11 @@ import {
   rosterRowId,
   type LineupDraft,
 } from "@/components/dashboard/team/roster-table";
-import { BENCH, lineupChanged, lineupOrder } from "@/lib/data/lineup-draft";
+import {
+  lineupChanged,
+  lineupOrder,
+  sequenceFrom,
+} from "@/lib/data/lineup-draft";
 import {
   DRAWER_ATTR,
   PlayerDrawer,
@@ -187,11 +191,7 @@ export function RosterView({
     syncUrl(null);
     setError(null);
     setLineup({
-      sequence: [
-        ...members.filter((m) => m.lineupSpot !== null).map((m) => m.playerId),
-        BENCH,
-        ...members.filter((m) => m.lineupSpot === null).map((m) => m.playerId),
-      ],
+      sequence: sequenceFrom(members, { sentinel: "always" }),
       lifted: null,
       dragging: null,
     });
@@ -227,31 +227,46 @@ export function RosterView({
     });
   }, [lineup]);
 
-  const onDragStartRow = useCallback((playerId: string) => {
-    setLineup((current) =>
-      current ? { ...current, dragging: playerId, lifted: null } : current
-    );
+  /**
+   * One partial update of the draft. The three callbacks below were the same
+   * three lines with one field changed.
+   */
+  const patchLineup = useCallback((patch: Partial<LineupDraft>) => {
+    setLineup((current) => (current ? { ...current, ...patch } : current));
   }, []);
 
-  const onDragEndRow = useCallback(() => {
-    setLineup((current) => (current ? { ...current, dragging: null } : current));
-  }, []);
-
-  /** `Reorder` hands back the whole sequence; the announcement names the row that moved. */
-  const onReorder = useCallback(
-    (sequence: string[]) => {
-      setLineup((current) => {
-        if (!current) return current;
-        if (current.dragging) setAnnouncement(describe(sequence, current.dragging, members));
-        return { ...current, sequence };
-      });
-    },
-    [members]
+  const onDragStartRow = useCallback(
+    (playerId: string) => patchLineup({ dragging: playerId, lifted: null }),
+    [patchLineup]
   );
 
-  const onLift = useCallback((playerId: string | null) => {
-    setLineup((current) => (current ? { ...current, lifted: playerId } : current));
-  }, []);
+  const onDragEndRow = useCallback(
+    () => patchLineup({ dragging: null }),
+    [patchLineup]
+  );
+
+  /**
+   * `Reorder` hands back the whole sequence; the announcement names the row
+   * that moved.
+   *
+   * The announcement is set OUTSIDE the updater. A state updater has to be
+   * pure — React runs it twice in development to prove it — and describing the
+   * move inside one meant the work ran twice and the live region was written
+   * twice per crossing.
+   */
+  const onReorder = useCallback(
+    (sequence: string[]) => {
+      const held = lineup?.dragging;
+      if (held) setAnnouncement(describe(sequence, held, members));
+      patchLineup({ sequence });
+    },
+    [lineup?.dragging, members, patchLineup]
+  );
+
+  const onLift = useCallback(
+    (playerId: string | null) => patchLineup({ lifted: playerId }),
+    [patchLineup]
+  );
 
   /**
    * One step for a lifted row. The sentinel is just another position in the
@@ -260,19 +275,17 @@ export function RosterView({
    */
   const onMove = useCallback(
     (playerId: string, direction: 1 | -1) => {
-      setLineup((current) => {
-        if (!current) return current;
-        const from = current.sequence.indexOf(playerId);
-        const to = from + direction;
-        if (from < 0 || to < 0 || to >= current.sequence.length) return current;
-        const sequence = [...current.sequence];
-        sequence.splice(from, 1);
-        sequence.splice(to, 0, playerId);
-        setAnnouncement(describe(sequence, playerId, members));
-        return { ...current, sequence };
-      });
+      if (!lineup) return;
+      const from = lineup.sequence.indexOf(playerId);
+      const to = from + direction;
+      if (from < 0 || to < 0 || to >= lineup.sequence.length) return;
+      const sequence = [...lineup.sequence];
+      sequence.splice(from, 1);
+      sequence.splice(to, 0, playerId);
+      setAnnouncement(describe(sequence, playerId, members));
+      patchLineup({ sequence });
     },
-    [members]
+    [lineup, members, patchLineup]
   );
 
   // The row the drawer showed is gone — removed, or merged away. Adjusted

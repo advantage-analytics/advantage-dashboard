@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import type { MemberRole } from "@/lib/data/team-settings-server";
 
 /**
@@ -43,9 +44,19 @@ export function InviteRing() {
  * hover token, so a tinted row sat there looking permanently moused-over. The
  * pill says it in words instead.
  */
+/**
+ * The roster's quiet grey pill — a claim receipt, a score waiting to be
+ * reviewed. One string, because it was three: the same 20px pill was typed out
+ * in this file and twice in the table, already drifting on height and ink.
+ * `ui/state-pill.tsx` is the system's 18px cousin and the eventual home; it is
+ * two pixels shorter, so converging is a visual change rather than a tidy-up.
+ */
+export const SUBTLE_PILL =
+  "inline-flex h-5 items-center whitespace-nowrap rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-2 text-[10px] font-medium text-[var(--ink-700)]";
+
 export function ClaimedTodayPill() {
   return (
-    <span className="inline-flex h-5 shrink-0 items-center rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-2 text-[10px] font-medium text-[var(--ink-700)]">
+    <span className={cn(SUBTLE_PILL, "shrink-0")}>
       Claimed today
     </span>
   );

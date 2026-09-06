@@ -19,6 +19,30 @@ export function lineupOrder(sequence: string[]): string[] {
 }
 
 /**
+ * The display sequence for a roster: everyone holding a line, in order, then
+ * the sentinel, then everyone who is not.
+ *
+ * Both callers used to build this inline — the mode's opening draft and the
+ * table's resting order — differing only in whether the sentinel appears when
+ * nobody is benched. That put the invariant "ranked, then BENCH, then rest" in
+ * two files and under no test. `sentinel: "always"` is the editor, which needs
+ * somewhere to drop a player being benched; `"if-needed"` is the resting
+ * table, which should not draw an empty heading.
+ */
+export function sequenceFrom(
+  members: readonly { playerId: string; lineupSpot: number | null }[],
+  { sentinel }: { sentinel: "always" | "if-needed" }
+): string[] {
+  const ranked: string[] = [];
+  const bench: string[] = [];
+  for (const member of members) {
+    (member.lineupSpot === null ? bench : ranked).push(member.playerId);
+  }
+  if (sentinel === "if-needed" && bench.length === 0) return ranked;
+  return [...ranked, BENCH, ...bench];
+}
+
+/**
  * The spot each player would hold after a save: 1..N down the lineup, null
  * on the bench. This is exactly what `set_program_lineup` writes, so it is
  * what "changed" has to be measured against.

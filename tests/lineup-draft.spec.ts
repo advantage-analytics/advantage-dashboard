@@ -1,6 +1,12 @@
 import { expect, test } from '@playwright/test';
 
-import { BENCH, lineupChanged, lineupOrder, lineupSpots } from '@/lib/data/lineup-draft';
+import {
+  BENCH,
+  lineupChanged,
+  lineupOrder,
+  lineupSpots,
+  sequenceFrom,
+} from '@/lib/data/lineup-draft';
 
 /**
  * The Roster page's Save lineup button is disabled until saving would change
@@ -44,4 +50,19 @@ test('a roster with gaps or shared lines normalises to 1..N, so saving it as-is 
 test('no sentinel means everybody is lined up', () => {
   expect(lineupOrder(['a', 'b'])).toEqual(['a', 'b']);
   expect(lineupSpots(['a', 'b'], ['a', 'b', 'd']).get('d')).toBeNull();
+});
+
+test('sequenceFrom puts the ranked first, then the sentinel, then the bench', () => {
+  expect(sequenceFrom(roster, { sentinel: 'always' })).toEqual(['a', 'b', 'c', BENCH, 'd']);
+  expect(sequenceFrom(roster, { sentinel: 'if-needed' })).toEqual(['a', 'b', 'c', BENCH, 'd']);
+});
+
+test('with nobody benched, only the editor draws the sentinel', () => {
+  const full = roster.slice(0, 3);
+  expect(sequenceFrom(full, { sentinel: 'always' })).toEqual(['a', 'b', 'c', BENCH]);
+  expect(sequenceFrom(full, { sentinel: 'if-needed' })).toEqual(['a', 'b', 'c']);
+});
+
+test('a sequence built from a roster is not a change to it', () => {
+  expect(lineupChanged(sequenceFrom(roster, { sentinel: 'always' }), roster)).toBe(false);
 });
