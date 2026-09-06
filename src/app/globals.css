@@ -297,6 +297,45 @@
   }
 }
 
+/*
+ * The KPI strip shows fewer tiles rather than narrower ones — see
+ * `KpiTileStrip` in src/components/dashboard/shared/kpi-tile.tsx.
+ *
+ * A tile needs 184px to hold "BREAK POINTS SAVED", the longest default label,
+ * on one line inside its 20px padding. Below 920px of strip the fifth tile
+ * goes; below 736px the fourth. That keeps every tile's height identical at
+ * every width, which is the whole point: a wrapping label made the strip grow
+ * a row taller on a tablet and nowhere else.
+ *
+ * A container query, not a media query, because the sidebar takes either 64px
+ * or 232px of the window: the same 1280px window holds five tiles with the
+ * rail and four with the panel open.
+ *
+ * Plain CSS rather than Tailwind variants: `@min-[…]/name:` composed with an
+ * arbitrary `[&>*:nth-child(4)]` variant silently emitted no rule at all, and
+ * a layout that quietly does nothing is worse than one written out here.
+ * Outside `@layer` so it beats the tile's own `display` utility.
+ */
+.adv-kpi-strip {
+  container: adv-kpi-strip / inline-size;
+}
+
+.adv-kpi-strip > * > *:nth-child(n + 4) {
+  display: none;
+}
+
+@container adv-kpi-strip (min-width: 736px) {
+  .adv-kpi-strip > * > *:nth-child(4) {
+    display: flex;
+  }
+}
+
+@container adv-kpi-strip (min-width: 920px) {
+  .adv-kpi-strip > * > *:nth-child(5) {
+    display: flex;
+  }
+}
+
 .report-page {
   width: 612px;
   height: 792px;
@@ -354,6 +393,21 @@
 
 .animate-page-enter {
   animation: page-enter 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+/* The 340px rail beside a table — the roster's player drawer and the
+   schedule's event drawer share this pair (Updated Design System 20f): "the
+   drawer slides in from the right edge over 200ms (--ease-primary), the table
+   reflows to the remaining width". Width is what animates, because the reflow
+   is the point: a transform would slide the panel over a table that had
+   already jumped. Named for the roster, where it was first built. */
+@keyframes roster-drawer-in {
+  from { width: 0; }
+  to { width: 340px; }
+}
+@keyframes roster-drawer-out {
+  from { width: 340px; }
+  to { width: 0; }
 }
 
 /* Upload modal animations */
@@ -419,19 +473,6 @@
 }
 
 /* New match highlight pulse */
-/* The roster's player drawer — Updated Design System 20f: "the drawer slides in
-   from the right edge over 200ms (--ease-primary), the table reflows to the
-   remaining width". Width is what animates, because the reflow is the point:
-   a transform would slide the panel over a table that had already jumped. */
-@keyframes roster-drawer-in {
-  from { width: 0; }
-  to { width: 340px; }
-}
-@keyframes roster-drawer-out {
-  from { width: 340px; }
-  to { width: 0; }
-}
-
 @keyframes highlight-new-match {
   0% { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3); }
   100% { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0); }

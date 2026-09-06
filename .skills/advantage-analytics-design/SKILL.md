@@ -1167,6 +1167,15 @@ selected, no chevrons, no gutter.
   the record itself, it costs the header nothing, and it puts the link where
   a reader already looks. **A drawer header holds navigation, position and
   dismissal only** — anything that travels somewhere belongs in the body.
+- **The record's name wraps; it never truncates.** A 340px rail clips plenty
+  of real names at 22px, and the answer is two lines, not a tooltip — the
+  panel scrolls anyway, and a person's name in their own drawer is as
+  essential as this surface gets ("nothing essential lives only in a
+  tooltip", Empty State). The identity row is therefore `items-start`, so the
+  avatar stays level with the first line rather than centring against a block
+  that grew. The table row is the opposite case and truncates bare: 52px
+  cannot give the height, and this drawer is the one click that shows the
+  name whole.
 - **Player body:** identity → six-match sparkline with a stat header → four
   24px stat pills that switch the chart → three recent matches as record rows
   (with chevrons — these navigate) → Upload. Upload is never event-level.
