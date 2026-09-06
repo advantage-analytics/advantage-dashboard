@@ -340,6 +340,11 @@ export default function RecentActivity({
           "id, created_by, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, duration, player1_id, player2_id, opponent_hand, opponent_backhand"
         )
         .eq("created_by", userId)
+        // AND no program. `/dashboard` is the personal home — same predicate as
+        // the matches list (`matches/page.tsx`), for the same reason:
+        // `matches.program_id` is nullable precisely so "no program" is the
+        // personal workspace.
+        .is("program_id", null)
         .order("date", { ascending: false })
         .limit(50);
 
