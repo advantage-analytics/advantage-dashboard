@@ -10,9 +10,9 @@ import { formatShortDate } from "@/lib/ui/date-format";
 import { RowState } from "./row-state";
 
 /**
- * Date · Event · Round · Opponent · Result · Score · ⋯ · chevron.
+ * Date · Event · Opponent · Result · Score · ⋯ · chevron.
  *
- * The row reads the way the match would be said aloud — "Aug 22, Riverside,
+ * The row reads the way the match would be said aloud — "Aug 22, Riverside
  * quarters, Okafor, lost, 3-6 6-7". Context first, then the three facts that
  * belong together, closing on a number the way every table in the product
  * does. Date keeps the lead, so this list, Schedule and the roster's match
@@ -25,9 +25,15 @@ import { RowState } from "./row-state";
  * a W or an L does not, and it costs 56px instead of 64px beside a score that
  * is louder than either.
  *
- * The round leaves the event cell, where it trailed after a middot and could
- * not be scanned, for a mono column of its own — the job the LINE column does
- * on the roster's history card, which is where this row's grammar comes from.
+ * The round stays inside the Event cell. It was tried as a column of its own,
+ * mirroring the LINE column on the roster card this grammar comes from, and the
+ * analogy turned out to be false: a line is a property of the PLAYER and holds
+ * across their matches, so a column of them is a pattern worth reading down. A
+ * round is a property of one EVENT — a quarter-final at Riverside and one at
+ * Marin are not the same measurement — so the column bought little and cost
+ * something real. With the event cell bounded, a typical name leaves air after
+ * it, which put the round column ~140px from its event and 16px from the
+ * opponent, where it read as qualifying the person rather than the tournament.
  */
 export const DATE_COL = "72px";
 /**
@@ -64,7 +70,7 @@ export const DATE_COL_WITH_YEAR = "84px";
  */
 export const LIST_GRID_COLS = {
   gridTemplateColumns:
-    `var(--date-col, ${DATE_COL}) minmax(170px,260px) 52px minmax(150px,240px) 56px minmax(116px,1fr) 28px 13px`,
+    `var(--date-col, ${DATE_COL}) minmax(190px,260px) minmax(150px,240px) 56px minmax(116px,1fr) 28px 13px`,
 } as const;
 
 /**
@@ -116,14 +122,17 @@ export function MatchCardList({ match, isNew, unseen }: MatchCardListProps): Rea
         {formatShortDate(match.date)}
       </span>
 
-      {/* Event — the occasion, quieter than the name it sets up. */}
-      <span className="min-w-0 truncate text-[12px]" style={{ color: "var(--ink-500)" }}>
-        {match.tournamentName}
-      </span>
-
-      {/* Round — its own column now, so a tournament run can be read down it. */}
-      <span className="mono truncate text-[11px]" style={{ color: "var(--ink-500)" }}>
-        {match.round ?? <span style={{ color: "var(--ink-300)" }}>—</span>}
+      {/* Event — the occasion, quieter than the name it sets up, with the round
+          it qualifies trailing it in mono. The round never truncates: it is two
+          or three characters, and a tournament losing its tail is a smaller
+          loss than a stage nobody can read. */}
+      <span className="flex min-w-0 items-baseline gap-1 text-[12px]" style={{ color: "var(--ink-500)" }}>
+        <span className="min-w-0 truncate">{match.tournamentName}</span>
+        {match.round && (
+          <span className="mono shrink-0 text-[11px]" style={{ color: "var(--ink-400)" }}>
+            · {match.round}
+          </span>
+        )}
       </span>
 
       {/* Opponent — the invisible full-row link lives here; it is the name a

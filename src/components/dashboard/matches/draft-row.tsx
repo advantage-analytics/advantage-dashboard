@@ -3,10 +3,11 @@
 /**
  * DraftRow — a saved upload at the top of the Matches table (design 11c).
  *
- * The same eight tracks as a match row, with the honest gaps: Result and Score
+ * The same seven tracks as a match row, with the honest gaps: Result and Score
  * read an em-dash because there is nothing yet, Round has no answer either, and
  * the opponent carries a grey Draft pill — a row's exception is a grey pill,
- * never a colour, which is what separates it from the blue "New".
+ * never a colour, which is what separates it from the blue "New". Round has no
+ * answer either, so the Event cell carries the one thing a draft can say.
  *
  * The one thing a draft has that a match does not is how far through it is, and
  * that is the whole of what its Event cell says: "Resume · step 3 of 4", so you
@@ -67,15 +68,13 @@ export function DraftRow({
       </span>
 
       {/* Event — the draft's own progress, which is the only thing it can say
-          about itself that a finished row cannot. */}
+          about itself that a finished match row cannot. */}
       <Link
         href={resumeHref}
         className="relative z-[1] min-w-0 truncate text-[12px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
       >
         Resume · step {draft.stepIndex + 1} of {draft.stepCount}
       </Link>
-
-      <span className="text-micro" style={{ color: "var(--ink-300)" }}>—</span>
 
       <Link
         href={resumeHref}

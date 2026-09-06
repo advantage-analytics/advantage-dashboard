@@ -33,20 +33,11 @@ interface MatchesGridProps {
  * right-aligning would ragged them against a three-set score.
  *
  * Plain eyebrows, no sort buttons: sorting lives in the toolbar's one sort
- * control. Two of the eight tracks are the actions lane and the chevron, which
+ * control. The last two tracks are the actions lane and the chevron, which
  * head nothing and carry an empty label to keep the header's column count in
  * step with the row's.
  */
-const COLUMNS: string[] = [
-  "Date",
-  "Event",
-  "Round",
-  "Opponent",
-  "Result",
-  "Score",
-  "",
-  "",
-];
+const COLUMNS: string[] = ["Date", "Event", "Opponent", "Result", "Score", "", ""];
 
 export function MatchesGrid({
   matches,

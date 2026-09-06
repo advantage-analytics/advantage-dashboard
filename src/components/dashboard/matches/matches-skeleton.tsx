@@ -8,7 +8,7 @@ function Bar({ className }: { className: string }): React.JSX.Element {
 
 /**
  * The populated page's frame with the data blanked — same toolbar, same card,
- * same eight tracks — so nothing moves when the rows arrive.
+ * same seven tracks — so nothing moves when the rows arrive.
  */
 export function MatchesSkeleton(): React.JSX.Element {
   return (
@@ -34,7 +34,6 @@ export function MatchesSkeleton(): React.JSX.Element {
         >
           <Bar className="h-2.5 w-8" />
           <Bar className="h-2.5 w-10" />
-          <Bar className="h-2.5 w-11" />
           <Bar className="h-2.5 w-16" />
           <Bar className="h-2.5 w-11" />
           <Bar className="h-2.5 w-10" />
@@ -45,8 +44,7 @@ export function MatchesSkeleton(): React.JSX.Element {
           {Array.from({ length: SKELETON_ROWS }).map((_, row) => (
             <div key={row} className={`${LIST_ROW_FRAME} h-[52px]`} style={LIST_GRID_COLS}>
               <Bar className="h-3 w-11" />
-              <Bar className="h-3 w-32" />
-              <Bar className="h-3 w-6" />
+              <Bar className="h-3 w-36" />
               <Bar className="h-3 w-28" />
               <Bar className="size-3.5 rounded-full" />
               <Bar className="h-3 w-20" />
