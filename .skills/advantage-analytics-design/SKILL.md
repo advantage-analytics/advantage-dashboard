@@ -1207,10 +1207,14 @@ everything else must not move.
   that slot, riding the hand a few pixels off it, so rule and row overlapped
   and it read as a cut through the card. The gap the siblings slide open is
   the destination, and costs nothing to draw.
-- **Focused and held are two weights of one outline.** Focus draws on plain
-  `:focus`, not `:focus-visible`: here a mouse click IS a selection, and a
-  selection nobody can see is the row the keyboard then acts on "for no
-  reason". Held keeps that outline and rises inside it.
+- **Focused and held are two weights of one outline, and only one of them is
+  yours to invent.** Focused is the system's `--focus-ring` — this table does
+  not get a second focus colour — written on plain `:focus`, not
+  `:focus-visible`, because here a mouse click IS a selection and a selection
+  nobody can see is the row the keyboard then acts on "for no reason". Held
+  is solid `--blue` and rises inside that same outline. The step between the
+  two is what tells them apart; making both solid left the difference resting
+  entirely on the shadow.
 - **The lineup and the bench are ONE sequence** with a sentinel between them
   ("Not in the lineup"). Dragging across it is how somebody enters or leaves
   the lineup — one gesture, no second control, and ↑/↓ cross it the same way.
@@ -1747,13 +1751,24 @@ write unlayered CSS. `advButton()` agrees by value rather than by utility — it
 sets `focus-visible:shadow-[var(--focus-ring)]`, the same property the file
 uses, so nothing is competing.
 
-**A third override exists for a component that draws its own selected state:
+**A programmatically focused element does NOT match `:focus-visible`**
+(measured on a row focused from its own `pointerdown` handler). Anywhere a
+click is a *selection* rather than a navigation — the lineup's rows are the
+shipped case — the ring the system gives you never fires, and the component
+must write `focus:shadow-[var(--focus-ring)]` on plain `:focus` itself. Do
+that **by value, not by invention**: on a keyboard both rules match, the
+unlayered one wins, and since it carries the same token nothing is competing
+and no `!important` is needed. This is `advButton()`'s approach applied to a
+row.
+
+**A third override exists for a state the system has no token for:
 `!important`.** An important declaration in a stylesheet beats an unlayered
 *normal* one, so `shadow-[0_0_0_2px_var(--blue)]!` lands where the same
-utility without the `!` is silently discarded. Reach for it only where a
-component needs a state the system has no token for — the lineup's held row
-(Data Table → Reorder Mode) is the shipped case — never to restyle the
-standard ring, which is a token edit.
+utility without the `!` is silently discarded. Reach for it only where the
+component genuinely needs a value the system does not define — the lineup's
+**held** row, which is a product state and not a focus state — never to
+restyle the standard ring, which is a token edit, and never for a focused
+state, which should agree by value as above.
 
 **Inline `style` is NOT a safe override on a `motion` component**, though
 inline normally wins. framer-motion owns that element's `style` attribute and

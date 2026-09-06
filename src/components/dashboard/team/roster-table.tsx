@@ -535,28 +535,35 @@ function MemberRow({
            pointer sitting on top of it would otherwise give it. */
         !lifted && "hover:bg-[var(--surface-muted)]",
         selected && !inLineupMode && "bg-[var(--surface-muted)]",
-        /* One outline, two weights of it. FOCUSED — by click, Tab or the
-           arrows — is a real selection in this mode: a mouse click is how a
-           row is chosen, and a selection nobody can see is the row Space acts
-           on "for no reason". So it draws on plain `:focus`, not
-           `:focus-visible`. HELD keeps that outline and rises inside it:
-           opaque fill, raised card, the circled number in the `#` cell.
-        
-           Both shadows are `!important`, and that is not laziness. The design
-           system's focus rule (`styles/design-system/focus.css`) sets
-           `box-shadow` on every `[tabindex]`, and it is imported OUTSIDE
-           Tailwind's layers — so an ordinary `shadow-*` utility loses to it no
-           matter how specific, and a row silently wore the app-wide 40% ring
-           instead of this. `!important` is the level above an unlayered rule.
-           An inline style would also win, but framer-motion owns this
-           element's `style` attribute and does not clear a key that stops
-           being passed, which strands the outline on a row focus has left.
-           The stacking is flagged for the same reason: framer writes
-           `z-index` inline on every item, and without `!` the row below
-           painted its hover wash over this row's bottom 2px. */
+        /* One outline, two weights of it.
+
+           FOCUSED is the system's own ring, by value — the same
+           `--focus-ring` `focus.css` gives every tabbable control, so a row
+           reads as focused the way a button does and this table invents no
+           second focus colour. It is written on plain `:focus` rather than
+           `:focus-visible` because in this mode a mouse click IS a selection,
+           and a row focused programmatically on pointerdown does NOT match
+           `:focus-visible` (measured) — so without this rule a coach who
+           clicks a row sees nothing. On a keyboard the design system's own
+           rule matches too and wins the cascade, but it sets this same value,
+           so the two agree and nothing is competing. That is why no
+           `!important` is needed here, and `advButton()` takes the same
+           approach.
+
+           HELD is a product state the system has no token for: the row is in
+           your hand. Solid `--blue`, opaque fill, raised card. This one is
+           `!important` because it must beat `focus.css` — that file is
+           imported OUTSIDE Tailwind's layers, so an ordinary utility loses to
+           it whatever its specificity, and a held row silently wore the 40%
+           ring instead. Inline style would also win, but framer-motion owns
+           this element's `style` attribute and does not clear a key that
+           stops being passed, which stranded the outline on rows focus had
+           left. The stacking is flagged for the same layering reason: framer
+           writes `z-index` inline on every item, and without `!` the row
+           below painted its hover wash over this row's bottom 2px. */
         inLineupMode &&
           !lifted &&
-          "focus:z-[2]! focus:shadow-[0_0_0_2px_var(--blue)]! focus:outline-none",
+          "focus:z-[2]! focus:shadow-[var(--focus-ring)] focus:outline-none",
         lifted &&
           "z-[3]! bg-[var(--surface-card)] shadow-[0_0_0_2px_var(--blue),var(--shadow-card-emphasis)]!",
         inLineupMode && "select-none"
