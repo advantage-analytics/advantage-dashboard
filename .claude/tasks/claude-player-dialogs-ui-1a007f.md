@@ -107,7 +107,7 @@ ready).
 - **notes:** Footer-left quiet text register per the DS; not a button. Invite already has an `initialEmail` prop — the hand-off flows the other direction.
 
 ## T8 · Branch verification sweep + score persistence check
-- **status:** todo
+- **status:** blocked
 - **model:** opus
 - **needs:** T2, T3, T7
 - **files:** none expected — this task should produce no source diff
