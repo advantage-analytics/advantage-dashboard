@@ -241,7 +241,7 @@ the start of the match and the ambiguity disappears.
 - Confirm the max video size. Docs say 8 GB enforced; an earlier call suggested
   10–12 GB. `MAX_VIDEO_SIZE_BYTES` takes the conservative number.
 - Is a lost delivery recoverable? `GET /jobs/{job_id}` returns status but not
-  `sas_url`/`trimmed_video_url`, so it does not get the results back.
+  `strokes_url`/`trimmed_video_url`, so it does not get the results back.
 - Is dead-time removal or an annotated render available at all? `trimmed_video_url`
   returns our submitted window re-encoded and nothing else. If a rally-only cut or
   an overlay render exists behind a flag we are not setting, that changes what the
@@ -327,11 +327,12 @@ mismatch, not a broken deployment.
 
 **Uploading from a port other than 3000 fails until Azure knows about it.** The
 browser PUTs blocks straight to Blob Storage, so the storage account's CORS rule
-is what decides which origins may upload. The rule on `advantagedashboard` lists
-the two deployed hosts plus `http://localhost:3000` and `http://localhost:3101` —
-a worktree on any other port gets `Network error uploading to Azure`, the job is
-marked failed, and nothing about the app is wrong. Add the origin rather than
-replacing the rule; the same rule serves production:
+is what decides which origins may upload. The rule on `advantagedashboardca` (Canada
+East, the account since 2026-09-03; `advantagedashboard` in West US 2 is the retired
+predecessor, kept until its in-flight jobs finish) lists the two deployed hosts plus
+`http://localhost:3000` and `http://localhost:3101` — a worktree on any other port gets
+`Network error uploading to Azure`, the job is marked failed, and nothing about the app
+is wrong. Add the origin rather than replacing the rule; the same rule serves production:
 
 ```ts
 const props = await svc.getProperties();          // @azure/storage-blob

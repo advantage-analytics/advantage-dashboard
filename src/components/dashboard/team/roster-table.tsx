@@ -220,7 +220,7 @@ function EmptyMark({ under }: { under: keyof typeof EMPTY_UNDER }) {
       aria-hidden
       className={cn(
         EMPTY_UNDER[under],
-        "block text-center text-[13px] leading-none text-[var(--ink-300)]"
+        "block text-center text-[13px] leading-none text-[var(--ink-400)]"
       )}
     >
       —
