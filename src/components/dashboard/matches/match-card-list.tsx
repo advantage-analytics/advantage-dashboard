@@ -7,10 +7,11 @@ import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { MatchActionsMenu } from "@/components/dashboard/matches/match-actions/match-actions-menu";
 import { formatShortDate } from "@/lib/ui/date-format";
-import { RowState } from "./row-state";
+import { NewPill } from "@/components/ui/new-pill";
+import { RowLifecycle } from "./row-state";
 
 /**
- * Date · Event · Opponent · Result · Score · ⋯ · chevron.
+ * Date · Event · Opponent · Result · Score · lifecycle · ⋯ · chevron.
  *
  * The row reads the way the match would be said aloud — "Aug 22, Riverside
  * quarters, Okafor, lost, 3-6 6-7". Context first, then the three facts that
@@ -18,12 +19,15 @@ import { RowState } from "./row-state";
  * does. Date keeps the lead, so this list, Schedule and the roster's match
  * history card all open on the same column.
  *
- * Two columns that used to be here are gone. **Analysis** said "View report" on
- * every settled row, which is what clicking the row already does — its
- * exceptions moved into `RowState` beside the opponent's name. **Result**'s
- * tracked word became `ResultMark`'s glyph: a circle survives translation where
- * a W or an L does not, and it costs 56px instead of 64px beside a score that
- * is louder than either.
+ * **Analysis** as a mid-row column is gone: it said "View report" on every
+ * settled row, which is what clicking the row already does. What was worth
+ * saying moved to `RowLifecycle`, in the trailing cell after the score, where
+ * it is silent on a settled row and carries the upload's progress on the few
+ * that are not. **Result**'s tracked word became `ResultMark`'s glyph — a
+ * circle survives translation where a W or an L does not — and it is the one
+ * centred cell in the product: its content is a single fixed-width glyph on
+ * every row, so centring raggeds nothing, which is the case the rule against
+ * centre-aligned cells exists to prevent.
  *
  * The round stays inside the Event cell. It was tried as a column of its own,
  * mirroring the LINE column on the roster card this grammar comes from, and the
@@ -46,31 +50,31 @@ export const DATE_COL = "72px";
 export const DATE_COL_WITH_YEAR = "84px";
 
 /**
- * Every text column is BOUNDED and the SCORE is the one fluid track — the
- * opposite of what a table usually does, because both obvious alternatives
- * break the row.
+ * The LIFECYCLE cell is the fluid track, and everything else is bounded.
  *
- * Give the slack to Event and it grows past 300px while a typical name draws
- * ~140, opening a gap between an event and its own round wide enough that Round
- * reads as belonging to the opponent beside it. Give it to Opponent and, at the
- * 1216px inner width a 1440 viewport leaves with the rail collapsed, the name
- * ends ~400px short of the result glyph — stranding the three facts this order
- * exists to keep together.
+ * That is the opposite of what a table usually does, and each alternative was
+ * tried and broke the row. Slack given to Event grew it past 300px while a
+ * typical name draws ~140, pushing the round away from its own event. Slack
+ * given to Opponent left the name ~400px short of the result glyph, stranding
+ * the three facts this order exists to keep together. Slack left after the
+ * Score was simply air — and air is exactly what the lifecycle cell needs,
+ * since it is empty on a settled row.
  *
- * So the columns pack to their content and the leftover falls after the score,
- * where it is trailing margin rather than a gap between two things that belong
- * to one another — which is also what the roster's match-history card does at
- * its own width. The score cell keeps `min-w-0`, so a tight viewport shrinks
- * the bounded columns toward their minima rather than clipping the number.
+ * So the leftover width IS the lifecycle column. It carries a 96px minimum, so
+ * at the narrow end of `lg` the upload's bar collapses before its words do —
+ * the chip is what has to survive — and every bounded column gives up its own
+ * slack first. It heads nothing: the cell is an annotation, self-describing on
+ * the rows that use it, and a label over a column that is blank eight rows in
+ * ten only draws attention to the blanks.
  *
- * Opponent's 240px cap is measured, not round: the longest realistic content is
- * a full name and a state chip together — "Timofey Stepanov" beside "Stats
- * pending" is ~207px — so 240 holds it with a little air and nothing wider is
- * bought at the cost of pushing the result glyph away from the name.
+ * Opponent's 240px cap is measured, not round: a full name at 13/500 —
+ * "Timofey Stepanov" is ~115px — with room for the "New" pill beside it, and
+ * nothing wider, because every pixel past that pushes the result glyph away
+ * from the name it belongs to.
  */
 export const LIST_GRID_COLS = {
   gridTemplateColumns:
-    `var(--date-col, ${DATE_COL}) minmax(190px,260px) minmax(150px,240px) 56px minmax(116px,1fr) 28px 13px`,
+    `var(--date-col, ${DATE_COL}) minmax(150px,260px) minmax(150px,240px) 56px 116px minmax(96px,1fr) 28px 13px`,
 } as const;
 
 /**
@@ -144,12 +148,12 @@ export function MatchCardList({ match, isNew, unseen }: MatchCardListProps): Rea
         <span className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
           {match.player2.name}
         </span>
-        <RowState analysis={match.analysis} unseen={unseen} />
+        {unseen && <NewPill className="shrink-0" />}
       </Link>
 
-      {/* Result — the glyph register, under a labelled header. The word is not
+      {/* Result — the glyph register, centred under its header. The word is not
           lost: `ResultMark` carries "Won"/"Lost" as its accessible name. */}
-      <ResultMark won={isWin} />
+      <ResultMark won={isWin} className="justify-self-center" />
 
       {/* Score — flush left in its fixed track, one precision, tabular, so
           every row's numbers start at the same x. */}
@@ -157,6 +161,22 @@ export function MatchCardList({ match, isNew, unseen }: MatchCardListProps): Rea
         sets={match.score.sets}
         className="text-scoreboard-sm min-w-0 truncate"
       />
+
+      {/* Lifecycle — silent on a settled row; the upload's chip and bar, or the
+          one word that explains an exception, on the rest. */}
+      {/* `grid`, and both parts of that are load-bearing. Grid items are
+          blockified, so `StatusChip`'s `inline-flex` stops sitting on the
+          cell's text baseline — on a bare block it landed a few pixels below
+          the chip-and-bar group, which is a flex row. And a grid item stretches
+          across the track by default, which a flex item does not: as a flex
+          child the group shrank to its content and left the upload's bar, whose
+          width comes from `flex-1`, at zero. */}
+      <div className="grid min-w-0 items-center">
+        <RowLifecycle
+          analysis={match.analysis}
+          label={`${match.player2.name}, ${match.tournamentName}`}
+        />
+      </div>
 
       <span className={ACTIONS_LANE}>
         <MatchActionsMenu

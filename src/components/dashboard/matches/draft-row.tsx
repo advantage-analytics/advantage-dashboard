@@ -3,7 +3,7 @@
 /**
  * DraftRow — a saved upload at the top of the Matches table (design 11c).
  *
- * The same seven tracks as a match row, with the honest gaps: Result and Score
+ * The same eight tracks as a match row, with the honest gaps: Result and Score
  * read an em-dash because there is nothing yet, Round has no answer either, and
  * the opponent carries a grey Draft pill — a row's exception is a grey pill,
  * never a colour, which is what separates it from the blue "New". Round has no
@@ -86,8 +86,9 @@ export function DraftRow({
         <StatePill className="shrink-0">Draft</StatePill>
       </Link>
 
+      <span className="text-micro justify-self-center" style={{ color: "var(--ink-300)" }}>—</span>
       <span className="text-micro" style={{ color: "var(--ink-300)" }}>—</span>
-      <span className="text-micro" style={{ color: "var(--ink-300)" }}>—</span>
+      <span />
 
       <span className={ACTIONS_LANE}>
         <Popover open={open} onOpenChange={setOpen}>

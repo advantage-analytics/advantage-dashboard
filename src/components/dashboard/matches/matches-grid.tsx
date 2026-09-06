@@ -27,17 +27,18 @@ interface MatchesGridProps {
 }
 
 /**
- * One header per row column, in the same order as `LIST_GRID_COLS`. Everything
- * is flush left: the score is the only numeric measure left and it sits in a
- * fixed track, so left-aligning it starts every row's numbers at one x —
- * right-aligning would ragged them against a three-set score.
+ * One header per row column, in the same order as `LIST_GRID_COLS`. Flush left
+ * but for Result, which centres over its glyph: the score is the only numeric
+ * measure left and it sits in a fixed track, so left-aligning it starts every
+ * row's numbers at one x — right-aligning would ragged them against a three-set
+ * score.
  *
  * Plain eyebrows, no sort buttons: sorting lives in the toolbar's one sort
- * control. The last two tracks are the actions lane and the chevron, which
- * head nothing and carry an empty label to keep the header's column count in
+ * control. The last three tracks — lifecycle, the actions lane and the chevron
+ * — head nothing and carry an empty label to keep the header's column count in
  * step with the row's.
  */
-const COLUMNS: string[] = ["Date", "Event", "Opponent", "Result", "Score", "", ""];
+const COLUMNS: string[] = ["Date", "Event", "Opponent", "Result", "Score", "", "", ""];
 
 export function MatchesGrid({
   matches,
@@ -90,7 +91,7 @@ export function MatchesGrid({
             {COLUMNS.map((label, i) => (
               <span
                 key={label || `col-${i}`}
-                className="eyebrow-sm min-w-0 truncate"
+                className={`eyebrow-sm min-w-0 truncate${label === "Result" ? " text-center" : ""}`}
                 role="columnheader"
               >
                 {label}
