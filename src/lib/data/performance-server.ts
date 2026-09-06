@@ -858,6 +858,11 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
       .from("matches")
       .select("id, date, player1_id, player2_id, player1_name, player2_name, score")
       .eq("created_by", user.id)
+      // AND no program. `/dashboard` is the personal home — same predicate as
+      // the matches list (`matches/page.tsx`), for the same reason:
+      // `matches.program_id` is nullable precisely so "no program" is the
+      // personal workspace.
+      .is("program_id", null)
       .order("date", { ascending: false }),
     getMyPlayerIds(),
   ]);

@@ -31,7 +31,7 @@ straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Scope home performance read to personal matches
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/lib/data/performance-server.ts (guess — `getOverallPerformance()`, matches query at ~L858-861)
 - **done when:**
