@@ -30,7 +30,7 @@ ready).
 - **notes:** Trailing-only trim — interior and leading `0-0` sets survive. Worktree needs `npm ci` before the first lint/test.
 
 ## T2 · Drawer recent-match score: trim and unclip
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** `src/components/dashboard/team/player-drawer.tsx` (row grid at ~line 725, `<ScoreLine>` at ~741), new `tests/player-drawer-score.spec.ts` (guess)
