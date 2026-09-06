@@ -51,8 +51,10 @@ export function ActivityTrayFallback() {
       aria-hidden="true"
       className="flex size-7 items-center justify-center rounded-[8px]"
     >
+      {/* Resting ink-700, the same as the real trigger, so the glyph does not
+          brighten when the feed arrives. */}
       <Activity
-        className="size-[15px] text-[var(--ink-400)]"
+        className="size-[15px] text-[var(--ink-700)]"
         strokeWidth={1.5}
       />
     </span>

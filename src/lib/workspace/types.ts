@@ -171,6 +171,14 @@ export interface Viewer {
   email: string;
   /** Display name, already falling back to the email local part. */
   name: string;
+  /**
+   * `users.first_name` on its own, or null when the profile never set one —
+   * the word the header's greeting addresses on the personal Home (Platform
+   * Audit Pa2). Separate from `name` because that one falls back to the email
+   * local part, and "Good morning, fluffybuddycj" is the one greeting worse
+   * than "Good morning" alone. A null here drops the name, never substitutes.
+   */
+  firstName: string | null;
   initials: string;
   /** `users.plan` — 'free' | 'pro'. The paid entitlement, and only that. */
   plan: string;

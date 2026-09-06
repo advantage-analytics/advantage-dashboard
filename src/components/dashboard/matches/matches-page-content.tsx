@@ -3,7 +3,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useSearchParams, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, ChevronLeft, ChevronRight, ChevronDown, Filter as FilterIcon } from "lucide-react";
+import { Search, ChevronDown, Filter as FilterIcon } from "lucide-react";
 import { EmptyMatches } from "./empty-matches";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import type { DraftRowData } from "./draft-row";
@@ -21,6 +21,7 @@ import { normalizedPersonName } from "@/lib/data/person-name";
 import { providers } from "@/lib/providers";
 import { useUnseenReportIds } from "@/lib/ui/seen-reports";
 import { MatchesGrid, type SortField, type SortDir } from "./matches-grid";
+import type { MatchAnalysis } from "@/lib/data/match-analysis";
 import {
   MatchesFilterPanel,
   type FilterOption,
@@ -99,6 +100,21 @@ function analysisGroup(match: DisplayMatch): string | null {
 }
 
 const ANALYSIS_GROUP_ORDER = ["In progress", "Ready", "Failed", "No video"];
+
+/**
+ * The "Estimates" view — statistics the engine published but could not defend
+ * at full confidence, to be read as "Estimate · Review data" in the row.
+ *
+ * No analysis state carries that marker yet: Phase 2 derivation withholds the
+ * aggregates it cannot stand behind (`timeline`) rather than publishing them
+ * flagged, so today nothing qualifies and the view is honestly empty. The
+ * predicate exists so the pill is wired to the fact the moment a low-confidence
+ * flag lands on `MatchAnalysis`, instead of to a status list that would need
+ * re-deriving then.
+ */
+function isEstimate(_analysis: MatchAnalysis | undefined): boolean {
+  return false;
+}
 
 interface ActiveFilter {
   key: FilterKey;
@@ -228,7 +244,12 @@ const FILTER_GROUPS: {
   },
 ];
 
-const PAGE_SIZES = [10, 25, 50] as const;
+/**
+ * Ten rows a page. The frame's footer is a range and one quiet "Older matches"
+ * link (Platform Audit Pb2) — no page-size control, so the size is a constant
+ * rather than a preference.
+ */
+const PAGE_SIZE = 10;
 
 /* ─── Sort dropdown ─── */
 const SORT_OPTIONS: { field: SortField; label: string }[] = [
@@ -432,14 +453,17 @@ export function MatchesPageContent({
   }, [serverMatches, livePatches]);
 
   /* Layout is decided by the viewport alone — there is no view control any
-     more. Six columns need the width, so under 1024px the same matches render
+     more. Seven columns need the width, so under 1024px the same matches render
      as cards instead. That choice is made in CSS inside MatchesGrid, so it
      needs no state, no listener, and no URL parameter here. */
+
+  // No search box in the filter row — the header owns search (⌘K), and a
+  // second control here was the drift Pb2 removed (Updated Design System
+  // 19g). The command palette still lands on this page with `?q=<name>` for
+  // an opponent or event it found, so the query survives as a cut this list
+  // states in words in the applied-filter strip, with the same "Clear filter"
+  // as any other. It has no input of its own.
   const [search, setSearch] = useState(() => searchParams.get("q") || "");
-  // Whether the search input is expanded. At rest it collapses to a compact
-  // "Search" trigger that hugs its label (no dead field width in the toolbar);
-  // it opens on click or "/", and re-collapses on blur when empty.
-  const [searchOpen, setSearchOpen] = useState(false);
   const [sortField, setSortField] = useState<SortField>(() => (searchParams.get("sort") as SortField) || "date");
   const [sortDir, setSortDir] = useState<SortDir>(() => (searchParams.get("dir") as SortDir) || "desc");
   const [filters, setFilters] = useState<ActiveFilter[]>(() => {
@@ -461,7 +485,7 @@ export function MatchesPageContent({
   });
   const [lifecycle, setLifecycle] = useState<LifecycleValue>(() => {
     const v = searchParams.get("lifecycle");
-    return v === "new" || v === "in-progress" ? v : "all";
+    return v === "new" || v === "in-progress" || v === "estimates" ? v : "all";
   });
   const readyMatchIds = useMemo(
     () => matches.filter((m) => !m.analysis || isAnalysisReady(m.analysis.status)).map((m) => m.id),
@@ -469,74 +493,6 @@ export function MatchesPageContent({
   );
   const unseenIds = useUnseenReportIds(readyMatchIds);
   const [page, setPage] = useState(() => Number(searchParams.get("page")) || 1);
-  const [pageSize, setPageSize] = useState<number>(() => {
-    const ps = Number(searchParams.get("pageSize"));
-    return (PAGE_SIZES as readonly number[]).includes(ps) ? ps : 10;
-  });
-  const [pageSizeOpen, setPageSizeOpen] = useState(false);
-  const pageSizeRef = useRef<HTMLDivElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
-
-  // Close page-size dropdown on outside click; scoped keyboard nav
-  const [pageSizeFocusIdx, setPageSizeFocusIdx] = useState(-1);
-  const pageSizeOptionRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const pageSizeTriggerRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!pageSizeOpen) { setPageSizeFocusIdx(-1); return; }
-    function handleClick(e: MouseEvent) {
-      if (pageSizeRef.current && !pageSizeRef.current.contains(e.target as Node)) {
-        setPageSizeOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [pageSizeOpen]);
-
-  function handlePageSizeKeyDown(e: React.KeyboardEvent) {
-    if (!pageSizeOpen) return;
-    if (e.key === "Escape") { e.preventDefault(); setPageSizeOpen(false); pageSizeTriggerRef.current?.focus(); return; }
-    if (e.key === "Tab") { setPageSizeOpen(false); return; }
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setPageSizeFocusIdx((prev) => {
-        const next = prev > 0 ? prev - 1 : PAGE_SIZES.length - 1;
-        pageSizeOptionRefs.current[next]?.focus();
-        return next;
-      });
-    }
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setPageSizeFocusIdx((prev) => {
-        const next = prev < PAGE_SIZES.length - 1 ? prev + 1 : 0;
-        pageSizeOptionRefs.current[next]?.focus();
-        return next;
-      });
-    }
-    if (e.key === "Home") {
-      e.preventDefault();
-      setPageSizeFocusIdx(0);
-      pageSizeOptionRefs.current[0]?.focus();
-    }
-    if (e.key === "End") {
-      e.preventDefault();
-      const last = PAGE_SIZES.length - 1;
-      setPageSizeFocusIdx(last);
-      pageSizeOptionRefs.current[last]?.focus();
-    }
-  }
-
-  // "/" focuses search; the input's own onFocus animates the chip open.
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "/" && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement)) {
-        e.preventDefault();
-        searchRef.current?.focus();
-      }
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, []);
 
   // Track newly created match for highlight animation
   const [newMatchId, setNewMatchId] = useState<string | null>(null);
@@ -559,13 +515,12 @@ export function MatchesPageContent({
   const filtered = useMemo(() => {
     let result = matches;
 
-    // Search
+    // The palette's `?q=` — two needles, because one query names two kinds of
+    // thing. Names go through the app's own rule so a row stored as
+    // "Dana  Brooks" is reachable by her name; tournament and round are not
+    // people and keep the plain contains. The plain needle is trimmed either
+    // way — a trailing space used to empty the whole list.
     if (search.trim()) {
-      // Two needles, because one box searches two kinds of thing. Names go
-      // through the app's own rule so a row stored as "Dana  Brooks" is
-      // reachable by typing her name; tournament and round are not people and
-      // keep the plain contains. The plain needle is trimmed either way — a
-      // trailing space in the box used to empty the whole list.
       const q = search.trim().toLowerCase();
       const person = normalizedPersonName(search);
       result = result.filter(
@@ -615,6 +570,8 @@ export function MatchesPageContent({
       result = result.filter((m) => unseenIds.has(m.id));
     } else if (lifecycle === "in-progress") {
       result = result.filter((m) => !!m.analysis && isInFlight(m.analysis.status));
+    } else if (lifecycle === "estimates") {
+      result = result.filter((m) => isEstimate(m.analysis));
     }
 
     return result;
@@ -648,19 +605,19 @@ export function MatchesPageContent({
   }, [filtered, sortField, sortDir]);
 
   // Pagination
-  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const paginatedMatches = sorted.slice(
-    (safePage - 1) * pageSize,
-    safePage * pageSize
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE
   );
-  const rangeStart = sorted.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
-  const rangeEnd = Math.min(safePage * pageSize, sorted.length);
+  const rangeStart = sorted.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(safePage * PAGE_SIZE, sorted.length);
 
-  // Reset page when filters/search/lifecycle change
+  // Reset page when filters/query/lifecycle change
   useEffect(() => {
     setPage(1);
-  }, [search, filters, lifecycle, pageSize]);
+  }, [search, filters, lifecycle]);
 
   // Sync state to URL
   const isInitialMount = useRef(true);
@@ -674,12 +631,11 @@ export function MatchesPageContent({
     if (sortField !== "date") params.set("sort", sortField);
     if (sortDir !== "desc") params.set("dir", sortDir);
     if (page > 1) params.set("page", String(page));
-    if (pageSize !== 10) params.set("pageSize", String(pageSize));
     if (lifecycle !== "all") params.set("lifecycle", lifecycle);
     for (const f of filters) params.append(f.key, f.value);
     const query = params.toString();
     window.history.replaceState(null, "", `${pathname}${query ? `?${query}` : ""}`);
-  }, [search, sortField, sortDir, page, pageSize, filters, lifecycle, pathname]);
+  }, [search, sortField, sortDir, page, filters, lifecycle, pathname]);
 
   function toggleSort(field: SortField) {
     if (sortField === field) {
@@ -778,26 +734,25 @@ export function MatchesPageContent({
     return sections;
   }, [matches, scope]);
 
-  const lifecycleCounts = useMemo(
-    () => ({
-      all: matches.length,
-      new: unseenIds.size,
-      inProgress: matches.filter((m) => !!m.analysis && isInFlight(m.analysis.status)).length,
-    }),
-    [matches, unseenIds]
-  );
+  // Whether the strip has anything to state. The palette's query is a cut the
+  // same as any facet, and the strip is the one place it is visible.
+  const hasCut = filters.length > 0 || search.trim().length > 0;
+  const clearCut = () => {
+    clearFilters();
+    setSearch("");
+  };
 
   if (matches.length === 0) {
     return <EmptyMatches scope={scope} />;
   }
 
   return (
-    <div>
-      {/* Toolbar: lifecycle chips, filters, search, sort — wraps on medium screens */}
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        <LifecycleChips active={lifecycle} counts={lifecycleCounts} onSelect={setLifecycle} />
+    <div className="flex flex-col gap-6">
+      {/* Toolbar — the view pills left; Filters and the sort right. Nothing
+          else lives in this row (19g). Wraps on medium screens. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <LifecycleChips active={lifecycle} onSelect={setLifecycle} />
 
-        {/* Right: filters, search, sort */}
         <div className="flex items-center gap-2">
           <MatchesFilterPanel
             sections={filterSections}
@@ -811,55 +766,23 @@ export function MatchesPageContent({
             totalCount={matches.length}
           />
 
-          {/* The canvas's quiet "Search" chip. At rest the chip hugs its
-              "Search" label (76px, no dead field width in the toolbar). Focusing
-              it — by click or "/" — animates the width open into a full input,
-              easing back on blur when empty. `overflow-hidden` clips the input
-              while it slides; the collapse is disabled under reduced motion. */}
-          <label
-            className={`flex h-7 cursor-text items-center gap-1.5 overflow-hidden rounded-[var(--radius-element)] px-2 transition-[width,background-color] duration-200 ease-out motion-reduce:transition-none hover:bg-[var(--surface-subtle)] ${
-              searchOpen || search ? "w-[184px]" : "w-[76px]"
-            }`}
-            style={{ background: searchOpen || search ? "var(--surface-subtle)" : undefined }}
-          >
-            <Search className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} style={{ color: "var(--ink-500)" }} />
-            <input
-              ref={searchRef}
-              type="text"
-              placeholder="Search"
-              aria-label="Search matches"
-              aria-keyshortcuts="/"
-              title="Search by event, opponent, or round"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onFocus={() => setSearchOpen(true)}
-              onBlur={() => {
-                if (!search) setSearchOpen(false);
-              }}
-              // Opt out of focus.css's neutral field ring: the chip's own
-              // surface-subtle background is the visible active-field state, so a
-              // ring on top is the "stray box" the DS underline-exception
-              // describes. WCAG-safe for the same reason.
-              data-focus-ring="none"
-              className="min-w-0 flex-1 bg-transparent text-[12px] placeholder:text-[var(--ink-600)] focus:outline-none"
-              style={{ color: "var(--ink-900)" }}
-            />
-          </label>
-
           <SortDropdown sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
         </div>
       </div>
 
       {/* Applied-filter strip — the panel closes on apply, this states the cut
           in words. Never chips, never a badge (v3's Data Table law 6). */}
-      {filters.length > 0 && (
+      {hasCut && (
         <div
-          className="mb-4 flex flex-wrap items-center gap-2 rounded-[var(--radius-element)] px-3.5 py-2.5"
+          className="flex flex-wrap items-center gap-2 rounded-[var(--radius-element)] px-3.5 py-2.5"
           style={{ background: "var(--surface-subtle)" }}
         >
           <FilterIcon className="size-[13px] shrink-0" strokeWidth={1.5} style={{ color: "var(--ink-500)" }} aria-hidden="true" />
           <span className="text-[11px]" style={{ color: "var(--ink-700)" }}>
-            {describeFilters(filters)}
+            {[
+              ...(search.trim() ? [`Matching “${search.trim()}”`] : []),
+              ...(filters.length > 0 ? [describeFilters(filters)] : []),
+            ].join(" · ")}
           </span>
           <span className="size-[3px] rounded-full" style={{ background: "var(--ink-300)" }} aria-hidden="true" />
           <span className="text-micro tabular">
@@ -868,9 +791,8 @@ export function MatchesPageContent({
           <div className="flex-1" />
           <button
             type="button"
-            onClick={clearFilters}
-            className="whitespace-nowrap text-[11px] font-medium"
-            style={{ color: "var(--blue)" }}
+            onClick={clearCut}
+            className="whitespace-nowrap text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
           >
             Clear filter
           </button>
@@ -882,21 +804,14 @@ export function MatchesPageContent({
         <div className="flex flex-col items-center justify-center py-16">
           <Search className="mb-3 h-8 w-8" strokeWidth={1.5} style={{ color: "var(--ink-300)" }} />
           <p className="mb-1 text-[14px] font-medium" style={{ color: "var(--ink-900)" }}>No matches found</p>
-          {(filters.length > 0 || search || lifecycle !== "all") && (
+          {(hasCut || lifecycle !== "all") && (
             <div className="mt-1 flex flex-col items-center gap-2">
-              {search && (
-                <span className="text-[11px]" style={{ color: "var(--ink-600)" }}>
-                  &ldquo;{search}&rdquo;
-                </span>
-              )}
               <button
                 onClick={() => {
-                  clearFilters();
-                  setSearch("");
+                  clearCut();
                   setLifecycle("all");
                 }}
-                className="text-[11px] font-medium"
-                style={{ color: "var(--blue)" }}
+                className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
               >
                 Clear all filters
               </button>
@@ -908,117 +823,43 @@ export function MatchesPageContent({
           matches={paginatedMatches}
           drafts={drafts}
           scope={scope}
-          sortField={sortField}
-          sortDir={sortDir}
-          onSort={toggleSort}
           newMatchId={newMatchId}
           unseenIds={unseenIds}
         />
       )}
 
-      {/* Pagination — no rule of its own. Every row already carries a bottom
-          hairline, so the last one closes the table; a second line 16px below it
-          just read as a doubled edge. Whitespace separates the two now. */}
+      {/* Footer — the range in micro type, and the way to the rest of the list
+          as one quiet blue link (Platform Audit Pb2). "Older" because the list
+          is newest-first; "Newer" appears once there is something newer to go
+          back to. No rule of its own: whitespace separates it from the card. */}
       {sorted.length > 0 && (
-        <div className="mt-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-micro tabular">
-              {rangeStart}–{rangeEnd} of {sorted.length}
-            </span>
-            <span className="size-[3px] rounded-full" style={{ background: "var(--ink-300)" }} aria-hidden="true" />
-            <div className="flex items-center gap-2">
-              <span className="text-micro">Results per page</span>
-              <div className="relative" ref={pageSizeRef} onKeyDown={handlePageSizeKeyDown}>
-                <button
-                  ref={pageSizeTriggerRef}
-                  onClick={() => setPageSizeOpen(!pageSizeOpen)}
-                  aria-expanded={pageSizeOpen}
-                  aria-haspopup="listbox"
-                  aria-controls={pageSizeOpen ? "pagesize-listbox" : undefined}
-                  className={`flex h-7 items-center gap-1 rounded-[var(--radius-element)] px-2 text-[12px] tabular-nums transition-colors duration-150 ${pageSizeOpen ? "" : "hover:bg-[var(--surface-subtle)]"}`}
-                  style={{
-                    background: pageSizeOpen ? "var(--surface-subtle)" : undefined,
-                    color: pageSizeOpen ? "var(--ink-900)" : "var(--ink-600)",
-                  }}
-                >
-                  {pageSize}
-                  <ChevronDown
-                    className={`h-3 w-3 transition-transform duration-200 ${pageSizeOpen ? "rotate-180" : ""}`}
-                    strokeWidth={1.5}
-                    style={{ color: "var(--ink-400)" }}
-                  />
-                </button>
-                <AnimatePresence>
-                  {pageSizeOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 4 }}
-                      transition={{ duration: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
-                      id="pagesize-listbox"
-                      role="listbox"
-                      aria-label="Results per page"
-                      className="absolute bottom-full left-0 z-20 mb-1.5 min-w-[56px] rounded-xl border px-1 py-1"
-                      style={{
-                        background: "var(--surface-card)",
-                        borderColor: "var(--border-medium)",
-                        boxShadow: "var(--shadow-dropdown)",
-                      }}
-                    >
-                      {PAGE_SIZES.map((size, idx) => (
-                        <button
-                          key={size}
-                          ref={(el) => { pageSizeOptionRefs.current[idx] = el; }}
-                          role="option"
-                          aria-selected={pageSize === size}
-                          tabIndex={idx === pageSizeFocusIdx ? 0 : -1}
-                          onClick={() => {
-                            setPageSize(size);
-                            setPageSizeOpen(false);
-                          }}
-                          className={`flex w-full items-center justify-center rounded-[var(--radius-element)] px-2 py-1.5 text-xs tabular-nums transition-colors duration-150 ${pageSize === size ? "" : "hover:bg-[var(--surface-subtle)]"}`}
-                          style={{
-                            background: pageSize === size ? "var(--surface-subtle)" : undefined,
-                            color: pageSize === size ? "var(--ink-900)" : "var(--ink-700)",
-                            fontWeight: pageSize === size ? 500 : 400,
-                          }}
-                        >
-                          {size}
-                        </button>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5">
+        <nav className="flex items-center gap-2" aria-label="Pages">
+          <span className="text-micro tabular">
+            {rangeStart}–{rangeEnd} of {sorted.length}
+          </span>
+          <div className="flex-1" />
+          {safePage > 1 && (
             <button
+              type="button"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={safePage <= 1}
-              aria-label="Previous page"
-              title="Previous page"
-              className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-element)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] disabled:pointer-events-none disabled:opacity-30"
-              style={{ color: "var(--ink-600)" }}
+              className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
             >
-              <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.5} />
+              Newer matches
             </button>
-            <span className="px-2 text-[12px] tabular-nums" style={{ color: "var(--ink-600)" }}>
-              {safePage} / {totalPages}
-            </span>
+          )}
+          {safePage > 1 && safePage < totalPages && (
+            <span className="size-[3px] rounded-full" style={{ background: "var(--ink-300)" }} aria-hidden="true" />
+          )}
+          {safePage < totalPages && (
             <button
+              type="button"
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={safePage >= totalPages}
-              aria-label="Next page"
-              title="Next page"
-              className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-element)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] disabled:pointer-events-none disabled:opacity-30"
-              style={{ color: "var(--ink-600)" }}
+              className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
             >
-              <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.5} />
+              Older matches
             </button>
-          </div>
-        </div>
+          )}
+        </nav>
       )}
     </div>
   );

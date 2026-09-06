@@ -13,9 +13,42 @@
  * rows are the point-by-point timeline and the video seek targets — so a wrong
  * point is a specific false claim on a screen, not a rounding error in an
  * aggregate.
+ *
+ * TEMPORARILY BYPASSED (2026-09-02, product decision): see
+ * ACCEPT_UNRECONCILED_FOLD below. A fold that misses the entered score is now
+ * still written, with player1 named from the wizard's top-player input and
+ * court geometry instead of from the fold. The refusal above is what to restore.
  */
 
 import type { PointWinner } from './winners';
+
+/**
+ * TEMPORARY — accept the vendor's data as truth even when the fold does not
+ * reproduce `matches.score`.
+ *
+ * Decided 2026-09-02 after the first real team match (job 3c0f5e7c) came back
+ * from the vendor and was refused here: "folded score … does not match the
+ * entered score", `derivation_failed`, and a match page with nothing on it.
+ * Until the vendor's stream is reliable enough for the gate to be a signal
+ * rather than a wall, an unreconciled transcript is written anyway.
+ *
+ * What still holds while this is true:
+ *   • `Reconciliation.ok` keeps meaning "the fold reproduced the score". It is
+ *     false on the bypass path, so nothing downstream mistakes an accepted
+ *     transcript for a verified one, and derive-and-publish logs it.
+ *   • player1 is named from geometry + the wizard's top-player input first, then
+ *     from whichever label assignment folds CLOSEST to the entered score, and
+ *     the match is still refused when neither says anything — writing rows on a
+ *     coin flip would put every statistic on the wrong human.
+ *   • The unresolved-points gate above this one is untouched.
+ *     `points.won_by_player1` is NOT NULL, and the fold's game alignment
+ *     depends on it.
+ *
+ * To restore Gate 1: set this to false (or delete the fenced block in
+ * `reconcile()`), bump DERIVATION_VERSION, and rebuild every match derived
+ * under the `-unreconciled` version tag.
+ */
+export const ACCEPT_UNRECONCILED_FOLD = true;
 
 export interface MatchScore {
   player1: number[];
@@ -30,13 +63,26 @@ export interface FoldedGame {
 }
 
 export interface Reconciliation {
+  /** True when the fold reproduced `matches.score` exactly. */
   ok: boolean;
-  /** Which label is player1, decided by the fold rather than by name. */
+  /**
+   * Which label is player1. Decided by the fold when `ok`; otherwise, under
+   * ACCEPT_UNRECONCILED_FOLD, by `player1Source`. Null means refused.
+   */
   player1Label: string | null;
+  /**
+   * How player1Label was decided. `fold` when the fold matched; `geometry`
+   * when the wizard's top-player input plus court position named it;
+   * `distance` when the closer of the two folds did. Null when refused.
+   */
+  player1Source: 'fold' | 'geometry' | 'distance' | null;
   /** Per-set game counts the fold produced, keyed by label. */
   foldedSets: Array<Record<string, number>>;
   games: FoldedGame[];
-  /** Populated only when ok is false. */
+  /**
+   * Why the fold did not reproduce the score. Populated whenever ok is false —
+   * including on the bypass path, where rows are written regardless.
+   */
   reason: string | null;
   /**
    * Points the vendor stream could not resolve on its own. The final rally is
@@ -137,6 +183,47 @@ function sameCounts(a: number[], b: number[]): boolean {
 }
 
 /**
+ * How far a folded score sits from the entered one, under a given mapping:
+ * the sum of per-set absolute game differences, with a missing set counted
+ * as 0 games. Used only by the ACCEPT_UNRECONCILED_FOLD path, to prefer the
+ * label assignment that is less wrong when nothing better is known.
+ */
+function scoreDistance(
+  p1Counts: number[],
+  p2Counts: number[],
+  score: MatchScore
+): number {
+  const n = Math.max(
+    p1Counts.length,
+    p2Counts.length,
+    score.player1.length,
+    score.player2.length
+  );
+  let d = 0;
+  for (let i = 0; i < n; i += 1) {
+    d +=
+      Math.abs((p1Counts[i] ?? 0) - (score.player1[i] ?? 0)) +
+      Math.abs((p2Counts[i] ?? 0) - (score.player2[i] ?? 0));
+  }
+  return d;
+}
+
+/**
+ * player1 from the wizard's top-player input and the opening game's court
+ * geometry — the same rule the mirror-score branch uses, pulled out so the
+ * bypass path can share it. Null when either half is missing.
+ */
+function player1FromGeometry(
+  geometryTopLabel: string | null | undefined,
+  initialTopIsPlayer1: boolean | null | undefined,
+  labels: string[]
+): string | null {
+  if (!geometryTopLabel) return null;
+  if (initialTopIsPlayer1 === null || initialTopIsPlayer1 === undefined) return null;
+  return initialTopIsPlayer1 ? geometryTopLabel : otherOf(geometryTopLabel, labels);
+}
+
+/**
  * Decide the label -> player1 mapping and confirm the fold matches the entered
  * score exactly.
  *
@@ -166,6 +253,7 @@ export function reconcile(params: {
   const empty: Reconciliation = {
     ok: false,
     player1Label: null,
+    player1Source: null,
     foldedSets: [],
     games: [],
     reason: null,
@@ -246,11 +334,75 @@ export function reconcile(params: {
   const { aIsPlayer1, bIsPlayer1 } = settled;
 
   if (!aIsPlayer1 && !bIsPlayer1) {
+    const reason = `folded score ${JSON.stringify({ [a]: aCounts, [b]: bCounts })} does not match the entered score`;
+
+    // ---- BEGIN Gate 1 bypass (ACCEPT_UNRECONCILED_FOLD) ----------------------
+    // Name player1 without the fold's help, so the transcript can still be
+    // written. `ok` stays false: this is an accepted transcript, not a
+    // verified one. Delete this block (or flip the constant) to restore.
+    if (ACCEPT_UNRECONCILED_FOLD) {
+      const { geometryTopLabel, initialTopIsPlayer1 } = params;
+
+      // 1. Geometry + the wizard's top-player input. Independent of the fold
+      //    that just proved itself wrong, and the only signal that identifies
+      //    the human directly.
+      let player1Label = player1FromGeometry(geometryTopLabel, initialTopIsPlayer1, labels);
+      let source: 'geometry' | 'distance' | null = player1Label ? 'geometry' : null;
+
+      // Distance of every (attempt, mapping) pair from the entered score.
+      // The mapping is judged on the SUM over every trailing-point attempt:
+      // the settlement of the final point is an unknown, and a single
+      // attempt can make either mapping look closer by exactly the one game
+      // that point decides. Summing averages that ambiguity out. A tie
+      // between the two sums says nothing — a self-mirroring fold is
+      // equidistant under both mappings — and is treated as no answer
+      // rather than as labels[0].
+      const distanceFor = (label: string, r: (typeof attempts)[number]) =>
+        label === a
+          ? scoreDistance(r.aCounts, r.bCounts, score)
+          : scoreDistance(r.bCounts, r.aCounts, score);
+      const total = (label: string) =>
+        attempts.reduce((sum, r) => sum + distanceFor(label, r), 0);
+
+      // 2. Otherwise the mapping whose fold is closest.
+      if (!player1Label) {
+        const totalA = total(a);
+        const totalB = total(b);
+        if (totalA !== totalB) {
+          player1Label = totalA < totalB ? a : b;
+          source = 'distance';
+        }
+      }
+
+      // 3. Neither: fall through to the refusal below.
+      if (player1Label) {
+        // Settle the trailing point under the chosen mapping: the attempt
+        // that lands closest to the entered score, as the reconciled path
+        // would have done.
+        const chosen = attempts.reduce((best, r) =>
+          distanceFor(player1Label as string, r) < distanceFor(player1Label as string, best)
+            ? r
+            : best
+        );
+        return {
+          ok: false,
+          player1Label,
+          player1Source: source,
+          foldedSets: chosen.sets,
+          games: chosen.games,
+          reason,
+          unresolvedPoints,
+          settledWinners: chosen.candidate,
+        };
+      }
+    }
+    // ---- END Gate 1 bypass ---------------------------------------------------
+
     return {
       ...empty,
       foldedSets: sets,
       games,
-      reason: `folded score ${JSON.stringify({ [a]: aCounts, [b]: bCounts })} does not match the entered score`,
+      reason,
     };
   }
 
@@ -274,6 +426,7 @@ export function reconcile(params: {
     return {
       ok: true,
       player1Label,
+      player1Source: 'fold',
       foldedSets: sets,
       games,
       reason: null,
@@ -285,6 +438,7 @@ export function reconcile(params: {
   return {
     ok: true,
     player1Label: aIsPlayer1 ? a : b,
+    player1Source: 'fold',
     foldedSets: sets,
     games,
     reason: null,

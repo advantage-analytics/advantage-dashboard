@@ -9,6 +9,7 @@ import { WorkspaceProvider } from "@/components/dashboard/workspace-provider";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { ToastProvider } from "@/components/dashboard/toast/toast-provider";
 import { UploadFailureListener } from "@/components/dashboard/toast/upload-failure-listener";
+import { timeOfDayGreeting } from "@/lib/ui/greeting";
 
 /**
  * Dashboard layout.
@@ -44,6 +45,13 @@ export default async function Layout({
   // so they never bounce.
   if (!workspace.viewer.onboardedAt) redirect("/onboarding");
 
+  // The header greets by name on the personal Home (Platform Audit Pa2). The
+  // word is chosen here, on the server, for the reason the page's own greeting
+  // always was: rendered into the HTML, it cannot flash in or mismatch on
+  // hydration. The server's clock is UTC on Vercel — the same compromise the
+  // page made before the greeting moved up.
+  const greeting = timeOfDayGreeting(new Date().getHours());
+
   return (
     <WorkspaceProvider value={workspace}>
       {/* Wraps the shell rather than sitting inside a page, because the thing
@@ -53,6 +61,7 @@ export default async function Layout({
       <ToastProvider>
         <UploadFailureListener />
         <DashboardShell
+          greeting={greeting}
           activitySlot={
             <Suspense fallback={<ActivityTrayFallback />}>
               <ActivityTrayLoader />

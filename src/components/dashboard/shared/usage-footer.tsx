@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Gauge } from "lucide-react";
-import { formatResetDate } from "@/lib/data/usage-format";
+import { formatHoursShort, formatResetDate } from "@/lib/data/usage-format";
 
 /**
  * The workspace's budget, as the last line on a Home page.
@@ -17,19 +17,12 @@ import { formatResetDate } from "@/lib/data/usage-format";
  * and the question a person actually asks before sending a match is how much
  * is left. There is no bar — with the number stated in words, a 4%-full track
  * was decoration competing with it.
+ *
+ * Measured to the round-45 / Platform Audit footer, which Team Home and the
+ * personal Home (Pa2) draw identically: 12px above the hairline, 8px between
+ * items, a 13px --ink-500 gauge, an 11px --ink-600 sentence, an 11px
+ * --border-medium divider — the header's divider token, not a card hairline.
  */
-
-/**
- * Hours with one decimal, rather than the `H:MM` Settings › Usage uses. This
- * sits inside a sentence that says "hours", and "3:12 of 75:00" makes a reader
- * do arithmetic to answer "roughly how much is left".
- */
-function hours(seconds: number): string {
-  // A tenth of an hour is six minutes — fine enough to show movement, coarse
-  // enough that the number does not change while someone is reading it.
-  const rounded = Math.round((Math.max(0, seconds) / 3600) * 10) / 10;
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
-}
 
 export function UsageFooter({
   usedSeconds,
@@ -54,17 +47,17 @@ export function UsageFooter({
   const leftSeconds = Math.max(0, capSeconds - usedSeconds);
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-[var(--border-hairline)] pt-4">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-t border-[var(--border-hairline)] pt-3">
       <Gauge
-        className="size-[15px] shrink-0 text-[var(--ink-400)]"
+        className="size-[13px] shrink-0 text-[var(--ink-500)]"
         strokeWidth={1.5}
         aria-hidden
       />
 
-      <p className="text-body-sm">
-        <span className="tabular">{hours(leftSeconds)}</span> of{" "}
-        <span className="tabular">{hours(capSeconds)}</span> hours left this
-        month{note ? ` · ${note}` : ""}
+      <p className="text-[11px] text-[var(--ink-600)]">
+        <span className="tabular">{formatHoursShort(leftSeconds)}</span> of{" "}
+        <span className="tabular">{formatHoursShort(capSeconds)}</span> hours
+        left this month{note ? ` · ${note}` : ""}
       </p>
 
       <span className="text-micro tabular ml-auto">
@@ -72,13 +65,13 @@ export function UsageFooter({
       </span>
 
       <span
-        className="h-3 w-px bg-[var(--border-hairline)]"
+        className="h-[11px] w-px bg-[var(--border-medium)]"
         aria-hidden="true"
       />
 
       <Link
         href="/dashboard/settings/usage"
-        className="text-[11px] font-medium transition-colors duration-200"
+        className="whitespace-nowrap text-[11px] font-medium transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
         style={{ color: "var(--blue)" }}
       >
         Usage

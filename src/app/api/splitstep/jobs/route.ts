@@ -489,7 +489,7 @@ export async function POST(request: NextRequest) {
         if (result.owedResultsDownload) {
           console.error(
             `${LOG} an adopted delivery carried a results URL that was never ` +
-              `downloaded — fetch sas_url from splitstep_webhook_deliveries by ` +
+              `downloaded — fetch strokes_url from splitstep_webhook_deliveries by ` +
               `hand; it stays valid about a week`,
             { jobId: job.id, externalJobId }
           );

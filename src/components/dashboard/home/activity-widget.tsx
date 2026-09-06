@@ -20,14 +20,17 @@ export function ActivityWidget({ activity }: { activity: PersonalActivity }) {
 
   return (
     <div
-      className="surface-card"
+      // `@container/activity` so the grid's gap below can scale with this
+      // card's width (`cqi`) rather than the viewport's.
+      className="surface-card @container/activity"
       style={{ padding: "18px 24px", display: "flex", flexDirection: "column", gap: "10px" }}
     >
       <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
         <span className="eyebrow">Activity</span>
         <div style={{ flex: 1 }} />
         <span className="text-micro">
-          <span className="tabular">{sessionCount}</span> sessions · last 12 months
+          <span className="tabular">{sessionCount}</span>{" "}
+          {sessionCount === 1 ? "session" : "sessions"} · last 12 months
         </span>
       </div>
 

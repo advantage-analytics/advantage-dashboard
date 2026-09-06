@@ -10,6 +10,7 @@ import {
 } from "@/lib/data/matches-list-types";
 import { MatchesPageContent } from "@/components/dashboard/matches/matches-page-content";
 import { MatchesTitleRow } from "@/components/dashboard/matches/matches-title-row";
+import { MatchesDayZero } from "@/components/dashboard/matches/matches-day-zero";
 import { MatchesSkeleton } from "@/components/dashboard/matches/matches-skeleton";
 import { listMatchDrafts } from "@/lib/wizard/actions";
 
@@ -126,27 +127,45 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
     }
   }
 
+  // Day zero, personal only: the offer over the list's shape, no title row —
+  // the same composition Home draws, so a player meets one offer wherever
+  // they land. A draft counts as a match in flight, so it keeps the list.
+  // The team workspace keeps `EmptyMatches`: its day zero is a different page
+  // ("Set up your program") that has not been designed yet.
+  if (!isTeam && matches.length === 0 && drafts.length === 0) {
+    return (
+      <div className="flex flex-1 w-full flex-col bg-white">
+        <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-14 pt-5 pb-8">
+          <MatchesDayZero />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 w-full bg-white">
-      <div className="mx-auto max-w-screen-2xl px-6 sm:px-8 py-8 sm:py-10">
+      {/* The frame's content column: 32px 56px 24px around it, 24px between the
+          title row, the toolbar, the table card and the footer (Platform Audit
+          Pb2; the 32px top is the 19d title slot). The 56px sides arrive with
+          the table itself at `lg` — below that the gallery cards take the
+          narrower page gutter every other page uses. */}
+      <div className="mx-auto flex max-w-screen-2xl flex-col gap-6 px-6 pb-6 pt-8 lg:px-14">
         <MatchesTitleRow
           scope={isTeam ? "team" : "personal"}
           readyMatches={matches.map((m) => ({ id: m.id, status: m.analysis?.status }))}
         />
 
-        <div className="mt-8">
-          <Suspense fallback={<MatchesSkeleton />}>
-            {/* userId drives the realtime subscription's server-side filter, so
-                a busy account never receives other people's job rows. See the
-                header for what that means inside a team workspace. */}
-            <MatchesPageContent
-              matches={matches}
-              drafts={drafts}
-              userId={user?.id}
-              scope={isTeam ? "team" : "personal"}
-            />
-          </Suspense>
-        </div>
+        <Suspense fallback={<MatchesSkeleton />}>
+          {/* userId drives the realtime subscription's server-side filter, so
+              a busy account never receives other people's job rows. See the
+              header for what that means inside a team workspace. */}
+          <MatchesPageContent
+            matches={matches}
+            drafts={drafts}
+            userId={user?.id}
+            scope={isTeam ? "team" : "personal"}
+          />
+        </Suspense>
       </div>
     </div>
   );

@@ -22,9 +22,15 @@
  * every stored match must be rebuilt and no webhook will fire for those jobs
  * again. That wants a paged cron route calling the same deriveAndPublish().
  *
- * A completion carries TWO urls, and both are short-lived SAS:
- *   • `sas_url` — the stroke-by-stroke results JSON, downloaded and written to
- *     the `match-results` bucket.
+ * A completion carries FOUR urls, all short-lived (7-day) SAS:
+ *   • `strokes_url` — the stroke-by-stroke results JSON, downloaded and written
+ *     to the `match-results` bucket. This was `sas_url` until September 2026;
+ *     the parser accepts both, and the column is still `sas_url`.
+ *   • `players_url` / `trajectories_url` — per-frame player tracking and ball
+ *     trajectory (September 2026 API; trajectories may be null). Nothing derives
+ *     from them yet, so they are fetched LAST in after(), best-effort, once the
+ *     work the user actually sees has finished. A miss is recoverable by hand
+ *     from the url on the job row for a week.
  *   • `trimmed_video_url` — their trimmed, re-encoded video, copied server-side
  *     into our own container. This one was dropped entirely until now, while
  *     the code below deleted our source video, so a successful job used to end
@@ -74,8 +80,17 @@ const LOG = '[splitstep-webhook]';
    Imported rather than re-declared: the verification script reads the same
    bucket, and two literals would drift silently. */
 
-/** Ceiling on the results fetch, leaving headroom inside maxDuration. */
+/** Ceiling on the strokes fetch, leaving headroom inside maxDuration. */
 const RESULTS_FETCH_TIMEOUT_MS = 25_000;
+
+/**
+ * Ceiling on each per-frame file. These run last, after derivation, in what is
+ * left of the 60s budget; a frame-per-row file for a long match is tens of
+ * megabytes, so the two are fetched in parallel and each gets its own clock
+ * rather than sharing one. Whatever does not land in time stays fetchable by
+ * hand from `players_url` / `trajectories_url` on the job row.
+ */
+const FRAME_DATA_FETCH_TIMEOUT_MS = 20_000;
 
 /**
  * Headers the signature might arrive in.
@@ -261,14 +276,17 @@ export async function POST(request: NextRequest) {
     event: payload.event,
     nextStatus: payload.nextStatus,
     matchId: payload.matchId,
-    hasSasUrl: Boolean(payload.sasUrl),
+    hasStrokesUrl: Boolean(payload.strokesUrl),
+    hasPlayersUrl: Boolean(payload.playersUrl),
+    hasTrajectoriesUrl: Boolean(payload.trajectoriesUrl),
+    hasTrimmedVideoUrl: Boolean(payload.trimmedVideoUrl),
   });
 
   const fingerprint = createHash('sha256').update(rawBody).digest('hex');
   const supabase = createAdminClient();
 
   // 4. Record durably. This is the step that must succeed before we return 200 —
-  //    it is what makes the envelope, and the sas_url inside it, recoverable by
+  //    it is what makes the envelope, and the urls inside it, recoverable by
   //    hand if everything downstream fails.
   const { data, error } = await supabase
     .rpc('record_splitstep_webhook', {
@@ -280,13 +298,15 @@ export async function POST(request: NextRequest) {
       p_external_job_id: payload.externalJobId,
       p_event: payload.event,
       p_next_status: payload.nextStatus,
-      p_sas_url: payload.sasUrl,
+      p_sas_url: payload.strokesUrl,
       p_trimmed_video_url: payload.trimmedVideoUrl,
       p_error_message: payload.errorMessage,
       p_match_id: payload.matchId,
       p_error_code: payload.errorCode,
       p_error_category: payload.errorCategory,
       p_error_step: payload.errorStep,
+      p_players_url: payload.playersUrl,
+      p_trajectories_url: payload.trajectoriesUrl,
     })
     .single();
 
@@ -309,6 +329,8 @@ export async function POST(request: NextRequest) {
     results_object_key: string | null;
     already_stored: boolean;
     trimmed_object_key: string | null;
+    players_object_key: string | null;
+    trajectories_object_key: string | null;
   };
 
   if (!record.matched_job_id) {
@@ -333,38 +355,44 @@ export async function POST(request: NextRequest) {
   //
   // The old code returned 500 here "to invite a retry". That was wrong: they
   // confirmed no retry policy exists, so a 500 bought nothing and only risked
-  // the timeout. Recovery is by hand from the stored sas_url, or via
+  // the timeout. Recovery is by hand from the stored strokes url, or via
   // GET {BASE_URL}/jobs/{job_id}, which the docs now expose.
   if (payload.nextStatus === 'completed') {
     const deliveryId = record.delivery_id;
     const jobId = record.matched_job_id;
 
-    // Two independent assets with two independent guards. Gating both on
-    // `already_stored` — which is only ever about the JSON — would mean a video
-    // copy that failed once never got another chance, on a url that expires.
-    const sasUrl = record.already_stored ? null : payload.sasUrl;
+    // Four independent assets with four independent guards. Gating them all on
+    // `already_stored` — which is only ever about the strokes JSON — would mean
+    // a video copy or a per-frame download that failed once never got another
+    // chance, on a url that expires.
+    const strokesUrl = record.already_stored ? null : payload.strokesUrl;
     const trimmedVideoUrl = record.trimmed_object_key
       ? null
       : payload.trimmedVideoUrl;
+    const playersUrl = record.players_object_key ? null : payload.playersUrl;
+    const trajectoriesUrl = record.trajectories_object_key
+      ? null
+      : payload.trajectoriesUrl;
 
-    // Pick this delivery's two storage keys. The results JSON is always keyed;
-    // the trimmed video is kept only when the match is nameable — which includes
-    // a retained match whose uploader deleted their account. The retain/orphan
+    // Pick this delivery's storage keys. The JSON files are always keyed; the
+    // trimmed video is kept only when the match is nameable — which includes a
+    // retained match whose uploader deleted their account. The retain/orphan
     // policy and its full rationale live in selectDeliveryStorageKeys.
-    const { resultsKey, trimmedKey } = selectDeliveryStorageKeys({
-      jobId,
-      createdBy: record.created_by,
-      matchId: record.match_id,
-      externalJobId: payload.externalJobId,
-      deliveryId,
-    });
+    const { resultsKey, playersKey, trajectoriesKey, trimmedKey } =
+      selectDeliveryStorageKeys({
+        jobId,
+        createdBy: record.created_by,
+        matchId: record.match_id,
+        externalJobId: payload.externalJobId,
+        deliveryId,
+      });
 
-    if (sasUrl || trimmedVideoUrl) {
+    if (strokesUrl || trimmedVideoUrl || playersUrl || trajectoriesUrl) {
       after(async () => {
         // Is the analysis durably ours? Either an earlier delivery stored it or
         // this one does. Tracked rather than assumed, because it is what gates
-        // the delete below — and a completion that arrives with no sas_url at
-        // all must NOT be read as "nothing left to save".
+        // the delete below — and a completion that arrives with no strokes url
+        // at all must NOT be read as "nothing left to save".
         let resultsSecured = record.already_stored;
 
         // Set only when this delivery did the download. Left undefined on a
@@ -379,11 +407,15 @@ export async function POST(request: NextRequest) {
         // key we just wrote over both.
         let storedKey = record.results_object_key ?? resultsKey;
 
-        if (sasUrl) {
-          const stored = await storeResults({
+        if (strokesUrl) {
+          const stored = await storeVendorJson({
             supabase,
-            sasUrl,
+            url: strokesUrl,
             objectKey: resultsKey,
+            timeoutMs: RESULTS_FETCH_TIMEOUT_MS,
+            // Kept in memory for the grading step below, which would otherwise
+            // read it straight back out of storage.
+            returnBody: true,
           });
 
           await supabase.rpc('finalize_splitstep_results', {
@@ -404,10 +436,10 @@ export async function POST(request: NextRequest) {
               bytes: stored.bytes,
             });
           } else {
-            // Loud, because nothing retries this. The sas_url is in the delivery
-            // row and stays valid for days — it can be fetched by hand.
+            // Loud, because nothing retries this. The url is on the job row
+            // (`sas_url`) and stays valid for days — it can be fetched by hand.
             console.error(
-              `${LOG} results download FAILED — recover from the stored sas_url`,
+              `${LOG} results download FAILED — recover from the stored strokes url (processing_jobs.sas_url)`,
               { deliveryId, jobId, error: stored.error }
             );
           }
@@ -470,6 +502,21 @@ export async function POST(request: NextRequest) {
           // unmeasured workload; the workload turned out not to need it.
           await deriveAndPublish({ supabase, jobId });
         }
+
+        // The per-frame files, last of all. Nothing reads them yet — they are
+        // kept so metrics can be built on them without waiting another week for
+        // a vendor url — so they must never delay derivation, which is what the
+        // user is waiting on, and they run in whatever budget is left. Each is
+        // best-effort with its own clock; a miss is logged with the recovery
+        // path and the url stays on the job row.
+        await storeFrameData({
+          supabase,
+          jobId,
+          files: [
+            { kind: 'players', url: playersUrl, objectKey: playersKey },
+            { kind: 'trajectories', url: trajectoriesUrl, objectKey: trajectoriesKey },
+          ],
+        });
       });
     }
   }
@@ -702,25 +749,34 @@ async function deleteSourceVideo(params: {
 }
 
 /**
- * Fetch the results JSON and put it in Supabase Storage.
+ * Fetch one of the vendor's JSON files and put it in Supabase Storage.
  *
  * Returns rather than throws: the caller decides the HTTP outcome, and the
  * failure reason has to reach `finalize_splitstep_results` either way.
+ *
+ * `returnBody` is for the strokes file only: it comes back as text so the
+ * grading step can work from what is already in memory rather than reading it
+ * straight back out of storage. The per-frame files are tens of megabytes and
+ * nothing here reads them, so they go through as a Blob and are never decoded
+ * into a string at all.
  */
-async function storeResults(params: {
+async function storeVendorJson(params: {
   supabase: ReturnType<typeof createAdminClient>;
-  sasUrl: string;
+  url: string;
   objectKey: string;
+  timeoutMs: number;
+  returnBody?: boolean;
 }): Promise<
-  | { ok: true; objectKey: string; bytes: number; body: string }
+  | { ok: true; objectKey: string; bytes: number; body?: string }
   | { ok: false; error: string }
 > {
-  const { supabase, sasUrl, objectKey } = params;
+  const { supabase, url, objectKey, timeoutMs, returnBody = false } = params;
 
-  let body: string;
+  let body: Blob;
+  let text: string | undefined;
   try {
-    const response = await fetch(sasUrl, {
-      signal: AbortSignal.timeout(RESULTS_FETCH_TIMEOUT_MS),
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(timeoutMs),
       // No credentials — the URL carries its own.
       redirect: 'follow',
     });
@@ -732,7 +788,12 @@ async function storeResults(params: {
       };
     }
 
-    body = await response.text();
+    if (returnBody) {
+      text = await response.text();
+      body = new Blob([text], { type: 'application/json' });
+    } else {
+      body = await response.blob();
+    }
   } catch (err) {
     return {
       ok: false,
@@ -740,16 +801,16 @@ async function storeResults(params: {
     };
   }
 
-  if (body.trim() === '') {
+  if (body.size === 0 || (text !== undefined && text.trim() === '')) {
     return { ok: false, error: 'Vendor returned an empty body' };
   }
 
   const { error } = await supabase.storage
     .from(RESULTS_BUCKET)
-    .upload(objectKey, new Blob([body], { type: 'application/json' }), {
+    .upload(objectKey, body, {
       contentType: 'application/json',
-      // Overwrite: a retry that got past the already_stored guard should land on
-      // the same key rather than accumulating near-identical copies.
+      // Overwrite: a retry that got past the already-stored guard should land
+      // on the same key rather than accumulating near-identical copies.
       upsert: true,
     });
 
@@ -757,10 +818,76 @@ async function storeResults(params: {
     return { ok: false, error: `Storage upload failed: ${error.message}` };
   }
 
-  // The body comes back with the result so the grading step can work from what
-  // is already in memory. Re-reading it from storage would be a second network
-  // round trip for bytes we are holding.
-  return { ok: true, objectKey, bytes: body.length, body };
+  return { ok: true, objectKey, bytes: body.size, body: text };
+}
+
+/**
+ * The per-frame files (`players_url`, `trajectories_url`), fetched in parallel
+ * and recorded on the job row as each one lands.
+ *
+ * Best-effort by construction, like every cleanup step in after(): a failure
+ * logs the recovery path and moves on, because nothing downstream depends on
+ * these bytes yet and the url stays on the row for a week. Entries with no url
+ * are skipped — a redelivery whose file is already stored arrives here with
+ * null, and so does a completion where the vendor sent `trajectories_url: null`.
+ *
+ * Recorded per file rather than once: a job that got its players file but not
+ * its trajectories should say exactly that, so the redelivery guard in the
+ * route re-fetches only what is missing.
+ */
+async function storeFrameData(params: {
+  supabase: ReturnType<typeof createAdminClient>;
+  jobId: string | null;
+  files: Array<{
+    kind: 'players' | 'trajectories';
+    url: string | null;
+    objectKey: string;
+  }>;
+}): Promise<void> {
+  const { supabase, jobId, files } = params;
+
+  await Promise.all(
+    files
+      .filter((f) => f.url)
+      .map(async ({ kind, url, objectKey }) => {
+        const stored = await storeVendorJson({
+          supabase,
+          url: url as string,
+          objectKey,
+          timeoutMs: FRAME_DATA_FETCH_TIMEOUT_MS,
+        });
+
+        if (!stored.ok) {
+          console.error(
+            `${LOG} ${kind} download FAILED — recover from processing_jobs.${kind}_url, ` +
+              `valid about a week`,
+            { jobId, objectKey, error: stored.error }
+          );
+          return;
+        }
+
+        console.log(`${LOG} ${kind} stored`, { jobId, objectKey, bytes: stored.bytes });
+
+        // An orphaned delivery has no row to record the key on; the bytes are
+        // still safe under the orphaned/ key, which is the point.
+        if (!jobId) return;
+
+        const column = kind === 'players' ? 'players_object_key' : 'trajectories_object_key';
+        const { error } = await supabase
+          .from('processing_jobs')
+          .update({ [column]: objectKey })
+          .eq('id', jobId);
+
+        if (error) {
+          // The bytes are stored under a key nothing points at. Loud, because
+          // the only way back is reading this line.
+          console.error(
+            `${LOG} ${kind} stored but ${column} was NOT recorded — a redelivery will fetch it again`,
+            { jobId, objectKey, error: error.message }
+          );
+        }
+      })
+  );
 }
 
 /**

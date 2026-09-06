@@ -76,7 +76,10 @@ async function main() {
   const shots = t.points.reduce((n, p) => n + p.shots.length, 0);
 
   console.log(write ? '=== WRITTEN ===' : '=== DRY RUN — nothing written ===');
-  console.log(`player1 (from the score fold, not by name): ${r.player1Label}`);
+  console.log(`player1 (by ${r.player1Source ?? 'nothing'}, not by name): ${r.player1Label}`);
+  if (!r.ok) {
+    console.log(`UNRECONCILED — written anyway under ACCEPT_UNRECONCILED_FOLD: ${t.reason}`);
+  }
   console.log(`folded sets: ${JSON.stringify(r.foldedSets)}`);
   console.log(`points ${t.points.length}   shots ${shots}   games ${r.games.length}`);
   console.log(

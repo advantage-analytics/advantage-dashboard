@@ -27,6 +27,11 @@ test.describe('selectDeliveryStorageKeys', () => {
     });
 
     expect(keys.resultsKey).toBe('results/user-1/match-1/job-1.json');
+    // The per-frame files sit beside the strokes file, suffixed — match id
+    // stays the third segment for the sweeper, and the strokes key is
+    // unchanged for everything that already reads results_object_key.
+    expect(keys.playersKey).toBe('results/user-1/match-1/job-1.players.json');
+    expect(keys.trajectoriesKey).toBe('results/user-1/match-1/job-1.trajectories.json');
     expect(keys.trimmedKey).toBe('trimmed/user-1/match-1/job-1.mp4');
   });
 
@@ -45,6 +50,8 @@ test.describe('selectDeliveryStorageKeys', () => {
     });
 
     expect(keys.resultsKey).toBe('results/former-member/match-2/job-2.json');
+    expect(keys.playersKey).toBe('results/former-member/match-2/job-2.players.json');
+    expect(keys.trajectoriesKey).toBe('results/former-member/match-2/job-2.trajectories.json');
     expect(keys.trimmedKey).toBe('trimmed/former-member/match-2/job-2.mp4');
   });
 
@@ -60,6 +67,8 @@ test.describe('selectDeliveryStorageKeys', () => {
     });
 
     expect(keys.resultsKey).toBe('orphaned/ext-3/del-3.json');
+    expect(keys.playersKey).toBe('orphaned/ext-3/del-3.players.json');
+    expect(keys.trajectoriesKey).toBe('orphaned/ext-3/del-3.trajectories.json');
     expect(keys.trimmedKey).toBeNull();
   });
 

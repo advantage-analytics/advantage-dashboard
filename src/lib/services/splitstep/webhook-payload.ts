@@ -2,15 +2,19 @@
  * SplitStep webhook payload interpretation.
  *
  * Pure — no I/O, no clock, no side effects. Isolated because it is the one part
- * of the webhook written against a payload shape NOBODY HAS SEEN YET. The
- * vendor's docs describe it; nothing has round-tripped against their real
- * output (handoff §9).
+ * of the webhook written against the vendor's payload shape, which has now been
+ * confirmed by real deliveries (first completion 2026-08-15, first structured
+ * failure 2026-08-28) and which the vendor has since changed once already: in
+ * September 2026 the completion's `sas_url` became `strokes_url`, with two new
+ * per-frame datasets beside it (`players_url`, `trajectories_url`). Real
+ * deliveries also carry undocumented detection scores (`homography_score`,
+ * `ball_detection_score`, …) that nothing here reads yet.
  *
  * So this module never assumes a path. It walks the payload looking for a field
  * whose NAME matches, comparing names with punctuation and case stripped, which
- * makes `sas_url`, `sasUrl` and `SasUrl` the same key. If the vendor nests the
- * interesting fields under `data` or `result`, or renames `job_id` to `jobId`,
- * extraction still works and the smoke test still produces something.
+ * makes `strokes_url`, `strokesUrl` and `StrokesUrl` the same key. If the vendor
+ * nests the interesting fields under `data` or `result`, or renames `job_id` to
+ * `jobId`, extraction still works and the smoke test still produces something.
  *
  * Nothing here throws and nothing here rejects. An unrecognised payload yields
  * a result with null fields — the route still records the raw body verbatim,
@@ -27,11 +31,30 @@ export interface ParsedWebhook {
   event: string | null;
   /** Status to advance the job to, or null to leave it alone. */
   nextStatus: WebhookNextStatus | null;
-  /** Short-lived URL to the results JSON. Present on completion. */
-  sasUrl: string | null;
+  /**
+   * Short-lived URL to the stroke-by-stroke results JSON. Present on
+   * completion. The vendor's field is `strokes_url` (renamed from `sas_url` in
+   * September 2026); the old name is still accepted so stored deliveries and
+   * the smoke script keep parsing. Persisted on `processing_jobs.sas_url`.
+   */
+  strokesUrl: string | null;
+  /**
+   * Short-lived URL to the per-frame player tracking JSON (`players_url`):
+   * one row per frame with pixel and court-metre positions. Present on
+   * completion since September 2026. Nothing derives from it yet; the bytes are
+   * stored so metrics can be built on them later.
+   */
+  playersUrl: string | null;
+  /**
+   * Short-lived URL to the per-frame ball trajectory JSON (`trajectories_url`):
+   * per-frame ball position in pixels and court metres plus height, keyed to
+   * the stroke and bounce frames. Documented as nullable — a completion may
+   * legitimately carry `trajectories_url: null`.
+   */
+  trajectoriesUrl: string | null;
   /**
    * Short-lived URL to the trimmed, re-encoded video the vendor processed.
-   * Present on completion, alongside — and distinct from — `sasUrl`.
+   * Present on completion, alongside — and distinct from — `strokesUrl`.
    *
    * "Trimmed" means trimmed to the `StartTime`/`EndTime` window WE sent on the
    * job request — not dead time removed. Measured on the first real job: the
@@ -152,7 +175,14 @@ export function mapToNextStatus(raw: string | null): WebhookNextStatus | null {
 
 const JOB_ID_KEYS = ['externaljobid', 'jobid', 'job', 'id'];
 const EVENT_KEYS = ['event', 'eventtype', 'type', 'status', 'state'];
-const SAS_URL_KEYS = [
+/**
+ * The strokes JSON. `strokesurl` is the documented name since September 2026;
+ * `sasurl` was the name before that and stays second so replaying a stored
+ * delivery (adopt-deliveries.ts) or the smoke script keeps working. The rest
+ * are the original hedge, kept because they cost nothing.
+ */
+const STROKES_URL_KEYS = [
+  'strokesurl',
   'sasurl',
   'resultsurl',
   'resulturl',
@@ -161,11 +191,16 @@ const SAS_URL_KEYS = [
   'outputurl',
   'url',
 ];
+/* Narrow on purpose, like TRIMMED_VIDEO_URL_KEYS: nothing else in the payload
+   or in our own request is called this, and a broad fallback could hand us the
+   strokes url twice. */
+const PLAYERS_URL_KEYS = ['playersurl', 'playertrackingurl'];
+const TRAJECTORIES_URL_KEYS = ['trajectoriesurl', 'trajectoryurl', 'balltrajectoriesurl'];
 const ERROR_KEYS = ['errormessage', 'error', 'message', 'reason', 'detail'];
 const MATCH_ID_KEYS = ['matchid'];
 
 /**
- * The trimmed video, which arrives beside `sas_url` on a completion.
+ * The trimmed video, which arrives beside `strokes_url` on a completion.
  *
  * The documented name leads; the other two are the same cheap hedge the
  * signature header list makes, for a payload whose real shape one delivery has
@@ -217,7 +252,11 @@ export function parseWebhookPayload(body: unknown): ParsedWebhook {
     nextStatus,
     // `url` is last in the candidate list and broad enough to catch our own
     // echoed VideoUrl, so only accept something that looks fetchable.
-    sasUrl: asHttpUrl(findFirst(body, SAS_URL_KEYS)),
+    strokesUrl: asHttpUrl(findFirst(body, STROKES_URL_KEYS)),
+    // A documented `null` falls out as null: findFirst only returns non-empty
+    // strings, so there is nothing to special-case.
+    playersUrl: asHttpUrl(findFirst(body, PLAYERS_URL_KEYS)),
+    trajectoriesUrl: asHttpUrl(findFirst(body, TRAJECTORIES_URL_KEYS)),
     trimmedVideoUrl: asHttpUrl(findFirst(body, TRIMMED_VIDEO_URL_KEYS)),
     errorMessage,
     errorCode: stringField(errObj, 'code'),

@@ -35,6 +35,7 @@ import {
   saveFormDataToStorage,
   STORAGE_KEYS,
 } from "./utils";
+import type { ProviderId } from "@/lib/services/upload";
 import { formatEta } from "@/lib/data/match-analysis";
 import { usageFraction } from "@/lib/data/usage-format";
 import { advButton } from "@/lib/ui/adv-button";
@@ -115,7 +116,13 @@ const PHASE_LABEL: Record<Exclude<UploadState["phase"], "uploading">, string> = 
 export function UploadMatchFlow({
   preset: initialPreset,
   draft,
-}: { preset?: EventPreset | null; draft?: MatchDraft | null } = {}) {
+  initialProvider,
+}: {
+  preset?: EventPreset | null;
+  draft?: MatchDraft | null;
+  /** A source named by the link that opened the wizard — see the hook. */
+  initialProvider?: ProviderId | null;
+} = {}) {
   // The line this flow is filling. State rather than the prop because the
   // pinned bar's Change menu swaps it for another line of the same event
   // (design 10a) without leaving the page — the file already dropped stays.
@@ -215,6 +222,7 @@ export function UploadMatchFlow({
       preset={preset}
       onSwitchPreset={setPreset}
       draft={draft ?? null}
+      initialProvider={initialProvider ?? null}
     />
   );
 }
@@ -557,6 +565,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
   preset,
   onSwitchPreset,
   draft,
+  initialProvider,
 }: {
   onCreated: (matchId: string) => void;
   onVideoUpload: (event: VideoUploadEvent) => void;
@@ -564,6 +573,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
   preset: EventPreset | null;
   onSwitchPreset: (next: EventPreset) => void;
   draft: MatchDraft | null;
+  initialProvider: ProviderId | null;
 }) {
   const router = useRouter();
   // Which workspace this match will be created in, and billed against.
@@ -641,6 +651,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     onVideoUpload,
     preset,
     draft,
+    initialProvider,
   });
 
   const contentRef = useRef<HTMLDivElement>(null);

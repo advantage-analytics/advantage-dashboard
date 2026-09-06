@@ -15,15 +15,20 @@
  *
  * Requires in .env.local: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
  *
- * Neither url on a completion is mocked. The script uploads two fixtures into
- * the `match-results` bucket and signs them — one standing in for the results
- * JSON, one for the trimmed video — so both the download and the Azure
- * server-side copy run end-to-end over real HTTP without an external host.
+ * No url on a completion is mocked. The script uploads three fixtures into the
+ * `match-results` bucket and signs them — one standing in for the strokes
+ * JSON, one for the per-frame players JSON, one for the trimmed video — so the
+ * downloads and the Azure server-side copy run end-to-end over real HTTP
+ * without an external host. `trajectories_url` is sent as null, which the
+ * vendor's docs allow and which must be tolerated.
  *
  * The copy is worth testing precisely because its failure is silent: the vendor
- * sends `trimmed_video_url` alongside `sas_url`, we used to ignore it, and the
- * webhook then deleted our own source video. Nothing about that looked wrong
- * until someone went looking for the match and found no video at all.
+ * sends `trimmed_video_url` alongside `strokes_url`, we used to ignore it, and
+ * the webhook then deleted our own source video. Nothing about that looked
+ * wrong until someone went looking for the match and found no video at all.
+ * The same goes for the field names themselves: `sas_url` became `strokes_url`
+ * in September 2026, and a rename the parser misses leaves a completed job with
+ * no results and nothing on screen to say so.
  *
  * Everything it creates is removed on the way out, including after a failure,
  * and that now includes a blob in the real videos container.
@@ -34,7 +39,9 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { loadEnvLocal } from './lib/env';
 import { RESULTS_BUCKET } from '../src/lib/services/splitstep/config';
 import {
+  playersObjectKey,
   resultsObjectKey,
+  trajectoriesObjectKey,
   trimmedObjectKey,
 } from '../src/lib/services/splitstep/object-keys';
 import {
@@ -80,6 +87,12 @@ const FIXTURE_KEY = `__webhook_test__/${Date.now()}-strokes.json`;
 /* Shaped like a stroke array so the bytes that land are the bytes we expect. */
 const FIXTURE = JSON.stringify([
   { pred_rally_id: 1, pred_rally_stroke_number: 1, stroke_type: 'serve', in: true },
+]);
+
+/* Shaped like the vendor's per-frame players array (September 2026 API). */
+const PLAYERS_FIXTURE_KEY = `__webhook_test__/${Date.now()}-players.json`;
+const PLAYERS_FIXTURE = JSON.stringify([
+  { frame: 0, player_x_px: 1.0, player_y_px: 2.0, player_x_m: 0.1, player_y_m: 5.2 },
 ]);
 
 /**
@@ -158,6 +171,15 @@ async function post(body: unknown): Promise<{ status: number; json: unknown }> {
   return { status: res.status, json };
 }
 
+/**
+ * What a completed test job settles to. The fixture is one stroke with no
+ * entered score, so derivation — which runs in the same after() block as the
+ * download — refuses it and the row ends at `derivation_failed`, not
+ * `completed`. Both are terminal and both rank above `queued`, which is what
+ * the redelivery checks below are actually about: nothing drags the job back.
+ */
+const SETTLED_AFTER_COMPLETION = new Set(['completed', 'deriving', 'derivation_failed']);
+
 async function jobStatus(jobId: string): Promise<string | null> {
   const { data } = await supabase
     .from('processing_jobs')
@@ -200,16 +222,33 @@ const createdJobs: { id: string; matchId: string; userId: string }[] = [];
 const azureConfigured = resolveAzureStorageConfig().ok;
 
 async function makeJob(externalJobId: string): Promise<{ id: string }> {
-  const { data: match } = await supabase
+  // One live job per match is enforced by the partial unique index
+  // `processing_jobs_one_live_per_match` (status not in failed / completed /
+  // derivation_failed). Every job this run creates starts at `submitting`,
+  // which is live, so each needs a match of its own that currently holds no
+  // live job — the first match in the table is usually mid-pipeline.
+  const { data: live } = await supabase
+    .from('processing_jobs')
+    .select('match_id')
+    .not('status', 'in', '("failed","completed","derivation_failed")');
+  const taken = new Set<string>([
+    ...((live ?? []) as { match_id: string }[]).map((j) => j.match_id),
+    ...createdJobs.map((j) => j.matchId),
+  ]);
+
+  const { data: candidates } = await supabase
     .from('matches')
     .select('id, created_by')
     .not('created_by', 'is', null)
-    .limit(1)
-    .maybeSingle();
+    .limit(50);
 
-  if (!match) throw new Error('No match row to attach a test job to.');
+  const match = ((candidates ?? []) as { id: string; created_by: string }[]).find(
+    (m) => !taken.has(m.id)
+  );
 
-  const row = match as { id: string; created_by: string };
+  if (!match) throw new Error('No match row without a live job to attach a test job to.');
+
+  const row = match;
   const { data, error } = await supabase
     .from('processing_jobs')
     .insert({
@@ -235,13 +274,14 @@ async function cleanup(): Promise<void> {
   // Both keys are derived rather than read back from the job row, so a run that
   // failed halfway still removes whatever the webhook managed to write. Removing
   // a key that was never written is a no-op in both stores.
-  const resultKeys = createdJobs.map((j) =>
-    resultsObjectKey({ userId: j.userId, matchId: j.matchId, jobId: j.id })
-  );
+  const resultKeys = createdJobs.flatMap((j) => {
+    const ids = { userId: j.userId, matchId: j.matchId, jobId: j.id };
+    return [resultsObjectKey(ids), playersObjectKey(ids), trajectoriesObjectKey(ids)];
+  });
 
   await supabase.storage
     .from(RESULTS_BUCKET)
-    .remove([FIXTURE_KEY, VIDEO_FIXTURE_KEY, ...resultKeys]);
+    .remove([FIXTURE_KEY, PLAYERS_FIXTURE_KEY, VIDEO_FIXTURE_KEY, ...resultKeys]);
 
   // Blobs the webhook copied into the REAL videos container. Nothing else will
   // ever remove them: the orphan sweeper only deletes blobs whose match is gone,
@@ -294,8 +334,8 @@ async function main(): Promise<void> {
   console.log(`\nTarget: ${endpoint}`);
   console.log(`Secret: ${secret ? 'set — signed deliveries' : 'UNSET — exercising the unsigned path'}\n`);
 
-  // A signed URL to our own fixture stands in for the vendor's sas_url, so the
-  // download is real HTTP rather than a mock that proves nothing.
+  // A signed URL to our own fixture stands in for the vendor's strokes_url, so
+  // the download is real HTTP rather than a mock that proves nothing.
   const upload = await supabase.storage
     .from(RESULTS_BUCKET)
     .upload(FIXTURE_KEY, new Blob([FIXTURE], { type: 'application/json' }), {
@@ -310,7 +350,27 @@ async function main(): Promise<void> {
   if (signed.error || !signed.data) {
     throw new Error(`Could not sign fixture: ${signed.error?.message}`);
   }
-  const sasUrl = signed.data.signedUrl;
+  const strokesUrl = signed.data.signedUrl;
+
+  // The per-frame players file, same treatment. Fetched last in after(), after
+  // derivation, so its key lands later than the strokes key does.
+  const playersUpload = await supabase.storage
+    .from(RESULTS_BUCKET)
+    .upload(PLAYERS_FIXTURE_KEY, new Blob([PLAYERS_FIXTURE], { type: 'application/json' }), {
+      contentType: 'application/json',
+      upsert: true,
+    });
+  if (playersUpload.error) {
+    throw new Error(`Players fixture upload failed: ${playersUpload.error.message}`);
+  }
+
+  const signedPlayers = await supabase.storage
+    .from(RESULTS_BUCKET)
+    .createSignedUrl(PLAYERS_FIXTURE_KEY, 600);
+  if (signedPlayers.error || !signedPlayers.data) {
+    throw new Error(`Could not sign players fixture: ${signedPlayers.error?.message}`);
+  }
+  const playersUrl = signedPlayers.data.signedUrl;
 
   // The same treatment for the trimmed video, so the copy path runs against a
   // real url that Azure can reach rather than a string that only looks like one.
@@ -355,13 +415,18 @@ async function main(): Promise<void> {
   const completionBody = {
     status: 'job_completed',
     externalJobId: completedExtId,
-    sas_url: sasUrl,
-    // Named exactly as the vendor's docs have it. If they ever rename it, this
-    // is the check that fails rather than a silent loss of the video.
+    // Named exactly as the vendor's docs have them (September 2026 revision).
+    // If they rename one again, this is the check that fails rather than a
+    // silent loss of the file.
+    strokes_url: strokesUrl,
+    players_url: playersUrl,
+    // Documented as nullable. A null here must be tolerated, not treated as
+    // a malformed url.
+    trajectories_url: null,
     trimmed_video_url: trimmedVideoUrl,
   };
 
-  console.log('2. job_completed — results fetched and stored, trimmed video copied');
+  console.log('2. job_completed — strokes and players fetched and stored, trimmed video copied');
   {
     const r = await post(completionBody);
     check('returns 200', r.status === 200, r);
@@ -424,6 +489,50 @@ async function main(): Promise<void> {
 
     check("the vendor's url is recorded for recovery", Boolean(job?.trimmed_video_url));
 
+    // The players file. Its own poll: it is fetched LAST in after(), after
+    // grading and derivation, so it lands later than the strokes key.
+    let playersKey: string | null | undefined;
+    const gotPlayersKey = await waitFor(async () => {
+      const { data } = await supabase
+        .from('processing_jobs')
+        .select('players_object_key, players_url, trajectories_object_key')
+        .eq('id', completedJob.id)
+        .maybeSingle();
+      const row = data as {
+        players_object_key: string | null;
+        players_url: string | null;
+        trajectories_object_key: string | null;
+      } | null;
+      playersKey = row?.players_object_key;
+      return Boolean(playersKey);
+    });
+    check('players_object_key is set — players_url was parsed and fetched', gotPlayersKey, playersKey);
+
+    if (playersKey) {
+      const dl = await supabase.storage.from(RESULTS_BUCKET).download(playersKey);
+      const text = dl.data ? await dl.data.text() : '';
+      check('stored players bytes match the fixture byte-for-byte', text === PLAYERS_FIXTURE, {
+        got: text.slice(0, 120),
+      });
+    }
+
+    const { data: urlRow } = await supabase
+      .from('processing_jobs')
+      .select('players_url, trajectories_url, trajectories_object_key')
+      .eq('id', completedJob.id)
+      .maybeSingle();
+    const urls = urlRow as {
+      players_url: string | null;
+      trajectories_url: string | null;
+      trajectories_object_key: string | null;
+    } | null;
+    check('players_url recorded on the job row', Boolean(urls?.players_url));
+    check(
+      'a null trajectories_url is tolerated — nothing recorded, nothing fetched',
+      urls?.trajectories_url === null && urls?.trajectories_object_key === null,
+      urls
+    );
+
     // No bookkeeping for cleanup here — it derives the key from the job's ids,
     // so a failure anywhere above still gets swept.
     if (job?.trimmed_object_key) {
@@ -450,7 +559,8 @@ async function main(): Promise<void> {
     const before = await deliveryCount(completedExtId);
     const r = await post(completionBody);
     check('returns 200', r.status === 200, r);
-    check('job still completed', (await jobStatus(completedJob.id)) === 'completed');
+    const afterDup = await jobStatus(completedJob.id);
+    check('job still settled, not reopened', SETTLED_AFTER_COMPLETION.has(afterDup ?? ''), afterDup);
     check(
       'no duplicate row for an identical body',
       (await deliveryCount(completedExtId)) === before
@@ -463,9 +573,11 @@ async function main(): Promise<void> {
     // after completion must not reopen a finished job.
     const r = await post({ status: 'queued', externalJobId: completedExtId, note: 'late retry' });
     check('returns 200', r.status === 200, r);
+    const afterLate = await jobStatus(completedJob.id);
     check(
-      'job stays completed, not dragged back to queued',
-      (await jobStatus(completedJob.id)) === 'completed'
+      'job stays settled, not dragged back to queued',
+      SETTLED_AFTER_COMPLETION.has(afterLate ?? ''),
+      afterLate
     );
   }
 

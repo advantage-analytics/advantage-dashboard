@@ -1,4 +1,9 @@
-import { resultsObjectKey, trimmedObjectKey } from './object-keys';
+import {
+  playersObjectKey,
+  resultsObjectKey,
+  trajectoriesObjectKey,
+  trimmedObjectKey,
+} from './object-keys';
 
 /**
  * Choose the storage keys for a `completed` SplitStep delivery from the matched
@@ -8,11 +13,13 @@ import { resultsObjectKey, trimmedObjectKey } from './object-keys';
  * whether a trimmed video is even kept can be unit-tested — the route itself is
  * a Supabase-backed handler that cannot be.
  *
- * Two assets, two policies:
+ * Two kinds of asset, two policies:
  *
- *   • Results JSON — small, and worth keeping under any key just to have it. It
- *     ALWAYS gets a key: the matched job's `results/…` key, or an `orphaned/…`
- *     fallback when no job matched at all.
+ *   • The JSON files — strokes (small), and since September 2026 the per-frame
+ *     players and trajectories files (larger, but still JSON) — are worth
+ *     keeping under any key just to have them. They ALWAYS get a key: the
+ *     matched job's `results/…` keys, or `orphaned/…` fallbacks when no job
+ *     matched at all. The three share one directory and differ by suffix.
  *
  *   • Trimmed video — multi-gigabyte, so it only gets a key when the match it
  *     belongs to can be named. That requires `match_id`, and nothing more. A
@@ -42,24 +49,32 @@ export function selectDeliveryStorageKeys(params: {
   externalJobId: string | null | undefined;
   /** This delivery's id, for the orphan fallback key. */
   deliveryId: string;
-}): { resultsKey: string; trimmedKey: string | null } {
+}): {
+  /** The strokes JSON — `processing_jobs.results_object_key`. */
+  resultsKey: string;
+  playersKey: string;
+  trajectoriesKey: string;
+  trimmedKey: string | null;
+} {
   const { jobId, createdBy, matchId, externalJobId, deliveryId } = params;
 
   if (!jobId) {
+    const orphanDir = `orphaned/${externalJobId ?? 'unknown'}`;
     return {
-      resultsKey: `orphaned/${externalJobId ?? 'unknown'}/${deliveryId}.json`,
+      resultsKey: `${orphanDir}/${deliveryId}.json`,
+      playersKey: `${orphanDir}/${deliveryId}.players.json`,
+      trajectoriesKey: `${orphanDir}/${deliveryId}.trajectories.json`,
       trimmedKey: null,
     };
   }
 
   const uploaderSegment = createdBy ?? 'former-member';
+  const ids = { userId: uploaderSegment, matchId: matchId!, jobId };
 
   return {
-    resultsKey: resultsObjectKey({
-      userId: uploaderSegment,
-      matchId: matchId!,
-      jobId,
-    }),
+    resultsKey: resultsObjectKey(ids),
+    playersKey: playersObjectKey(ids),
+    trajectoriesKey: trajectoriesObjectKey(ids),
     trimmedKey: matchId
       ? trimmedObjectKey({ userId: uploaderSegment, matchId, jobId })
       : null,

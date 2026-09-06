@@ -60,6 +60,32 @@ export function resultsObjectKey(params: {
 }
 
 /**
+ * `results/{user_id}/{match_id}/{job_id}.players.json` — the vendor's per-frame
+ * player tracking (`players_url`, September 2026 API).
+ *
+ * Beside the strokes file, not under a new prefix: it is the same job's output,
+ * and the sweeper attributes by the third segment regardless of the suffix.
+ * The strokes file keeps the bare `.json` name so nothing that already reads
+ * `results_object_key` has to change.
+ */
+export function playersObjectKey(params: {
+  userId: string;
+  matchId: string;
+  jobId: string;
+}): string {
+  return `results/${params.userId}/${params.matchId}/${params.jobId}.players.json`;
+}
+
+/** `results/{user_id}/{match_id}/{job_id}.trajectories.json` — per-frame ball trajectory. */
+export function trajectoriesObjectKey(params: {
+  userId: string;
+  matchId: string;
+  jobId: string;
+}): string {
+  return `results/${params.userId}/${params.matchId}/${params.jobId}.trajectories.json`;
+}
+
+/**
  * `trimmed/{user_id}/{match_id}/{job_id}.mp4` — our copy of the vendor's
  * trimmed, re-encoded video.
  *

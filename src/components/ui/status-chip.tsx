@@ -24,29 +24,43 @@ const TONE: Record<StatusTone, string> = {
 export function StatusChip({
   tone = "neutral",
   live = false,
+  dot = true,
   children,
   className,
 }: {
   tone?: StatusTone;
   live?: boolean;
+  /**
+   * Draw the leading dot. The matches list turns it off: with the analysis
+   * column gone, its lifecycle cell is a lone word in a row otherwise made of
+   * words, and the tone colour carries the state on its own — the register
+   * `Badge` already uses for won and lost. Everywhere the chip sits beside
+   * other content (Home's in-flight row, the schedule details) keeps the dot,
+   * which is what the dot is for: separating a state from the sentence around
+   * it. Default true, so nothing changes by omission.
+   */
+  dot?: boolean;
   children: React.ReactNode;
   className?: string;
 }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] leading-none",
+        "inline-flex items-center whitespace-nowrap text-[11px] leading-none",
+        dot && "gap-1.5",
         className
       )}
       style={{ color: TONE[tone] }}
     >
-      <span
-        className={cn(
-          "size-[5px] shrink-0 rounded-full bg-current",
-          live &&
-            "animate-[adv-status-pulse_1.6s_var(--ease-primary)_infinite] motion-reduce:animate-none"
-        )}
-      />
+      {dot && (
+        <span
+          className={cn(
+            "size-[5px] shrink-0 rounded-full bg-current",
+            live &&
+              "animate-[adv-status-pulse_1.6s_var(--ease-primary)_infinite] motion-reduce:animate-none"
+          )}
+        />
+      )}
       {children}
     </span>
   );

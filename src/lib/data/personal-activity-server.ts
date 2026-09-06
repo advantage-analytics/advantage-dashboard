@@ -27,9 +27,9 @@ export interface PersonalActivity {
   /** Active days in the window — how many days carry at least one match. */
   sessionCount: number;
   /**
-   * 12 evenly-spaced month ticks across the 52 columns, matching the design's
-   * equal-flex label row. Real month names for the real window, not the mock's
-   * hard-coded Sep→Aug.
+   * The 12 most recent calendar months the 52-week window touches, oldest
+   * first, one label each — laid across the design's equal-flex label row.
+   * Real month names for the real window, not the mock's hard-coded Sep→Aug.
    */
   monthLabels: string[];
 }
@@ -109,15 +109,21 @@ export async function getPersonalActivity(
     }
   }
 
-  // 12 equal ticks across the 52 columns — sample the month at each tick's week.
-  const monthLabels: string[] = [];
-  for (let i = 0; i < 12; i++) {
-    const weekIndex = Math.floor((i * WEEKS) / 12);
+  // One label per calendar month the window touches, oldest first. 52 weeks
+  // cross 12 or 13 month boundaries and the label row has 12 equal-flex slots,
+  // so when a 13th month appears the oldest — the partial one the window
+  // starts inside — is the one dropped. This used to sample the month at 12
+  // equal week ticks instead, which named the same month twice whenever a
+  // five-week month straddled two ticks ("Jan Jan") and skipped the next.
+  const months: string[] = [];
+  for (let w = 0; w < WEEKS; w++) {
     const sample = new Date(
-      startSunday.getTime() + weekIndex * DAYS_PER_WEEK * MS_PER_DAY
+      startSunday.getTime() + w * DAYS_PER_WEEK * MS_PER_DAY
     );
-    monthLabels.push(MONTH_SHORT[sample.getMonth()]);
+    const label = MONTH_SHORT[sample.getMonth()];
+    if (months[months.length - 1] !== label) months.push(label);
   }
+  const monthLabels = months.slice(-12);
 
   return { days, sessionCount, monthLabels };
 }

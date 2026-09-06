@@ -3,6 +3,7 @@ import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { zonedDayString } from "@/lib/data/match-utils";
 import { canUploadForProgram, isProgramStaff } from "@/lib/workspace/types";
 import {
+  getOpponentPrograms,
   getProgramSchedule,
   scheduleRowsFrom,
   seasonSummaryFrom,
@@ -10,8 +11,11 @@ import {
 import { StaticSchedule } from "@/components/dashboard/schedule/static/static-schedule";
 import type { EventDetail } from "@/lib/schedule/types";
 
+export const metadata = { title: "Schedule" };
+
 /**
- * 25a / 4c -- the program's schedule, now a master-detail layout.
+ * `Tc2` / `Tc2c` -- the program's schedule: one full-width table, and the
+ * selected event's detail as a right rail.
  *
  * Reads `program_events`, not `matches`. That is the whole reason this page
  * exists rather than a team filter over `/dashboard/matches`: a schedule has
@@ -19,29 +23,24 @@ import type { EventDetail } from "@/lib/schedule/types";
  * does not.
  *
  * Fetches once -- `getProgramSchedule` -- and passes the full data down so
- * selection in the list swaps the detail pane with no further round-trip.
+ * selection in the list opens the rail with no further round-trip. The one
+ * addition is `getOpponentPrograms`, for the conference the rail prints under
+ * an opponent's name; it reads `programs` once for every opponent the season
+ * names, and nothing when no line names one.
  *
- * ── Back on the database, against the rebuilt body ─────────────────────────
- * The `events-lineups` run re-pointed this route at `StaticSchedule` reading
- * `src/lib/schedule/fixtures.ts`, so that the `7e`/`7d`/`7c`/`4c` artboards
- * could be built without a query. The body stays; the fixtures go. Everything
- * below `getWorkspaceContext` is the pre-static read verbatim — the same three
- * loaders, the same details map — plus `seasonSummaryFrom` for `7d`'s season
- * block, which the fixtures used to answer with one hard-coded sentence and
- * four hard-coded marks.
+ * `rows.length === 0` is what selects the day-zero frame, which is why
+ * nothing here branches on it: a program with no events hands the component
+ * an empty `rows` and the component already knows what that means.
  *
- * `rows.length === 0` is what selects the `7e` day-zero frame, which is why
- * nothing here branches on it: a program with no events hands the component an
- * empty `rows` and the component already knows what that means. That is the
- * branch `EMPTY_SCHEDULE` used to stand in for.
- *
- * The guards are untouched from both eras, and both permission answers still
- * come from the workspace rather than from the schedule: `isProgramStaff` gates
- * the drawer's "New event" CTA, and `canUploadForProgram` gates 7e's "One-off
- * match in Matches" — the same rule the DB-wired empty state applied to "Add
- * your own match".
+ * Both permission answers come from the workspace rather than from the
+ * schedule: `isProgramStaff` gates New event and every write the rail points
+ * at, and `canUploadForProgram` gates day zero's "One-off match in Matches".
  */
-export default async function SchedulePage() {
+export default async function SchedulePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ event?: string | string[] }>;
+}) {
   const workspace = await getWorkspaceContext();
   if (!workspace) redirect("/login");
 
@@ -53,7 +52,7 @@ export default async function SchedulePage() {
   const rows = scheduleRowsFrom(schedule);
 
   // Build the detail map: every event's detail, keyed by id, so the client
-  // component can swap panes without a fetch.
+  // component can swap the rail without a fetch.
   // Built from the loop's own `event` rather than through `eventDetailFrom`,
   // which re-`find()`s the very array this is iterating — an O(n²) walk over
   // the season for a map we already hold both halves of.
@@ -65,24 +64,37 @@ export default async function SchedulePage() {
     };
   }
 
+  // `?event=` opens the rail on one event, the way the roster's `?player=`
+  // does; the component ignores an id that names no row.
+  const { event: eventParam } = await searchParams;
+  const initialSelectedId = typeof eventParam === "string" ? eventParam : null;
+
+  const opponents = await getOpponentPrograms(
+    [...schedule.entriesByEvent.values()].flatMap((entries) =>
+      entries.map((entry) => entry.opponentProgramId)
+    )
+  );
+
   return (
     <StaticSchedule
       schedule={{ rows, details }}
       season={seasonSummaryFrom(schedule)}
       // Today in the PROGRAM's zone, not the server's. `starts_on` is a plain
       // calendar date authored where the coach is, and the server is UTC on
-      // Vercel — comparing the two against a UTC "today" makes the Next row a
-      // day wrong for every western coach from late afternoon onward, which is
-      // the same class of false claim this row was fixed to stop making.
+      // Vercel — comparing the two against a UTC "today" makes Upcoming a day
+      // wrong for every western coach from late afternoon onward.
       // `zonedDayString` is the app's one answer to "what day is it there",
       // shared with Team Home's dual sheet and the roster's claimed-today pill.
       //
-      // Passed as a prop rather than read from a clock in the pane: that
-      // component also renders on the server, and a `new Date()` there would
-      // give the two renders different answers.
+      // Passed as a prop rather than read from a clock in the component: it
+      // also renders on the server, and a `new Date()` there would give the
+      // two renders different answers.
       today={zonedDayString(new Date(), active.timeZone)}
       canCreate={isProgramStaff(active)}
       canAddOwnMatch={canUploadForProgram(active)}
+      programName={active.name}
+      opponents={opponents}
+      initialSelectedId={initialSelectedId}
     />
   );
 }

@@ -36,12 +36,15 @@
  * changes what it discards — all three change the grade for the same input,
  * and a grade you cannot attribute to a version is a grade you cannot compare.
  *
- * The suffix marks the scope. `-transcript` means this build derives points and
- * shots but does not publish statistics: `calculate_match_stats` is not called,
- * because several stat families are not measurable from this vendor's output
- * and the suppression pass that would handle them does not exist yet.
+ * The suffix marks the scope. `-transcript` (0.2.0) derived points and shots
+ * behind the score-reconciliation gate and published statistics with the
+ * unmeasurable families suppressed. `-unreconciled` (0.3.0, 2026-09-02) is the
+ * temporary "vendor as truth" build: the gate is bypassed
+ * (ACCEPT_UNRECONCILED_FOLD in reconcile.ts) and the suppression call is
+ * commented out in derive-and-publish.ts. Rows written under this tag were NOT
+ * verified against the entered score and must be rebuilt when the gate returns.
  */
-export const DERIVATION_VERSION = '0.2.0-transcript';
+export const DERIVATION_VERSION = '0.3.0-unreconciled';
 
 export type {
   RawSplitStepStroke,
@@ -132,6 +135,8 @@ export {
 export { flagPoint, flagStroke, POINT_FLAGS, SHOT_FLAGS } from './flags';
 
 export { pressureFor, type PressureFlags } from './pressure';
+
+export { ACCEPT_UNRECONCILED_FOLD } from './reconcile';
 
 export {
   buildTranscript,

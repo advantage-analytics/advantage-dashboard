@@ -157,6 +157,11 @@ derivation can correct.
 `suppress_derived_match_stats(match_id)` enforces it, scoped to
 `source_provider = 'splitstep'`.
 
+> **Temporarily not applied (2026-09-02).** The call is commented out in
+> `derive-and-publish.ts` by product decision — accept the vendor's data as truth for
+> now — so the Unknowable tier publishes as computed. The RPC still exists; uncomment
+> the step and re-run it for every match published since to restore.
+
 **Absence must survive to the render.** `?? 0` on a stat path is a bug: it turns
 "we did not measure this" into "the player did none of this". Two layers had it —
 the aggregate readers and the single-match reader — and both are fixed.
@@ -180,6 +185,15 @@ exactly.
 
 Of three real payloads, **only one passes Gate 1**. Ad-scoring matches and match
 tiebreaks are refused by design.
+
+> **Gate 1 temporarily bypassed (2026-09-02).** `ACCEPT_UNRECONCILED_FOLD` in
+> `derivation/reconcile.ts` is `true`: a fold that misses the entered score is still
+> written, with player1 named from the wizard's top-player input plus court geometry,
+> or failing that from whichever mapping folds closest to the score (a tie is still a
+> refusal). `Reconciliation.ok` stays `false` on that path and `player1Source` records
+> how player1 was chosen; `derive-and-publish` logs `grade: unreconciled`. Rows carry
+> `DERIVATION_VERSION = 0.3.0-unreconciled` and must be rebuilt when the gate returns.
+> The unresolved-points gate is untouched.
 
 ---
 

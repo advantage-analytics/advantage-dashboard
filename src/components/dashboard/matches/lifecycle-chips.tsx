@@ -1,28 +1,37 @@
-export type LifecycleValue = "all" | "new" | "in-progress";
+export type LifecycleValue = "all" | "new" | "in-progress" | "estimates";
 
 /**
- * All · New · In progress — with counts baked into the chip itself, the one
- * place a count lives outside a tooltip (v3's Data Table law 7: this is page
- * content, not chrome). "Estimates" isn't included — there's no low-confidence
- * signal in the data yet to back it honestly.
+ * All · New · In progress · Estimates — the view switcher over one list.
+ *
+ * Status pills, not filter chips: a fixed set of 3–4 mutually exclusive views
+ * of the same rows (Updated Design System 19f, applied on Matches in Platform
+ * Audit Pb2). They carry no counts and no dots — the unread signal already
+ * lives in the tray dot and the row's own New pill, so a third copy is noise;
+ * the count lives in the page's subline instead.
+ *
+ * 26px pill, hairline border; the active one takes border-medium +
+ * surface-subtle + ink-900 at weight 500.
+ *
+ * "Estimates" is the low-confidence view. No analysis state carries that
+ * marker yet (Phase 2 derivation labels stats it cannot defend), so the view
+ * is empty until one does — see `isEstimate` in matches-page-content.tsx.
  */
 export function LifecycleChips({
   active,
-  counts,
   onSelect,
 }: {
   active: LifecycleValue;
-  counts: { all: number; new: number; inProgress: number };
   onSelect: (value: LifecycleValue) => void;
 }) {
-  const chips: { value: LifecycleValue; label: string; count: number }[] = [
-    { value: "all", label: "All", count: counts.all },
-    { value: "new", label: "New", count: counts.new },
-    { value: "in-progress", label: "In progress", count: counts.inProgress },
+  const chips: { value: LifecycleValue; label: string }[] = [
+    { value: "all", label: "All" },
+    { value: "new", label: "New" },
+    { value: "in-progress", label: "In progress" },
+    { value: "estimates", label: "Estimates" },
   ];
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2" role="group" aria-label="View">
       {chips.map((chip) => {
         const isActive = active === chip.value;
         return (
@@ -39,13 +48,13 @@ export function LifecycleChips({
               // Only the active chip pins a background inline; rest chips leave it
               // unset so the hover class can paint the surface-subtle wash (an
               // inline `transparent` would beat the class and kill the hover —
-              // the design's rest chips wash on hover, `style-hover` in 1e).
+              // the design's rest chips wash on hover, `style-hover` in Pb2).
               background: isActive ? "var(--surface-subtle)" : undefined,
               color: isActive ? "var(--ink-900)" : "var(--ink-600)",
               fontWeight: isActive ? 500 : 400,
             }}
           >
-            {chip.label} <span className="tabular ml-1">{chip.count}</span>
+            {chip.label}
           </button>
         );
       })}

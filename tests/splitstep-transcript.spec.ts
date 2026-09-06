@@ -4,6 +4,7 @@ import path from 'node:path';
 import { expect, test } from '@playwright/test';
 
 import {
+  ACCEPT_UNRECONCILED_FOLD,
   analyzeResults,
   buildTranscript,
   classifyPoint,
@@ -246,10 +247,14 @@ test.describe('reconciliation', () => {
     expect(out.unresolvedPoints.length).toBeGreaterThan(1);
   });
 
-  test('a fold that misses the entered score is refused outright', () => {
+  test('a fold that misses the entered score is marked unreconciled, never ok', () => {
     // Spec §4.4 wanted "off by one game" to grade medium and publish. These
     // rows are the point timeline and the video seek targets, so a wrong point
     // is a false claim on screen, not a rounding error.
+    //
+    // Under ACCEPT_UNRECONCILED_FOLD (2026-09-02) the rows are written anyway,
+    // but `ok` MUST stay false and the reason MUST survive: an accepted
+    // transcript is not a verified one, and the publish log says which.
     const a = analyzeResults(clean);
     const winners = resolvePointWinners(a.rallies, a.players);
     const out = reconcile({
@@ -261,6 +266,57 @@ test.describe('reconciliation', () => {
     });
     expect(out.ok).toBe(false);
     expect(out.reason).toMatch(/does not match the entered score/);
+    // No geometry was passed, so only distance could name player1 — and a
+    // constant game key folds the whole match into ONE game, which sits
+    // exactly as far from [6,4]/[4,6] under either mapping. A tie names
+    // nobody, bypass or not: this stays a refusal rather than a coin flip.
+    expect(out.player1Label).toBeNull();
+    expect(out.player1Source).toBeNull();
+  });
+
+  test('bypass: geometry plus the wizard input names player1 when the fold cannot', () => {
+    test.skip(!ACCEPT_UNRECONCILED_FOLD, 'Gate 1 is restored');
+    const a = analyzeResults(clean);
+    const winners = resolvePointWinners(a.rallies, a.players);
+    const key = keysFor(a.rallies);
+    const [first, second] = a.players;
+    const out = reconcile({
+      winners,
+      labels: a.players,
+      score: { player1: [6, 4], player2: [4, 6] },
+      gameKeyOf: (id) => key.get(id)?.game ?? '',
+      setKeyOf: (id) => key.get(id)?.set ?? '',
+      geometryTopLabel: second,
+      initialTopIsPlayer1: false,
+    });
+    expect(out.ok).toBe(false);
+    expect(out.reason).toMatch(/does not match the entered score/);
+    // Geometry outranks distance: the top player was `second`, and the
+    // wizard said the top player is NOT player1, so player1 is `first`.
+    expect(out.player1Label).toBe(first);
+    expect(out.player1Source).toBe('geometry');
+    // Rows can be written from this: every point is settled.
+    expect(out.settledWinners).toHaveLength(winners.length);
+    expect(out.games.length).toBeGreaterThan(10);
+  });
+
+  test('bypass: a transcript is still built from an unreconciled fold', () => {
+    test.skip(!ACCEPT_UNRECONCILED_FOLD, 'Gate 1 is restored');
+    const a = analyzeResults(clean);
+    const t = buildTranscript({
+      rallies: a.rallies,
+      labels: a.players,
+      // Deliberately wrong: nothing about the clean fixture folds to this.
+      score: { player1: [6, 0, 6], player2: [0, 6, 0] },
+      initialTopIsPlayer1: null,
+    });
+    expect(t.ok).toBe(true);
+    expect(t.points).toHaveLength(a.rallies.length);
+    expect(t.reconciliation.ok).toBe(false);
+    expect(t.reconciliation.player1Label).not.toBeNull();
+    expect(['geometry', 'distance']).toContain(t.reconciliation.player1Source);
+    // The reason travels with the transcript so the publish log can say why.
+    expect(t.reason).toMatch(/does not match the entered score/);
   });
 });
 
@@ -493,7 +549,7 @@ test.describe('reconcile: the final point', () => {
     expect(rec.unresolvedPoints).toEqual([9]);
   });
 
-  test('settling tries both labels but still refuses a score neither reproduces', () => {
+  test('settling tries both labels but never calls a score neither reproduces ok', () => {
     // The point is that this reads the answer off the entered score, not that
     // it accepts whatever it is given. There are two games here, so no
     // assignment of one point can fold them into three.
@@ -501,6 +557,32 @@ test.describe('reconcile: the final point', () => {
 
     expect(rec.ok).toBe(false);
     expect(rec.reason).toContain('does not match the entered score');
+    if (ACCEPT_UNRECONCILED_FOLD) {
+      // Bypass: A=[2] vs entered [2]/[1] is distance 1; B as player1 is 3.
+      expect(rec.player1Label).toBe('A');
+      expect(rec.player1Source).toBe('distance');
+    }
+  });
+
+  test('bypass: a tie on distance with no geometry is still refused', () => {
+    test.skip(!ACCEPT_UNRECONCILED_FOLD, 'Gate 1 is restored');
+    // Two resolved games, one each, against an entered 3-3: both mappings are
+    // equally wrong, geometry is absent, so there is nothing to name player1
+    // from. Writing rows here would be a coin flip on which human owns every
+    // statistic, which is the one thing the bypass may not do.
+    const split = WINNERS.map((w, i) =>
+      i >= 5 ? { ...w, winner: 'B', via: 'game' as const } : w
+    );
+    const rec = reconcile({
+      winners: split,
+      labels: LABELS,
+      score: { player1: [3], player2: [3] },
+      gameKeyOf,
+      setKeyOf,
+    });
+    expect(rec.ok).toBe(false);
+    expect(rec.player1Label).toBeNull();
+    expect(rec.player1Source).toBeNull();
   });
 
   test('1-1 is reachable, and still refused — as a mirror, not as a mismatch', () => {

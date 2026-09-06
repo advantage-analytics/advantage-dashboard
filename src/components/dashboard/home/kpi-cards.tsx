@@ -5,6 +5,7 @@ import { useReducedMotion } from "framer-motion";
 import { Check, RotateCcw, Settings2 } from "lucide-react";
 import type { KpiCardData, KpiCategory } from "@/lib/data/performance-server";
 import { KpiTile, KpiTileStrip } from "@/components/dashboard/shared/kpi-tile";
+import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const STORAGE_KEY = "advantage.kpi.visible";
@@ -102,8 +103,9 @@ export default function KpiCards({ cards, matchCount }: KpiCardsProps) {
   })).filter((g) => g.items.length > 0);
 
   return (
-    <div className="relative">
-      <KpiTileStrip>
+    // `group`: the customize control below reveals on hover over the strip.
+    <div className="group relative">
+      <KpiTileStrip collapse>
         {shown.map((card, index) => (
           <KpiTile
             key={card.key}
@@ -130,15 +132,22 @@ export default function KpiCards({ cards, matchCount }: KpiCardsProps) {
       </KpiTileStrip>
 
       <Popover>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            aria-label="Customize KPI tiles"
-            className="absolute top-2 right-2 h-7 w-7 rounded-lg flex items-center justify-center text-[#8A8A8E] hover:text-[#3C3C43] hover:bg-[#F5F5F5] transition-colors duration-200 focus-visible:outline-none data-[state=open]:bg-[#F5F5F5] data-[state=open]:text-[#0D0D0D]"
-          >
-            <Settings2 className="size-3.5" strokeWidth={1.5} />
-          </button>
-        </PopoverTrigger>
+        {/* Hover-revealed, the way v3 reveals a table row's icon actions: the
+            Pa2 frame draws the strip with nothing in its corner, and the
+            SKILL.md lock still wants the 4–5 tile picker. So it is there on
+            hover, on focus and while open, and absent at rest. Named by a dark
+            tooltip as every icon-only control must be. */}
+        <ChromeTooltip label="Customize tiles" detail="Pick 4–5 to show">
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label="Customize KPI tiles"
+              className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-lg text-[#8A8A8E] opacity-0 transition-[opacity,color,background-color] duration-200 hover:bg-[#F5F5F5] hover:text-[#3C3C43] focus-visible:opacity-100 focus-visible:outline-none group-hover:opacity-100 data-[state=open]:bg-[#F5F5F5] data-[state=open]:text-[#0D0D0D] data-[state=open]:opacity-100"
+            >
+              <Settings2 className="size-3.5" strokeWidth={1.5} />
+            </button>
+          </PopoverTrigger>
+        </ChromeTooltip>
         <PopoverContent
           align="end"
           sideOffset={6}
