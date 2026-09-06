@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { RECENT_MATCH_GRID } from '@/components/dashboard/team/player-drawer-layout';
+
 import {
   GAME_SEPARATOR,
   SET_JOINER,
@@ -31,8 +33,21 @@ import {
  * If the row's template changes, change it here too.
  */
 
-/** Verbatim from the row in `player-drawer.tsx`. */
-const GRID_TEMPLATE = '14px minmax(0,1fr) minmax(72px,max-content) 40px 12px';
+/**
+ * The row's real track, imported from the component rather than restated.
+ *
+ * This was a hand-copied string, which made the test structurally unable to
+ * catch its own regression: reverting the component to a fixed `72px` left
+ * this spec green. Verified — do not inline it again.
+ *
+ * `RECENT_MATCH_GRID` is the Tailwind class (`grid-cols-[...]`); the browser
+ * harness needs the raw CSS value, so the bracket contents are unwrapped and
+ * Tailwind's underscore-for-space encoding undone.
+ */
+const GRID_TEMPLATE = RECENT_MATCH_GRID.replace(/^grid-cols-\[(.*)\]$/, '$1').replace(
+  /_/g,
+  ' '
+);
 
 /** A production shape: a two-setter stored with a phantom trailing set. */
 const TRAILING_ZERO_SET = { player1: [6, 6, 0], player2: [4, 3, 0] };

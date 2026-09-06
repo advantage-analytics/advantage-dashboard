@@ -21,6 +21,7 @@ import {
   LINEUP_SPOTS,
   RosterNote,
   UnderlineSelect,
+  nameList,
   spotHeldNote,
   spotHolders,
 } from "@/components/dashboard/team/player-fields";
@@ -102,20 +103,6 @@ function duplicateNameNote(matches: RosterMember[]): string {
   return `${who} — ${matches
     .map(emailNote)
     .join(", ")}. If this is somebody else, you can still add them.`;
-}
-
-/**
- * Who the confirm says the line would be shared with.
- *
- * Its own sentence, not `spotHeldNote`'s: that one is shared with Edit player,
- * which raises no confirm, and a helper bent to serve both would be the two
- * disagreeing copies `player-fields.tsx` exists to prevent. Long rosters stop
- * at two names for the same reason the note does — a list is not the point.
- */
-function sharedWith(names: string[]): string {
-  if (names.length === 1) return names[0];
-  if (names.length === 2) return `${names[0]} and ${names[1]}`;
-  return `${names[0]} and ${names.length - 1} others`;
 }
 
 /**
@@ -495,7 +482,7 @@ export function AddPlayerDialog({
           />
           <span>
             <span className="block text-[12px] text-[var(--ink-700)]">
-              Yes — share #{lineupSpot} with {sharedWith(spotTakenBy)} for now.
+              Yes — share #{lineupSpot} with {nameList(spotTakenBy)} for now.
             </span>
             <span className="mt-0.5 block text-[11px] leading-[1.5] text-[var(--ink-500)]">
               Nobody is moved off the line. You can change either player&rsquo;s

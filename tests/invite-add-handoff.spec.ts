@@ -82,8 +82,17 @@ test('the offer renders under the email field, on exactly three conditions', () 
     '{onHandOffToAddPlayer && !linked && !listed && draft !== "" && ('
   );
   // ...and it hands over the trimmed address, nothing else.
-  expect(INVITE).toContain('onClick={() => onHandOffToAddPlayer(draft)}');
+  expect(INVITE).toContain('onHandOffToAddPlayer(address);');
   expect(INVITE).not.toMatch(/onHandOffToAddPlayer\(\s*\{/);
+
+  /* It leaves through `close()`, which is what resets this dialog. The header
+     flips `inviting` itself, so a hand-off that skipped `close()` would be the
+     one exit that kept the typed address — and this dialog stays mounted, so
+     reopening Invite would offer to invite somebody the coach just added as a
+     coach-managed row. `address` is read before `close()` clears `draft`. */
+  expect(INVITE).toMatch(
+    /const address = draft;\s*close\(\);\s*onHandOffToAddPlayer\(address\);/
+  );
 
   // Quiet blue text, not a button — the DS's footer-left register.
   expect(INVITE).toMatch(

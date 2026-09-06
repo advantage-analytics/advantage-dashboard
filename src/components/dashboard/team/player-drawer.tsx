@@ -15,6 +15,7 @@ import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { playedSets } from "@/lib/ui/score-format";
+import { RECENT_MATCH_GRID } from "@/components/dashboard/team/player-drawer-layout";
 import { advButton } from "@/lib/ui/adv-button";
 import { capitalize, cn } from "@/lib/utils";
 import { formatDelta, getInitials } from "@/lib/data/match-utils";
@@ -723,7 +724,7 @@ export function PlayerDrawer({
                 <Link
                   key={match.id}
                   href={`/dashboard/matches/${match.id}`}
-                  className="-mx-2 grid h-9 grid-cols-[14px_minmax(0,1fr)_minmax(72px,max-content)_40px_12px] items-center gap-2.5 rounded-[var(--radius-element)] px-2 transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                  className={`-mx-2 grid h-9 ${RECENT_MATCH_GRID} items-center gap-2.5 rounded-[var(--radius-element)] px-2 transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none`}
                 >
                   {match.won === null ? (
                     <span

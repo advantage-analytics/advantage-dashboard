@@ -572,7 +572,20 @@ export function RosterInviteDialog({
           {onHandOffToAddPlayer && !linked && !listed && draft !== "" && (
             <button
               type="button"
-              onClick={() => onHandOffToAddPlayer(draft)}
+              onClick={() => {
+                /* Through `close()`, not past it. The header's hand-off flips
+                   `inviting` itself, which would otherwise make this the one
+                   caller that leaves without resetting — and this dialog stays
+                   MOUNTED, so what it kept would still be here next time. The
+                   address it kept is the one the coach is about to add as a
+                   coach-managed row: reopening Invite would offer to send an
+                   invitation to somebody who now has a profile, which is the
+                   second identity the picker exists to prevent. Read `draft`
+                   first; `close()` clears it. */
+                const address = draft;
+                close();
+                onHandOffToAddPlayer(address);
+              }}
               className="-mt-1 cursor-pointer self-start text-left text-[11px] font-medium text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)]"
             >
               Add a coach-managed profile instead &rarr;
