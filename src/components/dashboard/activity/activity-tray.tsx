@@ -256,7 +256,9 @@ export function ActivityTray({
           >
             <Activity
               className={cn(
-                "size-[15px] transition-colors duration-150 group-hover:text-[var(--ink-900)]",
+                // The DS `.adv-tray-btn` darkens the glyph only while open;
+                // hover is the surface wash alone.
+                "size-[15px] transition-colors duration-150",
                 isOpen ? "text-[var(--ink-900)]" : "text-[var(--ink-700)]"
               )}
               strokeWidth={1.5}

@@ -31,6 +31,7 @@ import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { workspaceTitle } from "@/lib/workspace/types";
 import { WorkspaceOptionList } from "@/components/dashboard/workspace-switcher";
 import { useRequestLogout } from "@/components/dashboard/logout-dialog";
+import { HeaderGreeting } from "@/components/dashboard/header-greeting";
 
 interface MatchCrumb {
   tournamentName: string;
@@ -80,6 +81,13 @@ const SCHEDULE_CRUMB = {
  * on the page that greets you by first name it is the line that says *whose
  * data* — the seam a claimed college player crosses with a second workspace one
  * click away.
+ *
+ * Platform Audit Pa2 then moved the personal Home's greeting up into this
+ * slot: "Good morning, Jordan" with "Personal · Monday, Aug 24" beside it, so
+ * the page body can open on a title over the KPI strip. Home therefore has a
+ * third treatment (`HeaderGreeting`), on the personal workspace only — Pb2's
+ * Matches frame keeps "Personal · <name>", and Team Home still greets in its
+ * own body — chosen ahead of the workspace title below.
  *
  * Exact matches, so `/dashboard/matches/new` and `/dashboard/matches/[matchId]`
  * keep their trails: those are positions within a flow, which is what a trail
@@ -152,7 +160,14 @@ function Chip({ children }: { children: React.ReactNode }) {
 const MENU_ITEM_CLASS =
   "flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-[7px] text-[12px] text-[var(--ink-900)] transition-colors duration-100 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none cursor-pointer";
 
-export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
+export function Header({
+  activitySlot,
+  greeting,
+}: {
+  activitySlot: React.ReactNode;
+  /** Server-chosen "Good morning" etc. — see `timeOfDayGreeting`. */
+  greeting: string;
+}) {
   const pathname = usePathname();
   const headerStatus = useHeaderStatus();
   const { active, viewer } = useWorkspace();
@@ -213,17 +228,23 @@ export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
     fetchMatchCrumb();
   }, [matchId]);
 
-  const title = WORKSPACE_TITLE_PATHS.has(pathname)
-    ? workspaceTitle(active, viewer)
-    : null;
+  // The personal Home greets here (Pa2). A team workspace never reaches this
+  // branch: its home is /dashboard/team, which greets in its own body.
+  const showGreeting = pathname === "/dashboard" && active.kind === "personal";
+
+  const title =
+    !showGreeting && WORKSPACE_TITLE_PATHS.has(pathname)
+      ? workspaceTitle(active, viewer)
+      : null;
 
   // A match detail page is one page. `matches/[matchId]/` has no
   // sub-directories — only error/layout/loading/not-found/page — so the trail
   // that used to be built here for insights/performance/statistics/video/visuals
   // matched routes that cannot be reached.
-  const breadcrumbs: { label: string; href?: string }[] = title
-    ? []
-    : isMatchDetailPage && matchCrumb
+  const breadcrumbs: { label: string; href?: string }[] =
+    title || showGreeting
+      ? []
+      : isMatchDetailPage && matchCrumb
       ? [
           MATCHES_CRUMB,
           { label: matchCrumb.tournamentName },
@@ -272,16 +293,32 @@ export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
            size and the row squeezes down to whatever its tallest control needs
            (33px — the avatar). The old `py-4` hid this by accident, by pushing
            the content-size suggestion past 44 so the automatic minimum pinned
-           there. Spec reads "44px sticky · padding 0 16px", so say it outright. */
+           there. Spec reads "44px sticky", so say it outright.
+
+           `px-6`: every Platform Audit frame (Pa2, Pb2, Tb4, Tc2 and the 21a
+           round before them) draws the bar at `padding: 0 24px`; the 16px an
+           older spec named was the drift the audit caught.
+
+           The bottom edge rests on the hairline the frames draw and firms up
+           to the scroll indicator once the column has moved — a canvas cannot
+           scroll, so the frame shows only the resting state. */
         className={cn(
-          "sticky top-0 z-30 flex h-11 shrink-0 items-center justify-between border-b bg-white px-4 transition-colors duration-200",
-          scrolled ? "border-[#EBEBEB]" : "border-transparent"
+          "sticky top-0 z-30 flex h-11 shrink-0 items-center justify-between border-b bg-white px-6 transition-colors duration-200",
+          scrolled ? "border-[#EBEBEB]" : "border-[var(--border-hairline)]"
         )}
       >
         {/* Left: the workspace title, or breadcrumbs — one or the other, never
             both. The collapse toggle moved into the sidebar's bottom group,
             where it never shifts relative to Settings and Help. */}
         <div className="flex min-w-0 flex-1 items-center">
+          {showGreeting && (
+            <HeaderGreeting
+              greeting={greeting}
+              firstName={viewer.firstName}
+              workspaceName={active.name}
+            />
+          )}
+
           {/* Workspace first and heaviest; the qualifier — the squad on a team,
               the viewer's name on a personal one — trails it in micro type with
               no dash or dot, because the pair reads as one name rather than two
@@ -400,7 +437,7 @@ export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
             >
               <button
                 onClick={() => setIsSearchOpen(true)}
-                className="group flex h-7 cursor-pointer items-center gap-1.5 rounded-[8px] px-2 text-[var(--ink-500)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] active:scale-[0.97] focus-visible:outline-none"
+                className="group flex h-7 cursor-pointer items-center gap-[7px] rounded-[8px] px-2 text-[var(--ink-500)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] active:scale-[0.97] focus-visible:outline-none"
               >
                 <Search className="h-[14px] w-[14px]" strokeWidth={1.5} aria-hidden="true" />
                 <span className="text-[12px] text-[var(--ink-600)] transition-colors duration-150 group-hover:text-[var(--ink-700)]">
@@ -413,7 +450,7 @@ export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
 
             <span
               aria-hidden="true"
-              className="h-3.5 w-px bg-[var(--border-medium)]"
+              className="mx-0.5 h-3.5 w-px bg-[var(--border-medium)]"
             />
 
             {/* Profile.
@@ -429,7 +466,7 @@ export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
               <PopoverTrigger asChild>
                 <button
                   className={cn(
-                    "flex cursor-pointer items-center gap-1 rounded-full py-[3px] pl-[3px] pr-1.5 transition-colors duration-150 hover:bg-[var(--surface-subtle)] active:scale-[0.97] focus-visible:outline-none",
+                    "flex cursor-pointer items-center gap-[5px] rounded-full py-[3px] pl-[3px] pr-1.5 transition-colors duration-150 hover:bg-[var(--surface-subtle)] active:scale-[0.97] focus-visible:outline-none",
                     isProfileOpen && "bg-[var(--surface-subtle)]"
                   )}
                   aria-label="Account menu"

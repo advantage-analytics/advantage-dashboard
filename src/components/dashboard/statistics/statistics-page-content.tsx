@@ -3,7 +3,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import type { SelectableMatch, StatisticsPageData } from "@/lib/data/statistics-server";
-import { EmptyStatistics } from "./empty-statistics";
 import { computeStatistics } from "@/lib/data/statistics-client";
 import { MatchSelector } from "./match-selector";
 import { PeriodToggle, type Period } from "./period-toggle";
@@ -87,7 +86,12 @@ export function StatisticsPageContent({
   );
 
   if (allMatches.length === 0) {
-    return <EmptyStatistics />;
+    // The route itself is a coming-soon while the page is unfinished, so this
+    // branch is unreachable today. It stays because the components below it
+    // are intact and wired: when the route comes back, a viewer with no
+    // matches needs an answer here, and it should be the day-zero offer the
+    // rest of the product makes rather than a second invention.
+    return <></>;
   }
 
   function anim(i: number) {

@@ -8,6 +8,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import RecentMatches from "@/components/dashboard/home/recent-matches";
+import { RecentMatchesEmpty } from "@/components/dashboard/home/recent-matches-empty";
+import { advButton } from "@/lib/ui/adv-button";
 import { createClient } from "@/lib/supabase/client";
 import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
 import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
@@ -224,7 +226,8 @@ function groupMatchesIntoEvents(
       date: formatDisplayDate(first.date),
       matchType: first.match_type ?? null,
       courtType: first.court_type ?? null,
-      verificationStatus: first.verified ? "Verified Result" : null,
+      // Sentence case — the DS's one register for labels, and how Pa2 spells it.
+      verificationStatus: first.verified ? "Verified result" : null,
       matches: mapped,
     });
   }
@@ -281,6 +284,8 @@ function EventsList({
 export default function RecentActivity({
   userId,
   playerIds,
+  hasMatches,
+  showEmptyAction = true,
 }: {
   /** Whose uploads this list is scoped to. */
   userId: string;
@@ -289,6 +294,20 @@ export default function RecentActivity({
    * roster profile the viewer has claimed.
    */
   playerIds: string[];
+  /**
+   * Whether the account holds any match at all, resolved on the server.
+   *
+   * The client query below cannot answer this on its own: it returns nothing
+   * both for an account with no matches and for one whose matches name someone
+   * else, and those are different pages. Day zero gets the ghost rows and the
+   * one action; the other gets a list that explains itself.
+   */
+  hasMatches: boolean;
+  /**
+   * Whether the day-zero card carries its own "Send a match" band. Off on the
+   * day-zero page, where the centred offer above it is the page's one action.
+   */
+  showEmptyAction?: boolean;
 }) {
 
   const [events, setEvents] = useState<EventGroup[]>([]);
@@ -501,22 +520,33 @@ export default function RecentActivity({
 
   return (
     <>
-    <div className="surface-card" style={{ padding: "8px 24px 12px" }}>
+    {/* The day-zero card carries a footer band under the ghost rows, and a
+        band needs the card's full 24px below it; a list of rows does not. */}
+    <div
+      // `@container/matches`: the rows inside size their stat cells to this
+      // card, not the viewport — see `MatchLink` in recent-matches.tsx.
+      className="surface-card @container/matches"
+      style={{
+        padding:
+          !hasMatches && showEmptyAction ? "8px 24px 24px" : "8px 24px 14px",
+      }}
+    >
       {/* Header */}
       <div className="flex items-center gap-3" style={{ padding: "12px 0 2px" }}>
         <span className="eyebrow">Recent matches</span>
         <div className="flex-1" />
         <Link
           href="/dashboard/matches"
-          className="text-[11px] font-medium transition-colors duration-200 focus-visible:outline-none rounded-sm"
+          className="text-[11px] font-medium transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:outline-none rounded-sm"
           style={{ color: "var(--blue)" }}
         >
           All matches
         </Link>
       </div>
 
-      {/* Content */}
-      <div className="pb-2">
+      {/* Content — no padding of its own; the card's 14px bottom (Pa2) is the
+          whole gap under the last row. */}
+      <div>
         {loading && (
           <div className="flex flex-col gap-8 py-4">
             {[0, 1].map((i) => (
@@ -550,31 +580,49 @@ export default function RecentActivity({
         )}
 
         {error && (
-          <div className="flex flex-col items-center justify-center py-8 px-4 text-center" role="alert">
-            <AlertCircle className="text-[#E51837] size-6 mb-2" aria-hidden />
-            <p className="text-[13px] font-medium text-[#0D0D0D] mb-1">Failed to load matches</p>
-            <p className="text-[12px] text-[#888888] mb-4">Something went wrong. Please try again.</p>
-            <button
-              type="button"
-              onClick={load}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3B82F6] hover:bg-[#2563EB] text-white text-[10px] font-medium uppercase tracking-[1.5px] rounded-[6px] transition-colors duration-200 focus-visible:outline-none"
-            >
-              <RefreshCw className="size-3" aria-hidden />
-              Retry
+          <div className="flex flex-col items-center justify-center px-4 py-8 text-center" role="alert">
+            <AlertCircle className="mb-2 size-6 text-[var(--danger)]" strokeWidth={1.5} aria-hidden />
+            <p className="text-[13px] font-medium text-[var(--ink-900)]">
+              Couldn&apos;t load your matches
+            </p>
+            <p className="text-body-sm mt-1 mb-4">The list is still there; the request didn&apos;t make it.</p>
+            {/* An outline, not a second blue: the page's one primary is "New
+                match" in the title row, and a retry is a repair, not a
+                recommendation. */}
+            <button type="button" onClick={load} className={advButton("outline", "sm")}>
+              <RefreshCw className="size-3" strokeWidth={1.5} aria-hidden />
+              Try again
             </button>
           </div>
         )}
 
-        {!loading && !error && events.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-14 px-6 text-center">
-            <Inbox className="h-7 w-7 text-[#CCCCCC] mb-4" aria-hidden />
-            <p className="text-[14px] font-medium text-[#0D0D0D] mb-1.5">
-              No matches yet
+        {/* Day zero: the shape of a result, and the one action that makes one.
+            The card stays on the page in this state rather than giving way to
+            a separate empty screen, so the frame a player learns on the first
+            visit is the frame they keep. */}
+        {!loading && !error && events.length === 0 && !hasMatches && (
+          <RecentMatchesEmpty showAction={showEmptyAction} />
+        )}
+
+        {/* Matches exist on the account but none names the viewer as a player
+            — a different page from day zero, so it says what the list holds
+            rather than how to upload. */}
+        {!loading && !error && events.length === 0 && hasMatches && (
+          <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
+            <Inbox className="mb-4 size-7 text-[var(--ink-300)]" strokeWidth={1.5} aria-hidden />
+            <p className="text-[14px] font-medium text-[var(--ink-900)]">
+              No matches to show
             </p>
-            <p className="text-[13px] text-[#888888] max-w-[320px] leading-[1.55]">
-              Upload a SwingVision match file to see your stats, serve placement,
-              and AI-powered analysis.
+            <p className="text-body-sm mt-1.5 max-w-[36ch]" style={{ textWrap: "pretty" }}>
+              Matches you played appear here as soon as they are sent or
+              imported.
             </p>
+            <Link
+              href="/dashboard/matches"
+              className="mt-3 text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+            >
+              Open all matches
+            </Link>
           </div>
         )}
 

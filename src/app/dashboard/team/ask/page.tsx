@@ -6,8 +6,8 @@ export default function TeamAskPage() {
   return (
     <ComingSoonPage
       title="Ask"
-      heading="Ask questions about your program's matches"
-      description="Put a question to your program's match data — how a lineup's second serve held up under pressure, where a pattern broke down across the roster, what changed between rounds. The answers will draw on every match your program has already logged."
+      heading="Ask about your program's matches."
+      description="Put a question to your program's match data — how a lineup held up under pressure, or where a pattern broke down across the roster. The answers will draw on every match the program has logged."
       action={{ label: "View program matches", href: "/dashboard/matches" }}
     />
   );

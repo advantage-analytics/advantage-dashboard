@@ -72,10 +72,23 @@ export function ActivityHeatmap({
         aria-label={`Match activity over the last 12 months: ${sessionCount} active ${sessionCount === 1 ? "day" : "days"}`}
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(52, 1fr)",
+          // `minmax(0, 1fr)`, not `1fr`: a bare `1fr` is `minmax(auto, 1fr)`,
+          // and a square cell's `auto` minimum can be transferred from its
+          // row height. Once the rows have been laid out at one width, a
+          // narrower relayout can keep the columns at the old cell size and
+          // run 52 of them out past the card. A zero minimum lets the columns
+          // follow the card and the cells follow the columns.
+          gridTemplateColumns: "repeat(52, minmax(0, 1fr))",
           gridTemplateRows: "repeat(7, 1fr)",
           gridAutoFlow: "column",
-          gap: "2px",
+          // The gap scales with the card, not the cell count. 52 columns fill
+          // whatever width they are given, so a cell is 6px in a 476px card
+          // and 17px in a 1052px one; a fixed 2px gutter made the small grid
+          // a fine mesh and the large one a run of loose blocks. `cqi` reads
+          // the card's content box (its width less 48px of padding), so 0.3cqi
+          // is 2px at the 724px card the design was drawn at, one tick tighter
+          // in a narrow column, and never more than 3px in a wide one.
+          gap: "clamp(1.5px, 0.3cqi, 3px)",
         }}
       >
         {days.map((day, i) => (

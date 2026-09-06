@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import HomeContent from "./home-content";
 import KpiCards from "@/components/dashboard/home/kpi-cards";
-import type { SetupProgress } from "@/components/dashboard/home/empty-dashboard";
+import { KpiStripEmpty } from "@/components/dashboard/home/kpi-strip-empty";
+import type { SetupProgress } from "@/components/dashboard/home/setup-line";
 import { createClient } from "@/lib/supabase/server";
 import { getMyPlayerIds } from "@/lib/data/player-identity-server";
 import { getOverallPerformance } from "@/lib/data/performance-server";
@@ -29,12 +30,13 @@ export default async function Home() {
     { data: savedPreferences },
     activity,
   ] = await Promise.all([
-    // `hand` and `backhand` ride along on the row the greeting already needs —
-    // they are the checklist's first answer, and a second query for two columns
-    // of a row already in hand would be a round trip for nothing.
+    // `hand` and `backhand` are the getting-set-up checklist's first answer.
+    // The name used to ride along here for the page's greeting; that greeting
+    // now lives in the header (Platform Audit Pa2), which reads the viewer the
+    // layout already resolved.
     supabase
       .from("users")
-      .select("first_name, last_name, hand, backhand")
+      .select("hand, backhand")
       .eq("id", userId)
       .single(),
     getOverallPerformance(),
@@ -60,13 +62,8 @@ export default async function Home() {
     getPersonalActivity(userId),
   ]);
 
-  // Real name only — when absent, the greeting drops the name rather than
-  // showing a "Player" placeholder.
-  const displayName = [user?.first_name, user?.last_name]
-    .filter(Boolean)
-    .join(" ");
-
-  const { kpiCards, winRate, form, matchCount } = performanceData;
+  const { kpiCards, winRate, form, matchCount, analyzedMatchCount } =
+    performanceData;
   const hasMatches = matchCount > 0;
 
   const allKpiCards: KpiCardData[] = [
@@ -102,31 +99,56 @@ export default async function Home() {
     // Both, not either: a hand without a backhand orients half the analysis,
     // and the row asks for the pair.
     playingProfile: Boolean(user?.hand && user?.backhand),
-    // False everywhere the empty state actually renders — it renders only when
-    // this is false. Passed anyway; see `SetupProgress`.
-    firstMatch: hasMatches,
     notifications: Boolean(savedPreferences),
   };
-
-  // Compute greeting server-side to avoid hydration flash
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
   return (
     <div className="flex flex-1 w-full flex-col bg-white">
       {/* `w-full` alongside `mx-auto`: auto side margins on a column flex item
           switch off the stretch that would otherwise size it, so without an
-          explicit width the container would shrink to fit its content. */}
-      <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-6 sm:px-8 py-8 sm:py-10">
+          explicit width the container would shrink to fit its content.
+
+          20px top and 56px sides are Platform Audit Pa2's content column,
+          which tightened 21a's 32px vertical padding so the usage footer sits
+          above the fold at 1440×900. The max-width never binds at that size;
+          it only stops the column running edge to edge on a much wider
+          monitor.
+
+          **The bottom is 32px, not the frame's 10px.** That is the one
+          measurement the artboard cannot be copied on: on the canvas the 10px
+          sits inside a rounded 900px card, where it reads as a margin, and in
+          a browser it is the last 10px before the window edge, where the
+          footer reads as clipped rather than placed. Every sibling page runs
+          32-40px here, and Team Home — which draws this exact `UsageFooter` —
+          runs 32px, so the footer now sits at the same height above the fold
+          in both workspaces instead of two. */}
+      <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-14 pt-5 pb-8">
         <HomeContent
-          displayName={displayName}
-          greeting={greeting}
           hasMatches={hasMatches}
           userId={userId}
           playerIds={myPlayerIds}
-          kpiStrip={allKpiCards.length > 0 ? <KpiCards cards={allKpiCards} matchCount={matchCount} /> : undefined}
+          // Honest numbers only (round 45's rule for this strip in
+          // particular). A first match still in the pipeline has rows but no
+          // stats, and the strip drew five dashed tiles for it, each promising
+          // "1 more match for trends" about a match that had not been analysed
+          // once.
+          //
+          // Nothing analysed and the strip is still drawn, empty: the same
+          // five tiles at the same geometry, each holding a rule where the
+          // number goes. It states which statistics come back without
+          // inventing one, and it means the page a player learns on day zero
+          // is the page they keep — which is the whole reason the empty state
+          // stopped being a separate screen.
+          kpiStrip={
+            analyzedMatchCount > 0 && allKpiCards.length > 0 ? (
+              <KpiCards cards={allKpiCards} matchCount={analyzedMatchCount} />
+            ) : (
+              <KpiStripEmpty awaitingReport={hasMatches} />
+            )
+          }
           usage={usage}
           matchCount={matchCount}
+          analyzedMatchCount={analyzedMatchCount}
           insightEvidence={insightEvidence}
           insightSignature={insightSignature}
           activity={activity}

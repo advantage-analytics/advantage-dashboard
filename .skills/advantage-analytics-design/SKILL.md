@@ -623,7 +623,48 @@ bg-[#F0F0F0] rounded animate-pulse
 // Proportional widths: w-24, w-32, w-40
 ```
 
+**A skeleton is a promise that something is arriving.** It belongs to a
+request that will resolve — a fetch in flight, a page mounting. It never
+stands in for data that does not exist, because a shape that says "loading"
+when the truth is "nothing here yet" is a status message that is not true,
+and a reader who waits for it to resolve concludes the page is broken. Empty
+is a different state with a different pattern; see below.
+
 ### Empty State
+
+**Three things can fill a region with no data, and only one of them is
+right.**
+
+1. **Honest zero state — use this.** Render what the region will be, holding
+   nothing: the card, its eyebrow, its axis and column labels, and a mark
+   where each value goes. Say what will appear here and give one way to make
+   it appear. The labels are the payload — a player who reads "break points
+   saved" knows what comes back without a figure being invented.
+2. **Skeleton — never.** See above. Reserved for loading.
+3. **Sample or demo data — never in the user's own workspace.** A fabricated
+   number is a claim about this account, and on the day the real one lands at
+   a different value the page has already told them a different story. The
+   one defensible form is a single, clearly quoted **example** carrying its
+   own label in the card header, and it does not scale past one card — a
+   marker under a screen of confident-looking figures survives neither a skim
+   nor a screenshot. Even at one card it is expensive: it was built for Home's
+   Focus card and rejected, because a card showing finished prose sits
+   visibly apart from neighbours that all show structure. Prefer the card's
+   own anatomy, empty.
+
+**A zero is not a blank.** Write `—` where a value is unmeasured; `0%` is a
+statement about the athlete, `—` is not. `0` is correct only when zero is the
+measured answer.
+
+**Scale the treatment down as the region does.** One page-level path to first
+data beats six illustrated cards; a dashboard of empty widgets goes text-only
+rather than repeating an icon per card (see Icons → 28–32px empty states for
+the one-icon case).
+
+**Never show an empty state for something that exists but is unavailable.** A
+match still analysing gets progress, not an empty chart — an empty serve
+chart reads as "you hit no serves". `matches/[matchId]/page.tsx` short-circuits
+to the hero + `MatchAnalysisProgress` for exactly this reason.
 
 ```
 flex flex-col items-center justify-center py-12 px-6 text-center
@@ -632,6 +673,59 @@ flex flex-col items-center justify-center py-12 px-6 text-center
 // Title: text-[#0D0D0D]
 // Description: text-[12px] text-[#888888]
 ```
+
+This centred recipe is the **small-region** form — a card or a list with
+nothing in it, reached from a populated page. A whole personal page with no
+data is a different composition — the offer over the page's own dimmed shape:
+Personal Home Recipes → Day zero for Home, Data Table → Table page states for
+a list.
+
+**Three states, three treatments — never borrow one for another.**
+
+| The page is | Treatment | Shipped |
+|---|---|---|
+| built, no data yet (**day zero**) | the offer over the page's own shape, dimmed and `inert` | `home/day-zero-home.tsx`, `matches/matches-day-zero.tsx` |
+| built, no data, and its shape is too dense to dim | the offer, then a labelled run naming what arrives | *(no shipped example — Statistics held this slot until the page went back to coming-soon)* |
+| **not built yet** | "Coming soon", one statement, one way onward — **no shape at all** | `dashboard/coming-soon.tsx` |
+
+The last row is the one that gets confused. A feature that does not exist has
+no shape, so a dimmed mock-up of one invents a layout that may never ship —
+the same fabrication these rules exist to prevent — and a reader who cannot
+tell "nothing here yet" from "not built yet" will wait for data that is not
+coming. **A page counts as not built until it is finalised, not until it
+renders**: Statistics ran with every component wired and was still moved back
+here, because a day-zero offer on a page whose shape is unsettled promises a
+layout it cannot keep.
+
+*The shape* (`dashboard/coming-soon.tsx`): one **48ch** column, centred, the
+statement and the sentence sharing that measure. Held narrower — a 22ch
+heading over a 46ch paragraph — the block reads pinched: a wide line over a
+narrow one over a wide one. At 48ch the statement sits on **one line** and the
+sentence on two, and **keeping every heading to one line is part of the
+template**, not an accident of the copy. The statement is `text-title-lg`
+under the page's own 30px h1, because two headings a hair apart read as a
+mistake; the sentence is `text-body` at 1.7, not `text-body-sm`, which was the
+fine-print step doing the work of body copy.
+
+*The marker* is a **24px outlined pill** — hairline border, no fill, ink-600 at
+11/500 — and the three alternatives were each rejected for a reason worth
+keeping. An eyebrow labels a SECTION; this labels the page's condition. Grey
+`StatePill` is the right register but is sized for a table row, and 18px alone
+above a 24px statement reads undersized. The blue-tinted pill is spoken for:
+it belongs to "New" and to nothing else, and a second blue pill costs the
+first its meaning.
+
+The middle row is a judgement, not a loophole: Home dims one card and one row
+because those are shapes worth previewing, and Statistics does not because
+twenty-one stat components as grey rules is a screen of noise (Carbon says the
+same — a dashboard of empty widgets goes text-only rather than repeating a
+treatment per region). Where the shape is skipped, the labelled run carries
+the promise instead — Statistics names serve, return, rally and trends, which
+is what a report will hold, with no figure invented.
+
+All three share the offer's own words wherever a match is what is missing:
+`DayZeroOffer` takes a headline and measure, and everything beneath the
+sentence is byte-identical across Home, Matches and Statistics.
 
 ### Keyboard Shortcut Chip (`<kbd>`)
 
@@ -754,7 +848,7 @@ Empty state: "Nothing in flight."
 ### Header (v3)
 
 ```
-sticky top-0 z-30 h-[var(--header-h)] px-4 bg-white
+sticky top-0 z-30 h-[var(--header-h)] px-6 bg-white
 border-b transition-colors duration-200
 // Default: border-transparent
 // Scrolled: border-[#EBEBEB]
@@ -777,9 +871,8 @@ hover wash, 260px menu. The profile menu carries quiet role/plan capsules
 
 **On Home the breadcrumb slot carries the greeting:** "Good morning, Jordan"
 12/500 + `text-micro` "Personal · Monday, Aug 24" — so the body can open on a
-number (Layout Patterns → Title Slot). *Shipped:* the greeting is still the
-body's `text-display` h1 (`home/welcome-message.tsx`); moving it is part of
-the Home rework, not a token change.
+number (Layout Patterns → Title Slot). *Shipped:* `dashboard/header-greeting.tsx`,
+on `/dashboard` in a personal workspace only; the body's greeting h1 is gone.
 
 **One search per screen:** the header owns `⌘K`; a list page never adds a
 second search box. Keyboard map: `⌘K` search (the header's one binding) ·
@@ -949,10 +1042,33 @@ master-detail split is retired; its detail is the peek drawer below.
    **segmented set switcher**: 22px segments labeled by the set score itself,
    selected = surface-muted, unselected at 42% opacity; scope readout left,
    "Whole match" reset right, both only while filtered.
-8. **Table page states.** Day zero renders title, primary action and usage
-   footer identically to the populated page — the frame never moves; pills
-   and table are absent, not skeletoned; the middle carries one 24px light
-   line, one sentence, two quiet paths. The resting view is never
+8. **Table page states.** Day zero on a **personal** list page is the same
+   composition as personal Home's (Personal Home Recipes → Day zero): the
+   offer, centred, over the page's own shape at 0.32 and `inert` — the
+   lifecycle chips at zero, the toolbar, the table card with its column labels
+   over ghost rows — and **no title row**, because the offer carries the
+   page's one primary and a title-row button beside it would be two. The
+   title row, chips and populated table return with the first match. *This
+   rewrites the earlier rule* — "title, primary and footer identical to the
+   populated page; pills and table absent, not skeletoned" — which had two
+   day-zero pages one click apart looking like two products, and whose
+   shipped form carried two blue links to the same URL. What is dimmed is the
+   list's real anatomy with its labels intact, never grey stand-ins for
+   labels; the column headers are the payload (Empty State → labels). The
+   **team** list keeps the older shape (`matches/matches-empty.tsx`) until its
+   own day zero ("Set up your program") is designed.
+
+   *Shipped:* `matches/matches-day-zero.tsx` — the shared `DayZeroOffer` with
+   the page's own sentence ("Every match you send lands here." on a 30ch
+   measure, so it holds one line), then the real `LifecycleChips` at zero, a
+   drawn toolbar, and the list card with its six column labels over **five**
+   ghost rows stepping 1 → 0.8 → 0.6 → 0.45 → 0.3. Five rather than Home's
+   three because this card is the whole page below the offer, where Home's
+   shares a column; three left it a stub. It renders only when there is
+   neither a match nor a draft — a draft is a match in flight and keeps the
+   list.
+
+   Once populated the frame never moves again. The resting view is never
    pre-filtered; a filtered view is its own screen, never a mutation of the
    resting one — the resting frame keeps showing its in-flight and estimate
    rows regardless of what's filtered. Lifecycle cell copy: "View report"
@@ -1231,8 +1347,120 @@ primitives, but locked patterns for that page's own cards.
 **Home opens on numbers.** The greeting moves into the header's breadcrumb
 slot; the body opens with "Your season" at 24px (`.text-title-lg`), so the
 first screen's display type is a KPI number, not a title — Home is the one
-exception to the title slot's 30px. *Shipped:* `home/welcome-message.tsx`
-still opens the body with a `text-display` greeting.
+exception to the title slot's 30px. *Shipped:* `dashboard/header-greeting.tsx`
++ `home/season-title.tsx`.
+
+**Day zero is the offer over the page it offers.** Before the account holds a
+single match, Home is not the populated frame and not a separate screen of
+door cards — it is one centred offer with the real page quietened behind it.
+
+*The offer* (`home/day-zero-offer.tsx`), three elements and no subline: the
+sentence at **30px/300**, `-0.5px`, on a **24ch** measure so it breaks over two
+lines; the primary; the conditions at `text-micro` on a 52ch measure. **70px
+above, 24px gaps, 38px below.** **30px is a deliberate exception** — every
+other page title runs 24px, and this is the one screen with nothing competing
+for the first glance.
+
+*One primary, one ghost, 12px apart.* "Send match video" (`advButton("primary")`)
+beside "Import instead" (`advButton("ghost")`), the ghost linking to
+`/dashboard/matches/new?source=swing-vision`, which preselects the wizard's
+Source field. The pair is one route with two entrances, not two routes: the
+param cannot skip step one, which also asks which workspace the match is filed
+under and who played it. **The primary names the artifact, not the outcome.**
+It read "Send a match" first; beside "Import instead" its job is to name the
+other path, and "a match" is what both paths deliver — an export is a match
+too. "Match video" is the product's own term (guardrails: never a highlight or
+a condensed cut), and verb + object with no article is how the system writes
+"Save changes" and "View report". **The ghost label stays short.** "Import a
+SwingVision export" ran to 209px beside a 119px primary and the bigger grey
+button stopped the blue one reading as the main action; "Import instead" sits
+at 124px, against the primary's 146, and leaves naming the source to the
+conditions line beneath — "A SwingVision export needs none of that."
+
+Onboarding has already asked about a team and routed coaches and rostered
+players elsewhere, so no "Join a team" belongs on either day-zero page; the
+switcher's "Create team workspace" is where that lives.
+
+*`DayZeroOffer` is shared.* Matches renders the same component with its own
+sentence and measure — everything under the sentence is byte-identical, so a
+player who lands on either page meets one offer. The list page's own recipe
+lives with the rule that governs it: Data Table → Table page states.
+
+The generous version is the shipped one. A height study got the same three
+elements to 214px by closing the padding to 36px and the gaps to 14px, but
+the air is what the block is for: the gap between the sentence and the button
+is what gives the action room, and closing it makes the offer read as page
+content rather than as the one thing on the screen. Roughly 80px is spent
+deliberately here.
+
+*The tail* — the real page, in its real order, each region holding its own
+honest zero state (Empty State above), under **one continuous grade**: a mask
+running `0.62 → 0.46 at 40% → 0.32`, so a region fades with how far down it
+sits. Two dead ends got here. The strip first held full strength, on the
+argument that its five labels are the page's most specific promise — but then
+it was the only region not reading as background, and the page had an offer,
+a solid band and a fade: two treatments for one idea. Fixing that with a
+second fixed opacity produced banding, not a grade — a hard edge under the
+strip and one flat value for everything below however far down it sat.
+Matches had always graded properly (its five ghost rows step 1 → 0.3); this is
+the same idea where the regions are cards rather than rows.
+
+**The grade ends at 0.32, never at zero.** That is the value the tail already
+sat at, so nothing at the foot of the page is fainter than it has been. It
+matters most for the activity heatmap, which lives down there and whose empty
+cells are `#F2F2F2` — five per cent off white before any fade — and which a
+gradient running to transparent erased once already. No bottom fade to nothing: a
+mask running to transparent clips the activity heatmap mid-grid, and a
+calendar cut off partway through its last week reads as a fault, not depth.
+
+*The tail is `inert`.* At 0.32 its text is far below usable contrast and its
+links would be invisible tab stops. `inert` removes it from the tab order and
+the accessibility tree together; `aria-hidden` plus `pointer-events-none`
+leaves a link hidden from a screen reader and still reachable by keyboard. A
+`sr-only` sentence above it names what will fill the page and says plainly
+that nothing below is real data yet.
+
+*No furniture.* Day zero carries no title row, no getting-set-up line and no
+usage footer; all of it returns with the first match, and from then on the
+frame never moves again. The matches card also drops its own action band —
+the centred offer is the page's one action, and the band would be the same ask
+twice.
+
+*What each region shows empty:* KPI tile — a 34×2px rule on the value's
+baseline, a grey sparkline, and "After your first match" ("When the report
+lands" once a match is filed but unanalysed). Matches — three ghost rows at
+the shipped 54px, stepping 1 → 0.6 → 0.35, keeping their live stat labels
+because what each row will report is real information; only the values become
+rules. Focus — its own anatomy holding nothing: two rules at the claim's
+measure (a claim runs to about 30ch and wraps once, so full-width over
+half-width is the shape it takes), two thinner and lighter ones for the
+evidence run, and one line saying what arrives. A quoted example claim,
+labelled **Example** in the header, was built and rejected: it demonstrated
+more, but it made this the only card in the column carrying finished prose
+and the largest prose in the tail, and the card sat visibly apart from its
+neighbours. Serve placement — the hairline half court at the widget's own geometry; it is the
+one region here that is not a placeholder, since an empty court is the object
+in its empty state. Activity — the real 52×7 grid, all 364 cells empty,
+because a year with no sessions genuinely is 364 empty cells.
+
+*One header grammar across the column.* Eyebrow left, one quiet `text-micro`
+run right where the card has meta to show, then the card's own mark if it has
+one: "All matches" on matches, "0 sessions · last 12 months" on Activity,
+"last 4 matches" on serve placement, nothing but the engine mark on Focus.
+
+*The court levels the columns.* It is the only continuous dimension on the
+page — every other region's height is set by its content — so it is the one
+region that can absorb the difference between the columns without trapping
+empty surface: a bigger court is still a court. **It fills, it is not capped.**
+The grid runs `items-stretch`, the day-zero serve card takes `flex-1` in its
+column, and the court sits absolutely inside a `flex-1 min-h-0` slot sized by
+height (`h-full w-auto`), so it never contributes its own intrinsic size to
+the row. A fixed width cap was tried first and failed: the left column's
+height moves with the sidebar, because the heatmap's cells scale with its
+width, so a cap that levelled the 64px rail hung 23px low with the 232px
+panel open. Measured after: 0px between the columns' bottoms at 1440 with the
+rail, 1440 and 1280 and 1920 with the panel, and 1024 with the rail; the court
+runs from 156 to 253px across those.
 
 **Next fixture card** — the claimed player's one forward-looking object.
 Eyebrow middot-joins the stakes ("Next · B1G Conference" only when it's
@@ -1265,7 +1493,18 @@ practice, crosshair retired · court mark · verified), 13px glyphs.
 **Small locks** — personal-Home KPI strip defaults to the repo's five serve
 cards (1st serve · 1st serve won · 2nd serve won · service games won · break
 points saved), each with trend chip + sparkline; customize popover picks 4–5
-across Serve/Return/Other. Card-header counts retire — no bare numeral beside
+across Serve/Return/Other — its trigger is hover-revealed (and shown on
+focus / while open), because Platform Audit Pa2 draws the strip with an
+empty corner and v3 reveals icon actions on hover. **The strip shows fewer
+tiles, never narrower ones**: a tile needs 184px to hold "break points saved"
+on one line inside its 20px padding, so the fifth tile leaves below 920px of
+strip and the fourth below 736px, and the tile's height never changes with the
+window. That is a **container** query, not a media query — the sidebar takes
+either 64px or 232px, so the same 1280px window fits five tiles with the rail
+and four with the panel open. Labels truncate with an ellipsis rather than
+clipping: a hard clip turned "service games won" into "service game", which
+reads as a different statistic. Hidden tiles stay mounted, so a customised
+selection survives a resize. Card-header counts retire — no bare numeral beside
 an eyebrow, no count inside an "All matches" link; counts live in sublines
 and tooltips only. Low-confidence path: "Estimate · Review data" — grey fact
 + blue action, never yellow (charts-only amber) or red (outcomes/form errors

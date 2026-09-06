@@ -17,6 +17,21 @@ export function formatAnalysisTime(seconds: number): string {
   return `${hours}:${String(minutes).padStart(2, "0")}`;
 }
 
+/**
+ * Hours with one decimal — "5.5", "8" — for the Home sentences that say the
+ * word "hours" (the usage footer) or abbreviate it ("5.5 h left this month" in
+ * the personal Home title, Platform Audit Pa2). `formatAnalysisTime`'s `H:MM`
+ * is Settings › Usage's form; inside a sentence it makes the reader do
+ * arithmetic to answer "roughly how much is left".
+ *
+ * A tenth of an hour is six minutes — fine enough to show movement, coarse
+ * enough that the number does not change while someone is reading it.
+ */
+export function formatHoursShort(seconds: number): string {
+  const rounded = Math.round((Math.max(0, seconds) / 3600) * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
 /** `2026-08-01` → `Aug 2026`. */
 export function formatBillingMonth(billingMonth: string): string {
   return new Date(`${billingMonth}T00:00:00Z`).toLocaleDateString("en-US", {

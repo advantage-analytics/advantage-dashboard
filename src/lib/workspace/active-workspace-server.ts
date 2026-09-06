@@ -182,6 +182,8 @@ function toViewer(
     id,
     email,
     name: fullName || localPart,
+    // Trimmed and nulled rather than defaulted: see `Viewer.firstName`.
+    firstName: firstName?.trim() || null,
     // The shared rule, which also handles single-word and "A & B" names the
     // inline version here did not.
     initials: (fullName && getInitials(fullName)) || localPart.slice(0, 2).toUpperCase(),

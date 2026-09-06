@@ -13,6 +13,13 @@ import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 export function FocusCard({ children }: { children: React.ReactNode }) {
   return (
     <div className="surface-card flex flex-col gap-2.5" style={{ padding: "18px 20px" }}>
+      {/* Header grammar, matched to its siblings on Home: the eyebrow on the
+          left, then the card's own mark on the right — the same shape as
+          "All matches" on the matches card, "0 sessions · last 12 months" on
+          Activity and "last 4 matches" on serve placement.
+
+          `items-center`, not baseline: the engine mark is a 20px box, and a
+          baseline would hang it below the eyebrow it sits beside. */}
       <div className="flex items-center gap-2">
         <span className="eyebrow">Focus</span>
         <div className="flex-1" />
