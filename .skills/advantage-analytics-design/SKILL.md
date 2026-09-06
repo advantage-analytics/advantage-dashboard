@@ -1133,11 +1133,21 @@ No URL of its own — `?player=` / `?event=` deep links are the one case that
 lands open. **Closed is the resting state**: full-width table, nothing
 selected, no chevrons, no gutter.
 
-- **Header, 44px, 20px inset:** counter "Player 3 / 6" · ‹ › stepping · "Open
-  profile ↗" / "Open event ↗" (11px blue, `ArrowUpRight`) · divider · X. The
-  record's **name is a link** to its page (blue on hover) and ⌘-click on the
-  row does the same. The body scrolls; a full-width primary pins to the
-  bottom ("Upload for Rafael" · "Enter results").
+- **Header, 44px, 20px inset:** ‹ › stepping · counter "Player 3 / 6" · ⋯ ·
+  divider · X — and nothing else. The bridge to the record's page is the
+  **name in the body**, ink-900 at rest and blue on hover, the same
+  affordance the roster row's name carries; ⌘-click on the row does the same.
+  The body scrolls; a full-width primary pins to the bottom ("Upload for
+  Rafael" · "Enter results").
+
+  *This retires the header's "Open profile ↗" chip.* Two routes to one page
+  cost a 340px header its last breathing room: measured at 340, the flexible
+  gap had collapsed to its 8px floor and the chip was the widest item in the
+  row at 97px — a third of the header spent on a duplicate. Removing it
+  returns the gap to 69px. The name is the better of the two anyway: it is
+  the record itself, it costs the header nothing, and it puts the link where
+  a reader already looks. **A drawer header holds navigation, position and
+  dismissal only** — anything that travels somewhere belongs in the body.
 - **Player body:** identity → six-match sparkline with a stat header → four
   24px stat pills that switch the chart → three recent matches as record rows
   (with chevrons — these navigate) → Upload. Upload is never event-level.

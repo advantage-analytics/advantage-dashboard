@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import {
-  ArrowUpRight,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -43,7 +42,7 @@ import type {
  * opponent and date) → four stat pills that switch the chart — both only
  * where a figure exists, see `hasStats` → three recent
  * matches → full-width Upload. Header controls inset 20px to match the page
- * header; ‹ › step players, "Open profile ↗" bridges to the page.
+ * header; ‹ › step players, and the name below bridges to the page.
  *
  * ── Opening and closing (20f) ───────────────────────────────────────────────
  * The drawer slides in from the right edge over 200ms on `--ease-primary` and
@@ -573,14 +572,14 @@ export function PlayerDrawer({
               {index + 1} / {total}
             </span>
           </span>
+          {/* The bridge to the profile page is the NAME, below — not a chip
+              up here. Two routes to one page cost this header its last
+              breathing room: at 340px the flexible gap had collapsed to its
+              8px floor, and "Open profile" was the single widest item in the
+              row at 97px. The name is the better of the two anyway — it is
+              the record itself, it costs the header nothing, and ⌘-click on
+              the roster row already goes to the same place. */}
           <div className="min-w-2 flex-1" />
-          <Link
-            href={profile}
-            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-[var(--radius-element)] px-2 text-[11px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-          >
-            Open profile
-            <ArrowUpRight className="size-3" strokeWidth={1.5} aria-hidden />
-          </Link>
           {canManage && (
             <MemberMenu
               key={member.playerId}
@@ -615,11 +614,16 @@ export function PlayerDrawer({
               {getInitials(member.name)}
             </span>
             <div className="flex min-w-0 flex-col gap-1">
-              <h2
-                title={member.name}
-                className="truncate text-[22px] leading-[1.1] font-light tracking-[-0.2px] text-[var(--ink-900)]"
-              >
-                {member.name}
+              {/* Ink at rest, blue on hover — the product's link affordance
+                  for a record's own name, the same one the roster row uses. */}
+              <h2 className="min-w-0 text-[22px] leading-[1.1] font-light tracking-[-0.2px]">
+                <Link
+                  href={profile}
+                  title={`Open ${firstName}'s profile`}
+                  className="block truncate rounded-[var(--radius-cell)] text-[var(--ink-900)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                >
+                  {member.name}
+                </Link>
               </h2>
               <span className="text-[12px] text-[var(--ink-600)]">
                 {identityLine(member)}
@@ -683,7 +687,7 @@ export function PlayerDrawer({
               {member.matchesPlayed > 0 && (
                 <Link
                   href={profile}
-                  className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                  className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
                 >
                   All {member.matchesPlayed}
                 </Link>
