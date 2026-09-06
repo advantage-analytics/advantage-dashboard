@@ -844,17 +844,24 @@ bottom (header chrome) · right (rail rows). It names; it doesn't explain
 paragraphs — stat definitions may use `label` + `detail`, and nothing
 essential lives only in a tooltip.
 
-**Two hover disclosures, and they do not overlap.** The dark `Tooltip` names
-a **control** whose label is not on screen — icon-only chrome, and nothing
-else. A native `title` discloses **text that is clipped**, carrying the full
-string and nothing more: a truncated name, a truncated email. Never use
-`title` to say what a control does — a link's destination is carried by the
-link itself (ink → blue), and an action described only in an OS tooltip is
-invisible to touch and styled differently on every platform. Never wrap a
-text link in a dark tooltip either: it sits inches from real ones on icon
-buttons and turns the pattern into decoration. Where a name is both clipped
-and a link, `title` holds the name — the reader needs the part they cannot
-read, not the part the cursor already told them.
+**The dark `Tooltip` is the product's only tooltip.** It names a **control**
+whose label is not on screen — icon-only chrome, and nothing else. Never
+wrap a text link in one: it would sit inches from real ones on icon buttons
+and turn the pattern into decoration.
+
+**A native `title` is not a design element and mostly should not be there.**
+The browser draws it in the OS's own style — a pale box on one machine, a
+dark rounded one on the next — so it lands on a considered page as a foreign
+object, and it does not exist at all on touch. Never use it to say what a
+control does; a link's destination is carried by the link (ink → blue). For
+clipped text, **remove the clipping instead of explaining it**: a name in a
+340px drawer wraps to two lines, and the panel scrolls anyway. Where the
+frame genuinely cannot give the height — a 52px table row — let it truncate
+bare: CSS truncation hides nothing from a screen reader, the text stays in
+the DOM and is read in full, and the record's own drawer is one click away
+with the name entire. That leaves `title` for the case with no such route,
+where the clipped string is the only copy on screen and nothing can open it
+— a raw email on an invite row is the shipped example.
 
 ### Activity Tray (v3)
 

@@ -582,9 +582,12 @@ function MemberRow({
           ) : (
             <Link
               href={href}
-              /* The full name — a 230px column clips a long one, and one
-                 convention covers both places a player's name is a link. */
-              title={member.name}
+              /* No `title`. A 52px row cannot give a long name the height, so
+                 it truncates — but the tooltip that used to disclose it drew
+                 in the OS's own style, and the full name is already one click
+                 away in the drawer, which wraps it. CSS truncation hides
+                 nothing from a screen reader either: the text stays in the
+                 DOM and is read in full. */
               onClick={(event) => event.stopPropagation()}
               className="block truncate rounded-[var(--radius-cell)] text-[13px] font-medium text-[var(--ink-900)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
             >

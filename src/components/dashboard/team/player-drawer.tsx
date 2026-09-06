@@ -606,27 +606,37 @@ export function PlayerDrawer({
 
         <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pt-6 pb-[22px]">
           {/* Identity */}
-          <div className="flex items-center gap-3.5">
+          {/* `items-start`, not `items-center`: the avatar stays level with
+              the first line of a name that runs to two. */}
+          <div className="flex items-start gap-3.5">
             <span
               aria-hidden
-              className="flex size-12 shrink-0 items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[14px] font-medium text-[var(--ink-700)]"
+              className="mt-0.5 flex size-12 shrink-0 items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[14px] font-medium text-[var(--ink-700)]"
             >
               {getInitials(member.name)}
             </span>
             <div className="flex min-w-0 flex-col gap-1">
               {/* Ink at rest, blue on hover — the product's link affordance
-                  for a record's own name, the same one the roster row uses. */}
-              <h2 className="min-w-0 text-[22px] leading-[1.1] font-light tracking-[-0.2px]">
+                  for a record's own name, the same one the roster row uses.
+
+                  It WRAPS rather than truncating. A 340px rail clips plenty
+                  of real names at 22px, and the fix for "I cannot read this"
+                  is never a tooltip: the design system's own rule is that
+                  nothing essential lives only in one, and a person's name in
+                  their own drawer is as essential as this panel gets. Two
+                  lines cost ~24px of a rail that scrolls anyway. A row in the
+                  table is the opposite case — fixed at 52px, it cannot give
+                  the height, so there the name truncates and `title` carries
+                  the rest. */}
+              <h2 className="min-w-0 text-[22px] leading-[1.15] font-light tracking-[-0.2px]">
                 <Link
                   href={profile}
-                  /* The full name, because at 340px this one clips — that is
-                     the whole job of a native `title`, and the app already
-                     uses it that way for clipped emails. The destination is
-                     carried by the link itself (ink → blue), not by a
-                     tooltip, and the dark `Tooltip` beside it in the header
-                     stays what it is for: icon-only controls. */
-                  title={member.name}
-                  className="block truncate rounded-[var(--radius-cell)] text-[var(--ink-900)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                  /* No `title`. The name is fully readable now, and the
+                     native tooltip it needed drew in the OS's own style —
+                     a pale box here, a dark one there — inches from the
+                     header's real dark tooltips. Removing the truncation
+                     removed the reason for it. */
+                  className="block rounded-[var(--radius-cell)] text-[var(--ink-900)] [text-wrap:balance] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
                 >
                   {member.name}
                 </Link>
