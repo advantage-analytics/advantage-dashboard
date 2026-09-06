@@ -44,7 +44,7 @@ ready).
 - **notes:** Plan step 2. Ten paths gain the workspace title (Statistics, Ask, Help, Opponents, and the team Roster / Schedule / Statistics / Ask); every flow path keeps its trail unchanged. All six pages moving to the title treatment were audited for a body title in design — Statistics, Ask and Opponents via `ComingSoonPage`, Help / Roster / Schedule with their own `text-display` h1 — so none ends up unnamed. The comment being replaced is ~35 lines of provenance for the allowlist that is going away: replace it, do not simply delete it. Shares `header.tsx` with T3 — sequential only, never concurrent.
 
 ## T3 · Make the header's bottom edge permanent
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** `src/app/dashboard/header.tsx`
 - **done when:**
