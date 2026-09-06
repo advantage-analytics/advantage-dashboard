@@ -55,7 +55,7 @@ ready).
 - **notes:** Independent of the dialog work. Screen-reader text should still read as one sentence; check the sr-only/visible split if one exists.
 
 ## T4 · Dialog shell default width 440 → 520
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** `src/components/dashboard/team/dialog-shell.tsx`
 - **done when:**
