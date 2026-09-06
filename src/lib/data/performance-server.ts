@@ -603,6 +603,19 @@ const KPI_SPECS: KpiSpec[] = [
   },
 ];
 
+/**
+ * The five labels the strip shows before anything is customised.
+ *
+ * `KpiCards` restores a saved selection from localStorage and otherwise takes
+ * the first `MAX_VISIBLE` cards in this order, so on a first visit — the only
+ * time the empty strip is drawn — these are exactly the tiles that will be
+ * there once a report lands. Derived from `KPI_SPECS` rather than retyped, so
+ * a renamed statistic cannot leave the empty state promising an old name.
+ */
+export const DEFAULT_KPI_LABELS: readonly string[] = KPI_SPECS.slice(0, 5).map(
+  (spec) => spec.label
+);
+
 function formatKpiValue(value: number, format: KpiFormat): string {
   if (format === "percent") return `${Math.round(value)}%`;
   if (format === "count") return `${Math.round(value)}`;

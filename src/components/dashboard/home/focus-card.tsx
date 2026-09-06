@@ -10,11 +10,33 @@ import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
  * dismiss/restore behaviour this design doesn't carry. Two callers wanting
  * different chrome is two components, not one component with a flag.
  */
-export function FocusCard({ children }: { children: React.ReactNode }) {
+export function FocusCard({
+  tag,
+  children,
+}: {
+  /**
+   * A qualifier on the card's own name, in the header rather than under the
+   * sentence it qualifies. A disclaimer that arrives after the claim has
+   * already been read as a finding came too late, and it is the first thing
+   * lost when someone crops or skims the card from the top.
+   */
+  tag?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="surface-card flex flex-col gap-2.5" style={{ padding: "18px 20px" }}>
       <div className="flex items-center gap-2">
         <span className="eyebrow">Focus</span>
+        {tag && (
+          // The product's own grey capsule, not a second eyebrow: one card
+          // carries one eyebrow, and grey because a label is never an action.
+          <span
+            className="shrink-0 rounded-full px-2 py-0.5 text-[10px] leading-[1.4]"
+            style={{ background: "var(--surface-subtle)", color: "var(--ink-600)" }}
+          >
+            {tag}
+          </span>
+        )}
         <div className="flex-1" />
         <ChromeTooltip
           label="Advantage Intelligence"

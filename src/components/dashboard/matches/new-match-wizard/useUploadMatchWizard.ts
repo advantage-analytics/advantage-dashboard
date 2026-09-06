@@ -1689,12 +1689,12 @@ export function useUploadMatchWizard({
       onCreated?.(matchId);
 
       // Close the modal FIRST, then refresh after it has finished closing. The modal is
-      // a Radix dialog that locks <body> (pointer-events + scroll) while open. On the
-      // first upload, the refresh flips the dashboard from empty to populated, which
-      // unmounts EmptyDashboard — the subtree that hosts this open dialog. Refreshing
-      // while it's open tears the dialog down mid-close so Radix never restores <body>,
-      // freezing the whole page. Deferring past the 200ms close animation lets the
-      // dialog unmount and unlock <body> before the layout swaps.
+      // a Radix dialog that locks <body> (pointer-events + scroll) while open. A
+      // refresh that re-renders the subtree hosting this open dialog tears it down
+      // mid-close so Radix never restores <body>, freezing the whole page. (Home's
+      // day-zero state used to be a separate subtree that unmounted wholesale on the
+      // first upload, which is how this was found.) Deferring past the 200ms close
+      // animation lets the dialog unmount and unlock <body> before anything swaps.
       onOpenChange(false);
       setTimeout(() => router.refresh(), 300);
 

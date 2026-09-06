@@ -4,9 +4,12 @@ import { useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import { SeasonTitle } from "@/components/dashboard/home/season-title";
-import EmptyDashboard, {
+import {
+  SetupLine,
   type SetupProgress,
-} from "@/components/dashboard/home/empty-dashboard";
+} from "@/components/dashboard/home/setup-line";
+import { FocusExample } from "@/components/dashboard/home/focus-example";
+import { DayZeroHome } from "@/components/dashboard/home/day-zero-home";
 import RecentActivity from "./recent-activity";
 import ServePlacementHome from "@/components/dashboard/home/serve-placement-home";
 import { FocusCard } from "@/components/dashboard/home/focus-card";
@@ -39,10 +42,8 @@ interface HomeContentProps {
   /** 52-week match-day heatmap for the Activity widget. */
   activity: PersonalActivity;
   /**
-   * Persisted answers to the getting-set-up checklist, read on the server.
-   * Only the empty state renders them, but they are resolved alongside the
-   * rest of the page's data rather than fetched from inside it — the empty
-   * dashboard is reached through this client component and so cannot query.
+   * Persisted answers to the getting-set-up questions, read on the server —
+   * this is a client component and cannot query for them itself.
    */
   setup: SetupProgress;
 }
@@ -74,67 +75,96 @@ export default function HomeContent({
     hasAnimatedOnce = true;
   }, []);
 
+  // The card grid, composed once. Day zero renders it behind the offer at a
+  // third opacity; every other state renders it as the page.
+  const grid = (
+    <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_348px]">
+      <motion.div
+        initial={skipAnimation ? false : { opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: EASE_CURVE, delay: 0.15 }}
+        className="flex min-w-0 flex-col gap-5"
+      >
+        <RecentActivity
+          userId={userId}
+          playerIds={playerIds}
+          hasMatches={hasMatches}
+          showEmptyAction={hasMatches}
+        />
+        {/* Under the matches card in the main column — the design's
+            default `activityUnderMatches` placement (artboard 1b). */}
+        <ActivityWidget activity={activity} />
+      </motion.div>
+
+      <motion.div
+        initial={skipAnimation ? false : { opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: EASE_CURVE, delay: 0.2 }}
+        className="flex flex-col gap-5"
+      >
+        {/* Three states, one card. With computed evidence it states a
+            finding; on day zero it shows what a finding looks like, tagged
+            as an example and quoted so it cannot be read as one. In
+            between — matches filed, nothing analysed yet — it stays off the
+            page, because "Renders nothing without real numbers" (SKILL.md's
+            InsightCard spec) and an example after the player has already
+            sent a match would be the page failing to notice. */}
+        {insightEvidence ? (
+          <FocusCard>
+            <HomeAiInsight
+              evidence={insightEvidence}
+              cacheSignature={insightSignature}
+              matchCount={analyzedMatchCount}
+            />
+          </FocusCard>
+        ) : (
+          !hasMatches && (
+            <FocusCard tag="Example">
+              <FocusExample />
+            </FocusCard>
+          )
+        )}
+        <ServePlacementHome userId={userId} />
+      </motion.div>
+    </div>
+  );
+
+  // Day zero is its own composition: the offer centred over a graded copy of
+  // the page it is offering, and none of the furniture — no title row, no
+  // getting-set-up line, no usage footer. All of it returns with the first
+  // match, and from then on the frame never moves again.
+  if (!hasMatches) {
+    return <DayZeroHome kpiStrip={kpiStrip}>{grid}</DayZeroHome>;
+  }
+
   return (
     // 16px between the title row, the strip, the grid and the footer — Pa2's
     // column gap (21a ran 22px; the audit's 1440×900 frames tightened it).
     <div className="flex flex-1 flex-col gap-4">
       <SeasonTitle
         hasMatches={hasMatches}
+        matchCount={matchCount}
         analyzedMatchCount={analyzedMatchCount}
         usage={usage}
         userId={userId}
       />
 
-      {!hasMatches ? (
-        <EmptyDashboard setup={setup} />
-      ) : (
-        <>
-          {kpiStrip}
+      {/* The frame never moves once a match is in: every region stays present
+          and labelled with what will fill it, whether or not it has a figure
+          to show yet. */}
+      {kpiStrip}
 
-          {/* 348px right column and a 24px gutter, as 21a and Pa2 draw it;
-              the cards inside each column sit 20px apart. */}
-          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_348px]">
-            <motion.div
-              initial={skipAnimation ? false : { opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, ease: EASE_CURVE, delay: 0.15 }}
-              className="flex min-w-0 flex-col gap-5"
-            >
-              <RecentActivity userId={userId} playerIds={playerIds} />
-              {/* Under the matches card in the main column — the design's
-                  default `activityUnderMatches` placement (artboard 1b). */}
-              <ActivityWidget activity={activity} />
-            </motion.div>
-
-            <motion.div
-              initial={skipAnimation ? false : { opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, ease: EASE_CURVE, delay: 0.2 }}
-              className="flex flex-col gap-5"
-            >
-              {/* No computed evidence, no card — "Renders nothing without
-                  real numbers" (SKILL.md's InsightCard spec). */}
-              {insightEvidence && (
-                <FocusCard>
-                  <HomeAiInsight
-                    evidence={insightEvidence}
-                    cacheSignature={insightSignature}
-                    matchCount={analyzedMatchCount}
-                  />
-                </FocusCard>
-              )}
-              <ServePlacementHome userId={userId} />
-            </motion.div>
-          </div>
-        </>
-      )}
+      {/* 348px right column and a 24px gutter, as 21a and Pa2 draw it;
+          the cards inside each column sit 20px apart. */}
+      {grid}
 
       {/* `mt-auto` eats the leftover column height, so on a short page — the
           empty state especially — the footer lands on the bottom edge instead
           of hanging directly under the cards. On a page taller than the
           viewport there is no leftover height and the margin resolves to zero,
           leaving the footer in normal flow after the content. */}
-      <div className="mt-auto">
+      <div className="mt-auto flex flex-col gap-4">
+        <SetupLine setup={setup} />
         <UsageFooter
           usedSeconds={usage.usedSeconds}
           capSeconds={usage.capSeconds}

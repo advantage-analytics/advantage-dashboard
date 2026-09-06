@@ -244,8 +244,15 @@ export function KpiTile({
     <>
       <Tooltip>
         <TooltipTrigger asChild>
+          {/* One line, always, so the tile's height never changes with its
+              width — `KpiTileStrip` drops to four and then three tiles before
+              any default label would run out of room. `truncate` is the
+              backstop for a custom pick like "BREAK POINTS CONVERTED" in a
+              narrow tile: an ellipsis rather than the clip that used to cut
+              "SERVICE GAMES WON" to "SERVICE GAME", which read as a different
+              statistic. */}
           <p
-            className={`text-[9px] font-normal text-[var(--color-text-dim)] uppercase tracking-[2.5px] whitespace-nowrap w-fit focus-visible:outline-none rounded-sm ${description ? "cursor-help" : ""}`}
+            className={`text-[9px] font-normal text-[var(--color-text-dim)] uppercase tracking-[2.5px] max-w-full truncate focus-visible:outline-none rounded-sm ${description ? "cursor-help" : ""}`}
             tabIndex={description ? 0 : undefined}
           >
             {label}
@@ -352,9 +359,39 @@ export function KpiTile({
   );
 }
 
-export function KpiTileStrip({ children }: { children: ReactNode }) {
+export function KpiTileStrip({
+  children,
+  collapse = false,
+}: {
+  children: ReactNode;
+  /**
+   * Show fewer tiles rather than narrower ones as the strip loses width.
+   *
+   * A tile needs 184px to hold "BREAK POINTS SAVED", Home's longest label, on
+   * one line inside its 20px padding. With this on, the fifth tile goes below
+   * 920px of strip and the fourth below 736px — so every tile keeps the same
+   * height at every width, which is the point: a label that wrapped made the
+   * whole strip a row taller on a tablet and nowhere else.
+   *
+   * A container query, not a media query, because the sidebar takes either
+   * 64px or 232px of the window: the same 1280px window holds five tiles with
+   * the rail and four with the panel open. Hidden tiles stay mounted, so a
+   * customised selection survives a resize; the strip only decides what fits.
+   *
+   * Off by default, and off for match detail — a strip of four whose labels
+   * run to "First serve points won" would start dropping statistics from the
+   * page a player opened to read them. There the label ellipsizes instead.
+   *
+   * The rule itself is `.adv-kpi-strip` in globals.css: it needs a container
+   * query over `nth-child`, which is one composition Tailwind's variants drop
+   * on the floor.
+   */
+  collapse?: boolean;
+}) {
   return (
-    <div className="bg-white border border-[#F3F3F3] rounded-[14px] shadow-card overflow-hidden">
+    <div
+      className={`${collapse ? "adv-kpi-strip " : ""}bg-white border border-[#F3F3F3] rounded-[14px] shadow-card overflow-hidden`}
+    >
       <div className="flex flex-wrap sm:flex-nowrap">{children}</div>
     </div>
   );

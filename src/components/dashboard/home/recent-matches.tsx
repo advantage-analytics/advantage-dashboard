@@ -63,7 +63,13 @@ function MatchLink({ match }: { match: MatchRow }) {
 
       <div className="flex-1" />
 
-      <div className="hidden items-center gap-4 md:flex">
+      {/* Shown from a 672px card inward (`@2xl` of the `matches` container
+          `RecentActivity` declares), which is what the row needs to hold the
+          three cells beside a 170px name and a 110px score. It used to key off
+          the viewport (`md:`), but the column's width depends on the sidebar
+          as much as the window: at 1280 with the panel open the row is 516px
+          wide, and three fixed cells landed on top of the score. */}
+      <div className="hidden items-center gap-4 @2xl/matches:flex">
         {STAT_CELLS.map((cell) => (
           <StatCell key={cell.label} label={cell.label} width={cell.width} value={cell.format(match)} />
         ))}

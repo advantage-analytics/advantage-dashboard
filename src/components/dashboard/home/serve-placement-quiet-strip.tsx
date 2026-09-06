@@ -1,4 +1,5 @@
 import type { ZoneKey, ZoneStats } from "@/components/dashboard/matches/serve-placement/serve-placement-widget";
+import { ServePlacementCourt } from "./serve-placement-court";
 
 /**
  * Round 3/4's "quiet strip" — T/Body/Wide distribution bars per court, in
@@ -75,10 +76,19 @@ function dominantZoneClaim(zoneStats: Record<ZoneKey, ZoneStats>): string {
 export function ServePlacementQuietStrip({
   zoneStats,
   contextLabel,
+  awaitingReport = false,
   statisticsHref = "/dashboard/statistics",
 }: {
   zoneStats: Record<ZoneKey, ZoneStats> | null;
+  /** "last 4 matches" — shown only over bars it describes. */
   contextLabel: string;
+  /**
+   * A match exists but no serve has been mapped yet — the first report is
+   * still in the pipeline. Turns the empty line from an instruction into a
+   * promise, because "upload a match" to someone who just did is a page that
+   * did not notice.
+   */
+  awaitingReport?: boolean;
   statisticsHref?: string;
 }) {
   return (
@@ -86,7 +96,9 @@ export function ServePlacementQuietStrip({
       <div className="flex items-baseline gap-2">
         <span className="eyebrow">Serve placement</span>
         <div className="flex-1" />
-        <span className="text-micro">{contextLabel}</span>
+        {/* "last 0 matches" over an upload prompt was the label describing
+            bars that were not there. */}
+        {zoneStats && <span className="text-micro">{contextLabel}</span>}
       </div>
 
       {zoneStats ? (
@@ -116,7 +128,18 @@ export function ServePlacementQuietStrip({
           </a>
         </>
       ) : (
-        <p className="text-body-sm">Upload a match to see where your serves land.</p>
+        // The court itself, empty — not a sentence where the bars would be.
+        // Every other empty region on this page substitutes something for the
+        // data it lacks; this one shows the object in its empty state, the way
+        // an empty inbox shows the inbox rather than a grey rectangle.
+        <>
+          <ServePlacementCourt />
+          <span className="text-micro">
+            {awaitingReport
+              ? "Your serve map fills in when the first report lands."
+              : "Your first serves, plotted after your first match."}
+          </span>
+        </>
       )}
     </div>
   );

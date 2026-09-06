@@ -105,7 +105,7 @@ export default function KpiCards({ cards, matchCount }: KpiCardsProps) {
   return (
     // `group`: the customize control below reveals on hover over the strip.
     <div className="group relative">
-      <KpiTileStrip>
+      <KpiTileStrip collapse>
         {shown.map((card, index) => (
           <KpiTile
             key={card.key}
