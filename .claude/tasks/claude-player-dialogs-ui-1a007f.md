@@ -43,7 +43,7 @@ ready).
 - **notes:** The Playwright assertion needs an authenticated dashboard session — see the memory note "Dashboard screenshot harness" / "Unauthenticated preview harness" for the throwaway-user approach; if the harness is judged too costly, a component-level render test with fixture sets satisfies the same two assertions. `overflow-hidden` on the score cell may be dropped only if it now does nothing.
 
 ## T3 · Bench divider: symmetric dash gap
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** `src/components/dashboard/team/roster-table.tsx` (~line 715, the BENCH `Reorder.Item`)
 - **done when:**

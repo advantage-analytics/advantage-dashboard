@@ -712,13 +712,22 @@ export function RosterTable({
                   dragListener={false}
                   layout="position"
                   transition={{ layout: reduceMotion ? { duration: 0 } : ROW_SLIDE }}
-                  className="flex select-none items-center gap-2.5 pt-4 pb-2"
+                  /* gap-1.5 (6px) picked by eye at 11px against the eyebrow — the
+                     em dash is its own aria-hidden span so this one gap value
+                     produces equal spacing on both sides of it. */
+                  className="flex select-none items-center gap-1.5 pt-4 pb-2"
                 >
                   <span className="eyebrow-sm">Not in the lineup</span>
                   {lineup && (
-                    <span className="text-[11px] text-[var(--ink-400)]">
-                      — drag a row below this line to bench them
-                    </span>
+                    <>
+                      <span aria-hidden="true" className="text-[11px] text-[var(--ink-400)]">
+                        —
+                      </span>
+                      <span className="text-[11px] text-[var(--ink-400)]">
+                        <span className="sr-only">: </span>
+                        drag a row below this line to bench them
+                      </span>
+                    </>
                   )}
                 </Reorder.Item>
               );
