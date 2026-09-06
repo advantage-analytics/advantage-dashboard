@@ -42,7 +42,7 @@ ready).
 - **notes:** Server-side loader; this single read feeds the KPI strip, Win Rate, form, both match counts, the Season title and `buildInsightEvidence()` — none of those need edits. Plan step 1.
 
 ## T2 · Scope Recent Matches card to personal matches
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/app/dashboard/(home)/recent-activity.tsx (guess — browser-client `matches` list query at ~L338-342)
 - **done when:**
