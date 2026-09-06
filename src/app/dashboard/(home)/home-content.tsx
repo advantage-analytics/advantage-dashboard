@@ -8,7 +8,7 @@ import {
   SetupLine,
   type SetupProgress,
 } from "@/components/dashboard/home/setup-line";
-import { FocusExample } from "@/components/dashboard/home/focus-example";
+import { FocusEmpty } from "@/components/dashboard/home/focus-empty";
 import { DayZeroHome } from "@/components/dashboard/home/day-zero-home";
 import RecentActivity from "./recent-activity";
 import ServePlacementHome from "@/components/dashboard/home/serve-placement-home";
@@ -103,12 +103,12 @@ export default function HomeContent({
         className="flex flex-col gap-5"
       >
         {/* Three states, one card. With computed evidence it states a
-            finding; on day zero it shows what a finding looks like, tagged
-            as an example and quoted so it cannot be read as one. In
-            between — matches filed, nothing analysed yet — it stays off the
-            page, because "Renders nothing without real numbers" (SKILL.md's
-            InsightCard spec) and an example after the player has already
-            sent a match would be the page failing to notice. */}
+            finding; on day zero it shows its own anatomy holding nothing, the
+            way every other region on that page does. In between — matches
+            filed, nothing analysed yet — it stays off the page, because
+            "Renders nothing without real numbers" (SKILL.md's InsightCard
+            spec) and a placeholder after the player has already sent a match
+            would be the page failing to notice. */}
         {insightEvidence ? (
           <FocusCard>
             <HomeAiInsight
@@ -119,8 +119,8 @@ export default function HomeContent({
           </FocusCard>
         ) : (
           !hasMatches && (
-            <FocusCard tag="Example">
-              <FocusExample />
+            <FocusCard>
+              <FocusEmpty />
             </FocusCard>
           )
         )}

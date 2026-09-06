@@ -21,7 +21,7 @@
  * turned without stretching a card, which traps empty surface at the bottom
  * and reads worse than a ragged edge.
  *
- * 229px is measured, not chosen: at 270 the right column ran 998px against
+ * 227px is measured, not chosen: at 270 the right column ran 998px against
  * the left's 966 and hung 32px lower, and the court's 1.274 aspect turns 32px
  * of height into 41px of width. Re-measure it if the left column's content
  * changes — a ghost row added or dropped moves it by 55px.
@@ -30,7 +30,7 @@ export function ServePlacementCourt() {
   return (
     <svg
       viewBox="-2 -2 451 354"
-      className="mx-auto block h-auto w-full max-w-[229px]"
+      className="mx-auto block h-auto w-full max-w-[227px]"
       role="img"
       aria-label="Half court diagram with the six serve zones marked"
     >

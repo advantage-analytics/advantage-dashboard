@@ -644,10 +644,13 @@ right.**
 3. **Sample or demo data — never in the user's own workspace.** A fabricated
    number is a claim about this account, and on the day the real one lands at
    a different value the page has already told them a different story. The
-   one sanctioned exception is a single, clearly quoted **example** carrying
-   its own label in the card header — the Focus card's pattern — which does
-   not scale past one card. A marker under a screen of confident-looking
-   figures does not survive a skim or a screenshot.
+   one defensible form is a single, clearly quoted **example** carrying its
+   own label in the card header, and it does not scale past one card — a
+   marker under a screen of confident-looking figures survives neither a skim
+   nor a screenshot. Even at one card it is expensive: it was built for Home's
+   Focus card and rejected, because a card showing finished prose sits
+   visibly apart from neighbours that all show structure. Prefer the card's
+   own anatomy, empty.
 
 **A zero is not a blank.** Write `—` where a value is unmeasured; `0%` is a
 statement about the athlete, `—` is not. `0` is correct only when zero is the
@@ -1323,29 +1326,31 @@ baseline, a grey sparkline, and "After your first match" ("When the report
 lands" once a match is filed but unanalysed). Matches — three ghost rows at
 the shipped 54px, stepping 1 → 0.6 → 0.35, keeping their live stat labels
 because what each row will report is real information; only the values become
-rules. Focus — one quoted example claim in `--ink-600`, labelled **Example**
-in the card header, never under the sentence, because a disclaimer that
-arrives after the claim has been read as a finding came too late. Serve
-placement — the hairline half court at the widget's own geometry; it is the
+rules. Focus — its own anatomy holding nothing: two rules at the claim's
+measure (a claim runs to about 30ch and wraps once, so full-width over
+half-width is the shape it takes), two thinner and lighter ones for the
+evidence run, and one line saying what arrives. A quoted example claim,
+labelled **Example** in the header, was built and rejected: it demonstrated
+more, but it made this the only card in the column carrying finished prose
+and the largest prose in the tail, and the card sat visibly apart from its
+neighbours. Serve placement — the hairline half court at the widget's own geometry; it is the
 one region here that is not a placeholder, since an empty court is the object
 in its empty state. Activity — the real 52×7 grid, all 364 cells empty,
 because a year with no sessions genuinely is 364 empty cells.
 
 *One header grammar across the column.* Eyebrow left, one quiet `text-micro`
-run right, then the card's own mark if it has one: "All matches" on matches,
-"0 sessions · last 12 months" on Activity, "last 4 matches" on serve
-placement, "Example" on Focus. Focus carried its qualifier as a grey capsule
-wedged beside the eyebrow, which made it the only card in the column reading
-as if it had two labels.
+run right where the card has meta to show, then the card's own mark if it has
+one: "All matches" on matches, "0 sessions · last 12 months" on Activity,
+"last 4 matches" on serve placement, nothing but the engine mark on Focus.
 
 *The court levels the columns.* It is the only continuous dimension on the
 page — every other region's height is set by its content — so it is the one
 knob that squares the two columns without stretching a card, which traps
-empty surface and reads worse than a ragged edge. **229px** at the current
+empty surface and reads worse than a ragged edge. **227px** at the current
 composition: at 270 the right column ran 998 against the left's 966, and the
-court's 1.274 aspect turns 32px of height into 41px of width. It is a
-measured number, not a chosen one — re-measure when the left column's content
-changes, since one ghost row is 55px.
+court's 1.274 aspect turns a pixel of height into 1.27 of width. It is a
+measured number, not a chosen one — re-measure when either column's content
+changes, since one ghost row is 55px and a line in the Focus card is ~15px.
 
 **Next fixture card** — the claimed player's one forward-looking object.
 Eyebrow middot-joins the stakes ("Next · B1G Conference" only when it's
