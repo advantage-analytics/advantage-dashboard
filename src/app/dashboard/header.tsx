@@ -210,6 +210,17 @@ export function Header({
    * a trail *and* a title in one slot reads as two competing answers to the
    * same question.
    *
+   * This is a broadening. The `WORKSPACE_TITLE_PATHS` set it replaces held
+   * three paths, and its own comment said Statistics, Ask and Help stayed on
+   * crumbs because "their bodies do not all carry a display-type title to
+   * displace". That was true when it was written and is not true now: every
+   * rail destination was checked before this rule went in, and each one names
+   * itself. `ComingSoonPage` renders `<h1 class="text-display">` for
+   * Statistics, Ask and Opponents; Help, Roster and Schedule carry their own.
+   * That premise is what the rule rests on — a destination whose body stops
+   * naming itself has no name on screen at all, so check the body before
+   * adding a row to the rail.
+   *
    * `showGreeting` is tested first, and that order is load-bearing. Design 9g
    * gave destinations the workspace title; 1a–1g extended it to the personal
    * pair on Home, where "Personal · <name>" is the line saying *whose data* —

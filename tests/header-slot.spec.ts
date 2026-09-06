@@ -1,6 +1,12 @@
 import { expect, test } from '@playwright/test';
 
-import { isDestination, PERSONAL_NAV, TEAM_NAV } from '@/lib/dashboard/nav';
+import {
+  isDestination,
+  PERSONAL_BOTTOM,
+  PERSONAL_NAV,
+  TEAM_BOTTOM,
+  TEAM_NAV,
+} from '@/lib/dashboard/nav';
 
 /**
  * `isDestination` decides which of the header's two treatments a path gets:
@@ -16,22 +22,26 @@ import { isDestination, PERSONAL_NAV, TEAM_NAV } from '@/lib/dashboard/nav';
  * flow, not a place the rail sends you, so `DESTINATIONS` must leave it out.
  */
 test.describe('isDestination recognises every rail entry', () => {
-  // `/dashboard/matches` is a link both menus share (see nav.ts's own
-  // comment on why that duplication is deliberate), so dedupe by href
-  // before generating test titles — Playwright refuses two tests with the
+  // Every array `DESTINATIONS` spreads, so adding a rail row adds its test
+  // rather than needing one written by hand.
+  //
+  // Deduped by href because the menus overlap on purpose (see nav.ts's own
+  // comment): `/dashboard/matches` is in both, and PERSONAL_BOTTOM and
+  // TEAM_BOTTOM are identical today. Playwright refuses two tests with the
   // same title, and the assertion is identical either way.
-  const hrefs = [...new Set([...PERSONAL_NAV, ...TEAM_NAV].map((link) => link.href))];
+  const hrefs = [
+    ...new Set(
+      [...PERSONAL_NAV, ...TEAM_NAV, ...PERSONAL_BOTTOM, ...TEAM_BOTTOM].map(
+        (link) => link.href
+      )
+    ),
+  ];
 
   for (const href of hrefs) {
     test(`${href} is a destination`, () => {
       expect(isDestination(href)).toBe(true);
     });
   }
-
-  test('the personal-bottom entries are destinations', () => {
-    expect(isDestination('/dashboard/settings')).toBe(true);
-    expect(isDestination('/dashboard/help')).toBe(true);
-  });
 });
 
 test.describe('isDestination excludes UNLISTED', () => {
