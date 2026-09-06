@@ -1,9 +1,11 @@
 # Review — widget-personal-team-filtering
 
-Sign-off: pending
+Sign-off: approved
 
-*(The human edits this line to `approved`, or annotates it otherwise. That is
-the pipeline's final gate — stage 07 must not run while it reads `pending`.)*
+*(Approved by the human on 2026-09-06, in chat: "Looks good, sign off".
+Noted at the time of approval: the manual 19 → 3 verification on
+`clajersongimena@gmail.com` had NOT been performed. The approval was given
+with that outstanding.)*
 
 Gate run: `/pr-check` over the branch range `0c8411e...HEAD`, working tree
 clean at the start. Receipt recorded: **`bcef8ef ready`**.
