@@ -125,7 +125,14 @@ export function RowLifecycle({
            across its track by default, which handed the column its full width
            and the rule with it. */
         <span className="inline-flex flex-col items-stretch gap-[5px] justify-self-start">
-          <span className="text-[11px] leading-none text-[var(--blue)]">
+          {/* `tabular` and the 89px floor together hold the track still.
+              Without them it is sized by the label, and the label grows as the
+              number gains digits — "Uploading 5%" measures 74px, "46%" 81px,
+              "100%" 88px — so the track lengthened as the upload ran and
+              jumped at each digit boundary, re-scaling the fill under itself.
+              A progress bar whose own length is a variable cannot be read.
+              89px is "Uploading 100%" in tabular figures, rounded up. */}
+          <span className="tabular min-w-[89px] text-[11px] leading-none text-[var(--blue)]">
             {percent === undefined
               ? ANALYSIS_LABEL.uploading
               : `${ANALYSIS_LABEL.uploading} ${Math.round(percent)}%`}
