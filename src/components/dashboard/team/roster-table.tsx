@@ -1,15 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useLayoutEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Reorder,
-  animate,
-  motion,
-  useMotionValue,
-  useReducedMotion,
-} from "framer-motion";
+import { Reorder, useReducedMotion } from "framer-motion";
 import { GitMerge, GripVertical } from "lucide-react";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ResultMark } from "@/components/dashboard/result-mark";
@@ -77,6 +70,14 @@ import type {
  * under the pointer, and a click no longer opens the drawer — which is why it
  * is a mode with its own Cancel rather than a handle sitting there always.
  * `RosterView` owns that state and the save.
+ *
+ * ── 5. The row in hand carries its own marks ────────────────────────────────
+ * A blue outline says WHICH row, the circled number in the `#` cell says WHERE
+ * it lands. Nothing is drawn between the rows: an earlier cut drew a blue rule
+ * at the destination slot, but the held row already sits at that slot under
+ * the pointer, so rule and row overlapped and it read as a cut through the
+ * card. The gap the siblings slide open is a better indicator than a line, and
+ * it costs nothing to draw. See `SpotCell`.
  *
  * ── How the drag moves ──────────────────────────────────────────────────────
  * Pointer-driven, via framer-motion's `Reorder`, not HTML5 drag-and-drop. The
@@ -285,12 +286,26 @@ function LastMatchCell({ member }: { member: RosterMember }) {
 }
 
 /**
- * The leading cell: a line number at rest, the drag grip while a lineup is
- * being set and this row is the one under the pointer or holding focus.
+ * The leading cell, wearing one of three faces.
  *
- * The grip swaps in rather than taking a column of its own, so entering the
- * mode moves nothing — and it swaps in for ONE row at a time, so every other
- * line keeps the number that says what the order currently is.
+ * AT REST it is a line number — and that is the whole point of the column: 1,
+ * 2, 3, 4 read straight down, and a coach ranks by comparing them.
+ *
+ * IN THE MODE, on the row under the pointer or holding focus, it becomes the
+ * GRIP — swapped in rather than given a column of its own, so entering the
+ * mode moves nothing, and for one row at a time, so every other line keeps the
+ * number that says what the order currently is.
+ *
+ * HELD, it becomes the blue circled number: the line this row takes if it is
+ * let go here, live as the siblings swap around it. This replaced a blue rule
+ * drawn across the list at the destination slot. With a pointer drag the held
+ * row is already at that slot, riding the hand a few pixels off it, so the two
+ * overlapped and the rule read as a cut through the card. The number belongs
+ * in the number column: anywhere else — hanging off the row's edge, or beside
+ * it in the gutter — and the eye has to leave the column to compare it with
+ * the rows it is being ranked against, which is the only question it answers.
+ * The grip yields the cell, having already done its job: it advertises that a
+ * row can be dragged, and by now the row is in hand.
  */
 function SpotCell({
   spot,
@@ -301,27 +316,33 @@ function SpotCell({
   draggable: boolean;
   lifted: boolean;
 }) {
+  if (lifted) {
+    return (
+      <span className={cn(COL.spot, "flex items-center justify-center")}>
+        <span
+          aria-hidden
+          className="mono tabular inline-flex size-5 items-center justify-center rounded-full bg-[var(--blue)] text-[10px] font-medium text-white"
+        >
+          {spot ?? "—"}
+        </span>
+      </span>
+    );
+  }
+
   if (draggable) {
     return (
       <span className={cn(COL.spot, "flex items-center justify-center")}>
         <GripVertical
           aria-hidden
           strokeWidth={1.5}
-          className={cn(
-            "size-3.5",
-            lifted
-              ? "text-[var(--ink-900)]"
-              : "text-[var(--ink-400)] opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
-          )}
+          className="size-3.5 text-[var(--ink-400)] opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
         />
-        {!lifted && (
-          <span
-            aria-hidden
-            className="mono tabular absolute text-[11px] text-[var(--ink-500)] transition-opacity group-hover:opacity-0 group-focus-within:opacity-0"
-          >
-            {spot ?? "—"}
-          </span>
-        )}
+        <span
+          aria-hidden
+          className="mono tabular absolute text-[11px] text-[var(--ink-500)] transition-opacity group-hover:opacity-0 group-focus-within:opacity-0"
+        >
+          {spot ?? "—"}
+        </span>
       </span>
     );
   }
@@ -450,21 +471,39 @@ function MemberRow({
         ROW,
         ROW_BOX,
         "group relative transition-[background-color,box-shadow] duration-[var(--duration-fast)] ease-[var(--ease-out-expo)]",
-        "focus-visible:bg-[var(--surface-muted)] focus-visible:outline-none has-[:focus-visible]:bg-[var(--surface-muted)]",
-        inLineupMode
-          ? "cursor-grab active:cursor-grabbing hover:bg-[var(--surface-muted)]"
-          : "cursor-pointer hover:bg-[var(--surface-muted)]",
+        "focus-visible:outline-none",
+        !lifted &&
+          "focus-visible:bg-[var(--surface-muted)] has-[:focus-visible]:bg-[var(--surface-muted)]",
+        inLineupMode ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
+        /* The wash is for rows still on the surface. A held row is off it —
+           opaque and shadowed — so it must not take the hover tint the
+           pointer sitting on top of it would otherwise give it. */
+        !lifted && "hover:bg-[var(--surface-muted)]",
         selected && !inLineupMode && "bg-[var(--surface-muted)]",
-        /* Two states, told apart on sight. FOCUSED — by click, Tab or the
-           arrows — wears the system's blue focus ring on plain `:focus`, not
-           `:focus-visible`: in this mode a mouse click is a selection, and a
-           selection nobody can see is the row Space acts on "for no reason".
-           LIFTED drops the ring and rises instead: raised card, drop line. */
+        /* One outline, two weights of it. FOCUSED — by click, Tab or the
+           arrows — is a real selection in this mode: a mouse click is how a
+           row is chosen, and a selection nobody can see is the row Space acts
+           on "for no reason". So it draws on plain `:focus`, not
+           `:focus-visible`. HELD keeps that outline and rises inside it:
+           opaque fill, raised card, the circled number in the `#` cell.
+        
+           Both shadows are `!important`, and that is not laziness. The design
+           system's focus rule (`styles/design-system/focus.css`) sets
+           `box-shadow` on every `[tabindex]`, and it is imported OUTSIDE
+           Tailwind's layers — so an ordinary `shadow-*` utility loses to it no
+           matter how specific, and a row silently wore the app-wide 40% ring
+           instead of this. `!important` is the level above an unlayered rule.
+           An inline style would also win, but framer-motion owns this
+           element's `style` attribute and does not clear a key that stops
+           being passed, which strands the outline on a row focus has left.
+           The stacking is flagged for the same reason: framer writes
+           `z-index` inline on every item, and without `!` the row below
+           painted its hover wash over this row's bottom 2px. */
         inLineupMode &&
           !lifted &&
-          "focus:shadow-[var(--focus-ring)] focus:outline-none",
+          "focus:z-[2]! focus:shadow-[0_0_0_2px_var(--blue)]! focus:outline-none",
         lifted &&
-          "z-[3] bg-[var(--surface-card)] shadow-[var(--shadow-card-emphasis)] ring-1 ring-[var(--border-medium)]",
+          "z-[3]! bg-[var(--surface-card)] shadow-[0_0_0_2px_var(--blue),var(--shadow-card-emphasis)]!",
         inLineupMode && "select-none"
       )}
     >
@@ -518,70 +557,6 @@ function MemberRow({
       </span>
       <LastMatchCell member={member} />
     </Reorder.Item>
-  );
-}
-
-/**
- * `Tb4`'s blue rule with the line number the row is about to take.
- *
- * Drawn by the LIST, not by the row. The held row is the one element on the
- * page that is translated — it follows the pointer — so a line drawn on it
- * would travel with the hand instead of marking the slot. `offsetTop` ignores
- * transforms, which is exactly the number wanted: where the row's box sits in
- * the list, i.e. the gap its neighbours have slid open. It re-measures after
- * every reorder and glides to the new slot on the same curve the rows use.
- */
-function DropLine({
-  heldId,
-  spot,
-  sequence,
-  reduceMotion,
-}: {
-  heldId: string;
-  spot: number | null;
-  sequence: string[];
-  reduceMotion: boolean | null;
-}) {
-  // A motion value rather than state: the position is read from the DOM after
-  // each commit and pushed straight to the transform, so nothing re-renders
-  // to move the line — and the first measurement lands without a glide from
-  // zero.
-  const y = useMotionValue(0);
-  const opacity = useMotionValue(0);
-  const settled = useRef(false);
-
-  useLayoutEffect(() => {
-    const el = document.getElementById(rosterRowId(heldId));
-    if (!el) {
-      opacity.set(0);
-      return;
-    }
-    const top = el.offsetTop;
-    if (!settled.current || reduceMotion) {
-      y.set(top);
-      settled.current = true;
-    } else {
-      animate(y, top, ROW_SLIDE);
-    }
-    opacity.set(1);
-    // `sequence` is the dependency that matters: the row's slot changes only
-    // when the order does.
-  }, [heldId, sequence, reduceMotion, y, opacity]);
-
-  return (
-    <motion.div
-      aria-hidden
-      style={{ y, opacity }}
-      className="pointer-events-none absolute inset-x-0 top-0 z-[4]"
-    >
-      {/* -1px so the 2px rule straddles the row boundary rather than eating
-          into the row. The rule starts after the # column; the badge takes the
-          column's place with the number the row will be given on save. */}
-      <span className="absolute -top-px left-10 right-0 h-0.5 rounded-full bg-[var(--blue)]" />
-      <span className="mono tabular absolute -top-[10px] left-0.5 inline-flex h-[18px] min-w-[20px] items-center justify-center rounded-[var(--radius-pill)] bg-[var(--blue)] px-1.5 text-[10px] font-medium text-white shadow-[var(--shadow-cta-glow)]">
-        {spot ?? "—"}
-      </span>
-    </motion.div>
   );
 }
 
@@ -639,12 +614,6 @@ export function RosterTable({
       })();
   const benchAt = sequence.indexOf(BENCH);
 
-  // The row in hand, by either hand.
-  const heldId = lineup ? (lineup.dragging ?? lineup.lifted) : null;
-  const heldIndex = heldId ? sequence.indexOf(heldId) : -1;
-  const heldSpot =
-    heldIndex < 0 ? null : benchAt < 0 || heldIndex < benchAt ? heldIndex + 1 : null;
-
   /** ↑/↓ with nothing lifted: focus walks the players, skipping the sentinel. */
   const focusStep = (playerId: string, direction: 1 | -1) => {
     const players = sequence.filter((id) => id !== BENCH);
@@ -686,18 +655,7 @@ export function RosterTable({
           axis="y"
           values={sequence}
           onReorder={onReorder}
-          /* `relative` makes this the offset parent the drop line measures
-             against. */
-          className="relative"
         >
-          {heldId && (
-            <DropLine
-              heldId={heldId}
-              spot={heldSpot}
-              sequence={sequence}
-              reduceMotion={reduceMotion}
-            />
-          )}
           {sequence.map((id, index) => {
             if (id === BENCH) {
               return (
