@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Reorder, useReducedMotion } from "framer-motion";
 import { GitMerge, GripVertical } from "lucide-react";
@@ -72,12 +73,12 @@ import type {
  * `RosterView` owns that state and the save.
  *
  * ── 5. The row in hand carries its own marks ────────────────────────────────
- * A blue outline says WHICH row, the circled number in the `#` cell says WHERE
- * it lands. Nothing is drawn between the rows: an earlier cut drew a blue rule
- * at the destination slot, but the held row already sits at that slot under
- * the pointer, so rule and row overlapped and it read as a cut through the
- * card. The gap the siblings slide open is a better indicator than a line, and
- * it costs nothing to draw. See `SpotCell`.
+ * A blue outline says WHICH row; a blue disc in the gutter beside it says
+ * WHERE it lands. Nothing is drawn between the rows: an earlier cut drew a
+ * blue rule at the destination slot, but the held row already sits at that
+ * slot under the pointer, so rule and row overlapped and it read as a cut
+ * through the card. The gap the siblings slide open is a better indicator than
+ * a line, and it costs nothing to draw. See `SpotBadge` and `LINEUP_GUTTER`.
  *
  * ── How the drag moves ──────────────────────────────────────────────────────
  * Pointer-driven, via framer-motion's `Reorder`, not HTML5 drag-and-drop. The
@@ -128,6 +129,21 @@ const ROW = "flex items-center gap-4";
  * running wall to wall. No hairlines between rows — the wash is the boundary.
  */
 const ROW_BOX = "-mx-4 h-[52px] rounded-[var(--radius-element)] px-4";
+
+/**
+ * The room the table makes down its left edge while a lineup is being set, so
+ * the held row's line number has somewhere to sit beside it (`SpotBadge`).
+ *
+ * At rest a row's box starts 8px inside the card — the card's 24px of padding
+ * less the 16px each row pulls back for its wash. A 20px disc with a 10px gap
+ * needs 30, so the mode adds 24 and the table slides right as it opens. That
+ * is a real shift, and it is deliberate rather than overlooked: entering the
+ * mode already moves the table, because the instruction banner appears above
+ * it. Both move together, on one curve, and read as the table opening up to be
+ * edited. Nothing about the COLUMNS changes — the grip still borrows the `#`
+ * cell rather than taking a column, so no cell moves relative to its heading.
+ */
+const LINEUP_GUTTER = "pl-12";
 
 export function rosterRowId(playerId: string): string {
   return `roster-row-${playerId}`;
@@ -286,26 +302,17 @@ function LastMatchCell({ member }: { member: RosterMember }) {
 }
 
 /**
- * The leading cell, wearing one of three faces.
+ * The leading cell: a line number at rest, the drag grip while a lineup is
+ * being set and this row is the one under the pointer or holding focus.
  *
- * AT REST it is a line number — and that is the whole point of the column: 1,
- * 2, 3, 4 read straight down, and a coach ranks by comparing them.
+ * The grip swaps in rather than taking a column of its own, so entering the
+ * mode moves no column — and it swaps in for ONE row at a time, so every other
+ * line keeps the number that says what the order currently is.
  *
- * IN THE MODE, on the row under the pointer or holding focus, it becomes the
- * GRIP — swapped in rather than given a column of its own, so entering the
- * mode moves nothing, and for one row at a time, so every other line keeps the
- * number that says what the order currently is.
- *
- * HELD, it becomes the blue circled number: the line this row takes if it is
- * let go here, live as the siblings swap around it. This replaced a blue rule
- * drawn across the list at the destination slot. With a pointer drag the held
- * row is already at that slot, riding the hand a few pixels off it, so the two
- * overlapped and the rule read as a cut through the card. The number belongs
- * in the number column: anywhere else — hanging off the row's edge, or beside
- * it in the gutter — and the eye has to leave the column to compare it with
- * the rows it is being ranked against, which is the only question it answers.
- * The grip yields the cell, having already done its job: it advertises that a
- * row can be dragged, and by now the row is in hand.
+ * The held row's own line is NOT drawn here. It rides in the gutter beside the
+ * row (`SpotBadge`), which is what keeps the grip and the number on screen at
+ * the same time — they answer different questions, and the row in hand is the
+ * one moment both are worth asking.
  */
 function SpotCell({
   spot,
@@ -316,33 +323,27 @@ function SpotCell({
   draggable: boolean;
   lifted: boolean;
 }) {
-  if (lifted) {
-    return (
-      <span className={cn(COL.spot, "flex items-center justify-center")}>
-        <span
-          aria-hidden
-          className="mono tabular inline-flex size-5 items-center justify-center rounded-full bg-[var(--blue)] text-[10px] font-medium text-white"
-        >
-          {spot ?? "—"}
-        </span>
-      </span>
-    );
-  }
-
   if (draggable) {
     return (
       <span className={cn(COL.spot, "flex items-center justify-center")}>
         <GripVertical
           aria-hidden
           strokeWidth={1.5}
-          className="size-3.5 text-[var(--ink-400)] opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+          className={cn(
+            "size-3.5",
+            lifted
+              ? "text-[var(--ink-900)]"
+              : "text-[var(--ink-400)] opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+          )}
         />
-        <span
-          aria-hidden
-          className="mono tabular absolute text-[11px] text-[var(--ink-500)] transition-opacity group-hover:opacity-0 group-focus-within:opacity-0"
-        >
-          {spot ?? "—"}
-        </span>
+        {!lifted && (
+          <span
+            aria-hidden
+            className="mono tabular absolute text-[11px] text-[var(--ink-500)] transition-opacity group-hover:opacity-0 group-focus-within:opacity-0"
+          >
+            {spot ?? "—"}
+          </span>
+        )}
       </span>
     );
   }
@@ -360,6 +361,32 @@ function SpotCell({
   );
 }
 
+/**
+ * The line the held row takes if it is let go here — a blue disc in the gutter
+ * the table opens along its left edge while a lineup is being set.
+ *
+ * It sits OUTSIDE the row, clear of the blue outline by 10px, rather than
+ * inside the `#` cell. Beside the row it is unmistakably about the row in
+ * hand and not one more value in a column of five, and the grip keeps the cell
+ * it borrowed. It replaced a blue rule drawn across the list at the
+ * destination slot: with a pointer drag the held row is already at that slot,
+ * riding the hand a few pixels off it, so rule and row overlapped and it read
+ * as a cut through the card.
+ *
+ * The gutter is why `LINEUP_GUTTER` exists — a row's box begins only 8px
+ * inside the card at rest, which is not room for a 20px disc and a gap.
+ */
+function SpotBadge({ spot }: { spot: number | null }) {
+  return (
+    <span
+      aria-hidden
+      className="mono tabular absolute top-1/2 -left-[30px] inline-flex size-5 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--blue)] text-[10px] font-medium text-white"
+    >
+      {spot ?? "—"}
+    </span>
+  );
+}
+
 function MemberRow({
   member,
   spot,
@@ -369,6 +396,7 @@ function MemberRow({
   onToggle,
   onMerge,
   lineup,
+  listRef,
   onLift,
   onMove,
   onDragStartRow,
@@ -384,6 +412,8 @@ function MemberRow({
   onToggle: (member: RosterMember, viaKeyboard: boolean) => void;
   onMerge: (member: RosterMember) => void;
   lineup: LineupDraft | null;
+  /** The list — what a drag is constrained to. */
+  listRef: React.RefObject<HTMLUListElement | null>;
   onLift: (playerId: string | null) => void;
   onMove: (playerId: string, direction: 1 | -1) => void;
   onDragStartRow: (playerId: string) => void;
@@ -409,6 +439,14 @@ function MemberRow({
       /* Only the mode makes a row a handle. Outside it the item is inert and
          the click below opens the drawer. */
       dragListener={inLineupMode}
+      /* The row cannot leave the list. The card clips at its edge — its
+         `overflow-x-auto` makes it a scroll box in both axes — so a row
+         dragged past the last slot was cut off, outline and all, and the card
+         grew a scrollbar. There is nothing below the last slot to drop on
+         anyway. A little give at the ends, so the boundary feels like a
+         boundary and not a wall. */
+      dragConstraints={listRef}
+      dragElastic={0.08}
       dragTransition={ROW_SETTLE}
       onDragStart={() => onDragStartRow(member.playerId)}
       onDragEnd={onDragEndRow}
@@ -507,6 +545,7 @@ function MemberRow({
         inLineupMode && "select-none"
       )}
     >
+      {lifted && <SpotBadge spot={spot} />}
       <SpotCell spot={spot} draggable={inLineupMode} lifted={lifted} />
 
       <span className={cn(COL.player, "flex min-w-0 items-center gap-2.5")}>
@@ -599,6 +638,7 @@ export function RosterTable({
   onDragEndRow: () => void;
 }) {
   const reduceMotion = useReducedMotion();
+  const listRef = useRef<HTMLUListElement>(null);
   const byId = new Map(members.map((member) => [member.playerId, member]));
 
   // At rest the server's order is the order, and the sentinel appears only
@@ -623,7 +663,13 @@ export function RosterTable({
 
   return (
     <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
-      <div className="min-w-[760px] px-6 pt-0.5 pb-1.5">
+      <div
+        className={cn(
+          "min-w-[760px] px-6 pt-0.5 pb-1.5",
+          "transition-[padding] duration-200 ease-[var(--ease-out-expo)] motion-reduce:transition-none",
+          lineup && LINEUP_GUTTER
+        )}
+      >
         {/* Set lineup rides this row rather than a card header of its own —
             the eyebrow row already spans the table. */}
         <div
@@ -651,6 +697,7 @@ export function RosterTable({
         </div>
 
         <Reorder.Group
+          ref={listRef}
           as="ul"
           axis="y"
           values={sequence}
@@ -700,6 +747,7 @@ export function RosterTable({
                 onToggle={onToggle}
                 onMerge={onMerge}
                 lineup={lineup}
+                listRef={listRef}
                 onLift={onLift}
                 onMove={onMove}
                 onDragStartRow={onDragStartRow}
