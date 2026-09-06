@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { redirect } from "next/navigation";
 import { UserCheck } from "lucide-react";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
@@ -117,22 +118,29 @@ export default async function RosterPage({
           differently. */}
       <p className="text-body-sm mt-[9px]">
         {canManage ? (
+          /* Keyed fragments, not bare ones. This JSX is built in a server
+             component and handed to a client one as a prop; across that wire
+             React loses the "statically created" marker on a fragment's
+             children and warns about a keyless array. The keys cost nothing
+             and make the warning impossible. */
           <>
-            {squad && <>{squad} · </>}
-            <span className="tabular">{playersLabel(players.length)}</span>
+            {squad && <Fragment key="squad">{squad} · </Fragment>}
+            <span key="players" className="tabular">
+              {playersLabel(players.length)}
+            </span>
             {unclaimed > 0 && (
-              <>
+              <Fragment key="unclaimed">
                 {" · "}
                 <span className="tabular">{unclaimed} without an account</span>
-              </>
+              </Fragment>
             )}
             {roster.invites.length > 0 && (
-              <>
+              <Fragment key="invites">
                 {" · "}
                 <span className="tabular">
                   {invitesPendingLabel(roster.invites.length)}
                 </span>
-              </>
+              </Fragment>
             )}
           </>
         ) : (
@@ -159,7 +167,10 @@ export default async function RosterPage({
           table, in the terms a coach worries about: the credits stayed, and a
           seat moved. Rendered only on the day, and only when there was one. */}
       {claimant && (
-        <div className="flex items-center gap-2.5 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3.5 py-3">
+        <div
+          key="claim"
+          className="flex items-center gap-2.5 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3.5 py-3"
+        >
           <UserCheck
             className="size-3.5 shrink-0 text-[var(--ink-600)]"
             strokeWidth={1.5}
@@ -196,6 +207,7 @@ export default async function RosterPage({
           its list empties, which is the case this test cannot see. */}
       {canManage && joinRequests.length > 0 && (
         <JoinRequestsCard
+          key="requests"
           requests={joinRequests}
           seats={roster.seats}
           programName={active.name}
@@ -214,12 +226,13 @@ export default async function RosterPage({
     <div className="flex flex-col gap-2">
       {staff.length > 0 && (
         <p className="flex flex-wrap items-center gap-2.5 text-[11px] leading-[1.6] text-[var(--ink-600)]">
-          <span>{coachedByLine(staff.map((m) => m.name))}</span>
+          <span key="coached">{coachedByLine(staff.map((m) => m.name))}</span>
           {/* A player sees the sentence and not the link: knowing who coaches
               the program is fair, managing them is not theirs, and a link that
               refuses on click is worse than no link. */}
           {canManage && (
             <RowAction
+              key="manage"
               href="/dashboard/settings/team"
               ariaLabel="Manage staff in Team settings"
               className="whitespace-nowrap"

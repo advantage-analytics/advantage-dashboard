@@ -1,8 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
+  BENCH,
   RosterTable,
+  lineupOrder,
   rosterRowId,
   type LineupDraft,
 } from "@/components/dashboard/team/roster-table";
@@ -75,6 +78,12 @@ export function RosterView({
       ? initialSelectedId
       : null;
 
+  const reduceMotion = useReducedMotion();
+  // One curve for everything that moves on this page: the system's `--ease-out-expo`.
+  const ease = [0.23, 1, 0.32, 1] as const;
+  const quick = { duration: reduceMotion ? 0 : 0.12 };
+  const settle = { duration: reduceMotion ? 0 : 0.2, ease };
+
   const [selectedId, setSelectedId] = useState<string | null>(initial);
   const [drawerId, setDrawerId] = useState<string | null>(initial);
   const [closing, setClosing] = useState(false);
@@ -82,13 +91,6 @@ export function RosterView({
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [lineup, setLineup] = useState<LineupDraft | null>(null);
-  /**
-   * The row under the pointer's grip, mirrored into the draft so the row can
-   * draw itself held. The ref is what the drag handlers read — `dragover`
-   * fires many times a second and must not wait on a render to know which
-   * row it is moving.
-   */
-  const dragging = useRef<string | null>(null);
   /** What the last reorder did, for anyone listening rather than looking. */
   const [announcement, setAnnouncement] = useState("");
 
@@ -186,26 +188,24 @@ export function RosterView({
     syncUrl(null);
     setError(null);
     setLineup({
-      order: members
-        .filter((m) => m.lineupSpot !== null)
-        .map((m) => m.playerId),
-      bench: members
-        .filter((m) => m.lineupSpot === null)
-        .map((m) => m.playerId),
+      sequence: [
+        ...members.filter((m) => m.lineupSpot !== null).map((m) => m.playerId),
+        BENCH,
+        ...members.filter((m) => m.lineupSpot === null).map((m) => m.playerId),
+      ],
       lifted: null,
       dragging: null,
     });
   }, [members, finishClose]);
 
   const cancelLineup = useCallback(() => {
-    dragging.current = null;
     setLineup(null);
     setAnnouncement("");
   }, []);
 
   const saveLineup = useCallback(() => {
     if (!lineup) return;
-    const order = lineup.order;
+    const order = lineupOrder(lineup.sequence);
     startSaving(async () => {
       setError(null);
       const result = await setProgramLineup(order);
@@ -215,126 +215,54 @@ export function RosterView({
       }
       // The server action revalidates, so the new `members` arrive with their
       // spots already set; dropping the draft is what lets them through.
-      dragging.current = null;
       setLineup(null);
       setAnnouncement("");
     });
   }, [lineup]);
 
-  /** Move `id` so it lands at `index` of `list`, wherever it started. */
-  const place = useCallback(
-    (id: string, list: "order" | "bench", index: number) => {
-      setLineup((current) => {
-        if (!current) return current;
-        const order = current.order.filter((x) => x !== id);
-        const bench = current.bench.filter((x) => x !== id);
-        const target = list === "order" ? order : bench;
-        const at = Math.max(0, Math.min(index, target.length));
-        target.splice(at, 0, id);
-        const next = { ...current, order, bench };
-        setAnnouncement(describe(next, id, members));
-        return next;
-      });
-    },
-    [members]
-  );
-
   const onDragStartRow = useCallback((playerId: string) => {
-    dragging.current = playerId;
     setLineup((current) =>
       current ? { ...current, dragging: playerId, lifted: null } : current
     );
   }, []);
 
-  /**
-   * Live reorder rather than a drop indicator: the row moves to the position
-   * it would take, so the numbers beside it renumber as you drag and there is
-   * nothing to interpret when you let go.
-   */
-  const onDragOverRow = useCallback(
-    (targetId: string) => {
-      const id = dragging.current;
-      if (!id || id === targetId) return;
+  const onDragEndRow = useCallback(() => {
+    setLineup((current) => (current ? { ...current, dragging: null } : current));
+  }, []);
+
+  /** `Reorder` hands back the whole sequence; the announcement names the row that moved. */
+  const onReorder = useCallback(
+    (sequence: string[]) => {
       setLineup((current) => {
         if (!current) return current;
-        const inOrder = current.order.includes(targetId);
-        const list = inOrder ? current.order : current.bench;
-        const index = list.indexOf(targetId);
-        if (index < 0) return current;
-        const order = current.order.filter((x) => x !== id);
-        const bench = current.bench.filter((x) => x !== id);
-        const target = inOrder ? order : bench;
-        const at = Math.max(0, Math.min(index, target.length));
-        if (target[at] === id) return current;
-        target.splice(at, 0, id);
-        const next = { ...current, order, bench };
-        setAnnouncement(describe(next, id, members));
-        return next;
+        if (current.dragging) setAnnouncement(describe(sequence, current.dragging, members));
+        return { ...current, sequence };
       });
     },
     [members]
   );
-
-  const onDragEndRow = useCallback(() => {
-    dragging.current = null;
-    setLineup((current) => (current ? { ...current, dragging: null } : current));
-  }, []);
-
-  const onDropOnBench = useCallback(() => {
-    const id = dragging.current;
-    if (!id) return;
-    setLineup((current) => {
-      if (!current || current.bench.includes(id)) return current;
-      const next = {
-        ...current,
-        order: current.order.filter((x) => x !== id),
-        bench: [...current.bench, id],
-      };
-      setAnnouncement(describe(next, id, members));
-      return { ...next, dragging: null };
-    });
-    dragging.current = null;
-  }, [members]);
 
   const onLift = useCallback((playerId: string | null) => {
     setLineup((current) => (current ? { ...current, lifted: playerId } : current));
   }, []);
 
   /**
-   * One step for a lifted row, crossing the lineup's bottom edge when it runs
-   * out of room — which is how a keyboard takes somebody out of the lineup, or
-   * puts them back in, without a second control for it.
+   * One step for a lifted row. The sentinel is just another position in the
+   * sequence, so stepping past it is how a keyboard benches somebody or brings
+   * them back — the same move the pointer makes, without a second control.
    */
   const onMove = useCallback(
     (playerId: string, direction: 1 | -1) => {
       setLineup((current) => {
         if (!current) return current;
-        const inOrder = current.order.includes(playerId);
-        const from = inOrder ? current.order : current.bench;
-        const index = from.indexOf(playerId);
-        if (index < 0) return current;
-
-        const order = [...current.order];
-        const bench = [...current.bench];
-        const next = index + direction;
-
-        if (inOrder && next >= order.length) {
-          order.splice(index, 1);
-          bench.unshift(playerId);
-        } else if (!inOrder && next < 0) {
-          bench.splice(index, 1);
-          order.push(playerId);
-        } else if (next < 0 || next >= from.length) {
-          return current;
-        } else {
-          const list = inOrder ? order : bench;
-          list.splice(index, 1);
-          list.splice(next, 0, playerId);
-        }
-
-        const result = { ...current, order, bench };
-        setAnnouncement(describe(result, playerId, members));
-        return result;
+        const from = current.sequence.indexOf(playerId);
+        const to = from + direction;
+        if (from < 0 || to < 0 || to >= current.sequence.length) return current;
+        const sequence = [...current.sequence];
+        sequence.splice(from, 1);
+        sequence.splice(to, 0, playerId);
+        setAnnouncement(describe(sequence, playerId, members));
+        return { ...current, sequence };
       });
     },
     [members]
@@ -400,40 +328,74 @@ export function RosterView({
         <div className="flex min-w-0 flex-1 flex-col gap-5 px-8 pt-7 pb-8">
           <div className="flex flex-col items-start justify-between gap-4 lg:flex-row lg:items-end lg:gap-10">
             {title}
-            {lineup ? (
-              <div className="flex shrink-0 items-center gap-2.5">
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={cancelLineup}
-                  className={advButton("ghost")}
+            {/* The two button pairs crossfade rather than swap — the same
+                spot, a different verb, and the eye should not have to re-find
+                it. `popLayout` keeps the outgoing pair out of flow so the
+                title never reflows underneath. */}
+            <AnimatePresence mode="popLayout" initial={false}>
+              {lineup ? (
+                <motion.div
+                  key="lineup-actions"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={quick}
+                  className="flex shrink-0 items-center gap-2.5"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={saveLineup}
-                  className={advButton("primary")}
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={cancelLineup}
+                    className={advButton("ghost")}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={saveLineup}
+                    className={advButton("primary")}
+                  >
+                    {saving ? "Saving…" : "Save lineup"}
+                  </button>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="rest-actions"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={quick}
+                  className="flex shrink-0 items-center"
                 >
-                  {saving ? "Saving…" : "Save lineup"}
-                </button>
-              </div>
-            ) : (
-              actions
-            )}
+                  {actions}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {notices}
 
           {/* The mode says what it is and how to work it, once, above the
               table it changed — rather than a hint per row. */}
+          {/* The banner arrives from just above its slot and leaves faster
+              than it came; the table below is a layout-animated sibling, so it
+              slides down to make room rather than jumping. */}
+          <AnimatePresence initial={false}>
           {lineup && (
             /* The app's inline-notice register (`settings-alert.tsx`'s info
                tint: an 8% wash inside a 12% border), not a filled bar — the
                table below is the thing to look at, and this only has to say
                what mode it is in. Real keycaps from `ui/kbd.tsx`. */
-            <div className="flex items-center gap-3 rounded-[var(--radius-element)] border border-[var(--blue-tint-12)] bg-[var(--blue-tint-08)] px-3.5 py-2.5">
+            <motion.div
+              key="lineup-banner"
+              layout={!reduceMotion}
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4, transition: quick }}
+              transition={settle}
+              className="flex items-center gap-3 rounded-[var(--radius-element)] border border-[var(--blue-tint-12)] bg-[var(--blue-tint-08)] px-3.5 py-2.5"
+            >
               <GripVertical
                 className="size-3.5 shrink-0 text-[var(--blue)]"
                 strokeWidth={1.5}
@@ -452,8 +414,9 @@ export function RosterView({
               <span className="ml-auto shrink-0 text-[11px] text-[var(--ink-600)]">
                 Nothing is saved until Save lineup.
               </span>
-            </div>
+            </motion.div>
           )}
+          </AnimatePresence>
 
           {error && (
             <p role="alert" className="text-[12px] leading-[18px] text-[var(--danger)]">
@@ -461,6 +424,7 @@ export function RosterView({
             </p>
           )}
 
+          <motion.div layout={reduceMotion ? false : "position"} transition={{ layout: settle }}>
           <RosterTable
             members={members}
             invites={invites}
@@ -480,11 +444,11 @@ export function RosterView({
             onStartLineup={startLineup}
             onLift={onLift}
             onMove={onMove}
+            onReorder={onReorder}
             onDragStartRow={onDragStartRow}
-            onDragOverRow={onDragOverRow}
             onDragEndRow={onDragEndRow}
-            onDropOnBench={onDropOnBench}
           />
+          </motion.div>
 
           {/* Announced rather than drawn: the numbers beside the rows already
               show a sighted user what moved. */}
@@ -536,15 +500,16 @@ export function RosterView({
 
 /** "Rafael Osei, line 2 of 6" — or that they are out of the lineup. */
 function describe(
-  draft: LineupDraft,
+  sequence: string[],
   playerId: string,
   members: RosterMember[]
 ): string {
   const name =
     members.find((m) => m.playerId === playerId)?.name ?? "That player";
-  const index = draft.order.indexOf(playerId);
+  const order = lineupOrder(sequence);
+  const index = order.indexOf(playerId);
   if (index < 0) return `${name}, out of the lineup`;
-  return `${name}, line ${index + 1} of ${draft.order.length}`;
+  return `${name}, line ${index + 1} of ${order.length}`;
 }
 
 /**

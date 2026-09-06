@@ -1,7 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { useLayoutEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import {
+  Reorder,
+  animate,
+  motion,
+  useMotionValue,
+  useReducedMotion,
+} from "framer-motion";
 import { GitMerge, GripVertical } from "lucide-react";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ResultMark } from "@/components/dashboard/result-mark";
@@ -69,7 +77,30 @@ import type {
  * under the pointer, and a click no longer opens the drawer — which is why it
  * is a mode with its own Cancel rather than a handle sitting there always.
  * `RosterView` owns that state and the save.
+ *
+ * ── How the drag moves ──────────────────────────────────────────────────────
+ * Pointer-driven, via framer-motion's `Reorder`, not HTML5 drag-and-drop. The
+ * first cut used the native drag events and could not be made smooth: they
+ * fire at a throttled rate, the held row only ever jumps between slots, and a
+ * displaced row sliding under the cursor re-fires `dragover` mid-slide and
+ * swaps straight back — a flicker loop no easing curve can fix. With
+ * `Reorder` the held row follows the pointer as a transform, siblings slide
+ * aside on `--ease-out-expo`, and touch comes for free.
+ *
+ * The lineup and the bench are ONE reorderable sequence with a sentinel
+ * (`BENCH`) between them: everything above it holds a line, everything below
+ * does not. Dragging a row across the sentinel is how it enters or leaves the
+ * lineup — one gesture, no second control, and the keyboard's ↑/↓ cross it the
+ * same way.
  */
+
+/**
+ * The system's confident arrival: `--ease-out-expo`. Rows displaced by a drag
+ * slide on it; the held row's shadow eases on `--duration-fast`. Nothing here
+ * bounces — the design system bans it, and a lineup is not a toy.
+ */
+const EASE_OUT_EXPO = [0.23, 1, 0.32, 1] as const;
+const ROW_SLIDE = { duration: 0.22, ease: EASE_OUT_EXPO };
 
 /** Column widths. Only the spacer flexes. */
 const COL = {
@@ -89,17 +120,6 @@ const ROW = "flex items-center gap-4";
  */
 const ROW_BOX = "-mx-4 h-[52px] rounded-[var(--radius-element)] px-4";
 
-/**
- * A 1×1 transparent GIF, handed to `setDragImage` so the browser paints no
- * ghost. Module-level so it is one decode, not one per drag.
- */
-const BLANK_DRAG_IMAGE: HTMLImageElement | undefined =
-  typeof Image === "undefined"
-    ? undefined
-    : Object.assign(new Image(), {
-        src: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
-      });
-
 export function rosterRowId(playerId: string): string {
   return `roster-row-${playerId}`;
 }
@@ -108,19 +128,22 @@ export function profileHref(playerId: string): string {
   return `/dashboard/team/roster/${playerId}`;
 }
 
+/** The sentinel in a lineup sequence: above it is the lineup, below it the bench. */
+export const BENCH = "__bench__";
+
+/** The lined-up ids, in order — the part of a sequence before the sentinel. */
+export function lineupOrder(sequence: string[]): string[] {
+  const at = sequence.indexOf(BENCH);
+  return at < 0 ? sequence : sequence.slice(0, at);
+}
+
 /** What `RosterView` hands down while Set lineup is on. */
 export interface LineupDraft {
-  /** Player ids in the lineup, in order. Position 0 is line 1. */
-  order: string[];
-  /** Player ids currently out of the lineup. */
-  bench: string[];
+  /** Player ids with one `BENCH` between them, in display order. */
+  sequence: string[];
   /** The row a keyboard user has lifted, or null. */
   lifted: string | null;
-  /**
-   * The row under the pointer's grip, or null. State rather than a ref, so
-   * the row can draw itself lifted and carry the drop line while it moves —
-   * a ref told the list where the row was going but let nothing show it.
-   */
+  /** The row under the pointer, or null — so it can draw itself held. */
   dragging: string | null;
 }
 
@@ -320,8 +343,8 @@ function MemberRow({
   onLift,
   onMove,
   onDragStartRow,
-  onDragOverRow,
   onDragEndRow,
+  onFocusStep,
 }: {
   member: RosterMember;
   /** The line this row currently holds — live while dragging. */
@@ -335,10 +358,12 @@ function MemberRow({
   onLift: (playerId: string | null) => void;
   onMove: (playerId: string, direction: 1 | -1) => void;
   onDragStartRow: (playerId: string) => void;
-  onDragOverRow: (playerId: string) => void;
   onDragEndRow: () => void;
+  /** Move focus to the neighbouring row — the arrows' job while nothing is lifted. */
+  onFocusStep: (playerId: string, direction: 1 | -1) => void;
 }) {
   const router = useRouter();
+  const reduceMotion = useReducedMotion();
   const href = profileHref(member.playerId);
   const inLineupMode = lineup !== null;
   // Held by either hand: lifted with Space, or under the pointer mid-drag.
@@ -346,34 +371,22 @@ function MemberRow({
     lineup?.lifted === member.playerId || lineup?.dragging === member.playerId;
 
   return (
-    <li
+    <Reorder.Item
+      as="li"
+      value={member.playerId}
       id={rosterRowId(member.playerId)}
       tabIndex={0}
       aria-current={selected ? "true" : undefined}
-      draggable={inLineupMode}
-      onDragStart={(event) => {
-        if (!inLineupMode) return;
-        // Firefox refuses to start a drag without data on the transfer.
-        event.dataTransfer.setData("text/plain", member.playerId);
-        event.dataTransfer.effectAllowed = "move";
-        // The row itself is the thing that moves — it reorders live under the
-        // pointer and draws its own drop line — so the browser's translucent
-        // copy of it would be a second row following the first.
-        if (BLANK_DRAG_IMAGE) event.dataTransfer.setDragImage(BLANK_DRAG_IMAGE, 0, 0);
-        onDragStartRow(member.playerId);
-      }}
-      onDragOver={(event) => {
-        if (!inLineupMode) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "move";
-        onDragOverRow(member.playerId);
-      }}
-      onDrop={(event) => {
-        if (!inLineupMode) return;
-        event.preventDefault();
-        onDragEndRow();
-      }}
+      /* Only the mode makes a row a handle. Outside it the item is inert and
+         the click below opens the drawer. */
+      dragListener={inLineupMode}
+      onDragStart={() => onDragStartRow(member.playerId)}
       onDragEnd={onDragEndRow}
+      /* `position` only: nothing here changes size, and animating size would
+         re-layout the whole card each frame. The held row is exempt from the
+         slide — it is under the pointer, not on its way somewhere. */
+      layout="position"
+      transition={{ layout: reduceMotion ? { duration: 0 } : ROW_SLIDE }}
       onClick={(event) => {
         // In lineup mode the row is a handle, not a link. Without this the
         // drawer would open every time a drag ended a pixel from where it
@@ -389,18 +402,27 @@ function MemberRow({
         if (event.target !== event.currentTarget) return;
 
         if (inLineupMode) {
+          // Space lifts; Space again sets down. Between the two, the arrows
+          // move the row. Outside them, the arrows move *you* — from row to
+          // row — so the whole lineup is reachable without a pointer: walk,
+          // lift, move, drop, walk on.
           if (event.key === " " || event.key === "Enter") {
             event.preventDefault();
             onLift(lifted ? null : member.playerId);
             return;
           }
-          if (lifted && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+          if (event.key === "ArrowUp" || event.key === "ArrowDown") {
             event.preventDefault();
-            onMove(member.playerId, event.key === "ArrowDown" ? 1 : -1);
-            // Focus follows the row it moved to.
-            requestAnimationFrame(() => {
-              document.getElementById(rosterRowId(member.playerId))?.focus();
-            });
+            const direction = event.key === "ArrowDown" ? 1 : -1;
+            if (lifted) {
+              onMove(member.playerId, direction);
+              // Focus follows the row it moved with.
+              requestAnimationFrame(() => {
+                document.getElementById(rosterRowId(member.playerId))?.focus();
+              });
+            } else {
+              onFocusStep(member.playerId, direction);
+            }
           }
           return;
         }
@@ -413,28 +435,17 @@ function MemberRow({
       className={cn(
         ROW,
         ROW_BOX,
-        "group relative transition-colors duration-[var(--duration-hover)]",
+        "group relative transition-[background-color,box-shadow] duration-[var(--duration-fast)] ease-[var(--ease-out-expo)]",
         "focus-visible:bg-[var(--surface-muted)] focus-visible:outline-none has-[:focus-visible]:bg-[var(--surface-muted)]",
         inLineupMode
           ? "cursor-grab active:cursor-grabbing hover:bg-[var(--surface-muted)]"
           : "cursor-pointer hover:bg-[var(--surface-muted)]",
         selected && !inLineupMode && "bg-[var(--surface-muted)]",
         lifted &&
-          "bg-[var(--surface-card)] shadow-[var(--shadow-card-emphasis)] ring-1 ring-[var(--border-medium)]"
+          "z-[3] bg-[var(--surface-card)] shadow-[var(--shadow-card-emphasis)] ring-1 ring-[var(--border-medium)]",
+        inLineupMode && "select-none"
       )}
     >
-      {/* The drop line — `Tb4`'s blue rule with the line number the row is
-          about to take. It rides the held row's top edge, which in a list
-          that reorders live IS the drop position. */}
-      {lifted && (
-        <span aria-hidden className="pointer-events-none absolute inset-x-0 -top-px">
-          <span className="absolute left-12 right-0 h-0.5 rounded-full bg-[var(--blue)]" />
-          <span className="mono tabular absolute left-4 -top-2 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[var(--radius-pill)] bg-[var(--blue)] px-1.5 text-[10px] font-medium text-white">
-            {spot ?? "—"}
-          </span>
-        </span>
-      )}
-
       <SpotCell spot={spot} draggable={inLineupMode} lifted={lifted} />
 
       <span className={cn(COL.player, "flex min-w-0 items-center gap-2.5")}>
@@ -484,7 +495,71 @@ function MemberRow({
         <FormTicks form={member.form} />
       </span>
       <LastMatchCell member={member} />
-    </li>
+    </Reorder.Item>
+  );
+}
+
+/**
+ * `Tb4`'s blue rule with the line number the row is about to take.
+ *
+ * Drawn by the LIST, not by the row. The held row is the one element on the
+ * page that is translated — it follows the pointer — so a line drawn on it
+ * would travel with the hand instead of marking the slot. `offsetTop` ignores
+ * transforms, which is exactly the number wanted: where the row's box sits in
+ * the list, i.e. the gap its neighbours have slid open. It re-measures after
+ * every reorder and glides to the new slot on the same curve the rows use.
+ */
+function DropLine({
+  heldId,
+  spot,
+  sequence,
+  reduceMotion,
+}: {
+  heldId: string;
+  spot: number | null;
+  sequence: string[];
+  reduceMotion: boolean | null;
+}) {
+  // A motion value rather than state: the position is read from the DOM after
+  // each commit and pushed straight to the transform, so nothing re-renders
+  // to move the line — and the first measurement lands without a glide from
+  // zero.
+  const y = useMotionValue(0);
+  const opacity = useMotionValue(0);
+  const settled = useRef(false);
+
+  useLayoutEffect(() => {
+    const el = document.getElementById(rosterRowId(heldId));
+    if (!el) {
+      opacity.set(0);
+      return;
+    }
+    const top = el.offsetTop;
+    if (!settled.current || reduceMotion) {
+      y.set(top);
+      settled.current = true;
+    } else {
+      animate(y, top, ROW_SLIDE);
+    }
+    opacity.set(1);
+    // `sequence` is the dependency that matters: the row's slot changes only
+    // when the order does.
+  }, [heldId, sequence, reduceMotion, y, opacity]);
+
+  return (
+    <motion.div
+      aria-hidden
+      style={{ y, opacity }}
+      className="pointer-events-none absolute inset-x-0 top-0 z-[4]"
+    >
+      {/* -1px so the 2px rule straddles the row boundary rather than eating
+          into the row. The rule starts after the # column; the badge takes the
+          column's place with the number the row will be given on save. */}
+      <span className="absolute -top-px left-10 right-0 h-0.5 rounded-full bg-[var(--blue)]" />
+      <span className="mono tabular absolute -top-[10px] left-0.5 inline-flex h-[18px] min-w-[20px] items-center justify-center rounded-[var(--radius-pill)] bg-[var(--blue)] px-1.5 text-[10px] font-medium text-white shadow-[var(--shadow-cta-glow)]">
+        {spot ?? "—"}
+      </span>
+    </motion.div>
   );
 }
 
@@ -502,10 +577,9 @@ export function RosterTable({
   onStartLineup,
   onLift,
   onMove,
+  onReorder,
   onDragStartRow,
-  onDragOverRow,
   onDragEndRow,
-  onDropOnBench,
 }: {
   /** Players only — the page keeps staff out of this list entirely. */
   members: RosterMember[];
@@ -522,40 +596,39 @@ export function RosterTable({
   onStartLineup: () => void;
   onLift: (playerId: string | null) => void;
   onMove: (playerId: string, direction: 1 | -1) => void;
+  /** The whole sequence after a drag — ids and the sentinel, in new order. */
+  onReorder: (sequence: string[]) => void;
   onDragStartRow: (playerId: string) => void;
-  onDragOverRow: (playerId: string) => void;
   onDragEndRow: () => void;
-  onDropOnBench: () => void;
 }) {
+  const reduceMotion = useReducedMotion();
   const byId = new Map(members.map((member) => [member.playerId, member]));
 
-  // At rest the server's order is the order. In lineup mode the draft is,
-  // so rows renumber live as they are dragged.
-  const inLine = lineup
-    ? lineup.order.flatMap((id) => byId.get(id) ?? [])
-    : members.filter((member) => member.lineupSpot !== null);
-  const benched = lineup
-    ? lineup.bench.flatMap((id) => byId.get(id) ?? [])
-    : members.filter((member) => member.lineupSpot === null);
+  // At rest the server's order is the order, and the sentinel appears only
+  // if somebody is actually out of the lineup. In the mode the draft is the
+  // order and the sentinel is always there — it is the drop target for
+  // benching somebody.
+  const sequence: string[] = lineup
+    ? lineup.sequence
+    : (() => {
+        const ranked = members.filter((m) => m.lineupSpot !== null).map((m) => m.playerId);
+        const rest = members.filter((m) => m.lineupSpot === null).map((m) => m.playerId);
+        return rest.length > 0 ? [...ranked, BENCH, ...rest] : ranked;
+      })();
+  const benchAt = sequence.indexOf(BENCH);
 
-  const rowFor = (member: RosterMember, spot: number | null) => (
-    <MemberRow
-      key={member.playerId}
-      member={member}
-      spot={spot}
-      canManage={canManage}
-      isViewer={member.userId === viewerId}
-      selected={member.playerId === selectedId}
-      onToggle={onToggle}
-      onMerge={onMerge}
-      lineup={lineup}
-      onLift={onLift}
-      onMove={onMove}
-      onDragStartRow={onDragStartRow}
-      onDragOverRow={onDragOverRow}
-      onDragEndRow={onDragEndRow}
-    />
-  );
+  // The row in hand, by either hand.
+  const heldId = lineup ? (lineup.dragging ?? lineup.lifted) : null;
+  const heldIndex = heldId ? sequence.indexOf(heldId) : -1;
+  const heldSpot =
+    heldIndex < 0 ? null : benchAt < 0 || heldIndex < benchAt ? heldIndex + 1 : null;
+
+  /** ↑/↓ with nothing lifted: focus walks the players, skipping the sentinel. */
+  const focusStep = (playerId: string, direction: 1 | -1) => {
+    const players = sequence.filter((id) => id !== BENCH);
+    const next = players[players.indexOf(playerId) + direction];
+    if (next) document.getElementById(rosterRowId(next))?.focus();
+  };
 
   return (
     <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
@@ -586,34 +659,75 @@ export function RosterTable({
           )}
         </div>
 
-        <ul>
-          {inLine.map((member, index) => rowFor(member, index + 1))}
-
-          {/* Out of the lineup. A drop target in its own right, so somebody
-              can be dragged off the ladder as well as onto it. */}
-          {(benched.length > 0 || lineup) && (
-            <li
-              onDragOver={(event) => {
-                if (!lineup) return;
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "move";
-              }}
-              onDrop={(event) => {
-                if (!lineup) return;
-                event.preventDefault();
-                onDropOnBench();
-              }}
-              className="flex items-center gap-2.5 pt-4 pb-2"
-            >
-              <span className="eyebrow-sm">Not in the lineup</span>
-              {lineup && (
-                <span className="text-[11px] text-[var(--ink-400)]">
-                  — drag up to add
-                </span>
-              )}
-            </li>
+        <Reorder.Group
+          as="ul"
+          axis="y"
+          values={sequence}
+          onReorder={onReorder}
+          /* `relative` makes this the offset parent the drop line measures
+             against. */
+          className="relative"
+        >
+          {heldId && (
+            <DropLine
+              heldId={heldId}
+              spot={heldSpot}
+              sequence={sequence}
+              reduceMotion={reduceMotion}
+            />
           )}
-          {benched.map((member) => rowFor(member, null))}
+          {sequence.map((id, index) => {
+            if (id === BENCH) {
+              return (
+                /* The bench divider is itself an item in the sequence — that is
+                   what lets a row be dragged across it — but not a handle. */
+                <Reorder.Item
+                  key={BENCH}
+                  as="li"
+                  value={BENCH}
+                  dragListener={false}
+                  layout="position"
+                  transition={{ layout: reduceMotion ? { duration: 0 } : ROW_SLIDE }}
+                  className="flex select-none items-center gap-2.5 pt-4 pb-2"
+                >
+                  <span className="eyebrow-sm">Not in the lineup</span>
+                  {lineup && (
+                    <span className="text-[11px] text-[var(--ink-400)]">
+                      — drag a row below this line to bench them
+                    </span>
+                  )}
+                </Reorder.Item>
+              );
+            }
+            const member = byId.get(id);
+            if (!member) return null;
+            // In the mode the number is what Save will write; at rest it is
+            // what the server holds, which can differ when two players share a
+            // line from the Edit player form.
+            const spot = lineup
+              ? benchAt < 0 || index < benchAt
+                ? index + 1
+                : null
+              : member.lineupSpot;
+            return (
+              <MemberRow
+                key={member.playerId}
+                member={member}
+                spot={spot}
+                canManage={canManage}
+                isViewer={member.userId === viewerId}
+                selected={member.playerId === selectedId}
+                onToggle={onToggle}
+                onMerge={onMerge}
+                lineup={lineup}
+                onLift={onLift}
+                onMove={onMove}
+                onDragStartRow={onDragStartRow}
+                onDragEndRow={onDragEndRow}
+                onFocusStep={focusStep}
+              />
+            );
+          })}
 
           {/* Invitations belong in this list, not under it: somebody a coach
               emailed on Monday is on the roster as far as the coach is
@@ -683,7 +797,7 @@ export function RosterTable({
               )}
             </li>
           ))}
-        </ul>
+        </Reorder.Group>
       </div>
     </div>
   );
