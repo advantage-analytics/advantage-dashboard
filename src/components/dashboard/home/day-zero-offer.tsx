@@ -36,36 +36,45 @@ export function DayZeroOffer() {
       >
         Every serve, every point, and one thing to work on.
       </p>
-      <Link href="/dashboard/matches/new" className={advButton("primary")}>
-        Send a match
-      </Link>
       {/*
-       * The import path, as a link rather than a second button.
+       * Two ways in, one of them primary.
        *
-       * It was a sentence until the wizard could tell the two apart: both
-       * controls opened the same URL on the same step, so the second was
-       * promising a door that did not exist. `?source=swing-vision`
-       * preselects the Source field, so the link now lands somewhere the
-       * button does not.
+       * The import path was a clause in the sentence until the wizard could
+       * tell the two apart: both controls opened the same URL on the same
+       * step, so a second control was promising a door that did not exist.
+       * `?source=swing-vision` preselects the Source field, so the ghost now
+       * lands somewhere the primary does not.
        *
-       * Still a link, not a button. It does not skip step one — that step
-       * also asks whose match this is, and nothing may carry a viewer past
-       * that unreviewed — so it is a shorter way in, not a second route. And
-       * it is the one path that reaches a report inside the same session,
-       * for the only segment none of the video requirements apply to.
+       * A ghost, not a second primary, and a short label. "Import a
+       * SwingVision export" ran to 209px beside a 119px primary, and the
+       * bigger grey button stopped the blue one reading as the main action;
+       * "Import instead" sits at 124px. It says what this button is relative
+       * to the other, and leaves naming the source to the sentence directly
+       * beneath, which does it better than a label can.
+       *
+       * It does not skip step one — that step also asks whose match this is,
+       * and nothing may carry a viewer past that unreviewed — so the pair is
+       * one route with two entrances, not two routes. The import entrance is
+       * the only one that reaches a report inside the same session, for the
+       * one segment none of the video requirements apply to.
        */}
+      <div className="flex items-center gap-3">
+        <Link href="/dashboard/matches/new" className={advButton("primary")}>
+          Send a match
+        </Link>
+        <Link
+          href="/dashboard/matches/new?source=swing-vision"
+          className={advButton("ghost")}
+        >
+          Import instead
+        </Link>
+      </div>
       <p
         className="text-micro text-center"
         style={{ maxWidth: "52ch", textWrap: "pretty" }}
       >
-        One singles match, 1080p or better, camera fixed for the whole thing.{" "}
-        <Link
-          href="/dashboard/matches/new?source=swing-vision"
-          className="rounded-sm font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:outline-none"
-        >
-          Or import a SwingVision export
-        </Link>
-        , which needs none of that.
+        One singles match, 1080p or better, camera fixed for the whole thing.
+        A SwingVision export needs none of that.
       </p>
     </div>
   );

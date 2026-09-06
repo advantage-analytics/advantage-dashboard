@@ -92,9 +92,9 @@ export function RecentMatchesEmpty({
        * separate destination.
        *
        * The wizard now accepts `?source=swing-vision`, and the day-zero offer
-       * carries that as a link. It stayed a link rather than becoming a second
-       * button: the param preselects the Source field but cannot skip step
-       * one, which also asks whose match this is.
+       * carries that as a ghost button beside the primary — a second entrance
+       * to one route, since the param preselects the Source field but cannot
+       * skip step one, which also asks whose match this is.
        */}
       {showAction && (
       <div className="mt-3.5 flex items-center gap-5 border-t border-[var(--border-hairline)] pt-[22px] pb-1">
