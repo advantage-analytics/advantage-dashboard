@@ -67,7 +67,7 @@ ready).
 - **notes:** Must land before T5–T7 so their layout is judged at the final width.
 
 ## T5 · Add Player: occupied-spot acknowledgement gate
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4
 - **files:** `src/components/dashboard/team/add-player-dialog.tsx`, new `tests/add-player-spot-gate.spec.ts` (guess)

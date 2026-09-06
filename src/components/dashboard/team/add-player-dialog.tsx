@@ -104,6 +104,20 @@ function duplicateNameNote(matches: RosterMember[]): string {
     .join(", ")}. If this is somebody else, you can still add them.`;
 }
 
+/**
+ * Who the confirm says the line would be shared with.
+ *
+ * Its own sentence, not `spotHeldNote`'s: that one is shared with Edit player,
+ * which raises no confirm, and a helper bent to serve both would be the two
+ * disagreeing copies `player-fields.tsx` exists to prevent. Long rosters stop
+ * at two names for the same reason the note does — a list is not the point.
+ */
+function sharedWith(names: string[]): string {
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names[0]} and ${names.length - 1} others`;
+}
+
 export function AddPlayerDialog({
   open,
   onOpenChange,
@@ -123,6 +137,20 @@ export function AddPlayerDialog({
   const [lineupSpot, setLineupSpot] = useState("");
   const [email, setEmail] = useState("");
   const [alsoInvite, setAlsoInvite] = useState(false);
+  /**
+   * The coach saying, out loud, that a shared line is what they meant.
+   *
+   * Not validation, and deliberately not `DialogProblem`: sharing a spot is
+   * legal — `program_players` carries no unique index on it, for the reshuffle
+   * reason `spotHeldNote` states — so nothing here refuses the write. What it
+   * refuses is the *accidental* one, where the note above went by unread. Same
+   * quiet register as that note: neutral ink, no alert role, one tick.
+   *
+   * It resets whenever the spot changes, not just on close. Acknowledging #3
+   * says nothing about #5, and an acknowledgement that survives the change
+   * would let the second, unread collision through on the first one's tick.
+   */
+  const [spotAcknowledged, setSpotAcknowledged] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   /**
@@ -164,6 +192,7 @@ export function AddPlayerDialog({
     setLineupSpot("");
     setEmail("");
     setAlsoInvite(false);
+    setSpotAcknowledged(false);
     setError(null);
     setCreated(null);
   }
@@ -192,7 +221,11 @@ export function AddPlayerDialog({
     onOpenChange(false);
   }
 
-  const ready = firstName.trim() !== "" && lastName.trim() !== "";
+  /** The one place the spot changes, so the acknowledgement cannot outlive it. */
+  function changeLineupSpot(next: string) {
+    setLineupSpot(next);
+    setSpotAcknowledged(false);
+  }
 
   const formKey = [
     firstName.trim(),
@@ -214,6 +247,11 @@ export function AddPlayerDialog({
   // which Edit player uses to keep the note off the row it is editing — is the
   // one place that decides what "somebody else" means.
   const spotTakenBy = spotHolders(roster, lineupSpot, createdProfileId);
+
+  const ready =
+    firstName.trim() !== "" &&
+    lastName.trim() !== "" &&
+    (spotTakenBy.length === 0 || spotAcknowledged);
 
   // Half a name matches every Maya on the squad, which is a warning about
   // nothing while somebody is still typing — so this stays empty until both
@@ -371,7 +409,7 @@ export function AddPlayerDialog({
           <UnderlineSelect
             ariaLabel="Lineup spot"
             value={lineupSpot}
-            onChange={setLineupSpot}
+            onChange={changeLineupSpot}
           >
             <option value="">Not set</option>
             {LINEUP_SPOTS.map((spot) => (
@@ -387,6 +425,30 @@ export function AddPlayerDialog({
           440px dialog, and a name wrapped over three lines would shove the
           email field down every time a coach changed the spot. */}
       <RosterNote icon={Users} note={spotNote} />
+
+      {/* The note's confirm, borrowing the invite checkbox's grammar wholesale
+          rather than inventing a second one: same accent, same 12px label over
+          an 11px sub-line. It sits directly under the sentence it answers, and
+          exists only while that sentence does — a free spot asks nothing. */}
+      {spotTakenBy.length > 0 && (
+        <label className="flex cursor-pointer items-start gap-2.5">
+          <input
+            type="checkbox"
+            checked={spotAcknowledged}
+            onChange={(event) => setSpotAcknowledged(event.target.checked)}
+            className="mt-px size-4 shrink-0 cursor-pointer accent-[var(--blue)]"
+          />
+          <span>
+            <span className="block text-[12px] text-[var(--ink-700)]">
+              Yes — share #{lineupSpot} with {sharedWith(spotTakenBy)} for now.
+            </span>
+            <span className="mt-0.5 block text-[11px] leading-[1.5] text-[var(--ink-500)]">
+              Nobody is moved off the line. You can change either player&rsquo;s
+              spot later.
+            </span>
+          </span>
+        </label>
+      )}
 
       <SettingsField
         label="Email · optional"
