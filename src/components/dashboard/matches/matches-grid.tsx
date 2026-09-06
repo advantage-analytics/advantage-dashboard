@@ -27,20 +27,25 @@ interface MatchesGridProps {
 }
 
 /**
- * One header per row column, in the same order as `LIST_GRID_COLS`. Text and
- * its header flush left; the two numeric measures at the edge — Score and
- * Result — flush right with their headers (Updated Design System 20d). Plain
- * eyebrows: sorting lives in the toolbar's one sort control, not in the
- * header row.
+ * One header per row column, in the same order as `LIST_GRID_COLS`. Everything
+ * is flush left: the score is the only numeric measure left and it sits in a
+ * fixed track, so left-aligning it starts every row's numbers at one x —
+ * right-aligning would ragged them against a three-set score.
+ *
+ * Plain eyebrows, no sort buttons: sorting lives in the toolbar's one sort
+ * control. Two of the eight tracks are the actions lane and the chevron, which
+ * head nothing and carry an empty label to keep the header's column count in
+ * step with the row's.
  */
-const COLUMNS: { label: string; align?: "right" }[] = [
-  { label: "Date" },
-  { label: "Opponent" },
-  { label: "Event" },
-  { label: "Analysis" },
-  { label: "Score", align: "right" },
-  { label: "Result", align: "right" },
-  { label: "" },
+const COLUMNS: string[] = [
+  "Date",
+  "Event",
+  "Round",
+  "Opponent",
+  "Result",
+  "Score",
+  "",
+  "",
 ];
 
 export function MatchesGrid({
@@ -52,7 +57,7 @@ export function MatchesGrid({
 }: MatchesGridProps): React.JSX.Element {
   /* Which layout shows is a width question, so Tailwind answers it rather than
      React. Held in state it could only be read after mount, so the server — which
-     has no viewport — always emitted the seven-column table and a phone painted
+     has no viewport — always emitted the wide table and a phone painted
      that squeezed table for a frame before an effect swapped in the cards.
      Deciding in CSS renders the right layout the first time, and pins the
      breakpoint to `lg` instead of a 1023px literal with nothing tying it there.
@@ -91,13 +96,13 @@ export function MatchesGrid({
             style={LIST_GRID_COLS}
             role="row"
           >
-            {COLUMNS.map((col, i) => (
+            {COLUMNS.map((label, i) => (
               <span
-                key={col.label || `col-${i}`}
-                className={`eyebrow-sm min-w-0${col.align === "right" ? " text-right" : ""}`}
+                key={label || `col-${i}`}
+                className="eyebrow-sm min-w-0 truncate"
                 role="columnheader"
               >
-                {col.label}
+                {label}
               </span>
             ))}
           </div>
