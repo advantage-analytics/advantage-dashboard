@@ -993,15 +993,22 @@ master-detail split is retired; its detail is the peek drawer below.
    **segmented set switcher**: 22px segments labeled by the set score itself,
    selected = surface-muted, unselected at 42% opacity; scope readout left,
    "Whole match" reset right, both only while filtered.
-8. **Table page states.** Day zero renders title, primary action and usage
-   footer identically to the populated page — the frame never moves; pills
-   and table are absent, not skeletoned; the middle carries one 24px light
-   line, one sentence, two quiet paths. (This is the **table** page's rule
-   and it stays. Personal Home's day zero is a different composition — the
-   offer over a graded copy of the page — because Home's regions each own a
-   designed zero state worth showing, where a table's zero state is one empty
-   grid. Neither page skeletons: what Home dims is the real empty states, not
-   grey stand-ins for rows that do not exist.) The resting view is never
+8. **Table page states.** Day zero on a **personal** list page is the same
+   composition as personal Home's (Personal Home Recipes → Day zero): the
+   offer, centred, over the page's own shape at 0.32 and `inert` — the
+   lifecycle chips at zero, the toolbar, the table card with its column labels
+   over ghost rows — and **no title row**, because the offer carries the
+   page's one primary and a title-row button beside it would be two. The
+   title row, chips and populated table return with the first match. *This
+   rewrites the earlier rule* — "title, primary and footer identical to the
+   populated page; pills and table absent, not skeletoned" — which had two
+   day-zero pages one click apart looking like two products, and whose
+   shipped form carried two blue links to the same URL. What is dimmed is the
+   list's real anatomy with its labels intact, never grey stand-ins for
+   labels; the column headers are the payload (Empty State → labels). The
+   **team** list keeps the older shape until its own day zero ("Set up your
+   program") is designed. Once populated, the frame never moves again: the
+   resting view is never pre-filtered, and a filtered view is its own screen. The resting view is never
    pre-filtered; a filtered view is its own screen, never a mutation of the
    resting one — the resting frame keeps showing its in-flight and estimate
    rows regardless of what's filtered. Lifecycle cell copy: "View report"
@@ -1294,16 +1301,31 @@ above, 24px gaps, 38px below.** **30px is a deliberate exception** — every
 other page title runs 24px, and this is the one screen with nothing competing
 for the first glance.
 
-*One primary, one ghost, 12px apart.* "Send a match" (`advButton("primary")`)
+*One primary, one ghost, 12px apart.* "Send match video" (`advButton("primary")`)
 beside "Import instead" (`advButton("ghost")`), the ghost linking to
 `/dashboard/matches/new?source=swing-vision`, which preselects the wizard's
 Source field. The pair is one route with two entrances, not two routes: the
 param cannot skip step one, which also asks which workspace the match is filed
-under and who played it. **The ghost label stays short.** "Import a SwingVision
-export" ran to 209px beside a 119px primary and the bigger grey button stopped
-the blue one reading as the main action; "Import instead" sits at 124px and
-leaves naming the source to the conditions line beneath — "A SwingVision
-export needs none of that." Onboarding has already asked about a team and
+under and who played it. **The primary names the artifact, not the outcome.**
+It read "Send a match" first; beside "Import instead" its job is to name the
+other path, and "a match" is what both paths deliver — an export is a match
+too. "Match video" is the product's own term (guardrails: never a highlight or
+a condensed cut), and verb + object with no article is how the system writes
+"Save changes" and "View report". **The ghost label stays short.** "Import a
+SwingVision export" ran to 209px beside a 119px primary and the bigger grey
+button stopped the blue one reading as the main action; "Import instead" sits
+at 124px, against the primary's 146, and leaves naming the source to the
+conditions line beneath — "A SwingVision export needs none of that."
+
+*The same offer on Matches.* `matches/matches-day-zero.tsx` renders the same
+`DayZeroOffer` with the page's own sentence — "Every match you send lands
+here." on a 30ch measure, so it sits on one line — over the list's shape: the
+real `LifecycleChips` at zero, a drawn toolbar, and the table card with its six
+column labels over **five** ghost rows stepping 1 → 0.8 → 0.6 → 0.45 → 0.3.
+Five rather than Home's three because this card is the whole page below the
+offer, where Home's shares a column; three left it a stub. Personal scope only,
+and only when there is neither a match nor a draft — a draft is a match in
+flight and keeps the list. Onboarding has already asked about a team and
 routed coaches and rostered players elsewhere, so no "Join a team" belongs
 here; the switcher's "Create team workspace" is where that lives.
 

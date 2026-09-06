@@ -10,6 +10,7 @@ import {
 } from "@/lib/data/matches-list-types";
 import { MatchesPageContent } from "@/components/dashboard/matches/matches-page-content";
 import { MatchesTitleRow } from "@/components/dashboard/matches/matches-title-row";
+import { MatchesDayZero } from "@/components/dashboard/matches/matches-day-zero";
 import { MatchesSkeleton } from "@/components/dashboard/matches/matches-skeleton";
 import { listMatchDrafts } from "@/lib/wizard/actions";
 
@@ -124,6 +125,21 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
         })
         .filter((m): m is DisplayMatch => m !== null);
     }
+  }
+
+  // Day zero, personal only: the offer over the list's shape, no title row —
+  // the same composition Home draws, so a player meets one offer wherever
+  // they land. A draft counts as a match in flight, so it keeps the list.
+  // The team workspace keeps `EmptyMatches`: its day zero is a different page
+  // ("Set up your program") that has not been designed yet.
+  if (!isTeam && matches.length === 0 && drafts.length === 0) {
+    return (
+      <div className="flex flex-1 w-full flex-col bg-white">
+        <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-14 pt-5 pb-8">
+          <MatchesDayZero />
+        </div>
+      </div>
+    );
   }
 
   return (

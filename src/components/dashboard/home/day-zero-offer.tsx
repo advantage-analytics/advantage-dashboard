@@ -20,7 +20,20 @@ import { advButton } from "@/lib/ui/adv-button";
  * and closing it makes the block read as page content rather than as the one
  * thing on the screen.
  */
-export function DayZeroOffer() {
+export function DayZeroOffer({
+  headline = "Every serve, every point, and one thing to work on.",
+  headlineMeasure = "24ch",
+}: {
+  /**
+   * The one sentence above the buttons. Home's names what the product does;
+   * Matches' names what the page holds. Everything below the sentence — the
+   * pair of buttons, the conditions — is identical on both, so a player who
+   * lands on either page on day zero meets one offer.
+   */
+  headline?: string;
+  /** Where the sentence breaks. Home's is set to break once; Matches' fits one line. */
+  headlineMeasure?: string;
+} = {}) {
   return (
     <div className="flex shrink-0 flex-col items-center gap-6 pt-[70px] pb-[38px]">
       <p
@@ -31,10 +44,10 @@ export function DayZeroOffer() {
           lineHeight: 1.24,
           letterSpacing: "-0.5px",
           color: "var(--ink-900)",
-          maxWidth: "24ch",
+          maxWidth: headlineMeasure,
         }}
       >
-        Every serve, every point, and one thing to work on.
+        {headline}
       </p>
       {/*
        * Two ways in, one of them primary.
@@ -58,9 +71,18 @@ export function DayZeroOffer() {
        * the only one that reaches a report inside the same session, for the
        * one segment none of the video requirements apply to.
        */}
+      {/*
+       * "Send match video", not "Send a match". Beside "Import instead" the
+       * primary's job is to name the OTHER path, and "a match" is what both
+       * paths deliver — an export is a match too. The video is the artifact a
+       * player actually holds, and "match video" is the product's own term for
+       * it (guardrails: never a highlight or a condensed cut). Verb + object
+       * with no article, the way the system writes "Save changes" and "View
+       * report". 146px against the ghost's 124, so the hierarchy holds.
+       */}
       <div className="flex items-center gap-3">
         <Link href="/dashboard/matches/new" className={advButton("primary")}>
-          Send a match
+          Send match video
         </Link>
         <Link
           href="/dashboard/matches/new?source=swing-vision"
