@@ -19,25 +19,29 @@ export function FocusCard({
    * sentence it qualifies. A disclaimer that arrives after the claim has
    * already been read as a finding came too late, and it is the first thing
    * lost when someone crops or skims the card from the top.
+   *
+   * It sits in the header's right slot, in the same `text-micro` every other
+   * card on Home uses for its meta, rather than as a capsule beside the
+   * eyebrow.
    */
   tag?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className="surface-card flex flex-col gap-2.5" style={{ padding: "18px 20px" }}>
+      {/* Header grammar, matched to its siblings on Home: the eyebrow on the
+          left, one quiet run of meta on the right, then the card's own mark.
+          Every other card in the column does this — "All matches" on the
+          matches card, "0 sessions · last 12 months" on Activity, "last 4
+          matches" on serve placement — and this card used to break it with a
+          grey capsule wedged in beside the eyebrow, which read as a second
+          label on the only card carrying two. */}
+      {/* `items-center`, not baseline: the engine mark is a 20px box, and a
+          baseline would hang it below the eyebrow it sits beside. */}
       <div className="flex items-center gap-2">
         <span className="eyebrow">Focus</span>
-        {tag && (
-          // The product's own grey capsule, not a second eyebrow: one card
-          // carries one eyebrow, and grey because a label is never an action.
-          <span
-            className="shrink-0 rounded-full px-2 py-0.5 text-[10px] leading-[1.4]"
-            style={{ background: "var(--surface-subtle)", color: "var(--ink-600)" }}
-          >
-            {tag}
-          </span>
-        )}
         <div className="flex-1" />
+        {tag && <span className="text-micro shrink-0">{tag}</span>}
         <ChromeTooltip
           label="Advantage Intelligence"
           detail="Computed from your analyzed matches"

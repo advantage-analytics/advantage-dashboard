@@ -623,7 +623,45 @@ bg-[#F0F0F0] rounded animate-pulse
 // Proportional widths: w-24, w-32, w-40
 ```
 
+**A skeleton is a promise that something is arriving.** It belongs to a
+request that will resolve — a fetch in flight, a page mounting. It never
+stands in for data that does not exist, because a shape that says "loading"
+when the truth is "nothing here yet" is a status message that is not true,
+and a reader who waits for it to resolve concludes the page is broken. Empty
+is a different state with a different pattern; see below.
+
 ### Empty State
+
+**Three things can fill a region with no data, and only one of them is
+right.**
+
+1. **Honest zero state — use this.** Render what the region will be, holding
+   nothing: the card, its eyebrow, its axis and column labels, and a mark
+   where each value goes. Say what will appear here and give one way to make
+   it appear. The labels are the payload — a player who reads "break points
+   saved" knows what comes back without a figure being invented.
+2. **Skeleton — never.** See above. Reserved for loading.
+3. **Sample or demo data — never in the user's own workspace.** A fabricated
+   number is a claim about this account, and on the day the real one lands at
+   a different value the page has already told them a different story. The
+   one sanctioned exception is a single, clearly quoted **example** carrying
+   its own label in the card header — the Focus card's pattern — which does
+   not scale past one card. A marker under a screen of confident-looking
+   figures does not survive a skim or a screenshot.
+
+**A zero is not a blank.** Write `—` where a value is unmeasured; `0%` is a
+statement about the athlete, `—` is not. `0` is correct only when zero is the
+measured answer.
+
+**Scale the treatment down as the region does.** One page-level path to first
+data beats six illustrated cards; a dashboard of empty widgets goes text-only
+rather than repeating an icon per card (see Icons → 28–32px empty states for
+the one-icon case).
+
+**Never show an empty state for something that exists but is unavailable.** A
+match still analysing gets progress, not an empty chart — an empty serve
+chart reads as "you hit no serves". `matches/[matchId]/page.tsx` short-circuits
+to the hero + `MatchAnalysisProgress` for exactly this reason.
 
 ```
 flex flex-col items-center justify-center py-12 px-6 text-center
@@ -632,6 +670,10 @@ flex flex-col items-center justify-center py-12 px-6 text-center
 // Title: text-[#0D0D0D]
 // Description: text-[12px] text-[#888888]
 ```
+
+This centred recipe is the **small-region** form — a card or a list with
+nothing in it, reached from a populated page. A whole page with no data is a
+different composition: Personal Home Recipes → Day zero.
 
 ### Keyboard Shortcut Chip (`<kbd>`)
 
@@ -777,9 +819,8 @@ hover wash, 260px menu. The profile menu carries quiet role/plan capsules
 
 **On Home the breadcrumb slot carries the greeting:** "Good morning, Jordan"
 12/500 + `text-micro` "Personal · Monday, Aug 24" — so the body can open on a
-number (Layout Patterns → Title Slot). *Shipped:* the greeting is still the
-body's `text-display` h1 (`home/welcome-message.tsx`); moving it is part of
-the Home rework, not a token change.
+number (Layout Patterns → Title Slot). *Shipped:* `dashboard/header-greeting.tsx`,
+on `/dashboard` in a personal workspace only; the body's greeting h1 is gone.
 
 **One search per screen:** the header owns `⌘K`; a list page never adds a
 second search box. Keyboard map: `⌘K` search (the header's one binding) ·
@@ -952,7 +993,12 @@ master-detail split is retired; its detail is the peek drawer below.
 8. **Table page states.** Day zero renders title, primary action and usage
    footer identically to the populated page — the frame never moves; pills
    and table are absent, not skeletoned; the middle carries one 24px light
-   line, one sentence, two quiet paths. The resting view is never
+   line, one sentence, two quiet paths. (This is the **table** page's rule
+   and it stays. Personal Home's day zero is a different composition — the
+   offer over a graded copy of the page — because Home's regions each own a
+   designed zero state worth showing, where a table's zero state is one empty
+   grid. Neither page skeletons: what Home dims is the real empty states, not
+   grey stand-ins for rows that do not exist.) The resting view is never
    pre-filtered; a filtered view is its own screen, never a mutation of the
    resting one — the resting frame keeps showing its in-flight and estimate
    rows regardless of what's filtered. Lifecycle cell copy: "View report"
@@ -1231,8 +1277,75 @@ primitives, but locked patterns for that page's own cards.
 **Home opens on numbers.** The greeting moves into the header's breadcrumb
 slot; the body opens with "Your season" at 24px (`.text-title-lg`), so the
 first screen's display type is a KPI number, not a title — Home is the one
-exception to the title slot's 30px. *Shipped:* `home/welcome-message.tsx`
-still opens the body with a `text-display` greeting.
+exception to the title slot's 30px. *Shipped:* `dashboard/header-greeting.tsx`
++ `home/season-title.tsx`.
+
+**Day zero is the offer over the page it offers.** Before the account holds a
+single match, Home is not the populated frame and not a separate screen of
+door cards — it is one centred offer with the real page quietened behind it.
+
+*The offer* (`home/day-zero-offer.tsx`), three elements and no subline: the
+sentence at **30px/300**, `-0.5px`, on a **24ch** measure so it breaks over two
+lines; the primary; the conditions at `text-micro` on a 52ch measure. **70px
+above, 24px gaps, 38px below.** **30px is a deliberate exception** — every
+other page title runs 24px, and this is the one screen with nothing competing
+for the first glance.
+
+The generous version is the shipped one. A height study got the same three
+elements to 214px by closing the padding to 36px and the gaps to 14px, but
+the air is what the block is for: the gap between the sentence and the button
+is what gives the action room, and closing it makes the offer read as page
+content rather than as the one thing on the screen. Roughly 80px is spent
+deliberately here.
+
+*The tail* — the real page, in its real order, each region holding its own
+honest zero state (Empty State above). The KPI strip stays at **full
+strength** because its five labels are the most specific promise the page can
+make without a figure; everything below it sits at **0.32**. No bottom fade: a
+mask running to transparent clips the activity heatmap mid-grid, and a
+calendar cut off partway through its last week reads as a fault, not depth.
+
+*The tail is `inert`.* At 0.32 its text is far below usable contrast and its
+links would be invisible tab stops. `inert` removes it from the tab order and
+the accessibility tree together; `aria-hidden` plus `pointer-events-none`
+leaves a link hidden from a screen reader and still reachable by keyboard. A
+`sr-only` sentence above it names what will fill the page and says plainly
+that nothing below is real data yet.
+
+*No furniture.* Day zero carries no title row, no getting-set-up line and no
+usage footer; all of it returns with the first match, and from then on the
+frame never moves again. The matches card also drops its own action band —
+the centred offer is the page's one action, and the band would be the same ask
+twice.
+
+*What each region shows empty:* KPI tile — a 34×2px rule on the value's
+baseline, a grey sparkline, and "After your first match" ("When the report
+lands" once a match is filed but unanalysed). Matches — three ghost rows at
+the shipped 54px, stepping 1 → 0.6 → 0.35, keeping their live stat labels
+because what each row will report is real information; only the values become
+rules. Focus — one quoted example claim in `--ink-600`, labelled **Example**
+in the card header, never under the sentence, because a disclaimer that
+arrives after the claim has been read as a finding came too late. Serve
+placement — the hairline half court at the widget's own geometry; it is the
+one region here that is not a placeholder, since an empty court is the object
+in its empty state. Activity — the real 52×7 grid, all 364 cells empty,
+because a year with no sessions genuinely is 364 empty cells.
+
+*One header grammar across the column.* Eyebrow left, one quiet `text-micro`
+run right, then the card's own mark if it has one: "All matches" on matches,
+"0 sessions · last 12 months" on Activity, "last 4 matches" on serve
+placement, "Example" on Focus. Focus carried its qualifier as a grey capsule
+wedged beside the eyebrow, which made it the only card in the column reading
+as if it had two labels.
+
+*The court levels the columns.* It is the only continuous dimension on the
+page — every other region's height is set by its content — so it is the one
+knob that squares the two columns without stretching a card, which traps
+empty surface and reads worse than a ragged edge. **229px** at the current
+composition: at 270 the right column ran 998 against the left's 966, and the
+court's 1.274 aspect turns 32px of height into 41px of width. It is a
+measured number, not a chosen one — re-measure when the left column's content
+changes, since one ghost row is 55px.
 
 **Next fixture card** — the claimed player's one forward-looking object.
 Eyebrow middot-joins the stakes ("Next · B1G Conference" only when it's
@@ -1267,7 +1380,16 @@ cards (1st serve · 1st serve won · 2nd serve won · service games won · break
 points saved), each with trend chip + sparkline; customize popover picks 4–5
 across Serve/Return/Other — its trigger is hover-revealed (and shown on
 focus / while open), because Platform Audit Pa2 draws the strip with an
-empty corner and v3 reveals icon actions on hover. Card-header counts retire — no bare numeral beside
+empty corner and v3 reveals icon actions on hover. **The strip shows fewer
+tiles, never narrower ones**: a tile needs 184px to hold "break points saved"
+on one line inside its 20px padding, so the fifth tile leaves below 920px of
+strip and the fourth below 736px, and the tile's height never changes with the
+window. That is a **container** query, not a media query — the sidebar takes
+either 64px or 232px, so the same 1280px window fits five tiles with the rail
+and four with the panel open. Labels truncate with an ellipsis rather than
+clipping: a hard clip turned "service games won" into "service game", which
+reads as a different statistic. Hidden tiles stay mounted, so a customised
+selection survives a resize. Card-header counts retire — no bare numeral beside
 an eyebrow, no count inside an "All matches" link; counts live in sublines
 and tooltips only. Low-confidence path: "Estimate · Review data" — grey fact
 + blue action, never yellow (charts-only amber) or red (outcomes/form errors

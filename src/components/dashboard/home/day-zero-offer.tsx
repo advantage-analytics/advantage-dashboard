@@ -12,15 +12,17 @@ import { advButton } from "@/lib/ui/adv-button";
  * 24px; this is the one screen with nothing else competing for the first
  * glance, so the sentence is allowed to lead it.
  *
- * The measurements are the ones that survived the height study: 36px above,
- * 14px gaps, a 34ch measure so the sentence breaks where it wants rather than
- * at a fixed 24ch, and conditions written to fit one line. That is 216px
- * against the 300px the same block cost before, and the difference is entirely
- * padding and measure — no word was cut to get it.
+ * The block keeps its drawn proportions rather than the tighter ones a height
+ * study offered: 70px above, 24px gaps, a 24ch measure that breaks the
+ * sentence over two lines, and the conditions at their full 52ch. It costs
+ * about 80px more than the compressed version and spends all of it on air —
+ * the gap between the sentence and the button is what gives the action room,
+ * and closing it makes the block read as page content rather than as the one
+ * thing on the screen.
  */
 export function DayZeroOffer() {
   return (
-    <div className="flex shrink-0 flex-col items-center gap-3.5 pt-9 pb-6">
+    <div className="flex shrink-0 flex-col items-center gap-6 pt-[70px] pb-[38px]">
       <p
         className="text-center"
         style={{
@@ -29,8 +31,7 @@ export function DayZeroOffer() {
           lineHeight: 1.24,
           letterSpacing: "-0.5px",
           color: "var(--ink-900)",
-          maxWidth: "34ch",
-          textWrap: "balance",
+          maxWidth: "24ch",
         }}
       >
         Every serve, every point, and one thing to work on.
@@ -38,9 +39,12 @@ export function DayZeroOffer() {
       <Link href="/dashboard/matches/new" className={advButton("primary")}>
         Send a match
       </Link>
-      <p className="text-micro text-center">
-        One singles match, 1080p or better, camera fixed throughout · or a
-        SwingVision export.
+      <p
+        className="text-micro text-center"
+        style={{ maxWidth: "52ch", textWrap: "pretty" }}
+      >
+        One singles match, 1080p or better, camera fixed for the whole thing.
+        Or import a SwingVision export, which needs none of that.
       </p>
     </div>
   );
