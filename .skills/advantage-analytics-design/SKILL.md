@@ -680,6 +680,34 @@ data is a different composition — the offer over the page's own dimmed shape:
 Personal Home Recipes → Day zero for Home, Data Table → Table page states for
 a list.
 
+**Three states, three treatments — never borrow one for another.**
+
+| The page is | Treatment | Shipped |
+|---|---|---|
+| built, no data yet (**day zero**) | the offer over the page's own shape, dimmed and `inert` | `home/day-zero-home.tsx`, `matches/matches-day-zero.tsx` |
+| built, no data, and its shape is too dense to dim | the offer, then a labelled run naming what arrives | `statistics/empty-statistics.tsx` |
+| **not built yet** | "Coming soon", one statement, one way onward — **no shape at all** | `dashboard/coming-soon.tsx` |
+
+The last row is the one that gets confused. A feature that does not exist has
+no shape, so a dimmed mock-up of one invents a layout that may never ship —
+the same fabrication these rules exist to prevent — and a reader who cannot
+tell "nothing here yet" from "not built yet" will wait for data that is not
+coming. Name the state: the eyebrow reads **Coming soon**, and the statement
+sits at `text-title-lg` under the page's own 30px h1, because two headings a
+hair apart read as a mistake.
+
+The middle row is a judgement, not a loophole: Home dims one card and one row
+because those are shapes worth previewing, and Statistics does not because
+twenty-one stat components as grey rules is a screen of noise (Carbon says the
+same — a dashboard of empty widgets goes text-only rather than repeating a
+treatment per region). Where the shape is skipped, the labelled run carries
+the promise instead — Statistics names serve, return, rally and trends, which
+is what a report will hold, with no figure invented.
+
+All three share the offer's own words wherever a match is what is missing:
+`DayZeroOffer` takes a headline and measure, and everything beneath the
+sentence is byte-identical across Home, Matches and Statistics.
+
 ### Keyboard Shortcut Chip (`<kbd>`)
 
 Always render keyboard hints inside a semantic `<kbd>` element, marked `aria-hidden="true"` when an `aria-label` already conveys the shortcut. Use `inline-flex` so the chip aligns with adjacent text/icons.

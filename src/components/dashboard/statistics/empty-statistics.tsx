@@ -1,23 +1,36 @@
 "use client";
 
 import { motion, useReducedMotion } from "framer-motion";
-import Link from "next/link";
-import { HelpCircle, Percent, RotateCcw, Swords, TrendingUp } from "lucide-react";
-import { CreateMatchButton } from "@/components/dashboard/matches/create-match-button";
+import { Percent, RotateCcw, Swords, TrendingUp } from "lucide-react";
+import { DayZeroOffer } from "@/components/dashboard/home/day-zero-offer";
+
+/**
+ * Statistics with no match behind it.
+ *
+ * This is a **day zero**, not a coming-soon: the page is built, every one of
+ * its twenty-one components exists, and only the data is missing. So it makes
+ * the same offer Home and Matches make — one sentence, the primary and ghost
+ * pair, the same conditions — and a player who has met that offer on either of
+ * those pages meets it again here rather than a third invention.
+ *
+ * What it does not do is dim a copy of the page beneath. Home and Matches can,
+ * because one card and one row are shapes worth previewing; twenty-one stat
+ * components rendered as grey rules would be a screen of noise, and Carbon's
+ * own guidance for a dashboard of empty widgets is to go text-only rather than
+ * repeat a treatment per region.
+ *
+ * The four columns below stay, because they are the honest form of the same
+ * promise: they name what arrives — serve, return, rally, trends — without a
+ * figure being invented. They lost their blue rules (a fading accent across
+ * four columns implied a ranking that is not there) and their semibold tracked
+ * titles for the label register the rest of the product uses.
+ */
 
 const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
 
-const T = {
-  HEADING: 0.1,
-  DESCRIPTION: 0.2,
-  CTA: 0.35,
-  HELP: 0.45,
-  FEATURES_LABEL: 0.55,
-  FEATURES_START: 0.6,
-  FEATURES_STAGGER: 0.07,
-} as const;
+const T = { LABEL: 0.4, START: 0.46, STAGGER: 0.07 } as const;
 
-const FEATURES = [
+const ARRIVES = [
   {
     icon: Percent,
     title: "Serve",
@@ -42,13 +55,8 @@ const FEATURES = [
 
 export function EmptyStatistics() {
   // `skip` feeds motion `initial` props, which React only consults when an
-  // element mounts. A previous version also OR'd in a `hasAnimated` ref, but
-  // that ref is always false at mount (its effect runs afterwards), so it never
-  // changed what rendered — it only truncated an in-flight entrance if the
-  // component happened to re-render mid-animation. Reading a ref during render
-  // is also unsafe under concurrent rendering (react-hooks/refs).
-  const shouldReduceMotion = useReducedMotion();
-  const skip = shouldReduceMotion;
+  // element mounts.
+  const skip = useReducedMotion();
 
   function anim(delay: number) {
     if (skip) return { initial: false as const, animate: { opacity: 1 }, transition: { duration: 0 } };
@@ -60,71 +68,36 @@ export function EmptyStatistics() {
   }
 
   return (
-    <div className="flex flex-col items-center text-center pt-10 pb-16 px-6 max-w-[600px] mx-auto">
-      {/* Heading */}
-      <motion.h2
-        className="text-[28px] font-light text-[#0D0D0D] tracking-[-0.5px] leading-[34px] mb-3"
-        {...anim(T.HEADING)}
-      >
-        Your statistics build with every match
-      </motion.h2>
+    <div className="flex flex-col">
+      <DayZeroOffer
+        headline="Your statistics build with every match."
+        headlineMeasure="26ch"
+      />
 
-      {/* Description */}
-      <motion.p
-        className="text-[13px] font-normal text-[#888888] leading-[1.6] max-w-[380px]"
-        {...anim(T.DESCRIPTION)}
-      >
-        Upload a match from SwingVision to see serve percentages,
-        break point conversion, and 20+ stats tracked over time.
-      </motion.p>
-
-      {/* CTA + help link */}
-      <div className="mt-10 mb-14 flex flex-col items-center gap-4">
-        <motion.div {...anim(T.CTA)}>
-          <CreateMatchButton variant="blue" />
-        </motion.div>
-        <motion.div {...anim(T.HELP)}>
-          <Link
-            href="/dashboard/help"
-            className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#888888] uppercase tracking-[1.5px] transition-colors duration-200 hover:text-[#525252]"
-          >
-            <HelpCircle className="w-3 h-3" strokeWidth={1.5} aria-hidden />
-            How to export from SwingVision
-          </Link>
-        </motion.div>
-      </div>
-
-      {/* Feature preview — cascading entrance */}
-      <div className="w-full">
-        <motion.p
-          className="text-[10px] font-medium text-[#AAAAAA] uppercase tracking-[2.5px] mb-3 text-left"
-          {...anim(T.FEATURES_LABEL)}
-        >
-          What you&apos;ll unlock
+      <div className="mx-auto w-full max-w-[880px] pt-2">
+        <motion.p className="eyebrow mb-3.5" {...anim(T.LABEL)}>
+          What arrives
         </motion.p>
 
-        <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">
-          {FEATURES.map((feature, i) => (
+        <div className="flex flex-col gap-5 sm:flex-row sm:gap-6">
+          {ARRIVES.map((item, i) => (
             <motion.div
-              key={feature.title}
-              {...anim(T.FEATURES_START + i * T.FEATURES_STAGGER)}
-              className="flex-1 flex flex-col gap-2.5 text-left pt-3.5 border-t-2"
-              style={{
-                borderColor: `rgba(59, 130, 246, ${1 - i * 0.15})`,
-              }}
+              key={item.title}
+              {...anim(T.START + i * T.STAGGER)}
+              className="flex flex-1 flex-col gap-2 border-t border-[var(--border-hairline)] pt-3.5 text-left"
             >
               <div className="flex items-center gap-2">
-                <feature.icon
-                  className="size-3.5 text-[#525252]"
+                <item.icon
+                  className="size-3.5 text-[var(--ink-500)]"
                   strokeWidth={1.5}
-                  aria-hidden
+                  aria-hidden="true"
                 />
-                <p className="text-[11px] font-semibold text-[#0D0D0D] uppercase tracking-[1.5px]">
-                  {feature.title}
+                <p className="text-[12px] font-medium text-[var(--ink-900)]">
+                  {item.title}
                 </p>
               </div>
-              <p className="text-[11px] font-normal text-[#888888] leading-[1.6]">
-                {feature.description}
+              <p className="text-micro" style={{ textWrap: "pretty" }}>
+                {item.description}
               </p>
             </motion.div>
           ))}
