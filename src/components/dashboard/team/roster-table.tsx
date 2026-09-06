@@ -8,8 +8,9 @@ import { GitMerge, GripVertical } from "lucide-react";
 import { BENCH, sequenceFrom } from "@/lib/data/lineup-draft";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ResultMark } from "@/components/dashboard/result-mark";
+import { EmptyMark } from "@/components/ui/empty-mark";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { cn } from "@/lib/utils";
-import { getInitials } from "@/lib/data/match-utils";
 import {
   inviteMember,
   revokeInvite,
@@ -151,16 +152,6 @@ export interface LineupDraft {
   dragging: string | null;
 }
 
-function Avatar({ name }: { name: string }) {
-  return (
-    <span
-      aria-hidden
-      className="flex size-[26px] shrink-0 items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[9px] font-medium text-[var(--ink-700)]"
-    >
-      {getInitials(name)}
-    </span>
-  );
-}
 
 /**
  * The last five results as a strip, oldest at the left.
@@ -170,7 +161,7 @@ function Avatar({ name }: { name: string }) {
  */
 function FormTicks({ form }: { form: RosterMember["form"] }) {
   if (form.length === 0) {
-    return <EmptyMark under="Form" />;
+    return <EmptyMark label="No form yet" />;
   }
   return (
     <>
@@ -193,38 +184,12 @@ function FormTicks({ form }: { form: RosterMember["form"] }) {
   );
 }
 
-/**
- * The one glyph every empty cell shows. Record, Form and Last match each had
- * their own — a 13px dash, a 12px dash, a sentence — at different sizes and
- * weights, so a player with no matches read as three unrelated absences. One
- * mark, one size, and centred under its own heading rather than left-aligned
- * in the cell.
- *
- * The centring is derived, not measured. An earlier cut hardcoded each
- * heading's rendered width and told the next person to re-measure after a copy
- * edit — a coupling to font, weight and tracking that nothing would have
- * caught when it drifted. Instead the cell lays out the heading's OWN string,
- * invisible, in the heading's own class, and centres the dash over it: the
- * width is the same text in the same font by construction. The negative right
- * margin drops the trailing letter-space `eyebrow-sm` adds after the last
- * character, which is real width the heading itself does not show.
- */
-function EmptyMark({ under }: { under: "Record" | "Form" | "Last match" }) {
-  return (
-    <span aria-hidden className="relative inline-block">
-      <span className="eyebrow-sm invisible -mr-[2.5px] block">{under}</span>
-      <span className="absolute inset-0 flex items-center justify-center text-[13px] leading-none text-[var(--ink-400)]">
-        —
-      </span>
-    </span>
-  );
-}
 
 /** "4–1", or the empty mark for somebody with nothing decided yet. */
 function Record({ wins, losses }: { wins: number; losses: number }) {
   return (
     <span className={cn(COL.record, "tabular flex items-center text-[13px] text-[var(--ink-900)]")}>
-      {wins + losses === 0 ? <EmptyMark under="Record" /> : `${wins}–${losses}`}
+      {wins + losses === 0 ? <EmptyMark label="No record yet" /> : `${wins}–${losses}`}
     </span>
   );
 }
@@ -252,8 +217,7 @@ function LastMatchCell({ member }: { member: RosterMember }) {
     // it. The words stay for a screen reader, which cannot read a dash.
     return (
       <span className={cn(COL.last, "flex items-center")}>
-        <EmptyMark under="Last match" />
-        <span className="sr-only">No matches yet</span>
+        <EmptyMark label="No matches yet" />
       </span>
     );
   }
@@ -563,7 +527,7 @@ function MemberRow({
       <SpotCell spot={spot} draggable={inLineupMode} lifted={lifted} />
 
       <span className={cn(COL.player, "flex min-w-0 items-center gap-2.5")}>
-        <Avatar name={member.name} />
+        <InitialsAvatar name={member.name} />
         <span className="flex min-w-0 items-baseline gap-1.5">
           {inLineupMode ? (
             <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
@@ -690,7 +654,12 @@ export function RosterTable({
         lineup ? "overflow-visible" : "overflow-x-auto"
       )}
     >
-      <div className="min-w-[760px] px-6 pt-0.5 pb-1.5">
+      {/* 768px is the row's actual intrinsic width, not a round number:
+          24 + 230 + 56 + 80 + 250 of fixed columns, five 16px gaps between
+          the six items, and the 48px this box pads by. The old 760 was 8px
+          short, so at the threshold the shrink-0 cells overflowed their own
+          padding box before `overflow-x-auto` caught them. */}
+      <div className="min-w-[768px] px-6 pt-0.5 pb-1.5">
         {/* Set lineup rides this row rather than a card header of its own —
             the eyebrow row already spans the table. */}
         <div

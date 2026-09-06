@@ -35,7 +35,7 @@ export default async function OpponentPage({
 
   return (
     <div className="w-full flex-1 bg-[var(--surface-card)]">
-      <div className="mx-auto flex max-w-screen-2xl flex-col gap-8 px-6 py-8 sm:px-10">
+      <div className="mx-auto flex max-w-screen-2xl flex-col gap-8 px-6 pt-5 pb-8 sm:px-14">
         <div>
           <Link
             href="/dashboard/opponents"

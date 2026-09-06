@@ -27,28 +27,31 @@ export function MatchesSkeleton(): React.JSX.Element {
       </div>
 
       {/* Table card skeleton — same surface-card frame as the real table. */}
-      <div className="surface-card" style={{ padding: "8px 24px 12px" }}>
+      <div className="surface-card" style={{ padding: "2px 24px 6px" }}>
         <div
-          className={`${LIST_ROW_FRAME} border-b border-[var(--border-hairline)] pb-2 pt-3`}
+          className={`${LIST_ROW_FRAME} border-b border-[var(--border-hairline)] pb-2.5 pt-3.5`}
           style={LIST_GRID_COLS}
         >
           <Bar className="h-2.5 w-8" />
-          <Bar className="h-2.5 w-10" />
           <Bar className="h-2.5 w-16" />
-          <Bar className="h-2.5 w-11 justify-self-center" />
           <Bar className="h-2.5 w-10" />
+          <Bar className="h-2.5 w-10" />
+          <Bar className="h-2.5 w-11" />
           <span />
           <span />
           <span />
         </div>
-        <div className="pt-1">
+        <div>
           {Array.from({ length: SKELETON_ROWS }).map((_, row) => (
             <div key={row} className={`${LIST_ROW_FRAME} h-[52px]`} style={LIST_GRID_COLS}>
               <Bar className="h-3 w-11" />
+              <span className="flex min-w-0 items-center gap-2.5">
+                <Bar className="size-[26px] shrink-0 rounded-full" />
+                <Bar className="h-3 w-28" />
+              </span>
               <Bar className="h-3 w-36" />
-              <Bar className="h-3 w-28" />
-              <Bar className="size-3.5 justify-self-center rounded-full" />
               <Bar className="h-3 w-20" />
+              <Bar className="size-3.5 rounded-full" />
               <span />
               <span />
               <span />

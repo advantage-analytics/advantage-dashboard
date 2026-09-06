@@ -28,6 +28,8 @@ import { StatePill } from "@/components/ui/state-pill";
 import { deleteMatchDraft, type DraftRow as DraftRowData } from "@/lib/wizard/actions";
 import { formatShortDate } from "@/lib/ui/date-format";
 import { ACTIONS_LANE, LIST_GRID_COLS, LIST_ROW_FRAME } from "./match-card-list";
+import { EmptyMark } from "@/components/ui/empty-mark";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
 
 export type { DraftRowData };
 
@@ -67,6 +69,27 @@ export function DraftRow({
         {formatShortDate(draft.updatedAt)}
       </span>
 
+      {/* Opponent — led by its mark like every name column; a draft with no
+          name yet holds the slot with a dashed ring so the names below still
+          start on one x. */}
+      <Link
+        href={resumeHref}
+        className="flex min-w-0 items-center gap-2.5 rounded-sm after:absolute after:inset-0 focus-visible:outline-none"
+      >
+        {draft.playerName ? (
+          <InitialsAvatar name={draft.playerName} />
+        ) : (
+          <span
+            aria-hidden
+            className="size-[26px] shrink-0 rounded-full border border-dashed border-[var(--border-medium)]"
+          />
+        )}
+        <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
+          {draft.playerName ?? "Untitled match"}
+        </span>
+        <StatePill className="shrink-0">Draft</StatePill>
+      </Link>
+
       {/* Event — the draft's own progress, which is the only thing it can say
           about itself that a finished match row cannot. */}
       <Link
@@ -76,18 +99,10 @@ export function DraftRow({
         Resume · step {draft.stepIndex + 1} of {draft.stepCount}
       </Link>
 
-      <Link
-        href={resumeHref}
-        className="flex min-w-0 items-center gap-[7px] rounded-sm after:absolute after:inset-0 focus-visible:outline-none"
-      >
-        <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
-          {draft.playerName ?? "Untitled match"}
-        </span>
-        <StatePill className="shrink-0">Draft</StatePill>
-      </Link>
-
-      <span className="text-micro justify-self-center" style={{ color: "var(--ink-300)" }}>—</span>
-      <span className="text-micro" style={{ color: "var(--ink-300)" }}>—</span>
+      {/* Score and Result — not yet. One mark, one size, centred under its own
+          heading (law 1), so the two absences read as one "nothing yet". */}
+      <EmptyMark label="No score yet" />
+      <EmptyMark label="Not played yet" />
       <span />
 
       <span className={ACTIONS_LANE}>

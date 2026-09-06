@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { advButton } from "@/lib/ui/adv-button";
-import { Badge } from "@/components/ui/badge";
+import { ResultMark } from "@/components/dashboard/result-mark";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { scoreSetsFrom } from "@/lib/ui/score-format";
@@ -80,9 +80,7 @@ export function SingleDetail({
               </span>{" "}
               {match.opponentName}
             </span>
-            {won !== null ? (
-              <Badge variant={won ? "win" : "loss"}>{won ? "Won" : "Lost"}</Badge>
-            ) : null}
+            {won !== null ? <ResultMark won={won} /> : null}
           </h1>
 
           {facts.length > 0 ? (

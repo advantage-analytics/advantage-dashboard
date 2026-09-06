@@ -345,7 +345,7 @@ export function RosterView({
   return (
     <>
       <div className="flex w-full flex-1 bg-[var(--surface-card)]">
-        <div className="flex min-w-0 flex-1 flex-col gap-5 px-8 pt-7 pb-8">
+        <div className="flex min-w-0 flex-1 flex-col gap-5 px-14 pt-5 pb-8">
           <div className="flex flex-col items-start justify-between gap-4 lg:flex-row lg:items-end lg:gap-10">
             {title}
             {/* The two button pairs crossfade rather than swap — the same

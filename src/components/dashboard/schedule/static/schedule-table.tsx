@@ -1,6 +1,7 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
+import { ResultMark } from "@/components/dashboard/result-mark";
+import { EmptyMark } from "@/components/ui/empty-mark";
 import { EventMark } from "@/components/dashboard/schedule/static/event-mark";
 import { dualScore } from "@/lib/schedule/entry-state";
 import { formatEventDay, siteTitle } from "@/lib/schedule/format";
@@ -15,8 +16,19 @@ import type { EventDetail, ScheduleRow } from "@/lib/schedule/types";
  * `--surface-muted` wash on a `radius-element` row inset 8px from the card's
  * edge (`-mx-4 px-4` inside the card's 24px padding). Column order is the
  * date-first grammar Matches shares — Date · Event · Type · Venue · Lines ·
- * Score · Result — text flush left, the two numbers-and-outcome cells flush
- * right, and the Event cell the one fluid column.
+ * Score · Result — every cell flush left under a flush-left header, and the
+ * Event cell the one fluid column.
+ *
+ * Score and Result were right-aligned here and flush left on Matches, which
+ * made the two most-scanned cells in the product read two ways depending on
+ * the page. Left won: a score is spec'd flush left in a fixed track at one
+ * precision, the outcome sits beside it and follows it, and header and value
+ * then share an x in both tables — the same rule `EmptyMark` and `ResultMark`
+ * follow inside their cells. The cost is that these rows no longer end on a
+ * hard right edge, which Matches gets from its chevron and a container row is
+ * forbidden (law 3); the Result track is 60px — sized to "Not played", its
+ * widest content, not to the 52px heading, which clipped it by 4px — so the
+ * trailing air is a column's, not a gap's.
  *
  * ── Row-click law (19a–c) ──────────────────────────────────────────────────
  * Event rows have NO trailing chevron. They peek: a click opens the drawer
@@ -30,7 +42,7 @@ import type { EventDetail, ScheduleRow } from "@/lib/schedule/types";
  * null until every line is — "a partial dual score printed as final is a
  * result the page invented". So a dual in progress prints its RUNNING score
  * (read off the same `dualScore` the drawer shows) with "In progress" where
- * the outcome word would go, and only a decided dual earns the Badge. A
+ * the outcome would go, and only a decided dual earns the mark. A
  * tournament has no team score, so its Score is "—" always and its Result is
  * "—" once anything under it has been played.
  */
@@ -50,7 +62,7 @@ export function ScheduleTable({
     <div className="surface-card min-w-0 px-6 pb-1.5 pt-0.5">
       <div
         className={cn(
-          "grid items-center gap-2.5 border-b border-[var(--border-hairline)] pb-2.5 pt-3",
+          "grid items-center gap-4 border-b border-[var(--border-hairline)] pb-2.5 pt-3.5",
           GRID
         )}
       >
@@ -59,8 +71,8 @@ export function ScheduleTable({
         <span className="eyebrow-sm">Type</span>
         <span className="eyebrow-sm">Venue</span>
         <span className="eyebrow-sm">Lines</span>
-        <span className="eyebrow-sm text-right">Score</span>
-        <span className="eyebrow-sm text-right">Result</span>
+        <span className="eyebrow-sm">Score</span>
+        <span className="eyebrow-sm">Result</span>
       </div>
 
       {rows.map((row) => (
@@ -83,7 +95,7 @@ export function scheduleRowId(eventId: string): string {
 
 /** The artboard's seven columns, unchanged between `Tc2` and `Tc2c`. */
 const GRID =
-  "grid-cols-[84px_minmax(150px,1fr)_88px_56px_56px_48px_64px]";
+  "grid-cols-[84px_minmax(150px,1fr)_88px_56px_56px_48px_60px]";
 
 function EventRow({
   row,
@@ -108,7 +120,7 @@ function EventRow({
       // a pointer click with the click count. One handler, both tell.
       onClick={(event) => onSelect(row.id, event.detail === 0)}
       className={cn(
-        "-mx-4 grid h-[52px] w-[calc(100%+32px)] cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] px-4 text-left",
+        "-mx-4 grid h-[52px] w-[calc(100%+32px)] cursor-pointer items-center gap-4 rounded-[var(--radius-element)] px-4 text-left",
         "transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)]",
         "outline-none focus-visible:shadow-[var(--focus-ring)]",
         GRID
@@ -140,31 +152,37 @@ function EventRow({
           is about where OUR team travelled, and a neutral site says nothing
           about that. A tournament we host, or travel to, still says so. */}
       <span className="text-[12px]" style={{ color: "var(--ink-600)" }}>
-        {!isDual && row.site === "neutral" ? "—" : siteTitle(row.site)}
+        {!isDual && row.site === "neutral" ? (
+<EmptyMark label="Neutral site" />
+        ) : (
+          siteTitle(row.site)
+        )}
       </span>
 
       {/* Lines with a result over lines on the card. "Not set" is a dual whose
           lineup has no lines yet; a tournament with no entries has nothing to
           count and prints the dash. */}
       <span className="tabular text-[12px]" style={{ color: "var(--ink-600)" }}>
-        {row.entryCount === 0
-          ? isDual
-            ? "Not set"
-            : "—"
-          : `${row.playedCount} / ${row.entryCount}`}
+        {row.entryCount === 0 ? (
+          isDual ? (
+            "Not set"
+          ) : (
+<EmptyMark label="No entries yet" />
+          )
+        ) : (
+          `${row.playedCount} / ${row.entryCount}`
+        )}
       </span>
 
       {outcome.score ? (
         <span
-          className="tabular text-right text-[13px]"
+          className="tabular text-[13px]"
           style={{ color: "var(--ink-900)" }}
         >
           {outcome.score}
         </span>
       ) : (
-        <span className="text-right text-[12px]" style={{ color: "var(--ink-400)" }}>
-          —
-        </span>
+        <EmptyMark label="No score yet" />
       )}
 
       <ResultCell result={outcome.result} />
@@ -210,36 +228,34 @@ function rowOutcome(
 }
 
 /**
- * Law 2: the result cell has no container. The Badge is bare tracked
- * uppercase; everything that is not yet an outcome is quiet micro type.
+ * The outcome register: `ResultMark`'s glyph, no container. A tinted "banner"
+ * result cell was built and rejected — the mark already carries the meaning,
+ * and a tint would make the outcome louder than the score beside it. Undecided
+ * rows draw `EmptyMark` on the same x, which is why neither takes an alignment
+ * of its own.
  */
 function ResultCell({ result }: { result: RowResult }) {
-  if (result === "won" || result === "lost") {
+  // Decided — won, lost, or level on lines. One glyph register, flush right to
+  // match this column's header and the `EmptyMark` an undecided row draws.
+  if (result === "won" || result === "lost" || result === "level") {
     return (
-      <span className="inline-flex justify-self-end">
-        <Badge variant={result === "won" ? "win" : "loss"}>
-          {result === "won" ? "Won" : "Lost"}
-        </Badge>
-      </span>
+      <ResultMark
+        won={result === "level" ? null : result === "won"}
+        className="justify-self-start"
+      />
     );
   }
-  if (result === "level") {
+  if (result === "none") {
     return (
-      <span className="inline-flex justify-self-end">
-        <Badge variant="neutral">Level</Badge>
-      </span>
+      <EmptyMark label="No result" />
     );
   }
   return (
     <span
-      className="text-micro justify-self-end whitespace-nowrap"
+      className="text-micro whitespace-nowrap"
       style={{ color: "var(--ink-400)" }}
     >
-      {result === "in-progress"
-        ? "In progress"
-        : result === "not-played"
-          ? "Not played"
-          : "—"}
+      {result === "in-progress" ? "In progress" : "Not played"}
     </span>
   );
 }

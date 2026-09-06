@@ -58,7 +58,7 @@ export default async function PlayerProfilePage({
 
   return (
     <div className="w-full flex-1 bg-[var(--surface-card)]">
-      <div className="mx-auto flex max-w-screen-2xl flex-col gap-6 px-6 py-8 sm:px-10">
+      <div className="mx-auto flex max-w-screen-2xl flex-col gap-6 px-6 pt-5 pb-8 sm:px-14">
         <Link
           href="/dashboard/team/roster"
           className="inline-flex w-fit items-center gap-1 text-[12px] text-[var(--ink-500)] transition-colors hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"

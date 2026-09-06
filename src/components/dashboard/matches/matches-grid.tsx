@@ -39,7 +39,7 @@ interface MatchesGridProps {
  * — head nothing and carry an empty label to keep the header's column count in
  * step with the row's.
  */
-const COLUMNS: string[] = ["Date", "Event", "Opponent", "Result", "Score", "", "", ""];
+const COLUMNS: string[] = ["Date", "Opponent", "Event", "Score", "Result", "", "", ""];
 
 export function MatchesGrid({
   matches,
@@ -71,7 +71,7 @@ export function MatchesGrid({
     );
   }, [drafts, matches]);
   const cardStyle = {
-    padding: "8px 24px 12px",
+    padding: "2px 24px 6px",
     "--date-col": needsYear ? DATE_COL_WITH_YEAR : DATE_COL,
   } as React.CSSProperties;
 
@@ -85,19 +85,21 @@ export function MatchesGrid({
 
       <div className="hidden lg:block">
         {/* The whole table lives in one card (Platform Audit Pb2): surface-card,
-            8px 24px 12px padding, a hairline under the header only, and rows
-            that carry a rounded inset hover instead of dividers (SKILL 8a). */}
+            the Roster's 2px 24px 6px chrome — the 52px row is the vertical
+            rhythm and the card should not add a second one — a hairline under
+            the header only, and rows that carry a rounded inset hover instead
+            of dividers (SKILL 8a). */}
         <div className="surface-card" style={cardStyle}>
           {/* Column headers — flush at the card inset, hairline underneath. */}
           <div
-            className={`${LIST_ROW_FRAME} border-b border-[var(--border-hairline)] pb-2 pt-3`}
+            className={`${LIST_ROW_FRAME} border-b border-[var(--border-hairline)] pb-2.5 pt-3.5`}
             style={LIST_GRID_COLS}
             role="row"
           >
             {COLUMNS.map((label, i) => (
               <span
                 key={label || `col-${i}`}
-                className={`eyebrow-sm min-w-0 truncate${label === "Result" ? " text-center" : ""}`}
+                className="eyebrow-sm min-w-0 truncate"
                 role="columnheader"
               >
                 {label}
@@ -107,7 +109,7 @@ export function MatchesGrid({
           {/* Rows — no per-item entrance tween. Content must never depend on an
               animation frame to become visible; PageTransition already carries
               the route-level entrance. */}
-          <div className="pt-1">
+          <div>
             {drafts.map((draft) => (
               <DraftRow key={draft.id} draft={draft} scope={scope} />
             ))}

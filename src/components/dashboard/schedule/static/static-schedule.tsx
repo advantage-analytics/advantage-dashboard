@@ -88,7 +88,8 @@ interface Facets {
  * ahead of the program's `today` is upcoming, everything else is completed.
  * The drawer this page used to carry grouped by `playedCount` instead, which
  * filed a January dual nobody scored under Upcoming all year. Every event is
- * in exactly one of the two, so the pills' counts add up to All.
+ * in exactly one of the two. The pills carry no counts (Data Table law 7) —
+ * the summary line under the title is where the season's numbers live.
  *
  * ── Day zero ──────────────────────────────────────────────────────────────
  * Not drawn on either artboard, so it follows the table-page law the design
@@ -152,14 +153,9 @@ export function StaticSchedule({
 
   const upcomingCount = rows.filter((row) => isUpcoming(row, today)).length;
 
-  // The facet cut first, the lifecycle pill second, so the pills count what
-  // the panel left: "All 4" is the four rows All will show.
+  // The facet cut first, the lifecycle pill second: a pill is a view of what
+  // the panel left, never the other way round.
   const faceted = useMemo(() => cutByFacets(rows, facets), [rows, facets]);
-  const counts = {
-    all: faceted.length,
-    upcoming: faceted.filter((row) => isUpcoming(row, today)).length,
-    completed: faceted.filter((row) => !isUpcoming(row, today)).length,
-  };
   const visible = useMemo(
     () => order(cutByLifecycle(faceted, lifecycle, today), sort),
     [faceted, lifecycle, sort, today]
@@ -318,7 +314,7 @@ export function StaticSchedule({
 
   return (
     <div className="flex w-full flex-1 bg-[var(--surface-card)]">
-      <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-7 pb-6 pt-7">
+      <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-14 pb-6 pt-5">
         {/* Title slot with summary, ghost Import beside primary New event. */}
         <div className="flex items-end gap-2.5">
           <div>
@@ -362,19 +358,16 @@ export function StaticSchedule({
             <div className="flex items-center gap-2">
               <Chip
                 label="All"
-                count={counts.all}
                 active={lifecycle === "all"}
                 onClick={() => applyCut({ lifecycle: "all" })}
               />
               <Chip
                 label="Upcoming"
-                count={counts.upcoming}
                 active={lifecycle === "upcoming"}
                 onClick={() => applyCut({ lifecycle: "upcoming" })}
               />
               <Chip
                 label="Completed"
-                count={counts.completed}
                 active={lifecycle === "completed"}
                 onClick={() => applyCut({ lifecycle: "completed" })}
               />
@@ -620,12 +613,10 @@ function opponentOf(
  */
 function Chip({
   label,
-  count,
   active,
   onClick,
 }: {
   label: string;
-  count: number;
   active: boolean;
   onClick: () => void;
 }) {
@@ -635,14 +626,14 @@ function Chip({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "inline-flex h-[26px] cursor-pointer items-center whitespace-pre rounded-[var(--radius-pill)] border px-[11px] text-[12px]",
+        "inline-flex h-[26px] cursor-pointer items-center rounded-[var(--radius-pill)] border px-[11px] text-[12px]",
         "transition-colors duration-[var(--duration-hover)] outline-none focus-visible:shadow-[var(--focus-ring)]",
         active
           ? "border-[var(--border-medium)] bg-[var(--surface-subtle)] font-medium text-[var(--ink-900)]"
           : "border-[var(--border-hairline)] font-normal text-[var(--ink-600)] hover:bg-[var(--surface-subtle)]"
       )}
     >
-      {label} <span className="tabular">&nbsp;{count}</span>
+      {label}
     </button>
   );
 }

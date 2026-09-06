@@ -1,25 +1,31 @@
 import { cn } from "@/lib/utils";
 
-export type BadgeVariant = "win" | "loss" | "blue" | "neutral";
+export type BadgeVariant = "blue" | "neutral";
 
 const TONE: Record<BadgeVariant, string> = {
-  win: "var(--success)",
-  loss: "var(--danger)",
   blue: "var(--blue)",
   neutral: "var(--ink-500)",
 };
 
 /**
- * The outcome label — bare tracked uppercase text, no container.
+ * Bare tracked uppercase text — a label, no container.
  *
- * A transcription of `.adv-badge` from Advantage Design System v2. It is
- * deliberately not a pill: it sits on a table row between a court number and a
- * score, and a filled chip there reads as a button you could press. Green is
- * winning, red is losing.
+ * ── `win` and `loss` are retired ───────────────────────────────────────────
+ * This used to be the WORD register of the outcome vocabulary ("Won" / "Lost"
+ * under a labelled Result column), paired with `ResultMark`'s glyph register
+ * for headerless rows. **The product now runs one outcome register, and it is
+ * the glyph.** Two registers meant the same fact wore two faces depending on
+ * the page, and the split was invisible in review because each table looked
+ * right on its own — Matches drifted to the glyph, Schedule kept the word, and
+ * the two lists a coach moves between stopped matching.
  *
- * Those two colours are `--success` / `--danger`, never the `--viz-*` ramp —
- * `colors.css` fences that ramp to charts, and the design frames reach for
- * `--viz-good` here out of habit.
+ * The variants are gone from the type rather than merely unused, so a future
+ * `<Badge variant="win">` does not typecheck. Match outcomes go through
+ * `ResultMark` — a labelled Result column is no longer the trigger for a word.
+ *
+ * What is left is the non-outcome label the design system still draws:
+ * `<Badge variant="blue">Pro</Badge>`. Green and red do not belong here at all
+ * — they are reserved for winning and losing, which this no longer says.
  *
  * Colour goes in `style`, not a Tailwind utility. Callers pair this with DS
  * type classes, which are loaded unlayered and beat `text-[var(--…)]` outright.
