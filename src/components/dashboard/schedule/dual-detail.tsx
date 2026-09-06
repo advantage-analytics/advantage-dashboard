@@ -10,7 +10,7 @@
  */
 
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
+import { ResultMark } from "@/components/dashboard/result-mark";
 import { StatusChip } from "@/components/ui/status-chip";
 import { EventShell } from "@/components/dashboard/schedule/event-shell";
 import { LineRow } from "@/components/dashboard/schedule/line-row";
@@ -93,9 +93,9 @@ export function DualDetail({
               {event.name}
             </span>
             {score?.decided ? (
-              <Badge variant={score.us > score.them ? "win" : "loss"}>
-                {score.us > score.them ? "Won" : "Lost"}
-              </Badge>
+              <ResultMark
+                won={score.us === score.them ? null : score.us > score.them}
+              />
             ) : null}
           </h1>
         </div>

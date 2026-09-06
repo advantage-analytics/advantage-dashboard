@@ -64,9 +64,9 @@ The canonical source of truth for all UI across the app. Read this before buildi
 3. **Quiet confidence** — Light font weights, subtle borders, restrained color. Confidence through clarity, not volume.
 4. **Pro-level exclusivity** — Design for the player who knows what second-serve percentage means. Density is acceptable when it serves understanding.
 5. **One accent, one purpose** — Blue (#3B82F6) = action/emphasis. Green (#5DB955) = winning/positive. Red (#E51837) = losing/negative. No other semantic colors. No decoration colors.
-6. **Grey is a page you scan, white is chrome or a task you're inside** (v3) — `--surface-page` for browsing surfaces with several things to separate (Home, Matches, Roster, Schedule, the report body); `--surface-card` for chrome (rail, header, a fixed context column, the peek drawer) and for focused tasks (wizard, dialogs, and the cards themselves). A fixed context column may be white beside a grey body. Cards never nest.
+6. **The dashboard is white; separation comes from the hairline, not the ground** (ratified Sep 2026, supersedes v3's grey/white split) — every dashboard surface is `--surface-card`: Home, Matches, Roster, Schedule, Team Home, the report and its rail, the wizard, the chrome. A card is told from the page by its `--border-card` hairline and `--shadow-card`, never by a tint underneath it. `--surface-page` keeps the surfaces outside the dashboard — auth, admin, the claim flow — plus inset wells inside a card (a drop zone, a notice). *The retired rule read "grey is a page you scan, white is chrome or a task you're inside"; the product went all-white by decision and the rule stayed on the page describing something that had not been true for months. Ratifying it costs the tint as a grouping device, which is why the hairline is now load-bearing: a borderless card on a white page is invisible.* Cards never nest.
 
-**Banned**: Bounce/elastic animations, glassmorphism, neon accents, gradient-heavy surfaces, playful illustrations, gamification badges, warm/earthy tones, non-Inter fonts, non-Lucide icons. **(v3)** Colored left-border stripes, nested cards, font weights 800+, hover-peek panels of any kind (the rail toggles and the drawer opens on click — nothing expands under a crossing cursor), bare unlabeled icon buttons (every icon-only control needs an `aria-label` **and** a dark tooltip), invented ETAs or fake progress, numeric badges anywhere in the chrome, center-aligned table cells, tinted/bannered result cells, type swatches (an event's type is a word; its mark is the program's or the tournament's), accumulating filter chips (a filter cut reads as one sentence in a strip — a fixed 3–4-view status-pill row is a view switcher and is allowed), a second search on any screen.
+**Banned**: Bounce/elastic animations, glassmorphism, neon accents, gradient-heavy surfaces, playful illustrations, gamification badges, warm/earthy tones, non-Inter fonts, non-Lucide icons. **(v3)** Colored left-border stripes, nested cards, font weights 800+, hover-peek panels of any kind (the rail toggles and the drawer opens on click — nothing expands under a crossing cursor), bare unlabeled icon buttons (every icon-only control needs an `aria-label` **and** a dark tooltip), invented ETAs or fake progress, numeric badges anywhere in the chrome, center-aligned table cells, tinted/bannered result cells, the outcome as a word (`Badge` "Won"/"Lost" is retired — see Data Table rule 2), type swatches (an event's type is a word; its mark is the program's or the tournament's), accumulating filter chips (a filter cut reads as one sentence in a strip — a fixed 3–4-view status-pill row is a view switcher and is allowed), a second search on any screen.
 
 ---
 
@@ -179,12 +179,13 @@ Use `tabular-nums` for all numeric data (stats, scores, percentages) to ensure a
 | bg-error-soft | `bg-[rgba(229,24,55,0.06)]` | Subtle loss background tint |
 | bg-accent-15 | `rgba(59,130,246,0.15)` | Blue tint backgrounds |
 
-**Surfaces (v3).** The page/card split is a rule, not a habit: grey
-(`--surface-page`) is a page you scan, white (`--surface-card`) is chrome or a
-task you're inside — Design Principles §6. Six of the eight surfaces the
-platform audit read already comply (Home in both workspaces, Matches, Roster,
-both wizards); the report's pinned rail is the sanctioned white context column
-beside a grey body. No imagery, textures or patterns; the only gradients are
+**Surfaces.** The dashboard is white end to end (`--surface-card`) — Design
+Principles §6. What separates a card from the page it sits on is the
+`--border-card` hairline plus `--shadow-card`, so **neither is optional**: drop
+the border and the card stops existing. `--surface-page` is for the surfaces
+outside the dashboard (auth, admin, claim) and for wells inset *within* a card
+— a drop zone, a note strip — where it reads as recessed rather than as a
+page. No imagery, textures or patterns; the only gradients are
 the auth mesh and the sparkline's area fill (stroke colour 18%→0, chart-only).
 
 ### Border Colors
@@ -260,14 +261,19 @@ Match detail and video sections use additional colors for multi-player different
 
 ### Padding Patterns
 
-- Card internal: `p-5` (20px)
-- Page container: `px-8 py-10`
+- Card internal, **content card**: `p-5` (20px) — `--pad-card`
+- Card internal, **table card**: `px-6` (24px) sides, `pt-0.5 pb-1.5` — not a
+  free choice: rows pull back `-mx-4` (16px) for the hover wash, so 24px is
+  exactly what leaves the designed 8px inset. At 20px the wash would sit 4px
+  from the edge. Vertical stays tiny because the 52px row owns the rhythm and
+  card chrome must not add a second one.
+- Page container: `px-14 pt-5` (56px / 20px) — `--pad-page-x`
 - Compact horizontal: `px-4`
 - Medium horizontal: `px-6`
 - List item vertical: `py-2.5` to `py-3`
 - Button: `px-3 py-1.5`
 - Card header: `h-14 px-5` or `px-6 py-4`
-- Full-viewport size class **(v3)**: 1512×982 personal pages pad `32px 56px` with 22px section gaps; the default page container stays `px-8 py-10`
+- Every full-viewport dashboard page pads `20px 56px`, the value all six locked Platform Audit frames draw; the sticky header sits *inside* it at 24px on purpose — full-bleed chrome, inset content. Reading-width pages (settings, help, the wizard) are capped by a max-width instead and do not use it. *(The v2 default `px-8 py-10` is retired: it was referenced by no file, and three pages had drifted to 28/32/40 against it.)*
 
 ### Chrome Dimensions (v3)
 
@@ -441,8 +447,8 @@ never two.
 
 `secondary` is not a variant — a design doc that writes `variant="secondary"`
 means `outline`. **(v3)** A page header carries at most one primary; its
-companion is `ghost`, never `outline` on a grey page (an outline's white fill
-reads as a second card). Task footers use a text-only secondary. `pill`
+companion is `ghost`, never `outline` (on the white page an outline's box
+reads as a second card, and its fill says nothing). Task footers use a text-only secondary. `pill`
 switches to the 10px uppercase chip form below — filters and "Recommended"
 tags, never a CTA.
 
@@ -550,25 +556,29 @@ text-[9px] font-normal text-[#AAAAAA] uppercase tracking-[2.5px]
 text-[13px] font-light text-[#0D0D0D] tabular-nums
 ```
 
-### Outcome Word (`Badge`)
+### Outcome Mark (`ResultMark`) — the one register
 
-Bare tracked uppercase text in the outcome colour, **no container** —
-`src/components/ui/badge.tsx` is the transcription (`win` / `loss` / `blue` /
-`neutral`):
+`circle-check` / `circle-x` / `circle-minus` at 14px stroke 1.5, in
+`--success` / `--danger` / `--ink-500`, with "Won" / "Lost" / "Level" carried
+as the accessible name. `src/components/dashboard/result-mark.tsx`.
 
-```
-text-[10px] font-medium uppercase leading-none tracking-[2.5px]
-// Win: color var(--success) · Loss: color var(--danger) — set in style, not a utility
-```
+**There is one outcome register and this is it** — under a labelled Result
+header or in a headerless dense row alike. The system used to run two, the
+word (`Badge`) under a labelled column and the glyph without one; see Data
+Table rule 2 for why that split was retired and what it cost.
 
-Sentence-case children ("Won", not "WON"); the CSS uppercases. This is the
-**word register** — only under a labeled Result column header; dense headerless
-rows take `ResultMark`'s glyph, never both in one row, never a bare W/L letter.
-**(v3)** The tinted result cell was built, evaluated and rejected — Data Table
-rule 2. The old tinted badge (`bg-[rgba(115,230,104,0.15)]` /
-`bg-[rgba(229,24,55,0.15)]` on 10px semibold) survives only in the command
-palette's W/L chips (`search/search-command-palette.tsx`) — drift, not a
-second register.
+The mark takes **no alignment of its own** — it inherits its cell's, exactly as
+`EmptyMark` does, because a Result column shows the glyph on a decided row and
+the em dash on an undecided one and the two must sit on the same x. Never
+centred. Never a bare W/L letter (standings shorthand; it does not translate).
+The result cell takes **no container**: the tinted banner was built, evaluated
+and rejected (Data Table rule 2), and that rejection stands for the glyph too.
+
+`Badge` (`src/components/ui/badge.tsx`) survives only as a non-outcome label —
+`<Badge variant="blue">Pro</Badge>`. Its `win` and `loss` variants are gone
+**from the type**, so a future `variant="win"` does not compile. Green and red
+do not belong in it at all; they are reserved for winning and losing, which it
+no longer says.
 
 ### Form Ticks (`FormPills`)
 
@@ -986,8 +996,8 @@ live in the design project's `components/data/DataTable.prompt.md`.
 
 **One list-page shape** — Matches, Roster and Schedule share it, so a coach
 moving between them re-learns nothing: title slot · ghost + primary · filter
-row (status pills · Filters · sort) · one white full-width table card on the
-grey page · optional footer line ("Season 3–1 in duals · 31 of 36 lines
+row (status pills · Filters · sort) · one full-width table card, hairlined
+against the white page · optional footer line ("Season 3–1 in duals · 31 of 36 lines
 analyzed" + one blue link). Schedule is a list page too — the all-white
 master-detail split is retired; its detail is the peek drawer below.
 
@@ -996,14 +1006,26 @@ master-detail split is retired; its detail is the peek drawer below.
    reading order for every list: lists are newest-first, so **Date leads**
    (12px tabular ink-700, 72px) · the name at 13/500 ink-900 with its 26px
    mark (program initials for a dual, the tournament mark for a tournament) ·
-   context at 12px ink-600 · numbers and outcome **right-aligned at the
-   edge**. Canonical orders: **Matches** = Date · Opponent · Event (+ mono
-   round) · Analysis · Score · Result · chevron; **Roster** = # · Player ·
+   context at 12px ink-600 · then the numbers and the outcome, **flush left in
+   fixed tracks** (see the alignment clause below). Canonical orders: **Matches** = Date · Opponent · Event (+ mono
+   round) · Score · Result · Analysis (the fluid cell, heading nothing) · ⋯ ·
+   chevron — the outcome closes the facts, and the lifecycle annotation trails
+   them because it is blank on eight rows in ten; **Roster** = # · Player ·
    Record · Form · Last match (Record leads Form: the number a coach ranks
    by first, the five-tick trail that qualifies it second); **Schedule** = Date · Event · Type · Venue ·
-   Lines `n / 9` · Score · Result. Text and its header flush left; numeric
-   measures and headers flush right; scores in one fixed column (116px in
-   Matches) at one precision, tabular. **Never center-align anything.**
+   Lines `n / 9` · Score · Result. Text and its header flush left; a numeric
+   measure that is compared down its column flush right; **Score and Result
+   flush left**, in fixed tracks, at one precision, tabular — in *both* lists.
+   Schedule right-aligned that pair while Matches kept it left, which drew the
+   two most-scanned cells in the product two ways depending on the page; the
+   score's own rule (flush left in a fixed track) settles it and the outcome
+   follows the score it belongs to. Header and value then share an x, which is
+   the rule `EmptyMark` and `ResultMark` already follow inside a cell. The cost
+   is that Schedule's rows no longer close on a hard right edge — Matches gets
+   one from its chevron and a container row may not have one (rule 3) — so
+   size the Result track to its widest content — "Not played", 60px, not the
+   52px heading, which clips it — and let the column, not a gap, hold the
+   remaining width. **Never center-align anything.**
    Exactly one fluid cell per table (Analysis in Matches) — everything else
    fixed or bounded so scores and dates start at the same x on every row.
    Where every measure is fixed, **the name takes the slack**: one flex
@@ -1023,14 +1045,26 @@ master-detail split is retired; its detail is the peek drawer below.
    assistive technology. A future event's Result reads "Not played" (11px
    ink-500), never a Badge. Type is a plain word — no type swatch (amber stays
    chart-only).
-2. **The result cell has no container.** A tinted "banner" was built and
-   rejected. `Badge` stays bare tracked uppercase text (10/500, 2.5px
-   tracking, success/danger) — the word already carries the meaning, and a
-   tint makes the outcome louder than the Score beside it. If bare reads
-   faint: widen the Result column, or use `ResultMark`'s glyph instead in
-   headerless dense rows. Word under a labeled "Result" header, glyph in
-   headerless rows — **never both in one row, never a bare W/L letter** (it's
-   standings shorthand and doesn't translate).
+2. **One outcome register: the glyph.** `ResultMark` draws every match outcome
+   in the product — Matches, Schedule, the dual and single detail pages, the
+   roster's Last-match cell, Home's result rows, the command palette. Under a
+   labelled "Result" header or in a headerless row, it is the same mark.
+   *This rewrites the earlier rule* — "word under a labeled Result header,
+   glyph in headerless rows, never both in one row" — which was sound in
+   isolation and failed in practice: the trigger for a word was a property of
+   the *table* rather than of the fact, so the same outcome wore two faces
+   depending on which page you were on, and the split was invisible in review
+   because each table looked right on its own. Matches drifted to the glyph,
+   Schedule kept the word, and the two lists a coach moves between stopped
+   matching. A circle also survives translation, which a tracked English word
+   does not. **The result cell has no container** — the tinted "banner" was
+   built, evaluated and rejected, and that rejection carries over: the mark
+   already says the thing, and a tint would make the outcome louder than the
+   Score beside it. The mark **inherits its cell's alignment** and is never
+   centred — it shares its column with `EmptyMark`'s dash on undecided rows,
+   and those two must start on the same x. Never a bare W/L letter. A future
+   event's Result still reads "Not played" (11px ink-500), and a level dual is
+   the third glyph (`circle-minus`, ink-500) rather than a fourth register.
 3. **The row-click law — containers peek, records open.** Decided by the
    noun, not the page. **Record rows** (matches, wherever they appear — Home,
    Matches, inside an event drawer, a player's match list) navigate to the
@@ -1054,9 +1088,10 @@ master-detail split is retired; its detail is the peek drawer below.
    tray's mark alone). Max one state pill per row. A pill never truncates:
    the name span takes `min-width:0; overflow:hidden; text-overflow:ellipsis`
    and the pill `flex-shrink:0` — a clipped pill reads like the banned W/L
-   letter. *Shipped:* `ui/state-pill.tsx` is grey-only and
-   `match-card-list.tsx` draws "New" through it — the blue tint is the one
-   part of this rule not yet built.
+   letter. *Shipped:* `ui/state-pill.tsx` is the grey register (Draft, Shared,
+   Private) and `ui/new-pill.tsx` is the blue one — 18px, 10/500, `--blue` on a
+   10% blue tint mixed from the token so it follows into the dark scope.
+   `match-card-list.tsx` draws "New" through `NewPill`.
 5. **Row actions on hover:** surface-muted wash on the rounded
    `radius-element` row, inset 8px from the card edge; the lifecycle cell
    swaps for a `⋯` trigger (`MoreHorizontal`, stroke 1.75 — the one
@@ -1123,8 +1158,7 @@ master-detail split is retired; its detail is the peek drawer below.
    radius-element row inset 8px. Eyebrow headers over 8a rows is the
    sanctioned combination. *(Erratum: an earlier v3 DataTable spec called for
    hairlines between every row — 8a's site-wide lock above supersedes that for
-   every dense result list; the labeled Result-header register survives only
-   where a table keeps column headers at all.)*
+   every dense result list.)*
 10. **A table-level action lives INSIDE a column, never beside the
     headings.** As a flex sibling in the header row it takes a column's worth
     of the row and pushes every heading off the cells beneath it — the
@@ -1369,10 +1403,11 @@ project's sample personas: Jordan Lee · Elena Vargas · Meridian State.
 digit at 0.6em raised 1.05em, 0.5px off the score. Applies to any score
 anywhere, not a roster-page treatment.
 
-**`ResultMark`** — `CircleCheck`/`CircleX` at 14px stroke 1.5, the outcome
-pair (green/red). The glyph register for headerless dense rows, paired with
-`Badge`'s word register for labeled-column rows — see Data Table rule 2. The
-only green/red in a row besides form ticks; icon rather than a letter so it
+**`ResultMark`** — `CircleCheck`/`CircleX`/`CircleMinus` at 14px stroke 1.5,
+the outcome triple (green/red/ink-500 for a level dual). **The** outcome
+register, labelled column or not — `Badge`'s word register is retired, see
+Data Table rule 2. Inherits its cell's alignment, never centred. The only
+green/red in a row besides form ticks; icon rather than a letter so it
 survives translation.
 
 **`Delta`** — compared-number changes color by direction: `↑` viz-good ·
@@ -1756,7 +1791,7 @@ title — is retired. Where a page still draws one, it is drift.
 ### Page Container
 
 ```
-px-8 py-10
+px-14 pt-5 pb-8        /* 56px sides · 20px top — see Padding Patterns */
 ```
 
 ### Two-Column (Main + Sidebar)

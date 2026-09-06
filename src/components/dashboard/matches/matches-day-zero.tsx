@@ -44,21 +44,20 @@ import { LIST_GRID_COLS, LIST_ROW_FRAME } from "./match-card-list";
  * would be two on one screen. The title row returns with the first match.
  */
 
-const COLUMNS = ["Date", "Event", "Opponent", "Result", "Score", "", "", ""] as const;
+const COLUMNS = ["Date", "Opponent", "Event", "Score", "Result", "", "", ""] as const;
 
 /**
  * Proportional rules for the five columns that carry a value, in
- * `LIST_GRID_COLS` order. The Result column draws a centred dot rather than a
- * left rule, matching `ResultMark`'s own `justify-self-center`; the three
- * columns after Score — lifecycle, the actions lane, the chevron — draw
- * nothing, the same as a settled real row.
+ * `LIST_GRID_COLS` order. Result is a 14px dot — `ResultMark`'s own footprint,
+ * flush left where the glyph sits; the three columns after it — lifecycle, the
+ * actions lane, the chevron — draw nothing, the same as a settled real row.
  */
-const ROW_RULES: readonly { w: string; tone: "200" | "100"; center?: boolean }[] = [
+const ROW_RULES: readonly { w: string; tone: "200" | "100"; round?: boolean }[] = [
   { w: "70%", tone: "100" }, // Date
-  { w: "60%", tone: "100" }, // Event
   { w: "55%", tone: "200" }, // Opponent — the name, so the tallest, darkest rule
-  { w: "14px", tone: "100", center: true }, // Result — ResultMark's own footprint
+  { w: "60%", tone: "100" }, // Event
   { w: "65%", tone: "100" }, // Score
+  { w: "14px", tone: "100", round: true }, // Result — ResultMark's footprint
 ];
 
 const ROW_OPACITY = [1, 0.8, 0.6, 0.45, 0.3] as const;
@@ -69,10 +68,10 @@ function GhostRow({ opacity }: { opacity: number }) {
       {ROW_RULES.map((rule, i) => (
         <span
           key={i}
-          className={`h-2 rounded-[2px] ${rule.tone === "200" ? "bg-[var(--ink-200)]" : "bg-[var(--ink-100)]"}${
-            i === 2 ? " h-[9px]" : ""
-          }`}
-          style={{ width: rule.w, justifySelf: rule.center ? "center" : undefined }}
+          className={`${rule.round ? "h-3.5 rounded-full" : "h-2 rounded-[2px]"} ${
+            rule.tone === "200" ? "bg-[var(--ink-200)]" : "bg-[var(--ink-100)]"
+          }${i === 1 ? " h-[9px]" : ""}`}
+          style={{ width: rule.w }}
         />
       ))}
       {/* Lifecycle, actions lane, chevron — blank, the same as a settled row. */}
@@ -115,23 +114,23 @@ export function MatchesDayZero() {
           </div>
         </div>
 
-        {/* The populated table's own card: surface-card, 8px 24px 12px, a
+        {/* The populated table's own card: surface-card, 2px 24px 6px, a
             hairline under the header only (`MatchesGrid`). */}
-        <div className="surface-card" style={{ padding: "8px 24px 12px" }}>
+        <div className="surface-card" style={{ padding: "2px 24px 6px" }}>
           <div
-            className={`${LIST_ROW_FRAME} border-b border-[var(--border-hairline)] pb-2 pt-3`}
+            className={`${LIST_ROW_FRAME} border-b border-[var(--border-hairline)] pb-2.5 pt-3.5`}
             style={LIST_GRID_COLS}
           >
             {COLUMNS.map((label, i) => (
               <span
                 key={label || `col-${i}`}
-                className={`eyebrow-sm min-w-0 truncate${label === "Result" ? " text-center" : ""}`}
+                className="eyebrow-sm min-w-0 truncate"
               >
                 {label}
               </span>
             ))}
           </div>
-          <div className="pt-1">
+          <div>
             {ROW_OPACITY.map((opacity, i) => (
               <Fragment key={opacity}>
                 {i > 0 && <div className="h-px bg-[var(--border-hairline)]" />}

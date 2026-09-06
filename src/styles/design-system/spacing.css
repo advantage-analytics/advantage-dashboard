@@ -36,8 +36,18 @@
   --radius-modal:var(--radius-card);
   /* Standard paddings */
   --pad-card:20px;
-  --pad-page-x:32px;
-  --pad-page-y:40px;
+  /* Full-viewport page gutter. 56px, not v2's 32px: every locked Platform
+     Audit frame (Pa2 Home, Pb2 Matches, Tb4 Roster, Tc2 Schedule, Pd/Td
+     wizards) draws its content at `padding:20px 56px 10px`, and the sticky
+     header sits INSIDE it at 24px on purpose — full-bleed chrome, inset
+     content. The 32px here was a v2 value no file ever referenced; three
+     pages had drifted to 28/32/40 against it. Reading-width pages
+     (settings, help, the wizard) are capped by a max-width instead and do
+     not use this. */
+  --pad-page-x:56px;
+  /* Top only. The frames' 10px bottom is an artboard artifact — a fixed
+     900px canvas does not scroll, so pages set their own bottom clearance. */
+  --pad-page-y:20px;
   /* Chrome dims (v3, additive) — icon-rail sidebar + header. Two committed
      rail widths (never a hover peek); rows and the icon column share one
      size at both widths so only the edge travels when the rail toggles. */

@@ -107,6 +107,10 @@ const SCREENS = path.join(
   'schedule',
   'static'
 );
+/** The shared primitives a screen draws through — `EmptyMark`. */
+const UI = path.join(__dirname, '..', 'src', 'components', 'ui');
+/** `ResultMark`, the one outcome register, sits a level up from the screens. */
+const DASHBOARD = path.join(__dirname, '..', 'src', 'components', 'dashboard');
 
 /**
  * One screen's source, reduced to something a designed sentence survives in.
@@ -137,8 +141,8 @@ const SCREENS = path.join(
  * requires a letter after `<` and forbids a `<` or `>` inside, so
  * `index < suggestions.length` is never mistaken for a tag.
  */
-function screen(file: string): string {
-  const source = readFileSync(path.join(SCREENS, file), 'utf8')
+function screen(file: string, root = SCREENS): string {
+  const source = readFileSync(path.join(root, file), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/(^|[^:])\/\/.*$/gm, '$1')
     // The braces a removed JSX comment leaves behind, which would otherwise
@@ -181,6 +185,8 @@ test.describe('/dashboard/team/schedule · Tc2 Tc2c', () => {
   const schedule = screen('static-schedule.tsx');
   const table = screen('schedule-table.tsx');
   const drawer = screen('event-drawer.tsx');
+  const emptyMark = screen('empty-mark.tsx', UI);
+  const resultMark = screen('result-mark.tsx', DASHBOARD);
 
   test('the season this app is signed in to', () => {
     // Design record, all four — see the header. The shell prints the real
@@ -239,7 +245,8 @@ test.describe('/dashboard/team/schedule · Tc2 Tc2c', () => {
     drawn(schedule, 'static-schedule.tsx', ' upcoming');
     drawn(schedule, 'static-schedule.tsx', 'Import');
     drawn(schedule, 'static-schedule.tsx', 'New event');
-    // The three lifecycle pills, with their counts inside.
+    // The three lifecycle pills. No counts inside them (Data Table law 7) —
+    // the summary line carries the season's numbers.
     drawn(schedule, 'static-schedule.tsx', '"All"');
     drawn(schedule, 'static-schedule.tsx', '"Upcoming"');
     drawn(schedule, 'static-schedule.tsx', '"Completed"');
@@ -268,11 +275,18 @@ test.describe('/dashboard/team/schedule · Tc2 Tc2c', () => {
     drawn(table, 'schedule-table.tsx', '${row.playedCount} / ${row.entryCount}');
     // EN DASH between the halves of a team score, not a hyphen.
     drawn(table, 'schedule-table.tsx', '${us}–${them}');
-    drawn(table, 'schedule-table.tsx', 'Won');
-    drawn(table, 'schedule-table.tsx', 'Lost');
+    // The outcome words moved into `ResultMark`, the product's one register —
+    // the table draws the glyph and the mark carries "Won"/"Lost"/"Level" as
+    // its accessible name. "Not played" is still the table's own word.
+    drawn(table, 'schedule-table.tsx', 'ResultMark');
+    for (const word of ['Won', 'Lost', 'Level']) {
+      drawn(resultMark, 'result-mark.tsx', word);
+    }
     drawn(table, 'schedule-table.tsx', 'Not played');
-    // The em dash a cell with no value draws.
-    drawn(table, 'schedule-table.tsx', '—');
+    // The em dash a cell with no value draws — through the shared `EmptyMark`,
+    // one mark centred under its own heading, the same one the Roster draws.
+    drawn(table, 'schedule-table.tsx', 'EmptyMark');
+    drawn(emptyMark, 'ui/empty-mark.tsx', '—');
   });
 
   test("4c's nine lines, and the 5–2 they add up to", () => {

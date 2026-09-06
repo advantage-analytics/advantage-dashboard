@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { ResultMark } from "@/components/dashboard/result-mark";
+import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { MatchActionsMenu } from "@/components/dashboard/matches/match-actions/match-actions-menu";
 import { formatShortDate } from "@/lib/ui/date-format";
@@ -11,23 +12,24 @@ import { NewPill } from "@/components/ui/new-pill";
 import { RowLifecycle } from "./row-state";
 
 /**
- * Date · Event · Opponent · Result · Score · lifecycle · ⋯ · chevron.
+ * Date · Opponent · Event · Score · Result · lifecycle · ⋯ · chevron.
  *
- * The row reads the way the match would be said aloud — "Aug 22, Riverside
- * quarters, Okafor, lost, 3-6 6-7". Context first, then the three facts that
- * belong together, closing on a number the way every table in the product
- * does. Date keeps the lead, so this list, Schedule and the roster's match
- * history card all open on the same column.
+ * Data Table law 1's canonical order for this list, and the grammar the Roster
+ * and Schedule open with: the date leads, the 13/500 name comes next with its
+ * 26px mark (an initials avatar here, where the name is a person; `EventMark`
+ * on Schedule, where it is a program or a tournament), context in 12px ink-500
+ * after it, then the numbers and the outcome. Score before Result, because
+ * Schedule reads Score → Result and a coach moving between the two pages should
+ * find the outcome in the same place.
  *
- * **Analysis** as a mid-row column is gone: it said "View report" on every
- * settled row, which is what clicking the row already does. What was worth
- * saying moved to `RowLifecycle`, in the trailing cell after the score, where
- * it is silent on a settled row and carries the upload's progress on the few
- * that are not. **Result**'s tracked word became `ResultMark`'s glyph — a
- * circle survives translation where a W or an L does not — and it is the one
- * centred cell in the product: its content is a single fixed-width glyph on
- * every row, so centring raggeds nothing, which is the case the rule against
- * centre-aligned cells exists to prevent.
+ * An earlier cut ran Event before Opponent ("the way the match would be said
+ * aloud") and drew the outcome as `ResultMark`'s glyph, centred, ahead of the
+ * score. Each was defensible alone; together they made this the one table that
+ * did not look like the other two — no mark leading the name, the outcome in a
+ * different column, register and alignment from Schedule's. The word under a
+ * labelled "Result" header is law 2's register for a table that keeps its
+ * headers; the glyph is for headerless rows, and the roster still uses it that
+ * way inside its Last-match cell.
  *
  * The round stays inside the Event cell. It was tried as a column of its own,
  * mirroring the LINE column on the roster card this grammar comes from, and the
@@ -35,9 +37,7 @@ import { RowLifecycle } from "./row-state";
  * across their matches, so a column of them is a pattern worth reading down. A
  * round is a property of one EVENT — a quarter-final at Riverside and one at
  * Marin are not the same measurement — so the column bought little and cost
- * something real. With the event cell bounded, a typical name leaves air after
- * it, which put the round column ~140px from its event and 16px from the
- * opponent, where it read as qualifying the person rather than the tournament.
+ * something real.
  */
 export const DATE_COL = "72px";
 /**
@@ -55,10 +55,9 @@ export const DATE_COL_WITH_YEAR = "84px";
  * That is the opposite of what a table usually does, and each alternative was
  * tried and broke the row. Slack given to Event grew it past 300px while a
  * typical name draws ~140, pushing the round away from its own event. Slack
- * given to Opponent left the name ~400px short of the result glyph, stranding
- * the three facts this order exists to keep together. Slack left after the
- * Score was simply air — and air is exactly what the lifecycle cell needs,
- * since it is empty on a settled row.
+ * given to Opponent stranded the name far from the score it belongs with.
+ * Slack left after the Result was simply air — and air is exactly what the
+ * lifecycle cell needs, since it is empty on a settled row.
  *
  * So the leftover width IS the lifecycle column. It carries a 96px minimum, so
  * at the narrow end of `lg` the upload's bar collapses before its words do —
@@ -67,14 +66,14 @@ export const DATE_COL_WITH_YEAR = "84px";
  * the rows that use it, and a label over a column that is blank eight rows in
  * ten only draws attention to the blanks.
  *
- * Opponent's 240px cap is measured, not round: a full name at 13/500 —
- * "Timofey Stepanov" is ~115px — with room for the "New" pill beside it, and
- * nothing wider, because every pixel past that pushes the result glyph away
- * from the name it belongs to.
+ * Opponent's cap is measured, not round: a full name at 13/500 — "Timofey
+ * Stepanov" is ~115px — with the "New" pill beside it came to 240px; the 26px
+ * mark and its 10px gap add 36, so 276. Result is 64px, the width Schedule
+ * gives the same mark and header. Score is 116px at one precision.
  */
 export const LIST_GRID_COLS = {
   gridTemplateColumns:
-    `var(--date-col, ${DATE_COL}) minmax(150px,260px) minmax(150px,240px) 56px 116px minmax(96px,1fr) 28px 13px`,
+    `var(--date-col, ${DATE_COL}) minmax(186px,276px) minmax(150px,260px) 116px 64px minmax(96px,1fr) 28px 13px`,
 } as const;
 
 /**
@@ -126,7 +125,21 @@ export function MatchCardList({ match, isNew, unseen }: MatchCardListProps): Rea
         {formatShortDate(match.date)}
       </span>
 
-      {/* Event — the occasion, quieter than the name it sets up, with the round
+      {/* Opponent — the name a reader scans for, led by its mark like every
+          name column in the product. The invisible full-row link lives here,
+          and the row's one state marker follows the name. */}
+      <Link
+        href={`/dashboard/matches/${match.id}`}
+        className="flex min-w-0 items-center gap-2.5 rounded-sm after:absolute after:inset-0 focus-visible:outline-none"
+      >
+        <InitialsAvatar name={match.player2.name} />
+        <span className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
+          {match.player2.name}
+        </span>
+        {unseen && <NewPill className="shrink-0" />}
+      </Link>
+
+      {/* Event — the occasion, quieter than the name it follows, with the round
           it qualifies trailing it in mono. The round never truncates: it is two
           or three characters, and a tournament losing its tail is a smaller
           loss than a stage nobody can read. */}
@@ -139,28 +152,21 @@ export function MatchCardList({ match, isNew, unseen }: MatchCardListProps): Rea
         )}
       </span>
 
-      {/* Opponent — the invisible full-row link lives here; it is the name a
-          reader scans for, and the row's one state marker follows it. */}
-      <Link
-        href={`/dashboard/matches/${match.id}`}
-        className="flex min-w-0 items-center gap-[7px] rounded-sm after:absolute after:inset-0 focus-visible:outline-none"
-      >
-        <span className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
-          {match.player2.name}
-        </span>
-        {unseen && <NewPill className="shrink-0" />}
-      </Link>
-
-      {/* Result — the glyph register, centred under its header. The word is not
-          lost: `ResultMark` carries "Won"/"Lost" as its accessible name. */}
-      <ResultMark won={isWin} className="justify-self-center" />
-
       {/* Score — flush left in its fixed track, one precision, tabular, so
-          every row's numbers start at the same x. */}
+          every row's numbers start at the same x. 13px, like the Roster's
+          Record and Schedule's Score: the one column a coach reads straight
+          down is the same size on every page. */}
       <ScoreLine
         sets={match.score.sets}
-        className="text-scoreboard-sm min-w-0 truncate"
+        className="min-w-0 truncate text-[13px] text-[var(--ink-900)]"
       />
+
+      {/* Result — the outcome glyph, the product's one register, under its
+          labelled header. Flush left, matching the header above it and the
+          `EmptyMark` a draft row draws in this same column; this row's edge is
+          the chevron, not this cell, so right-aligning would only push the
+          outcome away from the score it belongs to. */}
+      <ResultMark won={isWin} className="justify-self-start" />
 
       {/* Lifecycle — silent on a settled row; the upload's chip and bar, or the
           one word that explains an exception, on the rest. */}

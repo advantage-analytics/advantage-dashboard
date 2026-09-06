@@ -16,6 +16,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
 import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
 import { createClient } from "@/lib/supabase/client";
@@ -510,15 +511,13 @@ export function SearchCommandPalette({
                               <span className="text-[13px] text-[#0D0D0D] truncate">
                                 vs. {match.opponentName}
                               </span>
-                              <span
-                                className={`shrink-0 px-1.5 py-0.5 rounded-[6px] text-[10px] font-semibold ${
-                                  match.isWin
-                                    ? "bg-[rgba(115,230,104,0.15)] text-[#5DB955]"
-                                    : "bg-[rgba(229,24,55,0.15)] text-[#E51837]"
-                                }`}
-                              >
-                                {match.isWin ? "W" : "L"}
-                              </span>
+                              {/* The one outcome register. This drew a tinted
+                                  W/L chip — a bare letter in a container, which
+                                  the system bans twice over (standings shorthand
+                                  that does not translate; a tint that makes the
+                                  outcome louder than the score) and which was
+                                  the last place an outcome wore a third face. */}
+                              <ResultMark won={match.isWin} className="shrink-0" />
                             </div>
                             <span className="text-[12px] text-[#888888]">
                               {match.tournamentName}

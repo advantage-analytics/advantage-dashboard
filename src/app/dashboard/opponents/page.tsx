@@ -56,7 +56,7 @@ export default async function OpponentsPage() {
 
   return (
     <div className="w-full flex-1 bg-[var(--surface-card)]">
-      <div className="mx-auto flex max-w-screen-2xl flex-col gap-8 px-6 py-8 sm:px-10">
+      <div className="mx-auto flex max-w-screen-2xl flex-col gap-8 px-6 pt-5 pb-8 sm:px-14">
         <div>
           <h1 className="text-[30px] leading-9 font-light tracking-[-0.6px] text-[var(--ink-900)]">
             Opponents
