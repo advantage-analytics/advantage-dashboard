@@ -43,16 +43,22 @@ ready).
 - **notes:** Plan Step 2. The `detail` slot already exists on `RailTooltip` and flips `align` to `start` on its own. The `aria-label` widening is the accessibility half of the marker and is not optional.
 
 ## T3 · Sign-out row on Settings → Account
-- **status:** blocked
+- **status:** todo
 - **model:** opus
-- **files:** src/app/dashboard/settings/account/page.tsx — guess
+- **files:** src/app/dashboard/settings/account/page.tsx, src/components/dashboard/logout-dialog.tsx — guess
 - **done when:**
+  - [ ] `logout-dialog.tsx`'s `handleLogout` calls `supabase.auth.signOut({ scope: "local" })` rather than the bare `signOut()`, whose auth-js default is `scope: "global"`. A comment states why: the shared dialog is the "sign out here" action, and revoking every device's refresh token is a separate, explicitly-labelled control. Nothing else in that file changes — the context, the confirmation dialog, the unsaved-changes warning and the error state are untouched.
   - [ ] Section `02 · Where you're signed in` renders two rows in one hairline-bordered group (a `flex-col`, not the current single `flex` row): first row glyph `Monitor`, title "This device", copy "Ends this session only. Other devices stay signed in.", action button `Sign out` (`SettingsButton variant="outline" size="sm"`); second row glyph `MonitorSmartphone`, existing copy "Signing out everywhere ends every other session too — phones included." and the existing `Sign out everywhere` button wired to the unchanged `handleSignOutEverywhere` / `isSigningOut`.
-  - [ ] The new `Sign out` button's `onClick` is the value of `useRequestLogout()` imported from `@/components/dashboard/logout-dialog`; `logout-dialog.tsx` itself is not modified, and clicking `Sign out` in the preview harness opens the existing confirmation dialog rather than signing out directly.
+  - [ ] The new `Sign out` button's `onClick` is the value of `useRequestLogout()` imported from `@/components/dashboard/logout-dialog`, so it opens the existing shared confirmation dialog rather than signing out directly — verified in the preview harness. The two rows are now genuinely different actions: local for the first, `scope: "global"` via the untouched `handleSignOutEverywhere` for the second.
   - [ ] The two rows share one row shape (either `FactRow` reused or the existing section-02 row markup repeated) — the diff introduces no third bespoke row component; the section's top and bottom hairlines align with sections 01 and 03 in the harness screenshot.
-  - [ ] The `lucide-react` import gains `MonitorSmartphone`; sections 01 and 03, the section-02 comment's intent (no device list is recorded), `handleDelete`, and every other section are unchanged.
-  - [ ] `npm run lint` exits 0; any preview-harness route/fixtures are deleted before commit so `git status` shows only this file.
-- **notes:** Plan Step 3; design §4 table. Ordered before T4 so sign-out never has zero homes outside the header. `FactRow` has a 130px label column — it may not fit the two-line-plus-button shape; the plan allows repeating the existing section-02 row instead. Update the section comment's "One row, not a device list" wording to match two rows. Copy is design open question 3 — use as written unless the human changes it.
+  - [ ] The `lucide-react` import gains `MonitorSmartphone`; sections 01 and 03, the section-02 comment's intent (no device list is recorded), `handleDelete`, and every other section are unchanged. `npm run lint` exits 0 and any preview-harness route/fixtures are deleted before commit, so `git status` shows only the two files above.
+- **notes:** Plan Step 3; design §4 table. Ordered before T4 so sign-out never has zero homes outside the header.
+
+  **Amended 2026-09-06 after the first run was blocked.** The original criteria wired the "This device" row to `useRequestLogout()` while forbidding any change to `logout-dialog.tsx` — but that dialog calls `supabase.auth.signOut()` bare, and `@supabase/auth-js` defaults it to `scope: "global"`. The row would have revoked every session while its copy promised the opposite, and both rows would have been the same action. The human's decision: make the shared dialog local. That deliberately changes the header profile menu's sign-out too, since both share the dialog — it makes the header behave the way its label already implied, and that is the point, not a side effect.
+
+  A reviewed implementation of everything except the `scope` change is stashed at `7b9a3ec` (`git stash apply 7b9a3ec`) — it passed lint, typecheck, completion review and guardrails, and was blocked only on the semantics above. Applying it as a starting point is expected but not required; if you do, drop the stash entry afterwards.
+
+  `FactRow` has a 130px label column and did not fit the glyph + two-line + button shape on the first attempt, so that run repeated the existing section-02 row markup instead — allowed by the plan. Update the section comment's "One row, not a device list" wording to match two rows. The second row needs a title of its own once "This device" moves up; the first attempt used "Every device".
 
 ## T4 · Remove sign-out from the sidebar footer
 - **status:** todo
