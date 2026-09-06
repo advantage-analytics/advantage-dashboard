@@ -73,6 +73,7 @@ export function AppSidebar() {
             icon={link.icon}
             active={current === link.href}
             expanded={expanded}
+            comingSoon={link.comingSoon}
           />
         ))}
       </div>

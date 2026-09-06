@@ -30,7 +30,7 @@ ready).
 - **notes:** Plan Step 1. `ChartLine` and `UsersRound` are exported by the installed `lucide-react` ^0.562 (verified in design). Opponents is deliberately unmarked — design open question 1; do not "fix" it. Nothing renders the flag until T2, so no visual check here.
 
 ## T2 · Rail row renders the coming-soon marker
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T1
 - **files:** src/components/dashboard/sidebar/rail-item.tsx, src/components/dashboard/app-sidebar.tsx (one prop in the `mainLinks` map only) — guess
