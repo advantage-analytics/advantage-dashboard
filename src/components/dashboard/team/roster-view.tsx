@@ -14,6 +14,8 @@ import { EditPlayerDialog } from "@/components/dashboard/team/edit-player-dialog
 import { MergeProfilesDialog } from "@/components/dashboard/team/merge-profiles-dialog";
 import { setProgramLineup } from "@/components/dashboard/team/roster-actions";
 import { advButton } from "@/lib/ui/adv-button";
+import { Kbd } from "@/components/ui/kbd";
+import { GripVertical } from "lucide-react";
 import type { InviteResult } from "@/components/dashboard/settings/team-actions";
 import type { ActionResult } from "@/components/dashboard/settings/actions";
 import type {
@@ -80,7 +82,12 @@ export function RosterView({
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [lineup, setLineup] = useState<LineupDraft | null>(null);
-  /** The row under the pointer's grip. A ref: a drag must not re-render per move. */
+  /**
+   * The row under the pointer's grip, mirrored into the draft so the row can
+   * draw itself held. The ref is what the drag handlers read — `dragover`
+   * fires many times a second and must not wait on a render to know which
+   * row it is moving.
+   */
   const dragging = useRef<string | null>(null);
   /** What the last reorder did, for anyone listening rather than looking. */
   const [announcement, setAnnouncement] = useState("");
@@ -186,6 +193,7 @@ export function RosterView({
         .filter((m) => m.lineupSpot === null)
         .map((m) => m.playerId),
       lifted: null,
+      dragging: null,
     });
   }, [members, finishClose]);
 
@@ -233,6 +241,9 @@ export function RosterView({
 
   const onDragStartRow = useCallback((playerId: string) => {
     dragging.current = playerId;
+    setLineup((current) =>
+      current ? { ...current, dragging: playerId, lifted: null } : current
+    );
   }, []);
 
   /**
@@ -266,6 +277,7 @@ export function RosterView({
 
   const onDragEndRow = useCallback(() => {
     dragging.current = null;
+    setLineup((current) => (current ? { ...current, dragging: null } : current));
   }, []);
 
   const onDropOnBench = useCallback(() => {
@@ -279,7 +291,7 @@ export function RosterView({
         bench: [...current.bench, id],
       };
       setAnnouncement(describe(next, id, members));
-      return next;
+      return { ...next, dragging: null };
     });
     dragging.current = null;
   }, [members]);
@@ -417,11 +429,28 @@ export function RosterView({
           {/* The mode says what it is and how to work it, once, above the
               table it changed — rather than a hint per row. */}
           {lineup && (
-            <div className="flex items-center gap-2.5 rounded-[var(--radius-element)] bg-[var(--blue-soft)] px-3 py-2.5">
-              <span className="text-[12px] text-[var(--ink-900)]">
-                Setting the lineup — drag a row, or focus one and press{" "}
-                <Kbd>Space</Kbd> then <Kbd>↑</Kbd> <Kbd>↓</Kbd>. Nothing is
-                saved until you press Save lineup.
+            /* The app's inline-notice register (`settings-alert.tsx`'s info
+               tint: an 8% wash inside a 12% border), not a filled bar — the
+               table below is the thing to look at, and this only has to say
+               what mode it is in. Real keycaps from `ui/kbd.tsx`. */
+            <div className="flex items-center gap-3 rounded-[var(--radius-element)] border border-[var(--blue-tint-12)] bg-[var(--blue-tint-08)] px-3.5 py-2.5">
+              <GripVertical
+                className="size-3.5 shrink-0 text-[var(--blue)]"
+                strokeWidth={1.5}
+                aria-hidden
+              />
+              <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] leading-[1.5] text-[var(--ink-900)]">
+                <span className="font-medium">Setting the lineup.</span>
+                <span className="text-[var(--ink-700)]">
+                  Drag a row, or focus one and press
+                </span>
+                <Kbd size="sm">Space</Kbd>
+                <span className="text-[var(--ink-700)]">then</span>
+                <Kbd size="sm">↑</Kbd>
+                <Kbd size="sm">↓</Kbd>
+              </p>
+              <span className="ml-auto shrink-0 text-[11px] text-[var(--ink-600)]">
+                Nothing is saved until Save lineup.
               </span>
             </div>
           )}
@@ -502,14 +531,6 @@ export function RosterView({
         }}
       />
     </>
-  );
-}
-
-function Kbd({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="mono mx-0.5 inline-flex h-[18px] items-center rounded-[4px] border border-[var(--border-medium)] bg-[var(--surface-card)] px-1.5 text-[10px] font-medium text-[var(--ink-700)]">
-      {children}
-    </span>
   );
 }
 

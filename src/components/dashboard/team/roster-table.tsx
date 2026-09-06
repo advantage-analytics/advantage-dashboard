@@ -89,6 +89,17 @@ const ROW = "flex items-center gap-4";
  */
 const ROW_BOX = "-mx-4 h-[52px] rounded-[var(--radius-element)] px-4";
 
+/**
+ * A 1×1 transparent GIF, handed to `setDragImage` so the browser paints no
+ * ghost. Module-level so it is one decode, not one per drag.
+ */
+const BLANK_DRAG_IMAGE: HTMLImageElement | undefined =
+  typeof Image === "undefined"
+    ? undefined
+    : Object.assign(new Image(), {
+        src: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+      });
+
 export function rosterRowId(playerId: string): string {
   return `roster-row-${playerId}`;
 }
@@ -105,6 +116,12 @@ export interface LineupDraft {
   bench: string[];
   /** The row a keyboard user has lifted, or null. */
   lifted: string | null;
+  /**
+   * The row under the pointer's grip, or null. State rather than a ref, so
+   * the row can draw itself lifted and carry the drop line while it moves —
+   * a ref told the list where the row was going but let nothing show it.
+   */
+  dragging: string | null;
 }
 
 function Avatar({ name }: { name: string }) {
@@ -324,7 +341,9 @@ function MemberRow({
   const router = useRouter();
   const href = profileHref(member.playerId);
   const inLineupMode = lineup !== null;
-  const lifted = lineup?.lifted === member.playerId;
+  // Held by either hand: lifted with Space, or under the pointer mid-drag.
+  const lifted =
+    lineup?.lifted === member.playerId || lineup?.dragging === member.playerId;
 
   return (
     <li
@@ -337,6 +356,10 @@ function MemberRow({
         // Firefox refuses to start a drag without data on the transfer.
         event.dataTransfer.setData("text/plain", member.playerId);
         event.dataTransfer.effectAllowed = "move";
+        // The row itself is the thing that moves — it reorders live under the
+        // pointer and draws its own drop line — so the browser's translucent
+        // copy of it would be a second row following the first.
+        if (BLANK_DRAG_IMAGE) event.dataTransfer.setDragImage(BLANK_DRAG_IMAGE, 0, 0);
         onDragStartRow(member.playerId);
       }}
       onDragOver={(event) => {
@@ -400,6 +423,18 @@ function MemberRow({
           "bg-[var(--surface-card)] shadow-[var(--shadow-card-emphasis)] ring-1 ring-[var(--border-medium)]"
       )}
     >
+      {/* The drop line — `Tb4`'s blue rule with the line number the row is
+          about to take. It rides the held row's top edge, which in a list
+          that reorders live IS the drop position. */}
+      {lifted && (
+        <span aria-hidden className="pointer-events-none absolute inset-x-0 -top-px">
+          <span className="absolute left-12 right-0 h-0.5 rounded-full bg-[var(--blue)]" />
+          <span className="mono tabular absolute left-4 -top-2 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[var(--radius-pill)] bg-[var(--blue)] px-1.5 text-[10px] font-medium text-white">
+            {spot ?? "—"}
+          </span>
+        </span>
+      )}
+
       <SpotCell spot={spot} draggable={inLineupMode} lifted={lifted} />
 
       <span className={cn(COL.player, "flex min-w-0 items-center gap-2.5")}>
