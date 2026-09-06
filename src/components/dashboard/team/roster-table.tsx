@@ -177,7 +177,7 @@ function Avatar({ name }: { name: string }) {
  */
 function FormTicks({ form }: { form: RosterMember["form"] }) {
   if (form.length === 0) {
-    return <EmptyMark />;
+    return <EmptyMark under="form" />;
   }
   return (
     <>
@@ -204,12 +204,28 @@ function FormTicks({ form }: { form: RosterMember["form"] }) {
  * The one glyph every empty cell shows. Record, Form and Last match each had
  * their own — a 13px dash, a 12px dash, a sentence — at different sizes and
  * weights, so a player with no matches read as three unrelated absences.
- * One mark, one size, one colour, on each column's left edge under its
- * heading: the eye reads "nothing yet" once and moves on.
+ * One mark, one size, one colour, and each CENTRED under its heading: the
+ * mark is given the heading's own text width and centres the dash in it, so
+ * the dash sits under the middle of the word rather than under its first
+ * letter. The widths are the rendered eyebrow labels less their trailing
+ * letter-spacing (measured: Record 52, Form 36, Last match 83, each carrying
+ * 2.5px of tracking after the last letter). Change a heading, re-measure.
  */
-function EmptyMark() {
+const EMPTY_UNDER = {
+  record: "w-[50px]",
+  form: "w-[34px]",
+  last: "w-[80px]",
+} as const;
+
+function EmptyMark({ under }: { under: keyof typeof EMPTY_UNDER }) {
   return (
-    <span aria-hidden className="text-[13px] leading-none text-[var(--ink-300)]">
+    <span
+      aria-hidden
+      className={cn(
+        EMPTY_UNDER[under],
+        "block text-center text-[13px] leading-none text-[var(--ink-300)]"
+      )}
+    >
       —
     </span>
   );
@@ -219,7 +235,7 @@ function EmptyMark() {
 function Record({ wins, losses }: { wins: number; losses: number }) {
   return (
     <span className={cn(COL.record, "tabular flex items-center text-[13px] text-[var(--ink-900)]")}>
-      {wins + losses === 0 ? <EmptyMark /> : `${wins}–${losses}`}
+      {wins + losses === 0 ? <EmptyMark under="record" /> : `${wins}–${losses}`}
     </span>
   );
 }
@@ -241,14 +257,14 @@ function LastMatchCell({ member }: { member: RosterMember }) {
   const { lastMatch } = member;
 
   if (lastMatch === null) {
-    // The mark, then the words where the opponent's name would be — so the
-    // three empty cells line up on their headings and the sentence explains
-    // all of them once.
+    // The mark alone. Three dashes under three headings already say "nothing
+    // yet" once; a sentence beside the third said it a second time, in a
+    // different voice, and pulled the eye to the one row with the least in
+    // it. The words stay for a screen reader, which cannot read a dash.
     return (
-      <span className={cn(COL.last, "flex items-center gap-2.5")}>
-        <EmptyMark />
-        <span className="text-[12px] text-[var(--ink-400)]">No matches yet</span>
-        <span className="sr-only">No record, no form.</span>
+      <span className={cn(COL.last, "flex items-center")}>
+        <EmptyMark under="last" />
+        <span className="sr-only">No matches yet</span>
       </span>
     );
   }
