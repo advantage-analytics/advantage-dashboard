@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Check, ChevronsUpDown, Plus, Loader2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -31,6 +31,45 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
   const [hovered, setHovered] = useState(false);
   const [, startTransition] = useTransition();
   const [pendingId, setPendingId] = useState<string | null>(null);
+  // Row buttons, keyed by workspace id, so the open menu can put focus on the
+  // current workspace and so ArrowUp/ArrowDown can walk the list. Radix's own
+  // arrow handling belongs to menus, and this popover is not one.
+  const rowRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+
+  /**
+   * Opening the menu lands focus on the row you are already in, so the list
+   * starts where you are rather than at its first entry. Nothing here draws a
+   * ring: `focus.css` rings every `<button>` on `:focus-visible`, and a
+   * programmatic `.focus()` inherits the browser's own keyboard-vs-mouse
+   * modality — so a click leaves the row focused but unringed, and Enter rings
+   * it. If the active row is missing (an empty list, or an active workspace
+   * that is not in `available`), we leave Radix's default focus alone.
+   */
+  function focusActiveRow(event: Event) {
+    const button = rowRefs.current.get(active.id);
+    if (!button) return;
+    event.preventDefault();
+    button.focus();
+  }
+
+  function handleMenuKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    // Mid-switch every row is disabled; moving focus onto one would be a lie.
+    if (pendingId !== null) return;
+
+    const index = available.findIndex(
+      (workspace) => rowRefs.current.get(workspace.id) === document.activeElement
+    );
+    if (index === -1) return;
+
+    // preventDefault even at the ends — the key was ours to handle either way,
+    // and letting it through would scroll the page behind the open menu.
+    event.preventDefault();
+    // Clamped, not wrapped: the ends of a short list should feel like ends.
+    const next = event.key === "ArrowDown" ? index + 1 : index - 1;
+    if (next < 0 || next >= available.length) return;
+    rowRefs.current.get(available[next].id)?.focus();
+  }
 
   const squad = teamLabel(active.team);
   const subLabel = hovered || open ? "Switch workspace" : workspaceSubtitle(active);
@@ -131,6 +170,8 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
         sideOffset={expanded ? 6 : 8}
         style={{ width: PANEL_WIDTH }}
         className="rounded-[12px] border-[var(--border-medium)] p-1.5"
+        onOpenAutoFocus={focusActiveRow}
+        onKeyDown={handleMenuKeyDown}
       >
         {/* Squad in, role out — every row here is one line, so they are all
             the same height and the list reads as a list.
@@ -166,6 +207,10 @@ export function WorkspaceRow({ expanded }: { expanded: boolean }) {
             >
               <button
                 type="button"
+                ref={(node) => {
+                  if (node) rowRefs.current.set(workspace.id, node);
+                  else rowRefs.current.delete(workspace.id);
+                }}
                 disabled={pendingId !== null}
                 onClick={() => switchTo(workspace)}
                 className={cn(

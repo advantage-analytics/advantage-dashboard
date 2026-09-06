@@ -68,7 +68,7 @@ ready).
 - **notes:** Plan Step 4. Needs T2 because both tasks edit `app-sidebar.tsx`; needs T3 so a working non-header sign-out exists before this one is removed. `LogoutProvider` stays mounted — `header.tsx` is still a consumer.
 
 ## T5 · Workspace switcher opens focused on the current row
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/sidebar/workspace-row.tsx — guess
 - **done when:**
