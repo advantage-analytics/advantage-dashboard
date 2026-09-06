@@ -619,7 +619,13 @@ export function PlayerDrawer({
               <h2 className="min-w-0 text-[22px] leading-[1.1] font-light tracking-[-0.2px]">
                 <Link
                   href={profile}
-                  title={`Open ${firstName}'s profile`}
+                  /* The full name, because at 340px this one clips — that is
+                     the whole job of a native `title`, and the app already
+                     uses it that way for clipped emails. The destination is
+                     carried by the link itself (ink → blue), not by a
+                     tooltip, and the dark `Tooltip` beside it in the header
+                     stays what it is for: icon-only controls. */
+                  title={member.name}
                   className="block truncate rounded-[var(--radius-cell)] text-[var(--ink-900)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
                 >
                   {member.name}

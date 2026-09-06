@@ -844,6 +844,18 @@ bottom (header chrome) · right (rail rows). It names; it doesn't explain
 paragraphs — stat definitions may use `label` + `detail`, and nothing
 essential lives only in a tooltip.
 
+**Two hover disclosures, and they do not overlap.** The dark `Tooltip` names
+a **control** whose label is not on screen — icon-only chrome, and nothing
+else. A native `title` discloses **text that is clipped**, carrying the full
+string and nothing more: a truncated name, a truncated email. Never use
+`title` to say what a control does — a link's destination is carried by the
+link itself (ink → blue), and an action described only in an OS tooltip is
+invisible to touch and styled differently on every platform. Never wrap a
+text link in a dark tooltip either: it sits inches from real ones on icon
+buttons and turns the pattern into decoration. Where a name is both clipped
+and a link, `title` holds the name — the reader needs the part they cannot
+read, not the part the cursor already told them.
+
 ### Activity Tray (v3)
 
 Header icon (Lucide `activity`, 15px ink-700 in a 28px radius-8 square) + 6px

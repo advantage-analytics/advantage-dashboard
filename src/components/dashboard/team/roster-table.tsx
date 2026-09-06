@@ -582,7 +582,9 @@ function MemberRow({
           ) : (
             <Link
               href={href}
-              title="Open profile"
+              /* The full name — a 230px column clips a long one, and one
+                 convention covers both places a player's name is a link. */
+              title={member.name}
               onClick={(event) => event.stopPropagation()}
               className="block truncate rounded-[var(--radius-cell)] text-[13px] font-medium text-[var(--ink-900)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
             >
