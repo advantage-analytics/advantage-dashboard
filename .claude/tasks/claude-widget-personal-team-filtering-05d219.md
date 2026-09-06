@@ -75,7 +75,7 @@ ready).
 - **notes:** Correctness trap: the tray is scoped on the JOB, not the match — a job can belong to someone who did not create the match row, and one such row exists on the live DB. Dropping `created_by` would hide it from its submitter. Folded into the branch by explicit human decision (design.md "Scope decision"). Plan step 4.
 
 ## T5 · Add personal-home-scope regression spec
-- **status:** blocked
+- **status:** done
 - **model:** opus
 - **needs:** T1, T2, T3, T4
 - **files:** tests/personal-home-scope.spec.ts (new), reading tests/fixtures/live-db.ts and tests/rls-workspace-isolation.spec.ts for harness style
@@ -84,5 +84,5 @@ ready).
   - [ ] Fixture is one user, one program they belong to, one personal match (`created_by = user`, `program_id IS NULL`), one program match (`created_by = user`, `program_id = program`), and one `processing_jobs` row per match with `created_by = user`
   - [ ] Signed in as that user, three assertions mirror the T1/T2/T3 query shapes exactly as the source now writes them and each returns only the personal match
   - [ ] The tray case asserts both directions: the personal shape (`created_by` + `matches.program_id IS NULL`) returns only the personal match's job, and the team shape (`matches.program_id = program`) returns only the program match's job
-  - [ ] The file's doc comment states this is a query-shape mirror written after the fix, not red-first, and that it does not invoke the loaders (which build clients from request cookies); the runner's notes record that temporarily removing one predicate from source turned the matching assertion red before restoring it
+  - [ ] The file's doc comment states this is a query-shape mirror written after the fix, not red-first, and that it does not invoke the loaders (which build clients from request cookies); it also states the limitation that editing source alone cannot turn this spec red, and records the both-sides removal (source + mirror) that was observed red at authoring time
 - **notes:** `npx playwright test tests/personal-home-scope.spec.ts` must pass live and skip cleanly keyless. `matches.created_by` has no cascade — order of cleanup matters. Plan step 5.

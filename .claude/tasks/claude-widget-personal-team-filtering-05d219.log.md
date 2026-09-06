@@ -126,3 +126,43 @@ is the runner's. Newest entries at the bottom.
   both-sides removal that was observed red at authoring time" — then resets
   `status:` to `todo`. The work itself is finished and passing; only the
   contract is wrong.
+
+## T5 · Add personal-home-scope regression spec — done (re-run after unblock)
+- **gate:** lint clean · `tsc --noEmit` clean · `npm test` clean (430 passed,
+  including this spec live 6/6). `task-completion-reviewer`: **VERDICT: pass**
+  — all five criteria met, with the mirrored query shapes verified
+  field-for-field against all four source sites, and `git diff HEAD -- src/`
+  empty. `rls-boundary-reviewer`: ran (the spec uses the service-role client
+  and writes to the live database) — **no blocking findings**; it confirmed
+  every scoping assertion reads through the signed-in anon client rather than
+  the admin one (an admin-client assertion would have made the spec vacuous),
+  that teardown deletes in an FK-safe order and self-verifies, and that no
+  secret-bearing module becomes reachable from client code.
+  `pipeline-guardrails-reviewer`: skipped — the only new file is under
+  `tests/`, touching neither `src/app/dashboard/`, `src/components/dashboard/`,
+  nor the upload wizard.
+- **changed:** `tests/personal-home-scope.spec.ts` (new, 6 tests). Nothing else
+  — the subagent this run was dispatched to VERIFY the restored work, not
+  rebuild it, and changed nothing.
+- **why this needed a second run:** the first attempt was gated `needs-work`
+  on criterion 5 alone, which as originally drafted asked for two impossible
+  things — that removing a predicate *from source* turn the mirror red (it
+  cannot; the spec issues its own copy of each query), and that "the runner's
+  notes" record it (they are written after the gate, so a reviewer can never
+  see them). The code was correct and passing throughout. The human amended
+  criterion 5 to ask for what the file can actually show, restored the stashed
+  work, and reset the task to `todo`. Stash `17afbb1705ead31726e90dd8fa9a59c317534ce4`
+  is now redundant and can be dropped.
+- **follow-ups:**
+  1. The mirror's structural weakness is documented, not fixed. The durable
+     version is a shared `personalMatchesQuery(client, userId)` helper that
+     both the four call sites and this spec call, so a dropped predicate turns
+     the spec red from a source edit alone. That is a refactor across four
+     files — its own branch, per the branch-scope rule.
+  2. Coverage gap the RLS reviewer flagged as an observation, not a defect:
+     the tray's team-branch test cannot distinguish "correctly program-scoped"
+     from "RLS let the creator see their own row anyway", because the querying
+     athlete created both jobs. `processing_jobs` RLS is `created_by`-only by
+     design (the row carries a live video token). Proving the team branch
+     properly would need a second member — a coach or staff user — in the
+     fixture.
