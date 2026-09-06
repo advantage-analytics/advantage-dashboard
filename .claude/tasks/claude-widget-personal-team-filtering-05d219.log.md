@@ -92,3 +92,37 @@ is the runner's. Newest entries at the bottom.
      A test with a fake query builder asserting both clauses land on the
      personal branch would make a future substitution catchable; today only a
      human reading the query would notice.
+
+## T5 · Add personal-home-scope regression spec — blocked
+- **gate:** lint clean · `tsc --noEmit` clean · `npm test` clean (430 passed,
+  including the new spec running live, 6/6). **`task-completion-reviewer`:
+  VERDICT: needs-work** — stage 5b, so 5c never ran.
+  Four of the five criteria are met and it verified the three mirrored query
+  shapes field-for-field against the real source. The fifth failed on its last
+  clause only.
+- **why blocked:** criterion 5 asks the runner to record "that temporarily
+  removing one predicate **from source** turned the matching assertion red."
+  That is **structurally impossible for this kind of test**, and the reviewer
+  says so itself: the spec issues its own copy of each query rather than
+  calling the loader — which is exactly why it also could not be written
+  red-first — so editing the source alone can never turn it red. The
+  implementer did the honest thing: removed the predicate from source *and*
+  mirror, watched that assertion go red, restored both (`git diff src/` clean),
+  and wrote the limitation into the doc comment instead of claiming the
+  stronger result. The reviewer called that "the right response to an
+  unsatisfiable spec" and still could not mark the literal item met. Correct
+  per fail-closed: anything other than `VERDICT: pass` blocks, and the runner
+  does not get to triage.
+  Secondary artifact worth noting: the criterion says "the runner's notes
+  record…", but the runner's notes are this log entry, written *after* the
+  gate — so the gate can never see them. The criterion asks the reviewer to
+  verify something that does not exist yet at review time.
+- **stash:** 17afbb1705ead31726e90dd8fa9a59c317534ce4 (`blocked: T5`) — carries the whole new
+  `tests/personal-home-scope.spec.ts`, untracked, recovered with
+  `git stash apply 17afbb1705ead31726e90dd8fa9a59c317534ce4`. Nothing was discarded.
+- **what would unblock:** the author amends T5's fifth criterion to ask for
+  what a mirror test can actually show — e.g. "the doc comment states the
+  limitation that editing source alone cannot turn this red, and records the
+  both-sides removal that was observed red at authoring time" — then resets
+  `status:` to `todo`. The work itself is finished and passing; only the
+  contract is wrong.

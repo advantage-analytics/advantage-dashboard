@@ -75,7 +75,7 @@ ready).
 - **notes:** Correctness trap: the tray is scoped on the JOB, not the match — a job can belong to someone who did not create the match row, and one such row exists on the live DB. Dropping `created_by` would hide it from its submitter. Folded into the branch by explicit human decision (design.md "Scope decision"). Plan step 4.
 
 ## T5 · Add personal-home-scope regression spec
-- **status:** todo
+- **status:** blocked
 - **model:** opus
 - **needs:** T1, T2, T3, T4
 - **files:** tests/personal-home-scope.spec.ts (new), reading tests/fixtures/live-db.ts and tests/rls-workspace-isolation.spec.ts for harness style
