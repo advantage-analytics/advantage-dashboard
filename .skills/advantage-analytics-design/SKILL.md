@@ -1141,6 +1141,19 @@ selected, no chevrons, no gutter.
 - **Player body:** identity → six-match sparkline with a stat header → four
   24px stat pills that switch the chart → three recent matches as record rows
   (with chevrons — these navigate) → Upload. Upload is never event-level.
+  **With no measured figure the chart and the pills are absent, not empty.**
+  Gate on "is there a value", never on "has matches" — a player whose only
+  match is still analysing has a row and no numbers, which is the same
+  nothing to chart. Left in, the header read "—", the sparkline drew empty
+  air between two blank dates, and the four pills stayed clickable: a coach
+  could press one, watch it select, and watch nothing happen. **A control
+  that responds and does nothing is worse than an absent one**, and it is the
+  one case where honest-zero's "render the region's own anatomy" loses —
+  anatomy is labels and axes, not live buttons wired to nothing. What the
+  pills would have told you moves into the empty line under Recent matches
+  ("Serve and pressure numbers appear here once one is analyzed"), and the
+  way to make it appear is the drawer's own primary. A count link to an empty
+  page ("All 0") goes too.
 - **Event body:** program mark + name + conference → glyph row (date · venue ·
   surface) → score row (28/300 tabular, winner ink-900, loser ink-500) + nine
   4×18px outcome ticks (singles · gap · doubles) → all nine lines at 36px as

@@ -40,7 +40,8 @@ import type {
  *
  * "Row distilled to what you compare, drawer keeps what you read." Identity →
  * one-line stat header with a six-match sparkline (hover any match for value,
- * opponent and date) → four stat pills that switch the chart → three recent
+ * opponent and date) → four stat pills that switch the chart — both only
+ * where a figure exists, see `hasStats` → three recent
  * matches → full-width Upload. Header controls inset 20px to match the page
  * header; ‹ › step players, "Open profile ↗" bridges to the page.
  *
@@ -496,6 +497,26 @@ export function PlayerDrawer({
     : [];
   const heroDelta =
     active && active.trend !== null ? formatDelta(active.trend) : null;
+
+  /**
+   * Is there a figure to show at all?
+   *
+   * Not "has matches" — a player whose only match is still in analysis has a
+   * recent row and no measured values, which is the same nothing to chart.
+   * With every measure null the header read "—", the sparkline drew empty air
+   * between two blank dates, and the four pills stayed clickable: a coach
+   * could press one, watch it select, and watch nothing else happen. Controls
+   * that respond and do nothing are worse than absent.
+   *
+   * The design system's honest-zero rule asks for the region's own anatomy
+   * with a mark where each value goes, and that is right for a card on a page
+   * — the labels tell you what comes back. It also says to scale the
+   * treatment down as the region does, and this region is a 340px rail: four
+   * dead buttons and an empty chart is not anatomy, it is furniture. So the
+   * labels come back as one sentence under Recent matches, and the way to
+   * make them appear is already the drawer's primary.
+   */
+  const hasStats = member.measures.some((measure) => measure.value !== null);
   const firstName = member.name.split(" ")[0];
   const profile = profileHref(member.playerId);
 
@@ -607,7 +628,7 @@ export function PlayerDrawer({
           </div>
 
           {/* One-line stat header over the sparkline */}
-          {active && (
+          {active && hasStats && (
             <div className="flex flex-col gap-3.5">
               <div className="flex items-baseline justify-between">
                 <span className="text-[12px] text-[var(--ink-600)]">
@@ -640,31 +661,42 @@ export function PlayerDrawer({
             </div>
           )}
 
-          {/* Four pills that switch the chart */}
-          <div className="flex flex-wrap gap-1.5 border-t border-[var(--border-hairline)] pt-4">
-            {member.measures.map((measure) => (
-              <StatPill
-                key={measure.key}
-                measure={measure}
-                selected={measure.key === active?.key}
-                onSelect={() => setActiveKey(measure.key)}
-              />
-            ))}
-          </div>
+          {/* Four pills that switch the chart — only where there is a chart */}
+          {hasStats && (
+            <div className="flex flex-wrap gap-1.5 border-t border-[var(--border-hairline)] pt-4">
+              {member.measures.map((measure) => (
+                <StatPill
+                  key={measure.key}
+                  measure={measure}
+                  selected={measure.key === active?.key}
+                  onSelect={() => setActiveKey(measure.key)}
+                />
+              ))}
+            </div>
+          )}
 
           {/* Three recent matches — record rows, chevron, open the match page */}
           <div className="flex flex-col gap-0.5">
             <div className="flex items-center pb-2">
               <span className="eyebrow-sm flex-1">Recent matches</span>
-              <Link
-                href={profile}
-                className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-              >
-                All {member.matchesPlayed}
-              </Link>
+              {/* "All 0" is a link to nothing. */}
+              {member.matchesPlayed > 0 && (
+                <Link
+                  href={profile}
+                  className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                >
+                  All {member.matchesPlayed}
+                </Link>
+              )}
             </div>
             {member.recent.length === 0 ? (
-              <p className="text-[12px] text-[var(--ink-400)]">No matches yet</p>
+              /* The one place the drawer says what will arrive — the labels
+                 the pills would have carried, in a sentence, since the pills
+                 are gone. The button below is the way to make it arrive. */
+              <p className="text-[12px] leading-[1.6] text-[var(--ink-500)]">
+                No matches yet. Serve and pressure numbers appear here once one
+                is analyzed.
+              </p>
             ) : (
               member.recent.slice(0, 3).map((match) => (
                 <Link
