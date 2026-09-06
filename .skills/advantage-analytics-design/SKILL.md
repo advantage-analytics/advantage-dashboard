@@ -1375,14 +1375,22 @@ content rather than as the one thing on the screen. Roughly 80px is spent
 deliberately here.
 
 *The tail* — the real page, in its real order, each region holding its own
-honest zero state (Empty State above), graded in two steps: the KPI strip at
-**0.55**, everything below it at **0.32**. The strip held full strength for a
-while, on the argument that its five labels are the most specific promise the
-page can make without a figure — but at full strength it was the only region
-in the tail that did not read as background, so the page had an offer, a solid
-band, and then a fade: two treatments where there is one idea. A grade still
-needs a step, hence 0.55 rather than a flat value; Matches never carried the
-exception, and both day-zero pages now step down together. No bottom fade: a
+honest zero state (Empty State above), under **one continuous grade**: a mask
+running `0.62 → 0.46 at 40% → 0.32`, so a region fades with how far down it
+sits. Two dead ends got here. The strip first held full strength, on the
+argument that its five labels are the page's most specific promise — but then
+it was the only region not reading as background, and the page had an offer,
+a solid band and a fade: two treatments for one idea. Fixing that with a
+second fixed opacity produced banding, not a grade — a hard edge under the
+strip and one flat value for everything below however far down it sat.
+Matches had always graded properly (its five ghost rows step 1 → 0.3); this is
+the same idea where the regions are cards rather than rows.
+
+**The grade ends at 0.32, never at zero.** That is the value the tail already
+sat at, so nothing at the foot of the page is fainter than it has been. It
+matters most for the activity heatmap, which lives down there and whose empty
+cells are `#F2F2F2` — five per cent off white before any fade — and which a
+gradient running to transparent erased once already. No bottom fade to nothing: a
 mask running to transparent clips the activity heatmap mid-grid, and a
 calendar cut off partway through its last week reads as a fault, not depth.
 

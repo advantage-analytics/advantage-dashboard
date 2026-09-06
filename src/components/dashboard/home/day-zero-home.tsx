@@ -13,9 +13,9 @@ import { DayZeroOffer } from "@/components/dashboard/home/day-zero-offer";
  * example, the hairline court, and a heatmap whose cells are genuinely all
  * empty because no session has happened. Nothing in it is invented.
  *
- * It is graded rather than drawn flat: the strip at 0.55, the cards below at
- * a third, so the tail reads as the page waiting rather than as a second
- * thing competing with the offer.
+ * It is graded rather than drawn flat, and the grade is continuous: brightest
+ * under the offer and fading with distance, so the tail reads as the page
+ * waiting rather than as a second thing competing with it.
  *
  * **The tail is decoration, and is marked as such.** At a third opacity its
  * text sits far below any usable contrast and its links would be invisible
@@ -48,24 +48,35 @@ export function DayZeroHome({
         your serves land. Nothing below is real data yet.
       </p>
 
-      <div inert className="flex flex-1 flex-col gap-4">
-        {/* The strip joins the grade rather than standing outside it.
-            It sat at full strength on the argument that its five labels are
-            the page's most specific promise — but at full strength it was the
-            only region in the tail that did not read as background, so the
-            page had an offer, a solid band, and then a fade, which is two
-            treatments where there should be one. Matches never had the
-            exception, and both day-zero pages now step down together.
-
-            0.55 over 0.32 rather than one flat value: a grade needs a step,
-            and the strip is still the first thing under the offer and the
-            part worth reading first. */}
-        <div style={{ opacity: 0.55 }}>{kpiStrip}</div>
-        {/* A third, not a fade to nothing: a mask running to transparent at
-            the foot of the page clipped the activity heatmap mid-grid, and a
-            calendar cut off partway through its last week reads as a
-            rendering fault rather than as depth. */}
-        <div style={{ opacity: 0.32 }}>{children}</div>
+      {/*
+       * One continuous grade, not two flat steps.
+       *
+       * The strip and the cards each carried a fixed opacity, which is a
+       * banding, not a fade: the page went 0.55, then a hard edge, then 0.32
+       * for everything below regardless of how far down it sat. Matches has
+       * always graded properly — its five ghost rows step 1 → 0.3 — and this
+       * is the same idea applied to a page whose regions are cards rather
+       * than rows.
+       *
+       * **It fades to 0.32, not to nothing.** That is the value the whole
+       * tail already sat at, so nothing at the foot of the page is fainter
+       * than it was. It matters most for the activity heatmap, which lives
+       * down there and whose empty cells are `#F2F2F2` — five per cent off
+       * white before any fade at all. A gradient running to transparent
+       * erased it once already.
+       */}
+      <div
+        inert
+        className="flex flex-1 flex-col gap-4"
+        style={{
+          WebkitMaskImage:
+            "linear-gradient(180deg, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.46) 40%, rgba(0,0,0,0.32) 100%)",
+          maskImage:
+            "linear-gradient(180deg, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.46) 40%, rgba(0,0,0,0.32) 100%)",
+        }}
+      >
+        {kpiStrip}
+        {children}
       </div>
     </div>
   );
