@@ -53,7 +53,7 @@ ready).
 - **notes:** Client component — RLS cannot supply this predicate because the viewer legitimately reads the program's rows. Do NOT add a program clause to the match-id-keyed reads; that would be wrong. Plan step 2.
 
 ## T3 · Scope home Serve Placement widget to personal matches
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/home/serve-placement-home.tsx (guess — browser-client `matches` query at ~L57-62)
 - **done when:**

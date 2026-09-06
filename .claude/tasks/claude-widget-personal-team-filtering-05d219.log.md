@@ -40,3 +40,21 @@ is the runner's. Newest entries at the bottom.
   `.eq("created_by", userId)`, with T1's comment. The match-id-keyed
   `match_stats` read, the realtime channel, the toast state machine and
   `PROCESSING_TIMEOUT_MS` are untouched, which is the trap this task named.
+
+## T3 · Scope home Serve Placement widget to personal matches — done
+- **gate:** lint clean · `tsc --noEmit` clean · `npm test` clean (no stale
+  `.next/` re-run needed). `task-completion-reviewer`: VERDICT: pass, all three
+  criteria met; it also confirmed the note held — the other three
+  serve-placement components are absent from the diff.
+  `pipeline-guardrails-reviewer`: ran (diff touches
+  `src/components/dashboard/`) — explicitly clean, no findings against any
+  guardrail category; it notes this is a surface where wrong attribution would
+  be visually silent, and that the fix propagates through the `shots` read
+  rather than stopping at the matches query. `rls-boundary-reviewer`: ran (a
+  browser-client Supabase query change) — explicitly clean; it confirmed the
+  follow-on `shots` read is safe by construction because it keys off the
+  already-narrowed match ids rather than carrying its own predicate.
+- **changed:** `src/components/dashboard/home/serve-placement-home.tsx` — the
+  browser-client `matches` query gains `.is("program_id", null)` after
+  `.eq("created_by", userId)` and before `.order(...).limit(4)`, with T1's
+  comment. The `shots` read and the empty-result early return are untouched.
