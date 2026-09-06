@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { Check, ChevronDown, Filter as FilterIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -69,6 +70,15 @@ interface Facets {
  * and a cut that drops the selected event closes the drawer rather than
  * leaving it describing a row that is no longer there.
  *
+ * **Every selection goes through `select()`**, which is also where the rail's
+ * motion direction is decided: it compares the incoming row's position with
+ * the one on screen and hands the rail +1 or -1, so the rail's body enters
+ * from the side the season moved. The rail cannot work that out for itself
+ * without keeping a previous-value ref, and the intent lives here anyway —
+ * this is the function that knows a click came from a row further down the
+ * table. Opening from nothing is direction 0, so the body simply fades while
+ * the panel does the arriving.
+ *
  * ── Upcoming and Completed ────────────────────────────────────────────────
  * By the calendar, not by played lines: an event whose last day is still
  * ahead of the program's `today` is upcoming, everything else is completed.
@@ -121,6 +131,7 @@ export function StaticSchedule({
   const { rows, details } = schedule;
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [direction, setDirection] = useState(0);
   const [lifecycle, setLifecycle] = useState<Lifecycle>("all");
   const [facets, setFacets] = useState<Facets>({ kind: null, site: null });
   const [sort, setSort] = useState<SortOrder>("newest");
@@ -144,6 +155,23 @@ export function StaticSchedule({
     selectedId === null ? -1 : visible.findIndex((row) => row.id === selectedId);
   const selected =
     selectedIndex === -1 ? null : (details[visible[selectedIndex].id] ?? null);
+
+  /**
+   * Open the rail on one event, and record which way the season just moved.
+   *
+   * One path for all three ways a selection changes — a row click, a ‹ › step,
+   * and clicking another row while the rail is already open — so the direction
+   * is right for every one of them rather than only for the stepper.
+   */
+  function select(eventId: string) {
+    const nextIndex = visible.findIndex((row) => row.id === eventId);
+    setDirection(
+      selectedIndex === -1 || nextIndex === -1
+        ? 0
+        : Math.sign(nextIndex - selectedIndex)
+    );
+    setSelectedId(eventId);
+  }
 
   /**
    * Every cut goes through here so a selection the cut drops is cleared in
@@ -340,7 +368,7 @@ export function StaticSchedule({
                 rows={visible}
                 details={details}
                 selectedId={selectedId}
-                onSelect={setSelectedId}
+                onSelect={select}
               />
             )}
           </>
@@ -364,21 +392,25 @@ export function StaticSchedule({
         </div>
       </div>
 
-      {selected ? (
-        <EventDrawer
-          key={selected.event.id}
-          detail={selected}
-          opponent={opponentOf(selected, opponents)}
-          index={selectedIndex}
-          total={visible.length}
-          onStep={(delta) => {
-            const next = visible[selectedIndex + delta];
-            if (next) setSelectedId(next.id);
-          }}
-          onClose={() => setSelectedId(null)}
-          canEdit={canCreate}
-        />
-      ) : null}
+      {/* `initial={false}` so a page that loads with no selection has nothing
+          to play, and the rail only ever animates in answer to a click. */}
+      <AnimatePresence initial={false}>
+        {selected ? (
+          <EventDrawer
+            detail={selected}
+            opponent={opponentOf(selected, opponents)}
+            index={selectedIndex}
+            total={visible.length}
+            stepDirection={direction}
+            onStep={(delta) => {
+              const next = visible[selectedIndex + delta];
+              if (next) select(next.id);
+            }}
+            onClose={() => setSelectedId(null)}
+            canEdit={canCreate}
+          />
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

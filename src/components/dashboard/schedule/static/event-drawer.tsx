@@ -1,5 +1,6 @@
 "use client";
 
+import { motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import {
   ArrowUpRight,
@@ -34,6 +35,18 @@ import type { OpponentProgram } from "@/lib/data/schedule-server";
 import type { EntryMatch, EventDetail, EventEntry } from "@/lib/schedule/types";
 
 /**
+ * The rail's own width, and the two curves the design system allows here.
+ *
+ * `--ease-out-expo` is the arrival curve — confident deceleration, for the one
+ * authored moment. `--ease-primary` is the routine one, for the body swap.
+ * Both are transcribed as tuples because Framer takes numbers rather than the
+ * CSS custom properties; `effects.css` is the source of both values.
+ */
+const WIDTH = 340;
+const EASE_EXPO = [0.23, 1, 0.32, 1] as const;
+const EASE_PRIMARY = [0.25, 0.46, 0.45, 0.94] as const;
+
+/**
  * `Tc2` — the selected event's detail, as a dismissable right rail.
  *
  * Same shell as the Roster's drawer: 340px, the float shadow, a 44px header
@@ -62,6 +75,37 @@ import type { EntryMatch, EventDetail, EventEntry } from "@/lib/schedule/types";
  * ── Nothing here fetches ───────────────────────────────────────────────────
  * It renders the `EventDetail` the page already holds, so stepping through
  * the season with ‹ › is a state change and no round trip.
+ *
+ * ── Motion: two events, two answers ────────────────────────────────────────
+ * The rail is "a consequence of a click, never furniture", so its arrival is
+ * the one authored moment on this page — and stepping through the season is
+ * emphatically not a second one.
+ *
+ * **Opening** animates the rail's WIDTH from 0, with the 340px column pinned
+ * to the right edge (`justify-end`) inside the clip. The table therefore makes
+ * room and the panel is revealed from the screen edge in one movement, rather
+ * than a panel sliding over a list that already jumped. `--ease-out-expo` over
+ * `--duration-enter`, the app's own arrival pair; opacity finishes at 200ms so
+ * the float shadow never lingers as a ghost. Closing runs the same shape at
+ * ~75% (220ms), because an exit that matches its entrance reads as slow.
+ *
+ * The inner column is a fixed `w-[340px] shrink-0`, and that is the
+ * load-bearing half: without it, every frame of the width animation re-wraps
+ * the opponent's name, re-lays the glyph row and re-flows nine lines. With it,
+ * the only thing changing per frame is the clip.
+ *
+ * **Stepping** must not re-run any of that — the rail is already there, and
+ * only what it is about has changed. So the header holds perfectly still (the
+ * counter just ticks) and the BODY is keyed on the event id and fades up 8px
+ * from the direction of travel: `stepDirection` is +1 going down the list and
+ * -1 going up, so the content moves the way the season does. Every change of
+ * selection feeds it, including clicking a different row while the rail is
+ * open, which is why the direction is computed by the page rather than
+ * inferred here. No exit animation on that swap: at 180ms, waiting for the
+ * outgoing body reads as lag on a control you can hold down.
+ *
+ * Reduced motion keeps both meanings and drops both movements — the rail
+ * arrives at full width on a fade, and the body cross-fades in place.
  */
 export function EventDrawer({
   detail,
@@ -71,6 +115,7 @@ export function EventDrawer({
   onStep,
   onClose,
   canEdit,
+  stepDirection,
 }: {
   detail: EventDetail;
   /** The opponent's program record, where the dual resolved one. */
@@ -82,7 +127,14 @@ export function EventDrawer({
   onClose: () => void;
   /** `isProgramStaff` upstream — gates every write the rail points at. */
   canEdit: boolean;
+  /**
+   * Which way the selection just moved through the list — +1 further down,
+   * -1 back up, 0 on the first open. The body enters from that side, so its
+   * content travels the way the season does.
+   */
+  stepDirection: number;
 }) {
+  const shouldReduceMotion = useReducedMotion();
   const { event, entries } = detail;
   const isDual = event.kind === "dual";
   const singles = entries.filter((entry) => entry.discipline === "singles");
@@ -105,164 +157,208 @@ export function EventDrawer({
   const venue = isDual ? (event.host ?? siteTitle(event.site)) : siteTitle(event.site);
 
   return (
-    <div
+    <motion.aside
       role="dialog"
       aria-label={isDual ? `vs ${event.name}` : event.name}
-      className="relative z-[2] flex w-[340px] shrink-0 flex-col self-stretch border-l border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-dropdown)]"
+      /* Width, not transform: the rail displaces the table rather than
+         covering it, so the space opening IS the animation. `justify-end`
+         pins the fixed-width column to the right edge inside the clip, which
+         is what makes it read as arriving from off-screen rather than
+         unrolling leftward. */
+      initial={
+        shouldReduceMotion
+          ? { width: WIDTH, opacity: 0 }
+          : { width: 0, opacity: 0 }
+      }
+      animate={{
+        width: WIDTH,
+        opacity: 1,
+        transition: shouldReduceMotion
+          ? { duration: 0.15 }
+          : {
+              width: { duration: 0.3, ease: EASE_EXPO },
+              opacity: { duration: 0.2, ease: EASE_EXPO },
+            },
+      }}
+      exit={{
+        width: shouldReduceMotion ? WIDTH : 0,
+        opacity: 0,
+        transition: shouldReduceMotion
+          ? { duration: 0.1 }
+          : {
+              width: { duration: 0.22, ease: EASE_EXPO },
+              opacity: { duration: 0.15, ease: EASE_EXPO },
+            },
+      }}
+      className="relative z-[2] flex shrink-0 justify-end self-stretch overflow-hidden bg-[var(--surface-card)] shadow-[var(--shadow-dropdown)]"
     >
-      {/* One provider over the header's cluster, as the app header does, so
-          moving between the four controls pays the reveal delay once. */}
-      <TooltipProvider delayDuration={CHROME_TOOLTIP_DELAY_MS}>
-        <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-[var(--border-hairline)] px-5">
-          <RailButton
-            label="Previous event"
-            onClick={() => onStep(-1)}
-            disabled={index <= 0}
-          >
-            <ChevronUp className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
-          </RailButton>
-          <RailButton
-            label="Next event"
-            onClick={() => onStep(1)}
-            disabled={index >= total - 1}
-          >
-            <ChevronDown className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
-          </RailButton>
-
-          <span className="ml-1 inline-flex shrink-0 items-baseline gap-1.5 whitespace-nowrap">
-            <span className="text-[12px]" style={{ color: "var(--ink-600)" }}>
-              Event
-            </span>
-            <span className="mono tabular text-[11px]" style={{ color: "var(--ink-400)" }}>
-              {index + 1} / {total}
-            </span>
-          </span>
-
-          <div className="min-w-2 flex-1" />
-
-          {/* The doc's own anchor rule — blue at rest, ink-900 on hover — with
-              the wash the artboard gives every 28px control in this bar. */}
-          <Link
-            href={eventHref}
-            className="inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-[var(--radius-element)] px-2 text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]"
-          >
-            Open event
-            <ArrowUpRight className="size-3" strokeWidth={1.5} aria-hidden="true" />
-          </Link>
-
-          <span aria-hidden="true" className="mx-0.5 h-3.5 w-px bg-[var(--border-medium)]" />
-
-          <ChromeTooltip label="Close" shortcut="Esc" side="bottom">
-            <RailButton label="Close" onClick={onClose}>
-              <X className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
-            </RailButton>
-          </ChromeTooltip>
-        </div>
-      </TooltipProvider>
-
-      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pb-[22px] pt-6">
-        <div className="flex shrink-0 items-center gap-3.5">
-          <EventMark kind={event.kind} name={event.name} size={48} />
-          <div className="flex min-w-0 flex-col gap-1">
-            <div
-              className="text-[22px] font-light leading-[1.1] tracking-[-0.2px]"
-              style={{ color: "var(--ink-900)" }}
+      {/* Fixed width, so nothing inside re-wraps while the clip is moving. */}
+      <div className="flex h-full w-[340px] shrink-0 flex-col border-l border-[var(--border-hairline)]">
+        {/* One provider over the header's cluster, as the app header does, so
+            moving between the four controls pays the reveal delay once. */}
+        <TooltipProvider delayDuration={CHROME_TOOLTIP_DELAY_MS}>
+          <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-[var(--border-hairline)] px-5">
+            <RailButton
+              label="Previous event"
+              onClick={() => onStep(-1)}
+              disabled={index <= 0}
             >
-              {event.name}
-            </div>
-            {subline ? (
+              <ChevronUp className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+            </RailButton>
+            <RailButton
+              label="Next event"
+              onClick={() => onStep(1)}
+              disabled={index >= total - 1}
+            >
+              <ChevronDown className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+            </RailButton>
+
+            <span className="ml-1 inline-flex shrink-0 items-baseline gap-1.5 whitespace-nowrap">
               <span className="text-[12px]" style={{ color: "var(--ink-600)" }}>
-                {subline}
+                Event
+              </span>
+              <span className="mono tabular text-[11px]" style={{ color: "var(--ink-400)" }}>
+                {index + 1} / {total}
+              </span>
+            </span>
+
+            <div className="min-w-2 flex-1" />
+
+            {/* The doc's own anchor rule — blue at rest, ink-900 on hover — with
+                the wash the artboard gives every 28px control in this bar. */}
+            <Link
+              href={eventHref}
+              className="inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-[var(--radius-element)] px-2 text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]"
+            >
+              Open event
+              <ArrowUpRight className="size-3" strokeWidth={1.5} aria-hidden="true" />
+            </Link>
+
+            <span aria-hidden="true" className="mx-0.5 h-3.5 w-px bg-[var(--border-medium)]" />
+
+            <ChromeTooltip label="Close" shortcut="Esc" side="bottom">
+              <RailButton label="Close" onClick={onClose}>
+                <X className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+              </RailButton>
+            </ChromeTooltip>
+          </div>
+        </TooltipProvider>
+
+        <motion.div
+          /* Keyed on the event, so stepping remounts the body and re-runs its
+             entrance while the header above it never moves. */
+          key={event.id}
+          initial={{ opacity: 0, y: shouldReduceMotion ? 0 : stepDirection * 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{
+            duration: shouldReduceMotion ? 0.12 : 0.18,
+            ease: EASE_PRIMARY,
+          }}
+          className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pb-[22px] pt-6"
+        >
+          <div className="flex shrink-0 items-center gap-3.5">
+            <EventMark kind={event.kind} name={event.name} size={48} />
+            <div className="flex min-w-0 flex-col gap-1">
+              <div
+                className="text-[22px] font-light leading-[1.1] tracking-[-0.2px]"
+                style={{ color: "var(--ink-900)" }}
+              >
+                {event.name}
+              </div>
+              {subline ? (
+                <span className="text-[12px]" style={{ color: "var(--ink-600)" }}>
+                  {subline}
+                </span>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="-mt-2.5 flex shrink-0 flex-nowrap items-center gap-3 overflow-hidden">
+            <span className="text-micro inline-flex items-center gap-[5px] whitespace-nowrap">
+              <Calendar className="size-3" strokeWidth={1.5} style={{ color: "var(--ink-400)" }} aria-hidden="true" />
+              <span className="tabular">{formatEventDatesLong(event.startsOn, event.endsOn)}</span>
+            </span>
+            <span className="text-micro inline-flex items-center gap-[5px] whitespace-nowrap">
+              <MapPin className="size-3" strokeWidth={1.5} style={{ color: "var(--ink-400)" }} aria-hidden="true" />
+              {venue}
+            </span>
+            {event.surface ? (
+              <span className="text-micro inline-flex items-center gap-[5px] whitespace-nowrap">
+                {/* eslint-disable-next-line @next/next/no-img-element -- a static SVG in /public */}
+                <img
+                  src="/icons/tennis-court-icon.svg"
+                  alt=""
+                  className="block size-3 opacity-90"
+                />
+                {surfaceTitle(event.surface)}
               </span>
             ) : null}
           </div>
-        </div>
 
-        <div className="-mt-2.5 flex shrink-0 flex-nowrap items-center gap-3 overflow-hidden">
-          <span className="text-micro inline-flex items-center gap-[5px] whitespace-nowrap">
-            <Calendar className="size-3" strokeWidth={1.5} style={{ color: "var(--ink-400)" }} aria-hidden="true" />
-            <span className="tabular">{formatEventDatesLong(event.startsOn, event.endsOn)}</span>
-          </span>
-          <span className="text-micro inline-flex items-center gap-[5px] whitespace-nowrap">
-            <MapPin className="size-3" strokeWidth={1.5} style={{ color: "var(--ink-400)" }} aria-hidden="true" />
-            {venue}
-          </span>
-          {event.surface ? (
-            <span className="text-micro inline-flex items-center gap-[5px] whitespace-nowrap">
-              {/* eslint-disable-next-line @next/next/no-img-element -- a static SVG in /public */}
-              <img
-                src="/icons/tennis-court-icon.svg"
-                alt=""
-                className="block size-3 opacity-90"
-              />
-              {surfaceTitle(event.surface)}
-            </span>
-          ) : null}
-        </div>
+          {isDual ? <ScoreRow singles={singles} doubles={doubles} /> : null}
 
-        {isDual ? <ScoreRow singles={singles} doubles={doubles} /> : null}
-
-        {isDual ? (
-          <>
-            <Section label="Singles">
-              {singles.map((entry) => (
-                <DualLine key={entry.id} entry={entry} eventHref={eventHref} canEdit={canEdit} />
-              ))}
-              {/* A dual with no lines at all: one row where the lineup would
-                  start, pointing at the event page — the same shape as an
-                  unset line, one level up. */}
-              {entries.length === 0 ? (
-                <SetLineRow slot="S1" eventHref={eventHref} canEdit={canEdit} label="Set lineup" />
-              ) : null}
-            </Section>
-            {doubles.length > 0 ? (
-              <Section label="Doubles">
-                {doubles.map((entry) => (
-                  <DualLine key={entry.id} entry={entry} eventHref={eventHref} canEdit={canEdit} />
-                ))}
-              </Section>
-            ) : null}
-          </>
-        ) : (
-          <>
-            {singles.length > 0 ? (
+          {isDual ? (
+            <>
               <Section label="Singles">
                 {singles.map((entry) => (
-                  <TournamentLine key={entry.id} entry={entry} />
+                  <DualLine key={entry.id} entry={entry} eventHref={eventHref} canEdit={canEdit} />
                 ))}
+                {/* A dual with no lines at all: one row where the lineup would
+                    start, pointing at the event page — the same shape as an
+                    unset line, one level up. */}
+                {entries.length === 0 ? (
+                  <SetLineRow slot="S1" eventHref={eventHref} canEdit={canEdit} label="Set lineup" />
+                ) : null}
               </Section>
-            ) : null}
-            {doubles.length > 0 ? (
-              <Section label="Doubles">
-                {doubles.map((entry) => (
-                  <TournamentLine key={entry.id} entry={entry} />
-                ))}
-              </Section>
-            ) : null}
-            {entries.length === 0 ? (
-              <Section label="Entries">
-                <div className={cn(ROW, "cursor-default")}>
-                  <span className="mono text-[11px]" style={{ color: "var(--ink-500)" }}>
-                    —
-                  </span>
-                  <span className="text-[12px]" style={{ color: "var(--ink-700)" }}>
-                    No entries yet
-                  </span>
-                </div>
-              </Section>
-            ) : null}
-          </>
-        )}
+              {doubles.length > 0 ? (
+                <Section label="Doubles">
+                  {doubles.map((entry) => (
+                    <DualLine key={entry.id} entry={entry} eventHref={eventHref} canEdit={canEdit} />
+                  ))}
+                </Section>
+              ) : null}
+            </>
+          ) : (
+            <>
+              {singles.length > 0 ? (
+                <Section label="Singles">
+                  {singles.map((entry) => (
+                    <TournamentLine key={entry.id} entry={entry} />
+                  ))}
+                </Section>
+              ) : null}
+              {doubles.length > 0 ? (
+                <Section label="Doubles">
+                  {doubles.map((entry) => (
+                    <TournamentLine key={entry.id} entry={entry} />
+                  ))}
+                </Section>
+              ) : null}
+              {entries.length === 0 ? (
+                <Section label="Entries">
+                  <div className={cn(ROW, "cursor-default")}>
+                    <span className="mono text-[11px]" style={{ color: "var(--ink-500)" }}>
+                      —
+                    </span>
+                    <span className="text-[12px]" style={{ color: "var(--ink-700)" }}>
+                      No entries yet
+                    </span>
+                  </div>
+                </Section>
+              ) : null}
+            </>
+          )}
 
-        <div className="min-h-0 flex-1" />
+          <div className="min-h-0 flex-1" />
 
-        {canEdit && linesOpen ? (
-          <Link href={eventHref} className={cn(advButton("primary", "md"), "w-full shrink-0")}>
-            Enter results
-          </Link>
-        ) : null}
+          {canEdit && linesOpen ? (
+            <Link href={eventHref} className={cn(advButton("primary", "md"), "w-full shrink-0")}>
+              Enter results
+            </Link>
+          ) : null}
+        </motion.div>
       </div>
-    </div>
+    </motion.aside>
   );
 }
 
