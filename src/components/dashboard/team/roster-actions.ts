@@ -90,6 +90,57 @@ export async function setMemberUploadEnabled(
 }
 
 /**
+ * Write the whole singles order in one call.
+ *
+ * The Roster page's Set lineup mode holds every move locally and sends the
+ * finished order once, so nothing is written while a coach is still dragging
+ * and Cancel costs nothing. `set_program_lineup` does the numbering: position
+ * 1 in the array becomes lineup spot 1, and every player left out of it is
+ * taken out of the lineup.
+ *
+ * Not `update_program_player` in a loop — that function overwrites all five
+ * profile fields and NULLs the ones it is not passed, so moving a line that
+ * way would clear names and class years, one round trip at a time, with
+ * nothing to stop it half-applying.
+ *
+ * The program id comes from the workspace rather than the form, for the reason
+ * `setMemberUploadEnabled` records: accepting it from the client would mean
+ * re-checking it against exactly this lookup.
+ */
+export async function setProgramLineup(
+  orderedPlayerIds: string[]
+): Promise<ActionResult> {
+  const workspace = await getWorkspaceContext();
+  if (!workspace || workspace.active.kind !== "team") {
+    return { ok: false, error: "Switch to your team workspace to set a lineup." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_program_lineup", {
+    p_program_id: workspace.active.id,
+    p_player_ids: orderedPlayerIds,
+  });
+
+  if (error) {
+    // The function raises for a person, so its own message is better than
+    // anything invented here — `42501` is a player who reached the mode they
+    // are not offered, `P0002` a row archived or merged since the page loaded.
+    const raw = error.message?.trim();
+    return {
+      ok: false,
+      error:
+        raw && raw.length > 0
+          ? raw
+          : "Couldn't save that lineup. Reload the page and try again.",
+    };
+  }
+
+  revalidatePath(ROSTER_PATH);
+  revalidatePath(TEAM_HOME_PATH);
+  return { ok: true };
+}
+
+/**
  * Put a player on the roster now, without waiting for them to sign up.
  *
  * The counterpart to inviting. An invite sends email and waits; this creates

@@ -146,6 +146,24 @@ export function requesterName(request: {
   return request.email.split("@")[0] || request.email;
 }
 
+/**
+ * "Coached by Elena Vasquez and Jon Abara." — the roster's staff line.
+ *
+ * Staff left the table when it was reserved to players, and this sentence is
+ * what replaced them: names rather than a count, because a count cannot tell
+ * an assistant coach that they are one of the two. It sits in the page footer
+ * with the way through to Settings › Team beside it.
+ *
+ * The serial comma is deliberate on three or more; the last separator is a
+ * word because the line is a sentence, not a list.
+ */
+export function coachedByLine(names: string[]): string {
+  if (names.length === 0) return "";
+  if (names.length === 1) return `Coached by ${names[0]}.`;
+  if (names.length === 2) return `Coached by ${names[0]} and ${names[1]}.`;
+  return `Coached by ${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}.`;
+}
+
 /** "8 players" — the first clause of the Roster page's standing line. */
 export function playersLabel(count: number): string {
   return `${count} ${count === 1 ? "player" : "players"}`;
