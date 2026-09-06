@@ -67,7 +67,7 @@ ready).
 - **notes:** Must land before T5–T7 so their layout is judged at the final width.
 
 ## T5 · Add Player: occupied-spot acknowledgement gate
-- **status:** blocked
+- **status:** todo
 - **model:** opus
 - **needs:** T4
 - **files:** `src/components/dashboard/team/add-player-dialog.tsx`, new `tests/add-player-spot-gate.spec.ts` (guess)
@@ -75,9 +75,10 @@ ready).
   - [ ] New `spotAcknowledged` state is set to `false` in `reset()` and in the `setLineupSpot` change handler
   - [ ] When `spotTakenBy.length > 0` a checkbox reading "Yes — share #N with {names} for now." renders directly under the existing `RosterNote`, using the same classes as the "Also send an invite" checkbox (`accent-[var(--blue)]`, 12px label, 11px sub-line); no checkbox renders for a free spot
   - [ ] `ready` includes `&& (spotTakenBy.length === 0 || spotAcknowledged)` and the primary button's `disabled` expression is otherwise unchanged
-  - [ ] A test covers the sequence: occupied spot → "Add to roster" disabled; tick → enabled; switch to a different occupied spot → disabled again; free spot → enabled with no checkbox
+  - [ ] A test covers the sequence: occupied spot → "Add to roster" disabled; tick → enabled; switch to a different occupied spot → disabled again; free spot → enabled with no checkbox. **The repo cannot render a real client component in a test** (Playwright rewrites JSX in repo `.tsx`), so this criterion is satisfied by EITHER driving the real component, OR the pair: a source-pinning test asserting the literal `ready` term, the unchanged `disabled` expression, both acknowledgement resets and the `DialogProblem` usage, PLUS a behavioural test driving a replica of the state machine through the full sequence. If the pair is used, the spec must state plainly what it cannot catch.
   - [ ] `spotHeldNote`, `player-fields.tsx`, `edit-player-dialog.tsx`, `addProgramPlayer` and any SQL are absent from the diff, and the gate never renders through `DialogProblem`
 - **notes:** Gate, not validation — no red, no `role="alert"`. There is NO displacement write to any other player's row.
+  Criterion 4 was AMENDED by the author on 2026-09-06 after a first run was gated `needs-work` on it alone (log entry "T5 — blocked"). The implementation was judged correct on every other count; the blocker was that this repo has no component-render harness, which is infrastructure work belonging on its own branch rather than here. The amendment mirrors the escape hatch T2's notes already carried. Accepted residual risk, stated so it is not rediscovered as a surprise: a checkbox wired to the wrong state, rendered outside the `spotTakenBy.length > 0` guard, or shipped with wrong copy or classes would pass both tests, and rests on review instead.
 
 ## T6 · Add Player: `initial` prefill prop + header wiring
 - **status:** todo
