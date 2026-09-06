@@ -685,16 +685,35 @@ a list.
 | The page is | Treatment | Shipped |
 |---|---|---|
 | built, no data yet (**day zero**) | the offer over the page's own shape, dimmed and `inert` | `home/day-zero-home.tsx`, `matches/matches-day-zero.tsx` |
-| built, no data, and its shape is too dense to dim | the offer, then a labelled run naming what arrives | `statistics/empty-statistics.tsx` |
+| built, no data, and its shape is too dense to dim | the offer, then a labelled run naming what arrives | *(no shipped example — Statistics held this slot until the page went back to coming-soon)* |
 | **not built yet** | "Coming soon", one statement, one way onward — **no shape at all** | `dashboard/coming-soon.tsx` |
 
 The last row is the one that gets confused. A feature that does not exist has
 no shape, so a dimmed mock-up of one invents a layout that may never ship —
 the same fabrication these rules exist to prevent — and a reader who cannot
 tell "nothing here yet" from "not built yet" will wait for data that is not
-coming. Name the state: the eyebrow reads **Coming soon**, and the statement
-sits at `text-title-lg` under the page's own 30px h1, because two headings a
-hair apart read as a mistake.
+coming. **A page counts as not built until it is finalised, not until it
+renders**: Statistics ran with every component wired and was still moved back
+here, because a day-zero offer on a page whose shape is unsettled promises a
+layout it cannot keep.
+
+*The shape* (`dashboard/coming-soon.tsx`): one **48ch** column, centred, the
+statement and the sentence sharing that measure. Held narrower — a 22ch
+heading over a 46ch paragraph — the block reads pinched: a wide line over a
+narrow one over a wide one. At 48ch the statement sits on **one line** and the
+sentence on two, and **keeping every heading to one line is part of the
+template**, not an accident of the copy. The statement is `text-title-lg`
+under the page's own 30px h1, because two headings a hair apart read as a
+mistake; the sentence is `text-body` at 1.7, not `text-body-sm`, which was the
+fine-print step doing the work of body copy.
+
+*The marker* is a **24px outlined pill** — hairline border, no fill, ink-600 at
+11/500 — and the three alternatives were each rejected for a reason worth
+keeping. An eyebrow labels a SECTION; this labels the page's condition. Grey
+`StatePill` is the right register but is sized for a table row, and 18px alone
+above a 24px statement reads undersized. The blue-tinted pill is spoken for:
+it belongs to "New" and to nothing else, and a second blue pill costs the
+first its meaning.
 
 The middle row is a judgement, not a loophole: Home dims one card and one row
 because those are shapes worth previewing, and Statistics does not because

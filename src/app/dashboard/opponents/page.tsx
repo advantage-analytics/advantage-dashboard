@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { ComingSoonPage } from "@/components/dashboard/coming-soon";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { getConferenceTable, getOpponentsPlayed } from "@/lib/data/opponents-server";
 import type { ConferenceProgram } from "@/lib/data/opponents-server";
@@ -16,12 +17,35 @@ export const metadata = { title: "Opponents" };
  * its first week lands on its own conference rather than on an empty state
  * apologising for itself.
  */
+/**
+ * Not finalised, so the page says so.
+ *
+ * Everything below the early return still works and is deliberately left in
+ * place: the conference table is a seeded directory of 1,940 programs and is
+ * never empty, and the Played list already carries an honest empty state. Flip
+ * this constant to restore the page — nothing else has to change. It is typed
+ * `boolean` rather than inferred as `false` so the code below stays reachable
+ * to the compiler and cannot rot while it waits.
+ */
+const FINALISED: boolean = false;
+
 export default async function OpponentsPage() {
   const workspace = await getWorkspaceContext();
   if (!workspace) redirect("/login");
 
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard");
+
+  if (!FINALISED) {
+    return (
+      <ComingSoonPage
+        title="Opponents"
+        heading="Opponent scouting is still being built."
+        description="Who your program plays and who it is about to — a conference directory, and every lineup and result an opponent has shared, before you meet them."
+        action={{ label: "View program matches", href: "/dashboard/matches" }}
+      />
+    );
+  }
 
   const [{ conference, programs }, played] = await Promise.all([
     getConferenceTable(active.id),

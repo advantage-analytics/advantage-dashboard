@@ -78,27 +78,47 @@ function ComingSoon({
   }
 
   return (
-    <div className="mx-auto flex max-w-[440px] flex-1 flex-col items-center justify-center pb-24 text-center">
+    // One 48ch column carries the statement and the sentence, so the two runs
+    // share a measure. Held narrower — a 22ch heading over a 46ch paragraph —
+    // the block read as pinched: a wide line over a narrow one over a wide
+    // one. At 48ch the statement sits on ONE line and the sentence on two,
+    // which is the whole difference. **Keep every heading to one line at this
+    // measure**; a wrapped one puts the balance back where it started.
+    <div className="mx-auto flex max-w-[48ch] flex-1 flex-col items-center justify-center pb-24 text-center">
       {/* The state, named. Without it the page reads as though the feature is
-          here and the reader failed to find it. */}
-      <motion.span className="eyebrow mb-3.5" {...anim(T.LABEL)}>
+          here and the reader failed to find it.
+
+          An outlined pill rather than an eyebrow, a grey `StatePill` or a blue
+          one. An eyebrow labels a SECTION, and this labels the page's
+          condition. `StatePill` is the right register but is sized for a table
+          row — 18px alone above a 24px statement reads undersized. The
+          blue-tinted pill is spoken for: the design system gives it to "New"
+          and to nothing else, and a second blue pill costs the first its
+          meaning. An outline gains the presence a page-level marker needs
+          without gaining weight, and stays in the neutral register the state
+          deserves. */}
+      <motion.span
+        className="mb-5 inline-flex h-6 items-center whitespace-nowrap rounded-full border px-[11px] text-[11px] font-medium"
+        style={{ borderColor: "var(--border-medium)", color: "var(--ink-600)" }}
+        {...anim(T.LABEL)}
+      >
         Coming soon
       </motion.span>
 
-      <motion.h2 className="text-title-lg" style={{ maxWidth: "22ch" }} {...anim(T.HEADING)}>
+      <motion.h2 className="text-title-lg" {...anim(T.HEADING)}>
         {heading}
       </motion.h2>
 
       <motion.p
-        className="text-body-sm mt-2.5"
-        style={{ maxWidth: "46ch", textWrap: "pretty" }}
+        className="text-body mt-3.5"
+        style={{ lineHeight: 1.7, textWrap: "pretty" }}
         {...anim(T.DESCRIPTION)}
       >
         {description}
       </motion.p>
 
       {(action || showHelp) && (
-        <motion.div className="mt-7 flex items-center gap-3" {...anim(T.CTA)}>
+        <motion.div className="mt-[30px] flex items-center gap-3" {...anim(T.CTA)}>
           {action && (
             <Link href={action.href} className={advButton("primary")}>
               {action.label}

@@ -6,8 +6,8 @@ export default function TeamStatisticsPage() {
   return (
     <ComingSoonPage
       title="Statistics"
-      heading="Aggregate trends for your program"
-      description="Serve, return, rally and pressure numbers rolled up across every match your program has logged, with roster and lineup breakdowns alongside the season view. Per-match analysis is ready now, in every match your program has already sent for review."
+      heading="Program statistics are still being built."
+      description="Serve, return and rally numbers across every match the program has logged, with roster and lineup breakdowns beside the season view. Per-match analysis is ready now."
       action={{ label: "View program matches", href: "/dashboard/matches" }}
     />
   );
