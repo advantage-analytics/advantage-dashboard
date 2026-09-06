@@ -110,13 +110,19 @@ export default async function RosterPage({
     : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 
   const title = (
+    /* Every element that crosses to `RosterView` as a prop carries a key —
+       the fragment children below AND these two. React drops the
+       "statically created" marker on JSX serialised from a server component,
+       and then treats a two-child `<div>` like a keyless array. */
     <div>
-      <h1 className="text-display">Roster</h1>
+      <h1 key="title" className="text-display">
+        Roster
+      </h1>
       {/* 9px under the title, the one gap tuned by hand — 8 reads as attached,
           12 as unrelated. The clauses are the roster's shared vocabulary, so
           Team Home's card and this page cannot describe the same two people
           differently. */}
-      <p className="text-body-sm mt-[9px]">
+      <p key="summary" className="text-body-sm mt-[9px]">
         {canManage ? (
           /* Keyed fragments, not bare ones. This JSX is built in a server
              component and handed to a client one as a prop; across that wire
@@ -225,7 +231,10 @@ export default async function RosterPage({
   const footer = (
     <div className="flex flex-col gap-2">
       {staff.length > 0 && (
-        <p className="flex flex-wrap items-center gap-2.5 text-[11px] leading-[1.6] text-[var(--ink-600)]">
+        <p
+          key="staff"
+          className="flex flex-wrap items-center gap-2.5 text-[11px] leading-[1.6] text-[var(--ink-600)]"
+        >
           <span key="coached">{coachedByLine(staff.map((m) => m.name))}</span>
           {/* A player sees the sentence and not the link: knowing who coaches
               the program is fair, managing them is not theirs, and a link that
@@ -242,7 +251,7 @@ export default async function RosterPage({
           )}
         </p>
       )}
-      <p className="text-[11px] leading-[1.6] text-[var(--ink-500)]">
+      <p key="quota" className="text-[11px] leading-[1.6] text-[var(--ink-500)]">
         {roster.playersCanUpload
           ? "Anyone on the team can upload for a teammate"
           : "Coaches can upload for any player"}
