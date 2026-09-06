@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo } from "react";
+
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { DraftRow, type DraftRowData } from "./draft-row";
 import { MatchCardGallery } from "./match-card-gallery";
@@ -10,7 +12,6 @@ import {
   LIST_GRID_COLS,
   LIST_ROW_FRAME,
 } from "./match-card-list";
-import { formatShortDate } from "@/lib/ui/date-format";
 
 export type SortField = "date" | "opponent" | "event" | "result";
 export type SortDir = "asc" | "desc";
@@ -58,12 +59,17 @@ export function MatchesGrid({
      costs no paint and stays out of both the accessibility tree and the tab
      order; pagination caps the duplication at ten rows. */
   // The Date track widens for the whole card, not per row, so the columns keep
-  // one x across the list — see `DATE_COL_WITH_YEAR`. Decided from the same
-  // formatter the cells use, so the two cannot disagree about which dates
-  // carry a year.
-  const needsYear = [...drafts.map((d) => d.updatedAt), ...matches.map((m) => m.date)].some(
-    (date) => /\d{4}$/.test(formatShortDate(date))
-  );
+  // one x across the list — see `DATE_COL_WITH_YEAR`. A date needs the year
+  // whenever it is not from the current year, which is the exact rule
+  // `formatShortDate` applies — decided here by comparing years directly rather
+  // than formatting every date twice (once to detect, once to render), and
+  // memoized so a re-render that does not change the rows does not re-scan them.
+  const needsYear = useMemo(() => {
+    const thisYear = new Date().getFullYear();
+    return [...drafts.map((d) => d.updatedAt), ...matches.map((m) => m.date)].some(
+      (date) => new Date(date).getFullYear() !== thisYear
+    );
+  }, [drafts, matches]);
   const cardStyle = {
     padding: "8px 24px 12px",
     "--date-col": needsYear ? DATE_COL_WITH_YEAR : DATE_COL,

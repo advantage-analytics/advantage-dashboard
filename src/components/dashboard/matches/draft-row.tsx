@@ -4,10 +4,10 @@
  * DraftRow — a saved upload at the top of the Matches table (design 11c).
  *
  * The same eight tracks as a match row, with the honest gaps: Result and Score
- * read an em-dash because there is nothing yet, Round has no answer either, and
- * the opponent carries a grey Draft pill — a row's exception is a grey pill,
- * never a colour, which is what separates it from the blue "New". Round has no
- * answer either, so the Event cell carries the one thing a draft can say.
+ * read an em-dash because there is nothing yet, and the opponent carries a grey
+ * Draft pill — a row's exception is a grey pill, never a colour, which is what
+ * separates it from the blue "New". Round has no answer either, so the Event
+ * cell carries the one thing a draft can say.
  *
  * The one thing a draft has that a match does not is how far through it is, and
  * that is the whole of what its Event cell says: "Resume · step 3 of 4", so you

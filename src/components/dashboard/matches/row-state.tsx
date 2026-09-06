@@ -56,6 +56,12 @@ import {
  * They are also all measured: the widest draws ~144px at 11px Inter, inside the
  * 150px gate in `globals.css`. Adding a longer one silently breaks that — the
  * cell is only 157px wide at a 1280 viewport.
+ *
+ * The COUNT is load-bearing too. `PHRASE_SECONDS` × this length must equal the
+ * `analysis-copy-cycle` duration in `globals.css` (8 × 3s = 24s), and that
+ * file's keyframe stops (1.5/3/10.5/12.5%) are computed for an eight-phase
+ * cycle. Change the number of phrases and both must change with it — neither
+ * is visible from here.
  */
 const ANALYZING_COPY = [
   "Analyzing",
@@ -71,29 +77,31 @@ const ANALYZING_COPY = [
 /** One eighth of the 24s cycle in `globals.css`, per phrase. */
 const PHRASE_SECONDS = 3;
 
-function AnalyzingCopy(): React.JSX.Element {
-  return (
-    <>
-      {/* The truth, once, for assistive tech. The two visual branches are both
-          hidden from it: a live region announcing a new sentence every three
-          seconds for the length of a match would be unusable, and the phrases
-          are flavour on top of a state that is already named here. */}
-      <span className="sr-only">{ANALYSIS_LABEL.deriving}</span>
-      <span aria-hidden="true" className="analysis-copy-plain">
-        {ANALYSIS_LABEL.deriving}
-      </span>
-      <span aria-hidden="true" className="analysis-copy-roll">
-        {/* Keyed by position, not by text: the status word appears twice and
-            two children cannot share a key. */}
-        {ANALYZING_COPY.map((phrase, i) => (
-          <span key={i} style={{ animationDelay: `${i * PHRASE_SECONDS}s` }}>
-            {phrase}
-          </span>
-        ))}
-      </span>
-    </>
-  );
-}
+/**
+ * Fixed output, so it is built once at module load rather than on every render
+ * of every deriving row.
+ */
+const ANALYZING_COPY_NODE = (
+  <>
+    {/* The truth, once, for assistive tech. The two visual branches are both
+        hidden from it: a live region announcing a new sentence every three
+        seconds for the length of a match would be unusable, and the phrases
+        are flavour on top of a state that is already named here. */}
+    <span className="sr-only">{ANALYSIS_LABEL.deriving}</span>
+    <span aria-hidden="true" className="analysis-copy-plain">
+      {ANALYSIS_LABEL.deriving}
+    </span>
+    <span aria-hidden="true" className="analysis-copy-roll">
+      {/* Keyed by position, not by text: the status word appears twice and two
+          children cannot share a key. */}
+      {ANALYZING_COPY.map((phrase, i) => (
+        <span key={i} style={{ animationDelay: `${i * PHRASE_SECONDS}s` }}>
+          {phrase}
+        </span>
+      ))}
+    </span>
+  </>
+);
 
 export function RowLifecycle({
   analysis,
@@ -150,7 +158,7 @@ export function RowLifecycle({
     if (status === "deriving") {
       return (
         <span className="text-[11px] leading-none text-[var(--blue)]">
-          <AnalyzingCopy />
+          {ANALYZING_COPY_NODE}
         </span>
       );
     }
@@ -176,6 +184,11 @@ export function RowLifecycle({
   }
 
   if (status === "manual") {
+    // "No video", not `ANALYSIS_LABEL.manual` ("Stats unavailable"). A hand-
+    // scored match never had a video, and on a list of results that is the
+    // plainer fact; the match page keeps "Stats unavailable" because there the
+    // question is why the charts are empty. The one deliberate divergence from
+    // the shared vocabulary.
     return <StatusChip dot={false} tone="neutral">No video</StatusChip>;
   }
 

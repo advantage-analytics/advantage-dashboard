@@ -558,6 +558,11 @@
    `no-preference` wrapper rather than a `reduce` override fighting it. */
 .row-lifecycle {
   container-type: inline-size;
+  /* A phrase wider than the cell would otherwise overrun into the actions lane
+     and chevron. Clip at the cell edge — on the CELL, not the roll, whose
+     crossfade lifts each line 4px and needs the vertical room. The row is 52px
+     tall, so the fade is never clipped. */
+  overflow: hidden;
 }
 
 .analysis-copy-roll {
