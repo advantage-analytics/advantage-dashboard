@@ -32,8 +32,8 @@ import {
 /**
  * The phrases a match cycles through while OUR engine derives it.
  *
- * Each one describes what the finished report will cover. None of them narrates
- * a moment, and that distinction is the whole of why this is allowed to exist:
+ * Each one describes what the finished report will cover. None narrates a
+ * moment, and that distinction is the whole of why this is allowed to exist:
  * `stageNote` is declared on `MatchAnalysis` and no writer has ever set it, and
  * the vendor sends transitions with no sub-step detail, so "Detecting bounces"
  * would be a sentence about something nobody observed. Coverage is true for the
@@ -41,22 +41,31 @@ import {
  * implies any of them.
  *
  * Every line is a column `calculate_match_stats` actually fills — placement by
- * T, body and wide; first serves in; aces and double faults; break points
- * faced; rally length; winners against unforced errors — and per-side stats are
- * why "Both ends of the court" is true rather than generous.
+ * T, body and wide; double faults; winners against unforced errors; break
+ * points saved and converted; net appearances — and per-side stats are why
+ * "Both of you, every point" is true rather than generous.
  *
- * They are also all measured: the widest draws ~134px at 11px Inter, inside the
- * 150px gate in `globals.css`. Adding a longer one silently breaks that.
+ * **The status word appears twice, at the head of each half.** It used to open
+ * the cycle once, which left seven glances in eight landing on flavour and none
+ * on the state — and "Even the double faults" in blue does not, on its own,
+ * tell a first-time reader that anything is running. Twice puts the literal
+ * state under one glance in four. Alternating it with every phrase was the
+ * other option and reads as a stutter: the same word every other beat makes the
+ * rest feel like interruptions of it.
+ *
+ * They are also all measured: the widest draws ~144px at 11px Inter, inside the
+ * 150px gate in `globals.css`. Adding a longer one silently breaks that — the
+ * cell is only 157px wide at a 1280 viewport.
  */
 const ANALYZING_COPY = [
   "Analyzing",
-  "T, body and wide",
-  "Every first serve, in or out",
-  "Aces and double faults",
-  "Every break point faced",
-  "How long your rallies ran",
-  "Your winners, your errors",
-  "Both ends of the court",
+  "Where you really served",
+  "Even the double faults",
+  "Winners, and the other kind",
+  "Analyzing",
+  "Break points, both ways",
+  "How often you came in",
+  "Both of you, every point",
 ] as const;
 
 /** One eighth of the 24s cycle in `globals.css`, per phrase. */
@@ -74,8 +83,10 @@ function AnalyzingCopy(): React.JSX.Element {
         {ANALYSIS_LABEL.deriving}
       </span>
       <span aria-hidden="true" className="analysis-copy-roll">
+        {/* Keyed by position, not by text: the status word appears twice and
+            two children cannot share a key. */}
         {ANALYZING_COPY.map((phrase, i) => (
-          <span key={phrase} style={{ animationDelay: `${i * PHRASE_SECONDS}s` }}>
+          <span key={i} style={{ animationDelay: `${i * PHRASE_SECONDS}s` }}>
             {phrase}
           </span>
         ))}
