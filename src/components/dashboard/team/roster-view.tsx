@@ -3,12 +3,11 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
-  BENCH,
   RosterTable,
-  lineupOrder,
   rosterRowId,
   type LineupDraft,
 } from "@/components/dashboard/team/roster-table";
+import { BENCH, lineupChanged, lineupOrder } from "@/lib/data/lineup-draft";
 import {
   DRAWER_ATTR,
   PlayerDrawer,
@@ -203,6 +202,14 @@ export function RosterView({
     setAnnouncement("");
   }, []);
 
+  /**
+   * Save is live only when saving would change a spot. Not to spare the
+   * database — a no-op save writes no player rows — but because it would still
+   * log a `lineup.set` nobody made, and because an enabled primary is the
+   * page's way of saying "you have changes". See `lineupChanged`.
+   */
+  const dirty = lineup !== null && lineupChanged(lineup.sequence, members);
+
   const saveLineup = useCallback(() => {
     if (!lineup) return;
     const order = lineupOrder(lineup.sequence);
@@ -352,7 +359,7 @@ export function RosterView({
                   </button>
                   <button
                     type="button"
-                    disabled={saving}
+                    disabled={saving || !dirty}
                     onClick={saveLineup}
                     className={advButton("primary")}
                   >

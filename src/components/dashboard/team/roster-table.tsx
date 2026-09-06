@@ -5,6 +5,7 @@ import { useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Reorder, useReducedMotion } from "framer-motion";
 import { GitMerge, GripVertical } from "lucide-react";
+import { BENCH } from "@/lib/data/lineup-draft";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { cn } from "@/lib/utils";
@@ -139,14 +140,10 @@ export function profileHref(playerId: string): string {
   return `/dashboard/team/roster/${playerId}`;
 }
 
-/** The sentinel in a lineup sequence: above it is the lineup, below it the bench. */
-export const BENCH = "__bench__";
-
-/** The lined-up ids, in order — the part of a sequence before the sentinel. */
-export function lineupOrder(sequence: string[]): string[] {
-  const at = sequence.indexOf(BENCH);
-  return at < 0 ? sequence : sequence.slice(0, at);
-}
+/* The sequence arithmetic lives in `lib/data/lineup-draft` so a spec can
+   import it without this file's client-only dependencies; re-exported here
+   because the table is where callers meet it. */
+export { BENCH, lineupOrder } from "@/lib/data/lineup-draft";
 
 /** What `RosterView` hands down while Set lineup is on. */
 export interface LineupDraft {
