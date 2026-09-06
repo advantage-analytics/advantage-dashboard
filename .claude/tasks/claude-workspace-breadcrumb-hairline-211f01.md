@@ -31,7 +31,7 @@ ready).
 - **notes:** Plan step 1. Lands inert — nothing consumes `isDestination` until T2, which is the point: it is testable before it changes any behaviour. The spec follows the repo's established shape (import the function and assert; no rendering, no browser) — `tests/safe-next.spec.ts` is the model. Two comments matter and should not be dropped: why `UNLISTED` is excluded (`team/upload` is named so a crumb can say "Upload video", but it is a step inside a flow, not a place), and why duplicate hrefs across the four arrays are left alone (`some()` short-circuits; de-duplicating would couple two menus `nav.ts` keeps separate on purpose). Design: `work/workspace-breadcrumb-hairline/02_design/output/design.md`.
 
 ## T2 · Switch the header's leading slot to the destination rule
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** `src/app/dashboard/header.tsx`
