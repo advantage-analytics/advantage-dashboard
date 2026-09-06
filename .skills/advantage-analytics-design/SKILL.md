@@ -1375,9 +1375,14 @@ content rather than as the one thing on the screen. Roughly 80px is spent
 deliberately here.
 
 *The tail* — the real page, in its real order, each region holding its own
-honest zero state (Empty State above). The KPI strip stays at **full
-strength** because its five labels are the most specific promise the page can
-make without a figure; everything below it sits at **0.32**. No bottom fade: a
+honest zero state (Empty State above), graded in two steps: the KPI strip at
+**0.55**, everything below it at **0.32**. The strip held full strength for a
+while, on the argument that its five labels are the most specific promise the
+page can make without a figure — but at full strength it was the only region
+in the tail that did not read as background, so the page had an offer, a solid
+band, and then a fade: two treatments where there is one idea. A grade still
+needs a step, hence 0.55 rather than a flat value; Matches never carried the
+exception, and both day-zero pages now step down together. No bottom fade: a
 mask running to transparent clips the activity heatmap mid-grid, and a
 calendar cut off partway through its last week reads as a fault, not depth.
 

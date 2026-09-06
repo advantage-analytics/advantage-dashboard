@@ -13,10 +13,9 @@ import { DayZeroOffer } from "@/components/dashboard/home/day-zero-offer";
  * example, the hairline court, and a heatmap whose cells are genuinely all
  * empty because no session has happened. Nothing in it is invented.
  *
- * It is graded rather than drawn flat. The strip stays at full strength
- * because its five labels are the most specific promise this page can make
- * without a figure; the cards below step back to a third, so the tail reads
- * as the page waiting rather than as a second thing competing with the offer.
+ * It is graded rather than drawn flat: the strip at 0.55, the cards below at
+ * a third, so the tail reads as the page waiting rather than as a second
+ * thing competing with the offer.
  *
  * **The tail is decoration, and is marked as such.** At a third opacity its
  * text sits far below any usable contrast and its links would be invisible
@@ -50,7 +49,18 @@ export function DayZeroHome({
       </p>
 
       <div inert className="flex flex-1 flex-col gap-4">
-        {kpiStrip}
+        {/* The strip joins the grade rather than standing outside it.
+            It sat at full strength on the argument that its five labels are
+            the page's most specific promise — but at full strength it was the
+            only region in the tail that did not read as background, so the
+            page had an offer, a solid band, and then a fade, which is two
+            treatments where there should be one. Matches never had the
+            exception, and both day-zero pages now step down together.
+
+            0.55 over 0.32 rather than one flat value: a grade needs a step,
+            and the strip is still the first thing under the offer and the
+            part worth reading first. */}
+        <div style={{ opacity: 0.55 }}>{kpiStrip}</div>
         {/* A third, not a fade to nothing: a mask running to transparent at
             the foot of the page clipped the activity heatmap mid-grid, and a
             calendar cut off partway through its last week reads as a
