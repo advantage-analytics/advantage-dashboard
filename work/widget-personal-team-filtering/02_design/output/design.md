@@ -88,8 +88,9 @@ convention, exactly as the four correct sites already do.
 
 ### Architecture
 
-No new files, no new modules, no schema change, no RLS change. Three query
-builders gain one clause each. The distinction is already carried by
+No new files, no new modules, no schema change, no RLS change. **Four** query
+builders gain one clause each — the three home widgets, plus the header activity
+tray the human chose to fold in. The distinction is already carried by
 `matches.program_id`, nullable precisely so that NULL means "personal"
 (`statistics-server.ts:288-289` states this).
 
@@ -111,6 +112,25 @@ builders gain one clause each. The distinction is already carried by
    `.is("program_id", null)` after `.eq("created_by", userId)` (line 60), before
    the `.order().limit(4)`. The `shots` read below is keyed by those match ids
    and follows automatically.
+
+4. **`src/lib/data/activity-server.ts`** — in `getActivityFeed()`, the personal
+   branch (line 100) becomes `created_by = me` **AND**
+   `.is('matches.program_id', null)`.
+
+   Both clauses, and the order of reasoning matters: this file's header comment
+   establishes that the tray is scoped on the **job**, not the match, because a
+   job can belong to someone who did not create the match row — there is such a
+   row on this database. So `created_by` stays exactly as it is; the program
+   filter is *added* to it, never substituted for it. The filter lands on the
+   embedded resource, which the existing `matches!inner(...)` projection already
+   selects `program_id` through — the same mechanism the team branch one line
+   above uses for `.eq('matches.program_id', workspace.id)`.
+
+   The stale comment ("that column does not exist until the program migrations
+   land") must be **replaced, not left standing**: it is now wrong, and it is
+   the reason the clause was missing. The new comment should say what the two
+   clauses mean together — my jobs, on my own matches — and that RLS cannot
+   supply the second, which the file's header already explains.
 
 Each edit carries a one-line comment naming the rule and pointing at
 `matches/page.tsx` as the canonical statement of it, matching how
@@ -149,21 +169,24 @@ day-zero composition already exists to hold it.
   not execute the loaders themselves — `getOverallPerformance()` builds its
   client from request cookies and is not callable from the Playwright node
   context.
+- **The tray needs its own case**, on `processing_jobs` rather than `matches`,
+  in the same spec: a job the seeded user submitted against their program match
+  must be absent from the personal feed and present in the team feed. Seed it so
+  the job's `created_by` is the viewer while the match carries a `program_id` —
+  that is the exact shape both clauses exist for, and a fix that swapped one
+  clause for the other would pass a weaker fixture.
 - **Manual verification, real data:** sign in as `clajersongimena@gmail.com`,
   open `/dashboard` in the **personal** workspace. Season title and KPI counts
   read 3, not 19; Recent Matches lists only the three personal matches; Serve
   Placement draws from those three. Then switch to the team workspace and
-  confirm `/dashboard/team` is byte-for-byte unchanged.
+  confirm `/dashboard/team` is byte-for-byte unchanged. Open the header
+  activity tray in both workspaces: personal shows only jobs on non-program
+  matches, team is unchanged.
 - **Guardrails:** run `pipeline-guardrails-reviewer` on the diff — it touches
   `src/app/dashboard/` and `src/components/dashboard/`.
 
 ## Open questions
 
-- **`getActivityFeed()`'s personal branch (`src/lib/data/activity-server.ts:100`)
-  has the same leak** on `processing_jobs`, and its stale comment gives a reason
-  that no longer holds. It is header chrome on every page, not a home widget, so
-  it is outside this brief's scope. Recommend a separate branch; flag here so the
-  finding is not lost. **Does the human want it folded in instead?**
 - Should the Recent Matches empty state say something specific to "your team
   matches live in the team workspace" for a user whose personal home is now
   empty? Out of scope as a copy change; noted because that user's experience
