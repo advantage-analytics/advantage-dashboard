@@ -19,7 +19,7 @@ straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Add the destination predicate to nav.ts, with its spec
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** `src/lib/dashboard/nav.ts`, `tests/header-slot.spec.ts` (new)
 - **done when:**

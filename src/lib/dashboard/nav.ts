@@ -258,3 +258,32 @@ export function navLabel(pathname: string): string | null {
   const href = activeHref(pathname);
   return ALL_LINKS.find((link) => link.href === href)?.name ?? null;
 }
+
+/**
+ * Every destination the rail can send you to — deliberately NOT ALL_LINKS,
+ * which folds in UNLISTED. `team/upload` is named there so the crumb can say
+ * "Upload video", but it is a step inside a flow, not a place; it belongs on
+ * the trail.
+ *
+ * PERSONAL_BOTTOM and TEAM_BOTTOM are identical today, so this holds
+ * duplicate hrefs. `some()` does not care, and de-duplicating would couple
+ * the two lists that nav.ts keeps separate on purpose.
+ */
+const DESTINATIONS: readonly NavLink[] = [
+  ...PERSONAL_NAV,
+  ...TEAM_NAV,
+  ...PERSONAL_BOTTOM,
+  ...TEAM_BOTTOM,
+];
+
+/**
+ * Is this path a rail destination itself, rather than somewhere inside one?
+ *
+ * Exact match, never prefix: `/dashboard/matches` is a destination,
+ * `/dashboard/matches/[matchId]` is a position within it. That distinction is
+ * the whole rule — the header names the workspace on a destination and traces
+ * the path on a position within a flow.
+ */
+export function isDestination(pathname: string): boolean {
+  return DESTINATIONS.some((link) => link.href === pathname);
+}
