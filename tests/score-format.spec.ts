@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { tiebreakOf, type ScoreLineSet } from '@/lib/ui/score-format';
+import { playedSets, tiebreakOf, type ScoreLineSet } from '@/lib/ui/score-format';
 
 /**
  * Which sets are allowed to carry a superscript at all.
@@ -103,5 +103,37 @@ test.describe('tiebreakOf guards shape, never value', () => {
     // Unchanged by the guard, and load-bearing: the notation prints the
     // loser's points, so a number sitting only on the winner renders nothing.
     expect(tiebreakOf(set(7, 6, 7, null))).toBeNull();
+  });
+});
+
+test.describe('playedSets trims trailing 0-0 sets', () => {
+  test('a phantom third set is dropped', () => {
+    expect(playedSets([set(6, 4, 0, 0), set(0, 0, 0, 0), set(0, 0, 0, 0)])).toEqual([
+      set(6, 4, 0, 0),
+    ]);
+  });
+
+  test('a real two-setter with a phantom third is dropped', () => {
+    expect(playedSets([set(6, 4, 0, 0), set(7, 6, 0, 0), set(0, 0, 0, 0)])).toEqual([
+      set(6, 4, 0, 0),
+      set(7, 6, 0, 0),
+    ]);
+  });
+
+  test('an all-zero score trims to empty', () => {
+    expect(
+      playedSets([set(0, 0, 0, 0), set(0, 0, 0, 0), set(0, 0, 0, 0)]),
+    ).toEqual([]);
+  });
+
+  test('a genuine 0-6 set is not both-zero and survives', () => {
+    expect(playedSets([set(0, 6, 0, 0), set(6, 0, 0, 0)])).toEqual([
+      set(0, 6, 0, 0),
+      set(6, 0, 0, 0),
+    ]);
+  });
+
+  test('an empty score stays empty', () => {
+    expect(playedSets([])).toEqual([]);
   });
 });

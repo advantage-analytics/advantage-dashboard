@@ -18,7 +18,7 @@ straight past it; promote a task to `todo` by hand once it's actually
 ready).
 
 ## T1 · Add `playedSets()` display-only trim helper
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** `src/lib/ui/score-format.ts`, `tests/score-format.spec.ts` (existing spec for this module — extend it, do not create a new file)
 - **done when:**
