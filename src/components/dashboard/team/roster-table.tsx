@@ -102,6 +102,14 @@ import type {
 const EASE_OUT_EXPO = [0.23, 1, 0.32, 1] as const;
 const ROW_SLIDE = { duration: 0.22, ease: EASE_OUT_EXPO };
 
+/**
+ * How a released row settles into its slot. framer's default is an inertia
+ * spring at stiffness 500 / damping 25 — under-damped, so a row let go with
+ * any hand velocity overshoots its slot and bounces back. Critically damped
+ * instead: it arrives once, in about the time a sibling takes to slide.
+ */
+const ROW_SETTLE = { bounceStiffness: 600, bounceDamping: 50 };
+
 /** Column widths. Only the spacer flexes. */
 const COL = {
   spot: "w-6 shrink-0",
@@ -380,8 +388,14 @@ function MemberRow({
       /* Only the mode makes a row a handle. Outside it the item is inert and
          the click below opens the drawer. */
       dragListener={inLineupMode}
+      dragTransition={ROW_SETTLE}
       onDragStart={() => onDragStartRow(member.playerId)}
       onDragEnd={onDragEndRow}
+      /* A pointer grab is also a selection: the row under the hand is the
+         one the keys act on next, so it takes focus and shows it. */
+      onPointerDown={(event) => {
+        if (inLineupMode) event.currentTarget.focus({ preventScroll: true });
+      }}
       /* `position` only: nothing here changes size, and animating size would
          re-layout the whole card each frame. The held row is exempt from the
          slide — it is under the pointer, not on its way somewhere. */
@@ -441,6 +455,14 @@ function MemberRow({
           ? "cursor-grab active:cursor-grabbing hover:bg-[var(--surface-muted)]"
           : "cursor-pointer hover:bg-[var(--surface-muted)]",
         selected && !inLineupMode && "bg-[var(--surface-muted)]",
+        /* Two states, told apart on sight. FOCUSED — by click, Tab or the
+           arrows — wears the system's blue focus ring on plain `:focus`, not
+           `:focus-visible`: in this mode a mouse click is a selection, and a
+           selection nobody can see is the row Space acts on "for no reason".
+           LIFTED drops the ring and rises instead: raised card, drop line. */
+        inLineupMode &&
+          !lifted &&
+          "focus:shadow-[var(--focus-ring)] focus:outline-none",
         lifted &&
           "z-[3] bg-[var(--surface-card)] shadow-[var(--shadow-card-emphasis)] ring-1 ring-[var(--border-medium)]",
         inLineupMode && "select-none"
