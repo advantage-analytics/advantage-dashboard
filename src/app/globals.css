@@ -536,3 +536,73 @@
     animation: none;
   }
 }
+
+/* ── The matches list's rotating analysis copy ─────────────────────────────
+   A match takes tens of minutes to analyse, and the row that is waiting says
+   so in a phrase that changes every few seconds. Every phrase describes what
+   the finished report will cover — never what the engine is doing this second,
+   which nothing tells us: `stageNote` is declared on the analysis type and no
+   writer has ever set it, and the vendor sends its transitions with no
+   sub-step detail. Coverage is true for the whole wait; a live account would
+   not be.
+
+   The copy is a delight, so it yields when there is no room for it. The cell
+   is the row's fluid track, which is 319px at a 1440 viewport but 159px at
+   1280 and 96px at 1024 — and every phrase but the status word needs more than
+   96px. So the rotation is gated on the cell's own width rather than the
+   viewport's: above 150px it runs, below it the plain status word stands
+   alone. A truncated half-sentence would be worse than no sentence.
+
+   Under reduced motion the gate never opens at all, so the plain word is what
+   shows — the fallback is the same in both cases, which is why it is a
+   `no-preference` wrapper rather than a `reduce` override fighting it. */
+.row-lifecycle {
+  container-type: inline-size;
+}
+
+.analysis-copy-roll {
+  display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @container (min-width: 150px) {
+    .analysis-copy-plain {
+      display: none;
+    }
+    .analysis-copy-roll {
+      position: relative;
+      display: block;
+      height: 12px;
+    }
+  }
+}
+
+/* Each phrase holds for an eighth of the cycle and crosses over in the gap:
+   up 4px on the way out, up from 4px on the way in, so the change reads as one
+   line replacing another rather than two lines dissolving into each other. */
+.analysis-copy-roll > span {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  white-space: nowrap;
+  opacity: 0;
+  animation: analysis-copy-cycle 24s var(--ease-primary) infinite;
+}
+
+@keyframes analysis-copy-cycle {
+  0%,
+  1.5% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  3%,
+  10.5% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  12.5%,
+  100% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}

@@ -167,11 +167,14 @@ export function MatchCardList({ match, isNew, unseen }: MatchCardListProps): Rea
       {/* `grid`, and both parts of that are load-bearing. Grid items are
           blockified, so `StatusChip`'s `inline-flex` stops sitting on the
           cell's text baseline — on a bare block it landed a few pixels below
-          the chip-and-bar group, which is a flex row. And a grid item stretches
-          across the track by default, which a flex item does not: as a flex
-          child the group shrank to its content and left the upload's bar, whose
-          width comes from `flex-1`, at zero. */}
-      <div className="grid min-w-0 items-center">
+          the upload's stacked label-and-bar, which is a flex column. And a grid
+          item stretches across the track, which a flex item does not.
+
+          `row-lifecycle` makes it a container: the rotating analysis copy is
+          gated on THIS cell's width rather than the viewport's, because the
+          cell is the row's fluid track and shrinks far faster than the window
+          does. See globals.css. */}
+      <div className="row-lifecycle grid min-w-0 items-center">
         <RowLifecycle
           analysis={match.analysis}
           label={`${match.player2.name}, ${match.tournamentName}`}
