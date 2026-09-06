@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { GitMerge, Loader2, Upload, Users } from "lucide-react";
 import type { RosterMember } from "@/lib/data/team-roster-server";
 import {
@@ -118,11 +118,26 @@ function sharedWith(names: string[]): string {
   return `${names[0]} and ${names.length - 1} others`;
 }
 
+/**
+ * What a caller already knows about the person being added.
+ *
+ * The receiving end of a hand-off: a coach who has typed an address into
+ * Invite and then decides the athlete has no account yet should not retype it
+ * here. Every field is optional and none is authoritative — the coach can
+ * overwrite all of them before submitting.
+ */
+export type AddPlayerInitial = {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+};
+
 export function AddPlayerDialog({
   open,
   onOpenChange,
   seatNote,
   roster,
+  initial,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -130,6 +145,13 @@ export function AddPlayerDialog({
   seatNote: string;
   /** Who is on the roster already, so a repeat can say who it would repeat. */
   roster: RosterMember[];
+  /**
+   * A prefill for the next opening, applied on the closed→open transition.
+   *
+   * Not a controlled value: once the dialog is open the fields are the coach's,
+   * and a later change to this prop does not reach back into them.
+   */
+  initial?: AddPlayerInitial;
 }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -184,6 +206,39 @@ export function AddPlayerDialog({
     profileId: string | null;
     form: string;
   } | null>(null);
+
+  /**
+   * Applying `initial`, and why it is an effect keyed on the open edge.
+   *
+   * This component stays mounted whether or not it is showing — the same fact
+   * `close()` below is written around — so a `useState` initializer would run
+   * once, on the first mount, and never again. A coach who cancels and reopens
+   * would get an empty form the second time, and a hand-off arriving while the
+   * dialog was already mounted-but-closed would never be seen at all.
+   *
+   * The edge, not `open` itself: re-running on every render where `open` is
+   * true would overwrite whatever the coach had typed the moment any parent
+   * re-rendered. `wasOpen` is a ref rather than state because nothing renders
+   * differently for it; it only decides whether this is the transition.
+   *
+   * It runs after `reset()` has already emptied the form — every exit path
+   * calls that — so the prefill is what the fields hold, and `reset()` itself
+   * stays "clear to empty" rather than "clear to `initial`". That split is
+   * deliberate: Cancel leaves no residue behind it, and the next open re-applies
+   * the prefill from the prop that still says it.
+   */
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    const opening = open && !wasOpen.current;
+    wasOpen.current = open;
+    if (!opening || !initial) return;
+    if (initial.firstName) setFirstName(initial.firstName);
+    if (initial.lastName) setLastName(initial.lastName);
+    if (initial.email) setEmail(initial.email);
+    // `initial` is read only on the open edge; a change to it while the dialog
+    // is already open is deliberately not applied.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   function reset() {
     setFirstName("");

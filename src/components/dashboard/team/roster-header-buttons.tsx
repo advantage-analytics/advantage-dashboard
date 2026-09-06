@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { advButton } from "@/lib/ui/adv-button";
-import { AddPlayerDialog } from "./add-player-dialog";
+import { AddPlayerDialog, type AddPlayerInitial } from "./add-player-dialog";
 import { RosterInviteDialog } from "./roster-invite-dialog";
 import type { ManagedPlayer } from "./invite-target-picker";
 import type { RosterMember, SeatUsage } from "@/lib/data/team-roster-server";
@@ -40,6 +40,18 @@ export function RosterHeaderButtons({
 }) {
   const [inviting, setInviting] = useState(false);
   const [addingPlayer, setAddingPlayer] = useState(false);
+  /**
+   * What Add player should open holding.
+   *
+   * Held here rather than inside the dialog because the hand-off comes from a
+   * sibling: Invite is where a coach discovers the athlete has no account yet,
+   * and this is the one place that can see both dialogs. Nothing sets it today
+   * — the dialog's prefill path exists first so the hand-off has somewhere to
+   * land.
+   */
+  const [addInitial, setAddInitial] = useState<AddPlayerInitial | undefined>(
+    undefined
+  );
 
   const remaining = Math.max(0, seats.seats - seats.used - seats.pending);
   const seatNote =
@@ -82,6 +94,7 @@ export function RosterHeaderButtons({
         onOpenChange={setAddingPlayer}
         seatNote={seatNote}
         roster={roster}
+        initial={addInitial}
       />
     </>
   );

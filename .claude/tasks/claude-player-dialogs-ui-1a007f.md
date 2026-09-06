@@ -81,7 +81,7 @@ ready).
   Criterion 4 was AMENDED by the author on 2026-09-06 after a first run was gated `needs-work` on it alone (log entry "T5 — blocked"). The implementation was judged correct on every other count; the blocker was that this repo has no component-render harness, which is infrastructure work belonging on its own branch rather than here. The amendment mirrors the escape hatch T2's notes already carried. Accepted residual risk, stated so it is not rediscovered as a surprise: a checkbox wired to the wrong state, rendered outside the `spotTakenBy.length > 0` guard, or shipped with wrong copy or classes would pass both tests, and rests on review instead.
 
 ## T6 · Add Player: `initial` prefill prop + header wiring
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T5
 - **files:** `src/components/dashboard/team/add-player-dialog.tsx`, `src/components/dashboard/team/roster-header-buttons.tsx`
