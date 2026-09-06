@@ -3,6 +3,7 @@
 import { useCallback, useState, useTransition } from "react";
 import Link from "next/link";
 import { Monitor, MonitorSmartphone, Users } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { SettingsAlert } from "@/components/dashboard/settings/settings-alert";
 import { SettingsButton } from "@/components/dashboard/settings/settings-button";
 import { SettingsSectionHeading } from "@/components/dashboard/settings/settings-card";
@@ -156,7 +157,7 @@ export default function AccountPage() {
           implying it was all of them. The second action is genuinely global. */}
       <section className="flex flex-col gap-[18px]">
         <SettingsSectionHeading number="02" title="Where you're signed in" />
-        <div className="flex flex-col border-y border-[var(--border-hairline)] [&>*+*]:border-t [&>*+*]:border-[var(--border-hairline)]">
+        <div className="flex flex-col border-y border-[var(--border-hairline)]">
           <SessionRow
             icon={Monitor}
             title="This device"
@@ -277,15 +278,13 @@ function SessionRow({
   detail,
   children,
 }: {
-  icon: React.ComponentType<
-    React.SVGProps<SVGSVGElement> & { strokeWidth?: number }
-  >;
+  icon: LucideIcon;
   title: string;
   detail: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3.5 py-3">
+    <div className="flex items-center gap-3.5 border-t border-[var(--border-hairline)] py-3 first:border-t-0">
       <Icon
         className="size-3.5 shrink-0 text-[var(--ink-600)]"
         strokeWidth={1.5}
