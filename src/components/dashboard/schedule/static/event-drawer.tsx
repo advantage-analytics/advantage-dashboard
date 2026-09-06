@@ -1,7 +1,7 @@
 "use client";
 
-import { motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 import {
   ArrowUpRight,
   Calendar,
@@ -34,17 +34,12 @@ import { cn } from "@/lib/utils";
 import type { OpponentProgram } from "@/lib/data/schedule-server";
 import type { EntryMatch, EventDetail, EventEntry } from "@/lib/schedule/types";
 
-/**
- * The rail's own width, and the two curves the design system allows here.
- *
- * `--ease-out-expo` is the arrival curve — confident deceleration, for the one
- * authored moment. `--ease-primary` is the routine one, for the body swap.
- * Both are transcribed as tuples because Framer takes numbers rather than the
- * CSS custom properties; `effects.css` is the source of both values.
- */
-const WIDTH = 340;
-const EASE_EXPO = [0.23, 1, 0.32, 1] as const;
-const EASE_PRIMARY = [0.25, 0.46, 0.45, 0.94] as const;
+/** The drawer's `role="dialog"` carries this so the window key handler can tell it from a modal. */
+export const DRAWER_ATTR = "data-schedule-drawer";
+
+/** The header's 28px square control — chevrons and the close. The roster's, verbatim. */
+const ICON_BUTTON =
+  "inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40";
 
 /**
  * `Tc2` — the selected event's detail, as a dismissable right rail.
@@ -76,36 +71,35 @@ const EASE_PRIMARY = [0.25, 0.46, 0.45, 0.94] as const;
  * It renders the `EventDetail` the page already holds, so stepping through
  * the season with ‹ › is a state change and no round trip.
  *
- * ── Motion: two events, two answers ────────────────────────────────────────
- * The rail is "a consequence of a click, never furniture", so its arrival is
- * the one authored moment on this page — and stepping through the season is
- * emphatically not a second one.
+ * ── Opening and closing (20f) ───────────────────────────────────────────────
+ * The same shell as the roster's player drawer, and the same motion: the rail
+ * slides in from the right edge over 200ms on `--ease-primary` and the table
+ * reflows to the remaining width. It is the WIDTH that animates
+ * (`roster-drawer-in` / `-out` in globals.css, shared with the roster) rather
+ * than a transform: the reflow is the point, and a transform would slide a
+ * panel over a table that had already jumped. The panel inside is a fixed
+ * 340px, left-anchored, so what shows during the slide is its left edge
+ * arriving.
  *
- * **Opening** animates the rail's WIDTH from 0, with the 340px column pinned
- * to the right edge (`justify-end`) inside the clip. The table therefore makes
- * room and the panel is revealed from the screen edge in one movement, rather
- * than a panel sliding over a list that already jumped. `--ease-out-expo` over
- * `--duration-enter`, the app's own arrival pair; opacity finishes at 200ms so
- * the float shadow never lingers as a ghost. Closing runs the same shape at
- * ~75% (220ms), because an exit that matches its entrance reads as slow.
+ * CSS, not Framer, and the resting class is `w-[340px]`: if the animation
+ * never runs — reduced motion, a paused frame loop, a script that failed — the
+ * rail is simply there at full width. The first cut animated an inline width
+ * from 0 with Framer, and in exactly those conditions it stayed at 0 and the
+ * rail never appeared.
  *
- * The inner column is a fixed `w-[340px] shrink-0`, and that is the
- * load-bearing half: without it, every frame of the width animation re-wraps
- * the opponent's name, re-lays the glyph row and re-flows nine lines. With it,
- * the only thing changing per frame is the clip.
+ * Closing is the reverse animation; `onClosed` fires when it ends and the page
+ * unmounts this. Under reduced motion the animation is dropped and the page's
+ * timeout does the unmounting.
  *
- * **Stepping** must not re-run any of that — the rail is already there, and
- * only what it is about has changed. So the header holds perfectly still (the
- * counter just ticks) and the BODY is keyed on the event id and fades up 8px
- * from the direction of travel: `stepDirection` is +1 going down the list and
- * -1 going up, so the content moves the way the season does. Every change of
- * selection feeds it, including clicking a different row while the rail is
- * open, which is why the direction is computed by the page rather than
- * inferred here. No exit animation on that swap: at 180ms, waiting for the
- * outgoing body reads as lag on a control you can hold down.
+ * ── Sticky ─────────────────────────────────────────────────────────────────
+ * The frame draws the rail filling the height beside the page. In the app the
+ * page scrolls under a 44px sticky header, so the rail is `sticky` at
+ * `top: 44px` with the viewport's remaining height — a long season scrolls
+ * and the rail stays put, exactly as a fixed column would in the frame.
  *
- * Reduced motion keeps both meanings and drops both movements — the rail
- * arrives at full width on a fade, and the body cross-fades in place.
+ * ── Stepping ───────────────────────────────────────────────────────────────
+ * ‹ › and ↑ ↓ walk the list on screen; the header holds still and the body
+ * re-renders in place. Clicking the selected row again closes the rail.
  */
 export function EventDrawer({
   detail,
@@ -114,8 +108,10 @@ export function EventDrawer({
   total,
   onStep,
   onClose,
+  closing,
+  autoFocus,
+  onClosed,
   canEdit,
-  stepDirection,
 }: {
   detail: EventDetail;
   /** The opponent's program record, where the dual resolved one. */
@@ -125,16 +121,15 @@ export function EventDrawer({
   total: number;
   onStep: (delta: -1 | 1) => void;
   onClose: () => void;
+  /** Playing the slide-out; `onClosed` fires when it finishes. */
+  closing: boolean;
+  /** Opened from the keyboard — take focus so `Tab` continues inside. */
+  autoFocus: boolean;
+  onClosed: () => void;
   /** `isProgramStaff` upstream — gates every write the rail points at. */
   canEdit: boolean;
-  /**
-   * Which way the selection just moved through the list — +1 further down,
-   * -1 back up, 0 on the first open. The body enters from that side, so its
-   * content travels the way the season does.
-   */
-  stepDirection: number;
 }) {
-  const shouldReduceMotion = useReducedMotion();
+  const panelRef = useRef<HTMLDivElement>(null);
   const { event, entries } = detail;
   const isDual = event.kind === "dual";
   const singles = entries.filter((entry) => entry.discipline === "singles");
@@ -156,62 +151,58 @@ export function EventDrawer({
   // builder recorded one; otherwise the side of the trip is all we know.
   const venue = isDual ? (event.host ?? siteTitle(event.site)) : siteTitle(event.site);
 
+  useEffect(() => {
+    if (autoFocus) panelRef.current?.focus({ preventScroll: true });
+  }, [autoFocus, event.id]);
+
   return (
-    <motion.aside
-      role="dialog"
-      aria-label={isDual ? `vs ${event.name}` : event.name}
-      /* Width, not transform: the rail displaces the table rather than
-         covering it, so the space opening IS the animation. `justify-end`
-         pins the fixed-width column to the right edge inside the clip, which
-         is what makes it read as arriving from off-screen rather than
-         unrolling leftward. */
-      initial={
-        shouldReduceMotion
-          ? { width: WIDTH, opacity: 0 }
-          : { width: 0, opacity: 0 }
-      }
-      animate={{
-        width: WIDTH,
-        opacity: 1,
-        transition: shouldReduceMotion
-          ? { duration: 0.15 }
-          : {
-              width: { duration: 0.3, ease: EASE_EXPO },
-              opacity: { duration: 0.2, ease: EASE_EXPO },
-            },
+    <aside
+      {...{ [DRAWER_ATTR]: "" }}
+      onAnimationEnd={(animation) => {
+        if (animation.animationName === "roster-drawer-out") onClosed();
       }}
-      exit={{
-        width: shouldReduceMotion ? WIDTH : 0,
-        opacity: 0,
-        transition: shouldReduceMotion
-          ? { duration: 0.1 }
-          : {
-              width: { duration: 0.22, ease: EASE_EXPO },
-              opacity: { duration: 0.15, ease: EASE_EXPO },
-            },
-      }}
-      className="relative z-[2] flex shrink-0 justify-end self-stretch overflow-hidden bg-[var(--surface-card)] shadow-[var(--shadow-dropdown)]"
+      className={cn(
+        "sticky top-11 z-[2] h-[calc(100vh-44px)] shrink-0 self-start overflow-hidden border-l border-[var(--border-hairline)] bg-[var(--surface-card)] shadow-[var(--shadow-dropdown)] motion-reduce:animate-none",
+        closing
+          ? "w-0 animate-[roster-drawer-out_200ms_var(--ease-primary)_both]"
+          : "w-[340px] animate-[roster-drawer-in_200ms_var(--ease-primary)_both]"
+      )}
     >
-      {/* Fixed width, so nothing inside re-wraps while the clip is moving. */}
-      <div className="flex h-full w-[340px] shrink-0 flex-col border-l border-[var(--border-hairline)]">
-        {/* One provider over the header's cluster, as the app header does, so
-            moving between the four controls pays the reveal delay once. */}
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-label={isDual ? `vs ${event.name}` : event.name}
+        tabIndex={-1}
+        className="flex h-full w-[340px] flex-col outline-none"
+      >
+        {/* 44px, inset 20px — the page header's own height and inset, so the
+            two rules line up across the border. One provider over the
+            cluster, as the app header does, so moving between the controls
+            pays the reveal delay once. */}
         <TooltipProvider delayDuration={CHROME_TOOLTIP_DELAY_MS}>
           <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-[var(--border-hairline)] px-5">
-            <RailButton
-              label="Previous event"
-              onClick={() => onStep(-1)}
-              disabled={index <= 0}
-            >
-              <ChevronUp className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
-            </RailButton>
-            <RailButton
-              label="Next event"
-              onClick={() => onStep(1)}
-              disabled={index >= total - 1}
-            >
-              <ChevronDown className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
-            </RailButton>
+            <ChromeTooltip label="Previous event" shortcut="↑">
+              <button
+                type="button"
+                aria-label="Previous event"
+                disabled={index <= 0}
+                onClick={() => onStep(-1)}
+                className={ICON_BUTTON}
+              >
+                <ChevronUp className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+              </button>
+            </ChromeTooltip>
+            <ChromeTooltip label="Next event" shortcut="↓">
+              <button
+                type="button"
+                aria-label="Next event"
+                disabled={index >= total - 1}
+                onClick={() => onStep(1)}
+                className={ICON_BUTTON}
+              >
+                <ChevronDown className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+              </button>
+            </ChromeTooltip>
 
             <span className="ml-1 inline-flex shrink-0 items-baseline gap-1.5 whitespace-nowrap">
               <span className="text-[12px]" style={{ color: "var(--ink-600)" }}>
@@ -228,7 +219,7 @@ export function EventDrawer({
                 the wash the artboard gives every 28px control in this bar. */}
             <Link
               href={eventHref}
-              className="inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-[var(--radius-element)] px-2 text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]"
+              className="inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-[var(--radius-element)] px-2 text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
             >
               Open event
               <ArrowUpRight className="size-3" strokeWidth={1.5} aria-hidden="true" />
@@ -236,26 +227,20 @@ export function EventDrawer({
 
             <span aria-hidden="true" className="mx-0.5 h-3.5 w-px bg-[var(--border-medium)]" />
 
-            <ChromeTooltip label="Close" shortcut="Esc" side="bottom">
-              <RailButton label="Close" onClick={onClose}>
+            <ChromeTooltip label="Close" shortcut="Esc">
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={onClose}
+                className={ICON_BUTTON}
+              >
                 <X className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
-              </RailButton>
+              </button>
             </ChromeTooltip>
           </div>
         </TooltipProvider>
 
-        <motion.div
-          /* Keyed on the event, so stepping remounts the body and re-runs its
-             entrance while the header above it never moves. */
-          key={event.id}
-          initial={{ opacity: 0, y: shouldReduceMotion ? 0 : stepDirection * 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{
-            duration: shouldReduceMotion ? 0.12 : 0.18,
-            ease: EASE_PRIMARY,
-          }}
-          className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pb-[22px] pt-6"
-        >
+        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-[22px] pb-[22px] pt-6">
           <div className="flex shrink-0 items-center gap-3.5">
             <EventMark kind={event.kind} name={event.name} size={48} />
             <div className="flex min-w-0 flex-col gap-1">
@@ -356,40 +341,9 @@ export function EventDrawer({
               Enter results
             </Link>
           ) : null}
-        </motion.div>
+        </div>
       </div>
-    </motion.aside>
-  );
-}
-
-/** The header's 28px square control — chevrons and the close. */
-function RailButton({
-  label,
-  onClick,
-  disabled = false,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      aria-disabled={disabled || undefined}
-      onClick={disabled ? undefined : onClick}
-      className={cn(
-        "inline-flex size-7 shrink-0 items-center justify-center rounded-[var(--radius-element)] outline-none",
-        "transition-colors duration-[var(--duration-hover)] focus-visible:shadow-[var(--focus-ring)]",
-        disabled ? "cursor-default" : "cursor-pointer hover:bg-[var(--surface-subtle)]"
-      )}
-      style={{ color: disabled ? "var(--ink-300)" : "var(--ink-500)" }}
-    >
-      {children}
-    </button>
+    </aside>
   );
 }
 

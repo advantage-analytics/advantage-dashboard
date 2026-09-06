@@ -36,7 +36,11 @@ export const metadata = { title: "Schedule" };
  * schedule: `isProgramStaff` gates New event and every write the rail points
  * at, and `canUploadForProgram` gates day zero's "One-off match in Matches".
  */
-export default async function SchedulePage() {
+export default async function SchedulePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ event?: string | string[] }>;
+}) {
   const workspace = await getWorkspaceContext();
   if (!workspace) redirect("/login");
 
@@ -59,6 +63,11 @@ export default async function SchedulePage() {
       entries: schedule.entriesByEvent.get(event.id) ?? [],
     };
   }
+
+  // `?event=` opens the rail on one event, the way the roster's `?player=`
+  // does; the component ignores an id that names no row.
+  const { event: eventParam } = await searchParams;
+  const initialSelectedId = typeof eventParam === "string" ? eventParam : null;
 
   const opponents = await getOpponentPrograms(
     [...schedule.entriesByEvent.values()].flatMap((entries) =>
@@ -85,6 +94,7 @@ export default async function SchedulePage() {
       canAddOwnMatch={canUploadForProgram(active)}
       programName={active.name}
       opponents={opponents}
+      initialSelectedId={initialSelectedId}
     />
   );
 }

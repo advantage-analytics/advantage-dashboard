@@ -356,6 +356,21 @@
   animation: page-enter 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
 }
 
+/* The 340px rail beside a table — the roster's player drawer and the
+   schedule's event drawer share this pair (Updated Design System 20f): "the
+   drawer slides in from the right edge over 200ms (--ease-primary), the table
+   reflows to the remaining width". Width is what animates, because the reflow
+   is the point: a transform would slide the panel over a table that had
+   already jumped. Named for the roster, where it was first built. */
+@keyframes roster-drawer-in {
+  from { width: 0; }
+  to { width: 340px; }
+}
+@keyframes roster-drawer-out {
+  from { width: 340px; }
+  to { width: 0; }
+}
+
 /* Upload modal animations */
 @keyframes fadeIn {
   from { opacity: 0; }

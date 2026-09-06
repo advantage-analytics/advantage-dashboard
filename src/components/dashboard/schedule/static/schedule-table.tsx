@@ -43,7 +43,8 @@ export function ScheduleTable({
   rows: ScheduleRow[];
   details: Record<string, EventDetail>;
   selectedId: string | null;
-  onSelect: (eventId: string) => void;
+  /** `viaKeyboard` is true for Enter/Space, so the rail can take focus. */
+  onSelect: (eventId: string, viaKeyboard: boolean) => void;
 }) {
   return (
     <div className="surface-card min-w-0 px-6 pb-1.5 pt-0.5">
@@ -75,6 +76,11 @@ export function ScheduleTable({
   );
 }
 
+/** The DOM id of one event's row — for focus return and `scrollIntoView` from the rail. */
+export function scheduleRowId(eventId: string): string {
+  return `schedule-row-${eventId}`;
+}
+
 /** The artboard's seven columns, unchanged between `Tc2` and `Tc2c`. */
 const GRID =
   "grid-cols-[84px_minmax(150px,1fr)_88px_56px_56px_48px_64px]";
@@ -88,7 +94,7 @@ function EventRow({
   row: ScheduleRow;
   detail: EventDetail | null;
   isSelected: boolean;
-  onSelect: (eventId: string) => void;
+  onSelect: (eventId: string, viaKeyboard: boolean) => void;
 }) {
   const outcome = rowOutcome(row, detail);
   const isDual = row.kind === "dual";
@@ -96,8 +102,11 @@ function EventRow({
   return (
     <button
       type="button"
+      id={scheduleRowId(row.id)}
       aria-pressed={isSelected}
-      onClick={() => onSelect(row.id)}
+      // A keyboard "click" (Enter/Space on the button) arrives with detail 0;
+      // a pointer click with the click count. One handler, both tell.
+      onClick={(event) => onSelect(row.id, event.detail === 0)}
       className={cn(
         "-mx-4 grid h-[52px] w-[calc(100%+32px)] cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] px-4 text-left",
         "transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)]",

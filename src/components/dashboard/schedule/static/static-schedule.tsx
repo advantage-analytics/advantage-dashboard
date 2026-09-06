@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { AnimatePresence } from "framer-motion";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Check, ChevronDown, Filter as FilterIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -9,8 +8,14 @@ import {
   MatchesFilterPanel,
   type FilterPanelSection,
 } from "@/components/dashboard/matches/matches-filter-panel";
-import { EventDrawer } from "@/components/dashboard/schedule/static/event-drawer";
-import { ScheduleTable } from "@/components/dashboard/schedule/static/schedule-table";
+import {
+  DRAWER_ATTR,
+  EventDrawer,
+} from "@/components/dashboard/schedule/static/event-drawer";
+import {
+  ScheduleTable,
+  scheduleRowId,
+} from "@/components/dashboard/schedule/static/schedule-table";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 /**
@@ -64,20 +69,19 @@ interface Facets {
  * ── Selection ─────────────────────────────────────────────────────────────
  * A row click moves one piece of local state and nothing else: no route
  * change, no fetch. The route hands down every event's detail with the rows,
- * so the drawer, and stepping through the season with its ‹ › controls, is a
- * `useState` and no round trip. The drawer counts its position within the
- * list ON SCREEN — "2 / 8" is two of the eight the chips and filters left —
- * and a cut that drops the selected event closes the drawer rather than
- * leaving it describing a row that is no longer there.
+ * so the rail, and stepping through the season with ‹ › or ↑ ↓, is a
+ * `useState` and no round trip. The rail counts its position within the list
+ * ON SCREEN — "2 / 8" is two of the eight the chips and filters left — and a
+ * cut that drops the selected event closes the rail rather than leaving it
+ * describing a row that is no longer there.
  *
- * **Every selection goes through `select()`**, which is also where the rail's
- * motion direction is decided: it compares the incoming row's position with
- * the one on screen and hands the rail +1 or -1, so the rail's body enters
- * from the side the season moved. The rail cannot work that out for itself
- * without keeping a previous-value ref, and the intent lives here anyway —
- * this is the function that knows a click came from a row further down the
- * table. Opening from nothing is direction 0, so the body simply fades while
- * the panel does the arriving.
+ * The selection machinery is the roster's, so the two rails behave as one:
+ * clicking the selected row again closes the rail; `selectedId` is the row's
+ * wash and `drawerId` is what the rail shows, which differ only while the
+ * slide-out plays; `?event=` mirrors the selection so a link can open the
+ * rail. Esc and the arrows are a window listener that stands down for fields,
+ * open menus and modal dialogs — the rail's own `role="dialog"` is told from
+ * those by `DRAWER_ATTR`.
  *
  * ── Upcoming and Completed ────────────────────────────────────────────────
  * By the calendar, not by played lines: an event whose last day is still
@@ -105,6 +109,7 @@ export function StaticSchedule({
   canAddOwnMatch,
   programName,
   opponents,
+  initialSelectedId,
 }: {
   schedule: ScheduleData;
   /**
@@ -127,11 +132,20 @@ export function StaticSchedule({
   programName: string;
   /** `getOpponentPrograms()` upstream — the conference under an opponent's name. */
   opponents: Record<string, OpponentProgram>;
+  /** `?event=` from the URL, or null. Ignored unless it names a row. */
+  initialSelectedId: string | null;
 }) {
   const { rows, details } = schedule;
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [direction, setDirection] = useState(0);
+  const initial =
+    initialSelectedId && rows.some((row) => row.id === initialSelectedId)
+      ? initialSelectedId
+      : null;
+  const [selectedId, setSelectedId] = useState<string | null>(initial);
+  const [drawerId, setDrawerId] = useState<string | null>(initial);
+  const [closing, setClosing] = useState(false);
+  const [openedByKeyboard, setOpenedByKeyboard] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [lifecycle, setLifecycle] = useState<Lifecycle>("all");
   const [facets, setFacets] = useState<Facets>({ kind: null, site: null });
   const [sort, setSort] = useState<SortOrder>("newest");
@@ -151,27 +165,65 @@ export function StaticSchedule({
     [faceted, lifecycle, sort, today]
   );
 
-  const selectedIndex =
-    selectedId === null ? -1 : visible.findIndex((row) => row.id === selectedId);
-  const selected =
-    selectedIndex === -1 ? null : (details[visible[selectedIndex].id] ?? null);
+  const drawer = drawerId ? (details[drawerId] ?? null) : null;
+  const drawerIndex = drawerId
+    ? visible.findIndex((row) => row.id === drawerId)
+    : -1;
 
-  /**
-   * Open the rail on one event, and record which way the season just moved.
-   *
-   * One path for all three ways a selection changes — a row click, a ‹ › step,
-   * and clicking another row while the rail is already open — so the direction
-   * is right for every one of them rather than only for the stepper.
-   */
-  function select(eventId: string) {
-    const nextIndex = visible.findIndex((row) => row.id === eventId);
-    setDirection(
-      selectedIndex === -1 || nextIndex === -1
-        ? 0
-        : Math.sign(nextIndex - selectedIndex)
-    );
+  const finishClose = useCallback(() => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+    setDrawerId(null);
+    setClosing(false);
+  }, []);
+
+  const select = useCallback((eventId: string, viaKeyboard: boolean) => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+    setClosing(false);
     setSelectedId(eventId);
-  }
+    setDrawerId(eventId);
+    setOpenedByKeyboard(viaKeyboard);
+    syncUrl(eventId);
+  }, []);
+
+  const close = useCallback(
+    (returnFocusTo: string | null) => {
+      setSelectedId(null);
+      setClosing(true);
+      syncUrl(null);
+      // `onAnimationEnd` normally finishes this; the timer covers reduced
+      // motion, where no animation runs, and is harmless when both fire.
+      closeTimer.current = setTimeout(finishClose, 240);
+      if (returnFocusTo) {
+        document.getElementById(scheduleRowId(returnFocusTo))?.focus();
+      }
+    },
+    [finishClose]
+  );
+
+  /** A row click: open the rail on it, or close the rail if it is already there. */
+  const toggle = useCallback(
+    (eventId: string, viaKeyboard: boolean) => {
+      if (selectedId === eventId) close(viaKeyboard ? eventId : null);
+      else select(eventId, viaKeyboard);
+    },
+    [selectedId, select, close]
+  );
+
+  const step = useCallback(
+    (delta: -1 | 1) => {
+      if (!selectedId) return;
+      const index = visible.findIndex((row) => row.id === selectedId);
+      const next = visible[index + delta];
+      if (!next) return;
+      select(next.id, true);
+      document
+        .getElementById(scheduleRowId(next.id))
+        ?.scrollIntoView({ block: "nearest" });
+    },
+    [visible, selectedId, select]
+  );
 
   /**
    * Every cut goes through here so a selection the cut drops is cleared in
@@ -190,22 +242,61 @@ export function StaticSchedule({
       nextSort
     );
     if (selectedId !== null && !nextVisible.some((row) => row.id === selectedId)) {
-      setSelectedId(null);
+      close(null);
     }
     if (next.lifecycle !== undefined) setLifecycle(next.lifecycle);
     if (next.facets !== undefined) setFacets(next.facets);
     if (next.sort !== undefined) setSort(next.sort);
   }
 
-  // Esc closes the drawer — the tooltip on its close control says so.
+  // The row the rail showed is gone — a cut, or data that changed underneath.
+  // Adjusted during render rather than in an effect, so nothing paints a rail
+  // for a row that no longer exists.
+  if (drawerId && !drawer) {
+    setSelectedId(null);
+    setDrawerId(null);
+    setClosing(false);
+  }
+
   useEffect(() => {
-    if (selectedId === null) return;
+    return () => {
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedId) return;
+
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setSelectedId(null);
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey)
+        return;
+      // `instanceof`, not a cast: a keydown dispatched on `window` or
+      // `document` has no `closest`, and the guard must stand down rather
+      // than throw.
+      const target = event.target instanceof Element ? event.target : null;
+      if (target) {
+        if (target.closest("input, textarea, select, [contenteditable=true]"))
+          return;
+        if (target.closest(`[role="dialog"]:not([${DRAWER_ATTR}] [role="dialog"])`))
+          return;
+        if (target.closest("[data-radix-popper-content-wrapper]")) return;
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close(selectedId);
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        step(1);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        step(-1);
+      }
     }
+
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedId]);
+  }, [selectedId, close, step]);
 
   const hasFacets = facets.kind !== null || facets.site !== null;
 
@@ -226,8 +317,8 @@ export function StaticSchedule({
       : null;
 
   return (
-    <div className="flex min-h-0 w-full flex-1 bg-[var(--surface-card)]">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-[18px] overflow-y-auto px-7 pb-6 pt-7">
+    <div className="flex w-full flex-1 bg-[var(--surface-card)]">
+      <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-7 pb-6 pt-7">
         {/* Title slot with summary, ghost Import beside primary New event. */}
         <div className="flex items-end gap-2.5">
           <div>
@@ -368,7 +459,7 @@ export function StaticSchedule({
                 rows={visible}
                 details={details}
                 selectedId={selectedId}
-                onSelect={select}
+                onSelect={toggle}
               />
             )}
           </>
@@ -392,25 +483,20 @@ export function StaticSchedule({
         </div>
       </div>
 
-      {/* `initial={false}` so a page that loads with no selection has nothing
-          to play, and the rail only ever animates in answer to a click. */}
-      <AnimatePresence initial={false}>
-        {selected ? (
-          <EventDrawer
-            detail={selected}
-            opponent={opponentOf(selected, opponents)}
-            index={selectedIndex}
-            total={visible.length}
-            stepDirection={direction}
-            onStep={(delta) => {
-              const next = visible[selectedIndex + delta];
-              if (next) select(next.id);
-            }}
-            onClose={() => setSelectedId(null)}
-            canEdit={canCreate}
-          />
-        ) : null}
-      </AnimatePresence>
+      {drawer ? (
+        <EventDrawer
+          detail={drawer}
+          opponent={opponentOf(drawer, opponents)}
+          index={drawerIndex}
+          total={visible.length}
+          closing={closing}
+          autoFocus={openedByKeyboard}
+          onStep={step}
+          onClose={() => close(drawerId)}
+          onClosed={finishClose}
+          canEdit={canCreate}
+        />
+      ) : null}
     </div>
   );
 }
@@ -749,4 +835,20 @@ function tabularNumerals(text: string): React.ReactNode[] {
         part
       )
     );
+}
+
+/**
+ * Mirror the selection into `?event=` without a navigation.
+ *
+ * `history.replaceState` rather than `router.replace`: the App Router treats
+ * the latter as a navigation and re-renders from the server, which for a click
+ * on a row is a round trip to change one query string. The native call is one
+ * the router listens to, so `useSearchParams` elsewhere still sees it.
+ */
+function syncUrl(eventId: string | null) {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (eventId) url.searchParams.set("event", eventId);
+  else url.searchParams.delete("event");
+  window.history.replaceState(window.history.state, "", url);
 }
