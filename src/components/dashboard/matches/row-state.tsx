@@ -117,22 +117,22 @@ export function RowLifecycle({
     if (status === "uploading") {
       const percent = analysis.uploadPercent;
       return (
-        /* The track is exactly as wide as the words it measures — `items-stretch`
-           on an inline-flex column, so the rule takes the label's width rather
-           than one of its own. That is what makes it read as the label's own
-           underline instead of a bar that happens to sit nearby.
-           `justify-self-start` is what makes that true: a grid item stretches
-           across its track by default, which handed the column its full width
-           and the rule with it. */
-        <span className="inline-flex flex-col items-stretch gap-[5px] justify-self-start">
-          {/* `tabular` and the 89px floor together hold the track still.
-              Without them it is sized by the label, and the label grows as the
-              number gains digits — "Uploading 5%" measures 74px, "46%" 81px,
-              "100%" 88px — so the track lengthened as the upload ran and
-              jumped at each digit boundary, re-scaling the fill under itself.
-              A progress bar whose own length is a variable cannot be read.
-              89px is "Uploading 100%" in tabular figures, rounded up. */}
-          <span className="tabular min-w-[89px] text-[11px] leading-none text-[var(--blue)]">
+        /* Label over track, both taking the cell's width up to a cap. The
+           track was matched to the label at first, which bound the two
+           tightly — and made the bar 89px, too short to read a change in. It
+           takes the column now and stops at 280px, because a 3px rule running
+           the whole of a 391px cell on a large display starts to read as a
+           divider in a table that has none.
+
+           What the earlier version was protecting still holds, differently:
+           the track's length must not move DURING an upload. It is the cell's
+           width now, and the cell is a fixed track for any one viewport, so it
+           does not. */
+        <span className="flex w-full max-w-[280px] flex-col items-stretch gap-[5px]">
+          {/* `tabular` so the label itself does not shimmer as the digits
+              change — the track no longer depends on its width, but the number
+              is still read while it moves. */}
+          <span className="tabular text-[11px] leading-none text-[var(--blue)]">
             {percent === undefined
               ? ANALYSIS_LABEL.uploading
               : `${ANALYSIS_LABEL.uploading} ${Math.round(percent)}%`}
