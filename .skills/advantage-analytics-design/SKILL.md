@@ -1358,12 +1358,17 @@ one: "All matches" on matches, "0 sessions · last 12 months" on Activity,
 
 *The court levels the columns.* It is the only continuous dimension on the
 page — every other region's height is set by its content — so it is the one
-knob that squares the two columns without stretching a card, which traps
-empty surface and reads worse than a ragged edge. **227px** at the current
-composition: at 270 the right column ran 998 against the left's 966, and the
-court's 1.274 aspect turns a pixel of height into 1.27 of width. It is a
-measured number, not a chosen one — re-measure when either column's content
-changes, since one ghost row is 55px and a line in the Focus card is ~15px.
+region that can absorb the difference between the columns without trapping
+empty surface: a bigger court is still a court. **It fills, it is not capped.**
+The grid runs `items-stretch`, the day-zero serve card takes `flex-1` in its
+column, and the court sits absolutely inside a `flex-1 min-h-0` slot sized by
+height (`h-full w-auto`), so it never contributes its own intrinsic size to
+the row. A fixed width cap was tried first and failed: the left column's
+height moves with the sidebar, because the heatmap's cells scale with its
+width, so a cap that levelled the 64px rail hung 23px low with the 232px
+panel open. Measured after: 0px between the columns' bottoms at 1440 with the
+rail, 1440 and 1280 and 1920 with the panel, and 1024 with the rail; the court
+runs from 156 to 253px across those.
 
 **Next fixture card** — the claimed player's one forward-looking object.
 Eyebrow middot-joins the stakes ("Next · B1G Conference" only when it's

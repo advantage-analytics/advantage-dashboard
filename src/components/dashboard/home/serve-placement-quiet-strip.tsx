@@ -78,6 +78,7 @@ export function ServePlacementQuietStrip({
   contextLabel,
   awaitingReport = false,
   statisticsHref = "/dashboard/statistics",
+  fill = false,
 }: {
   zoneStats: Record<ZoneKey, ZoneStats> | null;
   /** "last 4 matches" — shown only over bars it describes. */
@@ -90,9 +91,28 @@ export function ServePlacementQuietStrip({
    */
   awaitingReport?: boolean;
   statisticsHref?: string;
+  /**
+   * Grow to the bottom of the column and let the empty court fill the room.
+   *
+   * On day zero the two columns should bottom out together, and the court is
+   * the one region that can absorb the difference without trapping empty
+   * surface — a bigger court is still a court. The left column's height moves
+   * with the sidebar, because the heatmap's cells scale with its width, so a
+   * fixed court cap that levelled one sidebar state hung 20-odd pixels low in
+   * the other. Here the card takes the column's leftover height and the court
+   * is sized by that height rather than by a width.
+   *
+   * The court is positioned absolutely inside its slot so its intrinsic size
+   * never contributes to the card's natural height — otherwise the right
+   * column could set the row height and the LEFT column would gain the slack.
+   */
+  fill?: boolean;
 }) {
   return (
-    <div className="surface-card flex flex-col gap-3" style={{ padding: "18px 20px" }}>
+    <div
+      className={`surface-card flex flex-col gap-3${fill ? " min-h-0 flex-1" : ""}`}
+      style={{ padding: "18px 20px" }}
+    >
       <div className="flex items-baseline gap-2">
         <span className="eyebrow">Serve placement</span>
         <div className="flex-1" />
@@ -133,7 +153,13 @@ export function ServePlacementQuietStrip({
         // data it lacks; this one shows the object in its empty state, the way
         // an empty inbox shows the inbox rather than a grey rectangle.
         <>
-          <ServePlacementCourt />
+          {fill ? (
+            <div className="relative min-h-0 flex-1">
+              <ServePlacementCourt className="absolute inset-y-0 left-1/2 h-full w-auto max-w-full -translate-x-1/2" />
+            </div>
+          ) : (
+            <ServePlacementCourt />
+          )}
           <span className="text-micro">
             {awaitingReport
               ? "Your serve map fills in when the first report lands."

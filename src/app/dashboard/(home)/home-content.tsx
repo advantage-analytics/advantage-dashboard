@@ -77,8 +77,13 @@ export default function HomeContent({
 
   // The card grid, composed once. Day zero renders it behind the offer at a
   // third opacity; every other state renders it as the page.
+  //
+  // `items-stretch`, not `items-start`: both columns take the row's height,
+  // which lets the day-zero serve card grow to the bottom of its column.
+  // Nothing else grows — a column's cards keep their natural heights, and any
+  // slack is invisible because the column has no surface of its own.
   const grid = (
-    <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_348px]">
+    <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-[minmax(0,1fr)_348px]">
       <motion.div
         initial={skipAnimation ? false : { opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -124,7 +129,7 @@ export default function HomeContent({
             </FocusCard>
           )
         )}
-        <ServePlacementHome userId={userId} />
+        <ServePlacementHome userId={userId} fill={!hasMatches} />
       </motion.div>
     </div>
   );

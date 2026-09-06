@@ -36,7 +36,14 @@ type ShotRow = {
   } | null;
 };
 
-export default function ServePlacementHome({ userId }: { userId: string }) {
+export default function ServePlacementHome({
+  userId,
+  fill = false,
+}: {
+  userId: string;
+  /** Day zero: grow to the column and let the court fill it — see the strip. */
+  fill?: boolean;
+}) {
   const [dots, setDots] = useState<ServeDot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -176,6 +183,7 @@ export default function ServePlacementHome({ userId }: { userId: string }) {
       // Matches exist but none has a mapped serve yet: the first report is
       // still in the pipeline, or the imports carried no shot coordinates.
       awaitingReport={matchCount > 0}
+      fill={fill}
     />
   );
 }

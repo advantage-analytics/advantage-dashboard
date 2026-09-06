@@ -15,22 +15,24 @@
  * Lines only, no fill, no zone names: one weight for the court with the net a
  * shade stronger, because the net is the edge every serve is measured against.
  *
- * Capped rather than filling the card, and the cap is what levels the two
- * columns. The court is the only continuous dimension on Home — every other
- * region's height is set by its content — so it is the one knob that can be
- * turned without stretching a card, which traps empty surface at the bottom
- * and reads worse than a ragged edge.
- *
- * 227px is measured, not chosen: at 270 the right column ran 998px against
- * the left's 966 and hung 32px lower, and the court's 1.274 aspect turns 32px
- * of height into 41px of width. Re-measure it if the left column's content
- * changes — a ghost row added or dropped moves it by 55px.
+ * Sized by its caller. The court is the only continuous dimension on Home —
+ * every other region's height is set by its content — so it is the one thing
+ * that can level the two columns without stretching a card into trapped
+ * surface. How it does that is the caller's decision: the default here is a
+ * width cap for a card that sizes itself; the day-zero strip instead lets the
+ * court fill whatever height its column leaves, because the left column's
+ * height moves with the sidebar (the heatmap's cells scale with its width)
+ * and no single cap levels both states.
  */
-export function ServePlacementCourt() {
+export function ServePlacementCourt({
+  className = "mx-auto block h-auto w-full max-w-[270px]",
+}: {
+  className?: string;
+}) {
   return (
     <svg
       viewBox="-2 -2 451 354"
-      className="mx-auto block h-auto w-full max-w-[227px]"
+      className={className}
       role="img"
       aria-label="Half court diagram with the six serve zones marked"
     >
