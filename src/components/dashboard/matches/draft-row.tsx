@@ -3,12 +3,16 @@
 /**
  * DraftRow — a saved upload at the top of the Matches table (design 11c).
  *
- * The same seven columns as a match row, with the honest gaps: Result and
- * Score read an em-dash because there is nothing yet, the player carries a
- * grey Draft StatePill (a row's exception is a grey pill, never a colour),
- * and the lifecycle cell holds the only action that matters — Resume · step 3
- * of 4 — so you know how much is left before you click. The row's ⋯ menu
- * holds Discard, last and with the consequence spelled out.
+ * The same eight tracks as a match row, with the honest gaps: Result and Score
+ * read an em-dash because there is nothing yet, and the opponent carries a grey
+ * Draft pill — a row's exception is a grey pill, never a colour, which is what
+ * separates it from the blue "New". Round has no answer either, so the Event
+ * cell carries the one thing a draft can say.
+ *
+ * The one thing a draft has that a match does not is how far through it is, and
+ * that is the whole of what its Event cell says: "Resume · step 3 of 4", so you
+ * know what is left before you click. The ⋯ menu holds Discard with the
+ * consequence spelled out, in the same lane every row's menu uses.
  */
 
 import { useState, useTransition } from "react";
@@ -23,7 +27,7 @@ import {
 import { StatePill } from "@/components/ui/state-pill";
 import { deleteMatchDraft, type DraftRow as DraftRowData } from "@/lib/wizard/actions";
 import { formatShortDate } from "@/lib/ui/date-format";
-import { LIST_GRID_COLS, LIST_ROW_FRAME } from "./match-card-list";
+import { ACTIONS_LANE, LIST_GRID_COLS, LIST_ROW_FRAME } from "./match-card-list";
 
 export type { DraftRowData };
 
@@ -58,7 +62,19 @@ export function DraftRow({
       style={LIST_GRID_COLS}
       role="row"
     >
-      <span className="text-micro">—</span>
+      {/* Date — when the draft was last touched. */}
+      <span className="tabular whitespace-nowrap text-[12px]" style={{ color: "var(--ink-700)" }}>
+        {formatShortDate(draft.updatedAt)}
+      </span>
+
+      {/* Event — the draft's own progress, which is the only thing it can say
+          about itself that a finished match row cannot. */}
+      <Link
+        href={resumeHref}
+        className="relative z-[1] min-w-0 truncate text-[12px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+      >
+        Resume · step {draft.stepIndex + 1} of {draft.stepCount}
+      </Link>
 
       <Link
         href={resumeHref}
@@ -70,37 +86,18 @@ export function DraftRow({
         <StatePill className="shrink-0">Draft</StatePill>
       </Link>
 
-      <span className="text-micro">—</span>
+      <span className="text-micro justify-self-center" style={{ color: "var(--ink-300)" }}>—</span>
+      <span className="text-micro" style={{ color: "var(--ink-300)" }}>—</span>
+      <span />
 
-      <span className="min-w-0 truncate text-[12px] text-[var(--ink-600)]">
-        {draft.eventLabel ?? (draft.fileName ? draft.fileName : "")}
-      </span>
-
-      <span className="relative z-[1] min-w-0">
-        <Link
-          href={resumeHref}
-          className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-        >
-          Resume · step {draft.stepIndex + 1} of {draft.stepCount}
-        </Link>
-      </span>
-
-      <span className="text-micro tabular text-right">{formatShortDate(draft.updatedAt)}</span>
-
-      {/* The chevron at rest; the ⋯ menu on hover, the same slot. */}
-      <span className="relative z-[1] flex items-center justify-end">
-        <ChevronRight
-          className="size-[13px] text-[var(--ink-300)] group-hover:hidden"
-          strokeWidth={1.5}
-          aria-hidden="true"
-        />
+      <span className={ACTIONS_LANE}>
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger
             aria-label="Draft actions"
             onClick={(e) => e.stopPropagation()}
-            className={`hidden size-7 items-center justify-center rounded-[var(--radius-element)] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] group-hover:inline-flex data-[state=open]:inline-flex data-[state=open]:bg-[var(--surface-subtle)] focus-visible:outline-none`}
+            className="inline-flex size-7 items-center justify-center rounded-[var(--radius-element)] bg-[var(--surface-subtle)] text-[var(--ink-500)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)] focus-visible:outline-none data-[state=open]:text-[var(--ink-900)]"
           >
-            <MoreHorizontal className="size-3.5" strokeWidth={1.5} />
+            <MoreHorizontal className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
           </PopoverTrigger>
           <PopoverContent
             align="end"
@@ -125,6 +122,12 @@ export function DraftRow({
           </PopoverContent>
         </Popover>
       </span>
+
+      <ChevronRight
+        className="size-[13px] text-[var(--ink-300)]"
+        strokeWidth={1.5}
+        aria-hidden="true"
+      />
     </div>
   );
 }

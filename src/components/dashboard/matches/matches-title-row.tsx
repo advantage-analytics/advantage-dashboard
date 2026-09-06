@@ -22,7 +22,8 @@ export function MatchesTitleRow({
   const [dateText, setDateText] = useState("");
   useEffect(() => {
     setDateText(
-      new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })
+      // "Monday, Aug 24" — the frame's short month (Platform Audit Pb2).
+      new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })
     );
   }, []);
 
