@@ -6,5 +6,5 @@ import { redirect } from "next/navigation";
  * menu still points here, and this keeps that link — and any bookmark — working.
  */
 export default function TeamSettingsRedirect() {
-  redirect("/dashboard/settings/team");
+  redirect("/dashboard/settings/teams");
 }

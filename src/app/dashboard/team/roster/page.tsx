@@ -291,7 +291,7 @@ export default async function RosterPage({
           {canManage && (
             <RowAction
               key="manage"
-              href="/dashboard/settings/team"
+              href={`/dashboard/settings/teams/${active.id}`}
               ariaLabel="Manage staff in Team settings"
               className="whitespace-nowrap"
             >
