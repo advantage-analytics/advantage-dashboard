@@ -1,7 +1,7 @@
 import { Activity } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { getActivityFeed } from "@/lib/data/activity-server";
+import { getActivityFeed, getElsewhereWork } from "@/lib/data/activity-server";
 import { getPendingInvites } from "@/lib/data/pending-invites-server";
 import { ActivityTray } from "./activity-tray";
 
@@ -22,20 +22,26 @@ import { ActivityTray } from "./activity-tray";
  * you have not joined belongs to no workspace at all, so it has to show in
  * whichever one happens to be active or it shows nowhere. `getPendingInvites`
  * returns `[]` on a read failure, so this second query cannot take the header
- * down with it — and the two run together rather than in sequence, since the
- * tray needs both before it renders either.
+ * down with it — and the reads run together rather than in sequence, since the
+ * tray needs all of them before it renders any.
+ *
+ * The third read is the other workspaces' in-flight counts. The feed is scoped
+ * to the active workspace on purpose; this is what lets the tray say "1 upload
+ * running in Personal" from inside a program instead of showing nothing at
+ * all. See `getElsewhereWork` for the cost.
  */
 export async function ActivityTrayLoader() {
   const workspace = await getWorkspaceContext();
   if (!workspace) return <ActivityTrayFallback />;
 
   const supabase = await createClient();
-  const [feed, invites] = await Promise.all([
+  const [feed, invites, elsewhere] = await Promise.all([
     getActivityFeed(supabase, workspace.active),
     getPendingInvites(supabase),
+    getElsewhereWork(supabase, workspace.active, workspace.available),
   ]);
 
-  return <ActivityTray feed={feed} invites={invites} />;
+  return <ActivityTray feed={feed} invites={invites} elsewhere={elsewhere} />;
 }
 
 /**

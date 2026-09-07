@@ -11,10 +11,19 @@
  * decide something; in-flight work resolves on its own whether or not anybody
  * looks. A person who has both wants to read the one with a button first.
  *
+ * Work in a workspace the viewer is NOT looking at comes last, and only as a
+ * count: the tray is scoped to the active workspace on purpose, so this is the
+ * one place the header admits the other workspaces exist. It is what the
+ * trigger's hollow ring means when nothing local is moving.
+ *
  * No React, no Next, no tokens: the whole point is that a spec can assert the
  * exact strings without rendering anything.
  */
-export function trayDetail(inviteCount: number, inFlightCount: number): string {
+export function trayDetail(
+  inviteCount: number,
+  inFlightCount: number,
+  elsewhereCount = 0
+): string {
   const parts: string[] = [];
 
   if (inviteCount > 0) {
@@ -25,6 +34,10 @@ export function trayDetail(inviteCount: number, inFlightCount: number): string {
 
   if (inFlightCount > 0) {
     parts.push(`${inFlightCount} in flight`);
+  }
+
+  if (elsewhereCount > 0) {
+    parts.push(`${elsewhereCount} elsewhere`);
   }
 
   // "Nothing in flight" is the tray's own empty state, said in the tooltip's

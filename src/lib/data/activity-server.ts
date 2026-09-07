@@ -23,6 +23,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   type MatchAnalysis,
+  isInFlight,
   pipelinePercent,
   resolveAnalysisStatus,
 } from './match-analysis';
@@ -55,6 +56,60 @@ export interface ActivityItem {
 
 export interface ActivityFeed {
   items: ActivityItem[];
+}
+
+/**
+ * Work moving in a workspace the viewer is NOT looking at.
+ *
+ * The feed above is scoped to the active workspace, and that is correct — a
+ * coach in their personal workspace must not see the program's uploads
+ * interleaved with their own. The cost of that correctness is that an upload
+ * running in the other workspace is invisible, dot and all. This is the one
+ * row that admits it exists: a count and a name, never the items themselves.
+ */
+export interface ElsewhereWork {
+  workspaceId: string;
+  workspaceName: string;
+  /** In-flight jobs only. Settled work elsewhere is nobody's business here. */
+  count: number;
+}
+
+/**
+ * In-flight counts for every workspace other than the active one.
+ *
+ * Reuses `getActivityFeed` per workspace rather than a second query shape, so
+ * the scoping rule — team on `program_id`, personal on `created_by` plus a
+ * null `program_id` — exists exactly once. One round trip per other workspace;
+ * a real viewer holds two or three, and the whole thing streams inside the
+ * tray's Suspense boundary, off the shell's critical path. Workspaces with
+ * nothing moving are dropped here so the tray never renders "0 running in".
+ */
+export async function getElsewhereWork(
+  supabase: SupabaseClient,
+  active: Workspace,
+  available: readonly Workspace[]
+): Promise<ElsewhereWork[]> {
+  const others = available.filter((workspace) => workspace.id !== active.id);
+  if (others.length === 0) return [];
+
+  const feeds = await Promise.all(
+    others.map((workspace) => getActivityFeed(supabase, workspace))
+  );
+
+  const elsewhere: ElsewhereWork[] = [];
+  for (let i = 0; i < others.length; i++) {
+    const count = feeds[i].items.filter((item) =>
+      isInFlight(item.analysis.status)
+    ).length;
+    if (count > 0) {
+      elsewhere.push({
+        workspaceId: others[i].id,
+        workspaceName: others[i].name,
+        count,
+      });
+    }
+  }
+  return elsewhere;
 }
 
 /** Fits two names into a ~300px row that also carries a timestamp. */
