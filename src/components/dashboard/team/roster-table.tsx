@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Reorder, useReducedMotion } from "framer-motion";
+import { AnimatePresence, Reorder, useReducedMotion } from "framer-motion";
 import { GitMerge, GripVertical } from "lucide-react";
 import { BENCH, sequenceFrom } from "@/lib/data/lineup-draft";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -106,6 +106,12 @@ import type {
  */
 const EASE_OUT_EXPO = [0.23, 1, 0.32, 1] as const;
 const ROW_SLIDE = { duration: 0.22, ease: EASE_OUT_EXPO };
+/**
+ * The bench divider leaving. Exits are faster than arrivals — the mode is
+ * over, and the eye is already back on the rows — so this undercuts
+ * `ROW_SLIDE` rather than mirroring it.
+ */
+const DIVIDER_OUT = { duration: 0.16, ease: EASE_OUT_EXPO };
 
 /**
  * How a released row settles into its slot. framer's default is an inertia
@@ -706,6 +712,18 @@ export function RosterTable({
           values={sequence}
           onReorder={onReorder}
         >
+          {/* The one child that comes and goes on its own is the bench divider:
+              the editor's sequence always carries it (a benched player needs
+              somewhere to land) while the resting table only draws it over a
+              bench with somebody on it. With nobody benched, entering and
+              leaving the mode used to add and remove ~40px in one frame — the
+              table's height snapped and everything under it jumped, while the
+              rows themselves slid on `ROW_SLIDE`. The divider now grows and
+              collapses as a row, height and opacity together, so the card
+              changes height continuously and the page follows it. Rows never
+              unmount here (a lineup reorders, it does not delete), so the
+              presence wrapper only ever has this one exit to run. */}
+          <AnimatePresence initial={false}>
           {sequence.map((id, index) => {
             if (id === BENCH) {
               return (
@@ -717,11 +735,23 @@ export function RosterTable({
                   value={BENCH}
                   dragListener={false}
                   layout="position"
-                  transition={{ layout: reduceMotion ? { duration: 0 } : ROW_SLIDE }}
+                  /* Height, not a transform: a transform would slide the label
+                     while the space it occupied stayed open, and the whole
+                     point is the space. `border-box` puts the padding inside
+                     `height`, so 0 → auto collapses the row entirely. Bounded
+                     to this one line of text, once per mode change. */
+                  initial={reduceMotion ? false : { opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={
+                    reduceMotion
+                      ? { opacity: 0, transition: { duration: 0 } }
+                      : { opacity: 0, height: 0, transition: DIVIDER_OUT }
+                  }
+                  transition={reduceMotion ? { duration: 0 } : ROW_SLIDE}
                   /* gap-1.5 (6px) picked by eye at 11px against the eyebrow — the
                      em dash is its own aria-hidden span so this one gap value
                      produces equal spacing on both sides of it. */
-                  className="flex select-none items-center gap-1.5 pt-4 pb-2"
+                  className="flex select-none items-center gap-1.5 overflow-hidden pt-4 pb-2"
                 >
                   <span className="eyebrow-sm">Not in the lineup</span>
                   {lineup && (
@@ -773,6 +803,7 @@ export function RosterTable({
               />
             );
           })}
+          </AnimatePresence>
 
           {/* Invitations belong in this list, not under it: somebody a coach
               emailed on Monday is on the roster as far as the coach is
