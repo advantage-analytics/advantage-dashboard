@@ -59,7 +59,7 @@ need it.
 - **notes:** Non-goals: nothing rendered; the loader does not re-check match status.
 
 ## T4 · Move `presetFor` / `lineupChoices` into `src/lib/schedule/line-choices.ts`
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/lib/schedule/line-choices.ts (new), src/app/dashboard/team/upload/page.tsx, src/lib/data/schedule-server.ts, tests/line-choices.spec.ts (new)
 - **done when:**

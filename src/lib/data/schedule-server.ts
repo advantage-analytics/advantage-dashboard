@@ -520,3 +520,21 @@ export async function getOpponentPrograms(
   }
   return programs;
 }
+
+/** `programs.program_key` and school name, by id, for a dual's opponents. */
+export async function programNamesFor(
+  ids: string[]
+): Promise<Map<string, { key: string; school: string }>> {
+  const map = new Map<string, { key: string; school: string }>();
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return map;
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("programs")
+    .select("id, program_key, school_name")
+    .in("id", unique);
+  for (const row of (data ?? []) as { id: string; program_key: string; school_name: string }[]) {
+    map.set(row.id, { key: row.program_key, school: row.school_name });
+  }
+  return map;
+}
