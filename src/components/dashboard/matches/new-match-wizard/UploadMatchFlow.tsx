@@ -42,7 +42,8 @@ import { advButton } from "@/lib/ui/adv-button";
 import { AnalysisProgressTrack } from "../analysis-progress-track";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { usePublishHeaderStatus } from "@/components/dashboard/header-status";
-import { StepIndicator } from "./StepIndicator";
+import { WizardShell, CONTENT_CLS } from "./WizardShell";
+import { useWizardKeys } from "./useWizardKeys";
 import { SourceStepContent } from "./SourceStepContent";
 import { PinnedMatchContent } from "./PinnedMatchContent";
 import { FileStepContent } from "./FileStepContent";
@@ -52,9 +53,6 @@ import { PinnedLineBar } from "./PinnedLineBar";
 
 /** Where the flow returns to when it is dismissed or finished. */
 const PERSONAL_EXIT_HREF = "/dashboard/matches";
-
-/** The design's column: 720px of content inside 56px gutters. */
-const CONTENT_CLS = "mx-auto w-full max-w-[832px] px-14";
 
 /**
  * The missing-field label for `initialTopPlayerIsPlayer1`, matching
@@ -466,26 +464,6 @@ function UploadMatchSuccess({
 }
 
 /**
- * Does this element own its own Enter key?
- *
- * Used by both the footer hint (which swaps to the chord while you are typing)
- * and the Enter handler (which must not submit out from under a form control).
- * One rule, because two shapes of it in one file is how they drift.
- */
-function isFormControl(el: EventTarget | null): boolean {
-  const node = el as HTMLElement | null;
-  if (!node) return false;
-  const tag = node.tagName;
-  return (
-    tag === "INPUT" ||
-    tag === "TEXTAREA" ||
-    tag === "SELECT" ||
-    node.isContentEditable ||
-    node.getAttribute("role") === "combobox"
-  );
-}
-
-/**
  * The monthly allowance, in the footer beside the primary action.
  *
  * Cancel · divider · 3px bar in `--viz-you-mid` with the mono readout. It
@@ -877,347 +855,195 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     !formData.playerName.trim();
   const continueDisabled = stepBusy !== null || gatedByMissing || awaitingPlayer;
 
-  // Keyboard:
-  //   • Plain Enter advances the wizard when focus is outside form controls
-  //     (so score-entry and dropdowns keep their native Enter semantics —
-  //     focus chain in DetailsContent, opening selects, etc.).
-  //   • ⌘/Ctrl+Enter advances *focus* to the next field — same idea as Tab,
-  //     but reachable without the user having to retrain pinkies. Submitting
-  //     the wizard is reserved for the explicit Continue button so a fast-typed
-  //     chord can never skip a missed field.
-  //   • Esc steps back when there's a previous step. On the first step it does
-  //     nothing: leaving is a deliberate click, not a stray keypress.
-  useEffect(() => {
-    const focusNextField = () => {
-      // Walk forward through the step content's tabbables. When the user runs
-      // out of fields, fall through to the Continue button so the terminal
-      // chord lands on submit instead of silently no-op'ing.
-      const root = contentRef.current;
-      if (!root) return;
-      const list = Array.from(
-        root.querySelectorAll<HTMLElement>(
-          'a, button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        )
-      ).filter((el) => el.offsetParent !== null || el === document.activeElement);
-      const idx = list.indexOf(document.activeElement as HTMLElement);
-      if (idx === -1) return;
-      const inFieldNext = list[idx + 1];
-      if (inFieldNext) {
-        inFieldNext.focus();
-        // Select text inputs so the next keystroke replaces, matching the
-        // behavior of tabbing into a numeric score cell.
-        if (
-          inFieldNext instanceof HTMLInputElement &&
-          /text|number|search|email|url/i.test(inFieldNext.type || "text")
-        ) {
-          inFieldNext.select();
-        }
-        return;
-      }
-      // Walked past the last field — hand focus to Continue with a one-shot
-      // ring pulse so the chord-to-submit handoff isn't silent.
-      const cta = document.querySelector<HTMLElement>('[data-wizard-continue]:not([disabled])');
-      if (!cta) return;
-      cta.focus();
-      cta.classList.remove("animate-chord-pulse");
-      // Force a reflow so re-adding the class restarts the animation if it
-      // was already mid-flight from a prior chord press.
-      void cta.offsetWidth;
-      cta.classList.add("animate-chord-pulse");
-      const onEnd = () => {
-        cta.classList.remove("animate-chord-pulse");
-        cta.removeEventListener("animationend", onEnd);
-      };
-      cta.addEventListener("animationend", onEnd);
-    };
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      // Cheapest test first: this listener sees EVERY keystroke on the page, and
-      // only two keys can do anything below. Scanning the document for open
-      // popovers before this check meant paying two full-document
-      // querySelectors per character typed into the score boxes.
-      if (e.key !== "Escape" && e.key !== "Enter") return;
-
-      // An open menu owns the keyboard, and this runs in the CAPTURE phase to
-      // find out. Radix dismisses its popovers from a document-level listener,
-      // which fires before a window-level one — so by the time a bubble-phase
-      // handler saw the event, aria-expanded had already flipped back to false
-      // and Escape popped the wizard step as well as the menu it was aimed at.
-      // Capturing means the question "is something open?" is asked while the
-      // answer is still true, and the menu still gets its Escape afterwards.
-      const active = document.activeElement as HTMLElement | null;
-      if (
-        active?.tagName === "SELECT" ||
-        document.querySelector('[aria-expanded="true"]')
-      ) {
-        return;
-      }
-
-      if (e.key === "Escape" && step !== firstStep) {
-        e.preventDefault();
-        e.stopPropagation();
-        handleBack();
-        return;
-      }
-      if (e.key !== "Enter" || e.shiftKey || e.altKey) return;
-
-      if (e.metaKey || e.ctrlKey) {
-        e.preventDefault();
-        focusNextField();
-        return;
-      }
-
-      if (isFormControl(e.target)) return;
-      if (continueDisabled) return;
-      e.preventDefault();
-      continueHandler();
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [continueDisabled, continueHandler, step, firstStep, handleBack]);
+  useWizardKeys({
+    contentRef,
+    canGoBack: step !== firstStep,
+    onBack: handleBack,
+    continueDisabled,
+    onContinue: continueHandler,
+  });
 
   return (
-    <div className="flex min-h-[calc(100vh-44px)] flex-col">
-      {/* Full-bleed under the app header. Inside the content column it read as
-          a rule belonging to the title; spanning the pane it reads as chrome
-          measuring the whole flow. */}
-      <StepIndicator currentStep={currentStepIndex} totalSteps={progressTotalSteps} />
+    <WizardShell
+      stepIndex={currentStepIndex}
+      stepCount={progressTotalSteps}
+      title={title}
+      description={description}
+      pinned={
+        /* Step 1, already answered: the line this flow is filling, pinned. */
+        line && (
+          <PinnedLineBar
+            preset={line}
+            onSwitch={onSwitchPreset}
+            outsideHref="/dashboard/matches/new"
+          />
+        )
+      }
+      contentRef={contentRef}
+      contentKey={step}
+      contentClassName={step === "match" ? "mt-9" : "mt-[52px]"}
+      back={step !== firstStep ? handleBack : undefined}
+      cancelHref={exitHref}
+      meter={
+        /* Only where hours are spent, and only once the allowance is known:
+           an export costs nothing, and a bar that has to explain itself is
+           a bar that shouldn't be there. */
+        isProcessingProvider && remainingQuotaSeconds !== undefined && (
+          <FooterMeter
+            remainingSeconds={remainingQuotaSeconds}
+            capSeconds={quotaCapSeconds}
+            suffix={workspaces.active.kind === "team" ? "team hours" : "resets on the 1st"}
+            /* Only once there is a video to price. A resumed draft keeps its
+               trim window in localStorage but cannot keep the File, so the
+               handles alone would have the meter costing a video that is no
+               longer picked. */
+            selectedSeconds={
+              uploadedFile?.file && trimSelected > 0 ? trimSelected : undefined
+            }
+          />
+        )
+      }
+      status={
+        /* What the last step is still waiting on — a list, not the first
+           offender. The earlier steps carry their own state on the page, so
+           it says nothing there. */
+        step === "match" &&
+          (stepBusy ? (
+            <span className="text-[11px] text-[var(--ink-500)]">{stepBusy}</span>
+          ) : gatedByMissing ? (
+            <span className="whitespace-nowrap text-[11px] text-[var(--ink-500)]">
+              <span className="font-medium tabular-nums text-[var(--ink-900)]">
+                {missing.labels.length}
+              </span>{" "}
+              to go — {missing.labels.slice(0, 3).join(" · ")}
+              {/* Naming all six wrapped this bar onto two lines and squeezed
+                  the meter beside it. Three is enough to start on; the count
+                  carries the rest, and the fields themselves are marked. */}
+              {missing.labels.length > 3
+                ? ` +${missing.labels.length - 3} more`
+                : ""}
+            </span>
+          ) : workspaces.available.length > 1 ? (
+            /* Only when there is a choice to get wrong. `program_id` on the
+               row follows this exact workspace, and the jobs route bills
+               whichever one it names. */
+            <span className="text-[11px] text-[var(--ink-500)]">
+              Saves in{" "}
+              <span className="font-medium text-[var(--ink-900)]">
+                {workspaces.active.name}
+              </span>
+            </span>
+          ) : null)
+      }
+      secondary={
+        <button
+          type="button"
+          onClick={() => void handleSaveDraft()}
+          disabled={draftSaving}
+          className="cursor-pointer text-[11px] text-[var(--ink-500)] transition-colors duration-150 hover:text-[var(--ink-900)] disabled:cursor-default"
+        >
+          {draftSaving ? "Saving…" : "Save draft"}
+        </button>
+      }
+      continueLabel={isCreating ? "Saving…" : CONTINUE_LABEL[step]}
+      onContinue={continueHandler}
+      continueDisabled={continueDisabled}
+    >
+      {step === "provider" &&
+        (preset ? (
+          // Same step, different question. In a team workspace "where do
+          // the numbers come from?" has one answer, so this slot confirms
+          // the destination instead of asking for a source.
+          <PinnedMatchContent
+            preset={preset}
+            playerName={formData.playerName}
+            onPickPlayer={(name, pickedUserId) => {
+              handleInputChange("playerName", name);
+              setPickedPlayerUserId(pickedUserId);
+            }}
+          />
+        ) : (
+          // Workspace · For · Source. In a personal workspace For is the
+          // uploader; in a team workspace it is the one thing the
+          // workspace cannot infer — whose match this is — and the hook
+          // refuses Continue until it is answered. The preset flows never
+          // reach this branch: a line already knows, and the single rail
+          // asks via PinnedMatchContent above.
+          <SourceStepContent
+            selectedProvider={selectedProvider}
+            onProviderSelect={handleProviderSelect}
+            whoPlayed={whoPlayed}
+          />
+        ))}
 
-      {/* Step 1, already answered: the line this flow is filling, pinned. */}
-      {line && (
-        <PinnedLineBar
-          preset={line}
-          onSwitch={onSwitchPreset}
-          outsideHref="/dashboard/matches/new"
+      {/* Step 2 asks for one thing. The same component for both kinds;
+          the handlers differ because a video is probed locally and an
+          export is validated and read. */}
+      {step === "file" && (
+        <FileStepContent
+          kind={isProcessingProvider ? "processing" : "import"}
+          selectedProvider={selectedProvider}
+          subjectFirstName={subjectFirstName}
+          uploadedFile={uploadedFile}
+          probe={videoProbe}
+          warnings={isProcessingProvider ? videoWarnings : []}
+          busy={isProbing || isUploading || parsingState.isParsing}
+          error={uploadError}
+          parsingState={parsingState}
+          formData={formData}
+          acceptString={acceptString}
+          isOver={isOver}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={isProcessingProvider ? onVideoDrop : handleDrop}
+          onFileChange={isProcessingProvider ? onVideoFileChange : handleFileChange}
+          onRemove={isProcessingProvider ? handleRemoveVideo : handleRemoveFile}
         />
       )}
 
-      <div className={`${CONTENT_CLS} pb-10 pt-16`}>
-        <div className="flex flex-col gap-3">
-          <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
-            Step {currentStepIndex + 1} of {progressTotalSteps}
-          </span>
-          <h1
-            className="max-w-[560px] text-[30px] font-light leading-[1.15] tracking-[-0.3px] text-[var(--ink-900)]"
-            style={{ textWrap: "pretty" }}
-          >
-            {title}
-          </h1>
-          <p
-            className="max-w-[480px] text-[13px] leading-[1.55] text-[var(--ink-600)]"
-            style={{ textWrap: "pretty" }}
-          >
-            {description}
-          </p>
-        </div>
+      {step === "trim" && (
+        <TrimStepContent
+          videoFile={uploadedFile?.file ?? null}
+          probe={videoProbe}
+          startSeconds={formData.videoStartSeconds}
+          endSeconds={formData.videoEndSeconds}
+          minTrimSeconds={minTrimSeconds}
+          subjectFirstName={subjectFirstName}
+          fixedCamera={formData.fixedCamera}
+          initialTopPlayerIsPlayer1={formData.initialTopPlayerIsPlayer1}
+          onTrimChange={handleTrimChange}
+          onAnswer={onCameraAnswer}
+        />
+      )}
 
-        <div
-          ref={contentRef}
-          key={step}
-          className={`animate-fadeIn ${step === "match" ? "mt-9" : "mt-[52px]"}`}
-        >
-          {step === "provider" &&
-            (preset ? (
-              // Same step, different question. In a team workspace "where do
-              // the numbers come from?" has one answer, so this slot confirms
-              // the destination instead of asking for a source.
-              <PinnedMatchContent
-                preset={preset}
-                playerName={formData.playerName}
-                onPickPlayer={(name, pickedUserId) => {
-                  handleInputChange("playerName", name);
-                  setPickedPlayerUserId(pickedUserId);
-                }}
-              />
-            ) : (
-              // Workspace · For · Source. In a personal workspace For is the
-              // uploader; in a team workspace it is the one thing the
-              // workspace cannot infer — whose match this is — and the hook
-              // refuses Continue until it is answered. The preset flows never
-              // reach this branch: a line already knows, and the single rail
-              // asks via PinnedMatchContent above.
-              <SourceStepContent
-                selectedProvider={selectedProvider}
-                onProviderSelect={handleProviderSelect}
-                whoPlayed={whoPlayed}
-              />
-            ))}
-
-          {/* Step 2 asks for one thing. The same component for both kinds;
-              the handlers differ because a video is probed locally and an
-              export is validated and read. */}
-          {step === "file" && (
-            <FileStepContent
-              kind={isProcessingProvider ? "processing" : "import"}
-              selectedProvider={selectedProvider}
-              subjectFirstName={subjectFirstName}
-              uploadedFile={uploadedFile}
-              probe={videoProbe}
-              warnings={isProcessingProvider ? videoWarnings : []}
-              busy={isProbing || isUploading || parsingState.isParsing}
-              error={uploadError}
-              parsingState={parsingState}
-              formData={formData}
-              acceptString={acceptString}
-              isOver={isOver}
-              onDragOver={onDragOver}
-              onDragLeave={onDragLeave}
-              onDrop={isProcessingProvider ? onVideoDrop : handleDrop}
-              onFileChange={isProcessingProvider ? onVideoFileChange : handleFileChange}
-              onRemove={isProcessingProvider ? handleRemoveVideo : handleRemoveFile}
-            />
-          )}
-
-          {step === "trim" && (
-            <TrimStepContent
-              videoFile={uploadedFile?.file ?? null}
-              probe={videoProbe}
-              startSeconds={formData.videoStartSeconds}
-              endSeconds={formData.videoEndSeconds}
-              minTrimSeconds={minTrimSeconds}
-              subjectFirstName={subjectFirstName}
-              fixedCamera={formData.fixedCamera}
-              initialTopPlayerIsPlayer1={formData.initialTopPlayerIsPlayer1}
-              onTrimChange={handleTrimChange}
-              onAnswer={onCameraAnswer}
-            />
-          )}
-
-          {/* The file was dropped a step ago and, for an export, already read —
-              so this step is the score, the players and the context, and Save
-              match is the last thing on the page. */}
-          {step === "match" && (
-            <DetailsStepContent
-              formData={formData}
-              onInputChange={handleInputChange}
-              onScoreChange={handleScoreChange}
-              onTiebreakChange={handleTiebreakChange}
-              isProcessingProvider={isProcessingProvider}
-              workspaceKind={workspaces.active.kind === "team" ? "team" : "personal"}
-              subject={{
-                name: formData.playerName || whoPlayed.uploaderName || "You",
-                isSelf: !preset && whoPlayed.subject?.kind !== "roster",
-                playerId:
-                  whoPlayed.subject?.kind === "roster"
-                    ? whoPlayed.subject.playerId
-                    : preset?.playerUserId ?? null,
-                userId: workspaces.viewer.id,
-              }}
-              preset={preset}
-              attachedLine={attachedLine}
-              onAttach={attachLine}
-              onDetach={detachLine}
-              exportRead={parsingState.parseSuccess}
-              error={error}
-            />
-          )}
-        </div>
-      </div>
-
-      {/* Footer sticks to the bottom of the viewport so the primary action is
-          reachable without scrolling to the end of a long form. 64px, white on
-          a hairline, matching the app header: Cancel · divider · meter, then
-          Save draft and Continue. It is the same on every step — only the
-          meter comes and goes, and it sits left of the spacer so nothing else
-          shifts when it does. */}
-      <div className="sticky bottom-0 mt-auto border-t border-[var(--border-hairline)] bg-white">
-        <div className={`${CONTENT_CLS} flex h-16 items-center gap-4`}>
-          {step !== firstStep ? (
-            <button
-              type="button"
-              onClick={handleBack}
-              className="cursor-pointer text-[12px] text-[var(--ink-600)] transition-colors duration-150 hover:text-[var(--ink-900)]"
-            >
-              Back
-            </button>
-          ) : (
-            /* Esc is deliberately inert on step 1 and the breadcrumb is not
-               obviously an exit — without this the flow has no way out that
-               looks like one. */
-            <Link
-              href={exitHref}
-              className="text-[12px] text-[var(--ink-600)] transition-colors duration-150 hover:text-[var(--ink-900)]"
-            >
-              Cancel
-            </Link>
-          )}
-
-          {/* Only where hours are spent, and only once the allowance is known:
-              an export costs nothing, and a bar that has to explain itself is
-              a bar that shouldn't be there. */}
-          {isProcessingProvider && remainingQuotaSeconds !== undefined && (
-            <FooterMeter
-              remainingSeconds={remainingQuotaSeconds}
-              capSeconds={quotaCapSeconds}
-              suffix={workspaces.active.kind === "team" ? "team hours" : "resets on the 1st"}
-              /* Only once there is a video to price. A resumed draft keeps its
-                 trim window in localStorage but cannot keep the File, so the
-                 handles alone would have the meter costing a video that is no
-                 longer picked. */
-              selectedSeconds={
-                uploadedFile?.file && trimSelected > 0 ? trimSelected : undefined
-              }
-            />
-          )}
-
-          {/* What the last step is still waiting on — a list, not the first
-              offender. The earlier steps carry their own state on the page, so
-              it says nothing there. */}
-          {step === "match" &&
-            (stepBusy ? (
-              <span className="text-[11px] text-[var(--ink-500)]">{stepBusy}</span>
-            ) : gatedByMissing ? (
-              <span className="whitespace-nowrap text-[11px] text-[var(--ink-500)]">
-                <span className="font-medium tabular-nums text-[var(--ink-900)]">
-                  {missing.labels.length}
-                </span>{" "}
-                to go — {missing.labels.slice(0, 3).join(" · ")}
-                {/* Naming all six wrapped this bar onto two lines and squeezed
-                    the meter beside it. Three is enough to start on; the count
-                    carries the rest, and the fields themselves are marked. */}
-                {missing.labels.length > 3
-                  ? ` +${missing.labels.length - 3} more`
-                  : ""}
-              </span>
-            ) : workspaces.available.length > 1 ? (
-              /* Only when there is a choice to get wrong. `program_id` on the
-                 row follows this exact workspace, and the jobs route bills
-                 whichever one it names. */
-              <span className="text-[11px] text-[var(--ink-500)]">
-                Saves in{" "}
-                <span className="font-medium text-[var(--ink-900)]">
-                  {workspaces.active.name}
-                </span>
-              </span>
-            ) : null)}
-
-          <div className="flex-1" />
-
-          <button
-            type="button"
-            onClick={() => void handleSaveDraft()}
-            disabled={draftSaving}
-            className="cursor-pointer text-[11px] text-[var(--ink-500)] transition-colors duration-150 hover:text-[var(--ink-900)] disabled:cursor-default"
-          >
-            {draftSaving ? "Saving…" : "Save draft"}
-          </button>
-
-          {/* Always present; asleep at the design system's disabled state
-              (`advButton()`: opacity 0.5, no pointer) until the step's
-              requirement is met. The same button as every other page-level
-              CTA — "New match", "Create dual", "Create tournament" — so `md`,
-              not the `sm` the row actions use, and no width of its own. */}
-          <button
-            type="button"
-            onClick={continueHandler}
-            disabled={continueDisabled}
-            data-wizard-continue
-            className={advButton("primary", "md")}
-          >
-            {isCreating ? "Saving…" : CONTINUE_LABEL[step]}
-          </button>
-        </div>
-      </div>
-    </div>
+      {/* The file was dropped a step ago and, for an export, already read —
+          so this step is the score, the players and the context, and Save
+          match is the last thing on the page. */}
+      {step === "match" && (
+        <DetailsStepContent
+          formData={formData}
+          onInputChange={handleInputChange}
+          onScoreChange={handleScoreChange}
+          onTiebreakChange={handleTiebreakChange}
+          isProcessingProvider={isProcessingProvider}
+          workspaceKind={workspaces.active.kind === "team" ? "team" : "personal"}
+          subject={{
+            name: formData.playerName || whoPlayed.uploaderName || "You",
+            isSelf: !preset && whoPlayed.subject?.kind !== "roster",
+            playerId:
+              whoPlayed.subject?.kind === "roster"
+                ? whoPlayed.subject.playerId
+                : preset?.playerUserId ?? null,
+            userId: workspaces.viewer.id,
+          }}
+          preset={preset}
+          attachedLine={attachedLine}
+          onAttach={attachLine}
+          onDetach={detachLine}
+          exportRead={parsingState.parseSuccess}
+          error={error}
+        />
+      )}
+    </WizardShell>
   );
 });

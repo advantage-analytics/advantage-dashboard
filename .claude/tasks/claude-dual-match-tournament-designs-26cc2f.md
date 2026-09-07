@@ -155,7 +155,7 @@ need it.
 - **notes:** The reseed is the highest-risk detail in the feature. Doubles lines are scoreable here (no video); forfeited lines are excluded from the lineup walk. Non-goals: no draft persistence, no change to `dashboard-shell.tsx`, nothing added to `TEAM_NAV`/`DESTINATIONS`.
 
 ## T12 · Extract `WizardShell` + `useWizardKeys`; `UploadMatchWizard` consumes them
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** src/components/dashboard/matches/new-match-wizard/WizardShell.tsx (new), src/components/dashboard/matches/new-match-wizard/useWizardKeys.ts (new), src/components/dashboard/matches/new-match-wizard/UploadMatchFlow.tsx, src/components/dashboard/matches/new-match-wizard/index.ts
 - **done when:**
