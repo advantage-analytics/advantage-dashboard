@@ -1,11 +1,12 @@
 # Review — player-dialogs-ui
 
-Sign-off: pending
+Sign-off: approved — "looks good, sign off" (2026-09-07), after the
+full-branch re-run below covering the four hand commits made since this
+review was first written.
 
-*(The human editing this line to `approved`, or annotating otherwise, is the
-pipeline's final gate.)*
-
-Gate run: `.claude/skills/pr-check/SKILL.md` over the branch range.
+Gate run: `.claude/skills/pr-check/SKILL.md` over the branch range, twice —
+once at `aba99fa` when this review was written, and again at `f2689dd` after
+four further commits (below). The second run is the one the sign-off covers.
 **Target picked: the branch range**, working tree clean at the start.
 `git merge-base HEAD splitstep-integration` resolves to `8e8d017` — the same
 base T8 derived independently, which is a useful consistency check. Note that
@@ -71,6 +72,44 @@ Fixed in this stage:
    a Playwright spec, pulling its whole module graph into Node to read one
    string. The guardrails reviewer flagged the fragility; the constant now
    lives in a module with no JSX and no client directive, imported by both.
+
+## Added after this review was first written
+
+Four commits landed by hand, outside the task queue, after the `aba99fa`
+receipt. They are ordinary work, not corrections to the reviewed range, and
+each was gated (lint, tsc, build, 447 tests) when made; the second pr-check
+run at `f2689dd` is what covers them properly.
+
+1. **`2a58937` — the lineup save flickered.** After Save the table drew the
+   OLD order, animated back to it, then animated to the new one:
+   `revalidatePath` only marks the cache stale, so the refreshed `members`
+   arrive a render or more after the action resolves, and in that gap the
+   table fell back to the old rows under `layout="position"`. A `settling`
+   state now holds the saved order until the first refresh after Save.
+   Released on `members` identity rather than only on a spot match, so a
+   concurrent edit by another coach cannot leave a stale order on screen —
+   a hole the guardrails reviewer found in the first version.
+2. **`c27ea4f` — the bench divider snapped.** With nobody benched, that ~40px
+   row appeared and vanished in one frame, so the card's height jumped while
+   the rows slid smoothly. It now grows and collapses on height and opacity,
+   with a reduced-motion path.
+3. **`0931c32` — required and optional in the dialogs.** `SettingsField` gains
+   a `required` prop (red asterisk, `aria-hidden`, with sr-only "(required)"),
+   marked only where the submit actually gates. `"Email · optional"` becomes
+   `"Email"` with the word moved into the hint as a sentence.
+4. **`f2689dd` — the second pr-check's own cleanups.** `held` derived once in
+   `roster-table.tsx` where two expressions had re-derived it, `aria-required`
+   on the five marked inputs, and a comment corrected that wrongly claimed
+   rows never unmount inside the presence wrapper.
+
+**None of the four has been seen running.** They are reasoned from the code
+and gated mechanically; this environment cannot drive an authenticated
+dashboard. Two are motion changes, where "it passes" and "it looks right" are
+genuinely different claims — worth one Save on a real roster with an empty
+bench. The correctness reviewer also flagged, at ~55% confidence and without
+calling it a defect, that the divider now carries both `layout="position"` and
+an animated `height`; `layout="position"` is documented to ignore size, so the
+two should not fight, but that is the specific thing to watch.
 
 ## Consciously left
 
