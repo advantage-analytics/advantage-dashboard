@@ -417,9 +417,62 @@ export function explainVideoRefusal(workspace: Workspace): string | null {
   );
 }
 
-/** The label under the workspace name in the switcher. */
+/**
+ * The label under the workspace name in the switcher.
+ *
+ * The squad rides here rather than on the name line above it. A collegiate
+ * name is long enough on its own — "University of California, Los Angeles"
+ * truncates in a 232px rail before the possessive is even reached — and the
+ * squad is a qualifier, not part of what the program is called. On the quiet
+ * second line it costs nothing and still answers which half of the program
+ * you are looking at.
+ */
 export function workspaceSubtitle(workspace: Workspace): string {
-  return workspace.kind === 'team' ? 'Team workspace' : 'Personal workspace';
+  if (workspace.kind !== 'team') return 'Personal workspace';
+  const squad = teamLabel(workspace.team);
+  return squad ? `${squad} team workspace` : 'Team workspace';
+}
+
+/**
+ * The squad a switcher row must carry on its NAME line, given the list it sits
+ * in — `teamLabel` where a school name alone is a coin flip, null everywhere
+ * else. Bind it once per list, then ask it per row.
+ *
+ * Two rows both reading "Meridian State" need the possessive; it is the only
+ * thing separating them. A list of three different schools does not, and
+ * appending "· Men's" to all three made every row longer to solve a problem
+ * that list does not have. So the label appears exactly where it works.
+ *
+ * It disambiguates by SCHOOL NAME, which is the case that exists: a program
+ * fields at most one men's and one women's squad. It does NOT rescue two
+ * workspaces sharing a name *and* a squad — duplicate program rows for the
+ * same school, which the claim flow is not proven to prevent. Those render
+ * identically here, as they did when every row carried its squad
+ * unconditionally, and nothing short of a second distinguishing field on
+ * `Workspace` would separate them: the mark is the name's first letter and
+ * the role is the same word on both. Fix that upstream by not creating the
+ * duplicate, not with a longer label.
+ *
+ * A row that drops it has not lost the squad — the sidebar menu's dark tooltip
+ * says "Men's team · Coach" either way, and the row a switcher is *sitting in*
+ * says it on the subtitle line (`workspaceSubtitle`).
+ *
+ * It returns the label rather than a set of ids so the rule and the wording
+ * stay in one place: two call sites holding a bare "is this one ambiguous"
+ * answer would each have to reach for `teamLabel` again and write the same
+ * ternary, which is how the two lists start disagreeing.
+ */
+export function squadDisambiguator(
+  available: Workspace[]
+): (workspace: Workspace) => string | null {
+  const counts = new Map<string, number>();
+  for (const workspace of available) {
+    counts.set(workspace.name, (counts.get(workspace.name) ?? 0) + 1);
+  }
+  // No `team` guard: `teamLabel` already answers null for a workspace that
+  // fields no squad, so a shared name between two such rows adds nothing.
+  return (workspace) =>
+    (counts.get(workspace.name) ?? 0) > 1 ? teamLabel(workspace.team) : null;
 }
 
 /**
