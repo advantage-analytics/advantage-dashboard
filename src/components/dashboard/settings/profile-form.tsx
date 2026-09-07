@@ -12,6 +12,7 @@ import {
 import { SettingsSaveBar } from "@/components/dashboard/settings/settings-save-bar";
 import { saveProfile } from "@/components/dashboard/settings/actions";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { AdvSelect } from "@/components/ui/adv-select";
 import { cn } from "@/lib/utils";
 
 /**
@@ -385,14 +386,14 @@ function ProfileSelect({
 }) {
   return (
     <SettingsField label={label}>
-      <select
+      {/* `AdvSelect` rather than this file's own copy of the underline rule:
+          the copy recoloured on focus but never thickened to 2px, and it left
+          the browser's own arrow in place beside two sibling fields that had
+          none. Both are the primitive's job now. */}
+      <AdvSelect
+        aria-label={label}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        data-focus-ring="none" /* the border-b above carries focus */
-        className={cn(
-          "h-[34px] cursor-pointer border-b border-[var(--border-field)] bg-transparent text-[13px] outline-none transition-colors focus:border-[var(--blue)]",
-          value === "" ? "text-[var(--ink-400)]" : "text-[var(--ink-900)]"
-        )}
       >
         <option value="">{placeholder}</option>
         {options.map((option) => (
@@ -400,7 +401,7 @@ function ProfileSelect({
             {option.label}
           </option>
         ))}
-      </select>
+      </AdvSelect>
     </SettingsField>
   );
 }
