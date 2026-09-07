@@ -20,8 +20,9 @@ import type { EventGroup, MatchRow } from "@/app/dashboard/(home)/recent-activit
 
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
-// Rows pull back 16px (`-mx-4`) for the hover wash inside the card's 24px
-// side padding — DS r21.6: 24 is exactly what leaves the designed 8px inset.
+// Rows pull back 12px (`-mx-3`) for the hover wash inside the card's 20px
+// side padding — the 8px inset DS r21.6 designs (it states it as 24 with a
+// 16px bleed; Home's cards share one 20px padding, so the bleed follows).
 //
 // 64 / 56 / 52 — the cell widths Pa2 draws (the eyebrow-sm label is the
 // widest thing in each, so the width is the label's, not the number's).
@@ -50,7 +51,7 @@ function MatchLink({ match }: { match: MatchRow }) {
     <Link
       href={`/dashboard/matches/${match.id}`}
       aria-label={`${match.won ? "Win" : "Loss"} vs ${match.opponentName}, ${formatScoreText(match.score)}`}
-      className="-mx-4 flex min-h-[52px] items-center gap-4 rounded-[var(--radius-element)] px-4 py-[5px] transition-colors duration-200 hover:bg-[var(--surface-muted)] focus-visible:outline-none"
+      className="-mx-3 flex min-h-[52px] items-center gap-4 rounded-[var(--radius-element)] px-3 py-[5px] transition-colors duration-200 hover:bg-[var(--surface-muted)] focus-visible:outline-none"
     >
       <ResultMark won={match.won} className="shrink-0" />
 
@@ -91,7 +92,7 @@ function InFlightLink({ match }: { match: MatchRow }) {
     <Link
       href={`/dashboard/matches/${match.id}`}
       aria-label={`vs ${match.opponentName}, ${ANALYSIS_LABEL[status]}`}
-      className="-mx-4 flex min-h-[52px] items-center gap-4 rounded-[var(--radius-element)] px-4 py-[5px] transition-colors duration-200 hover:bg-[var(--surface-muted)] focus-visible:outline-none"
+      className="-mx-3 flex min-h-[52px] items-center gap-4 rounded-[var(--radius-element)] px-3 py-[5px] transition-colors duration-200 hover:bg-[var(--surface-muted)] focus-visible:outline-none"
     >
       <span className="flex w-3.5 shrink-0 items-center justify-center">
         {failed ? (
@@ -217,11 +218,11 @@ export default function RecentMatches({ event, isNewEvent = false }: RecentMatch
   let newIndex = 0;
 
   return (
-    // Pa2's event block: 14px above the name (6px for the first group, which
-    // sits directly under the header row), 5px to the metadata row, 4px to
-    // the first match row. No hairline between groups — the 14px of air and
-    // the 12px/500 name are the whole separation, as the frame draws it.
-    <div className="flex flex-col pt-3.5 first:pt-1.5">
+    // Pa2's event block: 14px above the name (12px for the first group, the
+    // gap every sibling card keeps between its header row and its body),
+    // 5px to the metadata row, 4px to the first match row. No hairline
+    // between groups — the air and the 12px/500 name are the separation.
+    <div className="flex flex-col pt-3.5 first:pt-3">
       <motion.div
         className="flex flex-col gap-[5px] pb-1"
         initial={isNewEvent && !shouldReduceMotion ? { opacity: 0, y: 8 } : false}

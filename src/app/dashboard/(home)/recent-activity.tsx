@@ -540,23 +540,21 @@ export default function RecentActivity({
 
   return (
     <>
-    {/* The day-zero card carries a footer band under the ghost rows, and a
-        band needs the card's full 24px below it; a list of rows does not. */}
     <div
       // `@container/matches`: the rows inside size their stat cells to this
       // card, not the viewport — see `MatchLink` in recent-matches.tsx.
       className="surface-card @container/matches"
-      style={{
-        // Pa2 draws this card at `2px 24px 14px`: a 40px header row carries
-        // the top air itself (below), so the card's own top padding is
-        // nearly nothing.
-        padding:
-          !hasMatches && showEmptyAction ? "2px 24px 24px" : "2px 24px 14px",
-      }}
+      // One padding for every card on Home — `--pad-card`, 20px all round —
+      // so the eyebrows sit on one x and the cards close on one measure.
+      // Pa2 draws this card alone at `2px 24px 14px` with a 40px header row
+      // carrying the top air; the eyebrow lands at the same height either
+      // way, and the rows keep their 8px inset by bleeding 12px instead of
+      // 16 (see `MatchLink`).
+      style={{ padding: "var(--pad-card)" }}
     >
-      {/* Header — a 40px row with 6px above it (Pa2), which puts the eyebrow
-          at the same height as its siblings' 20px-padded headers. */}
-      <div className="flex min-h-10 items-center gap-3 pt-1.5">
+      {/* Header — the same row every sibling opens with: eyebrow left, the
+          card's one link right, 20px from the top edge. */}
+      <div className="flex items-center gap-3">
         <span className="eyebrow">Recent matches</span>
         <div className="flex-1" />
         <Link
@@ -568,8 +566,8 @@ export default function RecentActivity({
         </Link>
       </div>
 
-      {/* Content — no padding of its own; the card's 14px bottom (Pa2) is the
-          whole gap under the last row. */}
+      {/* Content — no padding of its own; the card's bottom padding is the
+          whole gap under the footer. */}
       <div>
         {loading && (
           <div className="flex flex-col gap-8 py-4">

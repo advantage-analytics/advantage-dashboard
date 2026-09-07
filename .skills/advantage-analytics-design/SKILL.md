@@ -1746,7 +1746,9 @@ blue link right: "All matches" on matches, "Session log" on Activity,
 the header for a hairline footer under the body: "Latest 3 shown · 12 matches
 · 8 won", "24 sessions · 12 months", the legend row's "Last 4 · 89 in", and
 Focus's caption naming the metric the evidence used ("1st serve won · 2nd
-serve won") beside "12 matches". The rail is 400px; the grid runs
+serve won") beside "12 matches". Every Home card runs `--pad-card` (20px
+all round) — the matches card too, its rows bleeding 12px for the 8px hover
+inset rather than the table-card 24/16 pair. The rail is 400px; the grid runs
 `items-start` and the columns bottom out where their content does — nothing
 is stretched to level them. (The earlier `items-stretch` grid, whose day-zero
 court grew to level the columns, went with the court.)

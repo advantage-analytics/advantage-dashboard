@@ -155,7 +155,7 @@ export function ServePlacementQuietStrip({
   const caption = zoneStats ? servePlacementCaption(serveCaptionInput(zoneStats)) : null;
 
   return (
-    <div className="surface-card flex flex-col gap-3" style={{ padding: "18px 20px" }}>
+    <div className="surface-card flex flex-col gap-3" style={{ padding: "var(--pad-card)" }}>
       <div className="flex items-center gap-2.5">
         <span className="eyebrow">Serve placement</span>
         <div className="flex-1" />
