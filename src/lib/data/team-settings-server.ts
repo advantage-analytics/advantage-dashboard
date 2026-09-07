@@ -38,6 +38,11 @@ export interface TeamIdentity {
   season: string | null;
   playersCanUpload: boolean;
   /**
+   * Object key in the `program-crests` bucket, or null for the initials mark.
+   * A key, never a URL — see `crestUrl()` in `teams-server.ts`.
+   */
+  crestPath: string | null;
+  /**
    * IANA zone name (`America/Los_Angeles`, `UTC`, …) the program's calendar
    * arithmetic runs in — Team Home's weekend dual sheet, invite countdown and
    * claimed-today roster pill. Never null: the `programs.time_zone` column is
@@ -52,6 +57,13 @@ export interface TeamSettingsData {
   members: TeamMember[];
   /** Outstanding only — accepted invites are members now. */
   invites: TeamInvite[];
+  /**
+   * Who to ask about the fields only the owner may change. Derived from the
+   * roster rather than `programs.owner_user_id` because the roster row is the
+   * one that carries a name, and the two agree by the `programs_one_owner`
+   * index. Null only for a program with no owner row at all.
+   */
+  ownerName: string | null;
 }
 
 export async function getTeamSettings(
@@ -63,7 +75,7 @@ export async function getTeamSettings(
     supabase
       .from("programs")
       .select(
-        "id, school_name, team, conference, home_venue, default_surface, season, players_can_upload, time_zone"
+        "id, school_name, team, conference, home_venue, default_surface, season, players_can_upload, time_zone, crest_path"
       )
       .eq("id", programId)
       .maybeSingle(),
@@ -130,9 +142,11 @@ export async function getTeamSettings(
       defaultSurface: row.default_surface,
       season: row.season,
       playersCanUpload: row.players_can_upload,
+      crestPath: row.crest_path ?? null,
       timeZone: row.time_zone,
     },
     members,
     invites,
+    ownerName: members.find((member) => member.role === "owner")?.name ?? null,
   };
 }
