@@ -1,10 +1,8 @@
 # Review — nav-bar-redesign
 
-**Sign-off:** pending
-
-*(The human edits this line to `approved`, or annotates it otherwise. That
-edit is the pipeline's final gate — stage 07 does not land a workspace whose
-sign-off still reads `pending`.)*
+**Sign-off:** approved — 2026-09-06, by Clajerson Gimena, who read this
+report and instructed the change in session ("approve the sign-off and
+continue"). Recorded on their behalf, not self-approved.
 
 ## The gate that ran
 
