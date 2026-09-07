@@ -94,7 +94,7 @@ need it.
 - **notes:** Non-goals: no page wiring (T7).
 
 ## T7 · Dual event page on the new frame; the route reads the season
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T5, T6
 - **files:** src/components/dashboard/schedule/dual-detail.tsx, src/app/dashboard/team/schedule/[eventId]/page.tsx, src/components/dashboard/schedule/line-row.tsx

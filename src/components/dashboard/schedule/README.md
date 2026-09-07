@@ -30,7 +30,7 @@ Seven route files render this directory, and all seven read the database.
 | `/dashboard/team/schedule/new` | `static/static-event-chooser.tsx` | nothing — two links and one piece of local state |
 | `/dashboard/team/schedule/new/dual` | `static/static-dual-builder.tsx` → `static/dual-school-step.tsx`, then `static/dual-build-step.tsx` with `static/opponent-popup.tsx` | `getLadder`, `getTeamSettings`, `getConferenceTable`, `getProgramSchedule` → `opponentDualHistory`, a `programs` head count; `/api/programs/search` and `opponentRosterForDual` from the client; writes through `createDual` |
 | `/dashboard/team/schedule/new/tournament` | `static/static-tournament-builder.tsx` | `getLadder`, `getTeamSettings`; writes through `createTournament` |
-| `/dashboard/team/schedule/[eventId]` | `dual-detail.tsx`, `tournament-detail.tsx` | `getEventDetail` |
+| `/dashboard/team/schedule/[eventId]` | `dual-detail.tsx` (on `event-page.tsx`'s frame, with `team-totals-widget.tsx` and `head-to-head-widget.tsx` in the rail), `tournament-detail.tsx` | `getProgramSchedule` → `eventDetailFrom`; for a dual also `opponentDualHistory` / `opponentHistoryFor` / `opponentMeetings` and `getEventTeamTotals` |
 | `/dashboard/team/schedule/single/[matchId]` | `single-detail.tsx` | `getTeamSingleMatch` |
 | `/dashboard/team/schedule/new/single` | `matches/new-match-wizard` (not this directory) | — |
 
