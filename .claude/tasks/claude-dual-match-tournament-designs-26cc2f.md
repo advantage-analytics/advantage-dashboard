@@ -107,13 +107,13 @@ need it.
 - **notes:** The score and edit routes 404 until T11 and T19 land; expected within the branch. Non-goals: no tournament changes, no loader changes.
 
 ## T9 · `AddResultDialog`: pick an entry, then round and score
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/schedule/add-result-dialog.tsx (new), src/components/dashboard/schedule/add-result-row.tsx
 - **done when:**
   - [ ] `add-result-row.tsx` exports `nextRound(entry)` (logic unchanged) and `add-result-dialog.tsx` exports a `"use client"` `AddResultDialog({ entries: EventEntry[]; open; onOpenChange })` built on `@/components/ui/dialog` with: an entry picker listing `entry.playerLabels.join(" / ")` (forfeited entries excluded), a round `<select>` over `ROUND_ORDER` defaulting to `nextRound(chosen)` recomputed on every open and on every entry change, and the existing `ScoreEntry` whose `onDone` closes the dialog and calls `router.refresh()`
   - [ ] Saving goes through `ScoreEntry` → `recordResult` only; the file contains no Supabase import
-  - [ ] The dialog has an accessible title `Add result`; its primary is `advButton("primary","md")`
+  - [ ] The dialog has an accessible title `Add result`; its primary is the `advButton("primary", ...)` Save that `ScoreEntry` already renders (amended 2026-09-07: `sm`, since `score-entry.tsx` is fenced off and a second primary would duplicate the save)
   - [ ] `npx tsc --noEmit` clean; no page imports it yet (T8 does)
 - **notes:** Keep `ScoreEntry`'s single tiebreak cell as-is; its storage already passes two arrays. Non-goals: no change to `recordResult`.
 
