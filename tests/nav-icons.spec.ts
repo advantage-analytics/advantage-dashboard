@@ -26,7 +26,7 @@ test.describe('nav data: icons and comingSoon flags', () => {
     expect(roster?.icon).toBe(UsersRound);
   });
 
-  test('exactly four routes are flagged comingSoon', () => {
+  test('exactly the five ComingSoonPage routes are flagged', () => {
     const flaggedHrefs = [...PERSONAL_NAV, ...TEAM_NAV]
       .filter((link) => link.comingSoon)
       .map((link) => link.href)
@@ -36,6 +36,7 @@ test.describe('nav data: icons and comingSoon flags', () => {
       [
         '/dashboard/statistics',
         '/dashboard/ask',
+        '/dashboard/opponents',
         '/dashboard/team/statistics',
         '/dashboard/team/ask',
       ].sort()
