@@ -38,7 +38,11 @@ const nextConfig: NextConfig = {
         // at it, so a player with an upload grant was bounced back silently.
         source: "/dashboard/team/schedule/new/single",
         destination: "/dashboard/matches/new",
-        permanent: true,
+        // 307, not 308. This path never shipped past `splitstep-integration`,
+        // so no browser out there holds it, and a permanent redirect is cached
+        // indefinitely — which would quietly poison the path if a one-off rail
+        // that asks for its source is ever built here.
+        permanent: false,
       },
     ];
   },

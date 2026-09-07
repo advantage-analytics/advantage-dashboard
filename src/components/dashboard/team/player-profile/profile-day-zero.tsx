@@ -67,13 +67,11 @@ function GhostRow({
 export function ProfileDayZero({
   mode,
   firstName,
-  playerId,
   canUpload,
   serve,
 }: {
   mode: "self" | "staff" | "viewer";
   firstName: string;
-  playerId: string;
   canUpload: boolean;
   serve: Parameters<typeof ServePlacementCard>[0]["serve"];
 }) {
@@ -99,7 +97,7 @@ export function ProfileDayZero({
         actions={
           canUpload ? (
             <Link
-              href={`/dashboard/team/upload?player=${playerId}`}
+              href="/dashboard/team/upload"
               className={advButton("primary")}
             >
               New match

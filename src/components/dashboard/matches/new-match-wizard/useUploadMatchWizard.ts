@@ -391,12 +391,6 @@ export interface UseUploadMatchWizardReturn {
   // Form handling
   handleInputChange: (field: keyof MatchFormData, value: string | number | boolean | null | undefined) => void;
   /**
-   * Set alongside `playerName` whenever a roster row is picked, and set to null
-   * for a name typed by hand. Not part of `MatchFormData` because it is not a
-   * field anyone fills in, and the personal wizard never needs it.
-   */
-  setPickedPlayerUserId: (userId: string | null) => void;
-  /**
    * The "who played this match" question, asked ONLY in a team workspace with
    * no preset. A personal workspace has exactly one candidate (the uploader),
    * and a preset already answered it — the lineup named the player. Everywhere
@@ -509,15 +503,6 @@ export function useUploadMatchWizard({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isPrivateMatch] = useState(true);
   const [formData, setFormData] = useState<MatchFormData>(getDefaultFormData);
-  /**
-   * The account behind `formData.playerName`, kept beside the form rather than
-   * in it — nobody types this, and the personal wizard has no use for it.
-   *
-   * A dual or tournament line seeds it from the entry. A single match gets it
-   * when a roster row is picked, and keeps it null when the name was typed by
-   * hand, because a typed name is not evidence of an account.
-   */
-  const [pickedPlayerUserId, setPickedPlayerUserId] = useState<string | null>(null);
   /**
    * Must step 1 ask WHO PLAYED? Only a team workspace with no preset: the
    * personal wizard's uploader IS the player, and a preset arrives with the
@@ -704,14 +689,10 @@ export function useUploadMatchWizard({
     // named in the URL, and restoring a half-finished personal match over it
     // would put another player's opponent and score on somebody else's court.
     if (preset) {
-      // The line already knows whose match it is — the lineup named the player.
-      setPickedPlayerUserId(preset.playerUserId);
-      // Deriving the source from the preset is only sound because a LINE
-      // genuinely constrains it: `job-request.ts` refuses a doubles line, so
-      // `supportsVideo: false` is a fact, not a default. It is not a licence to
-      // decide the source for a preset that merely omitted the question — the
-      // retired one-off rails did exactly that and locked every one-off match
-      // to video.
+      // This is where a preset answers the source question implicitly, which
+      // is why it may only be built where the answer is a fact — see the bar
+      // on `EventPreset`. `job-request.ts` refusing a doubles line is what
+      // makes `supportsVideo: false` one.
       const presetProvider = preset.supportsVideo ? DEFAULT_PROVIDER_ID : DEFAULT_IMPORT_PROVIDER_ID;
       setSelectedProvider(presetProvider);
       setFormData((prev) => ({
@@ -724,7 +705,7 @@ export function useUploadMatchWizard({
         opponentName: preset.opponentName,
         opponentSource: preset.opponentName ? ("event" as const) : undefined,
         date: preset.date,
-        dateSource: preset.kind === "line" ? ("event" as const) : prev.dateSource,
+        dateSource: "event" as const,
         courtType: preset.surface ? surfaceToCourtType(preset.surface) : prev.courtType,
         bestOf: String(preset.bestOf),
         adScoring: preset.adScoring ?? undefined,
@@ -751,11 +732,8 @@ export function useUploadMatchWizard({
       // bar re-runs this effect and must leave the step where it is.
       if (!seededRef.current) {
         seededRef.current = true;
-        if (preset.kind === "line") {
-          const kind = preset.supportsVideo ? "processing" : "import";
-          setProgressKind(kind);
-          setStep("file");
-        }
+        setProgressKind(preset.supportsVideo ? "processing" : "import");
+        setStep("file");
       }
       return;
     }
@@ -1013,7 +991,6 @@ export function useUploadMatchWizard({
     stepOrder,
     providerKind,
     preset,
-    formData.playerName,
     isProcessingProvider,
     askWhoPlayed,
     matchSubject,
@@ -1565,7 +1542,7 @@ export function useUploadMatchWizard({
       // original answer, unchanged. In a personal workspace the uploader IS
       // the player and nothing here differs from before.
       const playerUserId = preset
-        ? pickedPlayerUserId
+        ? preset.playerUserId
         : askWhoPlayed && matchSubject?.kind === "roster"
           ? matchSubject.playerId
           : userId;
@@ -1867,7 +1844,7 @@ export function useUploadMatchWizard({
     }
     // activeWorkspace is in here on purpose: a coach who switches workspaces
     // with the wizard open must not create the match against the one they left.
-  }, [formData, uploadedFile, selectedProvider, isProcessingProvider, supabase, isPrivateMatch, onOpenChange, onCreated, router, activeWorkspace.id, activeWorkspace.kind, preset, attachedLine, draftId, pickedPlayerUserId, askWhoPlayed, matchSubject]);
+  }, [formData, uploadedFile, selectedProvider, isProcessingProvider, supabase, isPrivateMatch, onOpenChange, onCreated, router, activeWorkspace.id, activeWorkspace.kind, preset, attachedLine, draftId, askWhoPlayed, matchSubject]);
 
   return {
     // State
@@ -1928,8 +1905,6 @@ export function useUploadMatchWizard({
 
     // Form handling
     handleInputChange,
-    /** Set together with `playerName` whenever a roster row is picked. */
-    setPickedPlayerUserId,
     whoPlayed: {
       required: askWhoPlayed,
       roster: whoPlayedRoster,

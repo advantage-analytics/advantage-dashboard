@@ -304,25 +304,27 @@ export interface ParsingState {
  *
  * A check here is a fact the EVENT owns. Wrong ones are corrected on the event,
  * never re-typed in the wizard, or the two disagree and the event loses.
+ *
+ * ── THE BAR A PRESET HAS TO CLEAR ───────────────────────────────────────────
+ * A preset does not pre-fill step 1, it REPLACES it: `firstStep` opens the
+ * flow on the file step and `handleBack` floors there, so every question step
+ * 1 would have asked is answered from these fields or not at all. It may
+ * therefore only be built where each of those answers is a FACT.
+ *
+ * The source is the one that bites, because it is answered here implicitly by
+ * `supportsVideo` rather than by a named field. Two rails once supplied it by
+ * default rather than by fact and so locked every one-off match to video with
+ * no way back; both are retired (see the `next.config.ts` redirect and
+ * `team/upload`'s `?player=` note). Where a source is genuinely open, send the
+ * person to `/dashboard/matches/new`, whose step 1 asks all three questions,
+ * rather than presetting a guess.
+ *
+ * There is deliberately no `kind` discriminant. It carried one live value and
+ * discriminated nothing, which made it a label a construction site could get
+ * wrong without the compiler noticing.
  */
 export interface EventPreset {
-  /**
-   * Which shape this is, and there is only one.
-   *
-   * `line` — a dual court or a tournament round. The event knows everything,
-   * which is what earns a preset the right to replace step 1 rather than
-   * pre-fill it.
-   *
-   * A `single` kind lived here for a one-off team match and was the wrong tool.
-   * The workspace knew only WHOSE match it was, so the preset supplied the rest
-   * by default rather than by fact — the SOURCE among them, which locked every
-   * one-off match to video with no way back. That case belongs to the ordinary
-   * wizard, whose step 1 asks all three questions. Nothing builds one now:
-   * `/dashboard/team/schedule/new/single` is retired, and `team/upload`'s
-   * `?player=` branch that built the other could never match a roster row.
-   */
-  kind: "line";
-  /** Null where a single match arrived by id rather than from a line. */
+  /** Null where the preset is an existing match by id rather than a line. */
   entryId: string | null;
   eventId: string | null;
   /** Opponent school for a dual, tournament name for a tournament. */

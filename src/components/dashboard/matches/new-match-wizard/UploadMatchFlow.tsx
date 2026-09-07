@@ -616,7 +616,6 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     handleFileChange,
     handleRemoveFile,
     handleInputChange,
-    setPickedPlayerUserId,
     whoPlayed,
     handleScoreChange,
     handleTiebreakChange,
@@ -742,7 +741,9 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     : handleCreateMatch;
 
   const currentStepIndex = stepOrder.indexOf(step);
-  const line = preset?.kind === "line" ? preset : null;
+  // A preset IS the line it came from; the name is what reads at the use
+  // sites, several of which pair it with `attachedLine`.
+  const line = preset;
   const { title, description } = {
     ...STEP_CONFIG[step],
     ...(isProcessingProvider ? STEP_CONFIG_PROCESSING[step] : undefined),

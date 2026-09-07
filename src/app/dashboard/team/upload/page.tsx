@@ -30,9 +30,6 @@ import type {
  * `job-request.ts`, and collecting them in two components is how those two
  * drift — silently, because the page still renders.
  *
- * `?player=` is accepted and ignored — see the branch below for why the roster
- * shortcut it was meant to serve never fired, and where it belongs instead.
- *
  * Without `?entry=` there is nothing to preset, so staff get the lines that have
  * no video and hand off to the pinned flow. A player gets the wizard itself —
  * see `staff` below for why they are never offered a line.
@@ -40,9 +37,9 @@ import type {
 export default async function TeamUploadPage({
   searchParams,
 }: {
-  searchParams: Promise<{ entry?: string; match?: string; player?: string; draft?: string }>;
+  searchParams: Promise<{ entry?: string; match?: string; draft?: string }>;
 }) {
-  const { entry: entryId, match: matchId, player: playerId, draft: draftId } = await searchParams;
+  const { entry: entryId, match: matchId, draft: draftId } = await searchParams;
 
   const workspace = await getWorkspaceContext();
   if (!workspace) redirect("/login");
@@ -123,7 +120,6 @@ export default async function TeamUploadPage({
     if (!single) redirect("/dashboard/team/upload");
 
     const preset: EventPreset = {
-      kind: "line",
       entryId: null,
       eventId: null,
       eventName: single.context,
@@ -151,20 +147,11 @@ export default async function TeamUploadPage({
     return <UploadMatchFlow preset={preset} />;
   }
 
-  // `?player=` is accepted and ignored.
-  //
-  // It was a roster shortcut that never fired. Both links that produce it —
-  // `team/roster/[playerId]/page.tsx` and `team/player-drawer.tsx` — send a
-  // `program_players.id`, and the branch here looked it up by `userId`. Those
-  // are separate id spaces (no roster row has `id = claimed_by_user_id`), so
-  // `picked` was always undefined and every visit fell through to the queue
-  // below, which is what this route has always actually done.
-  //
-  // Rather than switch the lookup and leave the preset in place: the preset it
-  // built also decided the SOURCE, forcing video, which is the defect that
-  // retired `/dashboard/team/schedule/new/single`. A roster shortcut that
-  // pre-picks the player and still asks for the source belongs on
-  // `/dashboard/matches/new`, whose step 1 asks both — it is not this branch.
+  // A `?player=` roster shortcut used to be presetted here and never once
+  // fired: the roster links send a `program_players.id` and this looked it up
+  // by `userId`, so every visit fell through to the queue below. Repairing the
+  // lookup would have re-lit the source lock `EventPreset` documents, so the
+  // shortcut belongs on `/dashboard/matches/new` instead, which asks.
 
   if (entryId) {
     const groups = await getUploadQueue(active.id);
@@ -202,7 +189,6 @@ export default async function TeamUploadPage({
         candidate: EventEntry,
         candidateMatch: EventEntry["matches"][number] | null
       ): EventPreset => ({
-        kind: "line",
         entryId: candidate.id,
         eventId: group.event.id,
         eventName: group.event.name,

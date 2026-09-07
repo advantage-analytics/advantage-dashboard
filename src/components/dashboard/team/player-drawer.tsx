@@ -768,7 +768,7 @@ export function PlayerDrawer({
           {canManage && (
             <div className="flex flex-col gap-3.5">
               <Link
-                href={`/dashboard/team/upload?player=${member.playerId}`}
+                href="/dashboard/team/upload"
                 className={cn(advButton("primary"), "w-full")}
               >
                 Upload for {firstName}

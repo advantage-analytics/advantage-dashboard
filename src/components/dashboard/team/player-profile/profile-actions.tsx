@@ -25,14 +25,12 @@ import type { RosterMember } from "@/lib/data/team-roster-server";
  */
 export function ProfileActions({
   mode,
-  playerId,
   member,
   roster,
   canUpload,
 }: {
   /** `self`: the viewer's own page. `staff`: someone with roster rights. `viewer`: a teammate. */
   mode: "self" | "staff" | "viewer";
-  playerId: string;
   /**
    * The roster row behind this profile, for Edit player — and, with it, the
    * rest of the squad the dialog needs to say who else holds a lineup spot.
@@ -67,7 +65,7 @@ export function ProfileActions({
       )}
       {canUpload && (
         <Link
-          href={`/dashboard/team/upload?player=${playerId}`}
+          href="/dashboard/team/upload"
           className={advButton("primary")}
         >
           New match
