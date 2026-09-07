@@ -103,7 +103,12 @@ export const TEAM_NAV: readonly NavLink[] = [
   { name: "Schedule", href: "/dashboard/team/schedule", icon: Calendar },
   { name: "Matches", href: "/dashboard/matches", icon: GalleryHorizontalEnd },
   { name: "Roster", href: "/dashboard/team/roster", icon: UsersRound },
-  { name: "Opponents", href: "/dashboard/opponents", icon: Brain },
+  {
+    name: "Opponents",
+    href: "/dashboard/opponents",
+    icon: Brain,
+    comingSoon: true,
+  },
   {
     name: "Statistics",
     href: "/dashboard/team/statistics",
