@@ -36,7 +36,7 @@ need it.
 - **notes:** Non-goals: no layout change, no `nav.ts` change, no change to `schedule-day-zero.tsx`.
 
 ## T2 · `opponentMeetings()` beside `opponentDualHistory`
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/lib/schedule/opponent-history.ts, tests/opponent-meetings.spec.ts (new)
 - **done when:**
@@ -47,7 +47,7 @@ need it.
 - **notes:** Non-goals: no UI, no change to `opponentDualHistory`'s signature. Same file shape as `tests/weekend-dual-reads.spec.ts` (hand-built `ProgramEvent`/`EventEntry`).
 
 ## T3 · `getEventTeamTotals` loader with a pure summing core
-- **status:** todo
+- **status:** doing
 - **model:** opus
 - **files:** src/lib/data/event-team-totals-server.ts (new), tests/event-team-totals.spec.ts (new)
 - **done when:**

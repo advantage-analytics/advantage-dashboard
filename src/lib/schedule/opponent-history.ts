@@ -19,6 +19,7 @@
 import { dualScore } from "@/lib/schedule/entry-state";
 import { formatEventSpan } from "@/lib/schedule/format";
 import type { ProgramSchedule } from "@/lib/data/schedule-server";
+import type { EventSite } from "@/lib/schedule/types";
 
 /**
  * This program's decided duals against one opponent school.
@@ -115,6 +116,72 @@ export function opponentDualHistory(
   }
 
   return histories;
+}
+
+/**
+ * One decided dual against an opponent, as a single row for a meeting list.
+ */
+export interface OpponentMeeting {
+  eventId: string;
+  /** YYYY-MM-DD. */
+  startsOn: string;
+  site: EventSite;
+  /** This program's dual score. */
+  us: number;
+  them: number;
+  /** Null on a level dual — decided, but with no winner. */
+  won: boolean | null;
+}
+
+/**
+ * Every decided dual this program has played against one opponent school,
+ * newest first — the row-level counterpart to `opponentDualHistory`'s
+ * aggregate tally.
+ *
+ * Same gates as `opponentDualHistory`: only `kind === "dual"` events, only
+ * ones whose `dualScore(entries).decided` is true, matched by
+ * `normalizedOpponentName(event.name)` against `opponentName`. A tournament
+ * is skipped outright even when its own name happens to equal the opponent's
+ * school name — a bracket has no team-vs-team result to report here either.
+ *
+ * `options.excludeEventId`, when given, drops that one event from the
+ * result — for a caller already showing one meeting in detail and wanting
+ * "other meetings" beside it.
+ *
+ * Sorted newest-first by comparing `startsOn` rather than trusting
+ * `schedule.events` order, the same care `opponentDualHistory`'s
+ * `lastPlayedOn` takes.
+ */
+export function opponentMeetings(
+  schedule: ProgramSchedule,
+  opponentName: string,
+  options?: { excludeEventId?: string }
+): OpponentMeeting[] {
+  const key = normalizedOpponentName(opponentName);
+  const meetings: OpponentMeeting[] = [];
+
+  for (const event of schedule.events) {
+    if (event.kind !== "dual") continue;
+    if (normalizedOpponentName(event.name) !== key) continue;
+    if (options?.excludeEventId && event.id === options.excludeEventId) {
+      continue;
+    }
+
+    const entries = schedule.entriesByEvent.get(event.id) ?? [];
+    const score = dualScore(entries);
+    if (!score.decided) continue;
+
+    meetings.push({
+      eventId: event.id,
+      startsOn: event.startsOn,
+      site: event.site,
+      us: score.us,
+      them: score.them,
+      won: score.us === score.them ? null : score.us > score.them,
+    });
+  }
+
+  return meetings.sort((a, b) => (a.startsOn < b.startsOn ? 1 : a.startsOn > b.startsOn ? -1 : 0));
 }
 
 /**
