@@ -214,9 +214,11 @@ re-invoking the runner is the approval. Rules and contracts:
 `.claude/pipeline/CONTEXT.md`; spec:
 `docs/superpowers/specs/2026-08-30-icm-feature-pipeline-design.md`.
 Stage 04 feeds the branch task queue above; 05/06 wrap the queue drain and
-`/pr-check`; 07 merges and then deletes the branch's queue pair and
-workspace on the integration branch (git history is the archive). Like `/task-next`, the runner is typed to Claude (never presented
-in a shell-fenced block) and must never be driven by `/loop`.
+`/pr-check`; 07 deletes the branch's queue pair and workspace on the feature
+branch (git history is the archive), then pushes and opens a PR against
+`splitstep-integration` with `gh` — it never merges that PR. Like
+`/task-next`, the runner is typed to Claude (never presented in a shell-fenced
+block) and must never be driven by `/loop`.
 
 ## Conventions
 
