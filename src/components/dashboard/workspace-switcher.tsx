@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MENU_LEAD_CLASS, MENU_ROW_CLASS } from "@/lib/ui/menu";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { setActiveWorkspace } from "@/lib/workspace/actions";
 import { teamLabel, type Workspace } from "@/lib/workspace/types";
@@ -56,15 +57,16 @@ export function WorkspaceOptionList({ onSwitched }: { onSwitched?: () => void })
             aria-selected={isActive}
             disabled={pendingId !== null}
             onClick={() => switchTo(workspace)}
-            // The same row measure as the menu items beneath it — see
-            // `MENU_ITEM_CLASS` in `dashboard/header.tsx`.
-            className="flex w-full items-center gap-3 rounded-[9px] px-3 py-[9px] text-left transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
+            className={cn(
+              MENU_ROW_CLASS,
+              "text-left disabled:cursor-not-allowed disabled:opacity-60"
+            )}
           >
-            <span className="flex w-[13px] shrink-0 justify-center">
+            <span className={MENU_LEAD_CLASS}>
               {pendingId === workspace.id ? (
                 <Loader2 className="size-3 animate-spin text-[var(--ink-400)]" aria-hidden="true" />
               ) : isActive ? (
-                <Check className="size-[13px] text-[var(--blue)]" strokeWidth={2} aria-hidden="true" />
+                <Check className="size-[14px] text-[var(--blue)]" strokeWidth={2} aria-hidden="true" />
               ) : null}
             </span>
 

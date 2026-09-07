@@ -37,6 +37,7 @@ import { workspaceTitle } from "@/lib/workspace/types";
 import { WorkspaceOptionList } from "@/components/dashboard/workspace-switcher";
 import { useRequestLogout } from "@/components/dashboard/logout-dialog";
 import { HeaderGreeting } from "@/components/dashboard/header-greeting";
+import { MENU_ROW_CLASS, MENU_RULE_CLASS } from "@/lib/ui/menu";
 
 interface MatchCrumb {
   tournamentName: string;
@@ -127,16 +128,7 @@ function Chip({ children }: { children: React.ReactNode }) {
   );
 }
 
-/**
- * One row of the profile menu. The 9px vertical rhythm and 9px radius are the
- * A4 measure — a 288px menu at the 7px/8px the 260px one ran read as packed
- * once it had the room not to be.
- */
-const MENU_ITEM_CLASS =
-  "flex w-full items-center gap-3 rounded-[9px] px-3 py-[9px] text-[12px] text-[var(--ink-900)] transition-colors duration-100 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none cursor-pointer";
 
-/** A hairline that runs edge to edge inside the menu's 8px padding. */
-const MENU_RULE_CLASS = "-mx-2 h-px bg-[var(--border-hairline)]";
 
 export function Header({
   activitySlot,
@@ -568,7 +560,7 @@ export function Header({
                     appears the moment a second workspace does. */}
                 {available.length > 1 && (
                   <>
-                    <p className="px-3 pb-1 pt-3 text-[10px] font-medium uppercase tracking-[2.5px] text-[var(--ink-400)]">
+                    <p className="eyebrow px-3 pb-1 pt-3">
                       Workspace
                     </p>
                     {/* Scrolls at four rows rather than growing the menu — a
@@ -582,7 +574,7 @@ export function Header({
                   </>
                 )}
 
-                <Link href="/dashboard/settings/profile" className={MENU_ITEM_CLASS}>
+                <Link href="/dashboard/settings/preferences" className={MENU_ROW_CLASS}>
                   <SlidersHorizontal
                     className="size-[14px] text-[var(--ink-600)]"
                     strokeWidth={1.5}
@@ -591,8 +583,8 @@ export function Header({
                   Preferences
                 </Link>
                 <Link
-                  href="/dashboard/settings/plan"
-                  className={MENU_ITEM_CLASS}
+                  href="/dashboard/settings/usage"
+                  className={MENU_ROW_CLASS}
                 >
                   <Timer
                     className="size-[14px] text-[var(--ink-600)]"
@@ -601,7 +593,7 @@ export function Header({
                   />
                   Usage &amp; quota
                 </Link>
-                <Link href="/dashboard/help" className={MENU_ITEM_CLASS}>
+                <Link href="/dashboard/help" className={MENU_ROW_CLASS}>
                   <CircleHelp
                     className="size-[14px] text-[var(--ink-600)]"
                     strokeWidth={1.5}
@@ -614,7 +606,7 @@ export function Header({
                     setIsProfileOpen(false);
                     requestLogout();
                   }}
-                  className={cn(MENU_ITEM_CLASS, "text-[var(--ink-700)]")}
+                  className={cn(MENU_ROW_CLASS, "text-[var(--ink-700)]")}
                 >
                   <LogOut
                     className="size-[14px] text-[var(--ink-600)]"

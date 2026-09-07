@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search,
@@ -29,17 +23,23 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { Kbd } from "@/components/ui/kbd";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
+import { WorkspaceScopeChip } from "@/components/dashboard/shared/workspace-scope-chip";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
+import { formatShortDate } from "@/lib/ui/date-format";
 import { createClient } from "@/lib/supabase/client";
+import { navLabel, settingsSection } from "@/lib/dashboard/nav";
+import { matchOutcome, setTally } from "@/lib/data/match-utils";
+import { rosterPlayerOptions, type RosterFullRow } from "@/lib/data/roster-shared";
+import { scopeToWorkspace } from "@/lib/workspace/scope";
 import {
   canUploadForProgram,
   isProgramStaff,
   type Workspace,
 } from "@/lib/workspace/types";
-import type { RosterFullRow } from "@/lib/data/roster-shared";
 import { cn } from "@/lib/utils";
 
 /**
@@ -61,31 +61,66 @@ import { cn } from "@/lib/utils";
  * carries both escapes — change the kind, or widen the scope with ⇧↵.
  *
  * ── Scope ──────────────────────────────────────────────────────────────────
- * The query is scoped to the active workspace exactly as the matches list
- * scopes itself (`app/dashboard/matches/page.tsx`): a team on `program_id`, a
- * personal workspace on `created_by` plus a null `program_id`. RLS decides
- * what a viewer MAY see; this decides which workspace they are LOOKING at.
- * ⇧↵ drops the filter and groups what comes back by workspace, because a
- * result from a program you coach and one from your own play are not the
- * same kind of answer.
+ * The query is scoped to the active workspace by `scopeToWorkspace` — the
+ * same rule the matches list and the activity feed apply. ⇧↵ drops the filter
+ * and groups what comes back by workspace, matches only: an Opponents or
+ * Events row aggregated across workspaces would land on a matches list that
+ * is scoped to one of them, advertising matches it then could not show.
  *
  * ── Commands ───────────────────────────────────────────────────────────────
  * Only real destinations. Statistics, Ask and Opponents are still
  * `ComingSoonPage` stubs, and a command that opens a placeholder is worse than
  * no command. Program verbs are ABSENT in a personal workspace, never
  * disabled — a greyed-out "Invite a player" is a promise the workspace cannot
- * keep.
+ * keep. Each command's hint is the route table's own label for its href, so a
+ * rename in `nav.ts` reaches here without a second edit.
  */
 
 // --- Types ---
 
 type Mode = ">" | "@" | "#";
 
-const MODE_LABEL: Record<Mode, string> = {
-  ">": "Command",
-  "@": "Player",
-  "#": "Event",
+/**
+ * Everything a mode changes, in one row per mode. Adding a fourth mode is
+ * one entry here, not four ternaries across the file.
+ */
+const MODES: Record<
+  Mode,
+  {
+    label: string;
+    placeholder: string;
+    /** Shown when the mode is set and nothing is typed. */
+    hint: string | null;
+    /** The columns the query is matched against. */
+    columns: readonly string[];
+  }
+> = {
+  ">": {
+    label: "Command",
+    placeholder: "Run a command",
+    hint: null,
+    columns: [],
+  },
+  "@": {
+    label: "Player",
+    placeholder: "Search players",
+    hint: "Type a player's name",
+    columns: ["player1_name", "player2_name"],
+  },
+  "#": {
+    label: "Event",
+    placeholder: "Search events",
+    hint: "Type an event",
+    columns: ["tournament_name", "round"],
+  },
 };
+
+const ALL_COLUMNS = [
+  "tournament_name",
+  "player1_name",
+  "player2_name",
+  "round",
+] as const;
 
 interface MatchResult {
   id: string;
@@ -95,12 +130,13 @@ interface MatchResult {
   score: ScoreLineSet[];
   date: string;
   /**
-   * Null when the match has no score yet — an upload still analysing. That is
-   * undecided, not level, so the row draws no outcome mark at all rather than
-   * `ResultMark`'s null (a decided draw). It used to fall through to `false`
-   * and mark every unscored match as lost.
+   * `matchOutcome`'s answer — won, lost, or null for level — and `hasScore`
+   * beside it, because null also means "no score yet". An upload still
+   * analysing is undecided, not level, and draws no mark at all; it used to
+   * fall through to "lost".
    */
-  isWin: boolean | null;
+  outcome: boolean | null;
+  hasScore: boolean;
   /** Which workspace the match belongs to — the eyebrow when scope is wide. */
   workspaceName: string;
 }
@@ -113,7 +149,7 @@ interface GroupedResult {
 interface RosterResult {
   playerId: string;
   name: string;
-  /** "No. 3 singles", or null where the ladder has never been set. */
+  /** "No. 3", or null where the ladder has never been set. */
   spot: string | null;
 }
 
@@ -129,8 +165,6 @@ interface SearchResults {
 interface Action {
   id: string;
   label: string;
-  /** Where it leads, in the words the sidebar uses. */
-  hint: string;
   href: string;
   icon: typeof Upload;
 }
@@ -146,6 +180,8 @@ type FlatItem =
 interface Section {
   title: string;
   items: FlatItem[];
+  /** Index of this section's first item in the flattened list. */
+  start: number;
 }
 
 // --- Helpers ---
@@ -158,31 +194,6 @@ const MAX_MATCHES = 20;
 
 function isMode(value: string): value is Mode {
   return value === ">" || value === "@" || value === "#";
-}
-
-function formatShortDate(isoDate: string): string {
-  try {
-    return new Date(isoDate).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    });
-  } catch {
-    return isoDate;
-  }
-}
-
-function didUserWin(
-  score: { player1: number[]; player2: number[] } | null,
-  isUserPlayer1: boolean
-): boolean {
-  if (!score?.player1?.length || !score?.player2?.length) return false;
-  let p1 = 0;
-  let p2 = 0;
-  score.player1.forEach((s, i) => {
-    if (s > (score.player2[i] ?? 0)) p1++;
-    else if ((score.player2[i] ?? 0) > s) p2++;
-  });
-  return isUserPlayer1 ? p1 > p2 : p2 > p1;
 }
 
 function loadRecent(): string[] {
@@ -214,9 +225,29 @@ function pluralize(count: number, noun: string, plural = `${noun}s`): string {
 }
 
 /**
+ * One `ilike` term for PostgREST's `.or()` grammar.
+ *
+ * The value is double-quoted, which is what lets a query carry the characters
+ * the logic tree otherwise reads as structure — a comma in "Smith, J.", the
+ * parentheses in "Ojai (Boys 16s)", the dot in an initial. Inside the quotes
+ * only `"` and `\` need escaping; `%` and `_` are escaped as well because they
+ * are `ilike`'s own wildcards, and a typed underscore should match an
+ * underscore.
+ */
+function ilikeTerm(column: string, query: string): string {
+  const value = query
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/%/g, "\\%")
+    .replace(/_/g, "\\_");
+  return `${column}.ilike."%${value}%"`;
+}
+
+/**
  * The command set for a workspace. Built from the workspace's own facts —
  * `canUploadForProgram`, `isProgramStaff` — so a verb appears exactly where
- * the page it opens would let you act, and nowhere else.
+ * the page it opens would let you act, and nowhere else. Labels are the
+ * verbs; where each one leads is `hintFor`'s to say, from the route table.
  */
 function actionsFor(active: Workspace): Action[] {
   const actions: Action[] = [];
@@ -225,7 +256,6 @@ function actionsFor(active: Workspace): Action[] {
     actions.push({
       id: "upload",
       label: "Upload a match",
-      hint: "Matches",
       href: "/dashboard/matches/new",
       icon: Upload,
     });
@@ -235,14 +265,12 @@ function actionsFor(active: Workspace): Action[] {
       {
         id: "invite",
         label: "Invite a player",
-        hint: "Roster",
         href: "/dashboard/team/roster",
         icon: UserPlus,
       },
       {
         id: "fixture",
         label: "Add a fixture",
-        hint: "Schedule",
         href: "/dashboard/team/schedule/new",
         icon: CalendarPlus,
       }
@@ -252,21 +280,18 @@ function actionsFor(active: Workspace): Action[] {
     {
       id: "usage",
       label: "Usage & quota",
-      hint: "Settings",
-      href: "/dashboard/settings/plan",
+      href: "/dashboard/settings/usage",
       icon: Timer,
     },
     {
       id: "preferences",
       label: "Preferences",
-      hint: "Settings",
-      href: "/dashboard/settings/profile",
+      href: "/dashboard/settings/preferences",
       icon: SlidersHorizontal,
     },
     {
       id: "help",
       label: "Help",
-      hint: "Help Center",
       href: "/dashboard/help",
       icon: CircleHelp,
     }
@@ -274,38 +299,21 @@ function actionsFor(active: Workspace): Action[] {
   return actions;
 }
 
-// --- Small pieces ---
-
-/** The one keycap. Four styles of `<kbd>` used to share this file. */
-function Keycap({
-  children,
-  className,
-  mono,
-}: {
-  children: React.ReactNode;
-  className?: string;
-  /** Prefix glyphs are machine values; the DS sets those in mono. */
-  mono?: boolean;
-}) {
-  return (
-    <kbd
-      className={cn(
-        "flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-[5px] bg-[var(--surface-subtle)] px-[5px] text-[10px] font-medium leading-none text-[var(--ink-500)] shadow-[var(--shadow-keycap)]",
-        mono && "font-mono",
-        className
-      )}
-    >
-      {children}
-    </kbd>
-  );
+/**
+ * Where a command leads, in the route table's words. A settings page names
+ * "Settings"; everything else names its rail entry. The upload wizard and the
+ * schedule create screens are steps inside a destination, so `navLabel`
+ * resolves them to the destination — "Matches", "Schedule" — which is the
+ * right thing for a hint to say.
+ */
+function hintFor(href: string): string {
+  return settingsSection(href) ? "Settings" : (navLabel(href) ?? "");
 }
 
+// --- Small pieces ---
+
 function Eyebrow({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="px-2 pb-1 pt-2.5 text-[10px] font-medium uppercase tracking-[2.5px] text-[var(--ink-400)]">
-      {children}
-    </p>
-  );
+  return <p className="eyebrow px-2 pb-1 pt-2.5">{children}</p>;
 }
 
 const ROW_CLASS =
@@ -324,7 +332,6 @@ export function SearchCommandPalette({
 }: SearchCommandPaletteProps) {
   const router = useRouter();
   const { active, available } = useWorkspace();
-  const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   const [query, setQuery] = useState("");
@@ -336,26 +343,46 @@ export function SearchCommandPalette({
   const [highlightIndex, setHighlightIndex] = useState(0);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
 
-  // One viewer holds one workspace far more often than not, and for them a
-  // chip saying "Personal" distinguishes nothing.
+  // Primitives, so the search effect keys on what it reads rather than on
+  // the context object's identity — which is fresh on every RSC render.
+  const activeId = active.id;
+  const activeKind = active.kind;
   const hasScope = available.length > 1;
 
   const actions = useMemo(() => actionsFor(active), [active]);
 
+  // `program_id` → the workspace's name, for the eyebrows a wide search
+  // groups under. A null program is the viewer's own play.
+  const workspaceNames = useMemo(() => {
+    const personal =
+      available.find((w) => w.kind === "personal")?.name ?? "Personal";
+    const teams = new Map(
+      available.filter((w) => w.kind === "team").map((w) => [w.id, w.name])
+    );
+    return (programId: string | null) =>
+      programId === null ? personal : (teams.get(programId) ?? "Another program");
+  }, [available]);
+
+  // The viewer's own ids and the roster are per-open facts, not per-keystroke
+  // ones. Fetched once when the palette opens (the roster only in a program)
+  // and read from here by every search.
+  const mineRef = useRef<Set<string> | null>(null);
+  const rosterRef = useRef<{ programId: string; rows: RosterFullRow[] } | null>(null);
+
   // Debounce query. Commands are local, so they do not wait.
-  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => {
     if (!query.trim() || mode === ">") {
       setDebouncedQuery("");
       setResults(null);
       return;
     }
-    timerRef.current = setTimeout(() => setDebouncedQuery(query.trim()), 300);
-    return () => clearTimeout(timerRef.current);
+    const timer = setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => clearTimeout(timer);
   }, [query, mode]);
 
   // Reset on open/close. The scope toggle resets too: widening is a thing you
-  // do to one search, not a setting.
+  // do to one search, not a setting. `isLoading` resets as well — a fetch
+  // abandoned mid-flight by a close used to leave the skeleton up forever.
   useEffect(() => {
     if (open) {
       setRecentSearches(loadRecent());
@@ -365,13 +392,21 @@ export function SearchCommandPalette({
       setMode(null);
       setAllWorkspaces(false);
       setResults(null);
+      setIsLoading(false);
       setHighlightIndex(0);
+      mineRef.current = null;
+      rosterRef.current = null;
     }
   }, [open]);
 
   // Fetch results
   useEffect(() => {
-    if (!debouncedQuery) return;
+    if (!debouncedQuery) {
+      // A cleared query is a resolved state, not a pending one. Without this
+      // a fetch abandoned by clearing the field left `isLoading` true.
+      setIsLoading(false);
+      return;
+    }
 
     let stale = false;
     setIsLoading(true);
@@ -386,32 +421,32 @@ export function SearchCommandPalette({
         return;
       }
 
-      const escaped = debouncedQuery
-        .replace(/%/g, "\\%")
-        .replace(/_/g, "\\_");
-      // The mode narrows the columns, not just the sections. Without this,
-      // `@va` returned M. Okafor as a person because their match was at Ojai
-      // VAlley — the event leaking into the people answer.
-      const needle =
-        mode === "@"
-          ? `player1_name.ilike.%${escaped}%,player2_name.ilike.%${escaped}%`
-          : mode === "#"
-            ? `tournament_name.ilike.%${escaped}%,round.ilike.%${escaped}%`
-            : `tournament_name.ilike.%${escaped}%,player1_name.ilike.%${escaped}%,player2_name.ilike.%${escaped}%,round.ilike.%${escaped}%`;
+      const columns = mode ? MODES[mode].columns : ALL_COLUMNS;
+      const needle = columns
+        .map((column) => ilikeTerm(column, debouncedQuery))
+        .join(",");
 
       // `@` in a program also asks the roster. Same RPC the Roster page calls,
       // through the same session, so it answers with exactly what that page
-      // would show this viewer — and nothing a stranger could not already
-      // reach through `getRosterData`.
-      const wantsRoster = mode === "@" && active.kind === "team";
-      const rosterPromise = wantsRoster
-        ? supabase.rpc("program_roster_full", { p_program_id: active.id })
-        : Promise.resolve({ data: null });
+      // would show this viewer. Fetched once per open and filtered here.
+      const wantsRoster = mode === "@" && activeKind === "team";
+      const rosterPromise =
+        wantsRoster && rosterRef.current?.programId !== activeId
+          ? supabase.rpc("program_roster_full", { p_program_id: activeId })
+          : Promise.resolve({ data: null });
+
+      // Not just `user.id`. A match a coach recorded for this athlete before
+      // they had an account carries their roster PROFILE's id, and
+      // `player1_id` is what orients the score and picks the opponent's name.
+      // Comparing against one id showed those the wrong way round.
+      const minePromise = mineRef.current
+        ? Promise.resolve({ data: null })
+        : supabase.rpc("my_player_ids");
 
       // `count: "exact"` rides the main read so a scoped search knows how many
       // it found; the unscoped head request beside it is what says how many it
-      // did NOT. Two round trips, not three, and only when there is a second
-      // workspace to have missed anything in.
+      // did NOT. Only when there is a second workspace to have missed anything
+      // in.
       let scoped = supabase
         .from("matches")
         .select(
@@ -423,10 +458,7 @@ export function SearchCommandPalette({
         .limit(MAX_MATCHES);
 
       if (!allWorkspaces) {
-        scoped =
-          active.kind === "team"
-            ? scoped.eq("program_id", active.id)
-            : scoped.eq("created_by", user.id).is("program_id", null);
+        scoped = scopeToWorkspace(scoped, { id: activeId, kind: activeKind }, user.id);
       }
 
       const everywherePromise =
@@ -438,74 +470,69 @@ export function SearchCommandPalette({
           : Promise.resolve({ count: null });
 
       const [
-        { data, count: scopedCount },
+        { data, error, count: scopedCount },
         { count: everywhereCount },
         { data: rosterRows },
-      ] = await Promise.all([scoped, everywherePromise, rosterPromise]);
+        { data: idRows },
+      ] = await Promise.all([scoped, everywherePromise, rosterPromise, minePromise]);
 
       if (stale) return;
+
+      if (error) {
+        // A query the database refused is not "no results". Say nothing
+        // rather than something false; the console has the reason.
+        console.error("[search] query failed", { message: error.message });
+        setResults(null);
+        setIsLoading(false);
+        return;
+      }
+
+      if (idRows) {
+        mineRef.current = new Set<string>(
+          [
+            user.id,
+            ...((idRows ?? []) as (string | { my_player_ids?: string })[]).map(
+              (row) =>
+                typeof row === "string" ? row : (row?.my_player_ids ?? "")
+            ),
+          ].filter(Boolean)
+        );
+      }
+      const mine = mineRef.current ?? new Set<string>([user.id]);
+      const isMine = (id: string | null) => Boolean(id && mine.has(id));
+
+      if (rosterRows) {
+        rosterRef.current = {
+          programId: activeId,
+          rows: rosterRows as RosterFullRow[],
+        };
+      }
+      // `rosterPlayerOptions` is the roster's own transform — players only,
+      // the same name fallback the Roster page uses, ladder order — so what
+      // the palette lists is what that page would select.
+      const q = debouncedQuery.toLowerCase();
+      const roster: RosterResult[] = wantsRoster
+        ? rosterPlayerOptions(rosterRef.current?.rows)
+            .filter((player) => player.name.toLowerCase().includes(q))
+            .slice(0, MAX_PER_CATEGORY)
+            .map((player) => ({
+              playerId: player.playerId,
+              name: player.name,
+              spot:
+                player.ladderPosition !== null
+                  ? `No. ${player.ladderPosition}`
+                  : null,
+            }))
+        : [];
 
       const elsewhereCount = Math.max(
         0,
         (everywhereCount ?? 0) - (scopedCount ?? 0)
       );
 
-      const roster: RosterResult[] = ((rosterRows ?? []) as RosterFullRow[])
-        .filter((row) =>
-          (row.display_name ?? "")
-            .toLowerCase()
-            .includes(debouncedQuery.toLowerCase())
-        )
-        .slice(0, MAX_PER_CATEGORY)
-        .map((row) => ({
-          playerId: row.player_id,
-          name: row.display_name ?? "Unnamed player",
-          spot: row.lineup_spot !== null ? `No. ${row.lineup_spot}` : null,
-        }));
+      const rows = data ?? [];
 
-      if (!data || data.length === 0) {
-        setResults({
-          matches: [],
-          opponents: [],
-          events: [],
-          roster,
-          elsewhereCount,
-        });
-        setHighlightIndex(0);
-        setIsLoading(false);
-        return;
-      }
-
-      // Not just `user.id`. A match a coach recorded for this athlete before
-      // they had an account carries their roster PROFILE's id, and `player1_id`
-      // is what orients the score and picks the opponent's name. Comparing
-      // against one id showed those the wrong way round.
-      const { data: idRows } = await supabase.rpc("my_player_ids");
-      const mine = new Set<string>(
-        [
-          user.id,
-          ...((idRows ?? []) as (string | { my_player_ids?: string })[]).map(
-            (row) => (typeof row === "string" ? row : (row?.my_player_ids ?? ""))
-          ),
-        ].filter(Boolean)
-      );
-      const isMine = (id: string | null) => Boolean(id && mine.has(id));
-
-      // `program_id` → the workspace's name, for the eyebrows a wide search
-      // groups under. A null program is the viewer's own play.
-      const personalName =
-        available.find((w) => w.kind === "personal")?.name ?? "Personal";
-      const teamNames = new Map(
-        available
-          .filter((w) => w.kind === "team")
-          .map((w) => [w.id, w.name] as const)
-      );
-      const workspaceNameFor = (programId: string | null) =>
-        programId === null
-          ? personalName
-          : (teamNames.get(programId) ?? "Another program");
-
-      const matches: MatchResult[] = data
+      const matches: MatchResult[] = rows
         .slice(0, allWorkspaces ? MAX_MATCHES : MAX_PER_CATEGORY)
         .map((m) => {
           const isP1 = isMine(m.player1_id);
@@ -517,32 +544,33 @@ export function SearchCommandPalette({
             // from their side — game counts and tiebreaks flipped together.
             score: scoreSetsFrom(m.score, { swap: !isP1 }),
             date: formatShortDate(m.date),
-            isWin: m.score ? didUserWin(m.score, isP1) : null,
-            workspaceName: workspaceNameFor(m.program_id),
+            outcome: matchOutcome(m.score, isP1),
+            hasScore: setTally(m.score) !== null,
+            workspaceName: workspaceNames(m.program_id),
           };
         });
 
       const oppCounts = new Map<string, number>();
-      for (const m of data) {
+      const eventCounts = new Map<string, number>();
+      for (const m of rows) {
         const opp = isMine(m.player1_id) ? m.player2_name : m.player1_name;
         oppCounts.set(opp, (oppCounts.get(opp) ?? 0) + 1);
+        const event = m.tournament_name ?? "Unknown event";
+        eventCounts.set(event, (eventCounts.get(event) ?? 0) + 1);
       }
-      const opponents: GroupedResult[] = Array.from(oppCounts.entries())
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, MAX_PER_CATEGORY)
-        .map(([name, matchCount]) => ({ name, matchCount }));
+      const topCounts = (counts: Map<string, number>): GroupedResult[] =>
+        Array.from(counts.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, MAX_PER_CATEGORY)
+          .map(([name, matchCount]) => ({ name, matchCount }));
 
-      const eventCounts = new Map<string, number>();
-      for (const m of data) {
-        const name = m.tournament_name ?? "Unknown event";
-        eventCounts.set(name, (eventCounts.get(name) ?? 0) + 1);
-      }
-      const events: GroupedResult[] = Array.from(eventCounts.entries())
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, MAX_PER_CATEGORY)
-        .map(([name, matchCount]) => ({ name, matchCount }));
-
-      setResults({ matches, opponents, events, roster, elsewhereCount });
+      setResults({
+        matches,
+        opponents: topCounts(oppCounts),
+        events: topCounts(eventCounts),
+        roster,
+        elsewhereCount,
+      });
       setHighlightIndex(0);
       setIsLoading(false);
     }
@@ -551,10 +579,13 @@ export function SearchCommandPalette({
     return () => {
       stale = true;
     };
-  }, [debouncedQuery, mode, allWorkspaces, active, available, hasScope]);
+  }, [debouncedQuery, mode, allWorkspaces, activeId, activeKind, hasScope, workspaceNames]);
 
   /**
-   * What the list shows, in order, by mode.
+   * What the list shows, in order, by mode — each section carrying the index
+   * its first item has in the flattened list, so the render and the keyboard
+   * agree by construction rather than by a counter that has to be walked in
+   * the same order.
    *
    * Commands lead when they match, because a person who typed "upl" wants the
    * verb, not the three matches whose opponent has those letters. In `@` a
@@ -562,69 +593,51 @@ export function SearchCommandPalette({
    * likelier answer to a name typed inside a program.
    */
   const sections = useMemo<Section[]>(() => {
+    const out: Section[] = [];
+    let start = 0;
+    const add = (title: string, items: FlatItem[]) => {
+      if (items.length === 0) return;
+      out.push({ title, items, start });
+      start += items.length;
+    };
     const q = query.trim().toLowerCase();
-    const matchingActions = actions.filter(
-      (action) => q === "" || action.label.toLowerCase().includes(q)
-    );
-    const actionItems: FlatItem[] = matchingActions.map((data) => ({
-      type: "action",
-      data,
-    }));
+
+    if (mode === "@" || mode === "#") {
+      if (!results) return out;
+      if (mode === "@") {
+        add("Roster", results.roster.map((data) => ({ type: "roster", data })));
+        add("Opponents", results.opponents.map((data) => ({ type: "opponent", data })));
+      } else {
+        add("Events", results.events.map((data) => ({ type: "event", data })));
+      }
+      return out;
+    }
+
+    const actionItems: FlatItem[] = actions
+      .filter((action) => q === "" || action.label.toLowerCase().includes(q))
+      .map((data) => ({ type: "action", data }));
 
     if (mode === ">") {
-      return actionItems.length > 0 ? [{ title: "Commands", items: actionItems }] : [];
+      add("Commands", actionItems);
+      return out;
     }
 
-    // Nothing typed: the four things people open this for, then what they
-    // last looked for. It replaces a magnifier illustration that explained
-    // what a search box is.
+    // Nothing typed: the things people open this for, then what they last
+    // looked for. It replaces a magnifier illustration that explained what a
+    // search box is.
     if (!results) {
-      if (q !== "" || mode !== null) return [];
-      const out: Section[] = [{ title: "Jump to", items: actionItems }];
-      if (recentSearches.length > 0) {
-        out.push({
-          title: "Recent",
-          items: recentSearches.map((query) => ({ type: "recent", query })),
-        });
-      }
+      if (q !== "") return out;
+      add("Jump to", actionItems);
+      add("Recent", recentSearches.map((query) => ({ type: "recent", query })));
       return out;
     }
 
-    const out: Section[] = [];
-
-    if (mode === "@") {
-      if (results.roster.length > 0) {
-        out.push({
-          title: "Roster",
-          items: results.roster.map((data) => ({ type: "roster", data })),
-        });
-      }
-      if (results.opponents.length > 0) {
-        out.push({
-          title: "Opponents",
-          items: results.opponents.map((data) => ({ type: "opponent", data })),
-        });
-      }
-      return out;
-    }
-
-    if (mode === "#") {
-      if (results.events.length > 0) {
-        out.push({
-          title: "Events",
-          items: results.events.map((data) => ({ type: "event", data })),
-        });
-      }
-      return out;
-    }
-
-    if (actionItems.length > 0) {
-      out.push({ title: "Actions", items: actionItems });
-    }
+    add("Actions", actionItems);
 
     if (allWorkspaces) {
-      // Grouped by where the match lives. Insertion order follows the query's
-      // date order, so the workspace with the most recent hit leads.
+      // Grouped by where the match lives, and matches ONLY — see the header
+      // on scope. Insertion order follows the query's date order, so the
+      // workspace with the most recent hit leads.
       const byWorkspace = new Map<string, FlatItem[]>();
       for (const data of results.matches) {
         const list = byWorkspace.get(data.workspaceName) ?? [];
@@ -632,27 +645,14 @@ export function SearchCommandPalette({
         byWorkspace.set(data.workspaceName, list);
       }
       for (const [title, items] of byWorkspace) {
-        out.push({ title, items: items.slice(0, MAX_PER_CATEGORY) });
+        add(title, items.slice(0, MAX_PER_CATEGORY));
       }
-    } else if (results.matches.length > 0) {
-      out.push({
-        title: "Matches",
-        items: results.matches.map((data) => ({ type: "match", data })),
-      });
+      return out;
     }
 
-    if (results.opponents.length > 0) {
-      out.push({
-        title: "Opponents",
-        items: results.opponents.map((data) => ({ type: "opponent", data })),
-      });
-    }
-    if (results.events.length > 0) {
-      out.push({
-        title: "Events",
-        items: results.events.map((data) => ({ type: "event", data })),
-      });
-    }
+    add("Matches", results.matches.map((data) => ({ type: "match", data })));
+    add("Opponents", results.opponents.map((data) => ({ type: "opponent", data })));
+    add("Events", results.events.map((data) => ({ type: "event", data })));
     return out;
   }, [query, mode, actions, results, recentSearches, allWorkspaces]);
 
@@ -660,6 +660,16 @@ export function SearchCommandPalette({
     () => sections.flatMap((section) => section.items),
     [sections]
   );
+
+  // The index the keyboard and the render both use. `highlightIndex` is
+  // state; this is that state clamped to the list that exists NOW. The list
+  // shrinks synchronously — typing in `>` mode filters commands locally,
+  // ⇧↵ regroups — while the state only resets when a fetch lands, and Enter
+  // on a stale index was a crash.
+  const activeIndex =
+    flatItems.length === 0
+      ? 0
+      : Math.min(Math.max(highlightIndex, 0), flatItems.length - 1);
 
   // Navigate to result
   const navigateTo = useCallback(
@@ -695,10 +705,17 @@ export function SearchCommandPalette({
   /**
    * The prefix is consumed, never shown in the field. A typed `>` becomes the
    * chip and the field goes back to empty, so what you type next is the
-   * query and only the query. Pasting ">upl" works the same way.
+   * query and only the query. Judged on the incoming value, not the old
+   * state: after ⌘A the field's text is replaced in one change, and `query`
+   * still holds what was there before.
    */
   const handleChange = (value: string) => {
-    if (mode === null && query === "" && value.length > 0 && isMode(value[0])) {
+    if (
+      mode === null &&
+      value.length > 0 &&
+      isMode(value[0]) &&
+      !query.startsWith(value[0])
+    ) {
       setMode(value[0]);
       setQuery(value.slice(1));
       return;
@@ -709,6 +726,10 @@ export function SearchCommandPalette({
   // Keyboard handler
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      // A CJK IME commits a candidate with Enter and edits it with Backspace.
+      // Neither is ours while composition is open.
+      if (e.nativeEvent.isComposing) return;
+
       if (e.key === "Backspace" && query === "" && mode !== null) {
         // Backspace clears the BLUE chip only. The grey one is scope, not a
         // token — see the header comment.
@@ -723,53 +744,50 @@ export function SearchCommandPalette({
       }
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setHighlightIndex((i) => Math.min(i + 1, flatItems.length - 1));
+        setHighlightIndex(Math.min(activeIndex + 1, Math.max(flatItems.length - 1, 0)));
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        setHighlightIndex((i) => Math.max(i - 1, 0));
+        setHighlightIndex(Math.max(activeIndex - 1, 0));
       } else if (e.key === "Enter" && flatItems.length > 0) {
         e.preventDefault();
-        navigateTo(flatItems[highlightIndex]);
+        navigateTo(flatItems[activeIndex]);
       }
     },
-    [query, mode, hasScope, flatItems, highlightIndex, navigateTo]
+    [query, mode, hasScope, flatItems, activeIndex, navigateTo]
   );
 
   // Scroll highlighted into view
   useEffect(() => {
-    const el = listRef.current?.querySelector(`[data-index="${highlightIndex}"]`);
+    const el = listRef.current?.querySelector(`[data-index="${activeIndex}"]`);
     el?.scrollIntoView({ block: "nearest" });
-  }, [highlightIndex]);
+  }, [activeIndex]);
 
-  const hasQuery = debouncedQuery.length > 0 || (mode === ">" && query.trim() !== "");
-  const noResults = !isLoading && hasQuery && flatItems.length === 0;
-  const modeHint =
-    mode === "@" ? "Type a player's name" : mode === "#" ? "Type an event" : null;
-  const showModeHint = !isLoading && !hasQuery && flatItems.length === 0 && modeHint;
+  /**
+   * Which one thing the results area shows. Four states that used to be four
+   * overlapping booleans; one value, so they cannot both be true.
+   */
+  const hasQuery =
+    debouncedQuery.length > 0 || (mode === ">" && query.trim() !== "");
+  const modeHint = mode ? MODES[mode].hint : null;
+  const pane: "loading" | "list" | "empty" | "hint" | null = isLoading
+    ? "loading"
+    : flatItems.length > 0
+      ? "list"
+      : hasQuery
+        ? "empty"
+        : modeHint
+          ? "hint"
+          : null;
 
-  const placeholder =
-    mode === ">"
-      ? "Run a command"
-      : mode === "@"
-        ? "Search players"
-        : mode === "#"
-          ? "Search events"
-          : "Search, or > for commands";
-
-  // Track flat index for rendering
-  let flatIdx = 0;
+  const placeholder = mode ? MODES[mode].placeholder : "Search, or > for commands";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* `outline-none` on all three: Radix focuses the content on open, and
-          the browser drew its ring around the whole panel before the input
-          took over. The caret is the only focus a search box needs.
-
-          14px and the hairline are the popover primitive's own surface — the
+      {/* 14px and the hairline are the popover primitive's own surface — the
           two menus this opens beside now draw the same one. The shadow is the
           token, not a copy of its value. */}
       <DialogContent
-        className="sm:max-w-[480px] sm:rounded-[14px] p-0 overflow-hidden sm:top-[20%] sm:translate-y-0 border border-[var(--border-hairline)] shadow-[var(--shadow-dropdown)] outline-none focus:outline-none focus-visible:outline-none"
+        className="sm:max-w-[480px] sm:rounded-[14px] p-0 overflow-hidden sm:top-[20%] sm:translate-y-0 border border-[var(--border-hairline)] shadow-[var(--shadow-dropdown)]"
         hideCloseButton
       >
         <DialogTitle className="sr-only">Search</DialogTitle>
@@ -785,28 +803,14 @@ export function SearchCommandPalette({
             aria-hidden="true"
           />
 
-          {/* Where you are. Grey at rest; blue when widened, because a widened
-              scope is a transient thing you did, like a mode. Not a button:
-              the profile menu switches workspaces, and this palette should not
-              be a second, hidden place that does. */}
-          {hasScope && (
-            <span
-              className={cn(
-                "flex h-5 shrink-0 items-center rounded-[6px] px-[7px] text-[11px]",
-                allWorkspaces
-                  ? "bg-[var(--blue-soft)] font-medium text-[var(--blue)]"
-                  : "bg-[var(--surface-subtle)] text-[var(--ink-700)]"
-              )}
-            >
-              {allWorkspaces ? "All workspaces" : active.name}
-            </span>
-          )}
+          {/* Where you are. */}
+          <WorkspaceScopeChip wide={allWorkspaces} />
 
           {/* What you are looking for. */}
           {mode && (
             <span className="flex h-5 shrink-0 items-center gap-1 rounded-[6px] bg-[var(--blue-soft)] px-[7px] text-[11px] font-medium text-[var(--blue)]">
               <span className="font-mono">{mode}</span>
-              {MODE_LABEL[mode]}
+              {MODES[mode].label}
             </span>
           )}
 
@@ -819,14 +823,13 @@ export function SearchCommandPalette({
               Focus stays visible: the caret lands in the one field the modal
               has, and the modal opening is itself the change on screen. */}
           <input
-            ref={inputRef}
             autoFocus
             data-focus-ring="none"
             value={query}
             onChange={(e) => handleChange(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
-            aria-label={mode ? `${MODE_LABEL[mode]} search` : "Search"}
+            aria-label={mode ? `${MODES[mode].label} search` : "Search"}
             className="min-w-0 flex-1 bg-transparent text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)]"
           />
           {query ? (
@@ -839,7 +842,7 @@ export function SearchCommandPalette({
               <X className="size-3.5 text-[var(--ink-400)]" strokeWidth={1.5} aria-hidden="true" />
             </button>
           ) : (
-            <Keycap>esc</Keycap>
+            <Kbd size="xs" variant="flat">esc</Kbd>
           )}
         </div>
 
@@ -851,7 +854,7 @@ export function SearchCommandPalette({
           aria-label="Search results"
         >
           <AnimatePresence mode="wait">
-            {isLoading && (
+            {pane === "loading" && (
               <motion.div
                 key="loading"
                 initial={{ opacity: 0 }}
@@ -872,9 +875,9 @@ export function SearchCommandPalette({
               </motion.div>
             )}
 
-            {showModeHint && (
+            {pane === "hint" && (
               <motion.p
-                key="mode-hint"
+                key="hint"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -885,7 +888,7 @@ export function SearchCommandPalette({
               </motion.p>
             )}
 
-            {noResults && (
+            {pane === "empty" && (
               <motion.div
                 key="empty"
                 initial={{ opacity: 0 }}
@@ -911,7 +914,7 @@ export function SearchCommandPalette({
               </motion.div>
             )}
 
-            {!isLoading && flatItems.length > 0 && (
+            {pane === "list" && (
               <motion.div
                 key={`${mode ?? "all"}-${allWorkspaces}-${results ? "results" : "home"}`}
                 initial={{ opacity: 0 }}
@@ -923,9 +926,9 @@ export function SearchCommandPalette({
                 {sections.map((section) => (
                   <div key={section.title}>
                     <Eyebrow>{section.title}</Eyebrow>
-                    {section.items.map((item) => {
-                      const idx = flatIdx++;
-                      const isActiveRow = highlightIndex === idx;
+                    {section.items.map((item, i) => {
+                      const idx = section.start + i;
+                      const isActiveRow = activeIndex === idx;
                       return (
                         <button
                           key={`${item.type}-${idx}`}
@@ -942,7 +945,11 @@ export function SearchCommandPalette({
                         >
                           <ResultRow item={item} />
                           {/* Enter has a target, and it is the row that says so. */}
-                          {isActiveRow && <Keycap className="bg-white">↵</Keycap>}
+                          {isActiveRow && (
+                            <Kbd size="xs" variant="flat" className="bg-[var(--surface-card)]">
+                              ↵
+                            </Kbd>
+                          )}
                         </button>
                       );
                     })}
@@ -962,7 +969,7 @@ export function SearchCommandPalette({
                       {pluralize(results.elsewhereCount, "more result")} in your
                       other workspace{available.length > 2 ? "s" : ""}
                     </span>
-                    <Keycap>⇧↵</Keycap>
+                    <Kbd size="xs" variant="flat">⇧↵</Kbd>
                   </button>
                 )}
               </motion.div>
@@ -999,7 +1006,9 @@ function FooterHint({
 }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-[10px] text-[var(--ink-400)]">
-      <Keycap mono={mono}>{keycap}</Keycap>
+      <Kbd size="xs" variant="flat" mono={mono}>
+        {keycap}
+      </Kbd>
       {children}
     </span>
   );
@@ -1019,7 +1028,7 @@ function ResultRow({ item }: { item: FlatItem }) {
             {item.data.label}
           </span>
           <span className="shrink-0 text-[11px] text-[var(--ink-400)]">
-            {item.data.hint}
+            {hintFor(item.data.href)}
           </span>
         </>
       );
@@ -1039,8 +1048,8 @@ function ResultRow({ item }: { item: FlatItem }) {
               </span>
               {/* The one outcome register — see `ResultMark`. Nothing for an
                   unscored match: undecided is not a result. */}
-              {item.data.isWin !== null && (
-                <ResultMark won={item.data.isWin} className="shrink-0" />
+              {item.data.hasScore && (
+                <ResultMark won={item.data.outcome} className="shrink-0" />
               )}
             </span>
             <span className="text-[12px] text-[var(--ink-500)]">
@@ -1070,9 +1079,11 @@ function ResultRow({ item }: { item: FlatItem }) {
         </>
       );
     case "opponent":
+    case "event": {
+      const Icon = item.type === "event" ? Trophy : Users;
       return (
         <>
-          <Users
+          <Icon
             className="size-3.5 shrink-0 text-[var(--ink-500)]"
             strokeWidth={1.5}
             aria-hidden="true"
@@ -1085,22 +1096,7 @@ function ResultRow({ item }: { item: FlatItem }) {
           </span>
         </>
       );
-    case "event":
-      return (
-        <>
-          <Trophy
-            className="size-3.5 shrink-0 text-[var(--ink-500)]"
-            strokeWidth={1.5}
-            aria-hidden="true"
-          />
-          <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--ink-900)]">
-            {item.data.name}
-          </span>
-          <span className="shrink-0 text-[12px] tabular-nums text-[var(--ink-500)]">
-            {pluralize(item.data.matchCount, "match", "matches")}
-          </span>
-        </>
-      );
+    }
     case "recent":
       return (
         <>
@@ -1114,7 +1110,5 @@ function ResultRow({ item }: { item: FlatItem }) {
           </span>
         </>
       );
-    default:
-      return null;
   }
 }

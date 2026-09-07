@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { unstable_rethrow } from "next/navigation";
 import { Activity, ChevronRight, CircleX } from "lucide-react";
 import {
   Popover,
@@ -9,6 +10,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
+import { WorkspaceScopeChip } from "@/components/dashboard/shared/workspace-scope-chip";
 import { AnalysisProgressTrack } from "@/components/dashboard/matches/analysis-progress-track";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import {
@@ -59,40 +61,12 @@ import { cn } from "@/lib/utils";
  * carry it. Start over keeps its border: it spends video budget.
  */
 
-/** The row chrome every kind shares. Only the body differs. */
-function RowShell({
-  lead,
-  washed,
-  children,
-}: {
-  lead: React.ReactNode;
-  /** The wash marks a row that is waiting on the reader. */
-  washed?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex gap-3 rounded-[9px] px-2.5 py-3",
-        washed && "bg-[var(--surface-subtle)]"
-      )}
-    >
-      <span className="flex w-[14px] shrink-0 justify-center">{lead}</span>
-      <div className="flex min-w-0 flex-1 flex-col">{children}</div>
-    </div>
-  );
-}
+/** The one row measure. Every row — div, link or button — draws from it. */
+const ROW_CLASS = "flex gap-3 rounded-[9px] px-2.5 py-3";
 
-const DOT = (
-  <span
-    aria-hidden="true"
-    className="mt-[5px] size-1.5 rounded-full bg-[var(--blue)]"
-  />
-);
-
-/** The same row as `RowShell`, made a link. Reads as one thing; is one thing. */
-const LINK_ROW_CLASS =
-  "flex gap-3 rounded-[9px] px-2.5 py-3 transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none";
+/** The interactive rows' hover and focus, on top of `ROW_CLASS`. */
+const ROW_INTERACTIVE_CLASS =
+  "transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none";
 
 /** Blue text action — the row it sits in already carries the emphasis. */
 const TEXT_ACTION_CLASS =
@@ -102,12 +76,37 @@ const TEXT_ACTION_CLASS =
 const TEXT_LINK_CLASS =
   "text-[12px] text-[var(--ink-600)] transition-colors duration-150 hover:text-[var(--ink-900)] focus-visible:outline-none focus-visible:underline";
 
+/**
+ * The 14px leading column. One definition, so the x every row's text starts
+ * on is one number rather than three copies of it.
+ */
+function Lead({ children }: { children?: React.ReactNode }) {
+  return <span className="flex w-[14px] shrink-0 justify-center">{children}</span>;
+}
+
+const DOT = (
+  <span
+    aria-hidden="true"
+    className="mt-[5px] size-1.5 rounded-full bg-[var(--blue)]"
+  />
+);
+
+const RING = (
+  <span
+    aria-hidden="true"
+    className="size-[7px] rounded-full border-[1.5px] border-[var(--blue)]"
+  />
+);
+
 function InFlightRow({ item }: { item: ActivityItem }) {
   const { analysis, title } = item;
 
   return (
-    <Link href={`/dashboard/matches/${item.matchId}`} className={LINK_ROW_CLASS}>
-      <span className="flex w-[14px] shrink-0 justify-center">{DOT}</span>
+    <Link
+      href={`/dashboard/matches/${item.matchId}`}
+      className={cn(ROW_CLASS, ROW_INTERACTIVE_CLASS)}
+    >
+      <Lead>{DOT}</Lead>
       <span className="flex min-w-0 flex-1 flex-col gap-[7px]">
         <span className="min-w-0 text-[12px] text-[var(--ink-900)] [text-wrap:pretty]">
           {ANALYSIS_LABEL[analysis.status]} <b className="font-medium">{title}</b>
@@ -134,19 +133,22 @@ function InFlightRow({ item }: { item: ActivityItem }) {
  * that does — the upload wizard. There is no retry endpoint, so a "Retry" here
  * would be a fourth word for a state the product already names in three
  * places, promising a thing the pipeline cannot do.
+ *
+ * The button keeps a border, unlike Accept: it is destructive-adjacent — it
+ * spends video budget. Hand-drawn at 24px because `advButton`'s smallest
+ * size is 32px, which is a page control, not a row control.
  */
 function FailedRow({ item }: { item: ActivityItem }) {
   return (
-    <RowShell
-      lead={
+    <div className={ROW_CLASS}>
+      <Lead>
         <CircleX
           className="size-[14px] text-[var(--danger)]"
           strokeWidth={1.5}
           aria-hidden="true"
         />
-      }
-    >
-      <span className="flex items-center gap-3">
+      </Lead>
+      <span className="flex min-w-0 flex-1 items-center gap-3">
         <Link
           href={`/dashboard/matches/${item.matchId}`}
           className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink-900)] hover:underline focus-visible:outline-none focus-visible:underline"
@@ -155,12 +157,12 @@ function FailedRow({ item }: { item: ActivityItem }) {
         </Link>
         <Link
           href="/dashboard/matches/new"
-          className="flex h-6 shrink-0 items-center rounded-[6px] border border-[var(--border-medium)] bg-white px-[9px] text-[12px] text-[var(--ink-700)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:outline-none focus-visible:bg-[var(--surface-subtle)]"
+          className="flex h-6 shrink-0 items-center rounded-[6px] border border-[var(--border-medium)] bg-[var(--surface-card)] px-[9px] text-[12px] text-[var(--ink-700)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]"
         >
           Start over
         </Link>
       </span>
-    </RowShell>
+    </div>
   );
 }
 
@@ -172,7 +174,8 @@ function FailedRow({ item }: { item: ActivityItem }) {
  * changing shape: "Join <program>?  Join · Cancel". The server action
  * redirects on success, which unmounts this — there is no local success state
  * to draw. On failure the sentence the action returns is printed under the
- * row, in its own words.
+ * row, in its own words; a rejection that is not Next's own redirect signal
+ * gets a sentence of ours, so the row never sits on "Joining…" forever.
  *
  * No Decline. Nothing on the server records one — the invitation page's "Not
  * now" is a GET flag that leaves the row exactly as it was — and a button that
@@ -188,70 +191,83 @@ function InviteRow({ invite }: { invite: PendingInvite }) {
   const join = () => {
     setError(null);
     startTransition(async () => {
-      // Success redirects, so this settles with Next's redirect signal rather
-      // than a value; only an `{ ok: false }` return is ours to show.
-      const result = await acceptPendingInvite(invite.id);
-      if (result && !result.ok) {
-        setError(result.error);
+      try {
+        const result = await acceptPendingInvite(invite.id);
+        if (result && !result.ok) {
+          setError(result.error);
+          setConfirming(false);
+        }
+      } catch (caught) {
+        // Success is a redirect, which arrives as a throw; let it through.
+        unstable_rethrow(caught);
+        setError("We couldn't finish that. Try again in a moment.");
         setConfirming(false);
       }
     });
   };
 
+  const beginConfirm = () => {
+    setError(null);
+    setConfirming(true);
+  };
+
   return (
-    <RowShell lead={DOT} washed>
-      <span className="min-w-0 text-[12px] text-[var(--ink-900)] [text-wrap:pretty]">
-        Invitation to <b className="font-medium">{invite.programName}</b>
-      </span>
-      <span className="mt-[3px] text-[11px] text-[var(--ink-500)]">
-        Join {inviteSubtitle(invite)}
-      </span>
-
-      <span className="mt-2.5 flex items-center gap-4">
-        {confirming ? (
-          <>
-            <span className="text-[12px] text-[var(--ink-700)]">
-              Join {invite.programName}?
-            </span>
-            <button
-              type="button"
-              onClick={join}
-              disabled={isPending}
-              className={TEXT_ACTION_CLASS}
-            >
-              {isPending ? "Joining…" : "Join"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirming(false)}
-              disabled={isPending}
-              className={cn(TEXT_LINK_CLASS, "cursor-pointer")}
-            >
-              Cancel
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              onClick={() => setConfirming(true)}
-              className={TEXT_ACTION_CLASS}
-            >
-              Accept
-            </button>
-            <Link href={invitationHref(invite.id)} className={TEXT_LINK_CLASS}>
-              Details
-            </Link>
-          </>
-        )}
-      </span>
-
-      {error && (
-        <span role="alert" className="mt-1.5 text-[11px] text-[var(--danger)]">
-          {error}
+    <div className={cn(ROW_CLASS, "bg-[var(--surface-subtle)]")}>
+      <Lead>{DOT}</Lead>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className="min-w-0 text-[12px] text-[var(--ink-900)] [text-wrap:pretty]">
+          Invitation to <b className="font-medium">{invite.programName}</b>
         </span>
-      )}
-    </RowShell>
+        <span className="mt-[3px] text-[11px] text-[var(--ink-500)]">
+          Join {inviteSubtitle(invite)}
+        </span>
+
+        <span className="mt-2.5 flex items-center gap-4">
+          {confirming ? (
+            <>
+              <span className="text-[12px] text-[var(--ink-700)]">
+                Join {invite.programName}?
+              </span>
+              <button
+                type="button"
+                onClick={join}
+                disabled={isPending}
+                className={TEXT_ACTION_CLASS}
+              >
+                {isPending ? "Joining…" : "Join"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirming(false)}
+                disabled={isPending}
+                className={cn(TEXT_LINK_CLASS, "cursor-pointer")}
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={beginConfirm}
+                className={TEXT_ACTION_CLASS}
+              >
+                Accept
+              </button>
+              <Link href={invitationHref(invite.id)} className={TEXT_LINK_CLASS}>
+                Details
+              </Link>
+            </>
+          )}
+        </span>
+
+        {error && (
+          <span role="alert" className="mt-1.5 text-[11px] text-[var(--danger)]">
+            {error}
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -272,21 +288,18 @@ function ElsewhereRow({ work }: { work: ElsewhereWork }) {
       onClick={() =>
         startTransition(async () => {
           // Redirects on success — rejects with Next's redirect signal rather
-          // than resolving. Nothing to clear: the navigation unmounts this.
+          // than resolving. A refused id resolves, and `isPending` clears on
+          // its own; nothing here to unwind.
           await setActiveWorkspace(work.workspaceId);
         })
       }
       className={cn(
-        LINK_ROW_CLASS,
+        ROW_CLASS,
+        ROW_INTERACTIVE_CLASS,
         "w-full items-center py-[11px] text-left disabled:opacity-60 cursor-pointer"
       )}
     >
-      <span className="flex w-[14px] shrink-0 justify-center">
-        <span
-          aria-hidden="true"
-          className="size-[7px] rounded-full border-[1.5px] border-[var(--blue)]"
-        />
-      </span>
+      <Lead>{RING}</Lead>
       <span className="min-w-0 flex-1 text-[12px] text-[var(--ink-600)] [text-wrap:pretty]">
         {work.count} upload{work.count === 1 ? "" : "s"} running in{" "}
         <b className="font-medium text-[var(--ink-900)]">{work.workspaceName}</b>
@@ -309,7 +322,7 @@ export function ActivityTray({
   invites: PendingInvite[];
   elsewhere: ElsewhereWork[];
 }) {
-  const { active, available, viewer } = useWorkspace();
+  const { viewer } = useWorkspace();
   const [isOpen, setIsOpen] = useState(false);
 
   /**
@@ -324,7 +337,8 @@ export function ActivityTray({
    *
    * Gated on the SERVER feed of the ACTIVE workspace, not the merged list and
    * not the other workspaces. Deriving it from `merged` is circular; and the
-   * other workspaces' work is a count the tray shows, not a feed it follows.
+   * other workspaces' work is a count the tray shows, not a feed it follows —
+   * so `elsewhere` is as fresh as the last RSC render, and no fresher.
    */
   const hasLiveWork = feed.items.some((item) =>
     isLiveUpdating(item.analysis.status)
@@ -351,18 +365,24 @@ export function ActivityTray({
     // RSC payload.
   }, [feed.items, patches]);
 
-  // Invitations count toward the dot but NOT toward the live subscription
-  // above: they arrive with the RSC payload and change only when a coach sends
-  // one, which no socket here would learn about anyway.
-  const unread = inFlight.length + invites.length;
+  // Everything waiting on the reader or moving for them. Invitations count
+  // but NOT toward the live subscription above: they arrive with the RSC
+  // payload and change only when a coach sends one, which no socket here
+  // would learn about anyway. Failures count because their row carries a
+  // button now — a dot that vanished the moment an upload failed was saying
+  // "nothing here" over the one row that needed someone.
+  const unread = inFlight.length + invites.length + failed.length;
   const elsewhereCount = elsewhere.reduce((sum, work) => sum + work.count, 0);
 
   // The trigger carries a dot, not a number: the chrome has no numeric badges,
   // so the count lives here — in the tooltip and, word for word, in the
   // aria-label — and in the tray itself.
-  const detail = trayDetail(invites.length, inFlight.length, elsewhereCount);
-
-  const hasRows = invites.length > 0 || inFlight.length > 0 || failed.length > 0;
+  const detail = trayDetail(
+    invites.length,
+    inFlight.length,
+    elsewhereCount,
+    failed.length
+  );
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -399,7 +419,7 @@ export function ActivityTray({
             ) : elsewhereCount > 0 ? (
               <span
                 aria-hidden="true"
-                className="absolute right-[2.5px] top-[2.5px] size-[7px] rounded-full border-[1.5px] border-[var(--blue)] bg-white"
+                className="absolute right-[2.5px] top-[2.5px] size-[7px] rounded-full border-[1.5px] border-[var(--blue)] bg-[var(--surface-card)]"
               />
             ) : null}
           </button>
@@ -421,20 +441,13 @@ export function ActivityTray({
           <p className="text-[13px] font-medium text-[var(--ink-900)]">
             Activity
           </p>
-          {/* The workspace this feed is scoped to, in the same grey chip the
-              search palette states its scope with. No chevron: the palette's
-              chip switches workspace, and switching from a notification panel
-              is not a move anyone means to make. Absent for a viewer holding
-              one workspace — there is nothing it would be distinguishing from. */}
-          {available.length > 1 && (
-            <span className="flex h-5 shrink-0 items-center rounded-[6px] bg-[var(--surface-subtle)] px-[7px] text-[11px] text-[var(--ink-700)]">
-              {active.name}
-            </span>
-          )}
+          {/* The workspace this feed is scoped to — the same chip the search
+              palette states its scope with, and absent for the same viewer. */}
+          <WorkspaceScopeChip />
         </div>
 
         <div className="flex max-h-[420px] flex-col overflow-y-auto p-2">
-          {hasRows ? (
+          {unread > 0 ? (
             <>
               {invites.map((invite) => (
                 <InviteRow key={invite.id} invite={invite} />

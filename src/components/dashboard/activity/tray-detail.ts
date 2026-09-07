@@ -11,6 +11,11 @@
  * decide something; in-flight work resolves on its own whether or not anybody
  * looks. A person who has both wants to read the one with a button first.
  *
+ * Failures come next. They used to be receipts, unmarked and uncounted; now
+ * the row carries "Start over", which makes a failure the second thing in
+ * the tray waiting on the reader. A count that left it out would say
+ * "Nothing in flight" over a row with a button on it.
+ *
  * Work in a workspace the viewer is NOT looking at comes last, and only as a
  * count: the tray is scoped to the active workspace on purpose, so this is the
  * one place the header admits the other workspaces exist. It is what the
@@ -22,7 +27,8 @@
 export function trayDetail(
   inviteCount: number,
   inFlightCount: number,
-  elsewhereCount = 0
+  elsewhereCount = 0,
+  failedCount = 0
 ): string {
   const parts: string[] = [];
 
@@ -30,6 +36,10 @@ export function trayDetail(
     parts.push(
       inviteCount === 1 ? "1 invitation" : `${inviteCount} invitations`
     );
+  }
+
+  if (failedCount > 0) {
+    parts.push(`${failedCount} failed`);
   }
 
   if (inFlightCount > 0) {
