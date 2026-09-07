@@ -120,8 +120,17 @@ export function RosterNote({
   );
 }
 
-/** "Maya Chen" · "Maya Chen and Alex Ruiz" · "Maya Chen and 2 others". */
-function nameList(names: string[]): string {
+/**
+ * "Maya Chen" · "Maya Chen and Alex Ruiz" · "Maya Chen and 2 others".
+ *
+ * Exported because Add player's occupied-spot confirm says the same names
+ * directly under the note `spotHeldNote` builds from them. The two sentences
+ * are deliberately separate — Edit player raises the note and no confirm — but
+ * the JOINER is a product decision they must agree on: stop at two names, spell
+ * the remainder "and N others". Two copies could drift, and the note and its
+ * own confirm disagreeing about how many names to list is the visible cost.
+ */
+export function nameList(names: string[]): string {
   if (names.length === 1) return names[0];
   if (names.length === 2) return `${names[0]} and ${names[1]}`;
   return `${names[0]} and ${names.length - 1} others`;

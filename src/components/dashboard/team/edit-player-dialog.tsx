@@ -256,15 +256,17 @@ export function EditPlayerDialog({
       ) : (
         <>
           <div className="grid grid-cols-2 gap-4">
-            <SettingsField label="First name">
+            <SettingsField label="First name" required>
               <SettingsUnderlineInput
+                aria-required
                 value={fields.firstName}
                 disabled={pending}
                 onChange={(event) => edit("firstName", event.target.value)}
               />
             </SettingsField>
-            <SettingsField label="Last name">
+            <SettingsField label="Last name" required>
               <SettingsUnderlineInput
+                aria-required
                 value={fields.lastName}
                 disabled={pending}
                 onChange={(event) => edit("lastName", event.target.value)}
@@ -326,9 +328,11 @@ export function EditPlayerDialog({
           <RosterNote icon={Users} note={spotNote} />
 
           <SettingsField
-            label="Email · optional"
+            label="Email"
             hint={
-              fields.claimed ? undefined : "So they can claim this profile later"
+              fields.claimed
+                ? "Optional"
+                : "Optional — so they can claim this profile later"
             }
           >
             <SettingsUnderlineInput

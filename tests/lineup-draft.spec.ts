@@ -6,6 +6,7 @@ import {
   lineupOrder,
   lineupSpots,
   sequenceFrom,
+  settledSequence,
 } from '@/lib/data/lineup-draft';
 
 /**
@@ -65,4 +66,27 @@ test('with nobody benched, only the editor draws the sentinel', () => {
 
 test('a sequence built from a roster is not a change to it', () => {
   expect(lineupChanged(sequenceFrom(roster, { sentinel: 'always' }), roster)).toBe(false);
+});
+
+test.describe('settledSequence — the saved draft as the resting table draws it', () => {
+  test('drops a trailing sentinel when nobody is benched', () => {
+    expect(settledSequence(['a', 'b', 'c', BENCH])).toEqual(['a', 'b', 'c']);
+  });
+
+  test('keeps the sentinel when somebody is under it', () => {
+    expect(settledSequence(['a', 'b', BENCH, 'c'])).toEqual(['a', 'b', BENCH, 'c']);
+  });
+
+  test('a sequence with no sentinel is returned unchanged', () => {
+    expect(settledSequence(['a', 'b'])).toEqual(['a', 'b']);
+  });
+
+  test('agrees with lineupChanged: a settled order matches the rows it wrote', () => {
+    const saved = ['b', 'a', BENCH];
+    const members = [
+      { playerId: 'a', lineupSpot: 2 },
+      { playerId: 'b', lineupSpot: 1 },
+    ];
+    expect(lineupChanged(settledSequence(saved), members)).toBe(false);
+  });
 });

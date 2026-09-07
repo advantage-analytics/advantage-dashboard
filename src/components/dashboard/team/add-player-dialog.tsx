@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { GitMerge, Loader2, Upload, Users } from "lucide-react";
 import type { RosterMember } from "@/lib/data/team-roster-server";
 import {
@@ -21,6 +21,7 @@ import {
   LINEUP_SPOTS,
   RosterNote,
   UnderlineSelect,
+  nameList,
   spotHeldNote,
   spotHolders,
 } from "@/components/dashboard/team/player-fields";
@@ -104,11 +105,26 @@ function duplicateNameNote(matches: RosterMember[]): string {
     .join(", ")}. If this is somebody else, you can still add them.`;
 }
 
+/**
+ * What a caller already knows about the person being added.
+ *
+ * The receiving end of a hand-off: a coach who has typed an address into
+ * Invite and then decides the athlete has no account yet should not retype it
+ * here. Every field is optional and none is authoritative — the coach can
+ * overwrite all of them before submitting.
+ */
+export type AddPlayerInitial = {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+};
+
 export function AddPlayerDialog({
   open,
   onOpenChange,
   seatNote,
   roster,
+  initial,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -116,6 +132,13 @@ export function AddPlayerDialog({
   seatNote: string;
   /** Who is on the roster already, so a repeat can say who it would repeat. */
   roster: RosterMember[];
+  /**
+   * A prefill for the next opening, applied on the closed→open transition.
+   *
+   * Not a controlled value: once the dialog is open the fields are the coach's,
+   * and a later change to this prop does not reach back into them.
+   */
+  initial?: AddPlayerInitial;
 }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -123,6 +146,20 @@ export function AddPlayerDialog({
   const [lineupSpot, setLineupSpot] = useState("");
   const [email, setEmail] = useState("");
   const [alsoInvite, setAlsoInvite] = useState(false);
+  /**
+   * The coach saying, out loud, that a shared line is what they meant.
+   *
+   * Not validation, and deliberately not `DialogProblem`: sharing a spot is
+   * legal — `program_players` carries no unique index on it, for the reshuffle
+   * reason `spotHeldNote` states — so nothing here refuses the write. What it
+   * refuses is the *accidental* one, where the note above went by unread. Same
+   * quiet register as that note: neutral ink, no alert role, one tick.
+   *
+   * It resets whenever the spot changes, not just on close. Acknowledging #3
+   * says nothing about #5, and an acknowledgement that survives the change
+   * would let the second, unread collision through on the first one's tick.
+   */
+  const [spotAcknowledged, setSpotAcknowledged] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   /**
@@ -157,6 +194,39 @@ export function AddPlayerDialog({
     form: string;
   } | null>(null);
 
+  /**
+   * Applying `initial`, and why it is an effect keyed on the open edge.
+   *
+   * This component stays mounted whether or not it is showing — the same fact
+   * `close()` below is written around — so a `useState` initializer would run
+   * once, on the first mount, and never again. A coach who cancels and reopens
+   * would get an empty form the second time, and a hand-off arriving while the
+   * dialog was already mounted-but-closed would never be seen at all.
+   *
+   * The edge, not `open` itself: re-running on every render where `open` is
+   * true would overwrite whatever the coach had typed the moment any parent
+   * re-rendered. `wasOpen` is a ref rather than state because nothing renders
+   * differently for it; it only decides whether this is the transition.
+   *
+   * It runs after `reset()` has already emptied the form — every exit path
+   * calls that — so the prefill is what the fields hold, and `reset()` itself
+   * stays "clear to empty" rather than "clear to `initial`". That split is
+   * deliberate: Cancel leaves no residue behind it, and the next open re-applies
+   * the prefill from the prop that still says it.
+   */
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    const opening = open && !wasOpen.current;
+    wasOpen.current = open;
+    if (!opening || !initial) return;
+    if (initial.firstName) setFirstName(initial.firstName);
+    if (initial.lastName) setLastName(initial.lastName);
+    if (initial.email) setEmail(initial.email);
+    // `initial` is read only on the open edge; a change to it while the dialog
+    // is already open is deliberately not applied.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   function reset() {
     setFirstName("");
     setLastName("");
@@ -164,6 +234,7 @@ export function AddPlayerDialog({
     setLineupSpot("");
     setEmail("");
     setAlsoInvite(false);
+    setSpotAcknowledged(false);
     setError(null);
     setCreated(null);
   }
@@ -192,7 +263,11 @@ export function AddPlayerDialog({
     onOpenChange(false);
   }
 
-  const ready = firstName.trim() !== "" && lastName.trim() !== "";
+  /** The one place the spot changes, so the acknowledgement cannot outlive it. */
+  function changeLineupSpot(next: string) {
+    setLineupSpot(next);
+    setSpotAcknowledged(false);
+  }
 
   const formKey = [
     firstName.trim(),
@@ -214,6 +289,11 @@ export function AddPlayerDialog({
   // which Edit player uses to keep the note off the row it is editing — is the
   // one place that decides what "somebody else" means.
   const spotTakenBy = spotHolders(roster, lineupSpot, createdProfileId);
+
+  const ready =
+    firstName.trim() !== "" &&
+    lastName.trim() !== "" &&
+    (spotTakenBy.length === 0 || spotAcknowledged);
 
   // Half a name matches every Maya on the squad, which is a warning about
   // nothing while somebody is still typing — so this stays empty until both
@@ -322,15 +402,17 @@ export function AddPlayerDialog({
       }
     >
       <div className="grid grid-cols-2 gap-4">
-        <SettingsField label="First name">
+        <SettingsField label="First name" required>
           <SettingsUnderlineInput
+            aria-required
             value={firstName}
             autoFocus
             onChange={(event) => setFirstName(event.target.value)}
           />
         </SettingsField>
-        <SettingsField label="Last name">
+        <SettingsField label="Last name" required>
           <SettingsUnderlineInput
+            aria-required
             value={lastName}
             onChange={(event) => setLastName(event.target.value)}
           />
@@ -371,7 +453,7 @@ export function AddPlayerDialog({
           <UnderlineSelect
             ariaLabel="Lineup spot"
             value={lineupSpot}
-            onChange={setLineupSpot}
+            onChange={changeLineupSpot}
           >
             <option value="">Not set</option>
             {LINEUP_SPOTS.map((spot) => (
@@ -388,9 +470,33 @@ export function AddPlayerDialog({
           email field down every time a coach changed the spot. */}
       <RosterNote icon={Users} note={spotNote} />
 
+      {/* The note's confirm, borrowing the invite checkbox's grammar wholesale
+          rather than inventing a second one: same accent, same 12px label over
+          an 11px sub-line. It sits directly under the sentence it answers, and
+          exists only while that sentence does — a free spot asks nothing. */}
+      {spotTakenBy.length > 0 && (
+        <label className="flex cursor-pointer items-start gap-2.5">
+          <input
+            type="checkbox"
+            checked={spotAcknowledged}
+            onChange={(event) => setSpotAcknowledged(event.target.checked)}
+            className="mt-px size-4 shrink-0 cursor-pointer accent-[var(--blue)]"
+          />
+          <span>
+            <span className="block text-[12px] text-[var(--ink-700)]">
+              Yes — share #{lineupSpot} with {nameList(spotTakenBy)} for now.
+            </span>
+            <span className="mt-0.5 block text-[11px] leading-[1.5] text-[var(--ink-500)]">
+              Nobody is moved off the line. You can change either player&rsquo;s
+              spot later.
+            </span>
+          </span>
+        </label>
+      )}
+
       <SettingsField
-        label="Email · optional"
-        hint="So they can claim this profile later"
+        label="Email"
+        hint="Optional — so they can claim this profile later"
       >
         <SettingsUnderlineInput
           type="email"

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Reorder, useReducedMotion } from "framer-motion";
+import { AnimatePresence, Reorder, useReducedMotion } from "framer-motion";
 import { GitMerge, GripVertical } from "lucide-react";
 import { BENCH, sequenceFrom } from "@/lib/data/lineup-draft";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -106,6 +106,12 @@ import type {
  */
 const EASE_OUT_EXPO = [0.23, 1, 0.32, 1] as const;
 const ROW_SLIDE = { duration: 0.22, ease: EASE_OUT_EXPO };
+/**
+ * The bench divider leaving. Exits are faster than arrivals — the mode is
+ * over, and the eye is already back on the rows — so this undercuts
+ * `ROW_SLIDE` rather than mirroring it.
+ */
+const DIVIDER_OUT = { duration: 0.16, ease: EASE_OUT_EXPO };
 
 /**
  * How a released row settles into its slot. framer's default is an inertia
@@ -593,6 +599,7 @@ export function RosterTable({
   run,
   pending,
   lineup,
+  settling,
   onStartLineup,
   onLift,
   onMove,
@@ -612,6 +619,8 @@ export function RosterTable({
   pending: boolean;
   /** Non-null while Set lineup is on. */
   lineup: LineupDraft | null;
+  /** The order a Save just wrote, shown until `members` catches up. */
+  settling: string[] | null;
   onStartLineup: () => void;
   onLift: (playerId: string | null) => void;
   onMove: (playerId: string, direction: 1 | -1) => void;
@@ -624,13 +633,17 @@ export function RosterTable({
   const listRef = useRef<HTMLUListElement>(null);
   const byId = new Map(members.map((member) => [member.playerId, member]));
 
-  // At rest the server's order is the order, and the sentinel appears only
-  // if somebody is actually out of the lineup. In the mode the draft is the
-  // order and the sentinel is always there — it is the drop target for
-  // benching somebody.
-  const sequence: string[] = lineup
-    ? lineup.sequence
-    : sequenceFrom(members, { sentinel: "if-needed" });
+  // The order on screen, and whether it is ours or the server's. `held` is an
+  // order we are drawing over the rows: the draft being edited, or — for the
+  // moment after Save, before the revalidated `members` land — the one Save
+  // just wrote (`settling` in `RosterView`). Named once because two things
+  // read it: the list itself, and the line numbers beside it. At rest the
+  // server's order is the order, and the sentinel appears only if somebody is
+  // actually out of the lineup; in the mode it is always there, because it is
+  // the drop target for benching somebody.
+  const held = lineup?.sequence ?? settling;
+  const sequence: string[] =
+    held ?? sequenceFrom(members, { sentinel: "if-needed" });
   const benchAt = sequence.indexOf(BENCH);
 
   /** ↑/↓ with nothing lifted: focus walks the players, skipping the sentinel. */
@@ -700,6 +713,20 @@ export function RosterTable({
           values={sequence}
           onReorder={onReorder}
         >
+          {/* The one child that comes and goes on its own is the bench divider:
+              the editor's sequence always carries it (a benched player needs
+              somewhere to land) while the resting table only draws it over a
+              bench with somebody on it. With nobody benched, entering and
+              leaving the mode used to add and remove ~40px in one frame — the
+              table's height snapped and everything under it jumped, while the
+              rows themselves slid on `ROW_SLIDE`. The divider now grows and
+              collapses as a row, height and opacity together, so the card
+              changes height continuously and the page follows it. Rows never
+              unmount here (a lineup reorders, it does not delete), so the
+              presence wrapper only ever has this one exit to run — a member row
+              carries no `exit`, so one removed or merged away still unmounts
+              at once. Give a row an `exit` and it animates here. */}
+          <AnimatePresence initial={false}>
           {sequence.map((id, index) => {
             if (id === BENCH) {
               return (
@@ -711,24 +738,50 @@ export function RosterTable({
                   value={BENCH}
                   dragListener={false}
                   layout="position"
-                  transition={{ layout: reduceMotion ? { duration: 0 } : ROW_SLIDE }}
-                  className="flex select-none items-center gap-2.5 pt-4 pb-2"
+                  /* Height, not a transform: a transform would slide the label
+                     while the space it occupied stayed open, and the whole
+                     point is the space. `border-box` puts the padding inside
+                     `height`, so 0 → auto collapses the row entirely. Bounded
+                     to this one line of text, once per mode change. */
+                  initial={reduceMotion ? false : { opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={
+                    reduceMotion
+                      ? { opacity: 0, transition: { duration: 0 } }
+                      : { opacity: 0, height: 0, transition: DIVIDER_OUT }
+                  }
+                  transition={reduceMotion ? { duration: 0 } : ROW_SLIDE}
+                  /* gap-1.5 (6px) picked by eye at 11px against the eyebrow — the
+                     em dash is its own aria-hidden span so this one gap value
+                     produces equal spacing on both sides of it. */
+                  className="flex select-none items-center gap-1.5 overflow-hidden pt-4 pb-2"
                 >
                   <span className="eyebrow-sm">Not in the lineup</span>
                   {lineup && (
-                    <span className="text-[11px] text-[var(--ink-400)]">
-                      — drag a row below this line to bench them
-                    </span>
+                    <>
+                      <span aria-hidden="true" className="text-[11px] text-[var(--ink-400)]">
+                        —
+                      </span>
+                      <span className="text-[11px] text-[var(--ink-400)]">
+                        <span className="sr-only">: </span>
+                        drag a row below this line to bench them
+                      </span>
+                    </>
                   )}
                 </Reorder.Item>
               );
             }
             const member = byId.get(id);
             if (!member) return null;
-            // In the mode the number is what Save will write; at rest it is
-            // what the server holds, which can differ when two players share a
-            // line from the Edit player form.
-            const spot = lineup
+            // The number is the position in `held` whenever we are drawing our
+            // own order — in the mode it is what Save will write, and just
+            // after Save it is what Save wrote. Reading `member.lineupSpot`
+            // there would badge a row sitting at the top with the spot it held
+            // BEFORE the save, for as long as the server's rows take to
+            // arrive. At rest it is the server's value, which can differ from
+            // position when two players share a line from the Edit player
+            // form.
+            const spot = held
               ? benchAt < 0 || index < benchAt
                 ? index + 1
                 : null
@@ -753,6 +806,7 @@ export function RosterTable({
               />
             );
           })}
+          </AnimatePresence>
 
           {/* Invitations belong in this list, not under it: somebody a coach
               emailed on Monday is on the roster as far as the coach is

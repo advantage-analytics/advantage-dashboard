@@ -15,6 +15,13 @@ import {
  * two widths, and they were going to be three hand-built copies of the same
  * header, spacing and footer. This is that structure once.
  *
+ * ── Why 520 rather than the DS's 440 ────────────────────────────────────────
+ * The design system's Dialog (v3) spec (`.skills/advantage-analytics-design/
+ * SKILL.md` § Dialog) gives form dialogs `w-[440px]` and reserves `w-[520px]`
+ * for compare dialogs. The roster's forms carry more rows than the v3 form
+ * dialog anticipates, so this shell now defaults to the DS's own compare-
+ * dialog width instead of inventing a new number.
+ *
  * ── Why not `DialogHeader` / `DialogFooter` ─────────────────────────────────
  * Nothing in this app uses them; they are near-empty flex divs and every real
  * consumer builds its own. Following the tree rather than the primitive.
@@ -36,7 +43,7 @@ export function RosterDialog({
   onOpenChange,
   title,
   description,
-  width = 440,
+  width = 520,
   children,
   footer,
 }: {
@@ -44,8 +51,8 @@ export function RosterDialog({
   onOpenChange: (open: boolean) => void;
   title: string;
   description: string;
-  /** 440 for the invite and add dialogs, 480 for review requests, 520 for merge. */
-  width?: 440 | 480 | 520;
+  /** 520 for add, invite, edit and merge; 480 for review requests; 440 kept for a narrower future case. */
+  width?: 440 | 480 | 520 | 560;
   children: React.ReactNode;
   footer: React.ReactNode;
 }) {

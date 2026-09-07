@@ -14,6 +14,8 @@ import { AdvSwitch } from "@/components/ui/adv-switch";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
+import { playedSets } from "@/lib/ui/score-format";
+import { RECENT_MATCH_GRID } from "@/components/dashboard/team/player-drawer-layout";
 import { advButton } from "@/lib/ui/adv-button";
 import { capitalize, cn } from "@/lib/utils";
 import { formatDelta, getInitials } from "@/lib/data/match-utils";
@@ -722,7 +724,7 @@ export function PlayerDrawer({
                 <Link
                   key={match.id}
                   href={`/dashboard/matches/${match.id}`}
-                  className="-mx-2 grid h-9 grid-cols-[14px_minmax(0,1fr)_72px_40px_12px] items-center gap-2.5 rounded-[var(--radius-element)] px-2 transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                  className={`-mx-2 grid h-9 ${RECENT_MATCH_GRID} items-center gap-2.5 rounded-[var(--radius-element)] px-2 transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none`}
                 >
                   {match.won === null ? (
                     <span
@@ -738,9 +740,15 @@ export function PlayerDrawer({
                     {match.opponent}
                     {match.event ? ` · ${match.event}` : ""}
                   </span>
+                  {/* `playedSets` is display-only and belongs here, not in the
+                      loader: `matches.score` genuinely stores trailing `0-0`
+                      sets and nothing may rewrite them. The track is
+                      `minmax(72px,max-content)` so a real three-setter pushes
+                      the truncating opponent/event cell instead of being
+                      clipped — the score is the column that must stay whole. */}
                   <ScoreLine
-                    sets={match.sets}
-                    className="overflow-hidden text-right text-[11px] whitespace-nowrap text-[var(--ink-600)]"
+                    sets={playedSets(match.sets)}
+                    className="text-right text-[11px] whitespace-nowrap text-[var(--ink-600)]"
                   />
                   <span className="mono text-right text-[10px] text-[var(--ink-400)]">
                     {match.date}

@@ -83,3 +83,18 @@ export function lineupChanged(
   );
   return members.some((m) => next.get(m.playerId) !== m.lineupSpot);
 }
+
+/**
+ * A draft as the resting table should draw it once saved: the same order,
+ * minus a trailing sentinel when nobody is benched.
+ *
+ * The editor's draft always carries `BENCH` (it needs somewhere to drop a
+ * player); the resting table only draws the divider when somebody is under
+ * it (`sequenceFrom`'s `"if-needed"`). This is the bridge between the two,
+ * for the moment after Save when the draft is still the truth on screen and
+ * the server's rows have not caught up yet.
+ */
+export function settledSequence(sequence: string[]): string[] {
+  const at = sequence.indexOf(BENCH);
+  return at === sequence.length - 1 ? sequence.slice(0, at) : sequence;
+}

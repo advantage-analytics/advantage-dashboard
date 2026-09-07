@@ -134,6 +134,32 @@ export function formatScoreText(sets: ScoreLineSet[]): string {
     .join(SET_JOINER);
 }
 
+/**
+ * Trim trailing "0-0" sets a row never played.
+ *
+ * `matches.score` genuinely stores trailing zero sets in production — a
+ * completed two-setter with a phantom third `0-0`, and at least one row that
+ * is `0-0` in every set. This trims those from the END only: a trailing set
+ * where BOTH sides are `0` is dropped, and trimming stops at the first set
+ * that isn't. Interior and leading `0-0` sets are left alone on purpose — a
+ * genuine `0-6` is not both-zero, and a completed set cannot legitimately sit
+ * at `0-0` in the middle of a match, so narrowing the rule to trailing-only
+ * is the safe read of the data rather than a guess.
+ *
+ * **Display-only.** This is deliberately a separate function from
+ * `scoreSetsFrom` — the adapter every reader shares — rather than folded into
+ * it, because the trim must never reach a write path or change what any other
+ * reader of the adapter sees. Call this only where the result is about to be
+ * rendered, never before a score is persisted or compared.
+ */
+export function playedSets(sets: ScoreLineSet[]): ScoreLineSet[] {
+  let end = sets.length;
+  while (end > 0 && sets[end - 1].player1 === 0 && sets[end - 1].player2 === 0) {
+    end -= 1;
+  }
+  return sets.slice(0, end);
+}
+
 /** The raw `matches.score` JSONB column, as every loader hands it over. */
 export interface RawMatchScore {
   player1: number[];
