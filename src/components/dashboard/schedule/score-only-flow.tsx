@@ -304,14 +304,20 @@ function ScoreForm({
 
           <div className="flex-1" />
 
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => save("close")}
-            className={advButton("ghost", "md")}
-          >
-            Save and close
-          </button>
+          {/* Only while there IS a next line. On the last one the primary
+              falls back to "Save and close", and drawing the ghost too would
+              put two identically labelled buttons side by side doing the same
+              thing — a choice that isn't one. */}
+          {nextOpen ? (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => save("close")}
+              className={advButton("ghost", "md")}
+            >
+              Save and close
+            </button>
+          ) : null}
           <button
             type="button"
             disabled={pending}

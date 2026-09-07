@@ -96,7 +96,7 @@ export function LineRow({
 
   return (
     <div
-      className={`grid ${columns} items-center gap-3.5 py-[11px] ${
+      className={`grid ${columns} items-center gap-4 py-[11px] ${
         last ? "" : "border-b border-[var(--border-hairline)]"
       }`}
     >
