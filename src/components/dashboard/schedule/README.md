@@ -31,7 +31,7 @@ Nine route files render this directory, and all nine read the database.
 | `/dashboard/team/schedule/new/dual` | `static/new-dual-flow.tsx` — three steps on `matches/new-match-wizard`'s `WizardShell`, with `static/pinned-event-bar.tsx`: `DualSchoolStep` (`static/dual-school-step.tsx`), then `DualFactsStep` and `DualLineupStep` (`static/dual-build-step.tsx`, with `static/opponent-popup.tsx`) | `getLadder`, `getTeamSettings`, `getConferenceTable`, `getProgramSchedule` → `opponentDualHistory`, a `programs` head count; `/api/programs/search` and `opponentRosterForDual` from the client; writes through `createDual` |
 | `/dashboard/team/schedule/new/tournament` | `static/new-tournament-flow.tsx` — two steps on `matches/new-match-wizard`'s `WizardShell`, with `static/pinned-event-bar.tsx`: `TournamentWeekendStep`, then `TournamentFieldStep` (both `static/static-tournament-builder.tsx`, over its `useTournamentDraft`) | `getLadder`, `getTeamSettings`; writes through `createTournament` |
 | `/dashboard/team/schedule/[eventId]` | `dual-detail.tsx` (on `event-page.tsx`'s frame, with `team-totals-widget.tsx` and `head-to-head-widget.tsx` in the rail), `tournament-detail.tsx` | `getProgramSchedule` → `eventDetailFrom`; for a dual also `opponentDualHistory` / `opponentHistoryFor` / `opponentMeetings` and `getEventTeamTotals` |
-| `/dashboard/team/schedule/[eventId]/edit` | `static/new-dual-flow.tsx` in `mode="edit"` — the same three-step flow opened at step two, its school pinned by `static/pinned-event-bar.tsx` with no `Change` and step one unreachable; settled lines draw read-only inside `DualLineupStep` (`static/dual-build-step.tsx`) | `getProgramSchedule` → `eventDetailFrom`, `getLadder`, `getTeamSettings`, one `programs` row for the opponent's directory key; `isSettled` from `lib/schedule/entry-plan.ts` decides which lines are read-only; writes through `updateDual`, which consults `planEntryChanges` before it writes anything at all. A tournament `notFound()`s here until T20 |
+| `/dashboard/team/schedule/[eventId]/edit` | branches on the event's kind: a dual gets `static/new-dual-flow.tsx` in `mode="edit"` — the same three-step flow opened at step two, its school pinned by `static/pinned-event-bar.tsx` with no `Change` and step one unreachable, settled lines drawn read-only inside `DualLineupStep` (`static/dual-build-step.tsx`); a tournament gets `static/new-tournament-flow.tsx` in `mode="edit"` — both steps reachable, the field seeded from `static/static-tournament-builder.tsx`'s `useTournamentDraft` with saved ids, draws and seeds, settled entries locked | `getProgramSchedule` → `eventDetailFrom`, `getLadder`, `getTeamSettings`; a dual also reads one `programs` row for the opponent's directory key; `isSettled` from `lib/schedule/entry-plan.ts` decides which lines/entries are read-only; writes through `updateDual` or `updateTournament`, both of which consult `planEntryChanges` before writing anything at all |
 | `/dashboard/team/schedule/[eventId]/score` | `score-only-flow.tsx` (the upload wizard's chrome with its video half switched off — `StepIndicator`, `PinnedLineBar` and `ScoreBlock` come from `matches/new-match-wizard`) | `getProgramSchedule` → `eventDetailFrom`, `programNamesFor`; `presetFor`/`lineupChoices` and `entryState`; writes through `recordResult` |
 | `/dashboard/team/schedule/single/[matchId]` | `single-detail.tsx` | `getTeamSingleMatch` |
 | `/dashboard/team/schedule/new/single` | `matches/new-match-wizard` (not this directory) | — |
@@ -39,7 +39,8 @@ Nine route files render this directory, and all nine read the database.
 The four `static/` routes were the design-copy run's; the four below them
 were never re-pointed and never dormant (the score-only flow at
 `[eventId]/score` is newer still — T11, and the edit flow at `[eventId]/edit`
-newer again — T19, dual/tournament designs). Which task wired which — the commits
+newer again — T19 wired the dual half, T20 the tournament half, both
+dual/tournament designs). Which task wired which — the commits
 carry the same numbers: T15 the schedule, T18 the chooser, T19–T20 the
 tournament builder, T21–T23 the dual builder. T25 then confirmed the schedule
 surfaces agree on the data of one event, and disagree on some words — §3.
@@ -58,7 +59,7 @@ every file that was on it is deleted:
 | `tournament-form.tsx`, `entry-editor.tsx` | `static/static-tournament-builder.tsx` calls `createTournament` (T20); the `StaticTournamentBuilder` composite that framed it is itself deleted, replaced by `static/new-tournament-flow.tsx` over the same file's `useTournamentDraft` (T16, dual/tournament designs) |
 | `dual-form.tsx` | `static/dual-school-step.tsx` + `static/dual-build-step.tsx`, the latter's `useDualDraft` calling `createDual` (T23); the `static-dual-builder.tsx` shell that first framed the two is itself deleted, replaced by `static/new-dual-flow.tsx` (T15, dual/tournament designs) |
 | `school-search.tsx` | `static/dual-school-step.tsx` searches the real directory (T21; deleted T23) |
-| `opponent-rail.tsx` | the left pane of `static/dual-build-step.tsx` (T23) |
+| `opponent-rail.tsx` | `static/dual-school-step.tsx` (the school-directory search moved to its own step one) and `static/opponent-popup.tsx` (the per-line target picker); the pane itself is gone — `static/dual-build-step.tsx` collapsed to one column when the dual/tournament designs run split it into `useDualDraft` + `DualFactsStep`/`DualLineupStep` (T14, dual/tournament designs) |
 | `field-row.tsx` | nothing 1:1 — the builders each draw their own defaults cells (T23) |
 | `lineup-editor.tsx` | the lineup half of `static/dual-build-step.tsx`; its `LineupLine` type moved to `lib/schedule/types.ts` (T24) |
 | `opponent-name-cell.tsx` | `static/opponent-popup.tsx`, plus the row key in `static/dual-build-step.tsx` — §4 on the `key` contract (T24) |
@@ -85,18 +86,26 @@ that replaced it, and each porting commit names the file it read from.
 
 Everything here is reachable: `dual-detail.tsx`, `tournament-detail.tsx`,
 `single-detail.tsx`, `single-score-entry.tsx`, `event-shell.tsx`,
-`line-row.tsx`, `score-entry.tsx`, `add-result-row.tsx`, `run-strip.tsx`,
-`row-action.tsx`, and everything under `static/`.
+`event-page.tsx`, `line-row.tsx`, `score-entry.tsx`, `score-only-flow.tsx`,
+`add-result-row.tsx`, `add-result-dialog.tsx`, `add-result-button.tsx`,
+`team-totals-widget.tsx`, `head-to-head-widget.tsx`, `run-strip.tsx`,
+`row-action.tsx`, and everything under `static/`. One caveat: `add-result-row.tsx`
+exports both `AddResultRow` and `nextRound`, and only `nextRound` still has a
+caller (`add-result-dialog.tsx`) — the `AddResultRow` component itself is
+unrendered dead code since T8 (dual/tournament designs) folded its job into
+the dialog; the file is reachable, the component is not.
 
 Two files are shared across routes and must survive any future deletion.
-`event-shell.tsx` frames the three detail screens (`dual-detail`,
-`tournament-detail`, `single-detail`) and two files under `static/`
-(`static-tournament-builder`, `static-event-chooser`) — `dual-build-step` used
-it until its frame left with `DualBuildStep` and `WizardShell` took over.
-`row-action.tsx` is not imported under `static/` at all, but is used from
-three separate live surfaces: `/dashboard/team/roster` directly, `line-row.tsx`
-(reachable via `dual-detail`/`tournament-detail`), and `team/dual-sheet.tsx`
-via `/dashboard/team`.
+`event-shell.tsx` now frames only `single-detail.tsx` and
+`static/static-event-chooser.tsx` — `dual-detail.tsx` and
+`tournament-detail.tsx` moved onto `event-page.tsx`'s `EventPageFrame`
+(T7/T8, dual/tournament designs), and `static-tournament-builder.tsx` lost its
+frame the same way `dual-build-step.tsx` did, when `static/new-tournament-flow.tsx`
+took over on `WizardShell` (T16, dual/tournament designs). `row-action.tsx` is
+not imported under `static/` at all, but is used from three separate live
+surfaces: `/dashboard/team/roster` directly, `line-row.tsx` (reachable via
+`dual-detail`/`tournament-detail`), and `team/dual-sheet.tsx` via
+`/dashboard/team`.
 
 ### The near-duplicate that was here
 
@@ -119,7 +128,8 @@ database. Deleting it was safe only because each piece landed somewhere first.
 Where to read each one now:
 
 - **`createDual` and its server-action call** — `static/dual-build-step.tsx`'s
-  `submit()`. `createTournament`'s is `static/static-tournament-builder.tsx`'s.
+  `useDualDraft().submit()`. `createTournament`'s is
+  `static/static-tournament-builder.tsx`'s `useTournamentDraft().submit()`.
 - **Roster matching and name splitting** — `lib/schedule/roster-match.ts` and
   `lib/schedule/format.ts`, which is where both already lived; the builder
   imports `rosterIdsForLabels` rather than keeping a second rule.

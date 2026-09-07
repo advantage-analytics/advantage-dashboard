@@ -250,7 +250,7 @@ need it.
 - **notes:** Non-goals: no change to `updateTournament`'s rules.
 
 ## T17 · Docs sweep for the new route set
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T11, T15, T16, T19
 - **files:** src/components/dashboard/schedule/README.md, CLAUDE.md, MAP.md

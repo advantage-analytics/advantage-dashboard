@@ -1276,10 +1276,12 @@ function LineRow({
           value={line.theirLabels.join(" / ")}
           addLabel={addLabel}
           discipline={line.discipline}
-          // The school and ITS saved roster, as one value — the header's name,
-          // the rail's tick, `2d`'s dedupe and `2e`'s confirmation all read
-          // this one object, so none of them can name a different school than
-          // the pool the name was matched against.
+          // The school and ITS saved roster, as one value — the pinned bar's
+          // name, `2d`'s dedupe and `2e`'s confirmation all read this one
+          // object, so none of them can name a different school than the pool
+          // the name was matched against. (The rail this once also fed was
+          // deleted with the single-frame builder; the object is still the
+          // reason a school change cannot leave a stale name behind.)
           pool={pool}
           draftName=""
           onCommit={(value) => onTheirLabels(line.key, value)}
