@@ -215,7 +215,7 @@ need it.
 - **notes:** Non-goals: no doubles entries, no host cell, no edit mode yet (T20).
 
 ## T18 · `updateDual` / `updateTournament` server actions with a pure reconcile plan
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/lib/schedule/actions.ts, src/lib/schedule/entry-plan.ts (new), tests/entry-plan.spec.ts (new)
 - **done when:**
