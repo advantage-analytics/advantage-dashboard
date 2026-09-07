@@ -54,6 +54,21 @@ export default async function ScoreEventPage({
   const detail = eventDetailFrom(schedule, eventId);
   if (!detail) notFound();
 
+  // Duals only, and structurally rather than by nobody linking here.
+  //
+  // This flow scores ONE line and takes its round from the entry — a dual
+  // line's slot IS its round, so there is nothing to ask. A tournament entry
+  // is a whole run with one match per round, so the round is a real question,
+  // and answering it from the entry's existing matches would hand
+  // `recordResult` a round it already holds: it de-duplicates on
+  // (entry, round) and would UPDATE the recorded quarter-final with the
+  // semi-final's score, losing the earlier result with no error. That question
+  // is asked properly by `AddResultDialog`, which the tournament page opens
+  // from its own header — so a tournament lands there, not here.
+  if (detail.event.kind !== "dual") {
+    redirect(`/dashboard/team/schedule/${eventId}`);
+  }
+
   const { event, entries } = detail;
 
   const programs = await programNamesFor(

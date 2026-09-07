@@ -82,10 +82,15 @@ export function ScoreOnlyFlow({
 
   /** The still-open lines other than this one, in lineup order from here. */
   const openAfter = useMemo(() => {
-    const rotated = [
-      ...lineup.slice(index + 1),
-      ...lineup.slice(0, Math.max(index, 0)),
-    ];
+    // Guarded on `index >= 0`. At -1 — a line the Change menu does not list,
+    // which the slot de-duplication in `lineupChoices` can produce — the old
+    // shape concatenated `slice(0)` with `slice(0, 0)` and walked the whole
+    // lineup twice. The filter below still dropped the current line, so the
+    // walk was right; the list was just built two deep for no reason.
+    const rotated =
+      index >= 0
+        ? [...lineup.slice(index + 1), ...lineup.slice(0, index)]
+        : lineup;
     return rotated.filter(
       (choice) =>
         choice.state === "open" &&

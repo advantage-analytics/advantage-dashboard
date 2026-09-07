@@ -100,7 +100,7 @@ import {
   type DualDraftSeed,
 } from "@/components/dashboard/schedule/static/dual-build-step";
 import { divisionLabel } from "@/lib/data/programs-server";
-import { EVENT_FORMATS } from "@/lib/schedule/format";
+import { formatValueOf } from "@/lib/schedule/format";
 import { isSettled } from "@/lib/schedule/entry-plan";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
 import type { EventDetail } from "@/lib/schedule/types";
@@ -173,22 +173,6 @@ export type NewDualFlowProps =
 interface DualEditTarget {
   detail: EventDetail;
   opponentProgram: ProgramSearchResult | null;
-}
-
-/**
- * The event's saved format as one of the four option names the control offers.
- *
- * A lookup over the shared table, never a parse: `EVENT_FORMATS` states each
- * pair as literals, so this either finds the row or finds nothing. Nothing is
- * the honest answer for a dual whose `ad_scoring` is null — the state
- * `docs/ui-revamp-guardrails.md` §3.1 and §4 exist about — and `useDualDraft`
- * then opens on the builder's own default rather than on a `false` invented
- * here to make the lookup succeed.
- */
-function formatValueOf({ bestOf, adScoring }: EventDetail["event"]["format"]) {
-  return EVENT_FORMATS.find(
-    (option) => option.bestOf === bestOf && option.adScoring === adScoring
-  )?.value;
 }
 
 /**

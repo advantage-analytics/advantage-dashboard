@@ -79,7 +79,7 @@ import {
 import type { LadderPlayer } from "@/lib/data/roster-server";
 import type { TournamentEntryInput } from "@/lib/schedule/actions";
 import { isSettled } from "@/lib/schedule/entry-plan";
-import { EVENT_FORMATS } from "@/lib/schedule/format";
+import { formatValueOf } from "@/lib/schedule/format";
 import type { EventDetail } from "@/lib/schedule/types";
 
 /** Where Cancel goes on step one. Inside the rebuilt set. */
@@ -113,22 +113,6 @@ export type NewTournamentFlowProps = {
   | { mode?: "create"; event?: undefined }
   | { mode: "edit"; event: EventDetail }
 );
-
-/**
- * The event's saved format as one of the four option names the control offers.
- *
- * A lookup over the shared table, never a parse: `EVENT_FORMATS` states each
- * pair as literals, so this either finds the row or finds nothing. Nothing is
- * the honest answer for a tournament whose `ad_scoring` is null — the state
- * `docs/ui-revamp-guardrails.md` §3.1 and §4 exist about — and
- * `useTournamentDraft` then opens on the builder's own default rather than on
- * a `false` invented here to make the lookup succeed.
- */
-function formatValueOf({ bestOf, adScoring }: EventDetail["event"]["format"]) {
-  return EVENT_FORMATS.find(
-    (option) => option.bestOf === bestOf && option.adScoring === adScoring
-  )?.value;
-}
 
 /**
  * The event, as the draft the builder opens on.

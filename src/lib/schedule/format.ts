@@ -118,6 +118,30 @@ export const EVENT_FORMATS: readonly {
 ];
 
 /**
+ * A saved event's format as the option name the builders select by, or
+ * `undefined` when no row states that pair.
+ *
+ * A lookup over the table above, never a parse: `EVENT_FORMATS` states each
+ * pair as literals, so this either finds the row or finds nothing. Nothing is
+ * the honest answer for an event whose `ad_scoring` is null — the state
+ * `docs/ui-revamp-guardrails.md` §3.1 and §4 exist about — and the draft hook
+ * then opens on its own default rather than on a `false` invented here to make
+ * the lookup succeed.
+ *
+ * Lives here rather than in either edit flow because both need it and a second
+ * copy is a second place for the encoding to come back.
+ */
+export function formatValueOf(format: {
+  bestOf: number;
+  adScoring: boolean | null;
+}): EventFormatValue | undefined {
+  return EVENT_FORMATS.find(
+    (option) =>
+      option.bestOf === format.bestOf && option.adScoring === format.adScoring
+  )?.value;
+}
+
+/**
  * "Brooks / Reid" → ["Brooks", "Reid"].
  *
  * Applied at the BOUNDARIES — on submit, and when comparing against the roster
