@@ -138,6 +138,26 @@ export const COL = {
 export const ROW = "flex items-center gap-4";
 
 /**
+ * The header row's labels and the column each sits over, in row order.
+ *
+ * Exported alongside `COL` and rendered by the header below, so `roster-day-zero`
+ * draws the real words rather than a copy that agrees with them today. The
+ * `spacer` entry is a column of the row too — it is what keeps Record, Form and
+ * Last match over their own cells.
+ */
+export const ROSTER_COLUMNS: readonly (
+  | { spacer: true }
+  | { label: string; col: string; center?: boolean }
+)[] = [
+  { label: "#", col: COL.spot, center: true },
+  { label: "Player", col: COL.player },
+  { spacer: true },
+  { label: "Record", col: COL.record },
+  { label: "Form", col: COL.form },
+  { label: "Last match", col: COL.last },
+];
+
+/**
  * Horizontal padding belongs to the card; each row pulls 16px of it back so a
  * wash reads as a rounded panel inset from the card's edge rather than a band
  * running wall to wall. No hairlines between rows — the wash is the boundary.
@@ -686,29 +706,42 @@ export function RosterTable({
             "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5"
           )}
         >
-          <span className={cn(COL.spot, "eyebrow-sm text-center")}>#</span>
-          <span className={cn(COL.player, "eyebrow-sm")}>Player</span>
-          <span className="flex-1" />
-          <span className={cn(COL.record, "eyebrow-sm")}>Record</span>
-          <span className={cn(COL.form, "eyebrow-sm")}>Form</span>
-          <span className={cn(COL.last, "eyebrow-sm flex items-center")}>
-            Last match
-            {/* Inside the last column, not after it. As a sibling it took a
-                column's worth of the row and pushed every heading ~100px left
-                of the cells beneath — Record sat over the spacer. The column
-                is 250px and its label is short, so the action rides its far
-                end and the headings stay over their values. */}
-            {canManage && !lineup && members.length > 1 && (
-              <button
-                type="button"
-                onClick={onStartLineup}
-                className="ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-[var(--radius-cell)] text-[11px] font-medium tracking-normal normal-case text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+          {ROSTER_COLUMNS.map((column) =>
+            "spacer" in column ? (
+              <span key="spacer" className="flex-1" />
+            ) : (
+              <span
+                key={column.label}
+                className={cn(
+                  column.col,
+                  "eyebrow-sm",
+                  column.center && "text-center",
+                  column.label === "Last match" && "flex items-center"
+                )}
               >
-                <GripVertical className="size-3" strokeWidth={1.5} aria-hidden />
-                Set lineup
-              </button>
-            )}
-          </span>
+                {column.label}
+                {/* Set lineup rides INSIDE the last column, not after it. As a
+                    sibling it took a column's worth of the row and pushed every
+                    heading ~100px left of the cells beneath — Record sat over
+                    the spacer. The column is 250px and its label is short, so
+                    the action rides its far end and the headings stay over
+                    their values. */}
+                {column.label === "Last match" &&
+                  canManage &&
+                  !lineup &&
+                  members.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={onStartLineup}
+                      className="ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-[var(--radius-cell)] text-[11px] font-medium tracking-normal normal-case text-[var(--blue)] transition-colors hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                    >
+                      <GripVertical className="size-3" strokeWidth={1.5} aria-hidden />
+                      Set lineup
+                    </button>
+                  )}
+              </span>
+            )
+          )}
         </div>
 
         <Reorder.Group

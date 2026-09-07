@@ -63,16 +63,14 @@ export function ScheduleTable({
       <div
         className={cn(
           "grid items-center gap-4 border-b border-[var(--border-hairline)] pb-2.5 pt-3.5",
-          GRID
+          SCHEDULE_GRID
         )}
       >
-        <span className="eyebrow-sm">Date</span>
-        <span className="eyebrow-sm">Event</span>
-        <span className="eyebrow-sm">Type</span>
-        <span className="eyebrow-sm">Venue</span>
-        <span className="eyebrow-sm">Lines</span>
-        <span className="eyebrow-sm">Score</span>
-        <span className="eyebrow-sm">Result</span>
+        {SCHEDULE_COLUMNS.map((label) => (
+          <span key={label} className="eyebrow-sm">
+            {label}
+          </span>
+        ))}
       </div>
 
       {rows.map((row) => (
@@ -105,7 +103,13 @@ export function scheduleRowId(eventId: string): string {
 export const SCHEDULE_GRID =
   "grid-cols-[84px_minmax(150px,1fr)_88px_56px_56px_48px_60px]";
 
-/** The header row's labels, in `SCHEDULE_GRID` order. */
+/**
+ * The header row's labels, in `SCHEDULE_GRID` order — and the header below
+ * renders FROM this, rather than restating it beside it. A constant the ghost
+ * reads and the real table only agrees with is a second source of truth: rename
+ * a column and day zero keeps the old word, silently, with the copy test still
+ * green because it asserts the constant.
+ */
 export const SCHEDULE_COLUMNS = [
   "Date",
   "Event",
@@ -115,8 +119,6 @@ export const SCHEDULE_COLUMNS = [
   "Score",
   "Result",
 ] as const;
-
-const GRID = SCHEDULE_GRID;
 
 function EventRow({
   row,
@@ -144,7 +146,7 @@ function EventRow({
         "-mx-4 grid h-[52px] w-[calc(100%+32px)] cursor-pointer items-center gap-4 rounded-[var(--radius-element)] px-4 text-left",
         "transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)]",
         "outline-none focus-visible:shadow-[var(--focus-ring)]",
-        GRID
+        SCHEDULE_GRID
       )}
       style={{ background: isSelected ? "var(--surface-muted)" : undefined }}
     >

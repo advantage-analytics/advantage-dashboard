@@ -2,7 +2,7 @@ import { Fragment } from "react";
 import { redirect } from "next/navigation";
 import { UserCheck } from "lucide-react";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { teamLabel } from "@/lib/workspace/types";
+import { isProgramStaff, teamLabel } from "@/lib/workspace/types";
 import { getRosterData } from "@/lib/data/team-roster-server";
 import { getPendingJoinRequests } from "@/lib/data/join-requests-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
@@ -61,7 +61,15 @@ export default async function RosterPage({
 
   // A hidden control is not authorization — every write behind these re-checks
   // `is_program_staff` in SQL. This only decides what is worth rendering.
-  const canManage = active.role !== "player";
+  //
+  // Through the shared predicate rather than `active.role !== "player"` spelled
+  // here. That hand-rolled form was right only because the redirect above has
+  // already ruled out a personal workspace — right by an ordering coincidence,
+  // in a file where this answer now also decides whether day zero offers a
+  // coach any way in at all. `isProgramStaff` is the one spelling every other
+  // team route uses, and its doc comment exists because the rail and the Team
+  // page once wrote this rule in opposite directions.
+  const canManage = isProgramStaff(active);
 
   // A deep link is the one case that lands with the drawer already open.
   const { player } = await searchParams;
@@ -109,6 +117,12 @@ export default async function RosterPage({
    * a page that is holding somebody's request with "Every player starts here"
    * would lose the one thing on it waiting on a coach. Same rule as Matches,
    * where a half-finished draft keeps the list.
+   *
+   * The third clause is staff-only by construction, not by oversight: a player
+   * never fetches the queue (it is hardcoded `[]` above), so for them this is a
+   * two-clause rule. That asymmetry is correct — a player cannot act on a
+   * request and is not shown one — so do not "fix" it by fetching the queue for
+   * everybody.
    */
   const dayZero =
     players.length === 0 &&

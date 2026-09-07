@@ -314,18 +314,30 @@ export function StaticSchedule({
       ? `/dashboard/team/schedule/${nextDual.id}`
       : null;
 
+  /**
+   * Day zero is the whole frame, not a panel inside it: the offer carries the
+   * page's one primary, so the title row and the season footer stand down
+   * until the season has an event. See `ScheduleDayZero` for why the rule
+   * changed, and where the program's name lives while this is on screen.
+   *
+   * A return rather than a branch in the JSX below — every hook above has
+   * already run, nothing here is conditional, and wrapping 150 lines in a
+   * ternary left the populated arm indented one level shy of its own nesting.
+   * There is no drawer to render either: with no rows nothing can be selected.
+   */
+  if (rows.length === 0) {
+    return (
+      <div className="flex w-full flex-1 bg-[var(--surface-card)]">
+        <div className="flex min-w-0 flex-1 flex-col px-14 pb-6 pt-5">
+          <ScheduleDayZero canCreate={canCreate} canAddOwnMatch={canAddOwnMatch} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex w-full flex-1 bg-[var(--surface-card)]">
       <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-14 pb-6 pt-5">
-        {/* Day zero is the whole frame, not a panel inside it: the offer
-            carries the page's one primary, so the title row and the season
-            footer stand down until the season has an event. See
-            `ScheduleDayZero` for why the rule changed, and where the program's
-            name lives while this is on screen. */}
-        {rows.length === 0 ? (
-          <ScheduleDayZero canCreate={canCreate} canAddOwnMatch={canAddOwnMatch} />
-        ) : (
-        <>
         {/* Title slot with summary, ghost Import beside primary New event. */}
         <div className="flex items-end gap-2.5">
           <div>
@@ -362,129 +374,126 @@ export function StaticSchedule({
           ) : null}
         </div>
 
-            <div className="flex items-center gap-2">
-              <Chip
-                label="All"
-                active={lifecycle === "all"}
-                onClick={() => applyCut({ lifecycle: "all" })}
-              />
-              <Chip
-                label="Upcoming"
-                active={lifecycle === "upcoming"}
-                onClick={() => applyCut({ lifecycle: "upcoming" })}
-              />
-              <Chip
-                label="Completed"
-                active={lifecycle === "completed"}
-                onClick={() => applyCut({ lifecycle: "completed" })}
-              />
-              <div className="flex-1" />
-              <MatchesFilterPanel<FacetKey>
-                sections={FILTER_SECTIONS}
-                hasActive={hasFacets}
-                isChecklistActive={() => false}
-                onToggleChecklist={() => {}}
-                segmentedValue={(key) => facets[key]}
-                onSelectSegment={(key, value) =>
-                  applyCut({
-                    facets:
-                      key === "kind"
-                        ? { ...facets, kind: value as EventKind | null }
-                        : { ...facets, site: value as EventSite | null },
-                  })
-                }
-                onClear={() => applyCut({ facets: { kind: null, site: null } })}
-                resultCount={visible.length}
-                totalCount={rows.length}
-                label="Filter events"
-                noun={{ singular: "event", plural: "events" }}
-              />
-              <SortMenu value={sort} onChange={(next) => applyCut({ sort: next })} />
-            </div>
+        <div className="flex items-center gap-2">
+          <Chip
+            label="All"
+            active={lifecycle === "all"}
+            onClick={() => applyCut({ lifecycle: "all" })}
+          />
+          <Chip
+            label="Upcoming"
+            active={lifecycle === "upcoming"}
+            onClick={() => applyCut({ lifecycle: "upcoming" })}
+          />
+          <Chip
+            label="Completed"
+            active={lifecycle === "completed"}
+            onClick={() => applyCut({ lifecycle: "completed" })}
+          />
+          <div className="flex-1" />
+          <MatchesFilterPanel<FacetKey>
+            sections={FILTER_SECTIONS}
+            hasActive={hasFacets}
+            isChecklistActive={() => false}
+            onToggleChecklist={() => {}}
+            segmentedValue={(key) => facets[key]}
+            onSelectSegment={(key, value) =>
+              applyCut({
+                facets:
+                  key === "kind"
+                    ? { ...facets, kind: value as EventKind | null }
+                    : { ...facets, site: value as EventSite | null },
+              })
+            }
+            onClear={() => applyCut({ facets: { kind: null, site: null } })}
+            resultCount={visible.length}
+            totalCount={rows.length}
+            label="Filter events"
+            noun={{ singular: "event", plural: "events" }}
+          />
+          <SortMenu value={sort} onChange={(next) => applyCut({ sort: next })} />
+        </div>
 
-            {/* The panel closes on apply; this states the cut in words. Never
-                chips, never a badge — v3's Data Table law 6. */}
-            {hasFacets ? (
-              <div
-                className="flex flex-wrap items-center gap-2 rounded-[var(--radius-element)] px-3.5 py-2.5"
-                style={{ background: "var(--surface-subtle)" }}
-              >
-                <FilterIcon
-                  className="size-[13px] shrink-0"
-                  strokeWidth={1.5}
-                  style={{ color: "var(--ink-500)" }}
-                  aria-hidden="true"
-                />
-                <span className="text-[11px]" style={{ color: "var(--ink-700)" }}>
-                  {describeCut(facets)}
-                </span>
-                <span
-                  className="size-[3px] rounded-full"
-                  style={{ background: "var(--ink-300)" }}
-                  aria-hidden="true"
-                />
-                <span className="text-micro tabular">
-                  {visible.length} of {rows.length}
-                </span>
-                <div className="flex-1" />
-                <button
-                  type="button"
-                  onClick={() => applyCut({ facets: { kind: null, site: null } })}
-                  className="whitespace-nowrap text-[11px] font-medium"
-                  style={{ color: "var(--blue)" }}
-                >
-                  Clear filter
-                </button>
-              </div>
-            ) : null}
+        {/* The panel closes on apply; this states the cut in words. Never
+            chips, never a badge — v3's Data Table law 6. */}
+        {hasFacets ? (
+          <div
+            className="flex flex-wrap items-center gap-2 rounded-[var(--radius-element)] px-3.5 py-2.5"
+            style={{ background: "var(--surface-subtle)" }}
+          >
+            <FilterIcon
+              className="size-[13px] shrink-0"
+              strokeWidth={1.5}
+              style={{ color: "var(--ink-500)" }}
+              aria-hidden="true"
+            />
+            <span className="text-[11px]" style={{ color: "var(--ink-700)" }}>
+              {describeCut(facets)}
+            </span>
+            <span
+              className="size-[3px] rounded-full"
+              style={{ background: "var(--ink-300)" }}
+              aria-hidden="true"
+            />
+            <span className="text-micro tabular">
+              {visible.length} of {rows.length}
+            </span>
+            <div className="flex-1" />
+            <button
+              type="button"
+              onClick={() => applyCut({ facets: { kind: null, site: null } })}
+              className="whitespace-nowrap text-[11px] font-medium"
+              style={{ color: "var(--blue)" }}
+            >
+              Clear filter
+            </button>
+          </div>
+        ) : null}
 
-            {visible.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16">
-                <p className="mb-1 text-[14px] font-medium" style={{ color: "var(--ink-900)" }}>
-                  No events match
-                </p>
-                <button
-                  type="button"
-                  onClick={() =>
-                    applyCut({ lifecycle: "all", facets: { kind: null, site: null } })
-                  }
-                  className="mt-1 text-[11px] font-medium"
-                  style={{ color: "var(--blue)" }}
-                >
-                  Clear all filters
-                </button>
-              </div>
-            ) : (
-              <ScheduleTable
-                rows={visible}
-                details={details}
-                selectedId={selectedId}
-                onSelect={toggle}
-              />
-            )}
-
-            {/* The season footer. It used to be drawn at day zero too, on the
-                old rule that the frame never moves — but that rule went with
-                the title row, and "Season 0–0 in duals · 0 of 0 lines
-                analyzed" under a page that has never held an event is a
-                readout of nothing. Once there is one event it is back, and
-                from then on it never moves again. */}
-            <div className="flex items-center gap-2.5">
-              <span className="text-micro" style={{ color: "var(--ink-500)" }}>
-                Season {tabularNumerals(seasonFacts(season))}
-              </span>
-              <div className="flex-1" />
-              {nextLineupHref ? (
-                <Link
-                  href={nextLineupHref}
-                  className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-                >
-                  Set next lineup
-                </Link>
-              ) : null}
-            </div>
-          </>
+        {visible.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16">
+            <p className="mb-1 text-[14px] font-medium" style={{ color: "var(--ink-900)" }}>
+              No events match
+            </p>
+            <button
+              type="button"
+              onClick={() =>
+                applyCut({ lifecycle: "all", facets: { kind: null, site: null } })
+              }
+              className="mt-1 text-[11px] font-medium"
+              style={{ color: "var(--blue)" }}
+            >
+              Clear all filters
+            </button>
+          </div>
+        ) : (
+          <ScheduleTable
+            rows={visible}
+            details={details}
+            selectedId={selectedId}
+            onSelect={toggle}
+          />
         )}
+
+        {/* The season footer. It used to be drawn at day zero too, on the old
+            rule that the frame never moves — but that rule went with the title
+            row, and "Season 0–0 in duals · 0 of 0 lines analyzed" under a page
+            that has never held an event is a readout of nothing. Once there is
+            one event it is back, and from then on it never moves again. */}
+        <div className="flex items-center gap-2.5">
+          <span className="text-micro" style={{ color: "var(--ink-500)" }}>
+            Season {tabularNumerals(seasonFacts(season))}
+          </span>
+          <div className="flex-1" />
+          {nextLineupHref ? (
+            <Link
+              href={nextLineupHref}
+              className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+            >
+              Set next lineup
+            </Link>
+          ) : null}
+        </div>
       </div>
 
       {drawer ? (
@@ -618,10 +627,6 @@ function opponentOf(
 
 /* ── Chrome ──────────────────────────────────────────────────────────────── */
 
-/**
- * One lifecycle pill, with its count inside — the one place a count lives
- * outside a tooltip, because it is page content rather than chrome.
- */
 /** "Newest first" ▾ — the two orders a season can be read in. */
 function SortMenu({
   value,

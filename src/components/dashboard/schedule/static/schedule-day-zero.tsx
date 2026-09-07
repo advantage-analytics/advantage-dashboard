@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { ChevronDown, Filter as FilterIcon } from "lucide-react";
 import { DayZeroOffer } from "@/components/dashboard/home/day-zero-offer";
+import {
+  DayZeroShape,
+  GHOST_OPACITY,
+  GhostRule,
+} from "@/components/dashboard/home/day-zero-shape";
 import { advButton } from "@/lib/ui/adv-button";
 import { Chip } from "./chip";
 import { SCHEDULE_COLUMNS, SCHEDULE_GRID } from "./schedule-table";
@@ -48,17 +53,15 @@ import { SCHEDULE_COLUMNS, SCHEDULE_GRID } from "./schedule-table";
  * the name, so it gets the darker, taller rule the way Opponent does on
  * Matches; Result is a 14px dot at `ResultMark`'s own footprint.
  */
-const ROW_RULES: readonly { w: string; tone: "200" | "100"; round?: boolean }[] = [
-  { w: "72%", tone: "100" }, // Date
-  { w: "40%", tone: "200" }, // Event — the opponent's name
-  { w: "62%", tone: "100" }, // Type
-  { w: "68%", tone: "100" }, // Venue
-  { w: "44%", tone: "100" }, // Lines
-  { w: "70%", tone: "100" }, // Score
-  { w: "14px", tone: "100", round: true }, // Result — ResultMark's footprint
+const ROW_RULES: readonly React.ComponentProps<typeof GhostRule>[] = [
+  { width: "72%" }, // Date
+  { width: "40%", tone: "200", shape: "tall" }, // Event — the opponent's name
+  { width: "62%" }, // Type
+  { width: "68%" }, // Venue
+  { width: "44%" }, // Lines
+  { width: "70%" }, // Score
+  { width: "14px", shape: "dot" }, // Result — ResultMark's footprint
 ];
-
-const ROW_OPACITY = [1, 0.8, 0.6, 0.45, 0.3] as const;
 
 function GhostRow({ opacity }: { opacity: number }) {
   return (
@@ -68,13 +71,7 @@ function GhostRow({ opacity }: { opacity: number }) {
       aria-hidden="true"
     >
       {ROW_RULES.map((rule, i) => (
-        <span
-          key={i}
-          className={`${rule.round ? "h-3.5 rounded-full" : "h-2 rounded-[2px]"} ${
-            rule.tone === "200" ? "bg-[var(--ink-200)]" : "bg-[var(--ink-100)]"
-          }${i === 1 ? " h-[9px]" : ""}`}
-          style={{ width: rule.w }}
-        />
+        <GhostRule key={i} {...rule} />
       ))}
     </div>
   );
@@ -140,13 +137,10 @@ export function ScheduleDayZero({
         }
       />
 
-      <p className="sr-only">
-        Once the season has events this page lists every dual and tournament by
-        date, with its venue, its lines and how it finished. Nothing below is
-        real data yet.
-      </p>
-
-      <div inert className="flex flex-col gap-[18px]" style={{ opacity: 0.32 }}>
+      <DayZeroShape
+        description="Once the season has events this page lists every dual and tournament by date, with its venue, its lines and how it finished. Nothing below is real data yet."
+        className="flex flex-col gap-[18px]"
+      >
         {/* The toolbar at rest and at zero. The pills are the real component;
             the filter and sort controls are drawn, since a panel and a menu
             that cannot open have nothing to be. */}
@@ -192,12 +186,12 @@ export function ScheduleDayZero({
               law 9) — a ghost that rules between its rows is drawing a table
               the page does not have. */}
           <div>
-            {ROW_OPACITY.map((opacity) => (
+            {GHOST_OPACITY.map((opacity) => (
               <GhostRow key={opacity} opacity={opacity} />
             ))}
           </div>
         </div>
-      </div>
+      </DayZeroShape>
     </div>
   );
 }
