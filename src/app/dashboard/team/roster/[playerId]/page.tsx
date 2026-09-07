@@ -100,7 +100,6 @@ export default async function PlayerProfilePage({
   const actions = (
     <ProfileActions
       mode={mode}
-      playerId={profile.playerId}
       member={member}
       roster={mode === "staff" ? roster.members : []}
       canUpload={canUpload}
@@ -127,7 +126,6 @@ export default async function PlayerProfilePage({
           <ProfileDayZero
             mode={mode}
             firstName={profile.firstName}
-            playerId={profile.playerId}
             canUpload={canUpload}
             serve={profile.serve}
           />

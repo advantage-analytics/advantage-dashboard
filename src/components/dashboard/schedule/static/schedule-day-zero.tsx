@@ -122,7 +122,7 @@ export function ScheduleDayZero({
                 <>
                   {" "}
                   <Link
-                    href="/dashboard/team/schedule/new/single"
+                    href="/dashboard/matches/new"
                     className="font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
                   >
                     Add a one-off match

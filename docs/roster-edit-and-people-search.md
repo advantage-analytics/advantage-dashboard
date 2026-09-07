@@ -280,7 +280,7 @@ runs on each keystroke after, so these must not be sequential.
 
 Name matching needs care: the roster stores `first_name`/`last_name` separately, so a
 PostgREST `.or()` on either column alone never matches "priya sharma". Use the two-step the
-codebase already proves in `PinnedMatchContent.tsx:68-73`:
+codebase already proves in `schedule/static/opponent-popup.tsx:194-203`:
 
 1. Split the query into tokens and `.or()` each token against `first_name`, `last_name` and
    `email` — deliberately a **superset**;
