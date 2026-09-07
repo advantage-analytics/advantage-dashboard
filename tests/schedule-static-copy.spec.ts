@@ -511,6 +511,16 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
   const step1 = screen('dual-school-step.tsx');
   const step2 = screen('dual-build-step.tsx');
   const popup = screen('opponent-popup.tsx');
+  /**
+   * The flow's own file, since T15.
+   *
+   * `new-dual-flow.tsx` frames all three steps on `WizardShell`, so the words
+   * that used to be a step body's chrome — the eyebrow, each screen's title,
+   * the footer's status line and the primary's label — are read from here
+   * rather than from the two bodies. What each body still draws itself, it is
+   * still asserted for below.
+   */
+  const flow = screen('new-dual-flow.tsx');
 
   test("2c's directory, as the artboard states it", () => {
     // Design record — see the header. Every expectation below reads
@@ -583,8 +593,14 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
   });
 
   test("2c's own words", () => {
-    drawn(step1, 'dual-school-step.tsx', 'New dual · step 1 of 2');
-    drawn(step1, 'dual-school-step.tsx', 'Which school are you playing?');
+    // RETIRED 'New dual · step 1 of 2' — the eyebrow is `WizardShell`'s now,
+    //   and it counts three steps rather than two: the school, the four facts
+    //   and the nine courts (T15). It prints "Step 1 of 3" from `stepIndex`
+    //   and `stepCount`, so there is no literal on any screen to pin — the
+    //   shell's own chrome is not this spec's record.
+    // RETIRED 'Which school are you playing?' — the title moved to the shell
+    //   with the eyebrow, and was rewritten with it: `flow` below pins the
+    //   sentence that replaced it.
     // RETIRED 'Region' — the pill is gone from the screen, not renamed. Nothing
     //   in `programs` backs a region and no mapping invents one, so the wired
     //   step drops the control rather than drawing a filter that cannot filter.
@@ -608,13 +624,51 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
     drawn(step1, 'dual-school-step.tsx', '↵');
     // The em dash a row with no last-played date falls back to.
     drawn(step1, 'dual-school-step.tsx', '"—"');
+    // RETIRED '· date, site and lineup come next' — the footer that printed
+    //   it is `WizardShell`'s. The line it stood in is now the shell's status
+    //   slot, which step one leaves empty: the pinned bar on the next screen
+    //   says what was chosen, so a sentence naming what comes after it would
+    //   be the flow describing its own step indicator.
+    // RETIRED 'Cancel' and 'Continue' — both are the shell's buttons
+    //   (`new-match-wizard/WizardShell.tsx`), drawn once for every wizard on
+    //   the platform rather than by each step. Step one hands the shell a
+    //   `cancelHref` and no `back`, and the shell decides which of the two it
+    //   draws. Step three's label IS this flow's, and is pinned below.
+  });
+
+  test("the flow's own words — the three steps' titles and ledes", () => {
+    // Not the artboards': `2c`'s title was rewritten and `2b`'s single frame
+    // became two steps when the flow adopted `WizardShell` (T15), so these
+    // three pairs are the new copy, transcribed here the same way — one side
+    // typed out by hand, the other the component's source.
+    drawn(flow, 'new-dual-flow.tsx', 'Who are you playing?');
     drawn(
-      step1,
-      'dual-school-step.tsx',
-      '· date, site and lineup come next'
+      flow,
+      'new-dual-flow.tsx',
+      'The school decides the lineup you fill in later. Pick a program, or type any opponent the directory never had.'
     );
-    drawn(step1, 'dual-school-step.tsx', 'Cancel');
-    drawn(step1, 'dual-school-step.tsx', 'Continue');
+    // STRAIGHT apostrophe in "it's", as everywhere else in this record.
+    drawn(flow, 'new-dual-flow.tsx', "When it's played, and how.");
+    drawn(
+      flow,
+      'new-dual-flow.tsx',
+      'Four facts the whole dual inherits. Every one of the nine lines is created under them.'
+    );
+    drawn(flow, 'new-dual-flow.tsx', 'The lineup.');
+    // Em dash before the clause about subs.
+    drawn(
+      flow,
+      'new-dual-flow.tsx',
+      'Six singles and three doubles. Your side is seeded from the ladder — type over a name to put a sub on.'
+    );
+
+    // The footer, which is the flow's and no longer either body's.
+    drawn(flow, 'new-dual-flow.tsx', 'Creates ');
+    drawn(flow, 'new-dual-flow.tsx', '"line" : "lines"');
+    drawn(flow, 'new-dual-flow.tsx', ' vs ');
+    drawn(flow, 'new-dual-flow.tsx', 'Create dual');
+    drawn(flow, 'new-dual-flow.tsx', 'Creating…');
+    drawn(flow, 'new-dual-flow.tsx', 'Continue');
   });
 
   test("2b's draft, as the fields print it", () => {
@@ -677,13 +731,17 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
   });
 
   test("2b's own words", () => {
+    // RETIRED 'Dual' — the eyebrow over the "vs <school>" header, which left
+    //   with `DualBuildStep` when the builder became two steps of the flow
+    //   (T15). The school is pinned above the column by `PinnedEventBar`
+    //   instead, under its own swords glyph, and the eyebrow slot is the
+    //   shell's "Step N of 3".
     // RETIRED 'Opponent' and '· type to search all' — the 320px opponent rail
     //   left with the design when `dual-build-step.tsx` was split into a draft
     //   hook and two step bodies (T14). Both strings were the rail's: the
     //   eyebrow over its list, and the placeholder in its drawn search field.
     //   Re-choosing the school is step one's job again, so nothing renames
     //   them — the pane they sat in is gone, and the builder is one column.
-    drawn(step2, 'dual-build-step.tsx', 'Dual');
     drawn(step2, 'dual-build-step.tsx', 'Date');
     drawn(step2, 'dual-build-step.tsx', 'Site');
     drawn(step2, 'dual-build-step.tsx', 'Surface');
@@ -714,11 +772,14 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
       'dual-build-step.tsx',
       "All nine lines are expected — forfeit a line only when a team can't field a player for it."
     );
-    drawn(step2, 'dual-build-step.tsx', 'Creates ');
-    drawn(step2, 'dual-build-step.tsx', '"line" : "lines"');
-    drawn(step2, 'dual-build-step.tsx', ' vs ');
-    drawn(step2, 'dual-build-step.tsx', 'Create dual');
-    drawn(step2, 'dual-build-step.tsx', 'Cancel');
+    // MOVED 'Creates ', '"line" : "lines"', ' vs ' and 'Create dual' — the
+    //   footer they were drawn in belonged to `DualBuildStep`, the composite
+    //   that framed these two bodies; the flow's shell draws them now, and
+    //   they are pinned against `new-dual-flow.tsx` above.
+    // RETIRED 'Cancel' — `WizardShell`'s, like step one's. Steps two and three
+    //   are handed a `back` rather than a `cancelHref`, so what the shell
+    //   draws in that corner is "Back": leaving from the lineup is a step back
+    //   to the facts and then out, not a second exit beside the first.
   });
 
   test('2d and 2e — the add-opponent popup', () => {

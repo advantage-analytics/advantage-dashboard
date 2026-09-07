@@ -8,10 +8,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import Link from "next/link";
 import { ChevronRight, Plus, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { advButton } from "@/lib/ui/adv-button";
 import {
   divisionLabel,
   programDisplayName,
@@ -32,12 +30,12 @@ import type { ProgramSearchResult } from "@/lib/data/programs-server";
  * the route reads once for the whole flow, as it always did.
  *
  * ── Why a context and not props ────────────────────────────────────────────
- * `StaticDualBuilder` is the two steps' shell: it owns which step is showing
- * and nothing else, deliberately, so that neither step's work has to be read
- * through it. Threading one screen's data through that shell as props would
- * undo exactly that. So the route wraps it in the provider below and each step
- * takes what it needs — step one the directory half, `ourConference` through
- * `directoryTotal`, and step two the rest.
+ * `NewDualFlow` (`new-dual-flow.tsx`) is the three steps' shell: it owns which
+ * step is showing and which school was chosen, and nothing else, deliberately,
+ * so that no step's work has to be read through it. Threading one screen's data
+ * through that shell as props would undo exactly that. So the route wraps it in
+ * the provider below and each step takes what it needs — step one the directory
+ * half, `ourConference` through `directoryTotal`, and the other two the rest.
  *
  * `ladder` and `defaultSurface` are therefore read on a
  * screen that does not use them: they are step two's, and this route is the
@@ -141,13 +139,29 @@ export function useNewDualData(): NewDualData {
  * `onContinue` takes the answer with it: the directory row beside the
  * school's own name for a pick, the typed text and a null row for a club side
  * or a school the directory never had — the dormant `SchoolSearch.onChosen`'s
- * contract. Step two names whichever it was given and nothing else; see
- * `static-dual-builder.tsx`'s header for the defect that shaped this.
+ * contract. The two steps after it name whichever it was given and nothing
+ * else. An earlier pass threaded the picked row through while the rest of the
+ * builder was still the artboard's fixtures, so picking Ridgemont Tech printed
+ * "vs Ridgemont Tech" over Ridgeline's lineup; the row travels now because the
+ * data travels with it. See `new-dual-flow.tsx`'s header for the shape that
+ * carries it.
  */
 export function DualSchoolStep({
   onContinue,
+  onChoiceChange,
 }: {
   onContinue: (name: string, program: ProgramSearchResult | null) => void;
+  /**
+   * What Continue would carry right now, reported upward on every change.
+   *
+   * The step still owns the answer — the picked row and the typed term are its
+   * state, and `commit()` below is still the one place the two are turned into
+   * one choice. What this adds is a read of that choice for a footer that is no
+   * longer this component's: `NewDualFlow` draws the shell's Continue, and a
+   * button that cannot see the answer cannot know whether to be asleep. Null is
+   * "nothing chosen yet", which is exactly the state that disables it.
+   */
+  onChoiceChange?: (name: string | null, program: ProgramSearchResult | null) => void;
 }) {
   const {
     ourConference,
@@ -240,25 +254,28 @@ export function DualSchoolStep({
    */
   const chosen: string | null = picked ? picked.schoolName : term.trim() || null;
 
+  // Reported rather than lifted: the choice stays this component's, and the
+  // flow above is told what it is so its Continue can gate on it. An effect
+  // and not a call inside the handlers, because "the term changed" and "a row
+  // was picked" are three separate handlers and one of them is the escape row.
+  useEffect(() => {
+    onChoiceChange?.(chosen, picked);
+  }, [chosen, picked, onChoiceChange]);
+
   function commit() {
     if (chosen === null) return;
     onContinue(chosen, picked);
   }
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col bg-[var(--surface-card)]">
-      {/* `padding:32px 40px` — the artboard's, not `EventShell`'s 26/48/32. */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-10 py-8">
-        <div className="max-w-[720px]">
-          <span className="eyebrow">New dual · step 1 of 2</span>
-          <h1
-            className="mt-[9px] text-[30px] font-light leading-[34px] text-[var(--ink-900)]"
-            style={{ letterSpacing: "-.6px" }}
-          >
-            Which school are you playing?
-          </h1>
-
-          <div className="mt-5 flex items-center gap-3 border-b-2 border-[var(--blue)] pb-[13px] pt-3">
+    /* No frame, no eyebrow, no title and no footer: all four are
+       `WizardShell`'s now (`new-dual-flow.tsx`), which draws them the same way
+       for all three steps. What is left is the question itself — the field,
+       the two pills, the two lists and the escape row — sitting in the shell's
+       832px column, which measures 720px inside its gutters and is therefore
+       the same width the artboard's own `max-w-[720px]` gave it. */
+    <>
+          <div className="flex items-center gap-3 border-b-2 border-[var(--blue)] pb-[13px] pt-3">
             <Search
               size={17}
               strokeWidth={1.5}
@@ -423,34 +440,7 @@ export function DualSchoolStep({
               ) : null}
             </button>
           ) : null}
-        </div>
-      </div>
-
-      {/* `padding:16px 40px 20px` — again the artboard's own, not the shell's. */}
-      <div className="flex shrink-0 items-center gap-3 border-t border-[var(--border-hairline)] px-10 pb-5 pt-4">
-        {/* Inside the rebuilt set. */}
-        <Link
-          href="/dashboard/team/schedule"
-          className={advButton("ghost", "md")}
-        >
-          Cancel
-        </Link>
-        <div className="flex-1" />
-        {chosen ? (
-          <span className="text-[11px]" style={{ color: "var(--ink-600)" }}>
-            {chosen} · date, site and lineup come next
-          </span>
-        ) : null}
-        <button
-          type="button"
-          onClick={commit}
-          disabled={chosen === null}
-          className={advButton("primary", "md")}
-        >
-          Continue
-        </button>
-      </div>
-    </div>
+    </>
   );
 }
 

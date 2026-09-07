@@ -1,22 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Calendar, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { advButton } from "@/lib/ui/adv-button";
-import { EventShell } from "@/components/dashboard/schedule/event-shell";
 import {
   OpponentPopup,
   opponentPoolFor,
   type OpponentPool,
 } from "@/components/dashboard/schedule/static/opponent-popup";
 import { useNewDualData } from "@/components/dashboard/schedule/static/dual-school-step";
-import {
-  divisionLabel,
-  programDisplayName,
-} from "@/lib/data/programs-server";
+import { programDisplayName } from "@/lib/data/programs-server";
 import {
   createDual,
   opponentRosterForDual,
@@ -271,7 +265,7 @@ export interface DualLineSeed {
 /**
  * The facts and lines a caller can open the builder on.
  *
- * T19 hands one in; `DualBuildStep` passes none, and every absent field falls
+ * T19 hands one in; `NewDualFlow` passes none, and every absent field falls
  * back to exactly what a new dual has always opened on — today, home, the
  * program's `default_surface`, `2b`'s format, and `seedLineup()`'s nine
  * courts.
@@ -735,165 +729,6 @@ export function DualLineupStep({
         </div>
       </div>
     </>
-  );
-}
-
-/**
- * `2b` — step two of a new dual: the facts and the lineup, in one frame.
- *
- * ── A composition, as of the split ─────────────────────────────────────────
- * Three pieces, and nothing of its own but the frame: `useDualDraft` holds the
- * draft and owns the write, `DualFactsStep` draws the top row and
- * `DualLineupStep` the nine courts. The route and `static-dual-builder.tsx`
- * see the same component taking the same one prop; what changed is that the
- * draft and the two bodies can now each be mounted somewhere else — which is
- * what T19's shell needs, and why the seed above is a parameter.
- *
- * ── The shell ──────────────────────────────────────────────────────────────
- * `EventShell` with `flush`, which is the prop that exists for this artboard by
- * name (see its doc comment). In `flush` mode the shell contributes
- * `flex min-h-0 flex-1 overflow-hidden` and NO padding, so the pane inside owns
- * its own insets and scrolls on its own. The default body would put 48/32/26
- * around it and scroll it with the frame, which is a different screen.
- *
- * The footer is `2b`'s own `16px 32px 20px` rather than the shell's `footer`
- * slot, whose `px-12 pb-[22px]` is 48/22 — the same call `dual-school-step.tsx`
- * made for `2c`. The shell's body padding is what `flush` exists to remove; its
- * footer padding belongs to the four create screens its comment names, and this
- * artboard draws different numbers. Where the design and the shell disagree the
- * design wins.
- *
- * ── One column, since the rail left ────────────────────────────────────────
- * `2b` drew the conference in a 320px left rail so the answer step one asked
- * for stayed revisable without a screen hop. That rail is gone with this
- * split — a searched school, its head-to-head sublines, the drawn search field
- * and the check on the chosen row all left together — so what remains is the
- * detail pane, and it is now the whole width rather than a `flex-1` beside an
- * empty 320px column. Re-choosing the school is step one's job again, as it is
- * on `2c`.
- *
- * The school is the one step one chose — a `ChosenSchool`, handed down by
- * `static-dual-builder.tsx`, which holds nothing else. It names the header, the
- * footer and the popups, and every one of those reads the same object, so they
- * cannot drift.
- *
- * Create calls `createDual` and pushes to the event it made. Its `ActionError`
- * is a sentence meant for the coach, so it is printed in the footer where the
- * line count goes — the same shape `static-tournament-builder.tsx` uses.
- */
-export function DualBuildStep({ school }: { school: ChosenSchool }) {
-  const {
-    draft,
-    edit,
-    lines,
-    pool,
-    laddered,
-    editOurLabels,
-    editTheirLabels,
-    setForfeited,
-    lineCount,
-    submit,
-    pending,
-    error,
-  } = useDualDraft(school);
-
-  const program = school.kind === "program" ? school.program : null;
-  const schoolName =
-    school.kind === "program" ? school.program.schoolName : school.name;
-
-  // "Big Ten · D-I" — conference first. `programSubtitle()` prints the two the
-  // other way round ("D-I · Big Sky") and four claim-flow call sites depend on
-  // that order, so this composes its own rather than reversing a shared helper
-  // for one screen. The artboard's order, and reported. Only a directory row
-  // knows either, so a typed opponent renders no subline rather than an
-  // invented one.
-  const headerSubline = program
-    ? [program.conference, divisionLabel(program.division)]
-        .filter(Boolean)
-        .join(" · ")
-    : "";
-
-  return (
-    <div className="flex min-h-0 w-full flex-1 flex-col bg-[var(--surface-card)]">
-      <EventShell flush>
-        <div className="flex min-w-0 flex-1 flex-col gap-[22px] overflow-auto px-8 py-6">
-          <div className="flex items-end gap-3 border-b border-[var(--border-hairline)] pb-3">
-            <div className="min-w-0 flex-1">
-              <span className="eyebrow">Dual</span>
-              <div className="mt-1.5 flex items-baseline gap-2.5">
-                <span
-                  className="text-[30px] font-light leading-none tracking-[-0.6px]"
-                  style={{ color: "var(--ink-600)" }}
-                >
-                  vs
-                </span>
-                <span
-                  className="min-w-0 truncate text-[30px] font-light leading-none tracking-[-0.6px]"
-                  style={{ color: "var(--ink-900)" }}
-                >
-                  {schoolName}
-                </span>
-              </div>
-            </div>
-            {headerSubline ? (
-              <span
-                className="text-micro shrink-0"
-                style={{ color: "var(--ink-500)" }}
-              >
-                {headerSubline}
-              </span>
-            ) : null}
-          </div>
-
-          <DualFactsStep draft={draft} onEdit={edit} />
-
-          <DualLineupStep
-            lines={lines}
-            pool={pool}
-            laddered={laddered}
-            onOurLabels={editOurLabels}
-            onTheirLabels={editTheirLabels}
-            onForfeit={setForfeited}
-          />
-        </div>
-      </EventShell>
-
-      {/* `padding:16px 32px 20px` — the artboard's, not `EventShell`'s footer
-          slot at 16/48/22. See the header. */}
-      <div className="flex shrink-0 items-center gap-3 border-t border-[var(--border-hairline)] px-8 pb-5 pt-4">
-        {/* Inside the rebuilt set. */}
-        <Link
-          href="/dashboard/team/schedule"
-          className={advButton("ghost", "md")}
-        >
-          Cancel
-        </Link>
-        <div className="flex-1" />
-        {error ? (
-          // `createDual`'s own sentence, in the count line's place — the same
-          // slot the tournament builder gives it.
-          <span className="text-[11px]" style={{ color: "var(--danger)" }}>
-            {error}
-          </span>
-        ) : (
-          <span className="text-[11px]" style={{ color: "var(--ink-600)" }}>
-            Creates <span className="tabular">{lineCount}</span>{" "}
-            {lineCount === 1 ? "line" : "lines"} vs {schoolName}
-          </span>
-        )}
-        {/* `createDual` refuses a dual with no lines, so the button is off
-            until there is one to write — a disabled button says that better
-            than a sentence the coach has to read to find out. */}
-        <button
-          type="button"
-          disabled={pending || lineCount === 0}
-          className={advButton("primary", "md")}
-          onClick={submit}
-        >
-          {pending ? "Creating…" : "Create dual"}
-        </button>
-      </div>
-    </div>
   );
 }
 

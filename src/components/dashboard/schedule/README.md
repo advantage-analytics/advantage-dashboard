@@ -28,7 +28,7 @@ Eight route files render this directory, and all eight read the database.
 |---|---|---|
 | `/dashboard/team/schedule` | `static/static-schedule.tsx`, with `static/schedule-table.tsx`, `static/event-drawer.tsx` and `static/event-mark.tsx` (Platform Audit `Tc2`/`Tc2c`) | `getProgramSchedule` → `scheduleRowsFrom`, `seasonSummaryFrom`; `getOpponentPrograms` |
 | `/dashboard/team/schedule/new` | `static/static-event-chooser.tsx` | nothing — two links and one piece of local state |
-| `/dashboard/team/schedule/new/dual` | `static/static-dual-builder.tsx` → `static/dual-school-step.tsx`, then `static/dual-build-step.tsx` with `static/opponent-popup.tsx` | `getLadder`, `getTeamSettings`, `getConferenceTable`, `getProgramSchedule` → `opponentDualHistory`, a `programs` head count; `/api/programs/search` and `opponentRosterForDual` from the client; writes through `createDual` |
+| `/dashboard/team/schedule/new/dual` | `static/new-dual-flow.tsx` — three steps on `matches/new-match-wizard`'s `WizardShell`, with `static/pinned-event-bar.tsx`: `DualSchoolStep` (`static/dual-school-step.tsx`), then `DualFactsStep` and `DualLineupStep` (`static/dual-build-step.tsx`, with `static/opponent-popup.tsx`) | `getLadder`, `getTeamSettings`, `getConferenceTable`, `getProgramSchedule` → `opponentDualHistory`, a `programs` head count; `/api/programs/search` and `opponentRosterForDual` from the client; writes through `createDual` |
 | `/dashboard/team/schedule/new/tournament` | `static/static-tournament-builder.tsx` | `getLadder`, `getTeamSettings`; writes through `createTournament` |
 | `/dashboard/team/schedule/[eventId]` | `dual-detail.tsx` (on `event-page.tsx`'s frame, with `team-totals-widget.tsx` and `head-to-head-widget.tsx` in the rail), `tournament-detail.tsx` | `getProgramSchedule` → `eventDetailFrom`; for a dual also `opponentDualHistory` / `opponentHistoryFor` / `opponentMeetings` and `getEventTeamTotals` |
 | `/dashboard/team/schedule/[eventId]/score` | `score-only-flow.tsx` (the upload wizard's chrome with its video half switched off — `StepIndicator`, `PinnedLineBar` and `ScoreBlock` come from `matches/new-match-wizard`) | `getProgramSchedule` → `eventDetailFrom`, `programNamesFor`; `presetFor`/`lineupChoices` and `entryState`; writes through `recordResult` |
@@ -53,7 +53,7 @@ every file that was on it is deleted:
 | `schedule-list.tsx`, `event-detail-pane.tsx` | `static/static-schedule.tsx` + `static/event-drawer.tsx` read the database (T15; deleted T17) |
 | `new-event-chooser.tsx` | `static/static-event-chooser.tsx` took the route (T18) |
 | `tournament-form.tsx`, `entry-editor.tsx` | `static/static-tournament-builder.tsx` calls `createTournament` (T20) |
-| `dual-form.tsx` | `static/static-dual-builder.tsx` → `dual-school-step` + `dual-build-step`, the latter calling `createDual` (T23) |
+| `dual-form.tsx` | `static/dual-school-step.tsx` + `static/dual-build-step.tsx`, the latter's `useDualDraft` calling `createDual` (T23); the `static-dual-builder.tsx` shell that first framed the two is itself deleted, replaced by `static/new-dual-flow.tsx` (T15, dual/tournament designs) |
 | `school-search.tsx` | `static/dual-school-step.tsx` searches the real directory (T21; deleted T23) |
 | `opponent-rail.tsx` | the left pane of `static/dual-build-step.tsx` (T23) |
 | `field-row.tsx` | nothing 1:1 — the builders each draw their own defaults cells (T23) |
@@ -87,8 +87,9 @@ Everything here is reachable: `dual-detail.tsx`, `tournament-detail.tsx`,
 
 Two files are shared across routes and must survive any future deletion.
 `event-shell.tsx` frames the three detail screens (`dual-detail`,
-`tournament-detail`, `single-detail`) and three files under `static/`
-(`dual-build-step`, `static-tournament-builder`, `static-event-chooser`).
+`tournament-detail`, `single-detail`) and two files under `static/`
+(`static-tournament-builder`, `static-event-chooser`) — `dual-build-step` used
+it until its frame left with `DualBuildStep` and `WizardShell` took over.
 `row-action.tsx` is not imported under `static/` at all, but is used from
 three separate live surfaces: `/dashboard/team/roster` directly, `line-row.tsx`
 (reachable via `dual-detail`/`tournament-detail`), and `team/dual-sheet.tsx`

@@ -189,7 +189,7 @@ need it.
 - **notes:** Keep the `schoolKey` row-key contract and the stale-fetch guard verbatim (README §4). `DualDraftSeed` is optional now and used by T19. Non-goals: no new shell, no copy for steps 2/3 yet.
 
 ## T15 · `NewDualFlow`: three steps on `WizardShell` with the pinned school
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T12, T13, T14
 - **files:** src/components/dashboard/schedule/static/new-dual-flow.tsx (new), src/components/dashboard/schedule/static/static-dual-builder.tsx (delete), src/components/dashboard/schedule/static/dual-school-step.tsx, src/components/dashboard/schedule/static/dual-build-step.tsx, src/app/dashboard/team/schedule/new/dual/page.tsx, tests/schedule-static-copy.spec.ts, src/components/dashboard/schedule/README.md
