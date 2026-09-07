@@ -511,6 +511,8 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
   const step1 = screen('dual-school-step.tsx');
   const step2 = screen('dual-build-step.tsx');
   const popup = screen('opponent-popup.tsx');
+  /** Our side of a lineup court, split out of step two's row. */
+  const picker = screen('lineup-name-picker.tsx');
   /**
    * The flow's own file, since T15.
    *
@@ -778,6 +780,32 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
       'dual-build-step.tsx',
       "All nine lines are expected — forfeit a line only when a team can't field a player for it."
     );
+
+    // Our side of a court is a roster typeahead rather than a bare input
+    // (`lineup-name-picker.tsx`), so its two sentences are pinned here too.
+    // Neither is the artboard's — `2b` draws a filled lineup and no field
+    // affordance at all — but both are drawn copy, and the first is the whole
+    // point of the control: the roster is reachable without spelling it, and
+    // a coach whose player is missing has somewhere to go. STRAIGHT
+    // apostrophe in "Don't", as everywhere else in this record.
+    drawn(
+      picker,
+      'lineup-name-picker.tsx',
+      "Don't see your player? Add your player"
+    );
+    // A court filled with a name the roster does not know still saves — this
+    // is the screen finally SAYING so, which is the defect being closed.
+    drawn(
+      picker,
+      'lineup-name-picker.tsx',
+      'not on your roster · no player linked'
+    );
+    drawn(
+      picker,
+      'lineup-name-picker.tsx',
+      'Type a first and last name to add a player.'
+    );
+    drawn(picker, 'lineup-name-picker.tsx', 'Adding…');
     // MOVED 'Creates ', '"line" : "lines"', ' vs ' and 'Create dual' — the
     //   footer they were drawn in belonged to `DualBuildStep`, the composite
     //   that framed these two bodies; the flow's shell draws them now, and
