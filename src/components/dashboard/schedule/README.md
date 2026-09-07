@@ -156,13 +156,30 @@ Where to read each one now:
   re-target can attach to a real, different person there. The rail does not
   yet offer a re-target — today the key changes only between mounts — but
   both halves are in place for when it does.
-- **Opponent-player contribution** — `createDual`'s own best-effort loop at
-  submit, once the lines are safely written. The dormant cell also wrote
-  per-pick, through `saveOpponentPlayer` in `lib/schedule/actions.ts`; the
-  live popup does not (its "saved" confirmation is a statement the design
-  draws, not a server's answer — `opponent-popup.tsx`'s `saveNote` says what
-  that costs), so **`saveOpponentPlayer` currently has no caller**. It is left
-  in place as the ready-made write for a popup that earns a real confirmation.
+- **Opponent-player contribution** — two callers now, and they do not
+  duplicate each other. `createDual`'s best-effort loop at submit contributes
+  every opposing name once the lines are safely written, and that is still the
+  backstop. `static/opponent-popup.tsx`'s "Save as a different player" card
+  calls `saveOpponentPlayer` in `lib/schedule/actions.ts` per-pick, the way
+  the dormant `opponent-name-cell.tsx` did — the same converging RPC run
+  earlier, so the coach is told the truth while the answer is still on screen.
+  It was left uncalled through the re-wiring for want of a popup that earned a
+  real confirmation; the picker-parity pass is that popup. The confirmation
+  splits three ways because there are three outcomes and `2e` drew one card
+  for all of them: `On {school}'s saved roster` for a name the pool already
+  held (nothing was written), `Saved to {school} roster` only once
+  `saveOpponentPlayer` reports `{ saved: true }`, and `Added to this lineup`
+  when there was no program to save to or the RPC refused — every arm of
+  `contribute_opponent_player` can legitimately refuse, and a refusal costs
+  the pool an identity, never the coach their typed name.
+- **The opponent picker** — `static/opponent-popup.tsx` is a roster picker
+  over `pool.candidates`, not the three-name near-duplicate warning `2d`
+  drew: with saved names it lists them on open and filters as you type (up to
+  eight rows, scrolling), and the keyboard is `hooks/use-listbox-nav.ts` over
+  a real `combobox`/`listbox`/`option` tree — the same hook and the same ARIA
+  shape as `team/invite-target-picker.tsx`, so two pickers on one screen
+  cannot drift on what a key does. A school with no pooled roster gets no list
+  at all and the field alone; free text stays the fallback, unchanged.
 - **Bench substitution and drag-to-reorder — nowhere.** The deleted
   `lineup-editor.tsx` could reorder lines by drag and substitute from a bench
   built by `benchFromLines` (`lib/schedule/roster-match.ts`). `2b` draws
