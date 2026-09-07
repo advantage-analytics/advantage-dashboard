@@ -9,6 +9,7 @@ import type {
   Viewer,
   Workspace,
   WorkspaceContextValue,
+  UploadPolicy,
 } from './types';
 
 /**
@@ -49,6 +50,7 @@ function personalWorkspace(viewer: Viewer): Workspace {
     // member is its owner. False is the honest value; `canUploadForProgram()`
     // never consults it here because it answers on `kind` first.
     playersCanUpload: false,
+    uploadPolicy: 'everyone',
     // The opposite default, for the opposite reason. There is no
     // `program_members` row to read here and the viewer is the only person in
     // this workspace, so false would not be cautious — it would assert that
@@ -82,7 +84,7 @@ async function listProgramWorkspaces(
   const { data, error } = await supabase
     .from('program_members')
     .select(
-      'role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload, org_type, time_zone)'
+      'role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload, upload_policy, org_type, time_zone)'
     )
     .eq('user_id', userId)
     .order('joined_at');
@@ -106,6 +108,7 @@ async function listProgramWorkspaces(
           team: string | null;
           status: string;
           players_can_upload: boolean;
+          upload_policy: string;
           org_type: string;
           time_zone: string;
         }
@@ -148,6 +151,9 @@ async function listProgramWorkspaces(
         // gate and the switcher's `landingPath()` are looking at one value
         // resolved once per request — see `Workspace.playersCanUpload`.
         playersCanUpload: program.players_can_upload,
+        // The ladder the boolean above is the bottom rung of; the CHECK pins
+        // the value set, so the cast is a naming ceremony.
+        uploadPolicy: program.upload_policy as UploadPolicy,
         // This membership's own grant, from the row the join is already
         // reading. `Boolean(...)` rather than `?? true`: the column is NOT
         // NULL, so the coalesce would only ever fire when the select did not

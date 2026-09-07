@@ -15,17 +15,29 @@ import { cn } from "@/lib/utils";
 export function StatePill({
   children,
   className,
+  outline = false,
 }: {
   children: React.ReactNode;
   className?: string;
+  /**
+   * A state that is promised rather than held — `Invited` beside members who
+   * are here. Same geometry, no fill, a hairline ring, and it pairs with the
+   * outlined seat box that stands for the same invitation.
+   */
+  outline?: boolean;
 }) {
   return (
     <span
       className={cn(
-        "inline-flex h-[18px] items-center whitespace-nowrap rounded-full px-[7px] text-[10px] font-medium text-[var(--ink-700)]",
+        "inline-flex h-[18px] items-center whitespace-nowrap rounded-full px-[7px] text-[10px] font-medium",
+        outline ? "text-[var(--ink-500)]" : "text-[var(--ink-700)]",
         className
       )}
-      style={{ background: "var(--surface-subtle)" }}
+      style={
+        outline
+          ? { boxShadow: "inset 0 0 0 1px var(--ink-200)" }
+          : { background: "var(--surface-subtle)" }
+      }
     >
       {children}
     </span>

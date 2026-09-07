@@ -47,7 +47,7 @@ is generated: run `npm run map` after adding a route, or `npm test` fails.
   page form, not a page.
 - `src/app/dashboard/` — `(home)`, `matches`, `matches/[matchId]`, `matches/new`,
   `statistics`, `ask`, `help`, `team/{roster,schedule,compare,upload,settings}`,
-  `settings/{account,profile,plan,preferences,subscription,team,usage}`
+  `settings/{account,profile,plan,preferences,subscription,teams,teams/[programId],usage}`
 - `src/app/claim/`, `src/app/join/[token]`, `src/app/admin/claims` — program claim,
   invite acceptance and claim review flows
 - `src/app/api/` — `upload`, `validate-file`, `chat`, `home-insight`, `matches/[matchId]`,

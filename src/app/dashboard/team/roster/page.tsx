@@ -2,7 +2,11 @@ import { Fragment } from "react";
 import { redirect } from "next/navigation";
 import { UserCheck } from "lucide-react";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { isProgramStaff, teamLabel } from "@/lib/workspace/types";
+import {
+  isProgramStaff,
+  teamLabel,
+  type UploadPolicy,
+} from "@/lib/workspace/types";
 import { getRosterData } from "@/lib/data/team-roster-server";
 import { getPendingJoinRequests } from "@/lib/data/join-requests-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
@@ -45,6 +49,14 @@ export const metadata = { title: "Roster" };
  * actions and the page says so: Add player creates the row now and needs no
  * account; Invite sends email and spends a seat when it is accepted.
  */
+/** The footer's one sentence about who may send video, per `upload_policy`. */
+const UPLOAD_COPY: Record<UploadPolicy, string> = {
+  owner: "Only the owner can upload for a player",
+  owner_coaches: "The owner and coaches can upload for any player",
+  staff: "Coaches can upload for any player",
+  everyone: "Anyone on the team can upload for a teammate",
+};
+
 export default async function RosterPage({
   searchParams,
 }: {
@@ -291,7 +303,7 @@ export default async function RosterPage({
           {canManage && (
             <RowAction
               key="manage"
-              href="/dashboard/settings/team"
+              href={`/dashboard/settings/teams/${active.id}`}
               ariaLabel="Manage staff in Team settings"
               className="whitespace-nowrap"
             >
@@ -301,9 +313,7 @@ export default async function RosterPage({
         </p>
       )}
       <p key="quota" className="text-[11px] leading-[1.6] text-[var(--ink-500)]">
-        {roster.playersCanUpload
-          ? "Anyone on the team can upload for a teammate"
-          : "Coaches can upload for any player"}
+        {UPLOAD_COPY[roster.uploadPolicy]}
         {" — analysis time resets "}
         {formatResetDate(currentBillingMonth())}.
         {claimant &&

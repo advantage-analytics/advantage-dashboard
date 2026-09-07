@@ -67,6 +67,29 @@ export async function setActiveWorkspaceInPlace(
 }
 
 /**
+ * Switch the active workspace and go to one of its team pages.
+ *
+ * For Settings › Teams' "Manage on Roster": that page can show a program
+ * the viewer has not switched into, and the roster is an active-workspace
+ * page, so the switch and the navigation are one act. The destination is
+ * allow-listed to the team subtree — this is a door into a workspace, not a
+ * general redirect. `push`, not `replace`: Back should return to the
+ * program's settings page, which the new workspace can still render.
+ */
+export async function setActiveWorkspaceThen(
+  workspaceId: string,
+  destination: string
+): Promise<void> {
+  const target = await writeActiveWorkspace(workspaceId);
+  if (!target) return;
+
+  const safe = destination.startsWith('/dashboard/team')
+    ? destination
+    : workspaceHome(target);
+  redirect(safe, RedirectType.push);
+}
+
+/**
  * The half the two actions share: re-resolve membership, write the cookie,
  * revalidate. Null when the id names no workspace the viewer belongs to.
  */

@@ -53,6 +53,8 @@ markers is hand-written — edit it as things move.
 | `/dashboard/settings/profile` | [`src/app/dashboard/settings/profile/page.tsx`](src/app/dashboard/settings/profile/page.tsx) |
 | `/dashboard/settings/subscription` | [`src/app/dashboard/settings/subscription/page.tsx`](src/app/dashboard/settings/subscription/page.tsx) |
 | `/dashboard/settings/team` | [`src/app/dashboard/settings/team/page.tsx`](src/app/dashboard/settings/team/page.tsx) |
+| `/dashboard/settings/teams/[programId]` | [`src/app/dashboard/settings/teams/[programId]/page.tsx`](src/app/dashboard/settings/teams/[programId]/page.tsx) |
+| `/dashboard/settings/teams` | [`src/app/dashboard/settings/teams/page.tsx`](src/app/dashboard/settings/teams/page.tsx) |
 | `/dashboard/settings/usage` | [`src/app/dashboard/settings/usage/page.tsx`](src/app/dashboard/settings/usage/page.tsx) |
 | `/dashboard/statistics` | [`src/app/dashboard/statistics/page.tsx`](src/app/dashboard/statistics/page.tsx) |
 | `/dashboard/team/ask` | [`src/app/dashboard/team/ask/page.tsx`](src/app/dashboard/team/ask/page.tsx) |

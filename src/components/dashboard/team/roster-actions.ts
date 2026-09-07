@@ -29,7 +29,7 @@ import type { ActionResult } from "@/components/dashboard/settings/actions";
  */
 
 const ROSTER_PATH = "/dashboard/team/roster";
-const SETTINGS_PATH = "/dashboard/settings/team";
+const SETTINGS_PATH = "/dashboard/settings/teams";
 const TEAM_HOME_PATH = "/dashboard/team";
 
 /**

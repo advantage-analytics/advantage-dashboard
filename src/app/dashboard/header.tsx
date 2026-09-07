@@ -61,6 +61,10 @@ const MATCHES_CRUMB = { label: "Matches", href: "/dashboard/matches" };
  * that no longer lists the route at all.
  */
 const SCHEDULE_HREF = "/dashboard/team/schedule";
+
+/** `/dashboard/settings/teams/<id>` — the one settings page nested a level deeper. */
+const TEAM_SETTINGS_PAGE = /^\/dashboard\/settings\/teams\/([^/]+)/;
+const TEAMS_CRUMB = { label: "Teams", href: "/dashboard/settings/teams" };
 const SCHEDULE_CRUMB = {
   label: navLabel(SCHEDULE_HREF) ?? "Schedule",
   href: SCHEDULE_HREF,
@@ -136,7 +140,17 @@ export function Header({
 }) {
   const pathname = usePathname();
   const headerStatus = useHeaderStatus();
-  const { active, viewer } = useWorkspace();
+  const { active, available, viewer } = useWorkspace();
+
+  // A program's own settings page names the program as the third crumb —
+  // resolved from the workspaces the client already holds, like the settings
+  // layout's title, so the trail and the title cannot disagree.
+  const teamSettingsId = pathname.match(TEAM_SETTINGS_PAGE)?.[1] ?? null;
+  const teamSettingsProgram = teamSettingsId
+    ? available.find(
+        (workspace) => workspace.kind === "team" && workspace.id === teamSettingsId
+      )
+    : undefined;
   const requestLogout = useRequestLogout();
 
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -250,6 +264,12 @@ export function Header({
           MATCHES_CRUMB,
           { label: matchCrumb.tournamentName },
           { label: `${matchCrumb.player1Name} vs ${matchCrumb.player2Name}` },
+        ]
+      : teamSettingsProgram
+      ? [
+          { label: "Settings", href: "/dashboard/settings" },
+          TEAMS_CRUMB,
+          { label: teamSettingsProgram.name },
         ]
       : getStaticBreadcrumbs(pathname);
 
