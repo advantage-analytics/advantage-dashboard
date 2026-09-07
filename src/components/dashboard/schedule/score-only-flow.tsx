@@ -273,6 +273,10 @@ function ScoreForm({
               setState((prior) => ({ ...prior, opponentName: event.target.value }))
             }
             placeholder="Name"
+            // The rule recolours to blue on focus, which IS the visible focus
+            // indicator WCAG 2.4.7 asks for — so the neutral field ring from
+            // `focus.css` would be a second, redundant one stacked on top.
+            data-focus-ring="none"
             className="max-w-[320px] border-b border-[var(--border-hairline)] bg-transparent pb-1.5 text-[14px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-300)] focus:border-[var(--blue)]"
           />
           <span className="text-micro">

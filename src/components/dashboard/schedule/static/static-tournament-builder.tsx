@@ -532,6 +532,10 @@ export function TournamentWeekendStep({
             value={draft.name}
             onChange={(event) => onEdit({ name: event.target.value })}
             placeholder="Buckeye Fall Classic"
+            /* The span above carries a standing 2px blue rule — the one field
+               this step is asking for. A ring inset inside it is a second mark
+               on a field that is already spoken for. */
+            data-focus-ring="none"
             className="w-full bg-transparent text-[22px] font-light tracking-[-0.4px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-300)]"
           />
         </span>

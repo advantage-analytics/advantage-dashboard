@@ -1929,8 +1929,14 @@ over the bottom 2px of your outline.
 Treat that as a known defect rather than as settled design — it fails silently,
 which is how 209 such declarations accumulated across 61 files before anyone
 noticed. A few encoded a *different* ring than the system's: `ui/input.tsx` set
-`#E5E5E5`, the value retired for measuring 1.26:1. All 209 were deleted in
-`247f054`, so `src/` carries none today.
+`#E5E5E5`, the value retired for measuring 1.26:1. `247f054` deleted 209 of
+them — but not all of them. Seven `focus-visible:border-[#E5E5E5]`
+declarations survived that sweep, across five files (`ui/input.tsx`,
+`ui/select.tsx`, `statistics/match-selector.tsx`, `schedule/score-entry.tsx`
+and `schedule/single-score-entry.tsx`), and were removed separately; `src/`
+carries none today. The gap is the point: a sweep that reports a count is not
+the same as a sweep that leaves nothing behind, and nothing in the repo
+re-checks it.
 
 Two structural fixes remain, and neither is done: importing the design-system
 CSS into a named layer, so a utility overrides normally and this warning
@@ -1979,18 +1985,35 @@ selector on:
 | `SettingsUnderlineInput` | `settings/settings-card.tsx` |
 | `UnderlineSelect` | `team/player-fields.tsx` |
 | `ProfileSelect`'s inline `<select>` | `settings/profile-form.tsx` |
-| `NameField` | `schedule/lineup-editor.tsx` |
 | `UnderlineField`'s children, `PlayerRow`'s name input | `matches/match-actions/edit-match-dialog.tsx` |
-| the player/opponent name inputs | `matches/new-match-wizard/DetailsContent.tsx` |
+| `EventCell`'s input — the wrapper goes blue 2px on `focus-within` | `matches/new-match-wizard/DetailsStepContent.tsx` |
+| the opponent-name input — its rule recolours to blue on `:focus` | `schedule/score-only-flow.tsx` |
 
 The opt-out is earned by an actual on-focus change, never by looking like an
-underline. `schedule/field-row.tsx`'s defaults row draws a hairline that never
-changes — no thickening, no recolour, nothing — so it keeps the neutral ring:
-remove it there and the field drops from one indicator to zero, which is
-precisely the failure this file exists to prevent. Before adding this
-attribute anywhere new, find the actual `:focus`/`:focus-within` rule that
-changes the control and confirm it fires — do not assume a `border-b` alone
-qualifies.
+underline. `schedule/add-result-row.tsx`'s round `<select>`,
+`schedule/add-result-dialog.tsx`'s `SELECT_CLS`, `schedule/score-entry.tsx`'s
+opponent input and `schedule/static/static-tournament-builder.tsx`'s
+`FieldCell` all draw a hairline that never changes — no thickening, no
+recolour, nothing — so they keep the neutral ring: remove it there and the
+field drops from one indicator to zero, which is precisely the failure this
+file exists to prevent.
+
+A *standing* rule fails the test for the same reason, even a bold one. The
+opponent-name span in `DetailsStepContent.tsx` and the title field in
+`static/static-tournament-builder.tsx` both sit under a permanent
+`border-b-2 border-[var(--blue)]` that looks focused but never changes: it is
+drawn by an editing state, not by focus, and it stays blue after focus moves
+to the next field. Those keep the ring. "Already blue" is not "changes on
+focus."
+
+Before adding this attribute anywhere new, find the actual
+`:focus`/`:focus-within` rule that changes the control and confirm it fires —
+do not assume a `border-b` alone qualifies, and confirm the rule tracks focus
+rather than some adjacent open/editing state. `EventCell` needed
+`focus-within:` added for exactly that reason: it keyed the blue rule on the
+popover's `open`, which `commit()` sets false while the input still holds
+focus, so the opt-out would have left a focused field with no indicator at all
+in that window.
 
 `data-focus-ring="none"` is the opt-out for both exceptions, and it lives in
 `focus.css` scoped to `:focus-visible` rather than as an inline
