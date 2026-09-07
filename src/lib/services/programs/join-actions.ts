@@ -477,7 +477,12 @@ async function nudgeInviter(invite: InviteRecord): Promise<void> {
  */
 export async function signOutForInvite(token: string): Promise<void> {
   const supabase = await createClient();
-  await supabase.auth.signOut();
+  // Local scope, explicitly: auth-js defaults signOut() to "global". This
+  // person is signed in under their own real account — it is simply the wrong
+  // one for this invitation — so ending the session in this browser is the
+  // whole job. Revoking every device's refresh token would sign them out of
+  // their phone for clicking a link.
+  await supabase.auth.signOut({ scope: "local" });
 
   const invite = await loadInvite(token);
   if (!invite) redirect("/login");

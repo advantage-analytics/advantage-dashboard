@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 import { expect, test } from '@playwright/test';
 import { ChartLine, UsersRound } from 'lucide-react';
 
@@ -26,20 +29,60 @@ test.describe('nav data: icons and comingSoon flags', () => {
     expect(roster?.icon).toBe(UsersRound);
   });
 
-  test('exactly the five ComingSoonPage routes are flagged', () => {
-    const flaggedHrefs = [...PERSONAL_NAV, ...TEAM_NAV]
-      .filter((link) => link.comingSoon)
-      .map((link) => link.href)
-      .sort();
+  /**
+   * The invariant, asserted against the pages rather than against a second
+   * copy of the flag list: a nav entry is flagged exactly when its page
+   * renders `ComingSoonPage`.
+   *
+   * The earlier version of this test listed the flagged hrefs and checked
+   * `nav.ts` still said the same thing — a tautology that could only restate
+   * whatever the nav data said, and it duly passed while Opponents rendered
+   * `ComingSoonPage` unflagged. This version fails in both directions: a new
+   * stub route nobody flagged, and — the one that will actually bite — a page
+   * that graduates out of `ComingSoonPage` while the nav still promises
+   * "coming soon".
+   */
+  test('a nav entry is flagged exactly when its page renders ComingSoonPage', () => {
+    const appDir = path.join(process.cwd(), 'src/app');
 
-    expect(flaggedHrefs).toEqual(
-      [
-        '/dashboard/statistics',
-        '/dashboard/ask',
-        '/dashboard/opponents',
-        '/dashboard/team/statistics',
-        '/dashboard/team/ask',
-      ].sort()
-    );
+    /** Every `page.tsx`, keyed by the route it serves. */
+    const routeToFile = new Map<string, string>();
+    const walk = (dir: string) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+        } else if (entry.name === 'page.tsx') {
+          // Route groups — `(home)` — are organisational, not part of the URL.
+          const route =
+            '/' +
+            path
+              .relative(appDir, dir)
+              .split(path.sep)
+              .filter((segment) => !segment.startsWith('('))
+              .join('/');
+          routeToFile.set(route === '/' ? '/' : route, full);
+        }
+      }
+    };
+    walk(appDir);
+
+    for (const link of [...PERSONAL_NAV, ...TEAM_NAV]) {
+      const file = routeToFile.get(link.href);
+      // Fail loudly rather than skipping: an href we cannot resolve to a page
+      // is exactly the silent hole this test exists to close.
+      expect(file, `no page.tsx serves ${link.href}`).toBeTruthy();
+
+      const rendersComingSoon = fs
+        .readFileSync(file as string, 'utf8')
+        .includes('ComingSoonPage');
+
+      expect(
+        Boolean(link.comingSoon),
+        rendersComingSoon
+          ? `${link.href} renders ComingSoonPage but is not flagged comingSoon`
+          : `${link.href} is flagged comingSoon but its page no longer renders ComingSoonPage`
+      ).toBe(rendersComingSoon);
+    }
   });
 });
