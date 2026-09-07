@@ -3,30 +3,34 @@ import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { isProgramStaff } from "@/lib/workspace/types";
 import { getLadder } from "@/lib/data/roster-server";
 import { getTeamSettings } from "@/lib/data/team-settings-server";
-import { StaticTournamentBuilder } from "@/components/dashboard/schedule/static/static-tournament-builder";
+import { NewTournamentFlow } from "@/components/dashboard/schedule/static/new-tournament-flow";
 
 /**
- * 3c — the new tournament, master and detail: the ladder on the left is what
- * the field is built from, so the roster fetch is not decoration here. Without
- * it the right pane has nothing to enter.
+ * 3c, under the wizard's chrome: the weekend, then the field.
  *
- * ── Back on the database, against the rebuilt body ─────────────────────────
- * The `events-lineups` run re-pointed this route at `StaticTournamentBuilder`
- * reading `src/lib/schedule/fixtures.ts`, so `3c` could be built without a
- * query. The body stays; the fixtures go. The two loaders below are the
- * pre-static read verbatim — `getLadder` and `getTeamSettings`, in parallel —
- * and they arrive as the same two props `TournamentForm` always took.
+ * The roster fetch is not decoration here — the field step is one list over the
+ * ladder, and without it the second step has nobody to enter.
  *
- * `defaultSurface` has no cell to fill. `3c` draws Name, Starts, Ends, Site and
- * Format, and no surface or host field, so the value travels as the surface the
- * created event will carry rather than as a control: `createTournament` takes a
- * `surface`, and the program's own answer is the only non-invented one
- * available. Nothing here defaults it to a court type the program never chose.
+ * ── The body this route renders ────────────────────────────────────────────
+ * `NewTournamentFlow` (`static/new-tournament-flow.tsx`) frames two steps of
+ * `matches/new-match-wizard`'s `WizardShell`, the same chrome the new dual and
+ * the upload wizard use. It draws `TournamentWeekendStep` and
+ * `TournamentFieldStep` out of `static/static-tournament-builder.tsx` over that
+ * file's `useTournamentDraft`. The two-pane composite this route used to render
+ * — a roster rail beside an entries table — is gone.
  *
- * Submitting writes: the builder calls `createTournament` and navigates to the
- * event it created. `tournament-form.tsx` and the `entry-editor.tsx` pair it
- * composed were the previous DB-wired implementation of this screen and are
- * deleted — the draw and seed vocabulary they owned was ported first.
+ * The two loaders below are unchanged: `getLadder` and `getTeamSettings`, in
+ * parallel, arriving as the same two props.
+ *
+ * `defaultSurface` has no cell to fill. The weekend step draws Name, Starts,
+ * Ends, Site and Format, and no surface or host field, so the value travels as
+ * the surface the created event will carry rather than as a control:
+ * `createTournament` takes a `surface`, and the program's own answer is the
+ * only non-invented one available. Nothing here defaults it to a court type the
+ * program never chose.
+ *
+ * Submitting writes: the draft calls `createTournament` and navigates to the
+ * event it created.
  *
  * The guards below are untouched.
  */
@@ -44,7 +48,7 @@ export default async function NewTournamentPage() {
   ]);
 
   return (
-    <StaticTournamentBuilder
+    <NewTournamentFlow
       roster={roster}
       defaultSurface={settings?.program.defaultSurface ?? null}
     />

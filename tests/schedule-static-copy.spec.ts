@@ -119,10 +119,10 @@ const DASHBOARD = path.join(__dirname, '..', 'src', 'components', 'dashboard');
  * Four passes, and the order matters:
  *
  *   1. **Comments go first, and they are the load-bearing pass.** These files
- *      quote the artboards at length in their own doc blocks — the tournament
- *      builder's header carries the info callout verbatim, `2b`'s carries
- *      "— no available player" — so a `toContain` over the raw file would pass
- *      on prose about the copy after the copy itself had been deleted. The
+ *      quote the artboards at length in their own doc blocks — `2b`'s header
+ *      carries "— no available player", and the tournament builder's names the
+ *      controls it draws — so a `toContain` over the raw file would pass on
+ *      prose about the copy after the copy itself had been deleted. The
  *      empty `{ }` a removed JSX comment leaves behind goes with it, or it
  *      lands in the middle of a sentence the design wrote as one.
  *   2. `{" "}`, JSX's explicit space, written wherever a line break would
@@ -823,11 +823,17 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
 /* ────────────────────────────────────────────────────────────────────────── */
 
 test.describe('/dashboard/team/schedule/new/tournament · 3c', () => {
+  // `3c` drew one frame — a roster rail beside a weekend and an entries table.
+  // It is two steps of `WizardShell` now (T16): the weekend, then the field as
+  // ONE list over the roster, each row carrying its own draw and seed. The rail,
+  // the `+` control, the separate entries table and the info callout are gone
+  // from the screen; each retired string below carries the reason.
   const builder = screen('static-tournament-builder.tsx');
   const file = 'static-tournament-builder.tsx';
+  const flow = screen('new-tournament-flow.tsx');
 
   test("3c's roster rail and the field it feeds", () => {
-    // Design record — see the header. The rail has listed `getLadder()` since
+    // Design record — see the header. The list has been `getLadder()`'s since
     // T19; `TOURNAMENT_FIELD` has no consumer under `src/`.
     expect(TOURNAMENT_FIELD.map((row) => row.player.name)).toEqual([
       'Dana Brooks',
@@ -861,12 +867,17 @@ test.describe('/dashboard/team/schedule/new/tournament · 3c', () => {
   });
 
   test("3c's own words", () => {
-    drawn(builder, file, 'Roster');
-    drawn(builder, file, 'Add a player to the field');
-    // The four shapes the rail's state line takes.
-    drawn(builder, file, '${spot} · qualifying');
-    drawn(builder, file, '${spot} · entered · seed ${entry.seed}');
-    drawn(builder, file, '${spot} · entered');
+    // RETIRED 'Roster' — the rail is gone, not renamed. The field step IS the
+    //   roster now, so an eyebrow naming it would label the whole step.
+    // RETIRED 'Add a player to the field' — the rail's search field went with
+    //   the rail. A player is entered on their own row by picking a draw, so
+    //   there is no second list to search into.
+    // RETIRED '${spot} · qualifying', '${spot} · entered · seed ${entry.seed}'
+    //   and '${spot} · entered' — the rail's state line reported back what a
+    //   click on the rail had done in the other pane. One list has nothing to
+    //   report to: the draw cell and the seed cell on the row ARE the state,
+    //   and the ladder spot is drawn beside the name rather than folded into a
+    //   sentence about it.
 
     drawn(builder, file, 'Tournament · name');
     // Still drawn, as the name field's placeholder now rather than as text: a
@@ -885,38 +896,64 @@ test.describe('/dashboard/team/schedule/new/tournament · 3c', () => {
     // "Bo3 · ad" — best of 3, AD scoring, which is the opposite of the dual's.
     drawn(builder, file, 'Bo3 · ad');
 
-    // A claim nothing in this app can compute: no table records which programs
-    // attend a tournament. Drawn because the artboard draws it — and held: it
-    // is still the component's literal, now printed for real programs in any
-    // conference (T25, finding 6). It leaves this file when it leaves the
-    // component.
-    drawn(
-      builder,
-      file,
-      '3 Big Ten programs are in this field — matches against them count toward conference seeding.'
-    );
+    // RETIRED '3 Big Ten programs are in this field — matches against them
+    //   count toward conference seeding.' — a claim nothing in this app can
+    //   compute: no table records which programs attend a tournament, and T25
+    //   recorded it (finding 6) as still being printed for real programs in any
+    //   conference. The frame it sat in is gone, and it is not re-drawn: a
+    //   sentence that cannot be true of the data is not copy worth carrying
+    //   into a new screen.
+    // RETIRED 'Entries · singles' and 'added from the roster' — the header over
+    //   the second table, which no longer exists. The field is the roster, so
+    //   there is nothing for a header to say it was added from.
 
-    drawn(builder, file, 'Entries · singles');
-    drawn(builder, file, 'added from the roster');
     drawn(builder, file, '"Main draw"');
     drawn(builder, file, '"Qualifying"');
     drawn(builder, file, '"Unseeded"');
     drawn(builder, file, 'Seed ${entry.seed}');
     // A qualifier holds no seed, and `3c` draws an em dash rather than a word.
+    // The same glyph is the draw cell's first option — the one that takes a
+    // player back out of the field.
     drawn(builder, file, '"—"');
     drawn(
       builder,
       file,
       "An entry is a player in a draw — where they start, not what they'll play."
     );
-    drawn(builder, file, 'Creates ');
-    drawn(builder, file, '"entry" : "entries"');
+    // RETIRED 'Cancel' — `WizardShell`'s, like the dual flow's. The shell is
+    //   handed a `cancelHref` on step one and a `back` on step two, and decides
+    //   which of the two it draws.
+  });
+
+  test("the flow's own words — the two steps' titles and ledes", () => {
+    // Not the artboard's: `3c`'s single frame became two steps when the screen
+    // adopted `WizardShell` (T16), so both pairs are new copy, transcribed here
+    // the same way — one side typed out by hand, the other the component's
+    // source.
+    drawn(flow, 'new-tournament-flow.tsx', 'The weekend.');
     drawn(
-      builder,
-      file,
+      flow,
+      'new-tournament-flow.tsx',
+      'Name it, say when and where. A tournament holds entries rather than lines — the field comes next.'
+    );
+    drawn(flow, 'new-tournament-flow.tsx', 'The field.');
+    // STRAIGHT apostrophe in "they'll", as everywhere else in this record.
+    drawn(
+      flow,
+      'new-tournament-flow.tsx',
+      "Add players from the roster. An entry says where they start, not what they'll play."
+    );
+
+    // The footer, which is the flow's and no longer the builder's.
+    drawn(flow, 'new-tournament-flow.tsx', 'Creates ');
+    drawn(flow, 'new-tournament-flow.tsx', '"entry" : "entries"');
+    drawn(
+      flow,
+      'new-tournament-flow.tsx',
       "and no matches — a match exists once it's played"
     );
-    drawn(builder, file, 'Create tournament');
-    drawn(builder, file, 'Cancel');
+    drawn(flow, 'new-tournament-flow.tsx', 'Create tournament');
+    drawn(flow, 'new-tournament-flow.tsx', 'Creating…');
+    drawn(flow, 'new-tournament-flow.tsx', 'Continue');
   });
 });

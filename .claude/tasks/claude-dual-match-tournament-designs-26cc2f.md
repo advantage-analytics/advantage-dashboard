@@ -202,7 +202,7 @@ need it.
 - **notes:** No drafts/localStorage — nothing to add to `dashboard-shell.tsx`. Non-goals: no tournament changes, no edit mode yet (T19).
 
 ## T16 · `NewTournamentFlow`: two steps on `WizardShell`, one roster list
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T12, T13
 - **files:** src/components/dashboard/schedule/static/static-tournament-builder.tsx, src/components/dashboard/schedule/static/new-tournament-flow.tsx (new), src/app/dashboard/team/schedule/new/tournament/page.tsx, tests/schedule-static-copy.spec.ts, src/components/dashboard/schedule/README.md
