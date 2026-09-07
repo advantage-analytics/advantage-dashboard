@@ -23,14 +23,23 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   type MatchAnalysis,
+  isWorking,
   pipelinePercent,
   resolveAnalysisStatus,
 } from './match-analysis';
 import { shortName } from './match-utils';
+import { scopeToWorkspace } from '@/lib/workspace/scope';
 import type { Workspace } from '@/lib/workspace/types';
 
-/** Recent enough to be activity rather than history. */
-const MAX_ITEMS = 10;
+/**
+ * The window the tray reads. It was 10 when the tray listed settled work too,
+ * and 10 was the list. The tray now renders only what is moving or waiting —
+ * settled successes fall out client-side — so the window has to be wide
+ * enough that a running upload behind a run of finished ones still lands in
+ * it. Still a window: a season's history is the matches list's, not the
+ * header's.
+ */
+const MAX_ITEMS = 50;
 
 /**
  * The four fields the tray renders.
@@ -55,6 +64,86 @@ export interface ActivityItem {
 
 export interface ActivityFeed {
   items: ActivityItem[];
+}
+
+/**
+ * Work moving in a workspace the viewer is NOT looking at.
+ *
+ * The feed above is scoped to the active workspace, and that is correct — a
+ * coach in their personal workspace must not see the program's uploads
+ * interleaved with their own. The cost of that correctness is that an upload
+ * running in the other workspace is invisible, dot and all. This is the one
+ * row that admits it exists: a count and a name, never the items themselves.
+ */
+export interface ElsewhereWork {
+  workspaceId: string;
+  workspaceName: string;
+  /** Jobs that are WORKING right now — the word the tray prints is "running". */
+  count: number;
+}
+
+/**
+ * Running-job counts for every workspace other than the active one.
+ *
+ * Its own read, not `getActivityFeed` reused: the feed is a display list,
+ * capped at `MAX_ITEMS` of any status, and a count taken through that cap
+ * missed a running job sitting behind ten settled ones. This reads only the
+ * two status columns, uncapped, and shares nothing with the feed but the
+ * scoping rule — which is `scopeToWorkspace`'s, not this file's.
+ *
+ * `isWorking`, not `isInFlight`: the tray says "running", and `processed` —
+ * in flight, but moving only on a deploy — is not running. Counting it drew
+ * a hollow ring that never cleared.
+ *
+ * One round trip per other workspace. A real viewer holds two or three, and
+ * it streams inside the tray's Suspense boundary, off the shell's critical
+ * path. Workspaces with nothing moving are dropped here so the tray never
+ * renders "0 running in".
+ */
+export async function getElsewhereWork(
+  supabase: SupabaseClient,
+  active: Workspace,
+  available: readonly Workspace[]
+): Promise<ElsewhereWork[]> {
+  const others = available.filter((workspace) => workspace.id !== active.id);
+
+  const counted = await Promise.all(
+    others.map(async (workspace) => {
+      // Same `!inner` as the feed, for the same reason: a job whose match the
+      // viewer cannot read is not theirs to count.
+      const query = scopeToWorkspace(
+        supabase
+          .from('processing_jobs')
+          .select('match_id, status, derivation_version, created_at, matches!inner(program_id)')
+          .order('created_at', { ascending: false }),
+        workspace,
+        workspace.id,
+        { column: 'matches.program_id' }
+      );
+      const { data, error } = await query;
+      if (error) {
+        console.error('[activity] could not count elsewhere', {
+          workspace: workspace.id,
+          error: error.message,
+        });
+        return { workspaceId: workspace.id, workspaceName: workspace.name, count: 0 };
+      }
+
+      // Newest first, so the first row for a match is its current attempt —
+      // the feed's own dedupe, for the same reason.
+      const seen = new Set<string>();
+      let count = 0;
+      for (const row of (data ?? []) as Pick<JobRow, 'match_id' | 'status' | 'derivation_version'>[]) {
+        if (seen.has(row.match_id)) continue;
+        seen.add(row.match_id);
+        const status = resolveAnalysisStatus(row.status, row.derivation_version);
+        if (status && isWorking(status)) count++;
+      }
+      return { workspaceId: workspace.id, workspaceName: workspace.name, count };
+    })
+  );
+
+  return counted.filter((work) => work.count > 0);
 }
 
 /** Fits two names into a ~300px row that also carries a timestamp. */
@@ -95,17 +184,14 @@ export async function getActivityFeed(
     .order('created_at', { ascending: false })
     .limit(MAX_ITEMS);
 
-  query =
-    workspace.kind === 'team'
-      ? query.eq('matches.program_id', workspace.id)
-      : // Personal: the jobs this person submitted, on matches of their own.
-        // Both halves are needed. `created_by` keeps the tray scoped on the
-        // job (see the header) so a submitter never loses sight of their own
-        // upload; the null `program_id` keeps a coach's team uploads out of
-        // their personal header. RLS cannot supply that second half — its
-        // program policy is a UNION, so it would happily return the program's
-        // rows here.
-        query.eq('created_by', workspace.id).is('matches.program_id', null);
+  // The rule lives in `scopeToWorkspace`; only the column path is this
+  // file's. Personal keeps the tray scoped on the JOB (see the header) so a
+  // submitter never loses sight of their own upload, and the null
+  // `matches.program_id` keeps a coach's team uploads out of their personal
+  // header — RLS cannot supply that half, its program policy is a UNION.
+  query = scopeToWorkspace(query, workspace, workspace.id, {
+    column: 'matches.program_id',
+  });
 
   const { data, error } = await query;
 

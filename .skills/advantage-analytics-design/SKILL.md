@@ -882,12 +882,20 @@ where the clipped string is the only copy on screen and nothing can open it
 Header icon (Lucide `activity`, 15px ink-700 in a 28px radius-8 square) + 6px
 Signal-Blue dot at top 3px / right 3px — presence, not arithmetic: **no numeric badges anywhere in the chrome**, the
 count lives only in the tooltip ("2 in flight") and matching `aria-label`.
-Opens a 326px "Notifications" panel: unread-dot rows, 3px progress tracks
-(live sheen only while something is actually running), settled
-"Report ready — {match}" rows. No "mark all read" control — the badge counts
-moving work and clears itself when nothing is in flight. Only the upload
-shows a measured ETA; queued work says "In line" — never an invented number.
-Empty state: "Nothing in flight."
+Opens a 360px "Activity" panel on the popover primitive's own 14px hairline
+surface, named for the trigger that opens it. One job: what is happening and
+what is waiting on you. Rows: invitations (Accept as a two-step text action,
+plus Details), in-flight work (3px progress track, live sheen only while
+something is actually running, no ETA line — the bar is the estimate),
+failures (loss-red circle-x, bordered "Start over" — `analysisAction`'s
+word; there is no retry). Settled successes are not rows; the footer
+"Everything that finished" opens the matches list. A grey workspace chip in
+the header (`WorkspaceScopeChip`, shared with the search palette) names the
+scope; a tail row per other workspace says "N uploads running in X" behind a
+hairline. The 14px leading column carries state, never air. Trigger: solid
+dot = something here is moving or waiting; hollow ring = only elsewhere;
+nothing = quiet. No "mark all read" — the mark clears itself.
+Empty state: "Nothing running here."
 
 ### Header (v3)
 
@@ -910,7 +918,8 @@ what it searches; naming it does.
 
 **Account**: 26px initials avatar (the chrome's one circle — icon buttons
 elsewhere are 8px-radius squares) + 12px chevron rotating 180° on open, pill
-hover wash, 260px menu. The profile menu carries quiet role/plan capsules
+hover wash, 288px menu on the popover primitive's own 14px hairline surface
+(`MENU_ROW_CLASS`, 9px rhythm). The profile menu carries quiet role/plan capsules
 (grey — neither is an action) and the workspace list again.
 
 **On Home the breadcrumb slot carries the greeting:** "Good morning, Jordan"

@@ -42,4 +42,25 @@ test.describe('trayDetail counts invitations and in-flight work', () => {
   test('the plural invitation half keeps its place ahead of the work', () => {
     expect(trayDetail(2, 1)).toBe('2 invitations · 1 in flight');
   });
+
+  // Work in a workspace the viewer is not looking at. It comes last and it
+  // never changes the idle sentence on its own: the tray is scoped on purpose,
+  // and "elsewhere" is a footnote to what is here, not a headline.
+  test('other-workspace work trails everything local', () => {
+    expect(trayDetail(1, 1, 2)).toBe('1 invitation · 1 in flight · 2 elsewhere');
+  });
+
+  test('other-workspace work alone still counts', () => {
+    expect(trayDetail(0, 0, 1)).toBe('1 elsewhere');
+  });
+
+  // A failure carries "Start over" now, so it is the second thing waiting on
+  // the reader — after invitations, before the work that resolves itself.
+  test('a failure is counted, after invitations and before the work', () => {
+    expect(trayDetail(1, 1, 0, 1)).toBe('1 invitation · 1 failed · 1 in flight');
+  });
+
+  test('a failure alone is not "nothing in flight"', () => {
+    expect(trayDetail(0, 0, 0, 2)).toBe('2 failed');
+  });
 });

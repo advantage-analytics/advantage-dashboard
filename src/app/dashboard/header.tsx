@@ -37,6 +37,7 @@ import { workspaceTitle } from "@/lib/workspace/types";
 import { WorkspaceOptionList } from "@/components/dashboard/workspace-switcher";
 import { useRequestLogout } from "@/components/dashboard/logout-dialog";
 import { HeaderGreeting } from "@/components/dashboard/header-greeting";
+import { MENU_ROW_CLASS, MENU_RULE_CLASS } from "@/lib/ui/menu";
 
 interface MatchCrumb {
   tournamentName: string;
@@ -127,8 +128,7 @@ function Chip({ children }: { children: React.ReactNode }) {
   );
 }
 
-const MENU_ITEM_CLASS =
-  "flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-[7px] text-[12px] text-[var(--ink-900)] transition-colors duration-100 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none cursor-pointer";
+
 
 export function Header({
   activitySlot,
@@ -511,84 +511,105 @@ export function Header({
                 </button>
               </PopoverTrigger>
 
+              {/* 288px on the popover primitive's own surface. This used to
+                  override the primitive to a 12px radius and the medium border,
+                  as the activity tray did; both now take the 14px hairline the
+                  primitive draws, so the two menus that open 6px apart are one
+                  object. Two rules, not four: identity | workspaces | everything
+                  else, with Sign out in the last run rather than behind a third
+                  hairline of its own. */}
               <PopoverContent
                 align="end"
                 sideOffset={6}
-                className="w-[260px] rounded-[12px] border-[var(--border-medium)] p-1.5"
+                className="w-[288px] p-2"
               >
-                {/* Identity */}
-                <div className="flex items-center gap-2.5 px-2.5 pb-2 pt-2.5">
+                {/* Identity. Role and plan ride the name's line rather than
+                    claiming a padded band beneath it — the chips are facts about
+                    the person, and a row of their own read as a third section. */}
+                <div className="flex items-center gap-3 px-3 py-2.5">
                   <span
                     aria-hidden="true"
-                    className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[10px] font-medium text-[var(--ink-700)]"
+                    className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[11px] font-medium text-[var(--ink-700)]"
                   >
                     {viewer.initials}
                   </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-[13px] font-medium text-[var(--ink-900)]">
-                      {viewer.name}
-                    </p>
-                    <p className="truncate text-[11px] text-[var(--ink-500)]">
+                  <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
+                        {viewer.name}
+                      </span>
+                      {/* Role is a program standing — a personal workspace has
+                          no one to have standing over, so it carries only the
+                          plan. */}
+                      {active.kind === "team" && (
+                        <Chip>{capitalize(active.role)}</Chip>
+                      )}
+                      <Chip>{capitalize(viewer.plan)}</Chip>
+                    </div>
+                    <span className="truncate text-[11px] text-[var(--ink-500)]">
                       {viewer.email}
-                    </p>
+                    </span>
                   </div>
                 </div>
 
-                <div className="flex gap-1.5 px-2.5 pb-2.5">
-                  {/* Role is a program standing — a personal workspace has no one
-                      to have standing over, so it carries only the plan. */}
-                  {active.kind === "team" && <Chip>{capitalize(active.role)}</Chip>}
-                  <Chip>{capitalize(viewer.plan)}</Chip>
-                </div>
+                <div className={cn(MENU_RULE_CLASS, "mt-1")} />
 
-                <div className="-mx-1.5 h-px bg-[var(--border-hairline)]" />
+                {/* Absent, not a list of one. A viewer holding a single
+                    workspace has nothing to switch to, and a lone row with a
+                    tick beside it is chrome that answers nothing. The block
+                    appears the moment a second workspace does. */}
+                {available.length > 1 && (
+                  <>
+                    <p className="eyebrow px-3 pb-1 pt-3">
+                      Workspace
+                    </p>
+                    {/* Scrolls at four rows rather than growing the menu — a
+                        coach on five programs still gets a menu that fits. */}
+                    <div className="max-h-[140px] overflow-y-auto">
+                      <WorkspaceOptionList
+                        onSwitched={() => setIsProfileOpen(false)}
+                      />
+                    </div>
+                    <div className={cn(MENU_RULE_CLASS, "my-2")} />
+                  </>
+                )}
 
-                <p className="px-2.5 pb-1 pt-2.5 text-[10px] font-medium uppercase tracking-[1.5px] text-[var(--ink-500)]">
-                  Workspace
-                </p>
-                <WorkspaceOptionList onSwitched={() => setIsProfileOpen(false)} />
-
-                <div className="-mx-1.5 my-1.5 h-px bg-[var(--border-hairline)]" />
-
-                <Link href="/dashboard/settings/profile" className={MENU_ITEM_CLASS}>
+                <Link href="/dashboard/settings/preferences" className={MENU_ROW_CLASS}>
                   <SlidersHorizontal
-                    className="size-[13px] text-[var(--ink-600)]"
+                    className="size-[14px] text-[var(--ink-600)]"
                     strokeWidth={1.5}
                     aria-hidden="true"
                   />
                   Preferences
                 </Link>
                 <Link
-                  href="/dashboard/settings/plan"
-                  className={MENU_ITEM_CLASS}
+                  href="/dashboard/settings/usage"
+                  className={MENU_ROW_CLASS}
                 >
                   <Timer
-                    className="size-[13px] text-[var(--ink-600)]"
+                    className="size-[14px] text-[var(--ink-600)]"
                     strokeWidth={1.5}
                     aria-hidden="true"
                   />
                   Usage &amp; quota
                 </Link>
-                <Link href="/dashboard/help" className={MENU_ITEM_CLASS}>
+                <Link href="/dashboard/help" className={MENU_ROW_CLASS}>
                   <CircleHelp
-                    className="size-[13px] text-[var(--ink-600)]"
+                    className="size-[14px] text-[var(--ink-600)]"
                     strokeWidth={1.5}
                     aria-hidden="true"
                   />
                   Help
                 </Link>
-
-                <div className="-mx-1.5 my-1.5 h-px bg-[var(--border-hairline)]" />
-
                 <button
                   onClick={() => {
                     setIsProfileOpen(false);
                     requestLogout();
                   }}
-                  className={cn(MENU_ITEM_CLASS, "text-[var(--ink-700)]")}
+                  className={cn(MENU_ROW_CLASS, "text-[var(--ink-700)]")}
                 >
                   <LogOut
-                    className="size-[13px] text-[var(--ink-600)]"
+                    className="size-[14px] text-[var(--ink-600)]"
                     strokeWidth={1.5}
                     aria-hidden="true"
                   />
