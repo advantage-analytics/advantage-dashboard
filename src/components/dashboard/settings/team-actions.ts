@@ -13,7 +13,7 @@ import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import { programDisplayName } from "@/lib/data/programs-server";
 import type { ActionResult } from "@/components/dashboard/settings/actions";
 import type { MemberRole } from "@/lib/data/team-settings-server";
-import type { Viewer, Workspace } from "@/lib/workspace/types";
+import type { UploadPolicy, Viewer, Workspace } from "@/lib/workspace/types";
 
 /**
  * The writes Settings › Team performs.
@@ -112,7 +112,8 @@ export interface TeamSettingsInput {
   homeVenue: string;
   defaultSurface: string | null;
   season: string;
-  playersCanUpload: boolean;
+  /** The whole ladder; `players_can_upload` is derived from it in SQL. */
+  uploadPolicy: UploadPolicy;
 }
 
 /**
@@ -138,7 +139,8 @@ export async function saveTeamSettings(
     p_home_venue: input.homeVenue,
     p_default_surface: input.defaultSurface,
     p_season: input.season,
-    p_players_can_upload: input.playersCanUpload,
+    p_players_can_upload: input.uploadPolicy === "everyone",
+    p_upload_policy: input.uploadPolicy,
   });
 
   if (error) {

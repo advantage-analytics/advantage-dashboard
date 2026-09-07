@@ -6,7 +6,7 @@ import {
   SettingsField,
   SettingsUnderlineInput,
 } from "@/components/dashboard/settings/settings-card";
-import { SettingsInlineSelect } from "@/components/dashboard/settings/settings-inline-select";
+import { SettingsMenuSelect } from "@/components/dashboard/settings/settings-menu-select";
 import { CrestControl } from "@/components/dashboard/settings/teams/crest-control";
 import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
 import type { IdentityDraft } from "@/components/dashboard/settings/teams/types";
@@ -23,8 +23,6 @@ export const SURFACE_OPTIONS = [
   { value: "carpet" as const, label: "Carpet" },
 ];
 
-const UNDERLINE_SELECT =
-  "w-full justify-between border-0 border-b border-[var(--border-field)] px-0";
 
 /**
  * The identity card: crest, name and home courts.
@@ -105,12 +103,12 @@ export function TeamIdentityCard({
 
         {isOwner ? (
           <SettingsField label="Squad">
-            <SettingsInlineSelect
+            <SettingsMenuSelect
               label="Squad"
+              variant="underline"
               value={draft.team}
               options={SQUAD_OPTIONS}
               onChange={(value) => onChange("team", value)}
-              className={UNDERLINE_SELECT}
             />
           </SettingsField>
         ) : (
@@ -129,12 +127,12 @@ export function TeamIdentityCard({
         />
 
         <SettingsField label="Default surface">
-          <SettingsInlineSelect
+          <SettingsMenuSelect
             label="Default surface"
+            variant="underline"
             value={draft.defaultSurface || "hard"}
             options={SURFACE_OPTIONS}
             onChange={(value) => onChange("defaultSurface", value)}
-            className={UNDERLINE_SELECT}
           />
         </SettingsField>
 

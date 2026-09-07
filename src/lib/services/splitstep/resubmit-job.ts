@@ -680,6 +680,7 @@ async function resolveAutoRetryWorkspace(params: {
       mark: '',
       canSubmitVideo: true,
       playersCanUpload: false,
+      uploadPolicy: 'everyone',
       memberUploadEnabled: true,
     };
   }
@@ -687,7 +688,7 @@ async function resolveAutoRetryWorkspace(params: {
   const { data, error } = await supabase
     .from('program_members')
     .select(
-      'role, upload_enabled, programs!inner(status, players_can_upload, org_type)'
+      'role, upload_enabled, programs!inner(status, players_can_upload, upload_policy, org_type)'
     )
     .eq('program_id', programId)
     .eq('user_id', userId)
@@ -699,8 +700,8 @@ async function resolveAutoRetryWorkspace(params: {
     role: string;
     upload_enabled: boolean;
     programs:
-      | { status: string; players_can_upload: boolean; org_type: string }
-      | { status: string; players_can_upload: boolean; org_type: string }[];
+      | { status: string; players_can_upload: boolean; upload_policy: string; org_type: string }
+      | { status: string; players_can_upload: boolean; upload_policy: string; org_type: string }[];
   };
   const program = Array.isArray(row.programs) ? row.programs[0] : row.programs;
   if (!program) return null;
@@ -725,6 +726,7 @@ async function resolveAutoRetryWorkspace(params: {
     // reads false here, exactly as it would for a fresh manual submission.
     canSubmitVideo: program.status === 'active',
     playersCanUpload: program.players_can_upload,
+    uploadPolicy: program.upload_policy as Workspace['uploadPolicy'],
     memberUploadEnabled: Boolean(row.upload_enabled),
   };
 }

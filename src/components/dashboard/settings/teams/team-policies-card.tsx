@@ -5,25 +5,44 @@ import {
   SettingsCardRow,
   SettingsCardTitle,
 } from "@/components/dashboard/settings/settings-card";
-import { SettingsInlineSelect } from "@/components/dashboard/settings/settings-inline-select";
+import {
+  SettingsMenuSelect,
+  type MenuOption,
+} from "@/components/dashboard/settings/settings-menu-select";
+import {
+  UPLOAD_POLICIES,
+  uploadPolicyLabel,
+  type UploadPolicy,
+} from "@/lib/workspace/types";
 
-const UPLOAD_POLICY_OPTIONS = [
-  { value: "coaches" as const, label: "Coaches only" },
-  { value: "anyone" as const, label: "Anyone on the team" },
-];
+/** What each rung of the ladder means, in the menu's second line. */
+const POLICY_NOTE: Record<UploadPolicy, string> = {
+  owner: "Only the owner sends team video",
+  owner_coaches: "Coaches too — staff and players don't",
+  staff: "Anyone on the coaching staff",
+  everyone: "Players as well, where their row allows it",
+};
+
+const UPLOAD_POLICY_OPTIONS: readonly MenuOption<UploadPolicy>[] = UPLOAD_POLICIES.map(
+  (policy) => ({
+    value: policy,
+    label: uploadPolicyLabel(policy),
+    description: POLICY_NOTE[policy],
+  })
+);
 
 /**
- * The two policies. The first is a select rather than the radio stack it was:
- * one line, centre-aligned like every other one-control row, and the same
- * control the Squad and Surface fields already use. Two options today; the
- * menu has room for a third without the row growing.
+ * The two policies. The first is the product's own menu rather than the
+ * radio stack it was — four rungs now (owner · owner and coaches · all staff ·
+ * everyone), one line each on what the rung means, and it sits centre-aligned
+ * like every other one-control row.
  */
 export function TeamPoliciesCard({
-  playersCanUpload,
+  uploadPolicy,
   onChange,
 }: {
-  playersCanUpload: boolean;
-  onChange: (next: boolean) => void;
+  uploadPolicy: UploadPolicy;
+  onChange: (next: UploadPolicy) => void;
 }) {
   return (
     <SettingsCard className="gap-3.5">
@@ -33,11 +52,12 @@ export function TeamPoliciesCard({
         label="Who can upload team matches"
         description="On-behalf uploads always show “added by”."
         control={
-          <SettingsInlineSelect
+          <SettingsMenuSelect
             label="Who can upload team matches"
-            value={playersCanUpload ? "anyone" : "coaches"}
+            value={uploadPolicy}
             options={UPLOAD_POLICY_OPTIONS}
-            onChange={(value) => onChange(value === "anyone")}
+            onChange={onChange}
+            note="A player's own row can still switch their uploads off."
           />
         }
       />

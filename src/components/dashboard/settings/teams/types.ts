@@ -1,4 +1,5 @@
 import type { TeamSettingsData } from "@/lib/data/team-settings-server";
+import type { UploadPolicy } from "@/lib/workspace/types";
 
 /**
  * What the identity card edits — one draft, one save, because the six fields
@@ -11,7 +12,7 @@ export interface IdentityDraft {
   homeVenue: string;
   defaultSurface: "hard" | "clay" | "grass" | "carpet" | "";
   season: string;
-  playersCanUpload: boolean;
+  uploadPolicy: UploadPolicy;
 }
 
 export function toDraft(data: TeamSettingsData): IdentityDraft {
@@ -22,6 +23,6 @@ export function toDraft(data: TeamSettingsData): IdentityDraft {
     homeVenue: data.program.homeVenue ?? "",
     defaultSurface: (data.program.defaultSurface as IdentityDraft["defaultSurface"] | null) ?? "",
     season: data.program.season ?? "",
-    playersCanUpload: data.program.playersCanUpload,
+    uploadPolicy: data.program.uploadPolicy,
   };
 }

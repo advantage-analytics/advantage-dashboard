@@ -211,6 +211,61 @@ test.describe('Settings › Teams — owner gate, transfer, one owner (live)', (
     expect(row.data?.conference).toBe('Owner Conference');
   });
 
+  // ── upload_policy ─────────────────────────────────────────────────────────
+
+  test('the upload policy is a ladder, and the boolean stays derived from it', async () => {
+    // Nine arguments: the settings page sends the whole policy.
+    const tighten = await owner.client.rpc('update_program_settings', {
+      ...(await currentSettings()),
+      p_players_can_upload: false,
+      p_upload_policy: 'owner_coaches',
+    });
+    expect(tighten.error).toBeNull();
+    let row = await admin
+      .from('programs')
+      .select('upload_policy, players_can_upload')
+      .eq('id', programId)
+      .single();
+    expect(row.data).toMatchObject({ upload_policy: 'owner_coaches', players_can_upload: false });
+
+    // Eight arguments: the roster's switch sends only the boolean. Off leaves
+    // a tighter policy alone; on opens it all the way.
+    const switchOff = await coach.client.rpc('update_program_settings', {
+      ...(await currentSettings()),
+      p_players_can_upload: false,
+    });
+    expect(switchOff.error).toBeNull();
+    row = await admin.from('programs').select('upload_policy').eq('id', programId).single();
+    expect(row.data?.upload_policy).toBe('owner_coaches');
+
+    const switchOn = await coach.client.rpc('update_program_settings', {
+      ...(await currentSettings()),
+      p_players_can_upload: true,
+    });
+    expect(switchOn.error).toBeNull();
+    row = await admin
+      .from('programs')
+      .select('upload_policy, players_can_upload')
+      .eq('id', programId)
+      .single();
+    expect(row.data).toMatchObject({ upload_policy: 'everyone', players_can_upload: true });
+
+    // And off again from `everyone` narrows to staff, not to nothing.
+    const narrow = await coach.client.rpc('update_program_settings', {
+      ...(await currentSettings()),
+      p_players_can_upload: false,
+    });
+    expect(narrow.error).toBeNull();
+    row = await admin.from('programs').select('upload_policy').eq('id', programId).single();
+    expect(row.data?.upload_policy).toBe('staff');
+
+    const bogus = await owner.client.rpc('update_program_settings', {
+      ...(await currentSettings()),
+      p_upload_policy: 'anyone',
+    });
+    expect(bogus.error?.code).toBe(INVALID_PARAMETER);
+  });
+
   // ── program_usage_pending ─────────────────────────────────────────────────
 
   test('program_usage_pending answers zero to a stranger, without an error', async () => {

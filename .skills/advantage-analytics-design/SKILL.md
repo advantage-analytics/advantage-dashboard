@@ -1869,6 +1869,26 @@ One shape for every person a card lists — members, invitees, usage lines:
   stays in the pill column. 18px, `--blue-tint-08` on `--blue`. A third blue
   pill costs both of these their meaning — do not add one.
 
+### Selects on a settings page are the product's menu
+
+`SettingsMenuSelect` (`components/dashboard/settings/settings-menu-select.tsx`)
+— the float menu from the Teams design: 10px radius, 5px inset, one row per
+option with an 11px line beneath saying what it means, the chosen row on
+`--surface-subtle` with a 12px `--blue` check, and an optional closing note
+under a hairline for the one thing the menu will not do. Two triggers: the
+**underline** form field (full width, the caption's hairline, no radius — a
+rule on a 6px-radius box curls at both ends) and the **pill** row control
+(30px, bordered, beside a `SettingsCardRow` label). Both turn their edge blue
+while open. Options with something to explain — a role, an upload policy —
+get the second line; plain values (a surface) do not. `SettingsInlineSelect`,
+the native select over a pill, is the previous pattern and stays on pages
+that have not moved; do not add it to a new one.
+
+**Who can upload team matches** is a four-rung ladder, not a switch: *Owner
+only · Owner and coaches · All staff · Everyone on the team*
+(`programs.upload_policy`; `players_can_upload` is derived from it and keeps
+the roster's own switch working).
+
 ### A field the viewer may not change
 
 Never a `disabled` input: it still looks like an input, so it reads as broken

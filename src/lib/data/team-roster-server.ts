@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import type { UploadPolicy } from "@/lib/workspace/types";
 import {
   matchOutcome,
   shortDate,
@@ -206,6 +207,8 @@ export interface RosterData {
   invites: RosterInvite[];
   /** Program-wide default. A member's own flag can still override it. */
   playersCanUpload: boolean;
+  /** The ladder `playersCanUpload` is the bottom rung of — for the footer line. */
+  uploadPolicy: UploadPolicy;
   /** What the invite dialogs state about the program's account allowance. */
   seats: SeatUsage;
 }
@@ -371,7 +374,7 @@ export const getRosterData = cache(async function getRosterData(
         .order("created_at", { ascending: false }),
       supabase
         .from("programs")
-        .select("players_can_upload, time_zone")
+        .select("players_can_upload, upload_policy, time_zone")
         .eq("id", programId)
         .maybeSingle(),
       // The measures need the match ids, so they cannot join the siblings
@@ -617,6 +620,8 @@ export const getRosterData = cache(async function getRosterData(
       invitedBy: (row.invited_by as string | null) ?? null,
     })),
     playersCanUpload: Boolean(programResult.data?.players_can_upload),
+    uploadPolicy:
+      (programResult.data?.upload_policy as UploadPolicy | undefined) ?? "everyone",
     // A row-returning function: PostgREST hands back an array of one.
     seats: (Array.isArray(seatResult.data) ? seatResult.data[0] : seatResult.data) ?? {
       seats: 0,

@@ -3,7 +3,7 @@
 import { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { SettingsNavigation } from "@/components/dashboard/settings/settings-navigation";
 import { settingsSection, SETTINGS_SECTIONS } from "@/lib/dashboard/nav";
@@ -60,12 +60,16 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
         <header className="flex flex-col gap-3">
           {program ? (
             <>
+              {/* In the eyebrow's row, but a control, not a label: 28px tall,
+                  arrow and word, the same wash every secondary control hovers
+                  to. Says where it goes ("Teams"), not where you are — the
+                  crumb above already says that. */}
               <Link
                 href="/dashboard/settings/teams"
-                className="eyebrow inline-flex items-center gap-1.5 self-start transition-colors hover:text-[var(--ink-700)]"
+                className="-ml-2 inline-flex h-7 items-center gap-1.5 self-start rounded-[6px] pl-2 pr-2.5 text-[12px] font-medium text-[var(--ink-600)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:outline-none"
               >
-                <ChevronLeft className="size-2.5" strokeWidth={2.5} aria-hidden="true" />
-                Settings · Teams
+                <ArrowLeft className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
+                Teams
               </Link>
               <h1 className="text-display">{program.name}</h1>
               <p className="text-body-sm max-w-[520px]">

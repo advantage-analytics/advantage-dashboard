@@ -19,6 +19,36 @@
 /** A member's standing inside a team workspace. Personal is always `owner`. */
 export type ProgramRole = 'owner' | 'coach' | 'staff' | 'player';
 
+/**
+ * `programs.upload_policy` — who may send team video. A ladder, top to bottom:
+ * the owner alone; the owner and coaches; anyone on the coaching staff; or
+ * everyone, players included (each player still subject to their own row's
+ * `upload_enabled`). `players_can_upload` is derived from it — true exactly
+ * at `everyone` — so the boolean readers keep their meaning.
+ */
+export type UploadPolicy = 'owner' | 'owner_coaches' | 'staff' | 'everyone';
+
+export const UPLOAD_POLICIES: readonly UploadPolicy[] = [
+  'owner',
+  'owner_coaches',
+  'staff',
+  'everyone',
+];
+
+/** The policy as a settings row reads it. */
+export function uploadPolicyLabel(policy: UploadPolicy): string {
+  switch (policy) {
+    case 'owner':
+      return 'Owner only';
+    case 'owner_coaches':
+      return 'Owner and coaches';
+    case 'staff':
+      return 'All staff';
+    case 'everyone':
+      return 'Everyone on the team';
+  }
+}
+
 export type WorkspaceKind = 'personal' | 'team';
 
 /**
@@ -156,6 +186,13 @@ export interface Workspace {
    * answer with only a `Workspace` in hand.
    */
   memberUploadEnabled: boolean;
+  /**
+   * `programs.upload_policy` — the ladder `playersCanUpload` is the bottom
+   * rung of. Read by `canUploadForProgram()` for the levels the boolean
+   * cannot express (owner only; owner and coaches). `'everyone'` for a
+   * personal workspace, where the question does not arise.
+   */
+  uploadPolicy: UploadPolicy;
 }
 
 /** Everything the dashboard shell needs to render, resolved once per request. */
@@ -246,8 +283,18 @@ export function isProgramStaff(workspace: Workspace): boolean {
  */
 export function canUploadForProgram(workspace: Workspace): boolean {
   if (workspace.kind !== 'team') return false;
-  if (isProgramStaff(workspace)) return true;
-  return workspace.playersCanUpload && workspace.memberUploadEnabled;
+  switch (workspace.uploadPolicy) {
+    case 'owner':
+      return workspace.role === 'owner';
+    case 'owner_coaches':
+      return workspace.role === 'owner' || workspace.role === 'coach';
+    case 'staff':
+      return isProgramStaff(workspace);
+    case 'everyone':
+      // Staff always; a player only with their own row's grant as well —
+      // see `memberUploadEnabled` for why the grant narrows nobody else.
+      return isProgramStaff(workspace) || workspace.memberUploadEnabled;
+  }
 }
 
 /**
@@ -343,13 +390,24 @@ export function explainVideoRefusal(workspace: Workspace): string | null {
 
   if (canUploadForProgram(workspace)) return null;
 
-  // Only a player reaches here, and only having failed one of the two flags.
-  // Which one decides who can fix it, so they are not one message.
-  if (!workspace.playersCanUpload) {
+  // Staff turned away by a policy above their standing. Only the owner can
+  // widen it, and the message says so rather than pointing at a switch they
+  // cannot reach.
+  if (isProgramStaff(workspace)) {
     return (
-      `${workspace.name} has video uploads set to coaches only, so this match ` +
-      `can't be sent for analysis from your account. A coach can send it, or ` +
-      `open uploads to players in Team settings.`
+      `${workspace.name} limits video uploads to ${uploadPolicyLabel(workspace.uploadPolicy).toLowerCase()}, ` +
+      `so this match can't be sent for analysis from your account. The owner ` +
+      `can widen it in Team settings.`
+    );
+  }
+
+  // A player, having failed one of the two flags. Which one decides who can
+  // fix it, so they are not one message.
+  if (workspace.uploadPolicy !== 'everyone') {
+    return (
+      `${workspace.name} limits video uploads to ${uploadPolicyLabel(workspace.uploadPolicy).toLowerCase()}, ` +
+      `so this match can't be sent for analysis from your account. A coach ` +
+      `can send it, or the program can open uploads to players in Team settings.`
     );
   }
 
