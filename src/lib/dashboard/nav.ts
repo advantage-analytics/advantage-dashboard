@@ -273,7 +273,8 @@ export function settingsSection(pathname: string): SettingsSection | null {
  * entry: those pages carry their identity in the body's own `<h1>`, and the
  * header shows the linked Schedule crumb alone. The one exception is the
  * score-only flow beneath an event, which is a step inside a flow rather than
- * a page — `SCHEDULE_SCORE_PATH` below names it.
+ * a page — `SCHEDULE_SCORE_PATH` below names it, and `SCHEDULE_EDIT_PATH` the
+ * edit flow beside it.
  */
 const SCHEDULE_LEAF_LABELS: Record<string, string> = {
   "/dashboard/team/schedule/new": "New event",
@@ -292,11 +293,24 @@ const SCHEDULE_LEAF_LABELS: Record<string, string> = {
  */
 const SCHEDULE_SCORE_PATH = /^\/dashboard\/team\/schedule\/[^/]+\/score$/;
 
+/**
+ * The edit flow under an event: `/dashboard/team/schedule/<id>/edit`.
+ *
+ * `SCHEDULE_SCORE_PATH`'s shape exactly, for its reasons — the path carries an
+ * event id, the crumb says the same word for every event, and `[^/]+` matching
+ * one segment keeps `/schedule/new/single` and any deeper path out. The word
+ * is "Edit" rather than "Edit dual": the crumb sits under a header that
+ * already names the event, and a tournament edit (T20) will land on this same
+ * route.
+ */
+const SCHEDULE_EDIT_PATH = /^\/dashboard\/team\/schedule\/[^/]+\/edit$/;
+
 /** The schedule create-screen leaf label for a path, or null. */
 export function scheduleLeaf(pathname: string): string | null {
   const exact = SCHEDULE_LEAF_LABELS[pathname];
   if (exact) return exact;
   if (SCHEDULE_SCORE_PATH.test(pathname)) return "Add score";
+  if (SCHEDULE_EDIT_PATH.test(pathname)) return "Edit";
   return null;
 }
 

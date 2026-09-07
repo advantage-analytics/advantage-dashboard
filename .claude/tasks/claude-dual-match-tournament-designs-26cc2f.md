@@ -226,7 +226,7 @@ need it.
 - **notes:** Never touch `matches` rows here; the opponent of a dual is not editable through this action. `rls-boundary-reviewer` runs on this task.
 
 ## T19 · Dual edit route on the same flow
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T15, T18
 - **files:** src/app/dashboard/team/schedule/[eventId]/edit/page.tsx (new), src/components/dashboard/schedule/static/new-dual-flow.tsx, src/components/dashboard/schedule/static/dual-build-step.tsx, src/lib/dashboard/nav.ts, MAP.md, src/components/dashboard/schedule/README.md, tests/schedule-leaf.spec.ts

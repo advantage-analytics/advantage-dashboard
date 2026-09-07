@@ -14,6 +14,8 @@ import { programDisplayName } from "@/lib/data/programs-server";
 import {
   createDual,
   opponentRosterForDual,
+  updateDual,
+  type LineupLineInput,
   type OpponentRosterCandidate,
 } from "@/lib/schedule/actions";
 import {
@@ -257,9 +259,41 @@ function seedLineup(ladder: LadderPlayer[]): LineupLine[] {
 export interface DualLineSeed {
   /** `"S1"`…`"D3"` — the same string `seedLineup()` puts on `key` and `slot`. */
   key: string;
+  /**
+   * The `program_event_entries` row this line was loaded from, when there is
+   * one.
+   *
+   * **Every loaded line must state it, and `submit()` must send it back.**
+   * `planEntryChanges` matches a submitted line to a saved one by id first and
+   * by slot second, so a lineup round-tripped without ids reads as nine
+   * deletes and nine inserts the moment any slot moves — and a renamed slot
+   * would orphan the matches hanging off the row it used to be. See
+   * `LineupLineInput.id` and `entry-plan.ts`.
+   */
+  id?: string;
   ourLabels?: string[];
   theirLabels?: string[];
-  forfeit?: LineupLine["forfeit"];
+  /**
+   * Which side forfeited, as the SAVED row states it.
+   *
+   * Wider than `LineupLine["forfeit"]` — `"theirs"` is a real saved value that
+   * a builder can never produce (`line-row.tsx` on the event page is where the
+   * opponent's forfeit gets recorded), and a seed that could not spell it would
+   * load such a line as "not forfeited" and submit it back changed. That is a
+   * save `planEntryChanges` refuses, on a line the coach never touched.
+   */
+  forfeit?: "ours" | "theirs" | null;
+  /**
+   * This line is settled and may not be edited — `isSettled` in
+   * `entry-plan.ts` is the same question, asked server-side at save.
+   *
+   * `"played"` — a `matches` row points at it. `"forfeited"` — a side gave the
+   * point away. Either way `planEntryChanges` REFUSES the whole save if the
+   * submission moves it, so the row is drawn read-only rather than offered as
+   * an edit that will be rejected after the coach has retyped it. Absent means
+   * a free line.
+   */
+  locked?: "played" | "forfeited";
 }
 
 /**
@@ -277,6 +311,18 @@ export interface DualLineSeed {
  * encoding here to get wrong, and a seed cannot introduce one.
  */
 export interface DualDraftSeed {
+  /**
+   * The dual being edited. Present ONLY on an edit — its presence is what
+   * makes `submit()` call `updateDual` instead of `createDual`, and it is the
+   * one field that says which of the two writes this draft is for.
+   *
+   * Not folded into `CreateDualInput` as an optional field: creating and
+   * editing are different actions with different rules (an edit consults
+   * `planEntryChanges` before it writes anything at all), and a create call
+   * that quietly became an update on the strength of one extra property is
+   * exactly the branch this seed keeps out of `actions.ts`.
+   */
+  eventId?: string;
   /** YYYY-MM-DD. */
   date?: string;
   site?: EventSite;
@@ -339,6 +385,56 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
     format: formatFor(initial?.format),
   }));
 
+  /**
+   * The saved entry behind each seeded line, and whether it is settled.
+   *
+   * Held beside `lines` rather than folded into `LineupLine`, which is the
+   * pre-persist shape and says so: a line the coach typed has no id and no
+   * lock, and widening the type would make both look optional on every row
+   * rather than absent from the ones that never had them.
+   *
+   * Keyed on `LineupLine.key` (S1–D3) — never on an index. `DualLineSeed`'s
+   * header states why, and it is the same reason: one row off, and an id lands
+   * on a court nobody meant, which is a save that re-points a played line at
+   * another player.
+   */
+  const seededIds = useMemo(
+    () =>
+      new Map(
+        (initial?.lines ?? [])
+          .filter((row): row is DualLineSeed & { id: string } =>
+            Boolean(row.id)
+          )
+          .map((row) => [row.key, row.id] as const)
+      ),
+    [initial?.lines]
+  );
+
+  const lockedByKey = useMemo(() => {
+    const locked: Record<string, "played" | "forfeited"> = {};
+    for (const row of initial?.lines ?? []) {
+      if (row.locked) locked[row.key] = row.locked;
+    }
+    return locked;
+  }, [initial?.lines]);
+
+  /**
+   * A settled line's forfeit exactly as it was saved, including `"theirs"`.
+   *
+   * The row is read-only, so what it submits must equal what it loaded or
+   * `planEntryChanges` reports it changed and refuses the whole save. This is
+   * the half `LineupLine` cannot carry — see `DualLineSeed.forfeit`.
+   */
+  const lockedForfeit = useMemo(
+    () =>
+      new Map(
+        (initial?.lines ?? [])
+          .filter((row) => row.locked)
+          .map((row) => [row.key, row.forfeit ?? null] as const)
+      ),
+    [initial?.lines]
+  );
+
   // Seeded once. See the header.
   const [lines, setLines] = useState<LineupLine[]>(() =>
     seedLineup(ladder).map((line) => {
@@ -353,8 +449,16 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
         // one rule that may produce it is `rosterIdsForLabels`.
         ourIds: rosterIdsForLabels(ourLabels.join(" / "), ladder),
         theirLabels: seed.theirLabels ?? line.theirLabels,
-        // `undefined` is "not stated"; `null` is "not forfeited".
-        forfeit: seed.forfeit !== undefined ? seed.forfeit : line.forfeit,
+        // `undefined` is "not stated"; `null` is "not forfeited". A saved
+        // `"theirs"` narrows to null here because `LineupLine` cannot hold it
+        // — such a line is always `locked`, so it is drawn from `lockedByKey`
+        // and submitted from `lockedForfeit` below, never from this field.
+        forfeit:
+          seed.forfeit === undefined
+            ? line.forfeit
+            : seed.forfeit === "ours"
+              ? "ours"
+              : null,
       };
     })
   );
@@ -488,7 +592,15 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
       ours: splitNames(line.ourLabels.join(" / ")),
       theirs: splitNames(line.theirLabels.join(" / ")),
     }))
-    .filter((row) => row.ours.length > 0 || row.line.forfeit !== null);
+    .filter(
+      (row) =>
+        row.ours.length > 0 ||
+        row.line.forfeit !== null ||
+        // A settled line always submits, whatever is on it. An opponent
+        // forfeit names nobody on either side, and dropping it here would
+        // submit a lineup missing a line the save is not allowed to delete.
+        lockedByKey[row.line.key] !== undefined
+    );
   const lineCount = filled.length;
 
   // The name the dual is recorded under — squad-qualified for a directory
@@ -503,37 +615,75 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
   // `DualLineupStep`.
   const laddered = ladder.some((player) => player.ladderPosition !== null);
 
+  /**
+   * The nine courts as the two writes take them.
+   *
+   * One mapping for create and edit both, so an edit cannot start sending a
+   * subtly different row than a create does. `id` is the only field that means
+   * anything to just one of them: `createDual` ignores it, and `updateDual`
+   * needs EVERY loaded line to carry it or `planEntryChanges` matches by slot,
+   * where a reorder reads as a rename and the save is refused.
+   */
+  function payloadLines(): LineupLineInput[] {
+    return filled.map((row, index) => ({
+      // Absent on a line the coach typed into an empty court — a fresh line
+      // has no saved row to be, and `planEntryChanges` inserts it.
+      id: seededIds.get(row.line.key),
+      discipline: row.line.discipline,
+      slot: row.line.slot,
+      position: index,
+      // A forfeited line carries nobody on either side. `setForfeited`
+      // already emptied both, so these are empty anyway — stated here so
+      // the write cannot drift from the row.
+      playerUserIds: row.line.forfeit === null ? row.line.ourIds : [],
+      playerLabels: row.line.forfeit === null ? row.ours : [],
+      opponentLabels: row.line.forfeit === null ? row.theirs : [],
+      // A settled line hands back the side it was saved with, untouched.
+      forfeit: lockedForfeit.has(row.line.key)
+        ? lockedForfeit.get(row.line.key) ?? null
+        : row.line.forfeit,
+    }));
+  }
+
+  /**
+   * Write the draft — creating a dual, or saving one that already exists.
+   *
+   * Two actions, chosen here by whether the seed named an event, rather than
+   * one action that decides for itself. `updateDual` takes no opponent at all:
+   * a dual's school is fixed once its lines point at it, which is why the edit
+   * flow pins the school with no way to change it.
+   */
   function submit() {
     setError(null);
+    const eventId = initial?.eventId;
+
     startTransition(async () => {
-      const result = await createDual({
-        opponent: opponentName,
-        // The key, never the uuid: `createDual` resolves it server-side, and
-        // a key that resolves to nothing leaves the dual on free text rather
-        // than refusing it.
-        opponentProgramKey: school.kind === "program"
-          ? school.program.programKey
-          : null,
-        date: draft.date,
-        site: draft.site,
-        surface: draft.surface,
-        // Read off the chosen `FORMATS` row, which states both as literals.
-        // Nothing here parses a string, so no null can arrive as "null".
-        bestOf: draft.format.bestOf,
-        adScoring: draft.format.adScoring,
-        lines: filled.map((row, index) => ({
-          discipline: row.line.discipline,
-          slot: row.line.slot,
-          position: index,
-          // A forfeited line carries nobody on either side. `setForfeited`
-          // already emptied both, so these are empty anyway — stated here so
-          // the write cannot drift from the row.
-          playerUserIds: row.line.forfeit === null ? row.line.ourIds : [],
-          playerLabels: row.line.forfeit === null ? row.ours : [],
-          opponentLabels: row.line.forfeit === null ? row.theirs : [],
-          forfeit: row.line.forfeit,
-        })),
-      });
+      const result = eventId
+        ? await updateDual({
+            eventId,
+            date: draft.date,
+            site: draft.site,
+            surface: draft.surface,
+            bestOf: draft.format.bestOf,
+            adScoring: draft.format.adScoring,
+            lines: payloadLines(),
+          })
+        : await createDual({
+            opponent: opponentName,
+            // The key, never the uuid: `createDual` resolves it server-side, and
+            // a key that resolves to nothing leaves the dual on free text rather
+            // than refusing it.
+            opponentProgramKey:
+              school.kind === "program" ? school.program.programKey : null,
+            date: draft.date,
+            site: draft.site,
+            surface: draft.surface,
+            // Read off the chosen `FORMATS` row, which states both as literals.
+            // Nothing here parses a string, so no null can arrive as "null".
+            bestOf: draft.format.bestOf,
+            adScoring: draft.format.adScoring,
+            lines: payloadLines(),
+          });
 
       if ("error" in result) {
         // The action's own sentence, on screen. A refusal that only turned the
@@ -551,6 +701,8 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
     draft,
     edit,
     lines,
+    /** Which courts are settled, and how — see `DualLineSeed.locked`. */
+    locked: lockedByKey,
     pool,
     laddered,
     editOurLabels,
@@ -672,6 +824,7 @@ export function DualFactsStep({
  */
 export function DualLineupStep({
   lines,
+  locked,
   pool,
   laddered,
   onOurLabels,
@@ -679,6 +832,15 @@ export function DualLineupStep({
   onForfeit,
 }: {
   lines: LineupLine[];
+  /**
+   * Courts the save may not move, by line key — `useDualDraft().locked`.
+   *
+   * Empty on a new dual: nothing has been played yet, so nothing is settled.
+   * On an edit it is the same question `planEntryChanges` asks server-side,
+   * asked early so a settled line is drawn read-only instead of accepting an
+   * edit the save is going to refuse.
+   */
+  locked?: Record<string, "played" | "forfeited">;
   /** The school and its saved roster. `pool.key` rides in every row's key. */
   pool: OpponentPool;
   /** Whether the program has a ladder — the singles note's only variable. */
@@ -705,6 +867,7 @@ export function DualLineupStep({
             : "six required · type a name on each court"
         }
         lines={singles}
+        locked={locked}
         addLabel="Add name"
         pool={pool}
         onOurLabels={onOurLabels}
@@ -717,6 +880,7 @@ export function DualLineupStep({
           title="Lineup · doubles"
           note="three required · pairs carried from singles"
           lines={doubles}
+          locked={locked}
           addLabel="Add pair"
           pool={pool}
           onOurLabels={onOurLabels}
@@ -826,6 +990,7 @@ function LineupBlock({
   title,
   note,
   lines,
+  locked,
   addLabel,
   pool,
   onOurLabels,
@@ -835,6 +1000,8 @@ function LineupBlock({
   title: string;
   note: string;
   lines: LineupLine[];
+  /** Settled courts by line key — see `DualLineupStep`. */
+  locked?: Record<string, "played" | "forfeited">;
   addLabel: string;
   /** The school and its saved roster. `pool.key` rides in every row's key. */
   pool: OpponentPool;
@@ -861,6 +1028,7 @@ function LineupBlock({
             // remounts the row and drops the resolved name with it.
             key={`${pool.key}:${line.key}`}
             line={line}
+            locked={locked?.[line.key]}
             addLabel={addLabel}
             pool={pool}
             onOurLabels={onOurLabels}
@@ -875,6 +1043,21 @@ function LineupBlock({
 }
 
 const LINE_GRID = "grid grid-cols-[34px_1fr_20px_1fr_70px] items-center gap-2.5";
+
+/**
+ * The rule and hover wash under every row but the last — `2b` draws the last
+ * row of each block without either. One function so the editable row and the
+ * settled one below cannot drift into two different blocks.
+ */
+function rowRule(last: boolean) {
+  return last
+    ? null
+    : [
+        "border-b border-[var(--border-hairline)]",
+        "transition-colors duration-[var(--duration-hover)]",
+        "hover:bg-[var(--surface-subtle)]",
+      ];
+}
 
 /**
  * One line.
@@ -907,6 +1090,7 @@ const LINE_GRID = "grid grid-cols-[34px_1fr_20px_1fr_70px] items-center gap-2.5"
  */
 function LineRow({
   line,
+  locked,
   addLabel,
   pool,
   onOurLabels,
@@ -915,6 +1099,8 @@ function LineRow({
   last,
 }: {
   line: LineupLine;
+  /** Settled, and how — the row is then read-only. See `DualLineSeed.locked`. */
+  locked?: "played" | "forfeited";
   addLabel: string;
   pool: OpponentPool;
   onOurLabels: (key: string, value: string) => void;
@@ -925,6 +1111,56 @@ function LineRow({
   const forfeited = line.forfeit !== null;
   const [active, setActive] = useState(false);
 
+  // A settled court. Drawn in place — the lineup has to read as nine courts —
+  // but with nothing on it a save could move: no name inputs, no opponent
+  // popup, no Forfeit toggle, just the two sides as they were recorded and one
+  // ink-500 micro saying why the row is closed. `planEntryChanges` refuses a
+  // submission that moves this line, and a refusal is total, so an editable row
+  // here would take a coach's retyped lineup and then reject the whole save.
+  if (locked) {
+    // From the lock, not from `line.forfeit`: an opponent's forfeit is saved as
+    // `"theirs"`, which `LineupLine` cannot hold at all.
+    const settledForfeit = locked === "forfeited";
+    return (
+      <div className={cn(LINE_GRID, "py-[7px]", rowRule(last))}>
+        <span className="mono text-[11px]" style={{ color: "var(--ink-600)" }}>
+          {line.slot}
+        </span>
+
+        <span className="truncate text-[13px] text-[var(--ink-900)]">
+          {settledForfeit
+            ? /* The one string a forfeited line prints, here and on the event
+                 page's own `line-row.tsx`. */
+              "— no available player"
+            : line.ourLabels.join(" / ")}
+        </span>
+
+        {settledForfeit ? (
+          <span />
+        ) : (
+          <span className="text-micro" style={{ color: "var(--ink-400)" }}>
+            vs
+          </span>
+        )}
+
+        {settledForfeit ? (
+          <span />
+        ) : (
+          <span className="truncate text-[13px] text-[var(--ink-900)]">
+            {line.theirLabels.join(" / ")}
+          </span>
+        )}
+
+        <span
+          className="text-micro text-right"
+          style={{ color: "var(--ink-500)" }}
+        >
+          {locked === "forfeited" ? "Forfeited" : "Played"}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
@@ -934,13 +1170,7 @@ function LineRow({
         // row, so the row is what it is positioned against.
         "relative",
         active ? "z-20" : null,
-        last
-          ? null
-          : [
-              "border-b border-[var(--border-hairline)]",
-              "transition-colors duration-[var(--duration-hover)]",
-              "hover:bg-[var(--surface-subtle)]",
-            ]
+        rowRule(last)
       )}
     >
       <span

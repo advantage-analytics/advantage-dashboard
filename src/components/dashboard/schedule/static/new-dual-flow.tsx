@@ -56,6 +56,27 @@
  *   step 3   a line. `createDual` refuses a dual with no lines, and the
  *            footer prints how many there are beside the button.
  *
+ * ── Editing the same dual ──────────────────────────────────────────────────
+ * `mode="edit"` is this flow's steps two and three over a dual that already
+ * exists. Everything below is the same component; four things differ, and each
+ * is a consequence of one fact — the opponent is fixed once lines point at it:
+ *
+ *   the school   comes from the event rather than from step one, is pinned
+ *                with no `Change`, and step one is unreachable. `PinnedEventBar`
+ *                takes no `onChange` at all rather than a disabled one.
+ *   the draft    opens on the event's own facts and its nine saved lines,
+ *                each carrying the `program_event_entries` id it came from —
+ *                see `dualSeed` below and `DualLineSeed.id` for why a lineup
+ *                submitted without ids is a lineup `planEntryChanges` reads as
+ *                nine deletes and nine inserts.
+ *   settled      lines with a match or a forfeit are drawn read-only. The save
+ *                would refuse to move them anyway, and a refusal is total, so
+ *                an editable row would take a whole retyped lineup and then
+ *                reject it.
+ *   the write    `updateDual`, chosen inside `useDualDraft` by the seed
+ *                carrying an `eventId`. Same footer, same `ActionError`.
+ *
+ * ── The format ─────────────────────────────────────────────────────────────
  * `adScoring` never passes through this file. The format is the `FORMATS` row
  * `DualFactsStep` chose, and `useDualDraft().submit()` reads `bestOf` and
  * `adScoring` off it as literals — see `DualFormat` in `dual-build-step.tsx`
@@ -63,7 +84,7 @@
  * pair to `formatLabel` and parses nothing.
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 /* Straight from the two files, not the wizard's barrel: `index.ts` re-exports
    `UploadMatchFlow` and its whole subtree, and this flow needs the chrome and
    the keys — the same call `score-only-flow.tsx` made. */
@@ -76,9 +97,13 @@ import {
   DualLineupStep,
   useDualDraft,
   type ChosenSchool,
+  type DualDraftSeed,
 } from "@/components/dashboard/schedule/static/dual-build-step";
 import { divisionLabel } from "@/lib/data/programs-server";
+import { EVENT_FORMATS } from "@/lib/schedule/format";
+import { isSettled } from "@/lib/schedule/entry-plan";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
+import type { EventDetail } from "@/lib/schedule/types";
 
 /** Where Cancel goes on step one. Inside the rebuilt set. */
 const SCHEDULE_HREF = "/dashboard/team/schedule";
@@ -124,9 +149,115 @@ function schoolKey(school: ChosenSchool): string {
     : `text:${school.name}`;
 }
 
-export function NewDualFlow() {
-  const [step, setStep] = useState<Step>(1);
-  const [school, setSchool] = useState<ChosenSchool | null>(null);
+/**
+ * What the flow is for.
+ *
+ * A discriminated pair rather than three loose optional props, so "an edit
+ * without an event" is not a shape anybody can write. `opponentProgram` is the
+ * opponent's directory row where the ROUTE could resolve one — `EventEntry`
+ * carries the opponent's program id and nothing else, and
+ * `opponentRosterForDual` is keyed on `program_key`, so the lookup belongs to
+ * the server. Null is a real answer (a dual entered as free text): the school
+ * is then pinned from `event.name`, the opponent-name popups offer no saved
+ * roster, and nothing else changes.
+ */
+export type NewDualFlowProps =
+  | { mode?: "create"; event?: undefined; opponentProgram?: undefined }
+  | {
+      mode: "edit";
+      event: EventDetail;
+      opponentProgram?: ProgramSearchResult | null;
+    };
+
+/** The edit's two facts, once the props say there is one. */
+interface DualEditTarget {
+  detail: EventDetail;
+  opponentProgram: ProgramSearchResult | null;
+}
+
+/**
+ * The event's saved format as one of the four option names the control offers.
+ *
+ * A lookup over the shared table, never a parse: `EVENT_FORMATS` states each
+ * pair as literals, so this either finds the row or finds nothing. Nothing is
+ * the honest answer for a dual whose `ad_scoring` is null — the state
+ * `docs/ui-revamp-guardrails.md` §3.1 and §4 exist about — and `useDualDraft`
+ * then opens on the builder's own default rather than on a `false` invented
+ * here to make the lookup succeed.
+ */
+function formatValueOf({ bestOf, adScoring }: EventDetail["event"]["format"]) {
+  return EVENT_FORMATS.find(
+    (option) => option.bestOf === bestOf && option.adScoring === adScoring
+  )?.value;
+}
+
+/**
+ * The event, as the draft the builder opens on.
+ *
+ * Keyed by slot, because that is what `LineupLine.key` is: an entry whose slot
+ * is not one of the nine courts (a dual has no such row — the column is 'S1'…
+ * 'D3' — but the type allows null) matches no seeded line and is simply not
+ * applied.
+ *
+ * Both sides are joined back into ONE label, which is how the builder holds a
+ * doubles pair: `useDualDraft` splits on `/` at the boundaries and nowhere
+ * else. `id` rides on every loaded line — see `DualLineSeed.id`.
+ */
+function dualSeed({ event, entries }: EventDetail): DualDraftSeed {
+  return {
+    eventId: event.id,
+    date: event.startsOn,
+    site: event.site,
+    // `""` is "no surface", and is honoured as one — the column is nullable
+    // and an absent surface is not "hard".
+    surface: event.surface ?? "",
+    format: formatValueOf(event.format),
+    lines: entries.flatMap((entry) =>
+      entry.slot
+        ? [
+            {
+              key: entry.slot,
+              id: entry.id,
+              ourLabels: [entry.playerLabels.join(" / ")],
+              theirLabels: [entry.opponentLabels.join(" / ")],
+              forfeit: entry.forfeit,
+              // The same question `planEntryChanges` asks at save, asked here
+              // so the row is drawn read-only rather than refused later.
+              locked: isSettled(entry)
+                ? entry.forfeit !== null
+                  ? ("forfeited" as const)
+                  : ("played" as const)
+                : undefined,
+            },
+          ]
+        : []
+    ),
+  };
+}
+
+export function NewDualFlow(props: NewDualFlowProps) {
+  const edit: DualEditTarget | undefined = useMemo(
+    () =>
+      props.mode === "edit"
+        ? {
+            detail: props.event,
+            opponentProgram: props.opponentProgram ?? null,
+          }
+        : undefined,
+    [props.mode, props.event, props.opponentProgram]
+  );
+
+  // An edit opens on step two: its school is the event's, already decided.
+  const [step, setStep] = useState<Step>(edit ? 2 : 1);
+  const [school, setSchool] = useState<ChosenSchool | null>(
+    edit
+      ? edit.opponentProgram
+        ? { kind: "program", program: edit.opponentProgram }
+        : // The name the dual was recorded under, which is the name it keeps:
+          // `updateDual` does not take an opponent at all.
+          { kind: "text", name: edit.detail.event.name }
+      : null
+  );
 
   const choose = useCallback(
     (name: string, program: ProgramSearchResult | null) => {
@@ -143,9 +274,11 @@ export function NewDualFlow() {
   return (
     <DualDraftFlow
       // A different school is a different draft. Same school, same key, same
-      // draft — which is what makes `Change` a round trip and not a reset.
+      // draft — which is what makes `Change` a round trip and not a reset. An
+      // edit's school never changes, so this key never moves.
       key={schoolKey(school)}
       school={school}
+      edit={edit}
       step={step}
       onStep={setStep}
       onChoose={choose}
@@ -234,20 +367,31 @@ function SchoolStep({
  */
 function DualDraftFlow({
   school,
+  edit,
   step,
   onStep,
   onChoose,
 }: {
   school: ChosenSchool;
+  /** Present only on an edit — see this file's header. */
+  edit?: DualEditTarget;
   step: Step;
   onStep: (step: Step) => void;
   onChoose: (name: string, program: ProgramSearchResult | null) => void;
 }) {
   const contentRef = useRef<HTMLDivElement>(null);
+  // Memoised because `useDualDraft` keys its settled-line and id maps on this
+  // object's `lines`. A fresh array each render would rebuild both on every
+  // keystroke — harmless, and still not what the hook's contract describes.
+  const seed = useMemo(
+    () => (edit ? dualSeed(edit.detail) : undefined),
+    [edit]
+  );
   const {
     draft,
-    edit,
+    edit: editDraft,
     lines,
+    locked,
     pool,
     laddered,
     editOurLabels,
@@ -258,13 +402,19 @@ function DualDraftFlow({
     submit,
     pending,
     error,
-  } = useDualDraft(school);
+  } = useDualDraft(school, seed);
 
   const back = useCallback(() => {
     onStep(step === 3 ? 2 : 1);
   }, [onStep, step]);
 
   const lastStep = step === 3;
+  // An edit has no step one to walk back to — the opponent is fixed — so step
+  // two's way out is Cancel, back to the event it came from.
+  const canGoBack = step !== 1 && (step === 3 || edit === undefined);
+  const eventHref = edit
+    ? `/dashboard/team/schedule/${edit.detail.event.id}`
+    : SCHEDULE_HREF;
   // `createDual` refuses a dual with no lines, so the button is asleep until
   // there is one to write — and asleep again while the write is in flight, so
   // a second click cannot create a second dual.
@@ -285,7 +435,7 @@ function DualDraftFlow({
   // step three, and one Escape stepping back twice.
   useWizardKeys({
     contentRef,
-    canGoBack: step !== 1,
+    canGoBack,
     onBack: back,
     continueDisabled: step === 1 || continueDisabled,
     onContinue,
@@ -321,7 +471,9 @@ function DualDraftFlow({
            an empty glyph. */
         <PinnedEventBar
           kind="dual"
-          name={opponentName}
+          // On an edit, the name the dual is already recorded under — the one
+          // `updateDual` does not take and cannot change.
+          name={edit ? edit.detail.event.name : opponentName}
           subline={subline}
           date={draft.date || null}
           site={draft.site}
@@ -331,13 +483,19 @@ function DualDraftFlow({
             bestOf: draft.format.bestOf,
             adScoring: draft.format.adScoring,
           }}
-          onChange={() => onStep(1)}
+          // No handler at all on an edit: a dual's school is fixed once its
+          // lines point at it, and a control that can never do anything is not
+          // a control. `PinnedEventBar` draws no `Change` without one.
+          onChange={edit ? undefined : () => onStep(1)}
         />
       }
       contentRef={contentRef}
       contentKey={step}
       contentClassName={step === 2 ? "mt-9" : "mt-9 flex flex-col gap-[22px]"}
-      back={back}
+      back={canGoBack ? back : undefined}
+      // Only ever reached when there is no Back — the shell draws one or the
+      // other. On an edit that is step two, and its way out is the event.
+      cancelHref={eventHref}
       status={
         error ? (
           // `createDual`'s own sentence, in the count line's place. A refusal
@@ -348,22 +506,34 @@ function DualDraftFlow({
           </span>
         ) : lastStep ? (
           <span className="text-[11px]" style={{ color: "var(--ink-600)" }}>
-            Creates <span className="tabular">{lineCount}</span>{" "}
-            {lineCount === 1 ? "line" : "lines"} vs {opponentName}
+            {edit ? "Saves" : "Creates"}{" "}
+            <span className="tabular">{lineCount}</span>{" "}
+            {lineCount === 1 ? "line" : "lines"} vs{" "}
+            {edit ? edit.detail.event.name : opponentName}
           </span>
         ) : null
       }
       continueLabel={
-        lastStep ? (pending ? "Creating…" : "Create dual") : "Continue"
+        lastStep
+          ? edit
+            ? pending
+              ? "Saving…"
+              : "Save changes"
+            : pending
+              ? "Creating…"
+              : "Create dual"
+          : "Continue"
       }
       onContinue={onContinue}
       continueDisabled={continueDisabled}
     >
       {step === 2 ? (
-        <DualFactsStep draft={draft} onEdit={edit} />
+        <DualFactsStep draft={draft} onEdit={editDraft} />
       ) : (
         <DualLineupStep
           lines={lines}
+          // Empty on a create — nothing has been played yet.
+          locked={locked}
           pool={pool}
           laddered={laddered}
           onOurLabels={editOurLabels}

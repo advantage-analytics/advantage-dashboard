@@ -662,12 +662,18 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
       'Six singles and three doubles. Your side is seeded from the ladder — type over a name to put a sub on.'
     );
 
-    // The footer, which is the flow's and no longer either body's.
-    drawn(flow, 'new-dual-flow.tsx', 'Creates ');
+    // The footer, which is the flow's and no longer either body's. The count
+    // line and the primary each read one of two words since T19 gave the edit
+    // route the same flow — the create half is unchanged, and the edit half is
+    // pinned beside it so a rename of either is a failure here rather than a
+    // "Create dual" button on a dual that already exists.
+    drawn(flow, 'new-dual-flow.tsx', '"Saves" : "Creates"');
     drawn(flow, 'new-dual-flow.tsx', '"line" : "lines"');
     drawn(flow, 'new-dual-flow.tsx', ' vs ');
     drawn(flow, 'new-dual-flow.tsx', 'Create dual');
     drawn(flow, 'new-dual-flow.tsx', 'Creating…');
+    drawn(flow, 'new-dual-flow.tsx', 'Save changes');
+    drawn(flow, 'new-dual-flow.tsx', 'Saving…');
     drawn(flow, 'new-dual-flow.tsx', 'Continue');
   });
 
