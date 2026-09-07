@@ -61,3 +61,8 @@ is the runner's. Newest entries at the bottom.
 **gate:** lint pass · tsc pass · npm test pass (535) · task-completion-reviewer `VERDICT: pass` (step blocks diff whitespace-only; keydown effect verbatim) · pipeline-guardrails-reviewer ran (highest attention) — no findings: the three inputs keep their bindings in `UploadMatchFlow.tsx`, `continueDisabled` and `data-wizard-continue` still connect hook to button, the four protected paths have an empty diff · rls-boundary-reviewer skipped
 **changed:** new `WizardShell.tsx` (exports `CONTENT_CLS` + the chrome: full-bleed step indicator, pinned slot, 832px column, sticky footer) and `useWizardKeys.ts` (keydown effect + `isFormControl`, moved verbatim); `UploadMatchFlow.tsx` consumes both; `index.ts` exports all three plus their types.
 **follow-ups:** `score-only-flow.tsx` could adopt the shell, but its eyebrow reads "Line N of M" — that needs an `eyebrow?` override prop, a design call left open. `UploadMatchFlow.tsx`'s header comment still calls the file "the shell".
+
+## T13 · `PinnedEventBar` for the create flows — done
+**gate:** lint pass · tsc pass · npm test pass (535) · task-completion-reviewer `VERDICT: pass` · pipeline-guardrails-reviewer skipped (one unused presentational file, no wizard or data surface) · rls-boundary-reviewer skipped
+**changed:** new `static/pinned-event-bar.tsx` — 36px bar in `PinnedLineBar`'s register, `Swords` / inlined `BracketMark`, name + subline, hairline-separated facts via the existing formatters, blue `Change` only when `onChange` is given.
+**follow-ups:** the bar inlines `BracketMark` because `static-event-chooser.tsx` keeps its copy private; a shared glyph module would remove the duplicate.

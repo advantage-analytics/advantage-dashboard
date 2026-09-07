@@ -167,7 +167,7 @@ need it.
 - **notes:** For `pipeline-guardrails-reviewer`: the shell owns chrome only; `fixedCamera`, `initialTopPlayerIsPlayer1` and `adScoring` are still collected by `TrimStepContent`/`DetailsStepContent` with the same handlers, and `continueDisabled` is computed exactly where it was. Non-goals: no change to step order, drafts, quota meter, or copy.
 
 ## T13 · `PinnedEventBar` for the create flows
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T5
 - **files:** src/components/dashboard/schedule/static/pinned-event-bar.tsx (new)
