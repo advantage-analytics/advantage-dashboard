@@ -120,14 +120,22 @@ function settledReason(entry: EventEntry, dropped: boolean): string {
  */
 function changed(entry: EventEntry, row: IncomingEntry): boolean {
   if (entry.discipline !== row.discipline) return true;
-  if (entry.position !== row.position) return true;
   if (!sameList(entry.playerUserIds, row.playerUserIds)) return true;
   if (!sameList(entry.playerLabels, row.playerLabels)) return true;
 
   if (isTournamentRow(row)) {
+    // A tournament entry has no slot — `position` IS half of its identity
+    // (see `slotKey`), so a row that moved is a row that changed.
+    if (entry.position !== row.position) return true;
     return entry.draw !== row.draw || entry.seed !== row.seed;
   }
 
+  // `position` is deliberately NOT compared for a dual line. A court's
+  // position is a fact about its slot, compared on the next line, so the two
+  // can never disagree about anything a coach did. Comparing it as well only
+  // adds a way to be wrong: a row whose stored position came from an older
+  // scheme reads as edited, and if that line is settled the save is refused
+  // over a court nobody touched.
   if ((entry.slot ?? "") !== row.slot) return true;
   if (!sameList(entry.opponentLabels, row.opponentLabels)) return true;
   return entry.forfeit !== (row.forfeit ?? null);

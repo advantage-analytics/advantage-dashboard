@@ -654,6 +654,32 @@ export async function recordResult(
       ? null
       : (((entry.player_user_ids as string[] | null) ?? [])[0] ?? null);
 
+  /**
+   * The opponent's name, back onto the entry the line is drawn from.
+   *
+   * Run on BOTH the insert and the correction path. The event page draws a
+   * line's opponent from `program_event_entries.opponent_labels`, not from the
+   * match — so when this only ran on insert, correcting a misspelled opponent
+   * updated `matches.player2_name` and left the line still showing the old
+   * spelling. Two names for one player, and the row that looks authoritative
+   * is the stale one.
+   */
+  const syncEntryOpponent = async () => {
+    if (input.opponentSchool === undefined && input.opponentLabels.length === 0) {
+      return;
+    }
+    await supabase
+      .from("program_event_entries")
+      .update({
+        opponent_labels: input.opponentLabels,
+        ...(input.opponentSchool !== undefined
+          ? { opponent_school: input.opponentSchool }
+          : {}),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", entry.id);
+  };
+
   if (existing?.id) {
     const { data: updated, error: updateError } = await supabase
       .from("matches")
@@ -683,6 +709,8 @@ export async function recordResult(
           "they can change it. Ask them to correct it.",
       };
     }
+
+    await syncEntryOpponent();
 
     revalidatePath("/dashboard/team/schedule");
     revalidatePath(`/dashboard/team/schedule/${entry.event_id}`);
@@ -733,18 +761,7 @@ export async function recordResult(
 
   if (matchError) return { error: matchError.message };
 
-  if (input.opponentSchool !== undefined || input.opponentLabels.length > 0) {
-    await supabase
-      .from("program_event_entries")
-      .update({
-        opponent_labels: input.opponentLabels,
-        ...(input.opponentSchool !== undefined
-          ? { opponent_school: input.opponentSchool }
-          : {}),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", entry.id);
-  }
+  await syncEntryOpponent();
 
   revalidatePath("/dashboard/team/schedule");
   revalidatePath(`/dashboard/team/schedule/${entry.event_id}`);

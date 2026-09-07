@@ -232,6 +232,111 @@ test.describe('round trip — a dual, loaded and saved unchanged', () => {
     expect(plan.refuse[0].reason).toContain('S1');
     expect(plan.refuse[0].reason).toContain('recorded match');
   });
+
+  /**
+   * The two ways a coach's own edit used to come back refused, or silently
+   * undone, naming a court they never touched.
+   *
+   * Both are the same underlying mistake: treating a court's place in the
+   * lineup as something derived from the OTHER courts. It isn't — a dual's
+   * courts are S1…D3 and always have been, so a line's position is a fact
+   * about its slot, and a court nobody saved is a court nobody is playing.
+   */
+  test.describe('a lineup with a gap above a played line', () => {
+    // S1 empty, S2 played. Exactly the shape that used to break: `position`
+    // was the index into the FILLED list, so S2 sat at 0 while S1 was empty.
+    const gapped: EventEntry[] = [
+      baseEntry({
+        id: 'g-s2',
+        slot: 'S2',
+        position: 0,
+        playerUserIds: ['u-ben'],
+        playerLabels: ['Ben Cole'],
+        opponentLabels: ['Rival Two'],
+        matches: [match('m-g-s2')],
+      }),
+      baseEntry({
+        id: 'g-s3',
+        slot: 'S3',
+        position: 1,
+        playerUserIds: ['u-cara'],
+        playerLabels: ['Cara Diaz'],
+        opponentLabels: ['Rival Three'],
+      }),
+    ];
+
+    const gappedDetail: EventDetail = {
+      ...detail,
+      entries: gapped,
+    };
+
+    function payloadFor(seed: ReturnType<typeof dualSeed>): LineupLineInput[] {
+      const lines = seedDualLines(ladder, seed);
+      const filled = filledDualLines(lines, lockedByKeyFromSeed(seed));
+      return buildDualPayloadLines(
+        filled,
+        seededIdsFromSeed(seed),
+        lockedForfeitFromSeed(seed)
+      );
+    }
+
+    test('a line’s position is its court, not its place among the filled ones', () => {
+      const payload = payloadFor(dualSeed(gappedDetail));
+      const bySlot = new Map(payload.map((row) => [row.slot, row.position]));
+
+      // S2 is the second court whether or not S1 is empty.
+      expect(bySlot.get('S2')).toBe(1);
+      expect(bySlot.get('S3')).toBe(2);
+    });
+
+    test('filling the empty court above a played one refuses nothing', () => {
+      const seed = dualSeed(gappedDetail);
+      const payload = payloadFor(seed).concat({
+        discipline: 'singles',
+        slot: 'S1',
+        position: 0,
+        playerUserIds: ['u-ana'],
+        playerLabels: ['Ana Vasquez'],
+        opponentLabels: ['Rival One'],
+        forfeit: null,
+      });
+
+      const plan = planEntryChanges(gapped, payload);
+
+      // The coach touched S1 and nothing else. S2 is played and must be left
+      // exactly alone — not refused over a position that only moved because
+      // the court above it stopped being empty.
+      expect(plan.refuse).toEqual([]);
+      expect(plan.update).toEqual([]);
+      expect(plan.delete).toEqual([]);
+      expect(plan.insert).toHaveLength(1);
+      expect(plan.insert[0].slot).toBe('S1');
+    });
+
+    test('a court the saved lineup does not mention opens empty, not ladder-seeded', () => {
+      // `gapped` names S2 and S3 only. The ladder could fill all nine, and
+      // used to: D1–D3 came back with pairs on them and the next save would
+      // have inserted courts the coach had removed.
+      const lines = seedDualLines(ladder, dualSeed(gappedDetail));
+
+      const untouched = lines.filter((line) => line.key !== 'S2' && line.key !== 'S3');
+      for (const line of untouched) {
+        expect(line.ourLabels.filter(Boolean), `${line.key} should be empty`).toEqual([]);
+        expect(line.ourIds, `${line.key} should name nobody`).toEqual([]);
+      }
+
+      const payload = payloadFor(dualSeed(gappedDetail));
+      expect(payload.map((row) => row.slot).sort()).toEqual(['S2', 'S3']);
+    });
+
+    test('a brand new dual still opens on the ladder', () => {
+      // The seed above is a LOADED lineup. One with no lines at all is a new
+      // dual, and that is the case the ladder exists for.
+      const lines = seedDualLines(ladder, undefined);
+      expect(lines.find((line) => line.key === 'S1')?.ourLabels).toEqual(['Ana Vasquez']);
+      expect(lines.find((line) => line.key === 'D1')?.ourIds).toEqual(['u-ana', 'u-ben']);
+    });
+  });
 });
 
 test.describe('round trip — a tournament, loaded and saved unchanged', () => {

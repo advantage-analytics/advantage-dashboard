@@ -186,6 +186,15 @@ const SINGLES_SLOTS = ["S1", "S2", "S3", "S4", "S5", "S6"];
 const DOUBLES_SLOTS = ["D1", "D2", "D3"];
 
 /**
+ * The same nine, as one list — the order a dual's courts are in, everywhere.
+ *
+ * This is what `program_event_entries.position` holds for a dual line: a
+ * court's place in this list, which never moves. See `buildDualPayloadLines`
+ * for what deriving it from anything else costs.
+ */
+const DUAL_SLOT_ORDER = [...SINGLES_SLOTS, ...DOUBLES_SLOTS];
+
+/**
  * Six singles and three doubles, seeded from the ladder where there is one.
  *
  * `dual-form.tsx`'s own, ported unchanged as that file is deleted: S1–S6 take
@@ -381,9 +390,20 @@ export function seedDualLines(
   ladder: LadderPlayer[],
   initial?: DualDraftSeed
 ): LineupLine[] {
+  // A seed that states its lines is a lineup that was SAVED, and a court it
+  // does not mention is a court that has no saved row — because the coach
+  // emptied it. Falling back to the ladder there would quietly put a doubles
+  // pair back on a court they deliberately removed, and the next save would
+  // insert it for real. Only a draft with no `lines` at all (a brand new dual)
+  // opens on the ladder.
+  const loaded = initial?.lines !== undefined;
+
   return seedLineup(ladder).map((line) => {
     const seed = initial?.lines?.find((row) => row.key === line.key);
-    if (!seed) return line;
+    if (!seed) {
+      if (!loaded) return line;
+      return { ...line, ourIds: [], ourLabels: [], theirLabels: [], forfeit: null };
+    }
     const ourLabels = seed.ourLabels ?? line.ourLabels;
     return {
       ...line,
@@ -447,13 +467,20 @@ export function buildDualPayloadLines(
   seededIds: Map<string, string>,
   lockedForfeit: Map<string, "ours" | "theirs" | null>
 ): LineupLineInput[] {
-  return filled.map((row, index) => ({
+  return filled.map((row) => ({
     // Absent on a line the coach typed into an empty court — a fresh line
     // has no saved row to be, and `planEntryChanges` inserts it.
     id: seededIds.get(row.line.key),
     discipline: row.line.discipline,
     slot: row.line.slot,
-    position: index,
+    // The court's own index, NOT this row's index in `filled`. `filled` skips
+    // empty courts, so an index into it moves whenever a court above changes:
+    // fill an empty S1 above a played S2 and S2's position slides 0 → 1,
+    // `planEntryChanges` reads that as an edit to a settled line, and the whole
+    // save is refused naming a court the coach never touched. A dual's court
+    // order is fixed, so the position of a line is a fact about its slot and
+    // nothing else.
+    position: DUAL_SLOT_ORDER.indexOf(row.line.slot),
     // A forfeited line carries nobody on either side. `setForfeited`
     // already emptied both, so these are empty anyway — stated here so
     // the write cannot drift from the row.
