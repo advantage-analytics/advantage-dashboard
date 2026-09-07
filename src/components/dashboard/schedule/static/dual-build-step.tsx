@@ -339,6 +339,134 @@ function formatFor(value: EventFormatValue | undefined): DualFormat {
 }
 
 /**
+ * The saved entry id behind each seeded line — see `DualLineSeed.id`.
+ *
+ * Pulled out of `useDualDraft` (a mechanical extraction, no behaviour change)
+ * so the seed→payload path is importable without mounting the hook. See
+ * `tests/entry-round-trip.spec.ts`.
+ */
+export function seededIdsFromSeed(initial?: DualDraftSeed): Map<string, string> {
+  return new Map(
+    (initial?.lines ?? [])
+      .filter((row): row is DualLineSeed & { id: string } => Boolean(row.id))
+      .map((row) => [row.key, row.id] as const)
+  );
+}
+
+/** Which courts are settled, and how — see `DualLineSeed.locked`. */
+export function lockedByKeyFromSeed(
+  initial?: DualDraftSeed
+): Record<string, "played" | "forfeited"> {
+  const locked: Record<string, "played" | "forfeited"> = {};
+  for (const row of initial?.lines ?? []) {
+    if (row.locked) locked[row.key] = row.locked;
+  }
+  return locked;
+}
+
+/** A settled line's forfeit exactly as it was saved — see `DualLineSeed.forfeit`. */
+export function lockedForfeitFromSeed(
+  initial?: DualDraftSeed
+): Map<string, "ours" | "theirs" | null> {
+  return new Map(
+    (initial?.lines ?? [])
+      .filter((row) => row.locked)
+      .map((row) => [row.key, row.forfeit ?? null] as const)
+  );
+}
+
+/** The nine courts, seeded from the ladder and overlaid with `initial.lines`. */
+export function seedDualLines(
+  ladder: LadderPlayer[],
+  initial?: DualDraftSeed
+): LineupLine[] {
+  return seedLineup(ladder).map((line) => {
+    const seed = initial?.lines?.find((row) => row.key === line.key);
+    if (!seed) return line;
+    const ourLabels = seed.ourLabels ?? line.ourLabels;
+    return {
+      ...line,
+      ourLabels,
+      // Re-resolved from the seeded label, never carried in by the caller:
+      // this id is what the line's eventual match is attributed to, and the
+      // one rule that may produce it is `rosterIdsForLabels`.
+      ourIds: rosterIdsForLabels(ourLabels.join(" / "), ladder),
+      theirLabels: seed.theirLabels ?? line.theirLabels,
+      // `undefined` is "not stated"; `null` is "not forfeited". A saved
+      // `"theirs"` narrows to null here because `LineupLine` cannot hold it
+      // — such a line is always `locked`, so it is drawn from
+      // `lockedByKeyFromSeed` and submitted from `lockedForfeitFromSeed`,
+      // never from this field.
+      forfeit:
+        seed.forfeit === undefined
+          ? line.forfeit
+          : seed.forfeit === "ours"
+            ? "ours"
+            : null,
+    };
+  });
+}
+
+/**
+ * The lines that count toward the write — our side named, or a forfeit either
+ * side already carries. See `useDualDraft`'s `lineCount`.
+ */
+export function filledDualLines(
+  lines: LineupLine[],
+  lockedByKey: Record<string, "played" | "forfeited">
+): { line: LineupLine; ours: string[]; theirs: string[] }[] {
+  return lines
+    .map((line) => ({
+      line,
+      ours: splitNames(line.ourLabels.join(" / ")),
+      theirs: splitNames(line.theirLabels.join(" / ")),
+    }))
+    .filter(
+      (row) =>
+        row.ours.length > 0 ||
+        row.line.forfeit !== null ||
+        // A settled line always submits, whatever is on it. An opponent
+        // forfeit names nobody on either side, and dropping it here would
+        // submit a lineup missing a line the save is not allowed to delete.
+        lockedByKey[row.line.key] !== undefined
+    );
+}
+
+/**
+ * The nine courts as the two writes take them — `useDualDraft`'s
+ * `payloadLines()`, pulled out so it can be composed and tested without the
+ * hook. One mapping for create and edit both, so an edit cannot start sending
+ * a subtly different row than a create does. `id` is the only field that
+ * means anything to just one of them: `createDual` ignores it, and
+ * `updateDual` needs EVERY loaded line to carry it or `planEntryChanges`
+ * matches by slot, where a reorder reads as a rename and the save is refused.
+ */
+export function buildDualPayloadLines(
+  filled: { line: LineupLine; ours: string[]; theirs: string[] }[],
+  seededIds: Map<string, string>,
+  lockedForfeit: Map<string, "ours" | "theirs" | null>
+): LineupLineInput[] {
+  return filled.map((row, index) => ({
+    // Absent on a line the coach typed into an empty court — a fresh line
+    // has no saved row to be, and `planEntryChanges` inserts it.
+    id: seededIds.get(row.line.key),
+    discipline: row.line.discipline,
+    slot: row.line.slot,
+    position: index,
+    // A forfeited line carries nobody on either side. `setForfeited`
+    // already emptied both, so these are empty anyway — stated here so
+    // the write cannot drift from the row.
+    playerUserIds: row.line.forfeit === null ? row.line.ourIds : [],
+    playerLabels: row.line.forfeit === null ? row.ours : [],
+    opponentLabels: row.line.forfeit === null ? row.theirs : [],
+    // A settled line hands back the side it was saved with, untouched.
+    forfeit: lockedForfeit.has(row.line.key)
+      ? lockedForfeit.get(row.line.key) ?? null
+      : row.line.forfeit,
+  }));
+}
+
+/**
  * A new dual's draft: the four facts, the nine lines, the opponent's pool, and
  * the write.
  *
@@ -399,24 +527,14 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
    * another player.
    */
   const seededIds = useMemo(
-    () =>
-      new Map(
-        (initial?.lines ?? [])
-          .filter((row): row is DualLineSeed & { id: string } =>
-            Boolean(row.id)
-          )
-          .map((row) => [row.key, row.id] as const)
-      ),
+    () => seededIdsFromSeed(initial),
     [initial?.lines]
   );
 
-  const lockedByKey = useMemo(() => {
-    const locked: Record<string, "played" | "forfeited"> = {};
-    for (const row of initial?.lines ?? []) {
-      if (row.locked) locked[row.key] = row.locked;
-    }
-    return locked;
-  }, [initial?.lines]);
+  const lockedByKey = useMemo(
+    () => lockedByKeyFromSeed(initial),
+    [initial?.lines]
+  );
 
   /**
    * A settled line's forfeit exactly as it was saved, including `"theirs"`.
@@ -426,41 +544,13 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
    * the half `LineupLine` cannot carry — see `DualLineSeed.forfeit`.
    */
   const lockedForfeit = useMemo(
-    () =>
-      new Map(
-        (initial?.lines ?? [])
-          .filter((row) => row.locked)
-          .map((row) => [row.key, row.forfeit ?? null] as const)
-      ),
+    () => lockedForfeitFromSeed(initial),
     [initial?.lines]
   );
 
   // Seeded once. See the header.
   const [lines, setLines] = useState<LineupLine[]>(() =>
-    seedLineup(ladder).map((line) => {
-      const seed = initial?.lines?.find((row) => row.key === line.key);
-      if (!seed) return line;
-      const ourLabels = seed.ourLabels ?? line.ourLabels;
-      return {
-        ...line,
-        ourLabels,
-        // Re-resolved from the seeded label, never carried in by the caller:
-        // this id is what the line's eventual match is attributed to, and the
-        // one rule that may produce it is `rosterIdsForLabels`.
-        ourIds: rosterIdsForLabels(ourLabels.join(" / "), ladder),
-        theirLabels: seed.theirLabels ?? line.theirLabels,
-        // `undefined` is "not stated"; `null` is "not forfeited". A saved
-        // `"theirs"` narrows to null here because `LineupLine` cannot hold it
-        // — such a line is always `locked`, so it is drawn from `lockedByKey`
-        // and submitted from `lockedForfeit` below, never from this field.
-        forfeit:
-          seed.forfeit === undefined
-            ? line.forfeit
-            : seed.forfeit === "ours"
-              ? "ours"
-              : null,
-      };
-    })
+    seedDualLines(ladder, initial)
   );
 
   function edit(patch: Partial<DualDraft>) {
@@ -586,21 +676,7 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
   // footer reads 9 over a lineup whose S6 is forfeited. Dropping it would
   // write eight lines under a dual that has nine points to give, and
   // `dualScore` would read a decided 4–3 as a 4–3 out of eight.
-  const filled = lines
-    .map((line) => ({
-      line,
-      ours: splitNames(line.ourLabels.join(" / ")),
-      theirs: splitNames(line.theirLabels.join(" / ")),
-    }))
-    .filter(
-      (row) =>
-        row.ours.length > 0 ||
-        row.line.forfeit !== null ||
-        // A settled line always submits, whatever is on it. An opponent
-        // forfeit names nobody on either side, and dropping it here would
-        // submit a lineup missing a line the save is not allowed to delete.
-        lockedByKey[row.line.key] !== undefined
-    );
+  const filled = filledDualLines(lines, lockedByKey);
   const lineCount = filled.length;
 
   // The name the dual is recorded under — squad-qualified for a directory
@@ -625,24 +701,7 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
    * where a reorder reads as a rename and the save is refused.
    */
   function payloadLines(): LineupLineInput[] {
-    return filled.map((row, index) => ({
-      // Absent on a line the coach typed into an empty court — a fresh line
-      // has no saved row to be, and `planEntryChanges` inserts it.
-      id: seededIds.get(row.line.key),
-      discipline: row.line.discipline,
-      slot: row.line.slot,
-      position: index,
-      // A forfeited line carries nobody on either side. `setForfeited`
-      // already emptied both, so these are empty anyway — stated here so
-      // the write cannot drift from the row.
-      playerUserIds: row.line.forfeit === null ? row.line.ourIds : [],
-      playerLabels: row.line.forfeit === null ? row.ours : [],
-      opponentLabels: row.line.forfeit === null ? row.theirs : [],
-      // A settled line hands back the side it was saved with, untouched.
-      forfeit: lockedForfeit.has(row.line.key)
-        ? lockedForfeit.get(row.line.key) ?? null
-        : row.line.forfeit,
-    }));
+    return buildDualPayloadLines(filled, seededIds, lockedForfeit);
   }
 
   /**

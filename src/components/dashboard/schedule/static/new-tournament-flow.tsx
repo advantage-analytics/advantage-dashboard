@@ -145,7 +145,7 @@ function formatValueOf({ bestOf, adScoring }: EventDetail["event"]["format"]) {
  * has been played. Dropping it would be worse still: `planEntryChanges` reads
  * an absence as a delete.
  */
-function tournamentSeed(
+export function tournamentSeed(
   { event, entries }: EventDetail,
   roster: LadderPlayer[]
 ): TournamentDraftSeed {

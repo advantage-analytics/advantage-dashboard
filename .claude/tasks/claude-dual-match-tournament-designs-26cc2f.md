@@ -261,7 +261,7 @@ need it.
 - **notes:** Non-goals: no code.
 
 ## T21 · Round-trip spec: loading an event and saving it unchanged plans nothing
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T19, T20
 - **files:** tests/entry-round-trip.spec.ts (new)

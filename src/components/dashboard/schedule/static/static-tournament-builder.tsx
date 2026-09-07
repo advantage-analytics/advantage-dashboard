@@ -238,7 +238,7 @@ function formatFor(value: EventFormatValue | undefined): TournamentFormat {
  * Filtered against the roster the screen actually draws: an id nobody on it
  * holds would be an entry with no row to edit or remove it from.
  */
-function seedEntries(
+export function seedEntries(
   roster: LadderPlayer[],
   field: TournamentEntrySeed[] | undefined
 ): Map<string, FieldEntry> {
@@ -260,6 +260,71 @@ function seedEntries(
     });
   }
   return entered;
+}
+
+/**
+ * The field the entered map draws — one `{ player, entry }` pair per roster
+ * player who is in, in roster order. Pulled out of `useTournamentDraft` (a
+ * mechanical extraction, no behaviour change) so `buildTournamentEntries`
+ * below can be composed and tested without the hook.
+ */
+export function fieldFor(
+  roster: LadderPlayer[],
+  entered: ReadonlyMap<string, FieldEntry>
+): { player: LadderPlayer; entry: FieldEntry }[] {
+  return roster.flatMap((player) => {
+    const entry = entered.get(player.userId);
+    return entry ? [{ player, entry }] : [];
+  });
+}
+
+/**
+ * The entries as `submit()` writes them — `carry` first and unchanged, then
+ * the field in roster order. A NEW entry's `position` is the next number no
+ * saved row already holds, taken in roster order; a LOADED entry keeps the
+ * position it was saved with, because `planEntryChanges` refuses a settled
+ * entry whose position moved. See `useTournamentDraft`'s `submit()` header.
+ */
+export function buildTournamentEntries(
+  roster: LadderPlayer[],
+  entered: ReadonlyMap<string, FieldEntry>,
+  carry: TournamentEntryInput[]
+): TournamentEntryInput[] {
+  const field = fieldFor(roster, entered);
+
+  let nextPosition =
+    Math.max(
+      -1,
+      ...carry.map((row) => row.position),
+      ...field.map(({ entry }) => entry.position ?? -1)
+    ) + 1;
+
+  return [
+    ...carry,
+    ...field.map(({ player, entry }) => ({
+      // The saved row this came from, where there is one. Without it
+      // `planEntryChanges` matches on the `<draw> #<position>` label alone,
+      // and an entry that moved draws would read as a delete and an insert.
+      id: entry.id,
+      // `3c` has one section and it is singles. A doubles pair is one entry
+      // carrying two names, and this screen draws no way to make one.
+      discipline: "singles" as const,
+      position: entry.position ?? nextPosition++,
+      draw: entry.draw,
+      // "" is "nobody typed a seed", which is a null column — not a 0, which
+      // would print as an actual seeding. Guarded on the number rather than
+      // the string: `"0"` is truthy, and the column refuses it
+      // (`check (seed is null or seed > 0)`). The cell already strips a
+      // leading zero, so this is the second lock on the same door.
+      seed: Number(entry.seed) > 0 ? Number(entry.seed) : null,
+      playerUserIds: [player.userId],
+      // The labels the row was SAVED with, where it was saved with any.
+      // `player_labels` is written once and never re-derived, so re-deriving
+      // one here would report a renamed roster player's untouched entry as
+      // an edit — and refuse it, if that entry has been played.
+      playerLabels: entry.labels ?? [player.name],
+    })),
+  ];
 }
 
 /**
@@ -310,10 +375,7 @@ export function useTournamentDraft(
   // entries are numbered in, which is why ladder order is the order; an entry
   // loaded from a saved event keeps the position it already had. See
   // `submit()`.
-  const field = roster.flatMap((player) => {
-    const entry = entered.get(player.userId);
-    return entry ? [{ player, entry }] : [];
-  });
+  const field = fieldFor(roster, entered);
 
   function enter(player: LadderPlayer, draw: string = MAIN_DRAW) {
     setEntered((current) => {
@@ -391,44 +453,11 @@ export function useTournamentDraft(
     // Entries the field step cannot draw, first and unchanged — see
     // `TournamentDraftSeed.carry`.
     const carried = initial?.carry ?? [];
-    // The first position no saved row already holds. A loaded entry keeps its
-    // own; only a newly entered player takes one from here, so entering
-    // somebody cannot renumber — and therefore cannot refuse — a settled entry
-    // below them in ladder order. On a create there is nothing saved, so this
-    // starts at 0 and positions are 0..n in roster order exactly as before.
-    let nextPosition =
-      Math.max(
-        -1,
-        ...carried.map((row) => row.position),
-        ...field.map(({ entry }) => entry.position ?? -1)
-      ) + 1;
-
-    const entries: TournamentEntryInput[] = [
-      ...carried,
-      ...field.map(({ player, entry }) => ({
-        // The saved row this came from, where there is one. Without it
-        // `planEntryChanges` matches on the `<draw> #<position>` label alone,
-        // and an entry that moved draws would read as a delete and an insert.
-        id: entry.id,
-        // `3c` has one section and it is singles. A doubles pair is one entry
-        // carrying two names, and this screen draws no way to make one.
-        discipline: "singles" as const,
-        position: entry.position ?? nextPosition++,
-        draw: entry.draw,
-        // "" is "nobody typed a seed", which is a null column — not a 0, which
-        // would print as an actual seeding. Guarded on the number rather than
-        // the string: `"0"` is truthy, and the column refuses it
-        // (`check (seed is null or seed > 0)`). The cell already strips a
-        // leading zero, so this is the second lock on the same door.
-        seed: Number(entry.seed) > 0 ? Number(entry.seed) : null,
-        playerUserIds: [player.userId],
-        // The labels the row was SAVED with, where it was saved with any.
-        // `player_labels` is written once and never re-derived, so re-deriving
-        // one here would report a renamed roster player's untouched entry as
-        // an edit — and refuse it, if that entry has been played.
-        playerLabels: entry.labels ?? [player.name],
-      })),
-    ];
+    const entries: TournamentEntryInput[] = buildTournamentEntries(
+      roster,
+      entered,
+      carried
+    );
 
     const eventId = initial?.eventId;
 

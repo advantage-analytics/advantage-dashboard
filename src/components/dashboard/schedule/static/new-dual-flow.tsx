@@ -203,7 +203,7 @@ function formatValueOf({ bestOf, adScoring }: EventDetail["event"]["format"]) {
  * doubles pair: `useDualDraft` splits on `/` at the boundaries and nowhere
  * else. `id` rides on every loaded line — see `DualLineSeed.id`.
  */
-function dualSeed({ event, entries }: EventDetail): DualDraftSeed {
+export function dualSeed({ event, entries }: EventDetail): DualDraftSeed {
   return {
     eventId: event.id,
     date: event.startsOn,

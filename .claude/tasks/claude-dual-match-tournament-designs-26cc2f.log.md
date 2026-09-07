@@ -99,3 +99,8 @@ is the runner's. Newest entries at the bottom.
 **criterion amended:** "its seed stays editable" → the seed is read-only on a settled entry, because `planEntryChanges` compares `seed` and refusal is total, so an editable seed would refuse a save the coach legitimately made.
 **changed:** `new-tournament-flow.tsx` takes a discriminated `mode`/`event` prop and builds the seed; `static-tournament-builder.tsx` seeds ids, positions, labels and lock state, locks settled rows in `enter`/`remove`/`amend`, and routes undrawable saved entries through a `carry` list submitted verbatim; `edit/page.tsx` gains the tournament branch.
 **follow-ups:** carried entries are invisible on the field step (a departed player or a consolation entry cannot be removed there). `DRAW_OPTIONS` restates the builder's private `DRAWS`. No spec covers a tournament seed round trip — queued as T21.
+
+## T21 · Round-trip spec: loading an event and saving it unchanged plans nothing — done
+**gate:** lint pass · tsc pass · npm test pass (559) · task-completion-reviewer `VERDICT: pass` (all eight extractions verified behaviour-preserving against HEAD) · pipeline-guardrails-reviewer ran — no findings: payloads identical, forfeit side and saved labels round-trip verbatim, the three protected paths have an empty diff
+**changed:** new `tests/entry-round-trip.spec.ts` (5 cases). To make the real transformation importable, six pure helpers were lifted out of `useDualDraft` and two out of `useTournamentDraft` (mechanical), and `dualSeed`/`tournamentSeed`/`seedEntries` were exported.
+**result:** the round trip came out empty on the first run — no latent bug. The spec now pins it, including a `"theirs"` forfeit and a tournament entry whose saved labels differ from a renamed roster player.
