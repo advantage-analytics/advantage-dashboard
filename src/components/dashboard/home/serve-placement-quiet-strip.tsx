@@ -1,4 +1,4 @@
-import type { ZoneKey, ZoneStats } from "@/components/dashboard/matches/serve-placement/serve-placement-widget";
+import type { ZoneKey, ZoneStats } from "@/lib/data/serve-zones";
 import { ServePlacementCourt } from "./serve-placement-court";
 
 /**
@@ -79,6 +79,9 @@ export function ServePlacementQuietStrip({
   awaitingReport = false,
   statisticsHref = "/dashboard/statistics",
   fill = false,
+  legend = false,
+  footerLabel,
+  emptyCopy,
 }: {
   zoneStats: Record<ZoneKey, ZoneStats> | null;
   /** "last 4 matches" — shown only over bars it describes. */
@@ -107,6 +110,19 @@ export function ServePlacementQuietStrip({
    * column could set the row height and the LEFT column would gain the slack.
    */
   fill?: boolean;
+  /**
+   * The T / Body / Wide swatches under the bars, with `footerLabel` opposite
+   * them above a hairline. Home reads the segments off their own labels and
+   * draws neither; the player profile (Platform Audit `Te`) draws both.
+   */
+  legend?: boolean;
+  /** "Season · 899 serves" — the right-hand end of the legend row. */
+  footerLabel?: string;
+  /**
+   * The empty state's two sentences, for a page that is not about the
+   * viewer. Home says "your"; a coach reading a player's page should not.
+   */
+  emptyCopy?: { awaiting: string; first: string };
 }) {
   return (
     <div
@@ -139,6 +155,26 @@ export function ServePlacementQuietStrip({
               />
             ))}
           </div>
+          {legend && (
+            <div className="flex items-center gap-3.5 border-t border-[var(--border-hairline)] pt-3">
+              <span className="flex items-center gap-3">
+                {SEGMENT_LABEL.map((seg, i) => (
+                  <span key={seg} className="flex items-center gap-1.5">
+                    <span
+                      aria-hidden
+                      className="h-2 w-3 rounded-[2px]"
+                      style={{ background: SEGMENT_COLOR[i] }}
+                    />
+                    <span className="text-[11px] text-[var(--ink-600)]">{seg}</span>
+                  </span>
+                ))}
+              </span>
+              <div className="flex-1" />
+              {footerLabel && (
+                <span className="text-[11px] text-[var(--ink-600)]">{footerLabel}</span>
+              )}
+            </div>
+          )}
           <a
             href={statisticsHref}
             className="text-[11px] font-medium transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
@@ -162,8 +198,8 @@ export function ServePlacementQuietStrip({
           )}
           <span className="text-micro">
             {awaitingReport
-              ? "Your serve map fills in when the first report lands."
-              : "Your first serves, plotted after your first match."}
+              ? (emptyCopy?.awaiting ?? "Your serve map fills in when the first report lands.")
+              : (emptyCopy?.first ?? "Your first serves, plotted after your first match.")}
           </span>
         </>
       )}

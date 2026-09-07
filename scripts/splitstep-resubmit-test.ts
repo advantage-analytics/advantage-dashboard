@@ -242,6 +242,7 @@ async function main(): Promise<void> {
     playersCanUpload: false,
     uploadPolicy: 'everyone',
     memberUploadEnabled: true,
+    myPlayerId: null,
   };
 
   const failedFields = {

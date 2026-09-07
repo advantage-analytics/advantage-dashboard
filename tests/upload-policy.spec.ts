@@ -32,6 +32,7 @@ function workspace(
     playersCanUpload: uploadPolicy === 'everyone',
     uploadPolicy,
     memberUploadEnabled,
+    myPlayerId: null,
   };
 }
 

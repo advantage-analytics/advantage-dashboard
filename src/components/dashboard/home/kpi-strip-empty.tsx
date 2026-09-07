@@ -1,5 +1,6 @@
 import { KpiTileStrip } from "@/components/dashboard/shared/kpi-tile";
-import { DEFAULT_KPI_LABELS } from "@/lib/data/performance-server";
+import { PlaceholderSparkline } from "@/components/dashboard/shared/placeholder-sparkline";
+import { SEASON_KPI_LABELS } from "@/lib/data/player-profile";
 
 /**
  * The KPI strip on day zero: present, shaped, and holding no numbers.
@@ -16,67 +17,18 @@ import { DEFAULT_KPI_LABELS } from "@/lib/data/performance-server";
  * are flex items and would otherwise collapse to their content.
  *
  * Two substitutions, and only two. A short rule sits on the value's baseline
- * where the number goes. And the sparkline keeps its 80×28 box, drawn grey and
- * fading left to right, with a different shape per tile so the strip does not
- * read as one graphic repeated five times.
+ * where the number goes. And the sparkline keeps its 80×28 box, drawn grey
+ * (`PlaceholderSparkline`, shared with a live tile's one-match state) with a
+ * different shape per tile so the strip does not read as one graphic repeated
+ * five times.
  */
 
 /** Where the number's baseline falls in a 28px row of 28px type. */
 const VALUE_RULE = "mb-1.5 h-0.5 w-[34px] shrink-0 rounded-[1px] bg-[var(--ink-200)]";
 
-/**
- * One placeholder curve per tile, in the sparkline's own coordinate space
- * (80×28, 2px inset — see `Sparkline` in `shared/kpi-tile.tsx`). Shapes only:
- * grey, unlabelled and never derived from anything, so they say "a chart lands
- * here" without claiming a trend.
- */
-const CURVES: readonly string[] = [
-  "2,22 17.2,10 32.4,26 47.6,2 62.8,14 78,10",
-  "2,26 17.2,14 32.4,2 47.6,18 62.8,6 78,14",
-  "2,2 17.2,18 32.4,10 47.6,26 62.8,14 78,14",
-  "2,26 17.2,12.3 32.4,19.1 47.6,2 62.8,15.7 78,12.3",
-  "2,20 17.2,8 32.4,14 47.6,26 62.8,2 78,8",
-];
-
-function areaPath(points: string): string {
-  const pts = points.split(" ");
-  const first = pts[0].split(",")[0];
-  const last = pts[pts.length - 1].split(",")[0];
-  return `M ${first},28 ${pts.map((p) => `L ${p}`).join(" ")} L ${last},28 Z`;
-}
-
-function PlaceholderSparkline({ index }: { index: number }) {
-  const points = CURVES[index % CURVES.length];
-  const line = `kpi-empty-line-${index}`;
-  const area = `kpi-empty-area-${index}`;
-
-  return (
-    <svg width="80" height="28" viewBox="0 0 80 28" className="shrink-0" aria-hidden="true">
-      <defs>
-        <linearGradient id={line} x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#AAAAAA" stopOpacity={0.18} />
-          <stop offset="100%" stopColor="#AAAAAA" stopOpacity={0.7} />
-        </linearGradient>
-        <linearGradient id={area} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#AAAAAA" stopOpacity={0.1} />
-          <stop offset="100%" stopColor="#AAAAAA" stopOpacity={0} />
-        </linearGradient>
-      </defs>
-      <path d={areaPath(points)} fill={`url(#${area})`} />
-      <polyline
-        points={points}
-        fill="none"
-        stroke={`url(#${line})`}
-        strokeWidth={1.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 export function KpiStripEmpty({
   awaitingReport = false,
+  labels = SEASON_KPI_LABELS,
 }: {
   /**
    * A match is filed but nothing has been analysed yet. "After your first
@@ -84,12 +36,17 @@ export function KpiStripEmpty({
    * the trend row names what is actually being waited on.
    */
   awaitingReport?: boolean;
+  /**
+   * What the tiles will be called once they hold numbers. The season strip's
+   * five by default — the same five on Home and on a player's profile.
+   */
+  labels?: readonly string[];
 }) {
   const hint = awaitingReport ? "When the report lands" : "After your first match";
 
   return (
     <KpiTileStrip collapse>
-      {DEFAULT_KPI_LABELS.map((label, index) => (
+      {labels.map((label, index) => (
         <div
           key={label}
           className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden px-5 py-5"

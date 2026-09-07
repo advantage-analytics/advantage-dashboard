@@ -9,6 +9,8 @@ import { BENCH, sequenceFrom } from "@/lib/data/lineup-draft";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { EmptyMark } from "@/components/ui/empty-mark";
+import { FormTicks } from "@/components/dashboard/shared/form-ticks";
+import { recordLabel } from "@/lib/data/player-profile";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { cn } from "@/lib/utils";
 import {
@@ -184,43 +186,15 @@ export interface LineupDraft {
 }
 
 
-/**
- * The last five results as a strip, oldest at the left.
- *
- * Colour alone would carry this to a red/green-blind reader, so the strip has
- * a text equivalent rather than an `aria-hidden` and nothing else.
- */
-function FormTicks({ form }: { form: RosterMember["form"] }) {
-  if (form.length === 0) {
-    return <EmptyMark label="No form yet" />;
-  }
-  return (
-    <>
-      <span className="sr-only">
-        Last {form.length}: {form.map((r) => (r === "win" ? "W" : "L")).join(" ")}
-      </span>
-      <span aria-hidden className="flex items-center gap-[3px]">
-        {form.map((result, index) => (
-          <span
-            key={index}
-            className="h-3 w-[2.5px] rounded-[1px]"
-            style={{
-              background:
-                result === "win" ? "var(--viz-good)" : "var(--viz-bad)",
-            }}
-          />
-        ))}
-      </span>
-    </>
-  );
-}
-
-
 /** "4–1", or the empty mark for somebody with nothing decided yet. */
 function Record({ wins, losses }: { wins: number; losses: number }) {
   return (
     <span className={cn(COL.record, "tabular flex items-center text-[13px] text-[var(--ink-900)]")}>
-      {wins + losses === 0 ? <EmptyMark label="No record yet" /> : `${wins}–${losses}`}
+      {wins + losses === 0 ? (
+        <EmptyMark label="No record yet" />
+      ) : (
+        recordLabel(wins, losses)
+      )}
     </span>
   );
 }

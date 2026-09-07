@@ -10,6 +10,7 @@ import { SidebarStateProvider } from "@/components/dashboard/sidebar/sidebar-sta
 import { UnsavedChangesProvider } from "@/components/dashboard/settings/unsaved-changes-context";
 import { LogoutProvider } from "@/components/dashboard/logout-dialog";
 import { HeaderStatusProvider } from "@/components/dashboard/header-status";
+import { HeaderSlotProvider } from "@/components/dashboard/header-slot";
 import {
   STORAGE_KEYS,
   clearStorageData,
@@ -72,6 +73,9 @@ export function DashboardShell({
         <SidebarStateProvider>
           {/* Wraps both, because the page sets the status and the header reads it. */}
           <HeaderStatusProvider>
+          {/* Same reason, other end of the bar: the page publishes a leading
+              slot and the header reads it. */}
+          <HeaderSlotProvider>
             <div className="flex h-screen w-full overflow-hidden bg-white">
               <AppSidebar />
               <div className="flex min-w-0 flex-1 flex-col overflow-y-auto scroll-smooth motion-reduce:scroll-auto">
@@ -87,6 +91,7 @@ export function DashboardShell({
                 </main>
               </div>
             </div>
+          </HeaderSlotProvider>
           </HeaderStatusProvider>
           <MobileGate />
         </SidebarStateProvider>

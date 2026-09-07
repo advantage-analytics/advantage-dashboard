@@ -1,12 +1,11 @@
 import { redirect } from "next/navigation";
 import HomeContent from "./home-content";
-import KpiCards from "@/components/dashboard/home/kpi-cards";
-import { KpiStripEmpty } from "@/components/dashboard/home/kpi-strip-empty";
+import { SeasonKpiStrip } from "@/components/dashboard/shared/season-kpi-strip";
 import type { SetupProgress } from "@/components/dashboard/home/setup-line";
 import { createClient } from "@/lib/supabase/server";
 import { getMyPlayerIds } from "@/lib/data/player-identity-server";
 import { getOverallPerformance } from "@/lib/data/performance-server";
-import type { KpiCardData } from "@/lib/data/performance-server";
+import { getPersonalSeasonKpis } from "@/lib/data/personal-kpis-server";
 import { getPersonalUsage } from "@/lib/data/usage-server";
 import { getPersonalActivity } from "@/lib/data/personal-activity-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
@@ -29,6 +28,7 @@ export default async function Home() {
     usage,
     { data: savedPreferences },
     activity,
+    season,
   ] = await Promise.all([
     // `hand` and `backhand` are the getting-set-up checklist's first answer.
     // The name used to ride along here for the page's greeting; that greeting
@@ -60,25 +60,14 @@ export default async function Home() {
     // 52-week match-day heatmap for the Activity widget. Personal scope only
     // (created_by = me AND program_id IS NULL), matching the Matches list.
     getPersonalActivity(userId),
+    // The season strip's five tiles — the same strip a team player's profile
+    // draws, over the personal matches above.
+    getPersonalSeasonKpis(userId),
   ]);
 
   const { kpiCards, winRate, form, matchCount, analyzedMatchCount } =
     performanceData;
   const hasMatches = matchCount > 0;
-
-  const allKpiCards: KpiCardData[] = [
-    ...kpiCards,
-    {
-      key: "win-rate",
-      label: "Win Rate",
-      value: `${winRate.value}%`,
-      change: winRate.change,
-      changeLabel: "last 30 days",
-      sparkline: winRate.sparkline,
-      description: "Percentage of matches won overall",
-      category: "Other",
-    },
-  ];
 
   // The Focus card's evidence line, composed here from the same computed KPI
   // movers the strip above it renders. The model never sees this sentence and
@@ -127,24 +116,19 @@ export default async function Home() {
           hasMatches={hasMatches}
           userId={userId}
           playerIds={myPlayerIds}
-          // Honest numbers only (round 45's rule for this strip in
-          // particular). A first match still in the pipeline has rows but no
-          // stats, and the strip drew five dashed tiles for it, each promising
-          // "1 more match for trends" about a match that had not been analysed
-          // once.
-          //
-          // Nothing analysed and the strip is still drawn, empty: the same
-          // five tiles at the same geometry, each holding a rule where the
-          // number goes. It states which statistics come back without
-          // inventing one, and it means the page a player learns on day zero
-          // is the page they keep — which is the whole reason the empty state
-          // stopped being a separate screen.
+          // One strip, shared with a team player's profile (Platform Audit
+          // `Te`): Record, First serve in, 1st serve won, Break pts won, Games
+          // won — the viewer's own numbers, trends from their second match.
+          // It draws itself empty until a match has statistics, so the page a
+          // player learns on day zero is the page they keep; a first match
+          // still in the pipeline reads "When the report lands", not a promise
+          // about a match that has not been analysed once.
           kpiStrip={
-            analyzedMatchCount > 0 && allKpiCards.length > 0 ? (
-              <KpiCards cards={allKpiCards} matchCount={analyzedMatchCount} />
-            ) : (
-              <KpiStripEmpty awaitingReport={hasMatches} />
-            )
+            <SeasonKpiStrip
+              kpis={season.kpis}
+              hasStats={season.hasStats}
+              matchesPlayed={season.matchesPlayed}
+            />
           }
           usage={usage}
           matchCount={matchCount}
