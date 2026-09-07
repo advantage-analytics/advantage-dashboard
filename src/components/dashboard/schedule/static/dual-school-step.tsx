@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { ChevronRight, Plus, Search } from "lucide-react";
+import { EventMark } from "@/components/dashboard/schedule/static/event-mark";
 import { cn } from "@/lib/utils";
 import {
   divisionLabel,
@@ -42,13 +43,29 @@ import type { ProgramSearchResult } from "@/lib/data/programs-server";
  * flow's one read.
  */
 export interface NewDualData {
-  /** The viewer's own program, for step two's header and its squad warning. */
   /** `getLadder` — step two's lineup. Step one does not read it. */
   ladder: LadderPlayer[];
   /** `getTeamSettings` — step two's surface default. */
   defaultSurface: string | null;
   /** From `getTeamSettings` — the label the own-conference chip carries. */
   ourConference: string | null;
+  /**
+   * The viewer's own squad, from `getTeamSettings` — step one lists only the
+   * squad that could actually be played.
+   *
+   * A men's program schedules men's duals. `programs` carries one row per
+   * squad, so a school fielding both surfaces as two rows in the conference
+   * table and in every search response; without this, half of every list is
+   * opponents this program will never face, and the two rows are told apart
+   * only by a word in the subline.
+   *
+   * Null when `getTeamSettings` came back empty — the one read that supplies
+   * it. Step one then narrows by squad NOT AT ALL and lists both, which is the
+   * honest failure: guessing a squad would hide the real opponents from
+   * whichever program guessed wrong, and a list that is too long is a list the
+   * coach can still finish.
+   */
+  ourTeam: "mens" | "womens" | null;
   /** Already label-formatted ("D-I"), so the chip and the sublines agree. */
   ourDivision: string | null;
   /** So a program cannot schedule a dual against itself out of the directory. */
@@ -165,6 +182,7 @@ export function DualSchoolStep({
 }) {
   const {
     ourConference,
+    ourTeam,
     ourDivision,
     ourProgramKey,
     conferencePrograms,
@@ -213,6 +231,25 @@ export function DualSchoolStep({
 
   const query = term.trim().toLowerCase();
 
+  /**
+   * The viewer's own squad, over both lists.
+   *
+   * Not a chip: a men's program cannot play a women's dual, so this is what
+   * the directory *is* on this screen and not a filter the coach turns on. It
+   * runs over the conference list and the search results alike — the search
+   * RPC matches on name, not on squad, so "Ridg" answers with both of
+   * Ridgeline's rows and only this drops the one that is not playable.
+   *
+   * ── When `ourTeam` is null ─────────────────────────────────────────────────
+   * Every row survives, both squads listed. `ourTeam` is null only when
+   * `getTeamSettings` returned nothing, and a program whose own identity did
+   * not load is one this screen cannot narrow honestly. See `NewDualData`.
+   */
+  function isOurSquad(program: ProgramSearchResult): boolean {
+    if (ourTeam === null) return true;
+    return program.team === ourTeam;
+  }
+
   function passesChips(program: ProgramSearchResult): boolean {
     if (conferenceOnly && program.conference !== ourConference) return false;
     if (divisionOnly && divisionLabel(program.division) !== ourDivision) {
@@ -228,15 +265,24 @@ export function DualSchoolStep({
   // dormant `SchoolSearch`, which showed nothing until two characters were
   // typed: behind a field that is now genuinely empty on arrival, that reads as
   // a program with no opponents rather than as a directory waiting for a term.
+  //
+  // The term matches a school's name OR its conference, because "Big Ten" is
+  // a thing a coach types into a box that lists schools by conference — and
+  // a term that matched only names answered it with nothing, having just
+  // drawn the heading "Your conference" above the list it emptied.
   const conferenceRows = conferencePrograms
+    .filter(isOurSquad)
     .filter(
       (program) =>
-        query.length === 0 || program.schoolName.toLowerCase().includes(query)
+        query.length === 0 ||
+        program.schoolName.toLowerCase().includes(query) ||
+        (program.conference?.toLowerCase().includes(query) ?? false)
     )
     .filter(passesChips);
 
   const listedKeys = new Set(conferenceRows.map((row) => row.programKey));
   const searchRows = results
+    .filter(isOurSquad)
     .filter((program) => program.programKey !== ourProgramKey)
     .filter((program) => !listedKeys.has(program.programKey))
     .filter(passesChips);
@@ -284,7 +330,14 @@ export function DualSchoolStep({
             {/* Autofocused, which is how `2c` draws it: a field with the caret
                 already in it. The blue rule under the row is the drawn focus
                 state and stays put. */}
+            {/* The row IS the field — the blue rule under it is drawn as the
+                focus mark, so the input must not stack a second one inside it.
+                `outline-none` alone does not do that: `focus.css` sets a
+                `--focus-ring-field` box-shadow on every input, unlayered and
+                therefore unreachable by a Tailwind utility. The data attribute
+                is the opt-out that file documents for exactly this shape. */}
             <input
+              data-focus-ring="none"
               autoFocus
               value={term}
               onChange={(event) => {
@@ -476,7 +529,7 @@ function SchoolRow({
       onClick={onSelect}
       aria-pressed={selected}
       className={cn(
-        "-mx-3 grid cursor-pointer grid-cols-[minmax(0,1fr)_96px_13px] items-center gap-4",
+        "-mx-3 grid cursor-pointer grid-cols-[26px_minmax(0,1fr)_96px_13px] items-center gap-4",
         "rounded-[var(--radius-element)] px-3 py-2.5 text-left",
         "transition-colors duration-[var(--duration-hover)]",
         selected
@@ -484,6 +537,12 @@ function SchoolRow({
           : "hover:bg-[var(--surface-muted)]"
       )}
     >
+      {/* The same mark the schedule table draws for the same opponent
+          (`schedule-table.tsx`), at the same 26px. Picking a school here and
+          finding it on the schedule afterwards should be recognising one
+          thing, not reading two names — which is the whole job a monogram
+          does in a product with no crests to draw. */}
+      <EventMark kind="dual" name={program.schoolName} size={26} />
       <span className="min-w-0">
         <span
           className={cn(
