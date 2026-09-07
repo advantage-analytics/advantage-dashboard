@@ -1,4 +1,3 @@
-import { Fragment } from "react";
 import Link from "next/link";
 import { advButton } from "@/lib/ui/adv-button";
 
@@ -11,10 +10,11 @@ import { advButton } from "@/lib/ui/adv-button";
  * the date and the three statistics will sit. The three labels stay readable —
  * what each row will report is real information; only the values become rules.
  *
- * Three rows, stepping down in opacity. Three is what the shipped card shows
- * for a full event group, so it is the shape the ghost is standing in for;
- * cutting it to two bought a page that fit 900px exactly, which is not worth
- * showing a player a shorter list than the one they will actually get.
+ * Three rows, stepping down in opacity, no hairlines between them — the real
+ * card draws none. Three is what the shipped card shows for a full event
+ * group, so it is the shape the ghost is standing in for; cutting it to two
+ * bought a page that fit 900px exactly, which is not worth showing a player a
+ * shorter list than the one they will actually get.
  *
  * The rows carry no semantics at all (`aria-hidden`), because a row that
  * reports nothing is not a row. The band below them is the accessible content.
@@ -29,7 +29,7 @@ const STAT_COLUMNS: readonly { label: string; width: string }[] = [
 function GhostRow({ opacity }: { opacity: number }) {
   return (
     <div
-      className="flex h-[54px] items-center gap-4"
+      className="flex h-[52px] items-center gap-4"
       style={{ opacity }}
       aria-hidden="true"
     >
@@ -73,12 +73,21 @@ export function RecentMatchesEmpty({
           from the first row to the second is what reads as "and so on", and
           the third only has to carry it far enough to stop. */}
       <div className="flex flex-col pt-2.5">
-        {[1, 0.6, 0.35].map((opacity, i) => (
-          <Fragment key={opacity}>
-            {i > 0 && <div className="h-px bg-[var(--border-hairline)]" />}
-            <GhostRow opacity={opacity} />
-          </Fragment>
+        {[1, 0.6, 0.35].map((opacity) => (
+          <GhostRow key={opacity} opacity={opacity} />
         ))}
+      </div>
+
+      {/* The populated card's footer, in its geometry: what the list is a
+          slice of. "0 matches" is a true figure, not a stand-in. */}
+      <div className="mt-2.5 flex items-baseline gap-2.5 border-t border-[var(--border-hairline)] pt-3">
+        <span className="text-micro" style={{ color: "var(--ink-600)" }}>
+          Your latest matches appear here
+        </span>
+        <div className="flex-1" />
+        <span className="whitespace-nowrap text-[11px] text-[var(--ink-600)]">
+          <span className="tabular">0</span> matches
+        </span>
       </div>
 
       {/*

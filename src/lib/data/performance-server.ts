@@ -92,6 +92,13 @@ export interface OverallPerformanceData {
    * the pipeline and its stats have not landed yet.
    */
   analyzedMatchCount: number;
+  /**
+   * Matches the viewer won — the matches card's "M matches · W won". A subset
+   * of `matchCount`: it counts only decided scores where the viewer is one of
+   * the two players, so a filed video with no result yet is a match but not a
+   * win or a loss.
+   */
+  wonCount: number;
   heatmap: HeatmapDay[];
   performanceProfile: PerformanceProfileDimension[];
 }
@@ -152,6 +159,7 @@ const DEFAULT_PERFORMANCE: OverallPerformanceData = {
   form: [],
   matchCount: 0,
   analyzedMatchCount: 0,
+  wonCount: 0,
   heatmap: [],
   performanceProfile: [
     { label: "SERVE", current: 0, previous: 0 },
@@ -939,6 +947,7 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
     form: calculateForm(typedMatches, myPlayerIds, user.id, 5),
     matchCount: typedMatches.length,
     analyzedMatchCount: analyzedMatchIds.size,
+    wonCount: overall.wins,
     heatmap: calculateHeatmap(typedMatches, myPlayerIds, user.id),
     performanceProfile: calculatePerformanceProfile(
       typedStats,

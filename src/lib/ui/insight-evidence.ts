@@ -52,22 +52,62 @@ function isReportable(card: KpiCardData): boolean {
   return card.value !== "—" && card.value.trim() !== "";
 }
 
+/**
+ * Which two cards the evidence reads from. Movement first, by size. Absent
+ * any, the largest-magnitude levels — still ordered so the two most
+ * substantial numbers lead.
+ */
+function pickEvidenceCards(
+  kpiCards: KpiCardData[]
+): { first: KpiCardData; second: KpiCardData | undefined; withDeltas: boolean } | null {
+  const reportable = kpiCards.filter(isReportable);
+  if (reportable.length === 0) return null;
+
+  const movers = reportable
+    .filter((c) => c.change !== 0)
+    .sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+  const withDeltas = movers.length > 0;
+  const [first, second] = withDeltas ? movers : reportable;
+  return { first, second, withDeltas };
+}
+
+export interface InsightEvidence {
+  parts: EvidencePart[];
+  /**
+   * The card's footer caption — the KPI label(s) the parts were read from,
+   * lower-cased and middot-joined ("1st serve won · 2nd serve won"). Pa2's
+   * footer names the metric under the evidence ("Points won behind each
+   * serve"); deriving it from the same pick means it can never name a
+   * statistic the sentence above it did not use.
+   */
+  caption: string;
+}
+
+/** The evidence line and the caption that names what it measured. */
+export function buildInsightEvidenceWithCaption(
+  kpiCards: KpiCardData[],
+  matchCount: number
+): InsightEvidence | null {
+  const parts = buildInsightEvidence(kpiCards, matchCount);
+  if (!parts) return null;
+  const picked = pickEvidenceCards(kpiCards);
+  if (!picked) return null;
+  const caption = [picked.first, picked.second]
+    .filter((c): c is KpiCardData => Boolean(c))
+    .map((c) => inSentence(c.label))
+    .join(" · ");
+  return { parts, caption };
+}
+
 export function buildInsightEvidence(
   kpiCards: KpiCardData[],
   matchCount: number
 ): EvidencePart[] | null {
   if (matchCount === 0) return null;
 
-  const reportable = kpiCards.filter(isReportable);
-  if (reportable.length === 0) return null;
-
-  // Movement first, by size. Absent any, the largest-magnitude levels — still
-  // ordered so the two most substantial numbers lead.
-  const movers = reportable
-    .filter((c) => c.change !== 0)
-    .sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
-  const withDeltas = movers.length > 0;
-  const [first, second] = withDeltas ? movers : reportable;
+  const picked = pickEvidenceCards(kpiCards);
+  if (!picked) return null;
+  const { first, second, withDeltas } = picked;
 
   const parts: EvidencePart[] = [
     { text: "Across " },

@@ -36,8 +36,12 @@ interface HomeContentProps {
   matchCount: number;
   /** Matches a report exists for — what the title and the Focus card count. */
   analyzedMatchCount: number;
+  /** Matches the viewer won — the matches card's "M matches · W won". */
+  wonCount: number;
   /** Computed evidence for the Focus card, or null when there is none to state. */
   insightEvidence: EvidencePart[] | null;
+  /** What the evidence measured — the Focus card's footer caption. */
+  insightCaption: string | null;
   insightSignature: string;
   /** 52-week match-day heatmap for the Activity widget. */
   activity: PersonalActivity;
@@ -56,7 +60,9 @@ export default function HomeContent({
   usage,
   matchCount,
   analyzedMatchCount,
+  wonCount,
   insightEvidence,
+  insightCaption,
   insightSignature,
   activity,
   setup,
@@ -75,15 +81,16 @@ export default function HomeContent({
     hasAnimatedOnce = true;
   }, []);
 
-  // The card grid, composed once. Day zero renders it behind the offer at a
-  // third opacity; every other state renders it as the page.
+  // The card grid, composed once. Day zero renders it behind the offer under
+  // a grade; every other state renders it as the page.
   //
-  // `items-stretch`, not `items-start`: both columns take the row's height,
-  // which lets the day-zero serve card grow to the bottom of its column.
-  // Nothing else grows — a column's cards keep their natural heights, and any
-  // slack is invisible because the column has no surface of its own.
+  // `items-start`, as Pa2 draws it: each column's cards keep their natural
+  // heights and the columns bottom out where their content does. Nothing is
+  // stretched to level them — the slack under the shorter column is
+  // invisible because the column has no surface of its own, and a card
+  // stretched to fill it would be trapped empty surface.
   const grid = (
-    <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-[minmax(0,1fr)_348px]">
+    <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
       <motion.div
         initial={skipAnimation ? false : { opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -95,6 +102,8 @@ export default function HomeContent({
           playerIds={playerIds}
           hasMatches={hasMatches}
           showEmptyAction={hasMatches}
+          matchCount={matchCount}
+          wonCount={wonCount}
         />
         {/* Under the matches card in the main column — the design's
             default `activityUnderMatches` placement (artboard 1b). */}
@@ -115,21 +124,32 @@ export default function HomeContent({
             spec) and a placeholder after the player has already sent a match
             would be the page failing to notice. */}
         {insightEvidence ? (
-          <FocusCard>
+          <FocusCard
+            footer={{
+              left: insightCaption,
+              right: (
+                <>
+                  <span className="tabular">{analyzedMatchCount}</span>{" "}
+                  {analyzedMatchCount === 1 ? "match" : "matches"}
+                </>
+              ),
+            }}
+          >
             <HomeAiInsight
               evidence={insightEvidence}
               cacheSignature={insightSignature}
-              matchCount={analyzedMatchCount}
             />
           </FocusCard>
         ) : (
           !hasMatches && (
-            <FocusCard>
+            <FocusCard
+              footer={{ left: "One thing to work on, after your first match." }}
+            >
               <FocusEmpty />
             </FocusCard>
           )
         )}
-        <ServePlacementHome userId={userId} fill={!hasMatches} />
+        <ServePlacementHome userId={userId} />
       </motion.div>
     </div>
   );
@@ -159,8 +179,8 @@ export default function HomeContent({
           to show yet. */}
       {kpiStrip}
 
-      {/* 348px right column and a 24px gutter, as 21a and Pa2 draw it;
-          the cards inside each column sit 20px apart. */}
+      {/* 400px right column and a 24px gutter, as Pa2 draws it (21a ran
+          348px); the cards inside each column sit 20px apart. */}
       {grid}
 
       {/* `mt-auto` eats the leftover column height, so on a short page — the

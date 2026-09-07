@@ -1,9 +1,9 @@
 /**
  * The Focus card before there is anything to focus on.
  *
- * The card's anatomy, holding nothing: two rules where the claim's two lines
- * go, two thinner ones for the evidence run beneath it, and one line saying
- * what arrives here. It is the same substitution every other region on this
+ * The card's anatomy, holding nothing: a rule where the claim's line goes,
+ * three thinner ones for the evidence run beneath it, and — in the footer
+ * slot `FocusCard` draws — one line saying what arrives here. It is the same substitution every other region on this
  * page makes — the KPI tile's rule on the value's baseline, the ghost match
  * rows — so the column reads as one set of cards waiting rather than three
  * waiting and one already speaking.
@@ -20,24 +20,21 @@
  */
 export function FocusEmpty() {
   return (
-    <>
-      {/* Two lines at the claim's own measure: a Focus claim runs to about
-          30ch and wraps once, so a full-width rule over a half-width one is
-          the shape it will actually take. */}
-      <div className="flex flex-col gap-[9px] pt-[3px] pb-[5px]" aria-hidden="true">
-        <span className="h-[9px] w-[82%] rounded-[2px] bg-[var(--ink-200)]" />
-        <span className="h-[9px] w-[56%] rounded-[2px] bg-[var(--ink-200)]" />
+    <div className="flex flex-col gap-3" aria-hidden="true">
+      {/* One line at the claim's own measure: a 14px claim on the 400px rail
+          runs to about 30ch and seldom wraps, so one rule is the shape it
+          takes. 8px tall — the x-height of 14px type, not its line box. */}
+      <div className="flex flex-col pt-[5px] pb-[5px]">
+        <span className="h-2 w-[72%] rounded-[2px] bg-[var(--ink-200)]" />
       </div>
       {/* Thinner and lighter: the evidence run under the claim is smaller
-          type, and the rules keep that relationship rather than flattening
-          the card into one weight of grey. */}
-      <div className="flex flex-col gap-1.5" aria-hidden="true">
-        <span className="h-1.5 w-[70%] rounded-[2px] bg-[var(--ink-100)]" />
+          type on a 1.7 line, and the rules keep that relationship rather than
+          flattening the card into one weight of grey. */}
+      <div className="flex flex-col gap-2 pb-0.5">
+        <span className="h-1.5 w-full rounded-[2px] bg-[var(--ink-100)]" />
+        <span className="h-1.5 w-[86%] rounded-[2px] bg-[var(--ink-100)]" />
         <span className="h-1.5 w-[44%] rounded-[2px] bg-[var(--ink-100)]" />
       </div>
-      <p className="text-micro mt-0.5" style={{ maxWidth: "36ch", textWrap: "pretty" }}>
-        One thing to work on, after your first match.
-      </p>
-    </>
+    </div>
   );
 }

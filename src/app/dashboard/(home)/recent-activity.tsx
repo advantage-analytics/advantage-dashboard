@@ -286,6 +286,8 @@ export default function RecentActivity({
   playerIds,
   hasMatches,
   showEmptyAction = true,
+  matchCount,
+  wonCount,
 }: {
   /** Whose uploads this list is scoped to. */
   userId: string;
@@ -308,6 +310,14 @@ export default function RecentActivity({
    * day-zero page, where the centred offer above it is the page's one action.
    */
   showEmptyAction?: boolean;
+  /**
+   * The footer's "M matches · W won", resolved on the server by the same
+   * loader that counts the title row — the two numbers on the page that say
+   * how many matches there are must come from one place. `matchCount` counts
+   * every filed row; `wonCount` only decided, viewer-attributed scores.
+   */
+  matchCount: number;
+  wonCount: number;
 }) {
 
   const [events, setEvents] = useState<EventGroup[]>([]);
@@ -523,6 +533,11 @@ export default function RecentActivity({
     }
   }, [toast, router]);
 
+  // "Latest N shown" — the rows actually on the card, which is what the
+  // grouping above leaves after it drops unscored and non-viewer rows and
+  // keeps the latest three events.
+  const shownCount = events.reduce((n, e) => n + e.matches.length, 0);
+
   return (
     <>
     {/* The day-zero card carries a footer band under the ghost rows, and a
@@ -532,12 +547,16 @@ export default function RecentActivity({
       // card, not the viewport — see `MatchLink` in recent-matches.tsx.
       className="surface-card @container/matches"
       style={{
+        // Pa2 draws this card at `2px 24px 14px`: a 40px header row carries
+        // the top air itself (below), so the card's own top padding is
+        // nearly nothing.
         padding:
-          !hasMatches && showEmptyAction ? "8px 24px 24px" : "8px 24px 14px",
+          !hasMatches && showEmptyAction ? "2px 24px 24px" : "2px 24px 14px",
       }}
     >
-      {/* Header */}
-      <div className="flex items-center gap-3" style={{ padding: "12px 0 2px" }}>
+      {/* Header — a 40px row with 6px above it (Pa2), which puts the eyebrow
+          at the same height as its siblings' 20px-padded headers. */}
+      <div className="flex min-h-10 items-center gap-3 pt-1.5">
         <span className="eyebrow">Recent matches</span>
         <div className="flex-1" />
         <Link
@@ -632,7 +651,23 @@ export default function RecentActivity({
         )}
 
         {!loading && !error && events.length > 0 && (
-          <EventsList events={events} seenEventIdsRef={seenEventIdsRef} />
+          <>
+            <EventsList events={events} seenEventIdsRef={seenEventIdsRef} />
+            {/* Pa2's card footer: what the list is a slice of. The count on
+                the right is the same number the title row states, so the two
+                can never disagree. */}
+            <div className="mt-2.5 flex items-baseline gap-2.5 border-t border-[var(--border-hairline)] pt-3">
+              <span className="text-micro" style={{ color: "var(--ink-600)" }}>
+                Latest <span className="tabular">{shownCount}</span> shown
+              </span>
+              <div className="flex-1" />
+              <span className="whitespace-nowrap text-[11px] text-[var(--ink-600)]">
+                <span className="tabular">{matchCount}</span>{" "}
+                {matchCount === 1 ? "match" : "matches"} ·{" "}
+                <span className="tabular">{wonCount}</span> won
+              </span>
+            </div>
+          </>
         )}
       </div>
     </div>

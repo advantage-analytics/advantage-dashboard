@@ -1727,29 +1727,38 @@ evidence run, and one line saying what arrives. A quoted example claim,
 labelled **Example** in the header, was built and rejected: it demonstrated
 more, but it made this the only card in the column carrying finished prose
 and the largest prose in the tail, and the card sat visibly apart from its
-neighbours. Serve placement — the hairline half court at the widget's own geometry; it is the
-one region here that is not a placeholder, since an empty court is the object
-in its empty state. Activity — the real 52×7 grid, all 364 cells empty,
-because a year with no sessions genuinely is 364 empty cells.
+neighbours. Serve placement — the quiet strip's own anatomy: a rule where the
+claim goes, the two labelled 14px tracks holding no serves ("— serves"), the
+legend at 0.6, and the caption slot carrying the one line that says what
+fills it. (The hairline half court held this slot until Platform Audit Pa2 was
+matched in full on 2026-09-07; it was the one region whose empty state was a
+different object from its populated one, and the populated card is bars.)
+Activity — the real 52×7 grid, all 364 cells empty, because a year with no
+sessions genuinely is 364 empty cells; its footer reads "0 sessions · 12
+months" from real data. Matches and Focus keep the populated card's hairline
+footer with a true zero or the arrival line in it.
 
-*One header grammar across the column.* Eyebrow left, one quiet `text-micro`
-run right where the card has meta to show, then the card's own mark if it has
-one: "All matches" on matches, "0 sessions · last 12 months" on Activity,
-"last 4 matches" on serve placement, nothing but the engine mark on Focus.
+*One header grammar across the column (Pa2).* Eyebrow left — or, on the
+Focus card, the 16px engine mark beside "Advantage Intelligence" in 12px
+ink-700, since that card is named by who wrote it — then the card's one 11px
+blue link right: "All matches" on matches, "Session log" on Activity,
+"Placement view" on serve placement, "Open Statistics" on Focus. Counts leave
+the header for a hairline footer under the body: "Latest 3 shown · 12 matches
+· 8 won", "24 sessions · 12 months", the legend row's "Last 4 · 89 in", and
+Focus's caption naming the metric the evidence used ("1st serve won · 2nd
+serve won") beside "12 matches". The rail is 400px; the grid runs
+`items-start` and the columns bottom out where their content does — nothing
+is stretched to level them. (The earlier `items-stretch` grid, whose day-zero
+court grew to level the columns, went with the court.)
 
-*The court levels the columns.* It is the only continuous dimension on the
-page — every other region's height is set by its content — so it is the one
-region that can absorb the difference between the columns without trapping
-empty surface: a bigger court is still a court. **It fills, it is not capped.**
-The grid runs `items-stretch`, the day-zero serve card takes `flex-1` in its
-column, and the court sits absolutely inside a `flex-1 min-h-0` slot sized by
-height (`h-full w-auto`), so it never contributes its own intrinsic size to
-the row. A fixed width cap was tried first and failed: the left column's
-height moves with the sidebar, because the heatmap's cells scale with its
-width, so a cap that levelled the 64px rail hung 23px low with the 232px
-panel open. Measured after: 0px between the columns' bottoms at 1440 with the
-rail, 1440 and 1280 and 1920 with the panel, and 1024 with the rail; the court
-runs from 156 to 253px across those.
+*Claims are 14px/300 on Home, evidence 12px/1.7 ink-600 with its figures in
+ink-900* — Pa2's "quiet body" setting. The claim is a size step over the
+evidence, not display type, so the largest type on the first screen stays the
+KPI numbers; the evidence is something you lean in for. *Shipped:*
+`home/focus-card.tsx` (header + footer shell), `home/home-ai-insight.tsx`,
+`home/serve-placement-quiet-strip.tsx` (legend, caption from
+`lib/ui/serve-placement-caption.ts` — first serves only, since the played
+serve is the second when there was one).
 
 **Next fixture card** — the claimed player's one forward-looking object.
 Eyebrow middot-joins the stakes ("Next · B1G Conference" only when it's

@@ -10,7 +10,7 @@ import type { KpiCardData } from "@/lib/data/performance-server";
 import { getPersonalUsage } from "@/lib/data/usage-server";
 import { getPersonalActivity } from "@/lib/data/personal-activity-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
-import { buildInsightEvidence } from "@/lib/ui/insight-evidence";
+import { buildInsightEvidenceWithCaption } from "@/lib/ui/insight-evidence";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -62,8 +62,14 @@ export default async function Home() {
     getPersonalActivity(userId),
   ]);
 
-  const { kpiCards, winRate, form, matchCount, analyzedMatchCount } =
-    performanceData;
+  const {
+    kpiCards,
+    winRate,
+    form,
+    matchCount,
+    analyzedMatchCount,
+    wonCount,
+  } = performanceData;
   const hasMatches = matchCount > 0;
 
   const allKpiCards: KpiCardData[] = [
@@ -85,7 +91,7 @@ export default async function Home() {
   // never writes a figure — it supplies only the claim above it. `null` when
   // there is no movement to report, which is what keeps the card off the page
   // entirely rather than letting it reach for something to say.
-  const insightEvidence = buildInsightEvidence(kpiCards, matchCount);
+  const insight = buildInsightEvidenceWithCaption(kpiCards, matchCount);
 
   // Signature of the data the insight is built from. When a new match is uploaded
   // (and processed), these change, busting the client-side insight cache so the
@@ -149,7 +155,9 @@ export default async function Home() {
           usage={usage}
           matchCount={matchCount}
           analyzedMatchCount={analyzedMatchCount}
-          insightEvidence={insightEvidence}
+          wonCount={wonCount}
+          insightEvidence={insight?.parts ?? null}
+          insightCaption={insight?.caption ?? null}
           insightSignature={insightSignature}
           activity={activity}
           setup={setup}

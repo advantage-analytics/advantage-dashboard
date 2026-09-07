@@ -36,14 +36,7 @@ type ShotRow = {
   } | null;
 };
 
-export default function ServePlacementHome({
-  userId,
-  fill = false,
-}: {
-  userId: string;
-  /** Day zero: grow to the column and let the court fill it — see the strip. */
-  fill?: boolean;
-}) {
+export default function ServePlacementHome({ userId }: { userId: string }) {
   const [dots, setDots] = useState<ServeDot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -133,7 +126,10 @@ export default function ServePlacementHome({
         // opponent's placement would answer a different question.
         if (!point.serverIsPlayer1) continue;
         const dot = pointToServeDot(point);
-        if (dot) nextDots.push(dot);
+        // First serves only. `pickServeShot` returns the serve that was
+        // *played* — the second when there was one — so without this the
+        // bars mixed both while the claim above them said "First serves".
+        if (dot && dot.isFirstServe) nextDots.push(dot);
       }
       setDots(nextDots);
     } catch {
@@ -150,7 +146,6 @@ export default function ServePlacementHome({
     return () => window.removeEventListener("match-processed", handler);
   }, [load]);
 
-  const contextLabel = matchCount === 1 ? "1 match" : `last ${matchCount} matches`;
   const zoneStats = useMemo(() => computeZoneStats(dots), [dots]);
 
   if (loading) {
@@ -184,11 +179,11 @@ export default function ServePlacementHome({
   return (
     <ServePlacementQuietStrip
       zoneStats={zoneStats}
-      contextLabel={contextLabel}
+      matchCount={matchCount}
+      serveCount={dots.length}
       // Matches exist but none has a mapped serve yet: the first report is
       // still in the pipeline, or the imports carried no shot coordinates.
       awaitingReport={matchCount > 0}
-      fill={fill}
     />
   );
 }
