@@ -402,14 +402,14 @@ export function AddPlayerDialog({
       }
     >
       <div className="grid grid-cols-2 gap-4">
-        <SettingsField label="First name">
+        <SettingsField label="First name" required>
           <SettingsUnderlineInput
             value={firstName}
             autoFocus
             onChange={(event) => setFirstName(event.target.value)}
           />
         </SettingsField>
-        <SettingsField label="Last name">
+        <SettingsField label="Last name" required>
           <SettingsUnderlineInput
             value={lastName}
             onChange={(event) => setLastName(event.target.value)}
@@ -493,8 +493,8 @@ export function AddPlayerDialog({
       )}
 
       <SettingsField
-        label="Email · optional"
-        hint="So they can claim this profile later"
+        label="Email"
+        hint="Optional — so they can claim this profile later"
       >
         <SettingsUnderlineInput
           type="email"

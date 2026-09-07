@@ -467,6 +467,7 @@ export function RosterInviteDialog({
 
           <SettingsField
             label={listed ? "Emails" : "Email"}
+            required
             hint={
               linked && !emailEdited && target?.email
                 ? "From their profile — edit if it has changed"

@@ -151,18 +151,42 @@ export function SettingsField({
   label,
   hint,
   marker,
+  required = false,
   children,
 }: {
   label: string;
   hint?: React.ReactNode;
   /** Right of the caption, e.g. the blue MISSING tag on an empty field. */
   marker?: React.ReactNode;
+  /**
+   * The form cannot submit without this field. Draws the conventional red
+   * asterisk against the caption and says "required" to assistive tech.
+   *
+   * Mark only what the submit button actually gates on. A form where every
+   * field wears one has said nothing; the asterisk earns its ink by being
+   * rare, and an optional field says so in its hint instead ("Optional — …")
+   * rather than in its caption.
+   */
+  required?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <label className="flex flex-col gap-2">
       <span className="flex items-center gap-2">
-        <span className="text-[11px] text-[var(--ink-600)]">{label}</span>
+        <span className="text-[11px] text-[var(--ink-600)]">
+          {label}
+          {required && (
+            <>
+              {/* Tight to the word, not a flex sibling: an asterisk is
+                  punctuation on the caption, and a gap would read it as a
+                  separate mark. */}
+              <span aria-hidden="true" className="ml-0.5 text-[var(--danger)]">
+                *
+              </span>
+              <span className="sr-only"> (required)</span>
+            </>
+          )}
+        </span>
         {marker}
       </span>
       {children}
