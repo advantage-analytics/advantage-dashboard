@@ -1850,6 +1850,16 @@ One shape for every person a card lists — members, invitees, usage lines:
   beneath the name are a second, softer answer to the question the pill already
   answered. Slot the row's one useful variable there instead — a date on an
   invitation, an action on a member.
+- **The role is a menu on the rows the viewer may change**, in the pill's
+  column: a 28px bordered trigger (`Coach ▾`), a 212px float menu with one
+  line per option saying what it lets you do, the current one carrying the
+  blue check, and a closing note — *Ownership moves by transfer, not from
+  this menu.* Owner is never an option. What the viewer may set mirrors
+  `set_program_member_role`: an owner sees coach / staff / player on every
+  row but their own; a coach sees staff / player on staff and player rows
+  only. A row that is not theirs keeps the flat pill — with a lock glyph
+  before it when the viewer is staff, and nothing extra for a player, for
+  whom no row was ever a control. Picking commits at once.
 - **Pending → outlined pill + dashed-ring avatar.** An `Invited` row is a state
   of the same list, not a different kind of row. The outlined pill deliberately
   matches the outlined seat box representing that same invite.
@@ -1893,7 +1903,10 @@ A settings card must not grow its own copy of an action another page owns. The
 Members card carries no invite field: the roster's dialog can bind an
 invitation to a player already listed — so their matches and video stay put —
 and a second, thinner control produces orphan logins beside existing rows.
-Summarize, then hand off.
+Summarize, then hand off. The split is by *what the act is*, not by page:
+adding and removing people is roster admin and lives on the Roster; what a
+person **is** — their role, and ownership — is decided on their row here,
+because that is where the person is.
 
 **A control that leaves the page wears `↗`, not `›`.** The chevron means
 *expands* or *next step* and is already spoken for by disclosures; on the same

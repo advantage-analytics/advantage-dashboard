@@ -134,8 +134,8 @@ export function TeamDetail({
         invites={data.invites}
         seats={seats}
         viewerId={viewerId}
-        isOwner={isOwner}
-        isStaff={isStaff}
+        viewerRole={viewerRole}
+        onError={setError}
         onMakeOwner={(member) => {
           setTransferTarget(member);
           setTransferSession((session) => session + 1);

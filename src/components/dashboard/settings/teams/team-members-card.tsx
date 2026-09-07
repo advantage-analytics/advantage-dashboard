@@ -1,13 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Lock } from "lucide-react";
 import { SettingsCard } from "@/components/dashboard/settings/settings-card";
 import { SettingsButton } from "@/components/dashboard/settings/settings-button";
 import { StatePill } from "@/components/ui/state-pill";
 import { YouPill } from "@/components/ui/new-pill";
 import { getInitials } from "@/lib/data/match-utils";
+import {
+  RoleMenu,
+  assignableRoles,
+} from "@/components/dashboard/settings/teams/role-menu";
 import type {
+  MemberRole,
   TeamInvite,
   TeamMember,
 } from "@/lib/data/team-settings-server";
@@ -20,12 +25,14 @@ const ROSTER_PATH = "/dashboard/team/roster";
 /**
  * Who is on the program, and how many more there is room for.
  *
- * A summary, deliberately without an invite box. The roster's dialog can bind
- * an invitation to a player already listed so their matches stay put; a
- * thinner control here would mint orphan logins beside those rows. So this
- * card names everyone and hands off — one place to add people, one place to
- * change what they are. The exception is ownership, which is governance rather
- * than roster admin and starts from the person's row here.
+ * Deliberately without an invite box. The roster's dialog can bind an
+ * invitation to a player already listed so their matches stay put; a thinner
+ * control here would mint orphan logins beside those rows. So adding and
+ * removing people happens there — but what someone IS is decided here, on
+ * their row: the role is a menu for the rows the viewer may change (an owner
+ * sees three options, a coach two), a pill with a lock for staff who may not,
+ * and a plain pill for a player, who may change nothing. Ownership starts from
+ * the same row and commits in its own dialog.
  *
  * Seats are countable and few, so they are boxes rather than a bar: filled =
  * taken, outlined = held by an open invite, grey = free. The outlined box and
@@ -38,9 +45,9 @@ export function TeamMembersCard({
   invites,
   seats,
   viewerId,
-  isOwner,
-  isStaff,
+  viewerRole,
   onMakeOwner,
+  onError,
 }: {
   programId: string;
   isActiveWorkspace: boolean;
@@ -48,10 +55,12 @@ export function TeamMembersCard({
   invites: readonly TeamInvite[];
   seats: SeatUsage;
   viewerId: string;
-  isOwner: boolean;
-  isStaff: boolean;
+  viewerRole: MemberRole;
   onMakeOwner: (member: TeamMember) => void;
+  onError: (message: string | null) => void;
 }) {
+  const isOwner = viewerRole === "owner";
+  const isStaff = viewerRole !== "player";
   const goToRoster = setActiveWorkspaceThen.bind(null, programId, ROSTER_PATH);
 
   return (
@@ -90,6 +99,12 @@ export function TeamMembersCard({
             isOwner &&
             member.userId !== viewerId &&
             (member.role === "coach" || member.role === "staff");
+          const options = assignableRoles(viewerRole, viewerId, member);
+          // Staff looking at a row that is not theirs to change — the owner's,
+          // a coach's, their own — see the lock; a player sees only the pill,
+          // because for them nothing on the row was ever a control.
+          const locked =
+            isStaff && options.length === 0 && member.userId !== viewerId;
           return (
             <PersonRow key={member.userId}>
               <Avatar22>{getInitials(member.name)}</Avatar22>
@@ -107,9 +122,28 @@ export function TeamMembersCard({
                   Make owner
                 </button>
               )}
-              <StatePill className="w-[62px] justify-center">
-                {capitalize(member.role)}
-              </StatePill>
+              {options.length > 0 ? (
+                <RoleMenu
+                  programId={programId}
+                  userId={member.userId}
+                  role={member.role}
+                  options={options}
+                  onError={onError}
+                />
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  {locked && (
+                    <Lock
+                      className="size-[11px] text-[var(--ink-300)]"
+                      strokeWidth={1.75}
+                      aria-hidden="true"
+                    />
+                  )}
+                  <StatePill className="w-[62px] justify-center">
+                    {capitalize(member.role)}
+                  </StatePill>
+                </span>
+              )}
             </PersonRow>
           );
         })}
@@ -142,9 +176,11 @@ export function TeamMembersCard({
 
       {/* No rule above the note: the last row already drew one. */}
       <span className="mt-3.5 text-[11px] leading-[1.5] text-[var(--ink-500)]">
-        {isStaff
-          ? "Inviting, roles and removals happen on the Roster, where an invitation can attach to a player already listed. Ownership is the exception and lives here."
-          : "Only the coaching staff can invite people or change roles on this team."}
+        {isOwner
+          ? "A role change takes effect at once. Inviting and removals happen on the Roster, where an invitation can attach to a player already listed; ownership moves by transfer from a member's row."
+          : isStaff
+            ? "You can move people between staff and player; coaches and the owner are the owner's to change. Inviting and removals happen on the Roster."
+            : "Only the coaching staff can invite people or change roles on this team."}
       </span>
     </SettingsCard>
   );

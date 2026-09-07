@@ -27,8 +27,10 @@ import {
  *     under one lock, writing an `ownership.transferred` audit row.
  *  3. `programs_one_owner` makes a second owner row impossible.
  *
- * Plus the gate on `program_usage_pending`: a stranger gets zero, not an
- * error and not someone else's reservation.
+ * Plus `set_program_member_role` (20260907034749): an owner sets anyone but
+ * themselves, a coach moves people between staff and player only, `owner`
+ * is never assignable, no-ops write no audit row — and the gate on
+ * `program_usage_pending`: a stranger gets zero, not an error.
  *
  * Run on demand:  npx playwright test tests/teams-management.spec.ts
  */
@@ -226,6 +228,121 @@ test.describe('Settings › Teams — owner gate, transfer, one owner (live)', (
     });
     expect(asStranger.error).toBeNull();
     expect(Number(asStranger.data)).toBe(0);
+  });
+
+  // ── set_program_member_role ───────────────────────────────────────────────
+
+  test('a coach may move a player to staff and back, and it is audited', async () => {
+    const promote = await coach.client.rpc('set_program_member_role', {
+      p_program_id: programId,
+      p_user_id: player.userId,
+      p_role: 'staff',
+    });
+    expect(promote.error).toBeNull();
+
+    const row = await admin
+      .from('program_members')
+      .select('role')
+      .eq('program_id', programId)
+      .eq('user_id', player.userId)
+      .single();
+    expect(row.data?.role).toBe('staff');
+
+    const audit = await admin
+      .from('program_audit_log')
+      .select('actor_user_id, subject_id, details')
+      .eq('program_id', programId)
+      .eq('action', 'member.role_changed');
+    expect(audit.data).toHaveLength(1);
+    expect(audit.data![0]).toMatchObject({
+      actor_user_id: coach.userId,
+      subject_id: player.userId,
+      details: { from: 'player', to: 'staff' },
+    });
+
+    // Same role again is a no-op: nothing written, no second audit row.
+    const again = await coach.client.rpc('set_program_member_role', {
+      p_program_id: programId,
+      p_user_id: player.userId,
+      p_role: 'staff',
+    });
+    expect(again.error).toBeNull();
+    const auditAgain = await admin
+      .from('program_audit_log')
+      .select('id')
+      .eq('program_id', programId)
+      .eq('action', 'member.role_changed');
+    expect(auditAgain.data).toHaveLength(1);
+
+    const demote = await coach.client.rpc('set_program_member_role', {
+      p_program_id: programId,
+      p_user_id: player.userId,
+      p_role: 'player',
+    });
+    expect(demote.error).toBeNull();
+  });
+
+  test('a coach may not make a coach, touch a coach or the owner, or change themselves', async () => {
+    const makeCoach = await coach.client.rpc('set_program_member_role', {
+      p_program_id: programId,
+      p_user_id: player.userId,
+      p_role: 'coach',
+    });
+    expect(makeCoach.error?.code).toBe(INSUFFICIENT_PRIVILEGE);
+
+    const demoteOwner = await coach.client.rpc('set_program_member_role', {
+      p_program_id: programId,
+      p_user_id: owner.userId,
+      p_role: 'player',
+    });
+    expect(demoteOwner.error?.code).toBe(INSUFFICIENT_PRIVILEGE);
+
+    const self = await coach.client.rpc('set_program_member_role', {
+      p_program_id: programId,
+      p_user_id: coach.userId,
+      p_role: 'staff',
+    });
+    expect(self.error?.code).toBe(INVALID_PARAMETER);
+  });
+
+  test('nobody may assign owner from the menu, and a player may assign nothing', async () => {
+    const asOwner = await owner.client.rpc('set_program_member_role', {
+      p_program_id: programId,
+      p_user_id: coach.userId,
+      p_role: 'owner',
+    });
+    expect(asOwner.error?.code).toBe(INVALID_PARAMETER);
+
+    const asPlayer = await player.client.rpc('set_program_member_role', {
+      p_program_id: programId,
+      p_user_id: coach.userId,
+      p_role: 'staff',
+    });
+    expect(asPlayer.error?.code).toBe(INSUFFICIENT_PRIVILEGE);
+  });
+
+  test('the owner may make anyone a coach, staff or player — and leaves the fixture as it was', async () => {
+    const toStaff = await owner.client.rpc('set_program_member_role', {
+      p_program_id: programId,
+      p_user_id: coach.userId,
+      p_role: 'staff',
+    });
+    expect(toStaff.error).toBeNull();
+
+    const backToCoach = await owner.client.rpc('set_program_member_role', {
+      p_program_id: programId,
+      p_user_id: coach.userId,
+      p_role: 'coach',
+    });
+    expect(backToCoach.error).toBeNull();
+
+    const row = await admin
+      .from('program_members')
+      .select('role')
+      .eq('program_id', programId)
+      .eq('user_id', coach.userId)
+      .single();
+    expect(row.data?.role).toBe('coach');
   });
 
   // ── transfer_program_ownership ────────────────────────────────────────────

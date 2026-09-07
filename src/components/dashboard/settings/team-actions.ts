@@ -150,6 +150,41 @@ export async function saveTeamSettings(
   return { ok: true };
 }
 
+/**
+ * Change one member's standing. Immediate — a role is not part of the
+ * identity draft, and a coach who has just been promoted should not be
+ * waiting on a Save button two cards down.
+ *
+ * The RPC holds every rule (owner sets anyone but themselves; a coach moves
+ * people between staff and player only; `owner` is never assignable; nobody
+ * edits their own row) and says each refusal in words the card shows.
+ */
+export async function setProgramMemberRole(input: {
+  programId: string;
+  userId: string;
+  role: Exclude<MemberRole, "owner">;
+}): Promise<ActionResult> {
+  const member = await memberWorkspace(input.programId);
+  if (!member) return { ok: false, error: NOT_A_MEMBER };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_program_member_role", {
+    p_program_id: input.programId,
+    p_user_id: input.userId,
+    p_role: input.role,
+  });
+
+  if (error) {
+    return { ok: false, error: toMessage(error, "Couldn't change that role.") };
+  }
+
+  revalidateTeams();
+  revalidatePath(ROSTER_PATH);
+  // Their `Workspace.role` changed, and with it every staff gate they see.
+  revalidatePath("/dashboard", "layout");
+  return { ok: true };
+}
+
 export type TransferResult =
   | { ok: true; warning?: string }
   | { ok: false; error: string };
