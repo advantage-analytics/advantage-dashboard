@@ -118,6 +118,7 @@ export default async function EditEventPage({
         // fetched for a screen nobody can open are round trips paid for
         // nothing.
         ourConference: settings?.program.conference ?? null,
+        ourTeam: settings?.program.team ?? null,
         ourDivision: null,
         ourProgramKey: null,
         conferencePrograms: [],

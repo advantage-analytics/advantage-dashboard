@@ -139,6 +139,10 @@ export default async function NewDualPage() {
         ladder,
         defaultSurface: settings?.program.defaultSurface ?? null,
         ourConference: settings?.program.conference ?? null,
+        // Which squad this program fields — step one lists only opponents it
+        // could actually play. Null when the settings read came back empty,
+        // which step one reads as "do not narrow": see `NewDualData`.
+        ourTeam: settings?.program.team ?? null,
         ourDivision: divisionLabel(self?.division ?? null),
         // Off the loader, not off `self`: the conference table is empty for a
         // program with no `conference`, and a key read out of it would then be
