@@ -103,6 +103,9 @@ export default async function PlayerProfilePage({
       member={member}
       roster={mode === "staff" ? roster.members : []}
       canUpload={canUpload}
+      // `profile.playerId`, never the URL's: a claimed player's old links
+      // carry their user id, and the wizard's For field wants the profile id.
+      playerId={profile.playerId}
     />
   );
 
@@ -127,6 +130,7 @@ export default async function PlayerProfilePage({
             mode={mode}
             firstName={profile.firstName}
             canUpload={canUpload}
+            playerId={profile.playerId}
             serve={profile.serve}
           />
         ) : (

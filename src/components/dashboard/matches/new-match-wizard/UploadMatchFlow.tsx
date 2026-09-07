@@ -24,6 +24,7 @@ import {
 } from "./types";
 import {
   useUploadMatchWizard,
+  type RosterSubject,
   type VideoUploadEvent,
   type VideoUploadProgress,
 } from "./useUploadMatchWizard";
@@ -116,11 +117,14 @@ export function UploadMatchFlow({
   preset: initialPreset,
   draft,
   initialProvider,
+  initialSubject,
 }: {
   preset?: EventPreset | null;
   draft?: MatchDraft | null;
   /** A source named by the link that opened the wizard — see the hook. */
   initialProvider?: ProviderId | null;
+  /** A roster player named by the link that opened the wizard — see the hook. */
+  initialSubject?: RosterSubject | null;
 } = {}) {
   // The line this flow is filling. State rather than the prop because the
   // pinned bar's Change menu swaps it for another line of the same event
@@ -210,7 +214,14 @@ export function UploadMatchFlow({
 
   return (
     <UploadMatchWizard
-      key={runId}
+      // The seeded player is part of the identity, not just the run: the hook
+      // installs it as initial state, and `/dashboard/matches/new?player=A` →
+      // `?player=B` is one route with new search params, which re-renders the
+      // wizard rather than remounting it. Without this the second visit would
+      // show B's name over A's id — the name/id mismatch the For field exists
+      // to prevent. No linked path does that today; the key is what keeps it
+      // from mattering if one is ever added.
+      key={`${runId}:${initialSubject?.playerId ?? ""}`}
       onCreated={setCreatedMatchId}
       onVideoUpload={handleVideoUpload}
       exitHref={EXIT_HREF}
@@ -218,6 +229,7 @@ export function UploadMatchFlow({
       onSwitchPreset={setPreset}
       draft={draft ?? null}
       initialProvider={initialProvider ?? null}
+      initialSubject={initialSubject ?? null}
     />
   );
 }
@@ -557,6 +569,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
   onSwitchPreset,
   draft,
   initialProvider,
+  initialSubject,
 }: {
   onCreated: (matchId: string) => void;
   onVideoUpload: (event: VideoUploadEvent) => void;
@@ -565,6 +578,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
   onSwitchPreset: (next: EventPreset) => void;
   draft: MatchDraft | null;
   initialProvider: ProviderId | null;
+  initialSubject: RosterSubject | null;
 }) {
   const router = useRouter();
   // Which workspace this match will be created in, and billed against.
@@ -642,6 +656,7 @@ const UploadMatchWizard = memo(function UploadMatchWizard({
     preset,
     draft,
     initialProvider,
+    initialSubject,
   });
 
   const contentRef = useRef<HTMLDivElement>(null);

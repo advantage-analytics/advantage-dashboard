@@ -68,10 +68,13 @@ export function ProfileDayZero({
   mode,
   firstName,
   canUpload,
+  playerId,
   serve,
 }: {
   mode: "self" | "staff" | "viewer";
   firstName: string;
+  /** This page's athlete, as a `program_players.id` — see `ProfileActions`. */
+  playerId: string;
   canUpload: boolean;
   serve: Parameters<typeof ServePlacementCard>[0]["serve"];
 }) {
@@ -97,7 +100,7 @@ export function ProfileDayZero({
         actions={
           canUpload ? (
             <Link
-              href="/dashboard/team/upload"
+              href={`/dashboard/matches/new?player=${playerId}`}
               className={advButton("primary")}
             >
               New match
