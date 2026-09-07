@@ -1,29 +1,56 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft, Upload } from "lucide-react";
+import type { Metadata } from "next";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import { canUploadForProgram, isProgramStaff } from "@/lib/workspace/types";
 import { getPlayerProfile } from "@/lib/data/player-profile-server";
-import { formatDelta, getInitials } from "@/lib/data/match-utils";
-import { capitalize } from "@/lib/utils";
-import { advButton } from "@/lib/ui/adv-button";
-
-export const metadata = { title: "Player" };
+import { getRosterData } from "@/lib/data/team-roster-server";
+import { getMyPlayerIds } from "@/lib/data/player-identity-server";
+import { ProfileHeaderSlot } from "@/components/dashboard/team/player-profile/profile-header-slot";
+import { ProfileIdentity } from "@/components/dashboard/team/player-profile/profile-identity";
+import { ProfileActions } from "@/components/dashboard/team/player-profile/profile-actions";
+import { SeasonKpiStrip } from "@/components/dashboard/shared/season-kpi-strip";
+import { LastMatchCard } from "@/components/dashboard/team/player-profile/last-match-card";
+import { MatchHistoryCard } from "@/components/dashboard/team/player-profile/match-history-card";
+import { LineHistoryCard } from "@/components/dashboard/team/player-profile/line-history-card";
+import { ServePlacementCard } from "@/components/dashboard/team/player-profile/serve-placement-card";
+import { ProfileDayZero } from "@/components/dashboard/team/player-profile/profile-day-zero";
 
 /**
- * One player's page.
+ * One player's page — Platform Audit `Te` (their own) and `Te2` (a coach's
+ * view of it).
  *
- * The roster row has always pointed somewhere; until now that was Compare,
- * which answers a different question. Compare exists to put two people side by
- * side for a lineup call and says nothing until you have picked a second one. A
- * coach clicking a name wants this person: how they are playing, what they last
- * did, and where the season is trending.
+ * Byte-for-byte the same page from both sides. A player's own data lives
+ * here rather than in a personal workspace — that one is for people not on
+ * a team — reached from their name at the foot of the rail; a coach reaches
+ * the same page from the Roster. Three things differ, all chrome: the header
+ * says the name alone or `Roster › name ⌄ 3 / 9` with a switcher; the
+ * **You** pill marks whose page it is; and the ghost button is **Edit
+ * profile** (a player owns their identity) or **Edit player** (a coach owns
+ * the roster). No data is added or withheld — that is what "fully open"
+ * buys a program.
  *
- * ── Why the numbers match an opponent's ─────────────────────────────────────
- * Both read `PLAYER_MEASURES` through the same loader shape. This page and an
- * opponent's profile disagreeing about what a first-serve percentage is would
- * make both untrustworthy, and there is no way for a reader to tell which one
- * lied.
+ * Five blocks in a 2:1 split: the things you scan repeatedly (the last
+ * match, then every match) on the left, the things you consult (line
+ * history, then serve placement) on the right.
+ *
+ * ── Why the numbers match the roster's ──────────────────────────────────────
+ * `getPlayerProfile` folds both of a claimed player's ids the way
+ * `getRosterData` does, so the Record here is the roster's Record. Both
+ * loaders are `cache()`d; the roster read is shared with the header's
+ * switcher and Edit player, which need the whole squad.
  */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ playerId: string }>;
+}): Promise<Metadata> {
+  const { playerId } = await params;
+  const workspace = await getWorkspaceContext();
+  if (!workspace || workspace.active.kind !== "team") return { title: "Player" };
+  const profile = await getPlayerProfile(workspace.active.id, playerId);
+  return { title: profile?.name ?? "Player" };
+}
+
 export default async function PlayerProfilePage({
   params,
 }: {
@@ -37,283 +64,98 @@ export default async function PlayerProfilePage({
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard");
 
-  const profile = await getPlayerProfile(active.id, playerId);
+  const [profile, roster, myPlayerIds] = await Promise.all([
+    getPlayerProfile(active.id, playerId),
+    getRosterData(active.id),
+    getMyPlayerIds(),
+  ]);
+
   // The loader returns null for an id that names nobody on this roster. It
   // arrives from a URL, so it is untrusted; a 404 is the honest answer.
   if (!profile) notFound();
 
-  const canManage = active.role !== "player";
-  const record =
-    profile.wins + profile.losses > 0
-      ? `${profile.wins}–${profile.losses}`
-      : "No decided matches";
+  // Both id eras count: the URL may carry the profile id or, for a claimed
+  // player's old links, the user id. `getMyPlayerIds` knows both.
+  const isSelf = myPlayerIds.includes(playerId);
+  const isStaff = isProgramStaff(active);
+  const canUpload = canUploadForProgram(active);
 
-  const line = [
-    profile.classYear,
-    profile.lineupSpot !== null ? `#${profile.lineupSpot} singles` : null,
-    profile.role !== "player" ? capitalize(profile.role) : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  // A staff member on their own row is still "self": the page is about them.
+  // A player on a teammate's page is a viewer — they read it, and nothing
+  // here is theirs to edit.
+  const mode = isSelf ? "self" : isStaff ? "staff" : "viewer";
+
+  const players = roster.members
+    .filter((m) => m.role === "player")
+    .map((m) => ({ id: m.playerId, name: m.name, lineupSpot: m.lineupSpot }));
+
+  // Only staff can open Edit player, and only they need the squad behind it.
+  // Everyone else gets nulls, which keeps a fat `RosterMember[]` out of the
+  // page's client payload — see `ProfileActions`.
+  const member =
+    mode === "staff"
+      ? (roster.members.find((m) => m.playerId === playerId) ?? null)
+      : null;
+
+  const actions = (
+    <ProfileActions
+      mode={mode}
+      playerId={profile.playerId}
+      member={member}
+      roster={mode === "staff" ? roster.members : []}
+      canUpload={canUpload}
+    />
+  );
 
   return (
     <div className="w-full flex-1 bg-[var(--surface-card)]">
-      <div className="mx-auto flex max-w-screen-2xl flex-col gap-6 px-6 pt-5 pb-8 sm:px-14">
-        <Link
-          href="/dashboard/team/roster"
-          className="inline-flex w-fit items-center gap-1 text-[12px] text-[var(--ink-500)] transition-colors hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-        >
-          <ChevronLeft className="size-3.5" strokeWidth={1.5} aria-hidden />
-          Roster
-        </Link>
+      {mode === "staff" ? (
+        <ProfileHeaderSlot
+          mode="staff"
+          name={profile.name}
+          playerId={profile.playerId}
+          players={players}
+        />
+      ) : (
+        <ProfileHeaderSlot mode="self" name={profile.name} />
+      )}
 
-        {/* ── Who ─────────────────────────────────────────────────────────── */}
-        <div className="flex flex-col items-start justify-between gap-4 lg:flex-row lg:items-center">
-          <div className="flex items-center gap-3.5">
-            <span
-              aria-hidden
-              className="flex size-12 shrink-0 items-center justify-center rounded-full bg-[var(--surface-subtle)] text-[13px] font-medium text-[var(--ink-700)]"
-            >
-              {getInitials(profile.name)}
-            </span>
-            <div>
-              <h1 className="text-[30px] leading-9 font-light tracking-[-0.6px] text-[var(--ink-900)]">
-                {profile.name}
-              </h1>
-              <p className="mt-0.5 flex items-center gap-2 text-[12px] text-[var(--ink-500)]">
-                {line || profile.email || "On the roster"}
-                {profile.managedBy === "coach" && (
-                  <span className="inline-flex h-[18px] items-center rounded-[var(--radius-pill)] bg-[var(--surface-subtle)] px-2 text-[10px] font-medium text-[var(--ink-700)]">
-                    Coach-managed
-                  </span>
-                )}
-              </p>
-            </div>
-          </div>
+      <div className="mx-auto flex max-w-screen-2xl flex-col gap-5 px-6 pt-5 pb-8 sm:px-14">
+        <ProfileIdentity profile={profile} isSelf={isSelf} actions={actions} />
 
-          {canManage && (
-            <Link
-              href={`/dashboard/team/upload?player=${profile.playerId}`}
-              className={advButton("outline")}
-            >
-              <Upload className="size-3.5" strokeWidth={1.5} aria-hidden />
-              Upload a match
-            </Link>
-          )}
-        </div>
-
-        {/* ── The season in four numbers ──────────────────────────────────── */}
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-medium)] bg-[var(--border-hairline)] sm:grid-cols-4">
-          <Stat label="Matches" value={String(profile.matchesPlayed)} />
-          <Stat label="Record" value={record} />
-          <Stat
-            label="Form"
-            value={
-              profile.form.length === 0 ? (
-                "—"
-              ) : (
-                <span className="flex items-center gap-1">
-                  <span className="sr-only">
-                    {profile.form.map((r) => (r === "win" ? "W" : "L")).join(" ")}
-                  </span>
-                  {profile.form.map((result, index) => (
-                    <span
-                      key={index}
-                      aria-hidden
-                      className="h-4 w-[3px] rounded-[1px]"
-                      style={{
-                        background:
-                          result === "win"
-                            ? "var(--viz-good)"
-                            : "var(--viz-bad)",
-                      }}
-                    />
-                  ))}
-                </span>
-              )
-            }
+        {profile.matchesPlayed === 0 ? (
+          <ProfileDayZero
+            mode={mode}
+            firstName={profile.firstName}
+            playerId={profile.playerId}
+            canUpload={canUpload}
+            serve={profile.serve}
           />
-          <Stat
-            label="First serve"
-            value={
-              profile.measures.find((m) => m.key === "first_serve_pct")
-                ?.value !== null &&
-              profile.measures.find((m) => m.key === "first_serve_pct") !==
-                undefined
-                ? `${profile.measures.find((m) => m.key === "first_serve_pct")!.value}%`
-                : "—"
-            }
-          />
-        </div>
+        ) : (
+          <>
+            <SeasonKpiStrip
+              kpis={profile.kpis}
+              hasStats={profile.hasStats}
+              matchesPlayed={profile.matchesPlayed}
+            />
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-          {/* ── Recent matches ────────────────────────────────────────────── */}
-          <section className="flex flex-col gap-3">
-            <h2 className="text-[10px] font-medium tracking-[1.5px] text-[var(--ink-500)] uppercase">
-              Recent matches
-            </h2>
-            {profile.recentMatches.length === 0 ? (
-              <Empty>
-                Nothing recorded yet.{" "}
-                {canManage
-                  ? "Upload a match and it will appear here."
-                  : "Your coaching staff will add matches as the season goes."}
-              </Empty>
-            ) : (
-              <ul className="overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-medium)]">
-                {profile.recentMatches.map((match, index) => (
-                  <li
-                    key={match.id}
-                    className={
-                      index === 0
-                        ? ""
-                        : "border-t border-[var(--border-hairline)]"
-                    }
-                  >
-                    <Link
-                      href={`/dashboard/matches/${match.id}`}
-                      className="flex items-center gap-3 px-[18px] py-3.5 transition-colors hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-                    >
-                      <span
-                        aria-hidden
-                        className="w-4 shrink-0 text-center text-[11px] font-medium"
-                        style={{
-                          color:
-                            match.won === null
-                              ? "var(--ink-400)"
-                              : match.won
-                                ? "var(--viz-good)"
-                                : "var(--viz-bad)",
-                        }}
-                      >
-                        {match.won === null ? "–" : match.won ? "W" : "L"}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[13px] text-[var(--ink-900)]">
-                          {match.opponent}
-                        </span>
-                        {match.event && (
-                          <span className="block truncate text-[11px] text-[var(--ink-500)]">
-                            {match.event}
-                          </span>
-                        )}
-                      </span>
-                      <span className="text-scoreboard-sm tabular shrink-0">
-                        {match.score}
-                      </span>
-                      <span className="text-micro tabular w-12 shrink-0 text-right">
-                        {match.date}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          {/* ── Rates, and where they are going ───────────────────────────── */}
-          <section className="flex flex-col gap-3">
-            <h2 className="text-[10px] font-medium tracking-[1.5px] text-[var(--ink-500)] uppercase">
-              Season averages
-            </h2>
-            {profile.matchesPlayed === 0 ? (
-              <Empty>
-                Averages appear once this player has a match with statistics on
-                it.
-              </Empty>
-            ) : (
-              <div className="overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-medium)]">
-                {profile.measures.map((measure, index) => (
-                  <div
-                    key={measure.key}
-                    title={measure.hint}
-                    className={`flex items-center gap-3 px-[18px] py-2.5 ${
-                      index === 0
-                        ? ""
-                        : "border-t border-[var(--border-hairline)]"
-                    }`}
-                  >
-                    <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--ink-700)]">
-                      {measure.label}
-                    </span>
-                    {/* A bar, because ten bare percentages is ten separate acts
-                        of arithmetic. Not coloured good or bad: every measure
-                        here is one where more is better, so a red number would
-                        be a judgement on a person rather than a fact. */}
-                    <span
-                      aria-hidden
-                      className="hidden h-1 w-24 shrink-0 overflow-hidden rounded-full bg-[var(--surface-subtle)] sm:block"
-                    >
-                      <span
-                        className="block h-full rounded-full bg-[var(--blue)]"
-                        style={{ width: `${measure.value ?? 0}%` }}
-                      />
-                    </span>
-                    <span className="tabular w-12 shrink-0 text-right text-[13px] text-[var(--ink-900)]">
-                      {measure.value === null ? "—" : `${measure.value}%`}
-                    </span>
-                    <Trend value={measure.trend} />
-                  </div>
-                ))}
+            <div className="grid items-start gap-4 lg:grid-cols-[1.9fr_1fr]">
+              <div className="flex min-w-0 flex-col gap-4">
+                {profile.lastMatch && <LastMatchCard match={profile.lastMatch} />}
+                <MatchHistoryCard rows={profile.history} playerName={profile.name} />
               </div>
-            )}
-            <p className="text-[11px] leading-[1.6] text-[var(--ink-500)]">
-              Averages cover every match this program has recorded. The arrow
-              compares their last five against everything before, and is absent
-              until there is enough season to compare against.
-            </p>
-          </section>
-        </div>
+              <div className="flex min-w-0 flex-col gap-4">
+                <LineHistoryCard lines={profile.lines} />
+                <ServePlacementCard
+                  serve={profile.serve}
+                  matchesPlayed={profile.matchesPlayed}
+                  isSelf={isSelf}
+                />
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
-  );
-}
-
-/** One cell of the four-number strip. */
-function Stat({
-  label,
-  value,
-}: {
-  label: string;
-  value: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5 bg-[var(--surface-card)] px-[18px] py-4">
-      <span className="text-[10px] font-medium tracking-[1.5px] text-[var(--ink-500)] uppercase">
-        {label}
-      </span>
-      <span className="flex h-7 items-center text-[20px] font-light tracking-[-0.4px] text-[var(--ink-900)] tabular-nums">
-        {value}
-      </span>
-    </div>
-  );
-}
-
-/**
- * The signed change beside a rate, or an empty slot when there is no baseline.
- *
- * The slot stays either way: a column of arrows that collapses on the rows
- * without one would leave the percentages beside it ragged.
- */
-function Trend({ value }: { value: number | null }) {
-  if (value === null) {
-    return <span className="w-10 shrink-0" aria-hidden />;
-  }
-  const { label, color } = formatDelta(value);
-  return (
-    <span
-      className="tabular w-10 shrink-0 text-right text-[11px]"
-      style={{ color }}
-    >
-      {label}
-    </span>
-  );
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="rounded-[var(--radius-card)] border border-dashed border-[var(--border-medium)] px-[18px] py-6 text-[12px] leading-[1.6] text-[var(--ink-500)]">
-      {children}
-    </p>
   );
 }

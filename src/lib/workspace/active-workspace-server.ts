@@ -57,7 +57,44 @@ function personalWorkspace(viewer: Viewer): Workspace {
     // this person is barred from sending their own video, which nothing has
     // ever said. `/dashboard/matches/new` has no such gate.
     memberUploadEnabled: true,
+    // No program, so no profile row to point at. The footer link that reads
+    // this only exists on a team workspace anyway.
+    myPlayerId: null,
   };
+}
+
+/**
+ * The claimed profile row per program for one login — `program_players.id`
+ * keyed by `program_id`.
+ *
+ * Mirrors arm 1 of `program_roster_full`: live (not archived, not merged)
+ * rows bound to this user. Readable under RLS by any member of the program.
+ * Never fatal — a failed read leaves the map empty, and the caller falls back
+ * to the user id, which is what arm 3 of that function would answer.
+ */
+async function claimedProfilesByProgram(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<Map<string, string>> {
+  const { data, error } = await supabase
+    .from('program_players')
+    .select('id, program_id')
+    .eq('claimed_by_user_id', userId)
+    .is('archived_at', null)
+    .is('merged_into_id', null);
+
+  if (error) {
+    console.error('[workspace] could not load claimed profiles', {
+      error: error.message,
+    });
+    return new Map();
+  }
+
+  const byProgram = new Map<string, string>();
+  for (const row of data ?? []) {
+    if (!byProgram.has(row.program_id)) byProgram.set(row.program_id, row.id);
+  }
+  return byProgram;
 }
 
 /**
@@ -81,13 +118,16 @@ async function listProgramWorkspaces(
   supabase: SupabaseClient,
   userId: string
 ): Promise<Workspace[]> {
-  const { data, error } = await supabase
-    .from('program_members')
-    .select(
-      'role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload, upload_policy, org_type, time_zone)'
-    )
-    .eq('user_id', userId)
-    .order('joined_at');
+  const [{ data, error }, claimedProfiles] = await Promise.all([
+    supabase
+      .from('program_members')
+      .select(
+        'role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload, upload_policy, org_type, time_zone)'
+      )
+      .eq('user_id', userId)
+      .order('joined_at'),
+    claimedProfilesByProgram(supabase, userId),
+  ]);
 
   if (error) {
     // Never fatal: a viewer who cannot load their programs should still get
@@ -161,6 +201,13 @@ async function listProgramWorkspaces(
         // broken read is the wrong way round. See
         // `Workspace.memberUploadEnabled` for why staff never feel it.
         memberUploadEnabled: Boolean(row.upload_enabled),
+        // A player's matches carry their claimed profile's id; a player-role
+        // member who never claimed one is listed under their user id (arm 3
+        // of `program_roster_full`). Staff have no player page of their own.
+        myPlayerId:
+          row.role === 'player'
+            ? (claimedProfiles.get(program.id) ?? userId)
+            : null,
       },
     ];
   });

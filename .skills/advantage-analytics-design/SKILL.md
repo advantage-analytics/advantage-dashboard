@@ -588,7 +588,7 @@ no longer says.
 
 **(v3)** The last five results as bars, not lettered squares: 2.5×12px, 3px
 gap, 1px radius, oldest left, `--viz-good` / `--viz-bad`. Shipped as
-`FormTicks` in `team/roster-table.tsx`; pair with a muted summary ("5–2 last
+`FormTicks` in `shared/form-ticks.tsx` (the roster table and the player profile's line history both draw it); pair with a muted summary ("5–2 last
 7") where there is room. The pre-v3 treatment — a 20px `rounded-[3px]` square
 with a 9px semibold letter on the 15% tint — is retired.
 

@@ -193,6 +193,19 @@ export interface Workspace {
    * personal workspace, where the question does not arise.
    */
   uploadPolicy: UploadPolicy;
+  /**
+   * The id this viewer's matches carry inside this program, when they are a
+   * player here — the `program_players.id` they have claimed, else their own
+   * user id for a player-role membership with no live profile (arm 3 of
+   * `program_roster_full`). Null for staff and for a personal workspace.
+   *
+   * On the workspace rather than fetched by the rail, because the rail is a
+   * client component and this id comes from `program_players`, which only a
+   * server read can resolve. It is what the sidebar's footer links to on a
+   * player's own team workspace (Platform Audit `Te`): their name at the foot
+   * of the rail opens their profile, not Settings.
+   */
+  myPlayerId: string | null;
 }
 
 /** Everything the dashboard shell needs to render, resolved once per request. */

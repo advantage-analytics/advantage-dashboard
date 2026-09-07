@@ -1,5 +1,6 @@
 import { meanOfPresent, num, pct, presentPairs } from "./aggregate";
 import { createClient } from "@/lib/supabase/server";
+import { getPersonalMatchData } from "@/lib/data/personal-matches-server";
 import { getMyPlayerIds } from "@/lib/data/player-identity-server";
 import { viewerSide } from "./viewer-side";
 
@@ -611,18 +612,6 @@ const KPI_SPECS: KpiSpec[] = [
   },
 ];
 
-/**
- * The five labels the strip shows before anything is customised.
- *
- * `KpiCards` restores a saved selection from localStorage and otherwise takes
- * the first `MAX_VISIBLE` cards in this order, so on a first visit — the only
- * time the empty strip is drawn — these are exactly the tiles that will be
- * there once a report lands. Derived from `KPI_SPECS` rather than retyped, so
- * a renamed statistic cannot leave the empty state promising an old name.
- */
-export const DEFAULT_KPI_LABELS: readonly string[] = KPI_SPECS.slice(0, 5).map(
-  (spec) => spec.label
-);
 
 function formatKpiValue(value: number, format: KpiFormat): string {
   if (format === "percent") return `${Math.round(value)}%`;
@@ -859,30 +848,21 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
 
   if (!user) return DEFAULT_PERFORMANCE;
 
-  // `player2_id` joins the projection because `viewerSide` needs both halves to
+  // Both reads come from `getPersonalMatchData`, shared with the season strip
+  // on the same page — see that module for why the pair lives there. Its
+  // projection carries `player2_id` because `viewerSide` needs both halves to
   // tell "I was player two" from "this is not my match at all".
-  const [{ data: matches }, myPlayerIds] = await Promise.all([
-    supabase
-      .from("matches")
-      .select("id, date, player1_id, player2_id, player1_name, player2_name, score")
-      .eq("created_by", user.id)
-      // AND no program. `/dashboard` is the personal home — same predicate as
-      // the matches list (`matches/page.tsx`), for the same reason:
-      // `matches.program_id` is nullable precisely so "no program" is the
-      // personal workspace.
-      .is("program_id", null)
-      .order("date", { ascending: false }),
-    getMyPlayerIds(),
-  ]);
+  const [{ matches: personalMatches, stats: personalStats }, myPlayerIds] =
+    await Promise.all([getPersonalMatchData(user.id), getMyPlayerIds()]);
+  const matches = personalMatches;
 
-  if (!matches || matches.length === 0) return DEFAULT_PERFORMANCE;
+  if (matches.length === 0) return DEFAULT_PERFORMANCE;
 
-  const typedMatches = matches as DbMatch[];
+  const typedMatches = matches as unknown as DbMatch[];
   const overall = calculateWinLoss(typedMatches, myPlayerIds, user.id);
   const last30 = calculateWinLoss(typedMatches, myPlayerIds, user.id, 30);
   const last7 = calculateWinLoss(typedMatches, myPlayerIds, user.id, 7);
 
-  const matchIds = matches.map((m) => m.id);
   const matchPlayerMap = new Map<string, boolean>();
   const matchMetaMap = new Map<string, { date: string; opponent: string }>();
   for (const m of matches) {
@@ -898,14 +878,7 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
     });
   }
 
-  const { data: stats } = await supabase
-    .from("match_stats_with_percentages")
-    .select(
-      "match_id, is_player1, first_serve_pct, first_serve_won_pct, second_serve_won_pct, serve_rating, first_return_won_pct, second_return_won_pct, break_points_saved_pct, break_points_converted_pct, service_games_won_pct, return_games_won_pct, total_points_won_pct, aces, double_faults, winners, unforced_errors, avg_rally_length"
-    )
-    .in("match_id", matchIds);
-
-  const typedStats = (stats as DbMatchStats[]) ?? [];
+  const typedStats = personalStats as unknown as DbMatchStats[];
   const orderedMatchIds = matches.map((m) => m.id);
 
   const ratings = calculateAverageRating(typedStats, user.id, matchPlayerMap);

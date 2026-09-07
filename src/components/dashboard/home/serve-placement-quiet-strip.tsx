@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ZoneKey, ZoneStats } from "@/components/dashboard/matches/serve-placement/serve-placement-widget";
+import type { ZoneKey, ZoneStats } from "@/lib/data/serve-zones";
 import { CardFooter } from "@/components/dashboard/shared/card-footer";
 import { HOME_CLAIM_CLASS } from "@/lib/ui/home-claim";
 import {
@@ -130,6 +130,7 @@ export function ServePlacementQuietStrip({
   matchCount,
   awaitingReport = false,
   statisticsHref = "/dashboard/statistics",
+  emptyCopy,
 }: {
   zoneStats: Record<ZoneKey, ZoneStats> | null;
   /** How many matches the bars were read from — "Last 4 · 89 serves". */
@@ -142,6 +143,14 @@ export function ServePlacementQuietStrip({
    */
   awaitingReport?: boolean;
   statisticsHref?: string;
+  /**
+   * The empty state's two sentences, for a page that is not about the
+   * viewer. Home says "your" (the default, below); a coach reading a
+   * player's page should not — the team profile (Platform Audit
+   * `Te`/`Te2`) passes third-person copy here instead of forking the
+   * component.
+   */
+  emptyCopy?: { awaiting: string; first: string };
 }) {
   // One read of the counts, shared by the bars and the sentence beneath them,
   // so the two can never round the same number two ways.
@@ -217,8 +226,8 @@ export function ServePlacementQuietStrip({
           </div>
           <span className="text-micro" style={{ textWrap: "pretty" }}>
             {awaitingReport
-              ? "Your serve map fills in when the first report lands."
-              : "Where your first serves land, after your first match."}
+              ? (emptyCopy?.awaiting ?? "Your serve map fills in when the first report lands.")
+              : (emptyCopy?.first ?? "Where your first serves land, after your first match.")}
           </span>
         </>
       )}
