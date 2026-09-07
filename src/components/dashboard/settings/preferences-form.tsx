@@ -8,7 +8,7 @@ import {
   SettingsCardTitle,
 } from "@/components/dashboard/settings/settings-card";
 import { SettingsToggle } from "@/components/dashboard/settings/settings-toggle";
-import { SettingsInlineSelect } from "@/components/dashboard/settings/settings-inline-select";
+import { MenuSelect } from "@/components/ui/menu-select";
 import { SettingsAlert } from "@/components/dashboard/settings/settings-alert";
 import { savePreferences } from "@/components/dashboard/settings/preferences-actions";
 import { capitalize } from "@/lib/utils";
@@ -127,7 +127,7 @@ export function PreferencesForm({
         <SettingsCardRow
           label="Workspace on sign-in"
           control={
-            <SettingsInlineSelect
+            <MenuSelect
               label="Workspace on sign-in"
               value={preferences.defaultWorkspace}
               options={WORKSPACE_OPTIONS}
@@ -138,7 +138,7 @@ export function PreferencesForm({
         <SettingsCardRow
           label="Match report opens at"
           control={
-            <SettingsInlineSelect
+            <MenuSelect
               label="Match report opens at"
               value={preferences.matchReportOpensAt}
               options={REPORT_OPTIONS}

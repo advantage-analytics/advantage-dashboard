@@ -2,10 +2,7 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  SettingsMenuSelect,
-  type MenuOption,
-} from "@/components/dashboard/settings/settings-menu-select";
+import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
 import { setProgramMemberRole } from "@/components/dashboard/settings/team-actions";
 import type { MemberRole } from "@/lib/data/team-settings-server";
 import { capitalize } from "@/lib/utils";
@@ -19,10 +16,19 @@ const ROLE_NOTE: Record<AssignableRole, string> = {
   player: "Their own matches, plus what the team shares",
 };
 
+/** Every option, built once; a row picks its slice by value. */
+const ROLE_OPTIONS: Record<AssignableRole, MenuOption<AssignableRole>> = {
+  coach: { value: "coach", label: "Coach", description: ROLE_NOTE.coach },
+  staff: { value: "staff", label: "Staff", description: ROLE_NOTE.staff },
+  player: { value: "player", label: "Player", description: ROLE_NOTE.player },
+};
+
+const NOTE = "Ownership moves by transfer, not from this menu.";
+
 /**
  * The role, as a menu, on a member row the viewer may change.
  *
- * `SettingsMenuSelect` in its pill form, narrowed to the row: options come
+ * `MenuSelect` in its pill form, narrowed to the row: options come
  * from the caller (an owner sees three, a coach two), owner is never among
  * them, and the menu ends on where ownership moves instead. Picking commits
  * at once; the row behind it re-renders from the server.
@@ -43,20 +49,16 @@ export function RoleMenu({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  const menuOptions: MenuOption<AssignableRole>[] = options.map((option) => ({
-    value: option,
-    label: capitalize(option),
-    description: ROLE_NOTE[option],
-  }));
+  const menuOptions = options.map((option) => ROLE_OPTIONS[option]);
 
   return (
-    <SettingsMenuSelect
+    <MenuSelect
       label={`Change role, currently ${capitalize(role)}`}
       // The owner's role is never assignable, so it is never `value` here —
       // rows that hold it draw as a pill, not this menu.
       value={role as AssignableRole}
       options={menuOptions}
-      note="Ownership moves by transfer, not from this menu."
+      note={NOTE}
       disabled={isPending}
       className="h-7 w-[92px] px-2.5"
       onChange={(next) => {

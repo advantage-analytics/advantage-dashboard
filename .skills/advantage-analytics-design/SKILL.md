@@ -27,7 +27,9 @@ The canonical source of truth for all UI across the app. Read this before buildi
 > v3 ships 36 primitives against v2's 21: `DataTable`, `Score`, `Delta`,
 > `ResultMark`, `InsightCard`+`EngineChip`, `Notice`, `Avatar`+`StatePill`,
 > `Radio`, `EntitySelect`, `ActivityTray`, `SlotLine`, `ScoreGrid`, `FieldRow`,
-> `StepBar`, `InlineFacts`.
+> `StepBar`, `InlineFacts`. Two more were added in-repo on 2026-09-07 and are
+> not in the project yet: `FloatMenu` and `MenuSelect` (`ui/float-menu.tsx`,
+> `ui/menu-select.tsx`) — see *Dropdown / Menu*.
 >
 > In the project, `readme.md` is the current-state rulebook and `CHANGELOG.md`
 > the decision trail (the v2→v3 diff, then Rounds 10–20 and a platform audit;
@@ -963,20 +965,29 @@ Focus → "The underline opt-out").
 
 ## Dropdown / Menu
 
-```
-// Container (p-1 gives inset gap for rounded item highlights)
-absolute right-0 top-full mt-1.5 w-44 rounded-xl
-overflow-hidden border border-[#E5E5EA] bg-white p-1
-shadow-[0_8px_30px_rgba(0,0,0,0.08),0_1px_3px_rgba(0,0,0,0.04)]
+**Primitives, not a class recipe** (2026-09-07, in-repo): every dropdown is
+built from `ui/float-menu.tsx` — `FloatMenu` (the surface, anchored to the
+trigger it wraps, 10px radius, 5px inset, `--shadow-dropdown`),
+`FloatMenuItem` (a 7px-radius row: 12px label, optional 11px `--ink-500`
+second line saying what the choice means, `--surface-subtle` on hover and on
+the chosen row, a 12px Signal Blue check — the one colour that means
+"chosen"), `FloatMenuNote` (the closing sentence under a hairline for the
+thing the menu will not do) and `FloatMenuDivider`. **Every select is
+`MenuSelect`** (`ui/menu-select.tsx`), composed from those with two triggers:
+`underline` for a form field (full width, the caption's hairline, no radius)
+and `pill` for the control beside a `SettingsCardRow` label (30px, bordered);
+both turn their edge blue while open, and the menu matches the trigger's
+width under a field.
 
-// Item (inset rounded — matches sidebar nav highlight pattern)
-flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] text-[#1D1D1F]
-hover:bg-[#F5F5F5] focus-visible:bg-[#F5F5F5] focus-visible:outline-none active:bg-[#EBEBEB]
-transition-colors duration-100
+**No native `<select>` in product UI.** It cannot carry a second line per
+option, its popup is the browser's not ours, and drawn as an underline on a
+6px-radius box its rule curled at both ends — the bug that retired
+`SettingsInlineSelect`. Give an option its second line when the label alone
+would not tell a coach what they are choosing ("Staff", "Owner and coaches"),
+and leave it off when it would ("Clay").
 
-// Divider
-h-px bg-[#E5E5EA] mx-2 my-1
-```
+The header's account menu predates the primitives and still carries its own
+classes; migrate it to `FloatMenu` rather than copying them.
 
 **EntitySelect (v3)** — the "For" field, picking a person or someone new.
 Float menu radius 12, 6px padding; rows 38px (radius 8, hover surface-subtle,
@@ -1869,20 +1880,13 @@ One shape for every person a card lists — members, invitees, usage lines:
   stays in the pill column. 18px, `--blue-tint-08` on `--blue`. A third blue
   pill costs both of these their meaning — do not add one.
 
-### Selects on a settings page are the product's menu
+### Selects on a settings page are `MenuSelect`
 
-`SettingsMenuSelect` (`components/dashboard/settings/settings-menu-select.tsx`)
-— the float menu from the Teams design: 10px radius, 5px inset, one row per
-option with an 11px line beneath saying what it means, the chosen row on
-`--surface-subtle` with a 12px `--blue` check, and an optional closing note
-under a hairline for the one thing the menu will not do. Two triggers: the
-**underline** form field (full width, the caption's hairline, no radius — a
-rule on a 6px-radius box curls at both ends) and the **pill** row control
-(30px, bordered, beside a `SettingsCardRow` label). Both turn their edge blue
-while open. Options with something to explain — a role, an upload policy —
-get the second line; plain values (a surface) do not. `SettingsInlineSelect`,
-the native select over a pill, is the previous pattern and stays on pages
-that have not moved; do not add it to a new one.
+The product's own menu (see *Dropdown / Menu* above for the primitives):
+`underline` under a `SettingsField` caption, `pill` beside a
+`SettingsCardRow` label. Options with something to explain — a role, an
+upload policy — get the second line; plain values (a surface) do not. There
+is no native select left in settings, and none is to be added.
 
 **Who can upload team matches** is a four-rung ladder, not a switch: *Owner
 only · Owner and coaches · All staff · Everyone on the team*
@@ -2130,9 +2134,8 @@ email chip carried a remove `<button>`, and focusing one drew the wrapper's
 neutral ring and the button's own blue ring at the same time — two indicators,
 two colours, the larger one on an element that was not focused. Keying on
 `input:focus-visible` scopes the wrapper ring to the case it exists for.
-(`settings/settings-inline-select.tsx` is a third case that stays on
-`focus-within`: its `<select>` is `opacity-0`, so there is no second ring to
-collide with and no opt-out to set.)
+(The native-select-over-a-pill that was the third case is gone — every
+select is `MenuSelect` now, whose trigger is a plain button and rings itself.)
 
 **The underline opt-out is the second exception to "write nothing."** A field
 whose own rule visibly changes on focus — thickens, recolours, or both — needs

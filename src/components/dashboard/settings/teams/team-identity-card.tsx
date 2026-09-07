@@ -6,7 +6,7 @@ import {
   SettingsField,
   SettingsUnderlineInput,
 } from "@/components/dashboard/settings/settings-card";
-import { SettingsMenuSelect } from "@/components/dashboard/settings/settings-menu-select";
+import { MenuSelect } from "@/components/ui/menu-select";
 import { CrestControl } from "@/components/dashboard/settings/teams/crest-control";
 import { ProgramCrest } from "@/components/dashboard/settings/teams/program-crest";
 import type { IdentityDraft } from "@/components/dashboard/settings/teams/types";
@@ -103,7 +103,7 @@ export function TeamIdentityCard({
 
         {isOwner ? (
           <SettingsField label="Squad">
-            <SettingsMenuSelect
+            <MenuSelect
               label="Squad"
               variant="underline"
               value={draft.team}
@@ -127,7 +127,7 @@ export function TeamIdentityCard({
         />
 
         <SettingsField label="Default surface">
-          <SettingsMenuSelect
+          <MenuSelect
             label="Default surface"
             variant="underline"
             value={draft.defaultSurface || "hard"}

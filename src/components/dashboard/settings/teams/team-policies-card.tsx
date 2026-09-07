@@ -5,10 +5,7 @@ import {
   SettingsCardRow,
   SettingsCardTitle,
 } from "@/components/dashboard/settings/settings-card";
-import {
-  SettingsMenuSelect,
-  type MenuOption,
-} from "@/components/dashboard/settings/settings-menu-select";
+import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
 import {
   UPLOAD_POLICIES,
   uploadPolicyLabel,
@@ -52,7 +49,7 @@ export function TeamPoliciesCard({
         label="Who can upload team matches"
         description="On-behalf uploads always show “added by”."
         control={
-          <SettingsMenuSelect
+          <MenuSelect
             label="Who can upload team matches"
             value={uploadPolicy}
             options={UPLOAD_POLICY_OPTIONS}
