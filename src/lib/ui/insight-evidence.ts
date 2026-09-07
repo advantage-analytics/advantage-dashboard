@@ -88,25 +88,28 @@ export function buildInsightEvidenceWithCaption(
   kpiCards: KpiCardData[],
   matchCount: number
 ): InsightEvidence | null {
-  const parts = buildInsightEvidence(kpiCards, matchCount);
-  if (!parts) return null;
-  const picked = pickEvidenceCards(kpiCards);
-  if (!picked) return null;
-  const caption = [picked.first, picked.second]
-    .filter((c): c is KpiCardData => Boolean(c))
-    .map((c) => inSentence(c.label))
-    .join(" · ");
-  return { parts, caption };
-}
-
-export function buildInsightEvidence(
-  kpiCards: KpiCardData[],
-  matchCount: number
-): EvidencePart[] | null {
   if (matchCount === 0) return null;
 
   const picked = pickEvidenceCards(kpiCards);
   if (!picked) return null;
+
+  const caption = [picked.first, picked.second]
+    .filter((c) => c !== undefined)
+    .map((c) => inSentence(c.label))
+    .join(" · ");
+
+  return { parts: evidenceParts(picked, matchCount), caption };
+}
+
+/**
+ * The sentence itself, from a pick already made — so the caption and the
+ * parts are guaranteed to be about the same two cards, and the filter and
+ * sort behind that choice run once.
+ */
+function evidenceParts(
+  picked: NonNullable<ReturnType<typeof pickEvidenceCards>>,
+  matchCount: number
+): EvidencePart[] {
   const { first, second, withDeltas } = picked;
 
   const parts: EvidencePart[] = [
@@ -145,3 +148,4 @@ export function buildInsightEvidence(
   parts.push({ text: "." });
   return parts;
 }
+

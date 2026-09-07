@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { CardFooter } from "@/components/dashboard/shared/card-footer";
 
 /**
  * The one AI-authored card on Home, as Platform Audit Pa2 draws it (the
@@ -25,9 +26,13 @@ export function FocusCard({
   children: React.ReactNode;
   /**
    * Left and right of the hairline footer — the caption naming what the
-   * body measured, and its sample size. Either may be empty; the hairline
-   * is drawn whenever a footer is given at all, so the empty card keeps the
-   * populated card's shape.
+   * body measured, and its sample size. The right side may be omitted; the
+   * hairline is drawn whenever a footer is given at all, so the empty card
+   * keeps the populated card's shape.
+   *
+   * The footer is a prop here and inline in its sibling cards because this
+   * is the one card whose *body* is swapped (a finding, or the empty
+   * anatomy) — hoisting it to the shell is what lets it survive both.
    */
   footer?: { left: React.ReactNode; right?: React.ReactNode };
 }) {
@@ -55,26 +60,13 @@ export function FocusCard({
         <div className="flex-1" />
         <Link
           href="/dashboard/statistics"
-          className="whitespace-nowrap text-[11px] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-          style={{ color: "var(--blue)" }}
+          className="whitespace-nowrap text-[11px] text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
         >
           Open Statistics
         </Link>
       </div>
       {children}
-      {footer && (
-        <div className="flex items-baseline gap-2.5 border-t border-[var(--border-hairline)] pt-3">
-          <span className="text-micro" style={{ color: "var(--ink-600)" }}>
-            {footer.left}
-          </span>
-          <div className="flex-1" />
-          {footer.right && (
-            <span className="whitespace-nowrap text-[11px] text-[var(--ink-600)]">
-              {footer.right}
-            </span>
-          )}
-        </div>
-      )}
+      {footer && <CardFooter left={footer.left} right={footer.right} />}
     </div>
   );
 }

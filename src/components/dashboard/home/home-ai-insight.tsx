@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { EvidencePart } from "@/lib/ui/insight-evidence";
+import { HOME_CLAIM_CLASS } from "@/lib/ui/home-claim";
 
 // Cached per session so navigating away and back doesn't re-trigger the LLM.
 // The key is suffixed with a signature of the underlying performance data (see
@@ -17,7 +18,7 @@ const MOCK_MARKER = "No LLM provider";
 interface HomeAiInsightProps {
   /**
    * The evidence line, already composed from computed stats. Never LLM text —
-   * see `buildInsightEvidence`. Renders immediately, without waiting on the
+   * see `buildInsightEvidenceWithCaption`. Renders immediately, without waiting on the
    * stream, because it needs nothing the server did not already know.
    */
   evidence: EvidencePart[];
@@ -106,10 +107,7 @@ export default function HomeAiInsight({
           Couldn&apos;t load your insight right now. Try again in a moment.
         </p>
       ) : claim ? (
-        <span
-          className="text-[14px] font-light leading-[1.4] text-[var(--ink-900)]"
-          style={{ maxWidth: "30ch", textWrap: "pretty" }}
-        >
+        <span className={HOME_CLAIM_CLASS} style={{ maxWidth: "30ch", textWrap: "pretty" }}>
           {claim}
         </span>
       ) : (

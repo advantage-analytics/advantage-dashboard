@@ -180,7 +180,6 @@ export default function ServePlacementHome({ userId }: { userId: string }) {
     <ServePlacementQuietStrip
       zoneStats={zoneStats}
       matchCount={matchCount}
-      serveCount={dots.length}
       // Matches exist but none has a mapped serve yet: the first report is
       // still in the pipeline, or the imports carried no shot coordinates.
       awaitingReport={matchCount > 0}

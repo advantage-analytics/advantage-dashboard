@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { advButton } from "@/lib/ui/adv-button";
+import { CardFooter } from "@/components/dashboard/shared/card-footer";
 
 /**
  * The recent-matches card on day zero: the shape of a result before there is
@@ -80,15 +81,15 @@ export function RecentMatchesEmpty({
 
       {/* The populated card's footer, in its geometry: what the list is a
           slice of. "0 matches" is a true figure, not a stand-in. */}
-      <div className="mt-2.5 flex items-baseline gap-2.5 border-t border-[var(--border-hairline)] pt-3">
-        <span className="text-micro" style={{ color: "var(--ink-600)" }}>
-          Your latest matches appear here
-        </span>
-        <div className="flex-1" />
-        <span className="whitespace-nowrap text-[11px] text-[var(--ink-600)]">
-          <span className="tabular">0</span> matches
-        </span>
-      </div>
+      <CardFooter
+        className="mt-2.5"
+        left="Your latest matches appear here"
+        right={
+          <>
+            <span className="tabular">0</span> matches
+          </>
+        }
+      />
 
       {/*
        * One action, not two. The "Import a session" link that sat under this

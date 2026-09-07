@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import RecentMatches from "@/components/dashboard/home/recent-matches";
+import { CardFooter } from "@/components/dashboard/shared/card-footer";
 import { RecentMatchesEmpty } from "@/components/dashboard/home/recent-matches-empty";
 import { advButton } from "@/lib/ui/adv-button";
 import { createClient } from "@/lib/supabase/client";
@@ -533,11 +534,6 @@ export default function RecentActivity({
     }
   }, [toast, router]);
 
-  // "Latest N shown" — the rows actually on the card, which is what the
-  // grouping above leaves after it drops unscored and non-viewer rows and
-  // keeps the latest three events.
-  const shownCount = events.reduce((n, e) => n + e.matches.length, 0);
-
   return (
     <>
     <div
@@ -651,20 +647,30 @@ export default function RecentActivity({
         {!loading && !error && events.length > 0 && (
           <>
             <EventsList events={events} seenEventIdsRef={seenEventIdsRef} />
-            {/* Pa2's card footer: what the list is a slice of. The count on
-                the right is the same number the title row states, so the two
-                can never disagree. */}
-            <div className="mt-2.5 flex items-baseline gap-2.5 border-t border-[var(--border-hairline)] pt-3">
-              <span className="text-micro" style={{ color: "var(--ink-600)" }}>
-                Latest <span className="tabular">{shownCount}</span> shown
-              </span>
-              <div className="flex-1" />
-              <span className="whitespace-nowrap text-[11px] text-[var(--ink-600)]">
-                <span className="tabular">{matchCount}</span>{" "}
-                {matchCount === 1 ? "match" : "matches"} ·{" "}
-                <span className="tabular">{wonCount}</span> won
-              </span>
-            </div>
+            {/* Pa2's card footer: what the list is a slice of. The left count
+                is the rows actually drawn — what the grouping leaves after it
+                drops unscored and non-viewer rows and keeps the latest three
+                events. The right one is the same number the title row states,
+                so the two can never disagree. */}
+            <CardFooter
+              className="mt-2.5"
+              left={
+                <>
+                  Latest{" "}
+                  <span className="tabular">
+                    {events.reduce((n, e) => n + e.matches.length, 0)}
+                  </span>{" "}
+                  shown
+                </>
+              }
+              right={
+                <>
+                  <span className="tabular">{matchCount}</span>{" "}
+                  {matchCount === 1 ? "match" : "matches"} ·{" "}
+                  <span className="tabular">{wonCount}</span> won
+                </>
+              }
+            />
           </>
         )}
       </div>

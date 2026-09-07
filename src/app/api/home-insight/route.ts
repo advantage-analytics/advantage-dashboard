@@ -104,7 +104,7 @@ export async function POST() {
   // 204 rather than prose: this used to answer with a line of marketing copy
   // ("Upload a match to unlock AI-powered insights"), which the card then
   // rendered in the claim slot at title weight, as though the engine had found
-  // something. The card's own render gate (see `buildInsightEvidence`) decides
+  // something. The card's own render gate (see `buildInsightEvidenceWithCaption`) decides
   // whether there are numbers worth showing; this only refuses to invent a
   // judgement about a player with no matches at all.
   if (perf.matchCount === 0) {

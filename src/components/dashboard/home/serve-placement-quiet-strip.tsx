@@ -1,7 +1,12 @@
 import Link from "next/link";
-import { cn } from "@/lib/utils";
 import type { ZoneKey, ZoneStats } from "@/components/dashboard/matches/serve-placement/serve-placement-widget";
-import { serveCaptionInput, servePlacementCaption } from "@/lib/ui/serve-placement-caption";
+import { CardFooter } from "@/components/dashboard/shared/card-footer";
+import { HOME_CLAIM_CLASS } from "@/lib/ui/home-claim";
+import {
+  serveCaptionInput,
+  servePlacementCaption,
+  type CourtRead,
+} from "@/lib/ui/serve-placement-caption";
 
 /**
  * Round 3/4's "quiet strip" — T/Body/Wide distribution bars per court, in
@@ -14,9 +19,9 @@ import { serveCaptionInput, servePlacementCaption } from "@/lib/ui/serve-placeme
  * behind "Placement view".
  */
 
-const COURTS: { label: string; keys: [ZoneKey, ZoneKey, ZoneKey] }[] = [
-  { label: "Deuce court", keys: ["deuce-t", "deuce-body", "deuce-wide"] },
-  { label: "Ad court", keys: ["ad-t", "ad-body", "ad-wide"] },
+const COURTS: { label: string; key: "deuce" | "ad" }[] = [
+  { label: "Deuce court", key: "deuce" },
+  { label: "Ad court", key: "ad" },
 ];
 
 const SEGMENT_COLOR = [
@@ -26,15 +31,14 @@ const SEGMENT_COLOR = [
 ] as const;
 const SEGMENT_LABEL = ["T", "Body", "Wide"] as const;
 
-function CourtBar({
-  label,
-  counts,
-}: {
-  label: string;
-  counts: [number, number, number];
-}) {
-  const total = counts[0] + counts[1] + counts[2];
-  const pcts = counts.map((c) => (total > 0 ? Math.round((c / total) * 100) : 0));
+function CourtBar({ label, read }: { label: string; read: CourtRead }) {
+  const { total, pcts } = read;
+  // The outer corners round on the segments that are actually drawn — a
+  // zero-width segment has no corners, so a court with no T serves must
+  // still start rounded. `findIndex`/`findLastIndex` say that directly;
+  // rounding the container and clipping would square the ends instead.
+  const firstDrawn = pcts.findIndex((p) => p > 0);
+  const lastDrawn = pcts.findLastIndex((p) => p > 0);
 
   return (
     <div className="flex flex-col gap-[5px]">
@@ -45,27 +49,19 @@ function CourtBar({
         <div className="flex-1" />
         <span className="text-micro tabular">{total} serves</span>
       </div>
-      {/* The radius sits on the segments, not the container: the first
-          drawn segment rounds its outer left corners and the last its outer
-          right, as the frame draws it. "Drawn", not "first": a zero-width
-          segment has no corners to round, and a court with no T serves would
-          otherwise start square. */}
       <div className="flex h-3.5 gap-0.5">
-        {(() => {
-          const drawn = pcts.map((pct, i) => (pct > 0 ? i : -1)).filter((i) => i >= 0);
-          const first = drawn[0];
-          const last = drawn[drawn.length - 1];
-          return pcts.map((pct, i) => (
-            <div
-              key={SEGMENT_LABEL[i]}
-              className={cn(
-                i === first && "rounded-l-[var(--radius-cell)]",
-                i === last && "rounded-r-[var(--radius-cell)]"
-              )}
-              style={{ width: `${pct}%`, background: SEGMENT_COLOR[i] }}
-            />
-          ));
-        })()}
+        {pcts.map((pct, i) => (
+          <div
+            key={SEGMENT_LABEL[i]}
+            className={[
+              i === firstDrawn ? "rounded-l-[var(--radius-cell)]" : "",
+              i === lastDrawn ? "rounded-r-[var(--radius-cell)]" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            style={{ width: `${pct}%`, background: SEGMENT_COLOR[i] }}
+          />
+        ))}
       </div>
       <div className="flex items-baseline gap-3">
         {SEGMENT_LABEL.map((seg, i) => (
@@ -129,20 +125,15 @@ function dominantZoneClaim(zoneStats: Record<ZoneKey, ZoneStats>): string {
   return "First serves stay to the body.";
 }
 
-const CLAIM_CLASS = "text-[14px] font-light leading-[1.4] text-[var(--ink-900)]";
-
 export function ServePlacementQuietStrip({
   zoneStats,
   matchCount,
-  serveCount,
   awaitingReport = false,
   statisticsHref = "/dashboard/statistics",
 }: {
   zoneStats: Record<ZoneKey, ZoneStats> | null;
-  /** How many matches the bars were read from — "Last 4 · 89 in". */
+  /** How many matches the bars were read from — "Last 4 · 89 serves". */
   matchCount: number;
-  /** How many first serves landed in across those matches. */
-  serveCount: number;
   /**
    * A match exists but no serve has been mapped yet — the first report is
    * still in the pipeline. Turns the empty line from an instruction into a
@@ -152,7 +143,15 @@ export function ServePlacementQuietStrip({
   awaitingReport?: boolean;
   statisticsHref?: string;
 }) {
-  const caption = zoneStats ? servePlacementCaption(serveCaptionInput(zoneStats)) : null;
+  // One read of the counts, shared by the bars and the sentence beneath them,
+  // so the two can never round the same number two ways.
+  const courts = zoneStats ? serveCaptionInput(zoneStats) : null;
+  const caption = courts ? servePlacementCaption(courts) : null;
+  // The bars' own total. **"serves", never "in"** — `pointToServeDot` keeps a
+  // fault whose landing sits within a ~20cm line-call tolerance, on purpose,
+  // so some of these were called out. The frame's "89 in" is the one label on
+  // this card that its own data cannot support.
+  const serveCount = courts ? courts.deuce.total + courts.ad.total : 0;
 
   return (
     <div className="surface-card flex flex-col gap-3" style={{ padding: "var(--pad-card)" }}>
@@ -161,33 +160,24 @@ export function ServePlacementQuietStrip({
         <div className="flex-1" />
         {/* The link names the drawn court a click away. Off over the empty
             bars, where a placement view holds nothing to view. */}
-        {zoneStats && (
+        {courts && (
           <Link
             href={statisticsHref}
-            className="whitespace-nowrap text-[11px] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-            style={{ color: "var(--blue)" }}
+            className="whitespace-nowrap text-[11px] text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
           >
             Placement view
           </Link>
         )}
       </div>
 
-      {zoneStats ? (
+      {courts && zoneStats ? (
         <>
-          <span className={CLAIM_CLASS} style={{ maxWidth: "30ch" }}>
+          <span className={HOME_CLAIM_CLASS} style={{ maxWidth: "30ch" }}>
             {dominantZoneClaim(zoneStats)}
           </span>
           <div className="flex flex-col gap-4">
             {COURTS.map((court) => (
-              <CourtBar
-                key={court.label}
-                label={court.label}
-                counts={[
-                  zoneStats[court.keys[0]].count,
-                  zoneStats[court.keys[1]].count,
-                  zoneStats[court.keys[2]].count,
-                ]}
-              />
+              <CourtBar key={court.label} label={court.label} read={courts[court.key]} />
             ))}
           </div>
           <div className="flex items-center gap-3.5 border-t border-[var(--border-hairline)] pt-3">
@@ -195,7 +185,7 @@ export function ServePlacementQuietStrip({
             <div className="flex-1" />
             <span className="whitespace-nowrap text-[11px] text-[var(--ink-600)]">
               Last <span className="tabular">{matchCount}</span> ·{" "}
-              <span className="tabular">{serveCount}</span> in
+              <span className="tabular">{serveCount}</span> serves
             </span>
           </div>
           {caption && (
@@ -222,7 +212,7 @@ export function ServePlacementQuietStrip({
               <EmptyCourtBar key={court.label} label={court.label} />
             ))}
           </div>
-          <div className="flex items-center gap-3.5 border-t border-[var(--border-hairline)] pt-3">
+          <div className="flex items-center border-t border-[var(--border-hairline)] pt-3">
             <Legend muted />
           </div>
           <span className="text-micro" style={{ textWrap: "pretty" }}>

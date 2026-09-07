@@ -32,10 +32,10 @@ test.describe('shareInWords', () => {
 test.describe('readCourt', () => {
   test('finds the leading zone and the runner-up, ties in bar order', () => {
     expect(readCourt([31, 11, 6])).toEqual({
-      total: 48, top: 'T', topPct: 65, second: 'Body', secondPct: 23, low: 'Wide', lowPct: 13,
+      total: 48, pcts: [65, 23, 13], top: 'T', topPct: 65, second: 'Body', secondPct: 23,
     });
     expect(readCourt([5, 5, 5])).toMatchObject({ top: 'T', second: 'Body' });
-    expect(readCourt([0, 0, 0])).toMatchObject({ total: 0, topPct: 0 });
+    expect(readCourt([0, 0, 0])).toMatchObject({ total: 0, pcts: [0, 0, 0], topPct: 0 });
   });
 });
 
@@ -57,14 +57,28 @@ test.describe('servePlacementCaption', () => {
     );
   });
 
-  test("one court is an address, the other spreads — the frame's sentence", () => {
-    // Deuce 64 / 22 / 14, ad 41 / 33 / 26 — Pa2's own bars.
+  test('one court is an address, the other spreads — cites the runner-up', () => {
+    // Deuce 64 / 22 / 14, ad 41 / 33 / 26 — Pa2's own bars. The spreading
+    // court is evidenced by its SECOND zone, never its tail.
     expect(servePlacementCaption({ deuce: readCourt([31, 11, 6]), ad: readCourt([17, 13, 11]) })).toBe(
-      'Deuce is one address; the ad court spreads — a quarter of those first serves go wide.'
+      'Deuce is one address; the ad court spreads — a third of those first serves go into the body.'
     );
-    expect(servePlacementCaption({ deuce: readCourt([17, 10, 13]), ad: readCourt([6, 8, 26]) })).toBe(
-      'Ad is one address; the deuce court spreads — a quarter of those first serves go into the body.'
+    expect(servePlacementCaption({ deuce: readCourt([17, 13, 11]), ad: readCourt([6, 8, 26]) })).toBe(
+      'Ad is one address; the deuce court spreads — a third of those first serves go into the body.'
     );
+  });
+
+  test('the spreading court is never evidenced by a negligible tail', () => {
+    // Ad 55 / 40 / 5. Citing the tail read "spreads — 5% ... go wide", a
+    // figure that argues against the claim it was offered for.
+    const caption = servePlacementCaption({
+      deuce: readCourt([14, 4, 2]),
+      ad: readCourt([11, 8, 1]),
+    });
+    expect(caption).toBe(
+      'Deuce is one address; the ad court spreads — a third of those first serves go into the body.'
+    );
+    expect(caption).not.toContain('5%');
   });
 
   test('neither is an address but one leans', () => {
@@ -77,8 +91,23 @@ test.describe('servePlacementCaption', () => {
     expect(servePlacementCaption({ deuce: readCourt([16, 12, 12]), ad: readCourt([12, 11, 17]) })).toBe(
       'Neither court has a fixed address — the T leads deuce, wide leads ad, both under 45%.'
     );
+    // Ad tops at exactly 50%, so the ceiling must clear it rather than
+    // land on it.
     expect(servePlacementCaption({ deuce: readCourt([3, 4, 3]), ad: readCourt([1, 2, 1]) })).toBe(
-      'Neither court has a fixed address — the body leads both, under 50%.'
+      'Neither court has a fixed address — the body leads both, under 55%.'
     );
+  });
+
+  test('the ceiling clears the larger share, never equals it', () => {
+    // Deuce 45 / 30 / 25, ad 40 / 35 / 25. `Math.ceil(45/5)*5` is 45, which
+    // claimed a court sitting at exactly 45% was "under 45%".
+    const caption = servePlacementCaption({
+      deuce: readCourt([9, 6, 5]),
+      ad: readCourt([8, 7, 5]),
+    });
+    expect(caption).toBe(
+      'Neither court has a fixed address — the T leads both, under 50%.'
+    );
+    expect(caption).not.toContain('under 45%');
   });
 });

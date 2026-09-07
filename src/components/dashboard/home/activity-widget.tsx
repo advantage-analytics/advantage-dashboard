@@ -37,8 +37,7 @@ export function ActivityWidget({ activity }: { activity: PersonalActivity }) {
             its own. */}
         <Link
           href="/dashboard/matches"
-          className="whitespace-nowrap text-[11px] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-          style={{ color: "var(--blue)" }}
+          className="whitespace-nowrap text-[11px] text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
         >
           Session log
         </Link>

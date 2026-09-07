@@ -24,19 +24,25 @@ export type Zone = "T" | "Body" | "Wide";
 
 export interface CourtRead {
   total: number;
+  /** Each zone's share of this court, in bar order: T · Body · Wide. */
+  pcts: [number, number, number];
   /** The zone holding the most serves, and its share. */
   top: Zone;
   topPct: number;
-  /** The runner-up, and its share. */
+  /**
+   * The runner-up, and its share — the evidence that a court "spreads".
+   *
+   * The tail (the least-used zone) was tried here first, because Pa2's
+   * sample sentence happens to quantify it: its ad court runs 41/33/26 and
+   * the frame says "a quarter of those first serves go wide". But the tail
+   * can be negligible — a court at 55/40/5 spreads across two zones and
+   * would have read "spreads — 5% of those first serves go wide", evidence
+   * that argues against the claim it is offered for. The runner-up cannot:
+   * with the top zone under 60% the remainder splits at least 20/20, so the
+   * second share is always material enough to name.
+   */
   second: Zone;
   secondPct: number;
-  /**
-   * The least-used zone, and its share — how far a court "spreads". Pa2's
-   * sentence quantifies this one ("a quarter of those first serves go
-   * wide"): on a court with no address, the tail is the finding.
-   */
-  low: Zone;
-  lowPct: number;
 }
 
 export interface ServeCaptionInput {
@@ -54,12 +60,14 @@ export function readCourt(counts: [t: number, body: number, wide: number]): Cour
   const order = [0, 1, 2].sort((a, b) => pct[b] - pct[a] || a - b);
   return {
     total,
+    // In bar order (T · Body · Wide), so the sentence and the bar above it
+    // round one number once. Two roundings of one count is how a caption
+    // comes to disagree with the bar it claims to be reading.
+    pcts: [pct[0], pct[1], pct[2]],
     top: ZONES[order[0]],
     topPct: pct[order[0]],
     second: ZONES[order[1]],
     secondPct: pct[order[1]],
-    low: ZONES[order[2]],
-    lowPct: pct[order[2]],
   };
 }
 
@@ -129,7 +137,7 @@ export function servePlacementCaption({ deuce, ad }: ServeCaptionInput): string 
     const [fixedName, spreadName, spread] = deuceFixed
       ? (["Deuce", "ad", ad] as const)
       : (["Ad", "deuce", deuce] as const);
-    return `${fixedName} is one address; the ${spreadName} court spreads — ${shareInWords(spread.lowPct)} of those first serves go ${zoneWord(spread.low)}.`;
+    return `${fixedName} is one address; the ${spreadName} court spreads — ${shareInWords(spread.secondPct)} of those first serves go ${zoneWord(spread.second)}.`;
   }
 
   const gap = deuce.topPct - ad.topPct;
@@ -139,7 +147,10 @@ export function servePlacementCaption({ deuce, ad }: ServeCaptionInput): string 
     return `${higherName} leans ${zoneWord(higher.top)} at ${higher.topPct}%; the ${lowerName} court is closer to even.`;
   }
 
-  const ceiling = Math.ceil(Math.max(deuce.topPct, ad.topPct) / 5) * 5;
+  // The next multiple of five ABOVE the larger share — never the share
+  // itself. `Math.ceil(45/5)*5` is 45, which would have the sentence say
+  // "both under 45%" about a court sitting at exactly 45%.
+  const ceiling = Math.floor(Math.max(deuce.topPct, ad.topPct) / 5) * 5 + 5;
   if (deuce.top === ad.top) {
     return `Neither court has a fixed address — ${zoneNoun(deuce.top)} leads both, under ${ceiling}%.`;
   }
