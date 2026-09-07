@@ -469,11 +469,54 @@ export function GroupHead({
   label,
   note,
   right,
+  name,
 }: {
   label: string;
   note?: string;
   right?: React.ReactNode;
+  /**
+   * The label is a PERSON, not a category — a tournament entry's player.
+   *
+   * The eyebrow register is 10px, uppercase, 2.5px tracked: right for
+   * "SINGLES", and wrong for "Dana Brooks", which it would print as
+   * "D A N A  B R O O K S". So a named group heads at 13px/500 in `--ink-900`
+   * with its note stacked underneath as a subline in 12px `--ink-600`, which
+   * is what a run's "Seed 3 · 2–1 · out in the quarter-final" is.
+   *
+   * A prop on the shared heading rather than a second heading component: a
+   * tournament that drew its own would be the drift `event-page.tsx` exists to
+   * prevent, one 2px gap at a time.
+   */
+  name?: boolean;
 }) {
+  if (name) {
+    return (
+      <div className="flex items-start gap-2.5 pb-1.5 pt-4">
+        <div className="min-w-0">
+          <div
+            className="truncate text-[13px] font-medium"
+            style={{ color: "var(--ink-900)" }}
+          >
+            {label}
+          </div>
+          {note ? (
+            <div className="mt-0.5 text-[12px]" style={{ color: "var(--ink-600)" }}>
+              {note}
+            </div>
+          ) : null}
+        </div>
+        {right ? (
+          <span
+            className="ml-auto text-[11px]"
+            style={{ color: "var(--ink-500)" }}
+          >
+            {right}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-baseline gap-2.5 pb-1.5 pt-4">
       <span className="eyebrow">{label}</span>

@@ -157,6 +157,39 @@ export function roundRank(round: string | null): number {
 }
 
 /**
+ * A round code as a sentence says it — "QF" → "the quarter-final".
+ *
+ * The article is PART of the label, because every caller drops it straight into
+ * a clause ("out in the quarter-final", "through the round of 16") and a
+ * qualifying or consolation round takes no article at all. Splitting the two
+ * apart would put the decision in each caller and give us "out in the
+ * qualifying round 2" the first time one of them guessed.
+ *
+ * Covers `ROUND_ORDER` and nothing else: an unrecognised code comes back
+ * verbatim rather than being dressed up, so a run built on a round we do not
+ * know still prints an honest string.
+ */
+const ROUND_LONG: Record<string, string> = {
+  Q1: "qualifying round 1",
+  Q2: "qualifying round 2",
+  Q3: "qualifying round 3",
+  R128: "the round of 128",
+  R64: "the round of 64",
+  R32: "the round of 32",
+  R16: "the round of 16",
+  QF: "the quarter-final",
+  SF: "the semi-final",
+  F: "the final",
+  C1: "consolation round 1",
+  C2: "consolation round 2",
+  C3: "consolation round 3",
+};
+
+export function roundLongLabel(code: string): string {
+  return ROUND_LONG[code.toUpperCase()] ?? code;
+}
+
+/**
  * Which draw a round belongs to — read from the ROUND, not from the entry.
  *
  * `Q*` is qualifying, `C*` is consolation, anything else is the main draw. The

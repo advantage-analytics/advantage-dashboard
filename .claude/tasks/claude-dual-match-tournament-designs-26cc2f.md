@@ -118,7 +118,7 @@ need it.
 - **notes:** Keep `ScoreEntry`'s single tiebreak cell as-is; its storage already passes two arrays. Non-goals: no change to `recordResult`.
 
 ## T8 · Tournament event page on the new frame
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T5, T6, T7, T9
 - **files:** src/components/dashboard/schedule/tournament-detail.tsx, src/lib/schedule/tournament-run.ts (new), src/lib/schedule/format.ts, src/app/dashboard/team/schedule/[eventId]/page.tsx, tests/tournament-run.spec.ts (new)

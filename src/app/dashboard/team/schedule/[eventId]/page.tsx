@@ -12,6 +12,7 @@ import {
   opponentHistoryFor,
   opponentMeetings,
 } from "@/lib/schedule/opponent-history";
+import type { EventDetail } from "@/lib/schedule/types";
 import { DualDetail } from "@/components/dashboard/schedule/dual-detail";
 import { TournamentDetail } from "@/components/dashboard/schedule/tournament-detail";
 
@@ -52,21 +53,13 @@ export default async function EventPage({
 
   const canEdit = isProgramStaff(active);
 
+  const totals = await getEventTeamTotals(readyMatchIds(detail));
+
   if (detail.event.kind !== "dual") {
-    return <TournamentDetail detail={detail} canEdit={canEdit} />;
+    return (
+      <TournamentDetail detail={detail} canEdit={canEdit} totals={totals} />
+    );
   }
-
-  // `getEventTeamTotals` sums raw stat rows and deliberately does not re-check
-  // status: a match that failed part-way can carry partial rows, and a total
-  // built from half a match is a wrong number that looks entirely plausible.
-  // Restricting the ids to `isAnalysisReady` here is that check.
-  const readyMatchIds = detail.entries.flatMap((entry) =>
-    entry.matches
-      .filter((match) => isAnalysisReady(match.status))
-      .map((match) => match.id)
-  );
-
-  const totals = await getEventTeamTotals(readyMatchIds);
 
   return (
     <DualDetail
@@ -81,5 +74,25 @@ export default async function EventPage({
         excludeEventId: eventId,
       })}
     />
+  );
+}
+
+/**
+ * The ids `getEventTeamTotals` may sum — the event's matches that finished
+ * analysis, and no others.
+ *
+ * `getEventTeamTotals` sums raw stat rows and deliberately does not re-check
+ * status: a match that failed part-way can carry partial rows, and a total
+ * built from half a match is a wrong number that looks entirely plausible.
+ * This filter IS that check, so it is stated once for both kinds rather than
+ * copied into each branch — a totals card whose denominator quietly differs
+ * between a dual and a tournament is exactly the drift the shared frame exists
+ * to prevent.
+ */
+function readyMatchIds(detail: EventDetail): string[] {
+  return detail.entries.flatMap((entry) =>
+    entry.matches
+      .filter((match) => isAnalysisReady(match.status))
+      .map((match) => match.id)
   );
 }
