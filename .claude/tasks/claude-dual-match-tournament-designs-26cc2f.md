@@ -47,7 +47,7 @@ need it.
 - **notes:** Non-goals: no UI, no change to `opponentDualHistory`'s signature. Same file shape as `tests/weekend-dual-reads.spec.ts` (hand-built `ProgramEvent`/`EventEntry`).
 
 ## T3 · `getEventTeamTotals` loader with a pure summing core
-- **status:** doing
+- **status:** done
 - **model:** opus
 - **files:** src/lib/data/event-team-totals-server.ts (new), tests/event-team-totals.spec.ts (new)
 - **done when:**
