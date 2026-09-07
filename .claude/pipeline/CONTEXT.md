@@ -27,10 +27,12 @@ Each run lives in `work/<slug>/`, scaffolded by `/feature-new`, advanced by
    no scripts deciding what runs next. The folder numbering is the
    orchestration.
 
-A landed pipeline leaves no residue: stage 07 merges the branch and then
-deletes its queue pair and workspace on the integration branch — git history
-is the archive. Only a workspace kept deliberately as the current worked
-example survives, and only one such example at a time.
+A landed pipeline leaves no residue: stage 07 deletes its queue pair and
+workspace on the feature branch, before pushing — so the PR it opens against
+the integration branch carries the deletion, and merging that PR is what
+leaves the branch clean. Git history is the archive. Only a workspace kept
+deliberately as the current worked example survives, and only one such example
+at a time.
 
 Per-feature contract edits are legitimate: the copies in `work/<slug>/` may be
 tuned for that feature. The factory templates here stay generic.
