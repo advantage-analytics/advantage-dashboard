@@ -3,26 +3,43 @@
 import { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ChevronLeft } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { SettingsNavigation } from "@/components/dashboard/settings/settings-navigation";
 import { settingsSection, SETTINGS_SECTIONS } from "@/lib/dashboard/nav";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { teamLabel } from "@/lib/workspace/types";
+import { capitalize } from "@/lib/utils";
 
 const EASE_CURVE: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
+
+/** `/dashboard/settings/teams/<id>` → the id; null anywhere else. */
+const TEAM_DETAIL = /^\/dashboard\/settings\/teams\/([^/]+)/;
 
 /**
  * Every settings page wears the same header: eyebrow, 30px light title,
  * subtitle. Which words go in it belong to `SETTINGS_SECTIONS` — this used to
  * hold a second `Record` keyed by the same ids, so a seventh section added to
  * the rail would have rendered under the Profile heading, silently.
+ *
+ * Teams is the one section with pages beneath it. On a program's own page the
+ * title is the program and the eyebrow is the way back, resolved from the
+ * workspaces the client already holds — so no round trip, and no chance of
+ * naming the *active* program when the person is looking at another.
  */
 export default function SettingsLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { active } = useWorkspace();
+  const { available } = useWorkspace();
 
   const section = settingsSection(pathname ?? "") ?? SETTINGS_SECTIONS[0];
-  const squad = teamLabel(active.team);
+
+  const detailId = pathname?.match(TEAM_DETAIL)?.[1] ?? null;
+  const program = detailId
+    ? available.find(
+        (workspace) => workspace.kind === "team" && workspace.id === detailId
+      )
+    : undefined;
+  const squad = program ? teamLabel(program.team) : null;
 
   return (
     <div className="min-h-screen w-full flex-1 bg-[var(--surface-card)]">
@@ -41,28 +58,43 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
           64px and the page reads cramped. */}
       <div className="mx-auto flex w-full max-w-[1032px] flex-col gap-10 px-6 py-8 sm:px-8 sm:py-10">
         <header className="flex flex-col gap-3">
-          <p className="eyebrow">Settings</p>
-          <h1 className="text-display">{section.title ?? section.label}</h1>
-          <p className="text-body-sm max-w-[520px]">
-            {/* The two subtitles that cannot be a static string: Team names the
-                program you are looking at, Plan points at where hours live. */}
-            {section.id === "team" && active.kind === "team"
-              ? `${active.name}${squad ? ` ${squad.toLowerCase()} tennis` : ""} — ${section.subtitle.toLowerCase()}`
-              : section.subtitle}
-            {section.id === "plan" && (
-              <>
-                {" "}
-                Analysis hours are metered separately on{" "}
-                <Link
-                  href="/dashboard/settings/usage"
-                  className="text-[var(--blue)] hover:text-[var(--blue-hover)]"
-                >
-                  Usage
-                </Link>
-                .
-              </>
-            )}
-          </p>
+          {program ? (
+            <>
+              <Link
+                href="/dashboard/settings/teams"
+                className="eyebrow inline-flex items-center gap-1.5 self-start transition-colors hover:text-[var(--ink-700)]"
+              >
+                <ChevronLeft className="size-2.5" strokeWidth={2.5} aria-hidden="true" />
+                Settings · Teams
+              </Link>
+              <h1 className="text-display">{program.name}</h1>
+              <p className="text-body-sm max-w-[520px]">
+                {squad ? `${squad} tennis · ` : ""}
+                {capitalize(program.role)}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="eyebrow">Settings</p>
+              <h1 className="text-display">{section.title ?? section.label}</h1>
+              <p className="text-body-sm max-w-[520px]">
+                {section.subtitle}
+                {section.id === "plan" && (
+                  <>
+                    {" "}
+                    Analysis hours are metered separately on{" "}
+                    <Link
+                      href="/dashboard/settings/usage"
+                      className="text-[var(--blue)] hover:text-[var(--blue-hover)]"
+                    >
+                      Usage
+                    </Link>
+                    .
+                  </>
+                )}
+              </p>
+            </>
+          )}
         </header>
 
         <div className="flex flex-col gap-12 md:flex-row">
@@ -70,7 +102,9 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
           <div className="min-w-0 flex-1">
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
-                key={section.id}
+                // Teams has pages beneath it; keying on the path lets the
+                // drill-down fade like every other section change does.
+                key={section.id === "teams" ? (pathname ?? section.id) : section.id}
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}

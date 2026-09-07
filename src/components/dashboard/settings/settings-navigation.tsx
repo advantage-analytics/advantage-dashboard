@@ -5,7 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { SETTINGS_SECTIONS, settingsSection } from "@/lib/dashboard/nav";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
-import { isProgramStaff } from "@/lib/workspace/types";
 import { useUnsavedChanges } from "@/components/dashboard/settings/unsaved-changes-context";
 
 /**
@@ -17,18 +16,20 @@ import { useUnsavedChanges } from "@/components/dashboard/settings/unsaved-chang
  * list went past three. Round 4 makes it a plain list: the page's own header
  * says where you are, so the rail only has to say where else you can go.
  *
- * Team appears only for staff of a program. That is presentation, not
- * authorization — `/dashboard/settings/team` re-checks on the server.
+ * Teams appears only for someone who belongs to at least one program. That is
+ * presentation, not authorization — each `/dashboard/settings/teams/[id]`
+ * re-checks membership on the server, and decides per role what to show.
  */
 export function SettingsNavigation(): React.ReactElement {
   const pathname = usePathname();
   const router = useRouter();
-  const { active } = useWorkspace();
+  const { available } = useWorkspace();
   const { confirmNavigation } = useUnsavedChanges();
 
   const activeId = settingsSection(pathname ?? "")?.id ?? "profile";
+  const hasTeam = available.some((workspace) => workspace.kind === "team");
   const sections = SETTINGS_SECTIONS.filter(
-    (section) => !section.teamStaffOnly || isProgramStaff(active)
+    (section) => !section.teamMemberOnly || hasTeam
   );
 
   const handleClick = (

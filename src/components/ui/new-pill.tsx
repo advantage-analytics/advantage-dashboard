@@ -13,19 +13,35 @@ import { cn } from "@/lib/utils";
  * the token into the dark scope; `--blue-tint-08` and `-12` bracket it but the
  * frame draws 10%.
  */
+const BLUE_PILL_CLASS =
+  "inline-flex h-[18px] items-center whitespace-nowrap rounded-full px-[7px] text-[10px] font-medium";
+
+const BLUE_PILL_STYLE = {
+  background: "color-mix(in oklch, var(--blue) 10%, transparent)",
+  color: "var(--blue)",
+} as const;
+
 export function NewPill({ className }: { className?: string }) {
   return (
-    <span
-      className={cn(
-        "inline-flex h-[18px] items-center whitespace-nowrap rounded-full px-[7px] text-[10px] font-medium",
-        className
-      )}
-      style={{
-        background: "color-mix(in oklch, var(--blue) 10%, transparent)",
-        color: "var(--blue)",
-      }}
-    >
+    <span className={cn(BLUE_PILL_CLASS, className)} style={BLUE_PILL_STYLE}>
       New
+    </span>
+  );
+}
+
+/**
+ * The viewer's own row, marked — "You" beside the name on a members list.
+ *
+ * The second, and last, blue-tinted pill (Settings Pages, design owner's call
+ * 2026-09-06). It lives in this file rather than its own so the cap is
+ * legible: the two share one class and one style, and a third would have to
+ * be added here, in view of the rule that says not to. Identity, not standing
+ * — it sits beside the name, and the role stays in the grey pill column.
+ */
+export function YouPill({ className }: { className?: string }) {
+  return (
+    <span className={cn(BLUE_PILL_CLASS, className)} style={BLUE_PILL_STYLE}>
+      You
     </span>
   );
 }
