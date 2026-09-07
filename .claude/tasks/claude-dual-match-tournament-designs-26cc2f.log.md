@@ -26,3 +26,8 @@ is the runner's. Newest entries at the bottom.
 **gate:** lint pass · tsc pass · npm test pass (500) · task-completion-reviewer `VERDICT: pass` · pipeline-guardrails-reviewer ran (dashboard surface) — no findings, no wizard file touched · rls-boundary-reviewer skipped (presentational, no query)
 **changed:** `format.ts` gains `formatLabel()` (null `adScoring` drops the scoring half). New `src/components/dashboard/schedule/event-page.tsx`: `EventPageFrame`, `EventTitle`, `EventFacts` (+ private `CourtGlyph`), `FormatCapsule`, `DetailLine` (`DetailCount` action/live/done), `TableCard`, `GroupHead`, `TABLE_ROW_CLS`. New `tests/event-format-label.spec.ts`, 2 cases.
 **follow-ups:** `EventTitle` and `TABLE_ROW_CLS` are extra exports for T7/T8; `schedule-table.tsx` should import `TABLE_ROW_CLS` in a later sweep instead of carrying its own copy.
+
+## T6 · Rail widgets: Team totals and Head-to-head — done
+**gate:** lint pass · tsc pass · npm test pass (500) · task-completion-reviewer `VERDICT: pass` · pipeline-guardrails-reviewer ran (dashboard surface) — no findings, side labels read straight off the props · rls-boundary-reviewer skipped (no query)
+**changed:** new `team-totals-widget.tsx` (`TeamTotalsWidget`, private `SplitBar`: blue ours / `#64748B` theirs, empty track on null) and `head-to-head-widget.tsx` (`HeadToHeadWidget`; record line, 36px meeting rows, footer link only with a program id; school name appears only in the link copy).
+**follow-ups:** T7 must pass analysis-ready match ids to `getEventTeamTotals` and the coverage counts alongside.

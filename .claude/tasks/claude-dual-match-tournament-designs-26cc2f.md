@@ -82,7 +82,7 @@ need it.
 - **notes:** Presentational only; every prop is data, no loader import. Non-goals: no page wiring.
 
 ## T6 · Rail widgets: Team totals and Head-to-head
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T2, T3
 - **files:** src/components/dashboard/schedule/team-totals-widget.tsx (new), src/components/dashboard/schedule/head-to-head-widget.tsx (new)
