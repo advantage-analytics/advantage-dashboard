@@ -121,13 +121,34 @@ const UNLISTED: readonly NavLink[] = [
   { name: "Upload video", href: "/dashboard/team/upload", icon: Calendar },
 ];
 
-const ALL_LINKS: readonly NavLink[] = [
-  ...UNLISTED,
+/**
+ * Every destination the rail can send you to.
+ *
+ * `team/upload` is deliberately absent: `UNLISTED` names it so the crumb can
+ * say "Upload video", but it is a step inside a flow, not a place, so it
+ * belongs on the trail rather than in this set.
+ *
+ * PERSONAL_BOTTOM and TEAM_BOTTOM are identical today, so this holds
+ * duplicate hrefs. `some()` does not care, and de-duplicating would couple
+ * the two lists that nav.ts keeps separate on purpose.
+ */
+const DESTINATIONS: readonly NavLink[] = [
   ...PERSONAL_NAV,
   ...TEAM_NAV,
   ...PERSONAL_BOTTOM,
   ...TEAM_BOTTOM,
 ];
+
+/**
+ * Everything nameable: the destinations plus the routes that carry a label
+ * without claiming a rail row.
+ *
+ * Composed from `DESTINATIONS` rather than re-spreading the same four arrays,
+ * so the two sets state their relationship — "everything" *is* "destinations
+ * plus the unlisted" — instead of being two independent enumerations that a
+ * fifth nav array could silently desynchronise.
+ */
+const ALL_LINKS: readonly NavLink[] = [...UNLISTED, ...DESTINATIONS];
 
 /**
  * The sections of Settings, in rail order.
@@ -257,4 +278,16 @@ export function activeHref(
 export function navLabel(pathname: string): string | null {
   const href = activeHref(pathname);
   return ALL_LINKS.find((link) => link.href === href)?.name ?? null;
+}
+
+/**
+ * Is this path a rail destination itself, rather than somewhere inside one?
+ *
+ * Exact match, never prefix: `/dashboard/matches` is a destination,
+ * `/dashboard/matches/[matchId]` is a position within it. That distinction is
+ * the whole rule — the header names the workspace on a destination and traces
+ * the path on a position within a flow.
+ */
+export function isDestination(pathname: string): boolean {
+  return DESTINATIONS.some((link) => link.href === pathname);
 }

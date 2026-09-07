@@ -26,7 +26,12 @@ import {
 } from "@/components/dashboard/shared/chrome-tooltip";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { navLabel, scheduleLeaf, settingsSection } from "@/lib/dashboard/nav";
+import {
+  isDestination,
+  navLabel,
+  scheduleLeaf,
+  settingsSection,
+} from "@/lib/dashboard/nav";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { workspaceTitle } from "@/lib/workspace/types";
 import { WorkspaceOptionList } from "@/components/dashboard/workspace-switcher";
@@ -62,45 +67,6 @@ const SCHEDULE_CRUMB = {
 };
 
 /**
- * Pages whose leading slot is the workspace itself rather than a position
- * within a flow (design 9g, and 1a–1g for the personal pair).
- *
- * The rule these three share: a top-level destination already names itself in
- * display type in its own body, and the rail already highlights the row that
- * got you here — so a crumb reading "Matches" above a page reading "Matches"
- * spends the slot restating what two other things on screen say. The workspace
- * is the one fact the page body never states. Not the only thing that says it,
- * though: the rail shows the name whenever it is expanded and its trigger
- * carries `aria-label="Workspace: <name>. Switch workspace"` in every state.
- * The two treatments are alternatives, never both — a trail *and* a title in
- * the same slot reads as two competing answers to "where am I".
- *
- * Home was absent until 1a–1g, on the reasoning that its crumb list is empty so
- * there was nothing to displace. That confused "no trail" with "nothing worth
- * saying": every one of those seven frames draws "Personal · <name>" here, and
- * on the page that greets you by first name it is the line that says *whose
- * data* — the seam a claimed college player crosses with a second workspace one
- * click away.
- *
- * Platform Audit Pa2 then moved the personal Home's greeting up into this
- * slot: "Good morning, Jordan" with "Personal · Monday, Aug 24" beside it, so
- * the page body can open on a title over the KPI strip. Home therefore has a
- * third treatment (`HeaderGreeting`), on the personal workspace only — Pb2's
- * Matches frame keeps "Personal · <name>", and Team Home still greets in its
- * own body — chosen ahead of the workspace title below.
- *
- * Exact matches, so `/dashboard/matches/new` and `/dashboard/matches/[matchId]`
- * keep their trails: those are positions within a flow, which is what a trail
- * is for. Statistics, Ask and Help stay on crumbs — no design round has covered
- * them, and their bodies do not all carry a display-type title to displace.
- */
-const WORKSPACE_TITLE_PATHS = new Set([
-  "/dashboard",
-  "/dashboard/matches",
-  "/dashboard/team",
-]);
-
-/**
  * The crumb for any page that is simply a navigation destination.
  *
  * Labels come from the shared route table rather than a second list here. The
@@ -122,7 +88,7 @@ function getStaticBreadcrumbs(
   // table lives in nav.ts with the other route labels), and just the linked
   // Schedule crumb for every other page under it — the event and single-match
   // detail pages name themselves in their own body's <h1>, so a leaf here
-  // would restate it: same philosophy as WORKSPACE_TITLE_PATHS above, the
+  // would restate it: same philosophy as the destination rule below, the
   // crumb slot doesn't compete with a display-type title for the same fact.
   if (pathname.startsWith(`${SCHEDULE_HREF}/`)) {
     const leaf = scheduleLeaf(pathname);
@@ -232,8 +198,43 @@ export function Header({
   // branch: its home is /dashboard/team, which greets in its own body.
   const showGreeting = pathname === "/dashboard" && active.kind === "personal";
 
+  /**
+   * The leading slot answers "where am I" once, never twice.
+   *
+   * A rail destination already lights its own row in the sidebar and names
+   * itself in display type in its own body, so a trail reading "Statistics"
+   * above a page reading "Statistics" spends the slot restating what two other
+   * things on screen already say. The workspace is the one fact the page body
+   * never states — so that is what a destination gets. A position *inside* a
+   * flow (`matches/[matchId]`, the upload wizard, the schedule create screens)
+   * has a path worth tracing and nothing else on screen tracing it, so it
+   * keeps the trail. `isDestination` matches exactly, never by prefix, for
+   * precisely that reason. The two treatments are alternatives and never both:
+   * a trail *and* a title in one slot reads as two competing answers to the
+   * same question.
+   *
+   * This is a broadening. The `WORKSPACE_TITLE_PATHS` set it replaces held
+   * three paths, and its own comment said Statistics, Ask and Help stayed on
+   * crumbs because "their bodies do not all carry a display-type title to
+   * displace". That was true when it was written and is not true now: every
+   * rail destination was checked before this rule went in, and each one names
+   * itself. `ComingSoonPage` renders `<h1 class="text-display">` for
+   * Statistics, Ask and Opponents; Help, Roster and Schedule carry their own.
+   * That premise is what the rule rests on — a destination whose body stops
+   * naming itself has no name on screen at all, so check the body before
+   * adding a row to the rail.
+   *
+   * `showGreeting` is tested first, and that order is load-bearing. Design 9g
+   * gave destinations the workspace title; 1a–1g extended it to the personal
+   * pair on Home, where "Personal · <name>" is the line saying *whose data* —
+   * the seam a claimed college player crosses with a second workspace one
+   * click away. Platform Audit Pa2 then promoted that page's greeting into
+   * this slot ("Good morning, Jordan", with "Personal · Monday, Aug 24"
+   * beside it), so the personal Home has a third treatment that outranks the
+   * title. It is the only per-path exception left in here; keep it that way.
+   */
   const title =
-    !showGreeting && WORKSPACE_TITLE_PATHS.has(pathname)
+    !showGreeting && isDestination(pathname)
       ? workspaceTitle(active, viewer)
       : null;
 
