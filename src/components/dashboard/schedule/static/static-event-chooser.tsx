@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Swords } from "lucide-react";
 import { advButton } from "@/lib/ui/adv-button";
@@ -94,7 +95,7 @@ const COPY = {
   tournamentMeta: "Creates entries · draws by round",
   aside:
     "One player's own match — a challenge, practice set or outside entry — isn't an event.",
-  asideLink: "Add it in Matches",
+  asideLink: "Add a one-off match",
   cancel: "Cancel",
   continue: "Continue",
   dualSelected: "Dual selected",
@@ -276,20 +277,20 @@ export function StaticEventChooser() {
           <span className="text-micro" style={{ color: "var(--ink-600)" }}>
             {COPY.aside}
           </span>
-          {/* Inert, and deliberately so. The artboard's own anchor is the
-              placeholder `href="#3b"`, and the destination the label names —
-              `/dashboard/matches/new` — is outside the four routes this run
-              rebuilds. The brief is categorical: links are inert or point
-              within the rebuilt set, and wiring them to real destinations is
-              later work. Same treatment `7e`'s "One-off match in Matches"
-              gets in `static-schedule.tsx`.
-
-              Flagged, not reworded: a team workspace's rail has no Matches
-              entry, so this label names a place the coach cannot navigate to
-              from here. The design wins; the falsehood is T12's to record. */}
-          <span className="text-[11px] font-medium text-[var(--blue)]">
+          {/* The artboard's own anchor is the placeholder `href="#3b"`. This
+              run wires it to the wizard's single-match step under the
+              schedule — `/new/single`, one of the four routes this run
+              rebuilds — rather than the label the artboard used to carry,
+              which named `/dashboard/matches/new`: a team workspace's rail
+              has no Matches entry to arrive at, so that destination was
+              never one a coach could reach from here. `schedule-day-zero.tsx`
+              already uses the same label for the same destination. */}
+          <Link
+            href="/dashboard/team/schedule/new/single"
+            className="text-[11px] font-medium text-[var(--blue)]"
+          >
             {COPY.asideLink}
-          </span>
+          </Link>
         </div>
       </div>
     </EventShell>

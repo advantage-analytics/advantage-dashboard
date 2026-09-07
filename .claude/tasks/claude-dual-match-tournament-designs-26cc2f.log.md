@@ -2,3 +2,7 @@
 
 Written by `/task-next`. Do not hand-edit — the queue file is yours, this one
 is the runner's. Newest entries at the bottom.
+
+## T1 · Chooser aside becomes a real link to the one-off match — done
+**gate:** lint pass · tsc pass · npm test pass (475) · task-completion-reviewer `VERDICT: pass` · pipeline-guardrails-reviewer ran (dashboard surface) — no findings · rls-boundary-reviewer skipped (no data/api/migration surface touched)
+**changed:** `static-event-chooser.tsx` — the aside's inert span is a `next/link` to `/dashboard/team/schedule/new/single` labelled "Add a one-off match"; header comment rewritten. `tests/schedule-static-copy.spec.ts` — `3b` asserts the new label with a RETIRED note for the old.

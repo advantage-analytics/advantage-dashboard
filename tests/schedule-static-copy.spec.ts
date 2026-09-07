@@ -493,12 +493,15 @@ test.describe('/dashboard/team/schedule/new · 3b', () => {
       file,
       "One player's own match — a challenge, practice set or outside entry — isn't an event."
     );
-    drawn(chooser, file, 'Add it in Matches');
+    drawn(chooser, file, 'Add a one-off match');
     drawn(chooser, file, 'Cancel');
     drawn(chooser, file, 'Continue');
     // The footer names the selection; `3b` opens on the dual.
     drawn(chooser, file, 'Dual selected');
     drawn(chooser, file, 'Tournament selected');
+    // RETIRED 'Add it in Matches' — the label named a rail entry a team
+    //   workspace does not have; `schedule-day-zero.tsx` already uses
+    //   'Add a one-off match' for the same `/new/single` destination.
   });
 });
 

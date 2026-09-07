@@ -25,7 +25,7 @@ The design and the plan these tasks come from: canvas "Add an Event" (page
 need it.
 
 ## T1 · Chooser aside becomes a real link to the one-off match
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/schedule/static/static-event-chooser.tsx, tests/schedule-static-copy.spec.ts
 - **done when:**
