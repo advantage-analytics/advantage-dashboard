@@ -29,6 +29,17 @@ const nextConfig: NextConfig = {
         destination: REQUEST_ACCESS_URL,
         permanent: true,
       },
+      {
+        // A one-off team match is the ordinary wizard's job. This route wrapped
+        // the same wizard in a preset that answered every question on step one,
+        // including the one it had no business answering — the source — which
+        // left a coach unable to hand in a SwingVision export. Its staff-only
+        // guard also disagreed with the `canUploadForProgram` link that pointed
+        // at it, so a player with an upload grant was bounced back silently.
+        source: "/dashboard/team/schedule/new/single",
+        destination: "/dashboard/matches/new",
+        permanent: true,
+      },
     ];
   },
 };

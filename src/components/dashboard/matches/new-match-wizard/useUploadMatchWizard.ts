@@ -181,8 +181,8 @@ const DEFAULT_PROVIDER_ID: ProviderId | null =
  * Where a line that CANNOT take video starts instead.
  *
  * A doubles line was handed the processing provider like every other preset,
- * and `PinnedMatchContent` replaces the provider step, so there was no way to
- * choose anything else. The coach picked a multi-gigabyte file and met
+ * and a preset opens on the file step, so there was no way to choose anything
+ * else. The coach picked a multi-gigabyte file and met
  * "Video analysis supports singles matches only" from `job-request.ts` after
  * the upload — a 422 at the end of the most expensive step, with an orphaned
  * blob and a job stuck at `uploaded`.
@@ -399,9 +399,8 @@ export interface UseUploadMatchWizardReturn {
   /**
    * The "who played this match" question, asked ONLY in a team workspace with
    * no preset. A personal workspace has exactly one candidate (the uploader),
-   * and a preset already answered it — the lineup for a line, the
-   * PinnedMatchContent roster picker for a single. Everywhere else `required`
-   * is false and nothing here renders.
+   * and a preset already answered it — the lineup named the player. Everywhere
+   * else `required` is false and nothing here renders.
    */
   whoPlayed: {
     /** True in a team workspace with no preset — the wizard must ask. */
@@ -705,9 +704,14 @@ export function useUploadMatchWizard({
     // named in the URL, and restoring a half-finished personal match over it
     // would put another player's opponent and score on somebody else's court.
     if (preset) {
-      // The line already knows whose match it is; a single match learns it when
-      // somebody picks from the roster. Both land in the same piece of state.
+      // The line already knows whose match it is — the lineup named the player.
       setPickedPlayerUserId(preset.playerUserId);
+      // Deriving the source from the preset is only sound because a LINE
+      // genuinely constrains it: `job-request.ts` refuses a doubles line, so
+      // `supportsVideo: false` is a fact, not a default. It is not a licence to
+      // decide the source for a preset that merely omitted the question — the
+      // retired one-off rails did exactly that and locked every one-off match
+      // to video.
       const presetProvider = preset.supportsVideo ? DEFAULT_PROVIDER_ID : DEFAULT_IMPORT_PROVIDER_ID;
       setSelectedProvider(presetProvider);
       setFormData((prev) => ({
@@ -997,10 +1001,6 @@ export function useUploadMatchWizard({
     // selected for one, and the cost of getting it wrong is paid entirely by
     // the coach — a full video upload, then a 422.
     if (preset && !preset.supportsVideo && isProcessingProvider) return;
-    // A single match in a team workspace cannot move on without a player: it is
-    // the one thing the workspace does not already know, and a match created
-    // without it belongs to nobody's season.
-    if (preset?.kind === "single" && !formData.playerName.trim()) return;
     // Same rule for a team upload with no preset — the who-played question is
     // this step's, and skipping it would fall back to attributing the match to
     // whoever is uploading.
@@ -1187,7 +1187,7 @@ export function useUploadMatchWizard({
 
   // Derived from the active order rather than a hardcoded map, so adding a step
   // to STEP_ORDER_BY_KIND is the only edit a new flow needs.
-  const firstStep: Step = preset?.kind === "line" ? "file" : "provider";
+  const firstStep: Step = preset ? "file" : "provider";
 
   const handleBack = useCallback(() => {
     const index = stepOrder.indexOf(step);
@@ -1316,9 +1316,9 @@ export function useUploadMatchWizard({
             /**
              * THE EVENT OUTRANKS THE FILE.
              *
-             * With a preset, these answers came from the event and
-             * `PinnedMatchContent` tells the coach in as many words that they
-             * are not re-asked here. A parsed file may FILL BLANKS; it may not
+             * With a preset, these answers came from the event and the
+             * pinned bar tells the coach in as many words that they are not
+             * re-asked here. A parsed file may FILL BLANKS; it may not
              * overwrite.
              *
              * This only became reachable when doubles lines started opening on

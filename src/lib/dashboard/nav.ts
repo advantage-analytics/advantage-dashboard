@@ -279,7 +279,6 @@ const SCHEDULE_LEAF_LABELS: Record<string, string> = {
   "/dashboard/team/schedule/new": "New event",
   "/dashboard/team/schedule/new/dual": "New dual",
   "/dashboard/team/schedule/new/tournament": "New tournament",
-  "/dashboard/team/schedule/new/single": "New single",
 };
 
 /** The schedule create-screen leaf label for a path, or null. */

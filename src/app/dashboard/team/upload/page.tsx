@@ -9,8 +9,6 @@ import { loadMatchDraft } from "@/lib/wizard/actions";
 import { supportsVideo as entrySupportsVideo } from "@/lib/schedule/entry-state";
 import type { EventEntry, ProgramEvent } from "@/lib/schedule/types";
 import { getTeamSingleMatch } from "@/lib/data/single-match-server";
-import { getLadder } from "@/lib/data/roster-server";
-import { getTeamSettings } from "@/lib/data/team-settings-server";
 import { supportsVideo } from "@/lib/schedule/entry-state";
 import { formatEventSpan, siteLabel } from "@/lib/schedule/format";
 import { UploadMatchFlow } from "@/components/dashboard/matches/new-match-wizard";
@@ -32,9 +30,8 @@ import type {
  * `job-request.ts`, and collecting them in two components is how those two
  * drift — silently, because the page still renders.
  *
- * `?player=` is the roster row's upload shortcut. It presets whose match this
- * is and leaves the rest of step 1 to be filled in — the coach knows the player
- * before they know the opponent, which is the order the roster puts them in.
+ * `?player=` is accepted and ignored — see the branch below for why the roster
+ * shortcut it was meant to serve never fired, and where it belongs instead.
  *
  * Without `?entry=` there is nothing to preset, so staff get the lines that have
  * no video and hand off to the pinned flow. A player gets the wizard itself —
@@ -154,47 +151,20 @@ export default async function TeamUploadPage({
     return <UploadMatchFlow preset={preset} />;
   }
 
-  // `?player=` from a roster row. Nothing about the match is known yet, so this
-  // is the single-match preset with the player already chosen. The id comes
-  // from `program_roster_full`, so it is the same `player_id` the match will be
-  // recorded against — a coach-managed athlete included, which is the point.
-  if (!entryId && !matchId && playerId) {
-    const [roster, settings] = await Promise.all([
-      getLadder(active.id),
-      getTeamSettings(active.id),
-    ]);
-    const picked = roster.find((p) => p.userId === playerId);
-    // An id that names nobody on this roster falls through to the queue rather
-    // than presetting a stranger. It arrives from a URL, so it is untrusted.
-    if (picked) {
-      const preset: EventPreset = {
-        kind: "single",
-        entryId: null,
-        eventId: null,
-        eventName: null,
-        matchId: null,
-        round: null,
-        roster,
-        playerName: picked.name,
-        playerUserId: picked.userId,
-        opponentName: "",
-        date: new Date().toISOString().slice(0, 10),
-        surface: settings?.program.defaultSurface ?? null,
-        bestOf: 3,
-        // Null, not false: nothing has declared a format for a match that does
-        // not exist yet, and the pipeline refuses a job without a real answer.
-        adScoring: null,
-        score: null,
-        supportsVideo: true,
-        eventHref: "/dashboard/team/roster",
-        site: null,
-        eventKind: null,
-        opponentProgramKey: null,
-        opponentSchool: null,
-      };
-      return <UploadMatchFlow preset={preset} />;
-    }
-  }
+  // `?player=` is accepted and ignored.
+  //
+  // It was a roster shortcut that never fired. Both links that produce it —
+  // `team/roster/[playerId]/page.tsx` and `team/player-drawer.tsx` — send a
+  // `program_players.id`, and the branch here looked it up by `userId`. Those
+  // are separate id spaces (no roster row has `id = claimed_by_user_id`), so
+  // `picked` was always undefined and every visit fell through to the queue
+  // below, which is what this route has always actually done.
+  //
+  // Rather than switch the lookup and leave the preset in place: the preset it
+  // built also decided the SOURCE, forcing video, which is the defect that
+  // retired `/dashboard/team/schedule/new/single`. A roster shortcut that
+  // pre-picks the player and still asks for the source belongs on
+  // `/dashboard/matches/new`, whose step 1 asks both — it is not this branch.
 
   if (entryId) {
     const groups = await getUploadQueue(active.id);
