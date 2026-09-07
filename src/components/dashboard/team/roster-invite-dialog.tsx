@@ -511,6 +511,7 @@ export function RosterInviteDialog({
                  browser validating it as one would mark the field invalid for
                  the whole time it takes to split. The split is the check. */
               type="text"
+              aria-required
               inputMode="email"
               value={email}
               emphasis={!linked}

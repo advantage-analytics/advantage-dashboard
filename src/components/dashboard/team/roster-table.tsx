@@ -633,16 +633,17 @@ export function RosterTable({
   const listRef = useRef<HTMLUListElement>(null);
   const byId = new Map(members.map((member) => [member.playerId, member]));
 
-  // At rest the server's order is the order, and the sentinel appears only
-  // if somebody is actually out of the lineup. In the mode the draft is the
-  // order and the sentinel is always there — it is the drop target for
-  // benching somebody.
-  // Three sources, in priority: the draft being edited; the order a Save just
-  // wrote, until the server's rows carry it (`settling` in `RosterView`); and
-  // at rest, the rows themselves.
-  const sequence: string[] = lineup
-    ? lineup.sequence
-    : settling ?? sequenceFrom(members, { sentinel: "if-needed" });
+  // The order on screen, and whether it is ours or the server's. `held` is an
+  // order we are drawing over the rows: the draft being edited, or — for the
+  // moment after Save, before the revalidated `members` land — the one Save
+  // just wrote (`settling` in `RosterView`). Named once because two things
+  // read it: the list itself, and the line numbers beside it. At rest the
+  // server's order is the order, and the sentinel appears only if somebody is
+  // actually out of the lineup; in the mode it is always there, because it is
+  // the drop target for benching somebody.
+  const held = lineup?.sequence ?? settling;
+  const sequence: string[] =
+    held ?? sequenceFrom(members, { sentinel: "if-needed" });
   const benchAt = sequence.indexOf(BENCH);
 
   /** ↑/↓ with nothing lifted: focus walks the players, skipping the sentinel. */
@@ -722,7 +723,9 @@ export function RosterTable({
               collapses as a row, height and opacity together, so the card
               changes height continuously and the page follows it. Rows never
               unmount here (a lineup reorders, it does not delete), so the
-              presence wrapper only ever has this one exit to run. */}
+              presence wrapper only ever has this one exit to run — a member row
+              carries no `exit`, so one removed or merged away still unmounts
+              at once. Give a row an `exit` and it animates here. */}
           <AnimatePresence initial={false}>
           {sequence.map((id, index) => {
             if (id === BENCH) {
@@ -770,19 +773,19 @@ export function RosterTable({
             }
             const member = byId.get(id);
             if (!member) return null;
-            // In the mode, and while a save is settling, the number is the
-            // position in the sequence on screen — the one Save wrote. Reading
-            // `member.lineupSpot` there would badge a row sitting at the top
-            // with the spot it held BEFORE the save, for as long as the
-            // server's rows take to arrive. At rest it is the server's value,
-            // which can differ from position when two players share a line
-            // from the Edit player form.
-            const spot =
-              lineup || settling
-                ? benchAt < 0 || index < benchAt
-                  ? index + 1
-                  : null
-                : member.lineupSpot;
+            // The number is the position in `held` whenever we are drawing our
+            // own order — in the mode it is what Save will write, and just
+            // after Save it is what Save wrote. Reading `member.lineupSpot`
+            // there would badge a row sitting at the top with the spot it held
+            // BEFORE the save, for as long as the server's rows take to
+            // arrive. At rest it is the server's value, which can differ from
+            // position when two players share a line from the Edit player
+            // form.
+            const spot = held
+              ? benchAt < 0 || index < benchAt
+                ? index + 1
+                : null
+              : member.lineupSpot;
             return (
               <MemberRow
                 key={member.playerId}

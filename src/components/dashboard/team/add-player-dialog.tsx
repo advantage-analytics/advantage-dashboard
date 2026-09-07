@@ -404,6 +404,7 @@ export function AddPlayerDialog({
       <div className="grid grid-cols-2 gap-4">
         <SettingsField label="First name" required>
           <SettingsUnderlineInput
+            aria-required
             value={firstName}
             autoFocus
             onChange={(event) => setFirstName(event.target.value)}
@@ -411,6 +412,7 @@ export function AddPlayerDialog({
         </SettingsField>
         <SettingsField label="Last name" required>
           <SettingsUnderlineInput
+            aria-required
             value={lastName}
             onChange={(event) => setLastName(event.target.value)}
           />

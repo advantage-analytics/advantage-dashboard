@@ -258,6 +258,7 @@ export function EditPlayerDialog({
           <div className="grid grid-cols-2 gap-4">
             <SettingsField label="First name" required>
               <SettingsUnderlineInput
+                aria-required
                 value={fields.firstName}
                 disabled={pending}
                 onChange={(event) => edit("firstName", event.target.value)}
@@ -265,6 +266,7 @@ export function EditPlayerDialog({
             </SettingsField>
             <SettingsField label="Last name" required>
               <SettingsUnderlineInput
+                aria-required
                 value={fields.lastName}
                 disabled={pending}
                 onChange={(event) => edit("lastName", event.target.value)}
