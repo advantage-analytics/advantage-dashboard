@@ -71,7 +71,7 @@ need it.
 - **notes:** Non-goals: no behaviour change to the upload page. T11 is the second consumer.
 
 ## T5 · Event page primitives: frame, facts, format capsule, detail line, table card
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/schedule/event-page.tsx (new), src/lib/schedule/format.ts, tests/event-format-label.spec.ts (new)
 - **done when:**

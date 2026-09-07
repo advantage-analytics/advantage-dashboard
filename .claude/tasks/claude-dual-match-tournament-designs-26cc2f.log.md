@@ -21,3 +21,8 @@ is the runner's. Newest entries at the bottom.
 **gate:** lint pass · tsc pass · npm test pass (498) · task-completion-reviewer `VERDICT: pass` · pipeline-guardrails-reviewer ran (upload page feeds the wizard) — no findings, §4 inputs traced byte-identical · rls-boundary-reviewer ran (src/lib/data) — no findings, cookie client, read unchanged
 **changed:** new `src/lib/schedule/line-choices.ts` (`presetFor`, `lineupChoices`, moved verbatim with closures turned into parameters; the identity `.map` deleted); `programNamesFor` exported from `schedule-server.ts`; `team/upload/page.tsx` imports all three and drops its locals. New `tests/line-choices.spec.ts`, 7 cases.
 **follow-ups:** T11's preset shape must match this signature — check when it lands.
+
+## T5 · Event page primitives: frame, facts, format capsule, detail line, table card — done
+**gate:** lint pass · tsc pass · npm test pass (500) · task-completion-reviewer `VERDICT: pass` · pipeline-guardrails-reviewer ran (dashboard surface) — no findings, no wizard file touched · rls-boundary-reviewer skipped (presentational, no query)
+**changed:** `format.ts` gains `formatLabel()` (null `adScoring` drops the scoring half). New `src/components/dashboard/schedule/event-page.tsx`: `EventPageFrame`, `EventTitle`, `EventFacts` (+ private `CourtGlyph`), `FormatCapsule`, `DetailLine` (`DetailCount` action/live/done), `TableCard`, `GroupHead`, `TABLE_ROW_CLS`. New `tests/event-format-label.spec.ts`, 2 cases.
+**follow-ups:** `EventTitle` and `TABLE_ROW_CLS` are extra exports for T7/T8; `schedule-table.tsx` should import `TABLE_ROW_CLS` in a later sweep instead of carrying its own copy.

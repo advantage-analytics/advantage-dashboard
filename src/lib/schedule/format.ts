@@ -6,7 +6,7 @@
  * is three chances to drift.
  */
 
-import type { EventSite } from "./types";
+import type { EventFormat, EventSite } from "./types";
 
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -197,4 +197,25 @@ export function formatEventDatesLong(startsOn: string, endsOn: string): string {
  */
 export function surfaceTitle(surface: string): string {
   return surface.charAt(0).toUpperCase() + surface.slice(1);
+}
+
+/**
+ * "Best of 3 Sets · No-Ad Scoring" — the event page's format capsule.
+ *
+ * Two halves joined by a middot, and the SCORING half is dropped entirely when
+ * `adScoring` is null. Null is a real state (`EventFormat.adScoring` says so:
+ * the vision pipeline rejects a job without it), so the capsule must not print
+ * a guess — "Best of 3 Sets" with nothing after it reads as "not chosen yet",
+ * where "Best of 3 Sets · Ad Scoring" would be a wrong answer that looks like a
+ * real one. `EVENT_FORMATS` above holds the four pairs a builder can WRITE;
+ * this labels whatever a stored event turns out to carry, which is why it takes
+ * `EventFormat` (nullable) and not `EventFormatValue`.
+ *
+ * Title Case is the design's, and it is the page's, not the row's — the
+ * schedule table's cells stay sentence case.
+ */
+export function formatLabel(format: EventFormat): string {
+  const sets = format.bestOf === 1 ? "One Set" : `Best of ${format.bestOf} Sets`;
+  if (format.adScoring === null) return sets;
+  return `${sets} · ${format.adScoring ? "Ad Scoring" : "No-Ad Scoring"}`;
 }
