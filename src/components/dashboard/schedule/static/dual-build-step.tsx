@@ -9,6 +9,7 @@ import {
   opponentPoolFor,
   type OpponentPool,
 } from "@/components/dashboard/schedule/static/opponent-popup";
+import { LineupNamePicker } from "@/components/dashboard/schedule/static/lineup-name-picker";
 import { useNewDualData } from "@/components/dashboard/schedule/static/dual-school-step";
 import { programDisplayName } from "@/lib/data/programs-server";
 import {
@@ -553,6 +554,25 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
     seedDualLines(ladder, initial)
   );
 
+  /**
+   * Players created from a lineup court, mid-flow.
+   *
+   * `addProgramPlayer` revalidates the roster's routes, but this client tree
+   * holds the ladder it was rendered with — the new row will not appear in
+   * `useNewDualData()` until a navigation re-runs the loader, which is long
+   * after the coach has typed the other eight courts. So the ids they carry
+   * are remembered here, and `editOurLabels` resolves against ladder + these.
+   * Nothing invented: every entry came back from the server with a real
+   * `program_players.id`.
+   */
+  const [extraPlayers, setExtraPlayers] = useState<LadderPlayer[]>([]);
+
+  /** The ladder as this flow now knows it — see `extraPlayers`. */
+  const roster = useMemo(
+    () => (extraPlayers.length === 0 ? ladder : [...ladder, ...extraPlayers]),
+    [ladder, extraPlayers]
+  );
+
   function edit(patch: Partial<DualDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
   }
@@ -619,14 +639,27 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
    * match is attributed to, and a looser rule would hand an athlete's match to
    * someone else with nothing on screen saying so.
    */
-  function editOurLabels(key: string, value: string) {
+  function editOurLabels(key: string, value: string, added?: LadderPlayer) {
+    // The just-created player is folded in for THIS call as well as kept,
+    // because `roster` is this render's value and `setExtraPlayers` will not
+    // have widened it yet. Without that, the player the coach just added
+    // resolves to no id on the very edit that placed them — the exact silent
+    // miss this screen is being fixed for.
+    const against = added ? [...roster, added] : roster;
+    if (added) {
+      setExtraPlayers((current) =>
+        current.some((player) => player.userId === added.userId)
+          ? current
+          : [...current, added]
+      );
+    }
     setLines((current) =>
       current.map((line) =>
         line.key === key
           ? {
               ...line,
               ourLabels: [value],
-              ourIds: rosterIdsForLabels(value, ladder),
+              ourIds: rosterIdsForLabels(value, against),
             }
           : line
       )
@@ -904,12 +937,48 @@ export function DualLineupStep({
   pool: OpponentPool;
   /** Whether the program has a ladder — the singles note's only variable. */
   laddered: boolean;
-  onOurLabels: (key: string, value: string) => void;
+  /**
+   * Our side of one court.
+   *
+   * `added` is a player the picker just created, handed over on the same call
+   * that names them so the id can be resolved before the widened roster has
+   * rendered — see `editOurLabels`. Optional, so a caller that only ever
+   * edits text passes a two-argument function unchanged.
+   */
+  onOurLabels: (key: string, value: string, added?: LadderPlayer) => void;
   onTheirLabels: (key: string, value: string) => void;
   onForfeit: (key: string, forfeited: boolean) => void;
 }) {
   const singles = lines.filter((line) => line.discipline === "singles");
   const doubles = lines.filter((line) => line.discipline === "doubles");
+
+  // Read from context rather than taken as a prop: the flow already provides
+  // it, and a required prop here would be a required prop on every caller for
+  // a value they all read from the same place.
+  const { ladder } = useNewDualData();
+
+  /**
+   * Players added from a court since this step mounted.
+   *
+   * Held here as well as in `useDualDraft` because the two answer different
+   * questions from the one event — this one is "who may the list offer, and
+   * whose name is NOT a stranger", `useDualDraft`'s is "which id does this
+   * label resolve to". There is exactly one path that appends to either.
+   */
+  const [added, setAdded] = useState<LadderPlayer[]>([]);
+  const roster = useMemo(
+    () => (added.length === 0 ? ladder : [...ladder, ...added]),
+    [ladder, added]
+  );
+
+  function onAddPlayer(key: string, player: LadderPlayer, value: string) {
+    setAdded((current) =>
+      current.some((entry) => entry.userId === player.userId)
+        ? current
+        : [...current, player]
+    );
+    onOurLabels(key, value, player);
+  }
 
   return (
     <>
@@ -929,6 +998,8 @@ export function DualLineupStep({
         locked={locked}
         addLabel="Add name"
         pool={pool}
+        roster={roster}
+        onAddPlayer={onAddPlayer}
         onOurLabels={onOurLabels}
         onTheirLabels={onTheirLabels}
         onForfeit={onForfeit}
@@ -942,6 +1013,8 @@ export function DualLineupStep({
           locked={locked}
           addLabel="Add pair"
           pool={pool}
+          roster={roster}
+          onAddPlayer={onAddPlayer}
           onOurLabels={onOurLabels}
           onTheirLabels={onTheirLabels}
           onForfeit={onForfeit}
@@ -1052,7 +1125,9 @@ function LineupBlock({
   locked,
   addLabel,
   pool,
+  roster,
   onOurLabels,
+  onAddPlayer,
   onTheirLabels,
   onForfeit,
 }: {
@@ -1064,7 +1139,10 @@ function LineupBlock({
   addLabel: string;
   /** The school and its saved roster. `pool.key` rides in every row's key. */
   pool: OpponentPool;
-  onOurLabels: (key: string, value: string) => void;
+  /** OUR ladder, including anyone added from a court — see `DualLineupStep`. */
+  roster: LadderPlayer[];
+  onOurLabels: (key: string, value: string, added?: LadderPlayer) => void;
+  onAddPlayer: (key: string, player: LadderPlayer, value: string) => void;
   onTheirLabels: (key: string, value: string) => void;
   onForfeit: (key: string, forfeited: boolean) => void;
 }) {
@@ -1090,7 +1168,9 @@ function LineupBlock({
             locked={locked?.[line.key]}
             addLabel={addLabel}
             pool={pool}
+            roster={roster}
             onOurLabels={onOurLabels}
+            onAddPlayer={onAddPlayer}
             onTheirLabels={onTheirLabels}
             onForfeit={onForfeit}
             last={index === lines.length - 1}
@@ -1152,7 +1232,9 @@ function LineRow({
   locked,
   addLabel,
   pool,
+  roster,
   onOurLabels,
+  onAddPlayer,
   onTheirLabels,
   onForfeit,
   last,
@@ -1162,13 +1244,20 @@ function LineRow({
   locked?: "played" | "forfeited";
   addLabel: string;
   pool: OpponentPool;
-  onOurLabels: (key: string, value: string) => void;
+  /** OUR ladder, ranked and unranked — what the name picker offers. */
+  roster: LadderPlayer[];
+  onOurLabels: (key: string, value: string, added?: LadderPlayer) => void;
+  onAddPlayer: (key: string, player: LadderPlayer, value: string) => void;
   onTheirLabels: (key: string, value: string) => void;
   onForfeit: (key: string, forfeited: boolean) => void;
   last: boolean;
 }) {
   const forfeited = line.forfeit !== null;
   const [active, setActive] = useState(false);
+  // Our picker's own open state, held apart from the opponent popup's: two
+  // controls writing one flag would have whichever closed last say the row is
+  // resting while the other is still up.
+  const [picking, setPicking] = useState(false);
 
   // A settled court. Drawn in place — the lineup has to read as nine courts —
   // but with nothing on it a save could move: no name inputs, no opponent
@@ -1228,7 +1317,7 @@ function LineRow({
         // The popup's containing block: `2d` anchors it to `right:0` of the
         // row, so the row is what it is positioned against.
         "relative",
-        active ? "z-20" : null,
+        active || picking ? "z-20" : null,
         rowRule(last)
       )}
     >
@@ -1249,12 +1338,20 @@ function LineRow({
         // `2b` draws our side as plain text because the artboard draws a
         // filled lineup. It is a real field under the same 13px ink-900 — the
         // ladder seeds it, and typing over a seeded name is how a sub goes on.
-        <input
+        //
+        // A typeahead over the roster rather than a bare input since the
+        // lineup defects: the field still takes free text, but the roster is
+        // now reachable without spelling it, and a name matching nobody says
+        // so instead of saving a court attributed to no player. Both handlers
+        // are closures over THIS row's key — see this component's header.
+        <LineupNamePicker
           value={line.ourLabels.join(" / ")}
-          onChange={(event) => onOurLabels(line.key, event.target.value)}
-          placeholder={line.discipline === "doubles" ? "Name / Name" : "Name"}
-          aria-label={`Our player at ${line.slot}`}
-          className="w-full min-w-0 bg-transparent text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-300)]"
+          slot={line.slot}
+          discipline={line.discipline}
+          ladder={roster}
+          onChange={(value) => onOurLabels(line.key, value)}
+          onAddPlayer={(player, value) => onAddPlayer(line.key, player, value)}
+          onOpenChange={setPicking}
         />
       )}
 
