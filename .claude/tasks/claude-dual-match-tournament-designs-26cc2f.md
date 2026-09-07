@@ -131,7 +131,7 @@ need it.
 - **notes:** Non-goals: no dual changes.
 
 ## T10 · Extract `ScoreBlock` out of `DetailsStepContent` (mechanical)
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** src/components/dashboard/matches/new-match-wizard/ScoreBlock.tsx (new), src/components/dashboard/matches/new-match-wizard/DetailsStepContent.tsx, src/components/dashboard/matches/new-match-wizard/index.ts
 - **done when:**

@@ -25,6 +25,8 @@ export type { TrimStepContentProps } from "./TrimStepContent";
 export { DetailsStepContent } from "./DetailsStepContent";
 export type { DetailsStepContentProps } from "./DetailsStepContent";
 
+export { ScoreBlock } from "./ScoreBlock";
+
 export { PinnedLineBar } from "./PinnedLineBar";
 
 // Types
