@@ -1,10 +1,21 @@
 # Review — workspace-breadcrumb-hairline
 
-**Sign-off: pending**
+**Sign-off: approved**
 
-*Edit that line to `approved` — or annotate it — once you have run the visual
-walk in "Success criteria" below. This is the pipeline's final gate, and it is
-the one thing no automated check in this repo can close.*
+*Approved by the author in chat on 2026-09-06, after walking the running app on
+a local dev server: "the breadcrumbs look good, merge it".*
+
+*Recorded here rather than left at `pending` so the archive matches what
+happened — the sign-off line is the pipeline's final gate, and git history is
+the only record of it once this workspace is deleted at land.*
+
+**One criterion was withdrawn rather than met.** Criterion 5 (the header's
+bottom edge visible unscrolled) was closed by the author looking at it and
+deciding against the change: `--border-medium` read as too dark, and the
+original two-state edge was what was wanted. The hairline work was reverted in
+`17c10f6`, which also retires the DS v3 override — with the scroll indicator
+restored, spec and code agree again. Criteria 1–3 (the rail walks and the
+unchanged flow trails) were verified in that same pass.
 
 - **Target reviewed:** branch range `8e8d017...HEAD` against
   `splitstep-integration`, working tree clean.
