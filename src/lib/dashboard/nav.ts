@@ -271,7 +271,9 @@ export function settingsSection(pathname: string): SettingsSection | null {
  * the crumb saying the old word. Every other path under the schedule — the
  * event pages at `[eventId]` and `single/[matchId]` — deliberately has no
  * entry: those pages carry their identity in the body's own `<h1>`, and the
- * header shows the linked Schedule crumb alone.
+ * header shows the linked Schedule crumb alone. The one exception is the
+ * score-only flow beneath an event, which is a step inside a flow rather than
+ * a page — `SCHEDULE_SCORE_PATH` below names it.
  */
 const SCHEDULE_LEAF_LABELS: Record<string, string> = {
   "/dashboard/team/schedule/new": "New event",
@@ -280,9 +282,22 @@ const SCHEDULE_LEAF_LABELS: Record<string, string> = {
   "/dashboard/team/schedule/new/single": "New single",
 };
 
+/**
+ * The score-only flow under an event: `/dashboard/team/schedule/<id>/score`.
+ *
+ * A regex rather than a map entry because the path carries an event id, and
+ * the crumb says the same word for every event. `[^/]+` deliberately matches
+ * one segment: `/schedule/new/single` is not a scoring screen, and a deeper
+ * path under `/score` would be a route that does not exist.
+ */
+const SCHEDULE_SCORE_PATH = /^\/dashboard\/team\/schedule\/[^/]+\/score$/;
+
 /** The schedule create-screen leaf label for a path, or null. */
 export function scheduleLeaf(pathname: string): string | null {
-  return SCHEDULE_LEAF_LABELS[pathname] ?? null;
+  const exact = SCHEDULE_LEAF_LABELS[pathname];
+  if (exact) return exact;
+  if (SCHEDULE_SCORE_PATH.test(pathname)) return "Add score";
+  return null;
 }
 
 /**

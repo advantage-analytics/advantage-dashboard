@@ -60,6 +60,7 @@ markers is hand-written — edit it as things move.
 | `/dashboard/team/roster/[playerId]` | [`src/app/dashboard/team/roster/[playerId]/page.tsx`](src/app/dashboard/team/roster/[playerId]/page.tsx) |
 | `/dashboard/team/roster` | [`src/app/dashboard/team/roster/page.tsx`](src/app/dashboard/team/roster/page.tsx) |
 | `/dashboard/team/schedule/[eventId]` | [`src/app/dashboard/team/schedule/[eventId]/page.tsx`](src/app/dashboard/team/schedule/[eventId]/page.tsx) |
+| `/dashboard/team/schedule/[eventId]/score` | [`src/app/dashboard/team/schedule/[eventId]/score/page.tsx`](src/app/dashboard/team/schedule/[eventId]/score/page.tsx) |
 | `/dashboard/team/schedule/new/dual` | [`src/app/dashboard/team/schedule/new/dual/page.tsx`](src/app/dashboard/team/schedule/new/dual/page.tsx) |
 | `/dashboard/team/schedule/new` | [`src/app/dashboard/team/schedule/new/page.tsx`](src/app/dashboard/team/schedule/new/page.tsx) |
 | `/dashboard/team/schedule/new/single` | [`src/app/dashboard/team/schedule/new/single/page.tsx`](src/app/dashboard/team/schedule/new/single/page.tsx) |

@@ -22,7 +22,7 @@ deleted, and where each deleted file's knowledge landed.
 
 ## 1. The routes
 
-Seven route files render this directory, and all seven read the database.
+Eight route files render this directory, and all eight read the database.
 
 | Route | Renders | Reads |
 |---|---|---|
@@ -31,11 +31,12 @@ Seven route files render this directory, and all seven read the database.
 | `/dashboard/team/schedule/new/dual` | `static/static-dual-builder.tsx` → `static/dual-school-step.tsx`, then `static/dual-build-step.tsx` with `static/opponent-popup.tsx` | `getLadder`, `getTeamSettings`, `getConferenceTable`, `getProgramSchedule` → `opponentDualHistory`, a `programs` head count; `/api/programs/search` and `opponentRosterForDual` from the client; writes through `createDual` |
 | `/dashboard/team/schedule/new/tournament` | `static/static-tournament-builder.tsx` | `getLadder`, `getTeamSettings`; writes through `createTournament` |
 | `/dashboard/team/schedule/[eventId]` | `dual-detail.tsx` (on `event-page.tsx`'s frame, with `team-totals-widget.tsx` and `head-to-head-widget.tsx` in the rail), `tournament-detail.tsx` | `getProgramSchedule` → `eventDetailFrom`; for a dual also `opponentDualHistory` / `opponentHistoryFor` / `opponentMeetings` and `getEventTeamTotals` |
+| `/dashboard/team/schedule/[eventId]/score` | `score-only-flow.tsx` (the upload wizard's chrome with its video half switched off — `StepIndicator`, `PinnedLineBar` and `ScoreBlock` come from `matches/new-match-wizard`) | `getProgramSchedule` → `eventDetailFrom`, `programNamesFor`; `presetFor`/`lineupChoices` and `entryState`; writes through `recordResult` |
 | `/dashboard/team/schedule/single/[matchId]` | `single-detail.tsx` | `getTeamSingleMatch` |
 | `/dashboard/team/schedule/new/single` | `matches/new-match-wizard` (not this directory) | — |
 
-The four `static/` routes were the design-copy run's; the three below them
-were never re-pointed and never dormant. Which task wired which — the commits
+The four `static/` routes were the design-copy run's; the four below them
+were never re-pointed and never dormant (the score-only flow at `[eventId]/score` is newer still — T11). Which task wired which — the commits
 carry the same numbers: T15 the schedule, T18 the chooser, T19–T20 the
 tournament builder, T21–T23 the dual builder. T25 then confirmed the schedule
 surfaces agree on the data of one event, and disagree on some words — §3.

@@ -142,7 +142,7 @@ need it.
 - **notes:** For `pipeline-guardrails-reviewer`: before — `ScoreBlock` reads `formData.adScoring` to print ` · ad`/` · no-ad`, never writes it; after — identical, one file over. Set-score arrays pass through unchanged; the top-player reorder still happens in `job-request.ts` at submit. Non-goals: no behaviour change.
 
 ## T11 · Score-only entry route under the event
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4, T10
 - **files:** src/app/dashboard/team/schedule/[eventId]/score/page.tsx (new), src/components/dashboard/schedule/score-only-flow.tsx (new), src/lib/schedule/score-seed.ts (new), src/lib/dashboard/nav.ts, MAP.md, src/components/dashboard/schedule/README.md, tests/score-seed.spec.ts (new), tests/schedule-leaf.spec.ts (new)
