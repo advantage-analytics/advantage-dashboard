@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import RecentMatches from "@/components/dashboard/home/recent-matches";
+import { CardFooter } from "@/components/dashboard/shared/card-footer";
 import { RecentMatchesEmpty } from "@/components/dashboard/home/recent-matches-empty";
 import { advButton } from "@/lib/ui/adv-button";
 import { createClient } from "@/lib/supabase/client";
@@ -286,6 +287,8 @@ export default function RecentActivity({
   playerIds,
   hasMatches,
   showEmptyAction = true,
+  matchCount,
+  wonCount,
 }: {
   /** Whose uploads this list is scoped to. */
   userId: string;
@@ -308,6 +311,14 @@ export default function RecentActivity({
    * day-zero page, where the centred offer above it is the page's one action.
    */
   showEmptyAction?: boolean;
+  /**
+   * The footer's "M matches · W won", resolved on the server by the same
+   * loader that counts the title row — the two numbers on the page that say
+   * how many matches there are must come from one place. `matchCount` counts
+   * every filed row; `wonCount` only decided, viewer-attributed scores.
+   */
+  matchCount: number;
+  wonCount: number;
 }) {
 
   const [events, setEvents] = useState<EventGroup[]>([]);
@@ -525,19 +536,21 @@ export default function RecentActivity({
 
   return (
     <>
-    {/* The day-zero card carries a footer band under the ghost rows, and a
-        band needs the card's full 24px below it; a list of rows does not. */}
     <div
       // `@container/matches`: the rows inside size their stat cells to this
       // card, not the viewport — see `MatchLink` in recent-matches.tsx.
       className="surface-card @container/matches"
-      style={{
-        padding:
-          !hasMatches && showEmptyAction ? "8px 24px 24px" : "8px 24px 14px",
-      }}
+      // One padding for every card on Home — `--pad-card`, 20px all round —
+      // so the eyebrows sit on one x and the cards close on one measure.
+      // Pa2 draws this card alone at `2px 24px 14px` with a 40px header row
+      // carrying the top air; the eyebrow lands at the same height either
+      // way, and the rows keep their 8px inset by bleeding 12px instead of
+      // 16 (see `MatchLink`).
+      style={{ padding: "var(--pad-card)" }}
     >
-      {/* Header */}
-      <div className="flex items-center gap-3" style={{ padding: "12px 0 2px" }}>
+      {/* Header — the same row every sibling opens with: eyebrow left, the
+          card's one link right, 20px from the top edge. */}
+      <div className="flex items-center gap-3">
         <span className="eyebrow">Recent matches</span>
         <div className="flex-1" />
         <Link
@@ -549,8 +562,8 @@ export default function RecentActivity({
         </Link>
       </div>
 
-      {/* Content — no padding of its own; the card's 14px bottom (Pa2) is the
-          whole gap under the last row. */}
+      {/* Content — no padding of its own; the card's bottom padding is the
+          whole gap under the footer. */}
       <div>
         {loading && (
           <div className="flex flex-col gap-8 py-4">
@@ -632,7 +645,33 @@ export default function RecentActivity({
         )}
 
         {!loading && !error && events.length > 0 && (
-          <EventsList events={events} seenEventIdsRef={seenEventIdsRef} />
+          <>
+            <EventsList events={events} seenEventIdsRef={seenEventIdsRef} />
+            {/* Pa2's card footer: what the list is a slice of. The left count
+                is the rows actually drawn — what the grouping leaves after it
+                drops unscored and non-viewer rows and keeps the latest three
+                events. The right one is the same number the title row states,
+                so the two can never disagree. */}
+            <CardFooter
+              className="mt-2.5"
+              left={
+                <>
+                  Latest{" "}
+                  <span className="tabular">
+                    {events.reduce((n, e) => n + e.matches.length, 0)}
+                  </span>{" "}
+                  shown
+                </>
+              }
+              right={
+                <>
+                  <span className="tabular">{matchCount}</span>{" "}
+                  {matchCount === 1 ? "match" : "matches"} ·{" "}
+                  <span className="tabular">{wonCount}</span> won
+                </>
+              }
+            />
+          </>
         )}
       </div>
     </div>

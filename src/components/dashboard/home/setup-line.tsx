@@ -44,7 +44,8 @@ const STEPS: ReadonlyArray<{
 /**
  * Account state, one line above the usage footer.
  *
- * It was a two-row checklist in the right column until the court went in.
+ * It was a two-row checklist in the right column until the serve card took
+ * that column.
  * That column is what the analysis will say; a list of profile fields is
  * neither analysis nor news, and it was the loudest thing on a page whose
  * subject is a match that has not happened yet. As one line it still says

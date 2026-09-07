@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import type { EvidencePart } from "@/lib/ui/insight-evidence";
+import { HOME_CLAIM_CLASS } from "@/lib/ui/home-claim";
 
 // Cached per session so navigating away and back doesn't re-trigger the LLM.
 // The key is suffixed with a signature of the underlying performance data (see
@@ -18,7 +18,7 @@ const MOCK_MARKER = "No LLM provider";
 interface HomeAiInsightProps {
   /**
    * The evidence line, already composed from computed stats. Never LLM text —
-   * see `buildInsightEvidence`. Renders immediately, without waiting on the
+   * see `buildInsightEvidenceWithCaption`. Renders immediately, without waiting on the
    * stream, because it needs nothing the server did not already know.
    */
   evidence: EvidencePart[];
@@ -28,14 +28,11 @@ interface HomeAiInsightProps {
    * cached insight is invalidated and a fresh one is generated.
    */
   cacheSignature?: string;
-  /** Sample size for the footer's "from N analyzed matches" — never invented. */
-  matchCount: number;
 }
 
 export default function HomeAiInsight({
   evidence,
   cacheSignature = "",
-  matchCount,
 }: HomeAiInsightProps) {
   const [claim, setClaim] = useState("");
   const [error, setError] = useState(false);
@@ -96,15 +93,21 @@ export default function HomeAiInsight({
     return () => controller.abort();
   }, [cacheSignature]);
 
+  // Pa2's "quiet body" setting: the claim at 14px/300 — a size step over the
+  // evidence rather than display type, so the page's largest type stays the
+  // KPI numbers above — and the evidence dropped to 12px ink-600 with only
+  // its figures in ink-900. The claim reads first by a wider margin; the
+  // evidence is something you lean in for. The footer (caption and sample
+  // size) belongs to `FocusCard`, which draws it for the empty card too.
   return (
-    <div className="flex flex-col gap-2.5">
+    <div className="flex flex-col gap-3">
       {/* Claim — one falsifiable sentence, the card's only title-weight text. */}
       {error ? (
         <p className="text-body-sm">
           Couldn&apos;t load your insight right now. Try again in a moment.
         </p>
       ) : claim ? (
-        <span className="text-title" style={{ maxWidth: "30ch" }}>
+        <span className={HOME_CLAIM_CLASS} style={{ maxWidth: "30ch", textWrap: "pretty" }}>
           {claim}
         </span>
       ) : (
@@ -113,10 +116,13 @@ export default function HomeAiInsight({
 
       {/* Evidence — computed, never invented. Present even when the claim
           fails to load: the numbers are ours and they are still true. */}
-      <span className="text-[12px] leading-[1.6] text-[var(--ink-700)]">
+      <span
+        className="text-[12px] leading-[1.7] text-[var(--ink-600)]"
+        style={{ textWrap: "pretty" }}
+      >
         {evidence.map((part, i) =>
           part.tabular ? (
-            <span key={i} className="tabular">
+            <span key={i} className="tabular text-[var(--ink-900)]">
               {part.text}
             </span>
           ) : (
@@ -124,20 +130,6 @@ export default function HomeAiInsight({
           )
         )}
       </span>
-
-      <div className="mt-0.5 flex items-center gap-2.5">
-        <Link
-          href="/dashboard/statistics"
-          className="text-[11px] font-medium transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-          style={{ color: "var(--blue)" }}
-        >
-          Open Statistics
-        </Link>
-        <span className="text-micro">
-          from <span className="tabular">{matchCount}</span> analyzed{" "}
-          {matchCount === 1 ? "match" : "matches"}
-        </span>
-      </div>
     </div>
   );
 }

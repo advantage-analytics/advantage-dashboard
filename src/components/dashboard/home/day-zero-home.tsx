@@ -9,9 +9,9 @@ import { DayZeroOffer } from "@/components/dashboard/home/day-zero-offer";
  *
  * The tail below the offer is the real page in its real order, carrying the
  * empty states each region already ships — a rule where every number goes,
- * ghost match rows with their live stat labels, the Focus card's quoted
- * example, the hairline court, and a heatmap whose cells are genuinely all
- * empty because no session has happened. Nothing in it is invented.
+ * ghost match rows with their live stat labels, the Focus card's own
+ * anatomy, the serve strip's empty bar tracks, and a heatmap whose cells are
+ * genuinely all empty because no session has happened. Nothing in it is invented.
  *
  * It is graded rather than drawn flat, and the grade is continuous: brightest
  * under the offer and fading with distance, so the tail reads as the page
