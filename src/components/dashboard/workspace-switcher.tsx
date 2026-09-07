@@ -5,7 +5,7 @@ import { Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { setActiveWorkspace } from "@/lib/workspace/actions";
-import { teamLabel, type Workspace } from "@/lib/workspace/types";
+import { squadDisambiguator, type Workspace } from "@/lib/workspace/types";
 
 /**
  * The workspace list inside the header's profile menu.
@@ -21,6 +21,10 @@ export function WorkspaceOptionList({ onSwitched }: { onSwitched?: () => void })
   // One state, not two. `isPending` and a pending id answered the same question
   // and briefly disagreed, leaving every row disabled with no spinner anywhere.
   const [pendingId, setPendingId] = useState<string | null>(null);
+  // Same rule as the sidebar menu: the squad is width worth spending only on
+  // the rows a school name alone cannot tell apart. This list has no tooltip
+  // to fall back on, so sharing the rule matters more here, not less.
+  const squadFor = squadDisambiguator(available);
 
   const switchTo = (workspace: Workspace) => {
     if (workspace.id === active.id) {
@@ -46,7 +50,7 @@ export function WorkspaceOptionList({ onSwitched }: { onSwitched?: () => void })
     <div role="listbox" aria-label="Workspaces">
       {available.map((workspace) => {
         const isActive = workspace.id === active.id;
-        const squad = teamLabel(workspace.team);
+        const squad = squadFor(workspace);
 
         return (
           <button
