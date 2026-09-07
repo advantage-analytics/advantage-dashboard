@@ -508,6 +508,12 @@ function EventCell({
           <div
             className={cn(
               UNDERLINE_CLS,
+              // The rule answers focus by itself: hairline at rest, the blue
+              // 2px whenever the field holds focus. `open` alone was not
+              // enough — `commit()` closes the list while the input keeps
+              // focus, and in that window a ring-less field would have shown
+              // no focus indicator at all.
+              "focus-within:border-b-2 focus-within:border-[var(--blue)] focus-within:pb-[7px]",
               open ? "border-b-2 border-[var(--blue)] pb-[7px]" : "border-[var(--border-hairline)]"
             )}
           >
@@ -515,6 +521,10 @@ function EventCell({
               id={inputId}
               value={term}
               placeholder="None — one-off"
+              // The wrapper's rule thickens and recolours on focus, so the
+              // neutral field ring would sit inset inside a field that has
+              // already answered the question.
+              data-focus-ring="none"
               autoComplete="off"
               onFocus={() => setOpen(true)}
               onChange={(e) => {
@@ -1166,6 +1176,10 @@ function DetailsStepContentImpl({
                     value={nameTerm}
                     placeholder="Opponent"
                     aria-label="Opponent"
+                    // The span above carries a standing 2px blue rule while
+                    // this field is being named, so the ring would sit inset
+                    // inside a field that has already answered focus.
+                    data-focus-ring="none"
                     autoComplete="off"
                     onFocus={() => setNameOpen(true)}
                     onChange={(e) => {
