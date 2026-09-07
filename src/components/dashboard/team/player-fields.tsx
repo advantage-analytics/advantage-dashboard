@@ -1,6 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
+import { AdvSelect } from "@/components/ui/adv-select";
 import type { RosterMember } from "@/lib/data/team-roster-server";
 
 /**
@@ -39,9 +40,15 @@ export const LINEUP_SPOTS = Array.from({ length: 9 }, (_, i) => i + 1);
 /**
  * The underline `<select>`, matching `SettingsUnderlineInput`'s rule.
  *
- * Native, deliberately, for the reason `settings-inline-select.tsx` records: on
- * a phone the platform picker is better than anything we would build, and this
- * is a form somebody fills in once per athlete.
+ * A thin adapter over `AdvSelect` now, kept only for its callback shape: the
+ * two roster dialogs pass `onChange={setClassYear}` — a plain setter, not an
+ * event handler — and rewriting both call sites to unwrap the event would be
+ * churn for no gain. Everything visual belongs to the primitive.
+ *
+ * What that fixed here: this component set `appearance-none` and put nothing
+ * back where the browser's arrow had been, so the control read as static
+ * text; and its rule recoloured on focus without thickening to the 2px the
+ * design system asks for.
  */
 export function UnderlineSelect({
   value,
@@ -57,16 +64,14 @@ export function UnderlineSelect({
   disabled?: boolean;
 }) {
   return (
-    <select
+    <AdvSelect
       aria-label={ariaLabel}
       value={value}
       disabled={disabled}
       onChange={(event) => onChange(event.target.value)}
-      data-focus-ring="none" /* the border-b above carries focus */
-      className="h-[34px] cursor-pointer appearance-none border-b border-[var(--border-field)] bg-transparent text-[13px] text-[var(--ink-900)] outline-none transition-colors focus:border-[var(--blue)] disabled:cursor-not-allowed disabled:opacity-50"
     >
       {children}
-    </select>
+    </AdvSelect>
   );
 }
 

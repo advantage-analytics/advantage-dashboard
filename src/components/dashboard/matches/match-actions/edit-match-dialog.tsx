@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AdvSelect } from "@/components/ui/adv-select";
 import { cn } from "@/lib/utils";
 import {
   eyebrowLabelCls,
@@ -591,15 +592,24 @@ export function EditMatchDialog({ matchId, open, onOpenChange }: EditMatchDialog
                     className="w-full bg-transparent text-[14px] outline-none text-[#0D0D0D] placeholder:text-[#AAAAAA] pb-1.5"
                   />
                 </UnderlineField>
+                {/* `kind="bare"`: `UnderlineField` already draws the rule and
+                    already thickens it to 2px blue on focus, so the select
+                    contributes only the chevron this dialog was missing —
+                    `appearance-none` had removed the browser's arrow and put
+                    nothing back. The 14px stays because it is what every other
+                    field in this dialog runs at; retiring it is a dialog-wide
+                    change, not a select change. */}
                 <UnderlineField label="Match type">
-                  <select
+                  <AdvSelect
+                    kind="bare"
+                    aria-label="Match type"
                     value={matchType}
                     onChange={(e) => setMatchType(e.target.value)}
-                    data-focus-ring="none" /* the rule below carries focus */
-                    className={cn(
-                      "w-full appearance-none bg-transparent text-[14px] outline-none pb-1.5 cursor-pointer",
-                      matchType ? "text-[#0D0D0D]" : "text-[#AAAAAA]"
-                    )}
+                    className="text-[14px] text-[#0D0D0D] pb-1.5"
+                    /* `pb-1.5` is the gap to the rule below, so the select's
+                       text sits 3px above its own box centre — nudge the
+                       glyph up by the same amount or it reads as low. */
+                    chevronClassName="-translate-y-[calc(50%+3px)]"
                   >
                     <option value="">Select type</option>
                     {MATCH_TYPES.map((t) => (
@@ -607,17 +617,16 @@ export function EditMatchDialog({ matchId, open, onOpenChange }: EditMatchDialog
                         {t}
                       </option>
                     ))}
-                  </select>
+                  </AdvSelect>
                 </UnderlineField>
                 <UnderlineField label="Court surface">
-                  <select
+                  <AdvSelect
+                    kind="bare"
+                    aria-label="Court surface"
                     value={courtType}
                     onChange={(e) => setCourtType(e.target.value)}
-                    data-focus-ring="none" /* the rule below carries focus */
-                    className={cn(
-                      "w-full appearance-none bg-transparent text-[14px] outline-none pb-1.5 cursor-pointer capitalize",
-                      courtType ? "text-[#0D0D0D]" : "text-[#AAAAAA]"
-                    )}
+                    className="text-[14px] text-[#0D0D0D] pb-1.5 capitalize"
+                    chevronClassName="-translate-y-[calc(50%+3px)]"
                   >
                     <option value="">Select surface</option>
                     {COURT_TYPES.map((t) => (
@@ -625,7 +634,7 @@ export function EditMatchDialog({ matchId, open, onOpenChange }: EditMatchDialog
                         {t.charAt(0).toUpperCase() + t.slice(1)}
                       </option>
                     ))}
-                  </select>
+                  </AdvSelect>
                 </UnderlineField>
               </div>
 
@@ -737,8 +746,17 @@ function UnderlineField({
         {children}
         <div
           className={
+            // Both branches thicken to 2px on focus, and that is load-bearing
+            // rather than symmetry: every child of this wrapper carries
+            // `data-focus-ring="none"`, so this rule is their ONLY focus
+            // indicator (focus.css, "the underline exception"). The error
+            // branch used to be a flat 1px that never changed — so a field
+            // that had just been rejected was also the one field on the
+            // dialog with no visible focus at all, which is the state a
+            // keyboard user is most likely to be in. It stays red: the error
+            // owns the colour, focus owns the weight.
             error
-              ? "h-[1px] w-full bg-[#E51837]"
+              ? "h-[1px] w-full bg-[#E51837] motion-safe:transition-all motion-safe:duration-300 group-focus-within:h-[2px]"
               : "h-[1px] w-full bg-[#F3F3F3] motion-safe:transition-all motion-safe:duration-300 group-focus-within:h-[2px] group-focus-within:bg-[#3B82F6]"
           }
         />

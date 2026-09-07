@@ -19,14 +19,22 @@
    utility class. `advButton()` sets the same ring, so it agrees by value.
 
    ── Two rings, split by control kind ─────────────────────────────────────────
-   The floor is one indicator per control, not one COLOUR for every control.
-   Text fields are the carve-out (DESIGN.md "Focus"): blue on a focused field
-   reads as a validation state, and a six-field form would spend the accent six
-   times over. So `input`, `select` and `textarea` resolve to the neutral
-   `--focus-ring-field`, and need no focus class of their own. Everything
-   actionable — links, buttons, `summary`, anything tabbable — keeps the blue
-   `--focus-ring`. The split is keyed on tag name, so Radix's `SelectTrigger`
-   is a `<button>` and takes blue; only a native `<select>` gets the carve-out.
+   The floor is one indicator per control. `input`, `select` and `textarea`
+   resolve to `--focus-ring-field`; everything actionable — links, buttons,
+   `summary`, anything tabbable — resolves to `--focus-ring`. The split is
+   keyed on tag name, so Radix's `SelectTrigger` is a `<button>` and takes the
+   actionable ring; only a native `<select>` takes the field one.
+
+   Two tokens, but as of 2026-08-26 ONE COLOUR: `--field-ring` aliases straight
+   to `--blue` (colors.css), so a focused field rings blue exactly like a
+   focused button. It sat on the neutral `--ink-500` for a while — the argument
+   being that blue on a field reads as a validation state, and a six-field form
+   would spend the accent six times over — and was reverted at the design
+   owner's explicit call: one consistent focus colour across the product
+   mattered more. The tokens stay separate so the two families *can* diverge
+   again, not because they currently do. Anything describing this rule as "the
+   neutral field ring" is stale; the two differ in geometry (1px core + 30%
+   band vs. a single 40% band), not in hue.
 
    One thing this split must not do: resolve either branch to `none`.
    "No indicator" is the bug this file exists to fix — recolour a ring, never
@@ -43,10 +51,16 @@
 
    These fields opt out with the same `data-focus-ring="none"` the composite-
    field case below uses — same attribute, same specificity-0 rule, different
-   reason for being safe: auth's `form-field.tsx`, the settings underline input
-   (`SettingsUnderlineInput`, `UnderlineSelect`, and `ProfileSelect`'s inline
-   copy of the same rule), the schedule lineup editor's `NameField`, and the
-   match-edit dialog's `UnderlineField` children and `PlayerRow` name input.
+   reason for being safe: auth's `form-field.tsx`, `SettingsUnderlineInput`,
+   the schedule lineup editor's `NameField`, and the match-edit dialog's
+   `UnderlineField` children and `PlayerRow` name input.
+
+   Every native `<select>` in the product now reaches that attribute through
+   one component — `ui/adv-select.tsx` — which sets it from its `kind` rather
+   than accepting it as a prop: `underline` and `bare` opt out because the
+   rule under them thickens to 2px `--blue` on focus, and `boxed` keeps the
+   ring because its border does not change. That is the judgement below made
+   once instead of at five call sites, three of which had already drifted.
 
    The opt-out is NOT safe merely because a field looks like an underline —
    only because something visibly changes on it at focus. `schedule/

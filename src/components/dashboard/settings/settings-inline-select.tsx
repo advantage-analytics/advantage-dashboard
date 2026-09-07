@@ -10,6 +10,25 @@ import { cn } from "@/lib/utils";
  * is one row inside a settings card, the options are three words each, and the
  * platform control already gives keyboard handling, mobile pickers and screen
  * reader support that a custom listbox would have to re-earn.
+ *
+ * ── Deliberately NOT `AdvSelect` ────────────────────────────────────────────
+ * The other five native-select wrappers collapsed into `ui/adv-select.tsx`
+ * because they were all trying to be the same field. This one is not a field:
+ * it is a 30px pill at 12px, the trailing control on a settings row, sitting
+ * beside a label that is already the row's question — the register `Toggle`
+ * and the row's other trailing controls use, not the register `Input` uses.
+ * `AdvSelect` would make it a 34px underline at 13px with a label above it,
+ * which is a layout change to two settings pages dressed up as a cleanup.
+ *
+ * It is also already right by the design system's own reading. Its ring lives
+ * on the wrapper because the `<select>` beneath is `opacity-0` — the
+ * wrapper-ring pattern, and `focus.css` names this file as the sanctioned
+ * `focus-within` case (there is no second focusable child here to double-ring
+ * against). So it needs no `data-focus-ring="none"`: there is no ring on the
+ * select to suppress, and the box draws the only indicator.
+ *
+ * If this pill ever needs a second instance, it earns its own primitive rather
+ * than a third kind on `AdvSelect`.
  */
 export function SettingsInlineSelect<T extends string>({
   value,
