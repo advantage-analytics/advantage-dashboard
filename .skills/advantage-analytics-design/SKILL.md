@@ -694,7 +694,7 @@ a list.
 
 | The page is | Treatment | Shipped |
 |---|---|---|
-| built, no data yet (**day zero**) | the offer over the page's own shape, dimmed and `inert` | `home/day-zero-home.tsx`, `matches/matches-day-zero.tsx` |
+| built, no data yet (**day zero**) | the offer over the page's own shape, dimmed and `inert` | `home/day-zero-home.tsx`, `matches/matches-day-zero.tsx`, `schedule/static/schedule-day-zero.tsx`, `team/roster-day-zero.tsx` |
 | built, no data, and its shape is too dense to dim | the offer, then a labelled run naming what arrives | *(no shipped example — Statistics held this slot until the page went back to coming-soon)* |
 | **not built yet** | "Coming soon", one statement, one way onward — **no shape at all** | `dashboard/coming-soon.tsx` |
 
@@ -1133,8 +1133,30 @@ master-detail split is retired; its detail is the peek drawer below.
    shipped form carried two blue links to the same URL. What is dimmed is the
    list's real anatomy with its labels intact, never grey stand-ins for
    labels; the column headers are the payload (Empty State → labels). The
-   **team** list keeps the older shape (`matches/matches-empty.tsx`) until its
-   own day zero ("Set up your program") is designed.
+   **team** list draws the same composition with different words —
+   `MatchesDayZero` takes a `scope`, and only the sentence and the action pair
+   change. This closes the slot that read "the team list keeps the older shape
+   until its own day zero is designed": two day zeros one workspace switch
+   apart would be the same drift the rewrite above was for.
+
+   The two other team table pages follow it. **Schedule**
+   (`schedule/static/schedule-day-zero.tsx`) draws the offer over its pills,
+   toolbar and seven column labels; **Roster** (`team/roster-day-zero.tsx`)
+   over its five, and a program has that screen on its first day, because
+   staff are not rows in that table. Both drop the title row and the footer
+   for the same reason Matches does, and both take their grid and their labels
+   by import from the real table — a ghost table never restates its own
+   geometry. What differs by role rather than by page: a viewer who may not
+   fill the page gets the identical shape with **no pair at all** and a
+   conditions line naming who does, never a button that refuses on click.
+   The gates are the page's own — `isProgramStaff` on Schedule and Roster,
+   `canUploadForProgram` on Matches — so the offer never opens a door the next
+   page closes.
+
+   Day zero is the state where **nothing is in flight**, not where the table
+   is empty: a draft keeps Matches' list, and an open invitation or a pending
+   join request keeps Roster's, because each is a person or a match on the
+   way and the page holding it has something waiting on somebody.
 
    *Shipped:* `matches/matches-day-zero.tsx` — the shared `DayZeroOffer` with
    the page's own sentence ("Every match you send lands here." on a 30ch

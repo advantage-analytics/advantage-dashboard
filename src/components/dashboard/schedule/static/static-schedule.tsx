@@ -12,6 +12,8 @@ import {
   DRAWER_ATTR,
   EventDrawer,
 } from "@/components/dashboard/schedule/static/event-drawer";
+import { ScheduleDayZero } from "./schedule-day-zero";
+import { Chip } from "./chip";
 import {
   ScheduleTable,
   scheduleRowId,
@@ -312,6 +314,27 @@ export function StaticSchedule({
       ? `/dashboard/team/schedule/${nextDual.id}`
       : null;
 
+  /**
+   * Day zero is the whole frame, not a panel inside it: the offer carries the
+   * page's one primary, so the title row and the season footer stand down
+   * until the season has an event. See `ScheduleDayZero` for why the rule
+   * changed, and where the program's name lives while this is on screen.
+   *
+   * A return rather than a branch in the JSX below — every hook above has
+   * already run, nothing here is conditional, and wrapping 150 lines in a
+   * ternary left the populated arm indented one level shy of its own nesting.
+   * There is no drawer to render either: with no rows nothing can be selected.
+   */
+  if (rows.length === 0) {
+    return (
+      <div className="flex w-full flex-1 bg-[var(--surface-card)]">
+        <div className="flex min-w-0 flex-1 flex-col px-14 pb-6 pt-5">
+          <ScheduleDayZero canCreate={canCreate} canAddOwnMatch={canAddOwnMatch} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex w-full flex-1 bg-[var(--surface-card)]">
       <div className="flex min-w-0 flex-1 flex-col gap-[18px] px-14 pb-6 pt-5">
@@ -351,115 +374,112 @@ export function StaticSchedule({
           ) : null}
         </div>
 
-        {rows.length === 0 ? (
-          <DayZero canCreate={canCreate} canAddOwnMatch={canAddOwnMatch} />
+        <div className="flex items-center gap-2">
+          <Chip
+            label="All"
+            active={lifecycle === "all"}
+            onClick={() => applyCut({ lifecycle: "all" })}
+          />
+          <Chip
+            label="Upcoming"
+            active={lifecycle === "upcoming"}
+            onClick={() => applyCut({ lifecycle: "upcoming" })}
+          />
+          <Chip
+            label="Completed"
+            active={lifecycle === "completed"}
+            onClick={() => applyCut({ lifecycle: "completed" })}
+          />
+          <div className="flex-1" />
+          <MatchesFilterPanel<FacetKey>
+            sections={FILTER_SECTIONS}
+            hasActive={hasFacets}
+            isChecklistActive={() => false}
+            onToggleChecklist={() => {}}
+            segmentedValue={(key) => facets[key]}
+            onSelectSegment={(key, value) =>
+              applyCut({
+                facets:
+                  key === "kind"
+                    ? { ...facets, kind: value as EventKind | null }
+                    : { ...facets, site: value as EventSite | null },
+              })
+            }
+            onClear={() => applyCut({ facets: { kind: null, site: null } })}
+            resultCount={visible.length}
+            totalCount={rows.length}
+            label="Filter events"
+            noun={{ singular: "event", plural: "events" }}
+          />
+          <SortMenu value={sort} onChange={(next) => applyCut({ sort: next })} />
+        </div>
+
+        {/* The panel closes on apply; this states the cut in words. Never
+            chips, never a badge — v3's Data Table law 6. */}
+        {hasFacets ? (
+          <div
+            className="flex flex-wrap items-center gap-2 rounded-[var(--radius-element)] px-3.5 py-2.5"
+            style={{ background: "var(--surface-subtle)" }}
+          >
+            <FilterIcon
+              className="size-[13px] shrink-0"
+              strokeWidth={1.5}
+              style={{ color: "var(--ink-500)" }}
+              aria-hidden="true"
+            />
+            <span className="text-[11px]" style={{ color: "var(--ink-700)" }}>
+              {describeCut(facets)}
+            </span>
+            <span
+              className="size-[3px] rounded-full"
+              style={{ background: "var(--ink-300)" }}
+              aria-hidden="true"
+            />
+            <span className="text-micro tabular">
+              {visible.length} of {rows.length}
+            </span>
+            <div className="flex-1" />
+            <button
+              type="button"
+              onClick={() => applyCut({ facets: { kind: null, site: null } })}
+              className="whitespace-nowrap text-[11px] font-medium"
+              style={{ color: "var(--blue)" }}
+            >
+              Clear filter
+            </button>
+          </div>
+        ) : null}
+
+        {visible.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16">
+            <p className="mb-1 text-[14px] font-medium" style={{ color: "var(--ink-900)" }}>
+              No events match
+            </p>
+            <button
+              type="button"
+              onClick={() =>
+                applyCut({ lifecycle: "all", facets: { kind: null, site: null } })
+              }
+              className="mt-1 text-[11px] font-medium"
+              style={{ color: "var(--blue)" }}
+            >
+              Clear all filters
+            </button>
+          </div>
         ) : (
-          <>
-            <div className="flex items-center gap-2">
-              <Chip
-                label="All"
-                active={lifecycle === "all"}
-                onClick={() => applyCut({ lifecycle: "all" })}
-              />
-              <Chip
-                label="Upcoming"
-                active={lifecycle === "upcoming"}
-                onClick={() => applyCut({ lifecycle: "upcoming" })}
-              />
-              <Chip
-                label="Completed"
-                active={lifecycle === "completed"}
-                onClick={() => applyCut({ lifecycle: "completed" })}
-              />
-              <div className="flex-1" />
-              <MatchesFilterPanel<FacetKey>
-                sections={FILTER_SECTIONS}
-                hasActive={hasFacets}
-                isChecklistActive={() => false}
-                onToggleChecklist={() => {}}
-                segmentedValue={(key) => facets[key]}
-                onSelectSegment={(key, value) =>
-                  applyCut({
-                    facets:
-                      key === "kind"
-                        ? { ...facets, kind: value as EventKind | null }
-                        : { ...facets, site: value as EventSite | null },
-                  })
-                }
-                onClear={() => applyCut({ facets: { kind: null, site: null } })}
-                resultCount={visible.length}
-                totalCount={rows.length}
-                label="Filter events"
-                noun={{ singular: "event", plural: "events" }}
-              />
-              <SortMenu value={sort} onChange={(next) => applyCut({ sort: next })} />
-            </div>
-
-            {/* The panel closes on apply; this states the cut in words. Never
-                chips, never a badge — v3's Data Table law 6. */}
-            {hasFacets ? (
-              <div
-                className="flex flex-wrap items-center gap-2 rounded-[var(--radius-element)] px-3.5 py-2.5"
-                style={{ background: "var(--surface-subtle)" }}
-              >
-                <FilterIcon
-                  className="size-[13px] shrink-0"
-                  strokeWidth={1.5}
-                  style={{ color: "var(--ink-500)" }}
-                  aria-hidden="true"
-                />
-                <span className="text-[11px]" style={{ color: "var(--ink-700)" }}>
-                  {describeCut(facets)}
-                </span>
-                <span
-                  className="size-[3px] rounded-full"
-                  style={{ background: "var(--ink-300)" }}
-                  aria-hidden="true"
-                />
-                <span className="text-micro tabular">
-                  {visible.length} of {rows.length}
-                </span>
-                <div className="flex-1" />
-                <button
-                  type="button"
-                  onClick={() => applyCut({ facets: { kind: null, site: null } })}
-                  className="whitespace-nowrap text-[11px] font-medium"
-                  style={{ color: "var(--blue)" }}
-                >
-                  Clear filter
-                </button>
-              </div>
-            ) : null}
-
-            {visible.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16">
-                <p className="mb-1 text-[14px] font-medium" style={{ color: "var(--ink-900)" }}>
-                  No events match
-                </p>
-                <button
-                  type="button"
-                  onClick={() =>
-                    applyCut({ lifecycle: "all", facets: { kind: null, site: null } })
-                  }
-                  className="mt-1 text-[11px] font-medium"
-                  style={{ color: "var(--blue)" }}
-                >
-                  Clear all filters
-                </button>
-              </div>
-            ) : (
-              <ScheduleTable
-                rows={visible}
-                details={details}
-                selectedId={selectedId}
-                onSelect={toggle}
-              />
-            )}
-          </>
+          <ScheduleTable
+            rows={visible}
+            details={details}
+            selectedId={selectedId}
+            onSelect={toggle}
+          />
         )}
 
-        {/* The season footer — drawn identically at day zero, where it counts
-            nothing yet, because the frame never moves. */}
+        {/* The season footer. It used to be drawn at day zero too, on the old
+            rule that the frame never moves — but that rule went with the title
+            row, and "Season 0–0 in duals · 0 of 0 lines analyzed" under a page
+            that has never held an event is a readout of nothing. Once there is
+            one event it is back, and from then on it never moves again. */}
         <div className="flex items-center gap-2.5">
           <span className="text-micro" style={{ color: "var(--ink-500)" }}>
             Season {tabularNumerals(seasonFacts(season))}
@@ -607,37 +627,6 @@ function opponentOf(
 
 /* ── Chrome ──────────────────────────────────────────────────────────────── */
 
-/**
- * One lifecycle pill, with its count inside — the one place a count lives
- * outside a tooltip, because it is page content rather than chrome.
- */
-function Chip({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={cn(
-        "inline-flex h-[26px] cursor-pointer items-center rounded-[var(--radius-pill)] border px-[11px] text-[12px]",
-        "transition-colors duration-[var(--duration-hover)] outline-none focus-visible:shadow-[var(--focus-ring)]",
-        active
-          ? "border-[var(--border-medium)] bg-[var(--surface-subtle)] font-medium text-[var(--ink-900)]"
-          : "border-[var(--border-hairline)] font-normal text-[var(--ink-600)] hover:bg-[var(--surface-subtle)]"
-      )}
-    >
-      {label}
-    </button>
-  );
-}
-
 /** "Newest first" ▾ — the two orders a season can be read in. */
 function SortMenu({
   value,
@@ -709,80 +698,6 @@ function SortMenu({
       </PopoverContent>
     </Popover>
   );
-}
-
-/* ── Day zero ────────────────────────────────────────────────────────────── */
-
-/**
- * The middle of the page before any event exists: one light line, one
- * sentence, the quiet paths. `7e`'s copy, in the table-page law's shape.
- */
-function DayZero({
-  canCreate,
-  canAddOwnMatch,
-}: {
-  canCreate: boolean;
-  canAddOwnMatch: boolean;
-}) {
-  const paths: React.ReactNode[] = [];
-  if (canCreate) {
-    paths.push(
-      <Link key="dual" href="/dashboard/team/schedule/new" className={LINK_CLASS}>
-        New dual
-      </Link>,
-      <Link
-        key="tournament"
-        href="/dashboard/team/schedule/new/tournament"
-        className={LINK_CLASS}
-      >
-        New tournament
-      </Link>
-    );
-  }
-  if (canAddOwnMatch) {
-    // The one-off path is the single-match wizard under the schedule — a
-    // team workspace's rail has no Matches entry, so that is where "in
-    // Matches" actually leads from here.
-    paths.push(
-      <Link key="single" href="/dashboard/team/schedule/new/single" className={LINK_CLASS}>
-        One-off match in Matches
-      </Link>
-    );
-  }
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col pt-2">
-      <span
-        className="text-[24px] font-light leading-[30px] tracking-[-0.4px]"
-        style={{ color: "var(--ink-900)" }}
-      >
-        No events yet
-      </span>
-      <p className="text-body-sm mt-2.5 max-w-[46ch] text-pretty">
-        {canCreate
-          ? "Create a dual and the lineup card builds itself — every slot becomes a real match the moment you set the line."
-          : "Your coaching staff schedule the program's duals and tournaments here."}
-      </p>
-      {paths.length > 0 ? (
-        <div className="mt-3.5 flex items-center gap-2.5">
-          {paths.map((path, index) => (
-            <span key={index} className="contents">
-              {index > 0 ? <Separator /> : null}
-              {path}
-            </span>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-/** `--blue` at rest, `--blue-hover` on hover — the one rule for a blue word. */
-const LINK_CLASS =
-  "text-[12px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]";
-
-function Separator() {
-  return <span className="text-[12px] text-[var(--ink-300)]">·</span>;
 }
 
 /* ── The footer's sentence ───────────────────────────────────────────────── */

@@ -23,6 +23,8 @@ import { advButton } from "@/lib/ui/adv-button";
 export function DayZeroOffer({
   headline = "Every serve, every point, and one thing to work on.",
   headlineMeasure = "24ch",
+  actions = <MatchOfferActions />,
+  conditions = MATCH_OFFER_CONDITIONS,
 }: {
   /**
    * The one sentence above the buttons. Home's names what the product does;
@@ -33,6 +35,25 @@ export function DayZeroOffer({
   headline?: string;
   /** Where the sentence breaks. Home's is set to break once; Matches' fits one line. */
   headlineMeasure?: string;
+  /**
+   * The action pair, for the day zeros whose first step is not an upload.
+   *
+   * Omitted, this draws the match pair below — the personal offer, unchanged
+   * to the byte on Home and Matches. A team page passes its own, because
+   * Schedule's first step is an event and Roster's is a player, and the
+   * geometry above and below the pair is the whole reason this component is
+   * shared rather than copied three times.
+   *
+   * `null` is not the same as omitting it, and the difference is the language
+   * feature rather than a convention: a default parameter fills in for
+   * `undefined` only, so `null` reaches the JSX and React draws nothing. That
+   * is what a player sees on a page only staff can fill — the conditions
+   * sentence then carries the whole answer, and nothing on screen refuses on
+   * click.
+   */
+  actions?: React.ReactNode;
+  /** The fine print under the pair. Omitted, the video requirements below. */
+  conditions?: React.ReactNode;
 } = {}) {
   return (
     <div className="flex shrink-0 flex-col items-center gap-6 pt-[70px] pb-[38px]">
@@ -80,24 +101,41 @@ export function DayZeroOffer({
        * with no article, the way the system writes "Save changes" and "View
        * report". 146px against the ghost's 124, so the hierarchy holds.
        */}
-      <div className="flex items-center gap-3">
-        <Link href="/dashboard/matches/new" className={advButton("primary")}>
-          Send match video
-        </Link>
-        <Link
-          href="/dashboard/matches/new?source=swing-vision"
-          className={advButton("ghost")}
-        >
-          Import instead
-        </Link>
-      </div>
+      {actions}
       <p
         className="text-micro text-center"
         style={{ maxWidth: "52ch", textWrap: "pretty" }}
       >
-        One singles match, 1080p or better, camera fixed for the whole thing.
-        A SwingVision export needs none of that.
+        {conditions}
       </p>
     </div>
   );
 }
+
+/**
+ * The match offer's own pair and fine print.
+ *
+ * Named exports rather than JSX buried in a default, so the strings have one
+ * spelling and a caller can ask for them back explicitly. They stay the
+ * parameter defaults above rather than something Home and Matches pass in:
+ * those two are the callers this component was written for, and making them
+ * restate it is exactly how the two personal day zeros stop being identical.
+ */
+export function MatchOfferActions() {
+  return (
+    <div className="flex items-center gap-3">
+      <Link href="/dashboard/matches/new" className={advButton("primary")}>
+        Send match video
+      </Link>
+      <Link
+        href="/dashboard/matches/new?source=swing-vision"
+        className={advButton("ghost")}
+      >
+        Import instead
+      </Link>
+    </div>
+  );
+}
+
+export const MATCH_OFFER_CONDITIONS =
+  "One singles match, 1080p or better, camera fixed for the whole thing. A SwingVision export needs none of that.";

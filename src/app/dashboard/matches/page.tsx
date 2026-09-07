@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { reconcileBeforePageRead } from "@/lib/services/splitstep/reconcile";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import { canUploadForProgram } from "@/lib/workspace/types";
 import { analysisFor, loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import {
   type DbMatch,
@@ -127,16 +128,24 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
     }
   }
 
-  // Day zero, personal only: the offer over the list's shape, no title row —
+  // Day zero, both scopes: the offer over the list's shape, no title row —
   // the same composition Home draws, so a player meets one offer wherever
   // they land. A draft counts as a match in flight, so it keeps the list.
-  // The team workspace keeps `EmptyMatches`: its day zero is a different page
-  // ("Set up your program") that has not been designed yet.
-  if (!isTeam && matches.length === 0 && drafts.length === 0) {
+  //
+  // The team scope used to fall through to `EmptyMatches` here, because its
+  // day zero had not been designed. It has now, and it is the same one: only
+  // the sentence and the action pair differ (`MatchesDayZero`'s header). What
+  // changes on the team side is who gets a pair at all — `canUploadForProgram`
+  // is the same predicate the wizard itself enforces, so the offer never opens
+  // a door the next page closes.
+  if (matches.length === 0 && drafts.length === 0) {
     return (
       <div className="flex flex-1 w-full flex-col bg-white">
         <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-14 pt-5 pb-8">
-          <MatchesDayZero />
+          <MatchesDayZero
+            scope={isTeam ? "team" : "personal"}
+            canUpload={isTeam ? canUploadForProgram(workspace.active) : true}
+          />
         </div>
       </div>
     );

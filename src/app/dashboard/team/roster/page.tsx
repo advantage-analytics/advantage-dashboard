@@ -2,12 +2,13 @@ import { Fragment } from "react";
 import { redirect } from "next/navigation";
 import { UserCheck } from "lucide-react";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { teamLabel } from "@/lib/workspace/types";
+import { isProgramStaff, teamLabel } from "@/lib/workspace/types";
 import { getRosterData } from "@/lib/data/team-roster-server";
 import { getPendingJoinRequests } from "@/lib/data/join-requests-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { formatResetDate } from "@/lib/data/usage-format";
 import { RosterView } from "@/components/dashboard/team/roster-view";
+import { RosterDayZero } from "@/components/dashboard/team/roster-day-zero";
 import { RosterHeaderButtons } from "@/components/dashboard/team/roster-header-buttons";
 import { JoinRequestsCard } from "@/components/dashboard/team/join-requests-card";
 import { RowAction } from "@/components/dashboard/schedule/row-action";
@@ -60,7 +61,15 @@ export default async function RosterPage({
 
   // A hidden control is not authorization — every write behind these re-checks
   // `is_program_staff` in SQL. This only decides what is worth rendering.
-  const canManage = active.role !== "player";
+  //
+  // Through the shared predicate rather than `active.role !== "player"` spelled
+  // here. That hand-rolled form was right only because the redirect above has
+  // already ruled out a personal workspace — right by an ordering coincidence,
+  // in a file where this answer now also decides whether day zero offers a
+  // coach any way in at all. `isProgramStaff` is the one spelling every other
+  // team route uses, and its doc comment exists because the rail and the Team
+  // page once wrote this rule in opposite directions.
+  const canManage = isProgramStaff(active);
 
   // A deep link is the one case that lands with the drawer already open.
   const { player } = await searchParams;
@@ -97,6 +106,46 @@ export default async function RosterPage({
     }));
 
   const unclaimed = managedPlayers.length;
+
+  /**
+   * Day zero: nobody plays for the program, nobody has been invited, and
+   * nobody has asked in.
+   *
+   * The last two clauses are what keep this honest. An open invitation and a
+   * pending join request are both a person in flight — the table has an
+   * Invited section for one and a card above it for the other — and replacing
+   * a page that is holding somebody's request with "Every player starts here"
+   * would lose the one thing on it waiting on a coach. Same rule as Matches,
+   * where a half-finished draft keeps the list.
+   *
+   * The third clause is staff-only by construction, not by oversight: a player
+   * never fetches the queue (it is hardcoded `[]` above), so for them this is a
+   * two-clause rule. That asymmetry is correct — a player cannot act on a
+   * request and is not shown one — so do not "fix" it by fetching the queue for
+   * everybody.
+   */
+  const dayZero =
+    players.length === 0 &&
+    roster.invites.length === 0 &&
+    joinRequests.length === 0;
+
+  if (dayZero) {
+    return (
+      /* RosterView's own frame, minus the title row and the footer: the offer
+         carries the page's one primary. See `RosterDayZero`. */
+      <div className="flex w-full flex-1 bg-[var(--surface-card)]">
+        <div className="flex min-w-0 flex-1 flex-col px-14 pt-5 pb-8">
+          <RosterDayZero
+            canManage={canManage}
+            managedPlayers={managedPlayers}
+            seats={roster.seats}
+            roster={players}
+            playersCanUpload={roster.playersCanUpload}
+          />
+        </div>
+      </div>
+    );
+  }
 
   // Design 9d's receipt. Everyone who bound a login today, in the roster's own
   // order. Two people can claim on the same day; every one is named and the
