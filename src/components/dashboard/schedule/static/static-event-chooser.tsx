@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Swords } from "lucide-react";
+import { Check, GraduationCap } from "lucide-react";
 import { advButton } from "@/lib/ui/adv-button";
 import { EventShell } from "@/components/dashboard/schedule/event-shell";
 import { cn } from "@/lib/utils";
@@ -25,12 +25,31 @@ import { cn } from "@/lib/utils";
  *   1. No `New event` eyebrow above the heading. The artboard has none — the
  *      words are already in the breadcrumb the dashboard header draws.
  *   2. The bracket mark is 19px, not 22px. It is drawn smaller than the 22px
- *      Lucide `swords` beside it. That asymmetry is in the design.
+ *      Lucide icon beside it. That asymmetry is in the design.
  *   3. `Creates 9 lines` sets the 9 in `mono tabular`, as the artboard's own
  *      class list does. The dormant component dropped `mono` on the grounds
  *      that Roboto Mono is reserved for timestamps and job ids. That is a real
  *      argument and it is recorded here rather than acted on, because
  *      re-deciding it silently is exactly what this run is not for.
+ *
+ * ── Two departures from the artboard, made deliberately ────────────────────
+ * Both were raised against the shipped screen, and both override "the design
+ * wins" above, so they are recorded here rather than left to be re-litigated:
+ *
+ *   1. Dual match carries Lucide `graduation-cap`, not the artboard's `swords`.
+ *      Crossed swords read as combat, and the two cards are not opponent vs.
+ *      opponent — they are two shapes of *collegiate* event. The cap says the
+ *      thing the pair actually divides on, and it sits beside `BracketMark`
+ *      without either glyph promising a fight. Size and stroke are the
+ *      artboard's still: 22px at `strokeWidth={1.5}`.
+ *
+ *   2. The body is a centred column, not a left-flushed one. The artboard
+ *      flushes it left because it was drawn at the artboard's own width; in
+ *      the live shell the 820px grid stranded a wide gutter on the right at
+ *      dashboard widths. The column centres in `EventShell`'s body; the text
+ *      inside it stays left-aligned, so only the column's position moves.
+ *      Done with a wrapper here rather than an `mx-auto` in
+ *      `event-shell.tsx`, which four other screens draw through.
  *
  * ── The selected card's inner rule ─────────────────────────────────────────
  * The artboard draws it `rgba(59,130,246,0.15)`, and `--blue-glow`
@@ -169,7 +188,7 @@ export function StaticEventChooser() {
           so the 32px stands. Invisible here — the content is top-aligned and
           far shorter than the viewport — but it is a real divergence from the
           artboard, recorded rather than left silent. */}
-      <div className="pt-[10px]">
+      <div className="mx-auto w-full max-w-[820px] pt-[10px]">
         <h1 className="text-[30px] font-light leading-[34px] tracking-[-0.6px] text-[var(--ink-900)]">
           {COPY.heading}
         </h1>
@@ -210,7 +229,7 @@ export function StaticEventChooser() {
                     }
                   >
                     {option.id === "dual" ? (
-                      <Swords
+                      <GraduationCap
                         strokeWidth={1.5}
                         className="size-[22px]"
                         aria-hidden="true"
