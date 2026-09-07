@@ -844,8 +844,27 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
     drawn(popup, 'opponent-popup.tsx', '"1 prior meeting"');
     drawn(popup, 'opponent-popup.tsx', 'prior meetings');
     drawn(popup, 'opponent-popup.tsx', 'Save as a different player');
-    // `2e`'s toast, in full — "Saved to Ridgeline University roster".
+    // The browse heading, which `2d` has no frame for: the popup lists the
+    // opponent's saved roster before a character is typed now, so the line
+    // above ("already has a close name saved") is the FILTERED state's and
+    // this is the unfiltered one. STRAIGHT apostrophe, as everywhere here.
+    drawn(
+      popup,
+      'opponent-popup.tsx',
+      "'s saved roster. Pick one, or type a name."
+    );
+    // `2e`'s toast, in full — "Saved to Ridgeline University roster". Still
+    // drawn, but no longer on every path: only once `saveOpponentPlayer`
+    // reports a row exists. `2e` collapsed three outcomes into this one
+    // sentence over a frame whose line resolves to a name the roster already
+    // held; the two below are the other two, and they are the dormant
+    // `opponent-name-cell.tsx`'s own split restored.
     drawn(popup, 'opponent-popup.tsx', 'Saved to ${schoolName} roster');
+    // A name the pool already had — nothing was written.
+    drawn(popup, 'opponent-popup.tsx', "On ${schoolName}'s saved roster");
+    // No program to save to, or the RPC refused. The line has the name; the
+    // card claims nothing more than that.
+    drawn(popup, 'opponent-popup.tsx', 'Added to this lineup');
     // The field's placeholders, singles and doubles.
     drawn(popup, 'opponent-popup.tsx', '"Name / Name"');
     drawn(popup, 'opponent-popup.tsx', '"Name"');
