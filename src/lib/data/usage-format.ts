@@ -71,14 +71,16 @@ export function usageFraction(used: number, cap: number): number {
  * Seconds as `8h 12m` — the form a sentence or a figure wants.
  *
  * `formatAnalysisTime`'s `H:MM` is a ledger column: it lines up. Beside the
- * word "left" it reads as a clock time, and "11:48 left" is a question. Under
- * a minute rounds to "0m" rather than inventing seconds nobody plans around.
+ * word "left" it reads as a clock time, and "11:48 left" is a question. Whole
+ * hours drop the minutes ("75h", not "75h 00m"); under a minute rounds to
+ * "0m" rather than inventing seconds nobody plans around.
  */
 export function formatHoursLong(seconds: number): string {
   const safe = Math.max(0, Math.round(seconds));
   const hours = Math.floor(safe / 3600);
   const minutes = Math.floor((safe % 3600) / 60);
   if (hours === 0) return `${minutes}m`;
+  if (minutes === 0) return `${hours}h`;
   return `${hours}h ${String(minutes).padStart(2, "0")}m`;
 }
 

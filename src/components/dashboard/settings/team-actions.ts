@@ -219,9 +219,10 @@ export async function transferProgramOwnership(input: {
   );
 
   if (!sent.ok) {
+    const reason = sent.error.replace(/\.$/, "");
     return {
       ok: true,
-      warning: `Ownership moved. ${sent.error} — let them know yourself.`,
+      warning: `Ownership moved, but we couldn't email ${recipient.display_name ?? recipient.email} (${reason}). Let them know yourself.`,
     };
   }
 

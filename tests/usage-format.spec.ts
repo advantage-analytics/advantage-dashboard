@@ -15,7 +15,8 @@ test.describe('formatHoursLong', () => {
   test('reads as hours and minutes, minutes padded', () => {
     expect(formatHoursLong(8 * 3600 + 12 * 60)).toBe('8h 12m');
     expect(formatHoursLong(11 * 3600 + 48 * 60)).toBe('11h 48m');
-    expect(formatHoursLong(20 * 3600)).toBe('20h 00m');
+    expect(formatHoursLong(20 * 3600)).toBe('20h');
+    expect(formatHoursLong(75 * 3600)).toBe('75h');
   });
 
   test('drops the hours word under an hour, and never goes negative', () => {
