@@ -1,6 +1,5 @@
 "use client";
 
-import { Fragment } from "react";
 import { ChevronDown, Search } from "lucide-react";
 import { DayZeroOffer } from "@/components/dashboard/home/day-zero-offer";
 import { LifecycleChips } from "./lifecycle-chips";
@@ -42,6 +41,20 @@ import { LIST_GRID_COLS, LIST_ROW_FRAME } from "./match-card-list";
  * has been rewritten to match (SKILL.md → Table page states, and Personal Home
  * Recipes → Day zero). The one primary is the offer's; a second one top-right
  * would be two on one screen. The title row returns with the first match.
+ *
+ * ── Both scopes, one composition ────────────────────────────────────────────
+ * `scope` decides the words; the shape below the offer is the same bytes for
+ * both, because the list below it is. That is the point of drawing the team's
+ * day zero here rather than in a file of its own: this page is one list under
+ * two predicates (`page.tsx` header), and two day zeros would be two products
+ * one workspace switch apart — the exact drift `empty-matches.tsx` was written
+ * to avoid and `SKILL.md` recorded as the unbuilt slot ("the team list keeps
+ * the older shape until its own day zero is designed"). This is that design.
+ *
+ * `canUpload` is `canUploadForProgram()` — staff always, a player only where
+ * the program allows it. False draws no pair at all rather than a pair that
+ * refuses on click, and the conditions line names who does fill the page. The
+ * personal scope never passes it: there, the viewer is the only member.
  */
 
 const COLUMNS = ["Date", "Opponent", "Event", "Score", "Result", "", "", ""] as const;
@@ -82,10 +95,35 @@ function GhostRow({ opacity }: { opacity: number }) {
   );
 }
 
-export function MatchesDayZero() {
+export function MatchesDayZero({
+  scope = "personal",
+  canUpload = true,
+}: {
+  scope?: "personal" | "team";
+  /** Team only. Whether this viewer may start the wizard the offer points at. */
+  canUpload?: boolean;
+} = {}) {
+  const isTeam = scope === "team";
+  // A player who cannot upload is shown no pair — `null`, which the offer
+  // tells apart from an omitted prop and draws as nothing.
+  const actions = isTeam && !canUpload ? null : undefined;
+
   return (
     <div className="flex flex-1 flex-col gap-4">
-      <DayZeroOffer headline="Every match you send lands here." headlineMeasure="30ch" />
+      <DayZeroOffer
+        headline={
+          isTeam
+            ? "Every match sent for the program lands here."
+            : "Every match you send lands here."
+        }
+        headlineMeasure="30ch"
+        actions={actions}
+        conditions={
+          actions === null
+            ? "Your coaching staff send the program's match video. Every report lands here for the whole squad, yours included."
+            : undefined
+        }
+      />
 
       <p className="sr-only">
         Once a match is analysed this page lists every report by opponent,
@@ -130,12 +168,15 @@ export function MatchesDayZero() {
               </span>
             ))}
           </div>
+          {/* No separators between rows. `MatchesGrid` rules under the HEADER
+              only — 8a's site-wide row treatment (SKILL.md law 9), where the
+              hover wash is the boundary. This drew a hairline between every
+              ghost row, which is a table the populated page does not have; the
+              two schedule and roster day zeros copied from this file, so it is
+              corrected at the source rather than diverged from twice. */}
           <div>
-            {ROW_OPACITY.map((opacity, i) => (
-              <Fragment key={opacity}>
-                {i > 0 && <div className="h-px bg-[var(--border-hairline)]" />}
-                <GhostRow opacity={opacity} />
-              </Fragment>
+            {ROW_OPACITY.map((opacity) => (
+              <GhostRow key={opacity} opacity={opacity} />
             ))}
           </div>
         </div>

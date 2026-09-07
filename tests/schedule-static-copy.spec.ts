@@ -26,6 +26,7 @@ import {
   USER_NAME,
 } from '@/lib/schedule/fixtures';
 import { formatEventDay, siteTitle } from '@/lib/schedule/format';
+import { SCHEDULE_COLUMNS } from '@/components/dashboard/schedule/static/schedule-table';
 import { LINE_STATUS } from '@/lib/schedule/line-status';
 import { formatOpponentRecord } from '@/lib/schedule/opponent-history';
 import { divisionLabel, teamLabel } from '@/lib/data/programs-server';
@@ -183,6 +184,7 @@ test.describe('/dashboard/team/schedule · Tc2 Tc2c', () => {
   // `dual-widget.tsx`. Every `drawn()` below was transcribed from the two
   // new artboards; each retired string carries the reason.
   const schedule = screen('static-schedule.tsx');
+  const dayZero = screen('schedule-day-zero.tsx');
   const table = screen('schedule-table.tsx');
   const drawer = screen('event-drawer.tsx');
   const emptyMark = screen('empty-mark.tsx', UI);
@@ -389,23 +391,64 @@ test.describe('/dashboard/team/schedule · Tc2 Tc2c', () => {
   });
 
   test("day zero's own words", () => {
-    drawn(schedule, 'static-schedule.tsx', 'No events yet');
+    // Day zero moved out of `static-schedule.tsx` into a file of its own when
+    // it was rebuilt on the composition Matches draws — the offer over the
+    // page's own anatomy, dimmed and `inert`. The page now renders one line of
+    // it, so the words are read where they live.
+    drawn(schedule, 'static-schedule.tsx', '<ScheduleDayZero');
+
     drawn(
-      schedule,
-      'static-schedule.tsx',
-      'Create a dual and the lineup card builds itself — every slot becomes a real match the moment you set the line.'
+      dayZero,
+      'schedule-day-zero.tsx',
+      'Every dual and tournament lands here.'
     );
-    drawn(schedule, 'static-schedule.tsx', 'New dual');
-    drawn(schedule, 'static-schedule.tsx', 'New tournament');
-    drawn(schedule, 'static-schedule.tsx', 'One-off match in Matches');
-    // The separator between the empty-state links.
-    drawn(schedule, 'static-schedule.tsx', '·');
+    drawn(
+      dayZero,
+      'schedule-day-zero.tsx',
+      'A dual builds its own lineup card — every slot becomes a real match the moment you set the line.'
+    );
+    drawn(dayZero, 'schedule-day-zero.tsx', 'New dual');
+    drawn(dayZero, 'schedule-day-zero.tsx', 'New tournament');
+    drawn(dayZero, 'schedule-day-zero.tsx', 'Add a one-off match');
+    // What a player is told instead of a pair of buttons they may not press.
+    drawn(
+      dayZero,
+      'schedule-day-zero.tsx',
+      "Your coaching staff schedule the program's duals and tournaments."
+    );
+    // The column labels are the payload: the ghost table draws the real
+    // header, imported from the table it stands in for.
+    expect(SCHEDULE_COLUMNS).toEqual([
+      'Date',
+      'Event',
+      'Type',
+      'Venue',
+      'Lines',
+      'Score',
+      'Result',
+    ]);
+
+    // RETIRED 'No events yet' — a 24px line over one sentence was the shape
+    //   the old table-page law prescribed (title, primary and footer
+    //   unchanged; chips and table absent). That law was rewritten because it
+    //   left two day-zero pages one click apart looking like two products;
+    //   the heading is now the offer's own 30px sentence, above.
+    // RETIRED 'Create a dual and the lineup card builds itself — every slot
+    //   becomes a real match the moment you set the line.' — the same clause
+    //   survives as the conditions line under the pair, reworded to state what
+    //   a dual creates rather than to instruct ('A dual builds its own lineup
+    //   card…', asserted above). It is fine print now, not the page's sentence.
+    // RETIRED 'One-off match in Matches' — the label named a destination that
+    //   was never where the link went: it opened `/new/single`, the wizard
+    //   under the schedule, and a team workspace's rail has no Matches entry
+    //   to arrive at. 'Add a one-off match' says what the link does.
+    // RETIRED the '·' separator between the empty-state links — there are no
+    //   longer three blue words in a row to separate. Two buttons carry the
+    //   paths and the third rides the conditions sentence.
     // RETIRED 'What a dual creates', '9 lines · none set', 'Opponent, format
     //   and lets are typed once and inherit down every line.', 'The team score
     //   adds itself up as lines resolve.' — `7e`'s nine-line scaffold was drawn
-    //   for the old half-width pane. The table-page law that governs day zero
-    //   now (title, primary, footer unchanged; chips and table absent; one
-    //   light line, one sentence, the quiet paths) has no room for it.
+    //   for the old half-width pane, and neither law since has had room for it.
   });
 });
 

@@ -8,6 +8,7 @@ import { getPendingJoinRequests } from "@/lib/data/join-requests-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { formatResetDate } from "@/lib/data/usage-format";
 import { RosterView } from "@/components/dashboard/team/roster-view";
+import { RosterDayZero } from "@/components/dashboard/team/roster-day-zero";
 import { RosterHeaderButtons } from "@/components/dashboard/team/roster-header-buttons";
 import { JoinRequestsCard } from "@/components/dashboard/team/join-requests-card";
 import { RowAction } from "@/components/dashboard/schedule/row-action";
@@ -97,6 +98,40 @@ export default async function RosterPage({
     }));
 
   const unclaimed = managedPlayers.length;
+
+  /**
+   * Day zero: nobody plays for the program, nobody has been invited, and
+   * nobody has asked in.
+   *
+   * The last two clauses are what keep this honest. An open invitation and a
+   * pending join request are both a person in flight — the table has an
+   * Invited section for one and a card above it for the other — and replacing
+   * a page that is holding somebody's request with "Every player starts here"
+   * would lose the one thing on it waiting on a coach. Same rule as Matches,
+   * where a half-finished draft keeps the list.
+   */
+  const dayZero =
+    players.length === 0 &&
+    roster.invites.length === 0 &&
+    joinRequests.length === 0;
+
+  if (dayZero) {
+    return (
+      /* RosterView's own frame, minus the title row and the footer: the offer
+         carries the page's one primary. See `RosterDayZero`. */
+      <div className="flex w-full flex-1 bg-[var(--surface-card)]">
+        <div className="flex min-w-0 flex-1 flex-col px-14 pt-5 pb-8">
+          <RosterDayZero
+            canManage={canManage}
+            managedPlayers={managedPlayers}
+            seats={roster.seats}
+            roster={players}
+            playersCanUpload={roster.playersCanUpload}
+          />
+        </div>
+      </div>
+    );
+  }
 
   // Design 9d's receipt. Everyone who bound a login today, in the roster's own
   // order. Two people can claim on the same day; every one is named and the

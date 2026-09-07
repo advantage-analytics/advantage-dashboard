@@ -93,9 +93,30 @@ export function scheduleRowId(eventId: string): string {
   return `schedule-row-${eventId}`;
 }
 
-/** The artboard's seven columns, unchanged between `Tc2` and `Tc2c`. */
-const GRID =
+/**
+ * The artboard's seven columns, unchanged between `Tc2` and `Tc2c`.
+ *
+ * Exported so day zero draws THIS grid rather than a second one that agrees
+ * with it today. `matches-day-zero.tsx` reads `LIST_GRID_COLS` from the row it
+ * stands in for, for the same reason, and after that file drew a stale column
+ * order for a while the rule is worth stating: a ghost table imports its
+ * geometry, it never restates it.
+ */
+export const SCHEDULE_GRID =
   "grid-cols-[84px_minmax(150px,1fr)_88px_56px_56px_48px_60px]";
+
+/** The header row's labels, in `SCHEDULE_GRID` order. */
+export const SCHEDULE_COLUMNS = [
+  "Date",
+  "Event",
+  "Type",
+  "Venue",
+  "Lines",
+  "Score",
+  "Result",
+] as const;
+
+const GRID = SCHEDULE_GRID;
 
 function EventRow({
   row,

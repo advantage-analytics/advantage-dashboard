@@ -122,7 +122,12 @@ const DIVIDER_OUT = { duration: 0.16, ease: EASE_OUT_EXPO };
 const ROW_SETTLE = { bounceStiffness: 600, bounceDamping: 50 };
 
 /** Column widths. Only the spacer flexes. */
-const COL = {
+/**
+ * Exported for `roster-day-zero.tsx`, which draws this table holding nothing.
+ * A ghost row that restates its own widths drifts from the real one silently;
+ * importing them makes that impossible.
+ */
+export const COL = {
   spot: "w-6 shrink-0",
   player: "w-[230px] shrink-0",
   record: "w-14 shrink-0",
@@ -130,7 +135,7 @@ const COL = {
   last: "w-[250px] shrink-0",
 } as const;
 
-const ROW = "flex items-center gap-4";
+export const ROW = "flex items-center gap-4";
 
 /**
  * Horizontal padding belongs to the card; each row pulls 16px of it back so a
