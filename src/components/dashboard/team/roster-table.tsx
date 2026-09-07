@@ -593,6 +593,7 @@ export function RosterTable({
   run,
   pending,
   lineup,
+  settling,
   onStartLineup,
   onLift,
   onMove,
@@ -612,6 +613,8 @@ export function RosterTable({
   pending: boolean;
   /** Non-null while Set lineup is on. */
   lineup: LineupDraft | null;
+  /** The order a Save just wrote, shown until `members` catches up. */
+  settling: string[] | null;
   onStartLineup: () => void;
   onLift: (playerId: string | null) => void;
   onMove: (playerId: string, direction: 1 | -1) => void;
@@ -628,9 +631,12 @@ export function RosterTable({
   // if somebody is actually out of the lineup. In the mode the draft is the
   // order and the sentinel is always there — it is the drop target for
   // benching somebody.
+  // Three sources, in priority: the draft being edited; the order a Save just
+  // wrote, until the server's rows carry it (`settling` in `RosterView`); and
+  // at rest, the rows themselves.
   const sequence: string[] = lineup
     ? lineup.sequence
-    : sequenceFrom(members, { sentinel: "if-needed" });
+    : settling ?? sequenceFrom(members, { sentinel: "if-needed" });
   const benchAt = sequence.indexOf(BENCH);
 
   /** ↑/↓ with nothing lifted: focus walks the players, skipping the sentinel. */
@@ -734,14 +740,19 @@ export function RosterTable({
             }
             const member = byId.get(id);
             if (!member) return null;
-            // In the mode the number is what Save will write; at rest it is
-            // what the server holds, which can differ when two players share a
-            // line from the Edit player form.
-            const spot = lineup
-              ? benchAt < 0 || index < benchAt
-                ? index + 1
-                : null
-              : member.lineupSpot;
+            // In the mode, and while a save is settling, the number is the
+            // position in the sequence on screen — the one Save wrote. Reading
+            // `member.lineupSpot` there would badge a row sitting at the top
+            // with the spot it held BEFORE the save, for as long as the
+            // server's rows take to arrive. At rest it is the server's value,
+            // which can differ from position when two players share a line
+            // from the Edit player form.
+            const spot =
+              lineup || settling
+                ? benchAt < 0 || index < benchAt
+                  ? index + 1
+                  : null
+                : member.lineupSpot;
             return (
               <MemberRow
                 key={member.playerId}

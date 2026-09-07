@@ -11,6 +11,7 @@ import {
   lineupChanged,
   lineupOrder,
   sequenceFrom,
+  settledSequence,
 } from "@/lib/data/lineup-draft";
 import {
   DRAWER_ATTR,
@@ -94,6 +95,23 @@ export function RosterView({
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [lineup, setLineup] = useState<LineupDraft | null>(null);
+  /**
+   * The order Save just wrote, held on screen until the server agrees.
+   *
+   * `setProgramLineup` revalidates, but the refreshed `members` arrive in a
+   * LATER render than the action's resolution. Dropping the draft the moment
+   * the action returned left one frame — long enough for `layout="position"`
+   * to animate — in which the table fell back to `sequenceFrom(members)` with
+   * the OLD spots: the rows slid back to where they started, then slid again
+   * when the new props landed. This holds the saved order across that gap, and
+   * an effect below releases it once `members` carries the same spots — at
+   * which point the two sequences are identical and nothing moves.
+   */
+  const [settling, setSettling] = useState<{
+    sequence: string[];
+    /** The `members` on screen when Save resolved — any other reference is a refresh. */
+    members: RosterMember[];
+  } | null>(null);
   /** What the last reorder did, for anyone listening rather than looking. */
   const [announcement, setAnnouncement] = useState("");
 
@@ -190,6 +208,7 @@ export function RosterView({
     finishClose();
     syncUrl(null);
     setError(null);
+    setSettling(null);
     setLineup({
       sequence: sequenceFrom(members, { sentinel: "always" }),
       lifted: null,
@@ -220,12 +239,47 @@ export function RosterView({
         setError(result.error);
         return;
       }
-      // The server action revalidates, so the new `members` arrive with their
-      // spots already set; dropping the draft is what lets them through.
+      // The server action revalidates, but the new `members` land a render
+      // or more after this resolves. Keep the saved order on screen until
+      // they do — see `settling` — rather than letting the table fall back
+      // to the old spots in between.
+      setSettling({
+        sequence: settledSequence(lineup.sequence),
+        members,
+      });
       setLineup(null);
       setAnnouncement("");
     });
-  }, [lineup]);
+    // `members` is the reference on screen when Save was pressed. If a refresh
+    // lands during the await, the release effect sees a different reference
+    // and lets go at once — correct either way, since that refresh is either
+    // ours (orders identical, nothing moves) or somebody else's (the server
+    // is the truth).
+  }, [lineup, members]);
+
+  /**
+   * Release the held order on the first refresh after Save — whatever it
+   * carries.
+   *
+   * Almost always that refresh is our own revalidation, and the two orders
+   * are then identical, so nothing moves. If it is somebody else's write
+   * landing first, the server is the truth and the hold must give way to it
+   * rather than draw our order over a roster that has changed underneath.
+   * Releasing on identity rather than on "the spots now match" is what makes
+   * it impossible for the hold to stick: a concurrent edit that never
+   * converges on our order would otherwise keep it on screen indefinitely.
+   * The match check stays as a fast path for a refresh that already landed
+   * before Save resolved.
+   */
+  useEffect(() => {
+    if (!settling) return;
+    if (
+      members !== settling.members ||
+      !lineupChanged(settling.sequence, members)
+    ) {
+      setSettling(null);
+    }
+  }, [settling, members]);
 
   /**
    * One partial update of the draft. The three callbacks below were the same
@@ -464,6 +518,7 @@ export function RosterView({
             run={run}
             pending={pending}
             lineup={lineup}
+            settling={settling?.sequence ?? null}
             onStartLineup={startLineup}
             onLift={onLift}
             onMove={onMove}
