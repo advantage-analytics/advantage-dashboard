@@ -34,6 +34,27 @@
  *   step 2   somebody in the field. The footer prints how many entries the
  *            click will create beside the button.
  *
+ * ── Editing the same tournament ────────────────────────────────────────────
+ * `mode="edit"` is these same two steps over a tournament that already exists.
+ * Every difference follows from one fact — parts of the field have already
+ * been played:
+ *
+ *   the draft   opens on the event's own weekend and its entered field, each
+ *               entry carrying the `program_event_entries` id it came from.
+ *               An entry submitted WITHOUT its id is one `planEntryChanges`
+ *               reads as a delete and an insert, which orphans the matches
+ *               hanging off it. See `tournamentSeed` below.
+ *   settled     entries with a match or a forfeit are drawn read-only — draw
+ *               AND seed, because `entry-plan.ts` compares both and a refusal
+ *               takes the whole save with it.
+ *   step one    stays reachable: a weekend's name, dates, site and format are
+ *               all still the coach's to change. The pinned bar over step two
+ *               therefore gets no `Change` — Back is the way, and there is one
+ *               event either way, since the same `eventId` is submitted
+ *               whatever the name says.
+ *   the write   `updateTournament`, chosen inside `useTournamentDraft` by the
+ *               seed carrying an `eventId`. Same footer, same `ActionError`.
+ *
  * `adScoring` never passes through this file. The format is the `FORMATS` row
  * `TournamentWeekendStep` chose, and `useTournamentDraft().submit()` reads
  * `bestOf` and `adScoring` off it as literals — see `TournamentFormat` in
@@ -41,7 +62,7 @@
  * pinned bar below hands the same pair to `formatLabel` and parses nothing.
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 /* Straight from the two files, not the wizard's barrel: `index.ts` re-exports
    `UploadMatchFlow` and its whole subtree, and this flow needs the chrome and
    the keys — the same call `new-dual-flow.tsx` made. */
@@ -53,8 +74,13 @@ import {
   TournamentWeekendStep,
   useTournamentDraft,
   type TournamentDraftSeed,
+  type TournamentEntrySeed,
 } from "@/components/dashboard/schedule/static/static-tournament-builder";
 import type { LadderPlayer } from "@/lib/data/roster-server";
+import type { TournamentEntryInput } from "@/lib/schedule/actions";
+import { isSettled } from "@/lib/schedule/entry-plan";
+import { EVENT_FORMATS } from "@/lib/schedule/format";
+import type { EventDetail } from "@/lib/schedule/types";
 
 /** Where Cancel goes on step one. Inside the rebuilt set. */
 const SCHEDULE_HREF = "/dashboard/team/schedule";
@@ -73,16 +99,141 @@ const COPY: Record<Step, { title: string; lede: string }> = {
   },
 };
 
+/**
+ * What the flow is for.
+ *
+ * A discriminated pair rather than a loose optional event, so "an edit without
+ * an event" is not a shape anybody can write — `new-dual-flow.tsx`'s
+ * `NewDualFlowProps` for the same reason.
+ */
+export type NewTournamentFlowProps = {
+  roster: LadderPlayer[];
+  defaultSurface: string | null;
+} & (
+  | { mode?: "create"; event?: undefined }
+  | { mode: "edit"; event: EventDetail }
+);
+
+/**
+ * The event's saved format as one of the four option names the control offers.
+ *
+ * A lookup over the shared table, never a parse: `EVENT_FORMATS` states each
+ * pair as literals, so this either finds the row or finds nothing. Nothing is
+ * the honest answer for a tournament whose `ad_scoring` is null — the state
+ * `docs/ui-revamp-guardrails.md` §3.1 and §4 exist about — and
+ * `useTournamentDraft` then opens on the builder's own default rather than on
+ * a `false` invented here to make the lookup succeed.
+ */
+function formatValueOf({ bestOf, adScoring }: EventDetail["event"]["format"]) {
+  return EVENT_FORMATS.find(
+    (option) => option.bestOf === bestOf && option.adScoring === adScoring
+  )?.value;
+}
+
+/**
+ * The event, as the draft the builder opens on.
+ *
+ * ── Which entries get a row ────────────────────────────────────────────────
+ * The field step is ONE list over the roster, so a saved entry earns a row
+ * only if the screen can actually express it: exactly one player, that player
+ * still on the roster, and a draw the control offers. Everything else goes to
+ * `carry` and is submitted back verbatim — a doubles pair this screen has no
+ * way to make, an entry for somebody who has left the program, and above all
+ * an entry that has moved on to a draw creation never offers (consolation, a
+ * flight). Coercing that last one onto the row's two-option control would
+ * quietly rewrite `draw` on save, or refuse the save outright once the entry
+ * has been played. Dropping it would be worse still: `planEntryChanges` reads
+ * an absence as a delete.
+ */
+function tournamentSeed(
+  { event, entries }: EventDetail,
+  roster: LadderPlayer[]
+): TournamentDraftSeed {
+  const onRoster = new Set(roster.map((player) => player.userId));
+  const field: TournamentEntrySeed[] = [];
+  const carry: TournamentEntryInput[] = [];
+
+  for (const entry of entries) {
+    const userId =
+      entry.playerUserIds.length === 1 ? entry.playerUserIds[0] : null;
+    const drawable =
+      userId !== null &&
+      onRoster.has(userId) &&
+      entry.draw !== null &&
+      DRAW_OPTIONS.includes(entry.draw);
+
+    if (drawable && userId) {
+      field.push({
+        userId,
+        draw: entry.draw ?? undefined,
+        seed: entry.seed,
+        id: entry.id,
+        position: entry.position,
+        // The labels the row was saved with, never re-derived from the
+        // roster — see `FieldEntry.labels`.
+        labels: entry.playerLabels,
+        // The same question `planEntryChanges` asks at save, asked here so the
+        // row is drawn read-only rather than refused later.
+        locked: isSettled(entry)
+          ? entry.forfeit !== null
+            ? ("forfeited" as const)
+            : ("played" as const)
+          : undefined,
+      });
+      continue;
+    }
+
+    carry.push({
+      id: entry.id,
+      discipline: entry.discipline,
+      position: entry.position,
+      draw: entry.draw,
+      seed: entry.seed,
+      playerUserIds: entry.playerUserIds,
+      playerLabels: entry.playerLabels,
+    });
+  }
+
+  return {
+    eventId: event.id,
+    name: event.name,
+    startsOn: event.startsOn,
+    endsOn: event.endsOn,
+    site: event.site,
+    // `""` is "no surface", and is honoured as one — the column is nullable
+    // and an absent surface is not "hard".
+    surface: event.surface ?? "",
+    format: formatValueOf(event.format),
+    field,
+    carry,
+  };
+}
+
+/**
+ * The two draws the field step's control offers, restated here.
+ *
+ * `DRAWS` is private to `static-tournament-builder.tsx` and stays that way —
+ * this is the read side of the same rule, and the seed above needs to know
+ * which saved draws have a row to sit on. Widening one without the other
+ * shows an entry a control that cannot hold its own value.
+ */
+const DRAW_OPTIONS: readonly string[] = ["Main draw", "Qualifying"];
+
 export function NewTournamentFlow({
   roster,
   defaultSurface,
-  initial,
-}: {
-  roster: LadderPlayer[];
-  defaultSurface: string | null;
-  /** The shape T20's edit mode hands in. Unset for a new tournament. */
-  initial?: TournamentDraftSeed;
-}) {
+  mode,
+  event,
+}: NewTournamentFlowProps) {
+  const editing = mode === "edit";
+  // Memoised because `useTournamentDraft` seeds its entered map from this
+  // object once. A fresh one per render would be a fresh `carry` array on
+  // every keystroke — harmless, and still not what the hook describes.
+  const initial = useMemo(
+    () => (event ? tournamentSeed(event, roster) : undefined),
+    [event, roster]
+  );
+
   const contentRef = useRef<HTMLDivElement>(null);
   const [step, setStep] = useState<Step>(1);
   const {
@@ -100,13 +251,21 @@ export function NewTournamentFlow({
 
   const back = useCallback(() => setStep(1), []);
 
+  const eventHref = event
+    ? `/dashboard/team/schedule/${event.event.id}`
+    : SCHEDULE_HREF;
+  // What the click will write: the rows on screen plus the ones the field step
+  // cannot draw and submits back untouched. Counting only the visible rows
+  // would tell a coach their save drops entries it does not touch.
+  const entryCount = field.length + (initial?.carry?.length ?? 0);
+
   const lastStep = step === 2;
   // `createTournament` refuses an unnamed tournament and refuses a weekend with
   // no dates, so the button is asleep until there is one to write — and asleep
   // again while the write is in flight, so a second click cannot create a
   // second tournament.
   const continueDisabled = lastStep
-    ? pending || field.length === 0
+    ? pending || entryCount === 0
     : draft.name.trim() === "" ||
       draft.startsOn === "" ||
       draft.endsOn === "";
@@ -150,7 +309,11 @@ export function NewTournamentFlow({
               bestOf: draft.format.bestOf,
               adScoring: draft.format.adScoring,
             }}
-            onChange={back}
+            /* No handler at all on an edit: Back is the way to step one,
+               and a second control saying the same thing is a second control
+               to keep honest. `PinnedEventBar` draws no `Change` without
+               one. */
+            onChange={editing ? undefined : back}
           />
         ) : undefined
       }
@@ -158,7 +321,9 @@ export function NewTournamentFlow({
       contentKey={step}
       contentClassName="mt-9"
       back={lastStep ? back : undefined}
-      cancelHref={SCHEDULE_HREF}
+      // An edit's way out is the event it came from — the page the coach
+      // opened this from, and the one they can read either way.
+      cancelHref={editing && event ? eventHref : SCHEDULE_HREF}
       status={
         error ? (
           // `createTournament`'s own sentence, in the count line's place. A
@@ -169,14 +334,23 @@ export function NewTournamentFlow({
           </span>
         ) : lastStep ? (
           <span className="text-[11px]" style={{ color: "var(--ink-600)" }}>
-            Creates <span className="tabular">{field.length}</span>{" "}
-            {field.length === 1 ? "entry" : "entries"} and no matches — a match
+            {editing ? "Saves" : "Creates"}{" "}
+            <span className="tabular">{entryCount}</span>{" "}
+            {entryCount === 1 ? "entry" : "entries"} and no matches — a match
             exists once it&#39;s played
           </span>
         ) : null
       }
       continueLabel={
-        lastStep ? (pending ? "Creating…" : "Create tournament") : "Continue"
+        lastStep
+          ? editing
+            ? pending
+              ? "Saving…"
+              : "Save changes"
+            : pending
+              ? "Creating…"
+              : "Create tournament"
+          : "Continue"
       }
       onContinue={onContinue}
       continueDisabled={continueDisabled}

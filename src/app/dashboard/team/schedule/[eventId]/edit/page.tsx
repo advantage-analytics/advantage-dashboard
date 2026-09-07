@@ -10,14 +10,33 @@ import {
 } from "@/lib/data/schedule-server";
 import { NewDualDataProvider } from "@/components/dashboard/schedule/static/dual-school-step";
 import { NewDualFlow } from "@/components/dashboard/schedule/static/new-dual-flow";
+import { NewTournamentFlow } from "@/components/dashboard/schedule/static/new-tournament-flow";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
 import type { EventDetail } from "@/lib/schedule/types";
 
 /**
- * Editing an event — today, editing a dual.
+ * Editing an event — a dual or a tournament, each back on the flow it was
+ * created on.
  *
- * The same flow the dual was created on, minus the question it can no longer
- * ask. `NewDualFlow` in `mode="edit"` opens on step two with the school pinned
+ * ── The two branches ───────────────────────────────────────────────────────
+ * One route, because one `Edit` button on each event page points here and the
+ * event itself says which kind it is. What differs is only which builder the
+ * event is handed to:
+ *
+ *   dual         `NewDualFlow mode="edit"` — nine courts, the school pinned
+ *                and unchangeable, step one unreachable.
+ *   tournament   `NewTournamentFlow mode="edit"` — the weekend and then the
+ *                field, both steps reachable, the entered field seeded with
+ *                its saved ids, draws and seeds.
+ *
+ * Both open on the event's own facts, draw settled entries read-only, and
+ * write through the `update*` action that consults `planEntryChanges` before
+ * it touches anything. Neither can change the thing its entries point at: a
+ * dual's opponent, a tournament's identity.
+ *
+ * The dual half is the same flow the dual was created on, minus the question
+ * it can no longer ask: `NewDualFlow` in `mode="edit"` opens on step two with
+ * the school pinned
  * and unchangeable, seeds the draft from this event's own facts and its nine
  * saved lines, draws the settled ones read-only, and writes through
  * `updateDual` — see that file's header for why each of those follows from the
@@ -62,11 +81,26 @@ export default async function EditEventPage({
   const detail = eventDetailFrom(schedule, eventId);
   if (!detail) notFound();
 
-  // A tournament edit is its own flow (T20) over `useTournamentDraft` and
-  // `updateTournament`. Until it lands, this route answers for duals only —
-  // `notFound()` rather than a dual builder pointed at a tournament, which
-  // would offer nine courts an event with draws and seeds has never had.
-  if (detail.event.kind !== "dual") notFound();
+  if (detail.event.kind === "tournament") {
+    // Its own flow over `useTournamentDraft` and `updateTournament` — never
+    // the dual builder, which would offer nine courts an event with draws and
+    // seeds has never had. The two reads are the create route's own: the
+    // ladder is the field step's whole list, and the default surface is the
+    // one fact no cell on that screen draws.
+    const [roster, settings] = await Promise.all([
+      getLadder(active.id),
+      getTeamSettings(active.id),
+    ]);
+
+    return (
+      <NewTournamentFlow
+        mode="edit"
+        event={detail}
+        roster={roster}
+        defaultSurface={settings?.program.defaultSurface ?? null}
+      />
+    );
+  }
 
   const [ladder, settings, opponentProgram] = await Promise.all([
     getLadder(active.id),

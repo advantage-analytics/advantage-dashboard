@@ -950,8 +950,12 @@ test.describe('/dashboard/team/schedule/new/tournament · 3c', () => {
       "Add players from the roster. An entry says where they start, not what they'll play."
     );
 
-    // The footer, which is the flow's and no longer the builder's.
-    drawn(flow, 'new-tournament-flow.tsx', 'Creates ');
+    // The footer, which is the flow's and no longer the builder's. The count
+    // line and the primary each read one of two words since T20 gave the edit
+    // route the same flow — the create half is unchanged, and the edit half is
+    // pinned beside it so a rename of either is a failure here rather than a
+    // "Create tournament" button on a tournament that already exists.
+    drawn(flow, 'new-tournament-flow.tsx', '"Saves" : "Creates"');
     drawn(flow, 'new-tournament-flow.tsx', '"entry" : "entries"');
     drawn(
       flow,
@@ -960,6 +964,8 @@ test.describe('/dashboard/team/schedule/new/tournament · 3c', () => {
     );
     drawn(flow, 'new-tournament-flow.tsx', 'Create tournament');
     drawn(flow, 'new-tournament-flow.tsx', 'Creating…');
+    drawn(flow, 'new-tournament-flow.tsx', 'Save changes');
+    drawn(flow, 'new-tournament-flow.tsx', 'Saving…');
     drawn(flow, 'new-tournament-flow.tsx', 'Continue');
   });
 });

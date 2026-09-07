@@ -4,7 +4,11 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { createTournament } from "@/lib/schedule/actions";
+import {
+  createTournament,
+  updateTournament,
+  type TournamentEntryInput,
+} from "@/lib/schedule/actions";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 import type { EventSite } from "@/lib/schedule/types";
 import {
@@ -33,14 +37,25 @@ import {
  * second pane only ever restated rows the first one already had.
  *
  * ── Writing ────────────────────────────────────────────────────────────────
- * `submit()` calls `createTournament` in `lib/schedule/actions.ts` — the action
- * that already existed. It re-resolves the workspace, refuses a caller who is
+ * `submit()` calls `createTournament` in `lib/schedule/actions.ts` — or
+ * `updateTournament`, when the seed it opened on carries an `eventId`. The
+ * create half: It re-resolves the workspace, refuses a caller who is
  * not staff here, writes the event and its entries, and rolls the event back if
  * the entries fail, so a tournament with nobody in it is never left on the
  * schedule. Its `ActionError` is a sentence meant for the coach: it is held in
  * `error` below and printed in the flow's status slot rather than swallowed
  * into a button that just stops working. Only on success does this navigate,
  * and it navigates to the event the action reports.
+ *
+ * The update half is the same call plus `planEntryChanges`, which decides
+ * which saved entries may move. It refuses to re-point or delete an entry a
+ * match points at, and a refusal is TOTAL — nothing is written. So a settled
+ * entry is drawn read-only here rather than editable-and-then-rejected: draw
+ * and seed both, because `changed()` in `entry-plan.ts` compares both on a
+ * tournament row. See `FieldEntry.locked`, `FieldEntry.position` and
+ * `FieldEntry.labels` for the three fields an edit has to carry back
+ * untouched so that a coach entering one new player is not told somebody
+ * else's finished match is in the way.
  *
  * `host` goes as null on purpose. `3c` draws no Hosted-by cell,
  * `createTournament` takes the field, and inventing a host is inventing a fact
@@ -77,6 +92,44 @@ import {
 export interface FieldEntry {
   draw: string;
   seed: string;
+  /**
+   * The `program_event_entries` row this cell came from, on an edit.
+   *
+   * It rides all the way back into the submitted row. `planEntryChanges`
+   * matches an incoming entry by id where it has one and by its
+   * `<draw> #<position>` label otherwise, so an entry loaded and submitted
+   * WITHOUT its id is an entry the planner reads as a delete and an insert —
+   * which orphans the matches hanging off it, or is refused outright.
+   */
+  id?: string;
+  /**
+   * The position the saved row already holds.
+   *
+   * Kept rather than recomputed, because `planEntryChanges` compares
+   * `position` and refuses a settled entry whose value moved. A fresh entry
+   * above a played one in ladder order would otherwise shift every position
+   * below it and refuse the whole save — a coach entering one new player told
+   * that somebody else's finished match is in the way. New entries take the
+   * next free position instead; see `submit()`.
+   */
+  position?: number;
+  /**
+   * The labels the saved row was written with, for the same reason.
+   *
+   * `program_event_entries.player_labels` is written once and never
+   * re-derived, so a roster rename since would make a re-derived label read as
+   * an edit — and a refusal on a settled entry nobody touched.
+   */
+  labels?: string[];
+  /**
+   * Settled, and how — a match points at this entry, or a side forfeited.
+   *
+   * The same question `planEntryChanges`'s `isSettled` asks at save, asked
+   * here so the row is drawn read-only rather than retyped and then refused.
+   * A refusal is total, so an editable settled row would take a whole edited
+   * field and reject it.
+   */
+  locked?: "played" | "forfeited";
 }
 
 /** The five facts the weekend step asks for, plus the one it does not draw. */
@@ -113,6 +166,14 @@ export interface TournamentEntrySeed {
   /** One of `DRAWS`; anything else is ignored and the entry opens in the main draw. */
   draw?: string;
   seed?: number | null;
+  /** The saved entry's id — see `FieldEntry.id`. Absent on a fresh seed. */
+  id?: string;
+  /** The saved entry's position — see `FieldEntry.position`. */
+  position?: number;
+  /** The saved entry's labels — see `FieldEntry.labels`. */
+  labels?: string[];
+  /** Settled, and how — see `FieldEntry.locked`. */
+  locked?: "played" | "forfeited";
 }
 
 /**
@@ -136,6 +197,12 @@ export interface TournamentEntrySeed {
  * no encoding here to get wrong, and a seed cannot introduce one.
  */
 export interface TournamentDraftSeed {
+  /**
+   * The event being edited. Its presence is what makes `submit()` call
+   * `updateTournament` rather than `createTournament` — one fact, in one
+   * place, rather than a `mode` flag the two halves could disagree about.
+   */
+  eventId?: string;
   name?: string;
   /** YYYY-MM-DD. */
   startsOn?: string;
@@ -145,6 +212,18 @@ export interface TournamentDraftSeed {
   surface?: string;
   format?: EventFormatValue;
   field?: TournamentEntrySeed[];
+  /**
+   * Saved entries the field step cannot draw, submitted back verbatim.
+   *
+   * The field is one row per ROSTER player, so a saved entry naming somebody
+   * who has since left the program — or a doubles pair, which this screen has
+   * no way to make — has no row to appear on. Dropping it from the submission
+   * is not the harmless option: `planEntryChanges` would read the absence as a
+   * delete, and either remove an entry nobody asked to remove or refuse the
+   * whole save because that entry has a match. Sent back unchanged, the
+   * planner sees no change and leaves the row alone.
+   */
+  carry?: TournamentEntryInput[];
 }
 
 /** The `FORMATS` row an option name names, or `3c`'s own. Never a parse. */
@@ -174,6 +253,10 @@ function seedEntries(
       // actual seeding.
       seed:
         row.seed !== undefined && row.seed !== null ? String(row.seed) : "",
+      id: row.id,
+      position: row.position,
+      labels: row.labels,
+      locked: row.locked,
     });
   }
   return entered;
@@ -223,8 +306,10 @@ export function useTournamentDraft(
 
   // The same array the field step walks, filtered — not a second list. Each
   // surviving element carries its own entry, so no row is ever paired with a
-  // lookup that could return somebody else's. `position` in the real write is
-  // the index here, which is why ladder order is the order.
+  // lookup that could return somebody else's. Its order is the order new
+  // entries are numbered in, which is why ladder order is the order; an entry
+  // loaded from a saved event keeps the position it already had. See
+  // `submit()`.
   const field = roster.flatMap((player) => {
     const entry = entered.get(player.userId);
     return entry ? [{ player, entry }] : [];
@@ -232,9 +317,14 @@ export function useTournamentDraft(
 
   function enter(player: LadderPlayer, draw: string = MAIN_DRAW) {
     setEntered((current) => {
-      const next = new Map(current);
       const existing = current.get(player.userId);
+      // A settled entry's draw is not this screen's to move — the save would
+      // refuse it, and refusal is total. The row draws no live control, so
+      // this is the second lock on the same door.
+      if (existing?.locked) return current;
+      const next = new Map(current);
       next.set(player.userId, {
+        ...existing,
         draw,
         // A qualifier is not seeded, and the cell beside the draw says so with
         // a dash. Keeping a seed alive behind that dash would send a number
@@ -247,6 +337,10 @@ export function useTournamentDraft(
 
   function remove(player: LadderPlayer) {
     setEntered((current) => {
+      // A settled entry cannot be dropped either: `planEntryChanges` refuses
+      // to delete a row a match points at, and a refusal takes the whole save
+      // with it.
+      if (current.get(player.userId)?.locked) return current;
       const next = new Map(current);
       next.delete(player.userId);
       return next;
@@ -262,7 +356,7 @@ export function useTournamentDraft(
   function amend(player: LadderPlayer, patch: Partial<FieldEntry>) {
     setEntered((current) => {
       const existing = current.get(player.userId);
-      if (!existing) return current;
+      if (!existing || existing.locked) return current;
       const next = new Map(current);
       next.set(player.userId, { ...existing, ...patch });
       return next;
@@ -279,14 +373,67 @@ export function useTournamentDraft(
    * writes, which is what `docs/ui-revamp-guardrails.md` §3.1 and §4 require of
    * every event a video is later submitted against.
    *
-   * `position` is the index in `field`, which is roster order filtered — so an
-   * entry's position is its ladder order, and no two entries can claim the same
-   * one.
+   * A NEW entry's `position` is the next number no saved row holds, taken in
+   * roster order — so a field typed from scratch is numbered 0..n in ladder
+   * order. A LOADED entry keeps the position it was saved with, because
+   * `planEntryChanges` compares `position` and refuses a settled entry whose
+   * value moved: renumbering the field around a newly entered player would
+   * turn "enter one more player" into "somebody else's played match is in the
+   * way".
+   *
+   * On an edit — a seed carrying an `eventId` — this calls `updateTournament`
+   * instead, which is `createTournament` plus `planEntryChanges` over the rows
+   * already saved. Same footer, same `ActionError`.
    */
   function submit() {
     setError(null);
+
+    // Entries the field step cannot draw, first and unchanged — see
+    // `TournamentDraftSeed.carry`.
+    const carried = initial?.carry ?? [];
+    // The first position no saved row already holds. A loaded entry keeps its
+    // own; only a newly entered player takes one from here, so entering
+    // somebody cannot renumber — and therefore cannot refuse — a settled entry
+    // below them in ladder order. On a create there is nothing saved, so this
+    // starts at 0 and positions are 0..n in roster order exactly as before.
+    let nextPosition =
+      Math.max(
+        -1,
+        ...carried.map((row) => row.position),
+        ...field.map(({ entry }) => entry.position ?? -1)
+      ) + 1;
+
+    const entries: TournamentEntryInput[] = [
+      ...carried,
+      ...field.map(({ player, entry }) => ({
+        // The saved row this came from, where there is one. Without it
+        // `planEntryChanges` matches on the `<draw> #<position>` label alone,
+        // and an entry that moved draws would read as a delete and an insert.
+        id: entry.id,
+        // `3c` has one section and it is singles. A doubles pair is one entry
+        // carrying two names, and this screen draws no way to make one.
+        discipline: "singles" as const,
+        position: entry.position ?? nextPosition++,
+        draw: entry.draw,
+        // "" is "nobody typed a seed", which is a null column — not a 0, which
+        // would print as an actual seeding. Guarded on the number rather than
+        // the string: `"0"` is truthy, and the column refuses it
+        // (`check (seed is null or seed > 0)`). The cell already strips a
+        // leading zero, so this is the second lock on the same door.
+        seed: Number(entry.seed) > 0 ? Number(entry.seed) : null,
+        playerUserIds: [player.userId],
+        // The labels the row was SAVED with, where it was saved with any.
+        // `player_labels` is written once and never re-derived, so re-deriving
+        // one here would report a renamed roster player's untouched entry as
+        // an edit — and refuse it, if that entry has been played.
+        playerLabels: entry.labels ?? [player.name],
+      })),
+    ];
+
+    const eventId = initial?.eventId;
+
     startTransition(async () => {
-      const result = await createTournament({
+      const payload = {
         name: draft.name,
         startsOn: draft.startsOn,
         endsOn: draft.endsOn,
@@ -297,22 +444,12 @@ export function useTournamentDraft(
         host: null,
         bestOf: draft.format.bestOf,
         adScoring: draft.format.adScoring,
-        entries: field.map(({ player, entry }, index) => ({
-          // `3c` has one section and it is singles. A doubles pair is one
-          // entry carrying two names, and this screen draws no way to make one.
-          discipline: "singles" as const,
-          position: index,
-          draw: entry.draw,
-          // "" is "nobody typed a seed", which is a null column — not a 0,
-          // which would print as an actual seeding. Guarded on the number
-          // rather than the string: `"0"` is truthy, and the column refuses it
-          // (`check (seed is null or seed > 0)`). The cell already strips a
-          // leading zero, so this is the second lock on the same door.
-          seed: Number(entry.seed) > 0 ? Number(entry.seed) : null,
-          playerUserIds: [player.userId],
-          playerLabels: [player.name],
-        })),
-      });
+        entries,
+      };
+
+      const result = eventId
+        ? await updateTournament({ eventId, ...payload })
+        : await createTournament(payload);
 
       if ("error" in result) {
         // The action's own sentence, on screen. A refusal that only turned the
@@ -488,6 +625,11 @@ export function TournamentFieldStep({
  * that already carries a roster id is how a match gets attributed to the wrong
  * athlete. A correction is a different row's draw, never an edit that silently
  * keeps the old id.
+ *
+ * A settled row — one whose entry has a match or a forfeit — is drawn in place
+ * with nothing on it a save could move: the draw select is disabled beside a
+ * `Played` micro, and the seed is a label rather than a field. See
+ * `FieldEntry.locked`.
  */
 function FieldRow({
   player,
@@ -505,6 +647,10 @@ function FieldRow({
   const [editingSeed, setEditingSeed] = useState(false);
 
   const name = player.name;
+  // Settled: a match points at this entry, or a side forfeited it. The row is
+  // then drawn in place and read-only — see `FieldEntry.locked`, and the seed
+  // cell below for why the seed is closed too.
+  const locked = entry?.locked;
   // Null is "the program has never set one" — see `getLadder`, which sorts
   // those last rather than proposing a ladder nobody set.
   const spot =
@@ -543,23 +689,41 @@ function FieldRow({
 
       {/* The row's whole control surface: a draw enters the player, `—` takes
           them back out. `appearance-none` is what stops the platform drawing a
-          chevron the artboard does not draw here. */}
-      <select
-        aria-label={`Draw for ${name}`}
-        value={entry?.draw ?? ""}
-        onChange={(event) => onDraw(event.target.value)}
-        className={cn(
-          "w-full cursor-pointer appearance-none bg-transparent text-[12px] outline-none",
-          entry ? "text-[var(--ink-600)]" : "text-[var(--ink-400)]"
-        )}
-      >
-        <option value="">—</option>
-        {DRAWS.map((draw) => (
-          <option key={draw} value={draw}>
-            {draw}
-          </option>
-        ))}
-      </select>
+          chevron the artboard does not draw here.
+
+          A settled entry's select is disabled rather than hidden, so the draw
+          it is in stays legible, and the micro beside it says why the row is
+          closed. `—` is unreachable there, which is the point: a played entry
+          cannot be taken out of the field, and `planEntryChanges` would refuse
+          the whole save if it tried. */}
+      <span className="flex min-w-0 items-center gap-1.5">
+        <select
+          aria-label={`Draw for ${name}`}
+          value={entry?.draw ?? ""}
+          disabled={locked !== undefined}
+          onChange={(event) => onDraw(event.target.value)}
+          className={cn(
+            "min-w-0 flex-1 appearance-none bg-transparent text-[12px] outline-none",
+            locked ? "cursor-default" : "cursor-pointer",
+            entry ? "text-[var(--ink-600)]" : "text-[var(--ink-400)]"
+          )}
+        >
+          <option value="">—</option>
+          {DRAWS.map((draw) => (
+            <option key={draw} value={draw}>
+              {draw}
+            </option>
+          ))}
+        </select>
+        {locked ? (
+          <span
+            className="text-micro shrink-0"
+            style={{ color: "var(--ink-500)" }}
+          >
+            {locked === "forfeited" ? "Forfeited" : "Played"}
+          </span>
+        ) : null}
+      </span>
 
       {entry === undefined ? (
         // Nobody to hold a seed. Drawn rather than dropped so the column does
@@ -570,6 +734,20 @@ function FieldRow({
           aria-hidden="true"
         >
           —
+        </span>
+      ) : locked ? (
+        // Read-only, and NOT because the seed is uninteresting: `changed()` in
+        // `entry-plan.ts` compares `seed` on a tournament row, so a settled
+        // entry whose seed moved is an entry the save refuses — and a refusal
+        // is total, taking every other edit in the field with it. An editable
+        // cell here would be a control that silently costs the coach their
+        // whole save. Correcting a played entry's seed is a job for whoever
+        // can also delete the match.
+        <span
+          className="mono tabular text-[11px]"
+          style={{ color: seeded ? "var(--ink-600)" : "var(--ink-400)" }}
+        >
+          {seedLabel}
         </span>
       ) : qualifying || !editingSeed ? (
         <button

@@ -238,13 +238,13 @@ need it.
 - **notes:** Non-goals: no tournament edit (T20).
 
 ## T20 · Tournament edit mode
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T16, T18, T19
 - **files:** src/components/dashboard/schedule/static/new-tournament-flow.tsx, src/components/dashboard/schedule/static/static-tournament-builder.tsx, src/app/dashboard/team/schedule/[eventId]/edit/page.tsx
 - **done when:**
   - [ ] `NewTournamentFlow` accepts `mode="edit"` and `event`, opens at step 1 with `useTournamentDraft`'s `initial` seeded from `EventDetail` (name, dates, site, format, and the entered field with ids, draws and seeds), the pinned bar showing the tournament with no `Change`
-  - [ ] In `TournamentFieldStep`, an entry whose entry has a match cannot be removed (its draw select is disabled with a `Played` micro) but its seed stays editable; new players can still be entered
+  - [ ] In `TournamentFieldStep`, an entry whose entry has a match cannot be removed (its draw select is disabled with a `Played` micro); its seed is read-only too (amended 2026-09-07: `planEntryChanges` compares `seed`, so an editable seed on a settled entry would refuse the whole save); new players can still be entered
   - [ ] The step 2 primary reads `Save changes`, calls `updateTournament`, and navigates to the event page on success; an `ActionError` prints in the footer status
   - [ ] `edit/page.tsx`'s tournament branch renders it; T8's `Edit tournament` ghost resolves; `npm test` green
 - **notes:** Non-goals: no change to `updateTournament`'s rules.
@@ -259,3 +259,16 @@ need it.
   - [ ] `CLAUDE.md`'s Routes bullet for `dashboard/team/{…}` mentions `schedule/[eventId]/score` and `schedule/[eventId]/edit`
   - [ ] `npm run map` produces no diff (`tests/generate-map.spec.ts` green)
 - **notes:** Non-goals: no code.
+
+## T21 · Round-trip spec: loading an event and saving it unchanged plans nothing
+- **status:** todo
+- **model:** sonnet
+- **needs:** T19, T20
+- **files:** tests/entry-round-trip.spec.ts (new)
+- **done when:**
+  - [ ] A pure spec builds an `EventDetail`-shaped dual (nine lines: some scored, one forfeited `"theirs"`, some empty) and a tournament (entries with ids, positions, saved `player_labels`, one with a match, one in a draw the field step cannot draw), maps each through the same seed→payload transformation the flows use, and asserts `planEntryChanges(existing, incoming)` returns empty `insert`, `update`, `delete` and `refuse`
+  - [ ] The dual case also pins that clearing an unplayed line deletes exactly that line and refuses nothing, and that renaming a scored line refuses naming its slot
+  - [ ] The tournament case pins that a carried entry (not drawable by the roster-shaped field step) survives the round trip byte-for-byte
+  - [ ] The spec imports the real transformation rather than restating it — if the seed/payload mapping is not importable, export the minimum needed from the flow files and say so; no logic is duplicated into the test
+  - [ ] `npm test` green; `npx tsc --noEmit` clean
+- **notes:** This is the regression net for T18–T20's riskiest behaviour: a coach opening an event and pressing Save must never be told a line they did not touch has changed. Non-goals: no change to `entry-plan.ts`, no UI change.
