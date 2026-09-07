@@ -21,13 +21,16 @@ import type { RosterMember } from "@/lib/data/team-roster-server";
  * **New match** is the primary on both, gated by `canUploadForProgram` at
  * the page — the same predicate the upload wizard enforces, so this never
  * opens a door the next page closes. Absent rather than disabled: a button
- * that refuses on click is worse than no button.
+ * that refuses on click is worse than no button. It carries `?player=` so
+ * the wizard opens with this page's athlete already in its For field; the
+ * wizard re-checks that id against the roster and still asks for the source.
  */
 export function ProfileActions({
   mode,
   member,
   roster,
   canUpload,
+  playerId,
 }: {
   /** `self`: the viewer's own page. `staff`: someone with roster rights. `viewer`: a teammate. */
   mode: "self" | "staff" | "viewer";
@@ -42,6 +45,8 @@ export function ProfileActions({
   member: RosterMember | null;
   roster: RosterMember[];
   canUpload: boolean;
+  /** This page's athlete, as a `program_players.id` — what `player1_id` wants. */
+  playerId: string;
 }) {
   const [editing, setEditing] = useState<RosterMember | null>(null);
 
@@ -65,7 +70,7 @@ export function ProfileActions({
       )}
       {canUpload && (
         <Link
-          href="/dashboard/team/upload"
+          href={`/dashboard/matches/new?player=${playerId}`}
           className={advButton("primary")}
         >
           New match

@@ -258,6 +258,19 @@ export interface UseUploadMatchWizardProps {
    * link is not the same as having chosen in the picker.
    */
   initialProvider?: ProviderId | null;
+  /**
+   * A player named by the link that opened the wizard (`?player=`), already
+   * checked against the active program's roster server-side.
+   *
+   * Same rank and the same limit as `initialProvider`: it answers the For
+   * field and nothing else — Source is still asked, and step one still opens.
+   *
+   * `playerId` is a `program_players.id`, which is what `player1_id` wants for
+   * a roster athlete. A miss resolves to null on the server and opens an
+   * unseeded wizard; nothing here may fall back to the uploader's own login
+   * id, which is the attribution bug `MatchSubject` exists to prevent.
+   */
+  initialSubject?: RosterSubject | null;
 }
 
 /**
@@ -306,6 +319,16 @@ export type RosterOption = RosterPlayerOption & {
 export type MatchSubject =
   | { kind: "self" }
   | { kind: "roster"; playerId: string; name: string };
+
+/**
+ * The half of `MatchSubject` a link can name.
+ *
+ * "Myself" needs no shortcut — it is the uploader, and the wizard's own
+ * default in the only workspace where it is not asked — so a seed is always a
+ * roster athlete. Narrowing it here rather than accepting the whole union
+ * keeps the impossible variant out of every seeding path.
+ */
+export type RosterSubject = Extract<MatchSubject, { kind: "roster" }>;
 
 export interface UseUploadMatchWizardReturn {
   // State
@@ -462,6 +485,7 @@ export function useUploadMatchWizard({
   preset,
   draft,
   initialProvider,
+  initialSubject,
 }: UseUploadMatchWizardProps): UseUploadMatchWizardReturn {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -511,7 +535,39 @@ export function useUploadMatchWizard({
    * wrong person's.
    */
   const askWhoPlayed = !preset && activeWorkspace.kind === "team";
-  const [matchSubject, setMatchSubject] = useState<MatchSubject | null>(null);
+  /**
+   * Seeded from a `?player=` link, which is initial state and not a
+   * synchronisation problem: the answer is known before the first paint, so
+   * nothing has to run after mount to install it.
+   */
+  const [matchSubject, setMatchSubject] = useState<MatchSubject | null>(
+    initialSubject ?? null
+  );
+  /**
+   * The same answer, readable from a callback that outlives the render it was
+   * scheduled in.
+   *
+   * The profile read below resolves whenever the network says so, and what it
+   * must not do is attach the UPLOADER's handedness to a roster athlete. Asking
+   * "which subject is chosen right now" at the moment it lands is
+   * order-independent; the alternative — guarding at each place a subject is
+   * written — needs a new clause per path and fails silently when one is
+   * missed (correct name, someone else's handedness).
+   */
+  const matchSubjectRef = useRef<MatchSubject | null>(initialSubject ?? null);
+  /**
+   * A seeded player's name, as a primitive.
+   *
+   * The effect below reads it, and depending on the prop OBJECT instead would
+   * re-run that whole effect — three localStorage reads, a step reset and two
+   * network round trips — every time this Server Component re-renders and
+   * mints a fresh but identical seed.
+   */
+  const seededPlayerName = initialSubject?.name ?? null;
+  const applyMatchSubject = useCallback((subject: MatchSubject | null) => {
+    matchSubjectRef.current = subject;
+    setMatchSubject(subject);
+  }, []);
   /** The program's players, for the who-played picker. Null while loading. */
   const [teamRoster, setTeamRoster] = useState<RosterOption[] | null>(null);
   /** The uploader's profile name and login, for the "Myself" row and for
@@ -779,10 +835,19 @@ export function useUploadMatchWizard({
     }
 
     const storedFormData = loadFormDataFromStorage();
-    if (storedFormData) {
+    if (storedFormData || seededPlayerName) {
       // Merge over defaults so newly added fields (e.g. player hand/backhand)
       // pick up their preselected values when stored data predates them.
-      setFormData({ ...getDefaultFormData(), ...storedFormData });
+      //
+      // A seeded player's name outranks the stored one, and last: storage can
+      // hold whoever the previous visit was for, and a name left disagreeing
+      // with the id chosen in the For field is the mismatch the details step
+      // exists to make impossible.
+      setFormData({
+        ...getDefaultFormData(),
+        ...storedFormData,
+        ...(seededPlayerName ? { playerName: seededPlayerName } : {}),
+      });
     }
 
     const storedFile = loadUploadedFileFromStorage();
@@ -838,9 +903,13 @@ export function useUploadMatchWizard({
         // who-played picker's "Myself" row reads it back.
         setUploaderName(fullName || null);
         // The uploader's own hand and backhand, "from your profile". Only
-        // where the form has none yet, and only for the uploader's own match
-        // — a coach's profile says nothing about the athlete they upload for,
-        // which chooseMatchSubject handles when a roster row is picked.
+        // where the form has none yet, and only where the match is still the
+        // uploader's own — a coach's profile says nothing about the athlete
+        // they upload for. The subject is read from the ref at the moment this
+        // resolves rather than tested per seeding path: a link's pick and a
+        // coach picking a row while this request was in flight are the same
+        // fact by then, and the second was landing the coach's handedness on
+        // the athlete before this line read it.
         const hand = profile?.hand === "right" || profile?.hand === "left" ? profile.hand : undefined;
         const backhand =
           profile?.backhand === "one-handed" || profile?.backhand === "two-handed"
@@ -849,7 +918,10 @@ export function useUploadMatchWizard({
         setFormData((prev) => ({
           ...prev,
           playerName: prev.playerName.trim() || !fullName ? prev.playerName : fullName,
-          ...(prev.playerHand === undefined && prev.playerBackhand === undefined && (hand || backhand)
+          ...(matchSubjectRef.current?.kind !== "roster" &&
+          prev.playerHand === undefined &&
+          prev.playerBackhand === undefined &&
+          (hand || backhand)
             ? { playerHand: hand, playerBackhand: backhand, playerStyleSource: "profile" as const }
             : {}),
         }));
@@ -860,7 +932,7 @@ export function useUploadMatchWizard({
     return () => {
       cancelled = true;
     };
-  }, [open, supabase, preset, draft, askWhoPlayed]);
+  }, [open, supabase, preset, draft, askWhoPlayed, seededPlayerName]);
 
   /**
    * The roster behind the who-played picker.
@@ -908,14 +980,27 @@ export function useUploadMatchWizard({
     };
   }, [open, askWhoPlayed, supabase, activeWorkspace.id]);
 
-  // Reset the who-played answer when the workspace changes while the wizard is
-  // open — a stale matchSubject from workspace A would otherwise write that
-  // program's player1_id into workspace B's match row.
+  /**
+   * Reset the who-played answer when the workspace CHANGES while the wizard is
+   * open — a stale matchSubject from workspace A would otherwise write that
+   * program's player1_id into workspace B's match row.
+   *
+   * The id is compared against the last one this ran for rather than keyed on
+   * alone, because an effect keyed on `activeWorkspace.id` also fires on
+   * mount, where nothing has changed. That extra fire is not free: it clears
+   * an answer a `?player=` link had already installed as initial state, which
+   * made the seed depend on being written by a later-declared effect — the
+   * feature held in place by source order inside a 2,000-line hook, with no
+   * type error and no test if anyone reordered it.
+   */
+  const subjectWorkspaceRef = useRef(activeWorkspace.id);
   useEffect(() => {
     if (!open) return;
-    setMatchSubject(null);
+    if (subjectWorkspaceRef.current === activeWorkspace.id) return;
+    subjectWorkspaceRef.current = activeWorkspace.id;
+    applyMatchSubject(null);
     setTeamRoster(null);
-  }, [open, activeWorkspace.id]);
+  }, [open, activeWorkspace.id, applyMatchSubject]);
 
   /**
    * The picker's list: the roster minus the uploader's own claimed profile.
@@ -941,7 +1026,7 @@ export function useUploadMatchWizard({
    */
   const chooseMatchSubject = useCallback(
     (subject: MatchSubject) => {
-      setMatchSubject(subject);
+      applyMatchSubject(subject);
       setFormData((prev) => ({
         ...prev,
         playerName:
@@ -954,7 +1039,7 @@ export function useUploadMatchWizard({
           : {}),
       }));
     },
-    [uploaderName]
+    [uploaderName, applyMatchSubject]
   );
 
   // Step navigation handlers

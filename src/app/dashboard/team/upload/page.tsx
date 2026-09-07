@@ -147,11 +147,14 @@ export default async function TeamUploadPage({
     return <UploadMatchFlow preset={preset} />;
   }
 
-  // A `?player=` roster shortcut used to be presetted here and never once
+  // The `?player=` roster shortcut is NOT here. It was, and it never once
   // fired: the roster links send a `program_players.id` and this looked it up
   // by `userId`, so every visit fell through to the queue below. Repairing the
-  // lookup would have re-lit the source lock `EventPreset` documents, so the
-  // shortcut belongs on `/dashboard/matches/new` instead, which asks.
+  // lookup would have re-lit the source lock `EventPreset` documents — a
+  // preset answers every question on step 1, so a coach with a SwingVision
+  // export was offered no way to say so. It now lives on
+  // `/dashboard/matches/new?player=`, which seeds the For field alone and
+  // still asks for the source.
 
   if (entryId) {
     const groups = await getUploadQueue(active.id);
