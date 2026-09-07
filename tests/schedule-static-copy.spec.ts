@@ -677,8 +677,12 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
   });
 
   test("2b's own words", () => {
-    drawn(step2, 'dual-build-step.tsx', 'Opponent');
-    drawn(step2, 'dual-build-step.tsx', '· type to search all');
+    // RETIRED 'Opponent' and '· type to search all' — the 320px opponent rail
+    //   left with the design when `dual-build-step.tsx` was split into a draft
+    //   hook and two step bodies (T14). Both strings were the rail's: the
+    //   eyebrow over its list, and the placeholder in its drawn search field.
+    //   Re-choosing the school is step one's job again, so nothing renames
+    //   them — the pane they sat in is gone, and the builder is one column.
     drawn(step2, 'dual-build-step.tsx', 'Dual');
     drawn(step2, 'dual-build-step.tsx', 'Date');
     drawn(step2, 'dual-build-step.tsx', 'Site');

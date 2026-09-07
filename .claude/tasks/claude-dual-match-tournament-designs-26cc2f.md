@@ -178,7 +178,7 @@ need it.
 - **notes:** Non-goals: not a replacement for `PinnedLineBar`. The absent-`onChange` form is what the edit flow (T19) uses to pin an opponent that cannot change.
 
 ## T14 · Split `DualBuildStep` into a draft hook and two step bodies (route keeps working)
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/schedule/static/dual-build-step.tsx, tests/schedule-static-copy.spec.ts
 - **done when:**

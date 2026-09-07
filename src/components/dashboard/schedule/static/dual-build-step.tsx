@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Calendar, Check, ChevronDown, Search } from "lucide-react";
+import { Calendar, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { advButton } from "@/lib/ui/adv-button";
 import { EventShell } from "@/components/dashboard/schedule/event-shell";
@@ -16,13 +16,7 @@ import { useNewDualData } from "@/components/dashboard/schedule/static/dual-scho
 import {
   divisionLabel,
   programDisplayName,
-  teamLabel,
 } from "@/lib/data/programs-server";
-import {
-  formatOpponentRecord,
-  opponentHistoryFor,
-  type OpponentDualHistory,
-} from "@/lib/schedule/opponent-history";
 import {
   createDual,
   opponentRosterForDual,
@@ -57,12 +51,13 @@ export type ChosenSchool =
  * One row of the Format control: the option it is, and what it means.
  *
  * ── Why this is a table and not an encoding ────────────────────────────────
- * The deleted `dual-form.tsx` carried the format through a `<select>` as the
- * string `"<bestOf>|<adScoring>"` and decoded it with `format.split("|")` →
- * `Number(bestOf)` and `adScoring === "true"`. Until this change the cell here
- * held the same string, hard-coded to `"3|false"` — because `adScoring` is
- * `boolean | null` on `EventFormat`, a null interpolates into that string as
- * the four characters `null`, and `=== "true"` reads those as a confident
+ * The deleted `dual-form.tsx` carried the format through a `<select>` as one
+ * pipe-joined string of the two fields, and decoded it by splitting on the
+ * pipe, numbering the first half and string-comparing the second against the
+ * word true. Until an earlier pass the cell here held the same string, with
+ * both halves hard-coded — and because `adScoring` is `boolean | null` on
+ * `EventFormat`, a null interpolates into such a string as the four characters
+ * spelling null, which that comparison then reads as a confident
  * `false`: a wrong answer that looks like a real one. That is the recorded
  * cause of a real outage — format arrived as `{}`, `adScoring` arrived null,
  * and every tournament video failed vendor submission long after the coach had
@@ -254,107 +249,84 @@ function seedLineup(ladder: LadderPlayer[]): LineupLine[] {
 }
 
 /**
- * `2b` — step two of a new dual: the master–detail builder.
+ * A draft handed in from outside — one line's half of it.
  *
- * The conference stays on the left while the fixture fills in on the right, so
- * the answer step one asked for is revisable without a screen hop. Date, site,
- * surface and format across the top; six singles and three doubles under them.
+ * Keyed by `LineupLine.key` (S1–S6, D1–D3) rather than by index, because an
+ * index is exactly the mistake `LineRow`'s header forbids: one row off, and a
+ * name lands on a court nobody meant. A key that matches no seeded line is
+ * simply not applied.
  *
- * ── The shell ──────────────────────────────────────────────────────────────
- * `EventShell` with `flush`, which is the prop that exists for this artboard by
- * name (see its doc comment). In `flush` mode the shell contributes
- * `flex min-h-0 flex-1 overflow-hidden` and NO padding, so the rail and the
- * detail pane own their own insets and each scrolls on its own — two panes edge
- * to edge, not one padded column. The default body would put 48/32/26 around
- * both of them and scroll them together, which is a different screen.
- *
- * The footer is `2b`'s own `16px 32px 20px` rather than the shell's `footer`
- * slot, whose `px-12 pb-[22px]` is 48/22 — the same call `dual-school-step.tsx`
- * made for `2c`. The shell's body padding is what `flush` exists to remove; its
- * footer padding belongs to the four create screens its comment names, and this
- * artboard draws different numbers. Where the design and the shell disagree the
- * design wins.
- *
- * ── Reading again, as of the schedule re-wiring ────────────────────────────
- * The school is the one step one chose — a `ChosenSchool`, handed down by
- * `static-dual-builder.tsx`, which holds nothing else. It names the header,
- * the rail's check, the subline, the footer and the popup, and every one of
- * those reads the same object, so they cannot drift. This used to be a module
- * const pinned to Ridgeline, and that const was the fix for a real defect:
- * step two's date, site, format and nine lines were Ridgeline's fixtures,
- * drawn and unvarying, so a header that followed step one's pick put one
- * school's name over another school's data. The pin comes out now because the
- * data travels with the school — see below — not because the guard was
- * unwanted.
- *
- * Date, site, surface and format are controlled state, opened on today, home,
- * the program's `default_surface` and `2b`'s own format. The rail lists the
- * real conference — `getConferenceTable`'s rows, own program already dropped —
- * with the chosen school checked, and pins that school on top when it is not
- * a conference row: a searched school, or a club side typed past the
- * directory. Sublines are this program's own head-to-head, from
- * `opponentDualHistory()`. All of it arrives through `useNewDualData()`; the
- * route reads once for both steps.
- *
- * The nine lines are the program's own: `seedLineup()` fills S1–S6 and D1–D3
- * from `getLadder`, every name is editable in place, and a typed name is
- * resolved back to a roster id by `rosterIdsForLabels` — exact beyond case and
- * whitespace, because that id is what the line's eventual match is attributed
- * to. Forfeiting is live too, which is what makes `2b`'s own "— no available
- * player" row reachable now that no fixture states one.
- *
- * Create calls `createDual` and pushes to the event it made. Its `ActionError`
- * is a sentence meant for the coach, so it is held in `error` and printed in
- * the footer where the line count goes — the same shape
- * `static-tournament-builder.tsx` uses.
- *
- * ── What is a control and what is still a picture ──────────────────────────
- *   date/site/surface   Real: an `<input type="date">` and two native
- *                       `<select>`s under the artboard's own underline
- *                       treatment, with the drawn glyph beside each.
- *   Format              Real, and the one cell a plain native select could not
- *                       draw: `2b` prints the sets half inside the underline
- *                       and the scoring half BELOW it, and a select prints one
- *                       label. So the select is a real one laid over the cell
- *                       at `opacity:0` — it owns the click, the keyboard and
- *                       the dropdown — while the two strings the cell prints
- *                       are read off the chosen `FORMATS` row underneath it.
- *   the lineup          Real: an input per side, a live Forfeit toggle, and
- *                       `createDual` behind the footer's button.
- *   the rail rows       Still drawn: a hover wash and no `cursor:pointer`,
- *                       which is what `2b` gives the unselected rows, and this
- *                       task's criteria do not ask for a re-target. The two
- *                       things a re-target needs are now both here — the row
- *                       key drops names typed against the old school, and
- *                       `OpponentPool` swaps the saved roster with it — so a
- *                       later task can make them live without re-deriving
- *                       either. The search field above them is a picture for
- *                       the same reason.
- *
- * The opponent cells ("Add name" / "Add pair") are `OpponentPopup`s, each
- * writing to its own row's state and nowhere else. Each is handed an
- * `OpponentPool` — the school and ITS saved roster as one value — built here
- * from `opponentRosterForDual()` and stamped with the school key it was
- * fetched for. That is the shape rather than two props on purpose: a popup
- * that dedupes against a different school's pool either merges two people or
- * fails to merge one, and the screen looks entirely correct either way. See
- * `OpponentPool` for why the mistake is not expressible.
- *
- * ── What the design draws that this app cannot know ────────────────────────
- * "18–4" and its five siblings on the rail were each opponent's OWN season
- * record, from matches this program never saw — `opponent-history.ts`'s header
- * says outright that the figure does not exist anywhere in this app. The slot
- * is gone rather than filled, the same call `2c` made in the previous task:
- * the rail's subline is squad · head-to-head now, two facts instead of three.
+ * Every field is optional and every absent field means "leave the ladder's
+ * seed alone" — `forfeit: null` is therefore a real value ("not forfeited"),
+ * distinguished from absence, so a seed can take a forfeit back.
  */
-export function DualBuildStep({ school }: { school: ChosenSchool }) {
-  const {
-    ladder,
-    ourConference,
-    conferencePrograms,
-    historyEntries,
-    defaultSurface,
-  } = useNewDualData();
+export interface DualLineSeed {
+  /** `"S1"`…`"D3"` — the same string `seedLineup()` puts on `key` and `slot`. */
+  key: string;
+  ourLabels?: string[];
+  theirLabels?: string[];
+  forfeit?: LineupLine["forfeit"];
+}
+
+/**
+ * The facts and lines a caller can open the builder on.
+ *
+ * T19 hands one in; `DualBuildStep` passes none, and every absent field falls
+ * back to exactly what a new dual has always opened on — today, home, the
+ * program's `default_surface`, `2b`'s format, and `seedLineup()`'s nine
+ * courts.
+ *
+ * `format` is the option NAME (`EventFormatValue`), never a `"<bestOf>|<ad>"`
+ * string and never a pair of loose numbers: `useDualDraft` resolves it to the
+ * `FORMATS` row, which states `bestOf` and `adScoring` as literals. See
+ * `DualFormat`'s header and `docs/ui-revamp-guardrails.md` §3.1 — there is no
+ * encoding here to get wrong, and a seed cannot introduce one.
+ */
+export interface DualDraftSeed {
+  /** YYYY-MM-DD. */
+  date?: string;
+  site?: EventSite;
+  /** One of `SURFACES`' values; `""` is none, and is honoured as none. */
+  surface?: string;
+  format?: EventFormatValue;
+  lines?: DualLineSeed[];
+}
+
+/** The `FORMATS` row an option name names, or `2b`'s own. Never a parse. */
+function formatFor(value: EventFormatValue | undefined): DualFormat {
+  if (!value) return DEFAULT_FORMAT;
+  return FORMATS.find((option) => option.value === value) ?? DEFAULT_FORMAT;
+}
+
+/**
+ * A new dual's draft: the four facts, the nine lines, the opponent's pool, and
+ * the write.
+ *
+ * ── Why this is a hook and not a component ─────────────────────────────────
+ * The builder is being taken apart into steps, and the one thing the steps
+ * cannot each own is the draft: a lineup held inside the lineup step would be
+ * thrown away every time the coach walked back to the facts, and a facts step
+ * that held the date would leave `submit()` with nothing to send. So the draft
+ * lives above whatever is on screen and the step bodies below are given the
+ * slice they draw. Nothing here renders.
+ *
+ * ── The lineup ─────────────────────────────────────────────────────────────
+ * Seeded once from `getLadder` through `seedLineup()`, then overlaid with
+ * `initial.lines` where a caller states one. Seeded ONCE on purpose: a ladder
+ * that changed under an open builder would rewrite a lineup the coach is
+ * halfway through entering, which is the one thing this screen must not do.
+ *
+ * `ourIds` is recomputed from the label on every edit rather than tracked
+ * beside it, so the two cannot drift — see `editOurLabels`.
+ *
+ * ── The opponent's pool ────────────────────────────────────────────────────
+ * The school and ITS saved roster travel as one value, stamped with the
+ * `schoolKey` the fetch was made for. `dual-form.tsx`'s rule, ported: an
+ * in-flight request for School A must not land after a change of school and
+ * pose as School B's.
+ */
+export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
+  const { ladder, defaultSurface } = useNewDualData();
 
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -362,26 +334,41 @@ export function DualBuildStep({ school }: { school: ChosenSchool }) {
   const [error, setError] = useState<string | null>(null);
 
   const [draft, setDraft] = useState<DualDraft>(() => ({
-    date: todayISO(),
-    site: "home",
-    // The program's own default, or none — not "Hard". A court type nobody
-    // stated is a fact about the fixture we would be inventing.
-    surface: defaultSurface ?? "",
-    format: DEFAULT_FORMAT,
+    date: initial?.date ?? todayISO(),
+    site: initial?.site ?? "home",
+    // The seed first — including `""`, which is a coach saying "no surface"
+    // and not an absent answer — then the program's own default, then none.
+    // Never "Hard": a court type nobody stated is a fact about the fixture we
+    // would be inventing.
+    surface:
+      initial?.surface !== undefined ? initial.surface : defaultSurface ?? "",
+    format: formatFor(initial?.format),
   }));
 
-  // Seeded once. A ladder that changed under an open builder would rewrite a
-  // lineup the coach is halfway through entering, which is the one thing this
-  // screen must not do.
-  const [lines, setLines] = useState<LineupLine[]>(() => seedLineup(ladder));
+  // Seeded once. See the header.
+  const [lines, setLines] = useState<LineupLine[]>(() =>
+    seedLineup(ladder).map((line) => {
+      const seed = initial?.lines?.find((row) => row.key === line.key);
+      if (!seed) return line;
+      const ourLabels = seed.ourLabels ?? line.ourLabels;
+      return {
+        ...line,
+        ourLabels,
+        // Re-resolved from the seeded label, never carried in by the caller:
+        // this id is what the line's eventual match is attributed to, and the
+        // one rule that may produce it is `rosterIdsForLabels`.
+        ourIds: rosterIdsForLabels(ourLabels.join(" / "), ladder),
+        theirLabels: seed.theirLabels ?? line.theirLabels,
+        // `undefined` is "not stated"; `null` is "not forfeited".
+        forfeit: seed.forfeit !== undefined ? seed.forfeit : line.forfeit,
+      };
+    })
+  );
 
   function edit(patch: Partial<DualDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
   }
 
-  const histories = useMemo(() => new Map(historyEntries), [historyEntries]);
-
-  const program = school.kind === "program" ? school.program : null;
   const schoolName =
     school.kind === "program" ? school.program.schoolName : school.name;
   // `OpponentTarget.key`'s mechanism (`opponent-name-cell.tsx`): every name on
@@ -392,26 +379,6 @@ export function DualBuildStep({ school }: { school: ChosenSchool }) {
       ? `program:${school.program.programKey}`
       : `text:${school.name}`;
 
-  // "Big Ten · D-I" — conference first. `programSubtitle()` prints the two the
-  // other way round ("D-I · Big Sky") and four claim-flow call sites depend on
-  // that order, so this composes its own rather than reversing a shared helper
-  // for one screen. The artboard's order, and reported. Only a directory row
-  // knows either, so a typed opponent renders no subline rather than an
-  // invented one.
-  const headerSubline = program
-    ? [program.conference, divisionLabel(program.division)]
-        .filter(Boolean)
-        .join(" · ")
-    : "";
-
-  // The chosen school always has a row carrying the check. When it is a
-  // conference row that row is it; when it is not — a searched school, or a
-  // club side typed past the directory — it is pinned on top rather than
-  // silently absent. The dormant `OpponentRail`'s rule.
-  const pinned =
-    program === null ||
-    !conferencePrograms.some((row) => row.programKey === program.programKey);
-
   // The opponent's pooled roster, stored WITH the school key it was fetched
   // for. `dual-form.tsx`'s rule, ported: an in-flight request for School A
   // must not land after a change of school and pose as School B's. The
@@ -421,7 +388,8 @@ export function DualBuildStep({ school }: { school: ChosenSchool }) {
     forKey: string;
     candidates: OpponentRosterCandidate[];
   } | null>(null);
-  const programKey = program?.programKey ?? null;
+  const programKey =
+    school.kind === "program" ? school.program.programKey : null;
 
   useEffect(() => {
     // Free text has no directory row, so there is no pool to ask for — an
@@ -529,9 +497,6 @@ export function DualBuildStep({ school }: { school: ChosenSchool }) {
     .filter((row) => row.ours.length > 0 || row.line.forfeit !== null);
   const lineCount = filled.length;
 
-  const singles = lines.filter((line) => line.discipline === "singles");
-  const doubles = lines.filter((line) => line.discipline === "doubles");
-
   // The name the dual is recorded under — squad-qualified for a directory
   // pick, so a school fielding both sides is two opponents and not one, and
   // the typed text otherwise. `ChosenSchool` states this contract.
@@ -539,6 +504,10 @@ export function DualBuildStep({ school }: { school: ChosenSchool }) {
     school.kind === "program"
       ? programDisplayName(school.program.schoolName, school.program.team)
       : school.name;
+
+  // Whether the singles block may promise "from your ladder" — see
+  // `DualLineupStep`.
+  const laddered = ladder.some((player) => player.ladderPosition !== null);
 
   function submit() {
     setError(null);
@@ -584,67 +553,269 @@ export function DualBuildStep({ school }: { school: ChosenSchool }) {
     });
   }
 
+  return {
+    draft,
+    edit,
+    lines,
+    pool,
+    laddered,
+    editOurLabels,
+    editTheirLabels,
+    setForfeited,
+    lineCount,
+    opponentName,
+    submit,
+    pending,
+    error,
+  };
+}
+
+/**
+ * The four facts `2b` draws across the top: Date, Site, Surface, Format.
+ *
+ * A body, not a screen — no shell, no header and no footer, so whichever frame
+ * shows it decides those. `2b` draws the four in one four-up at `gap:24px`.
+ *
+ * ── What is a control and what is still a picture ──────────────────────────
+ *   date/site/surface   Real: an `<input type="date">` and two native
+ *                       `<select>`s under the artboard's own underline
+ *                       treatment, with the drawn glyph beside each.
+ *   Format              Real, and the one cell a plain native select could not
+ *                       draw: `2b` prints the sets half inside the underline
+ *                       and the scoring half BELOW it, and a select prints one
+ *                       label. So the select is a real one laid over the cell
+ *                       at `opacity:0` — it owns the click, the keyboard and
+ *                       the dropdown — while the two strings the cell prints
+ *                       are read off the chosen `FORMATS` row underneath it.
+ */
+export function DualFactsStep({
+  draft,
+  onEdit,
+}: {
+  draft: DualDraft;
+  onEdit: (patch: Partial<DualDraft>) => void;
+}) {
+  return (
+    <div className="grid grid-cols-4 gap-6">
+      <FieldCell label="Date" glyph="calendar">
+        {/* `2b` draws "09-26", month and day; a native date input
+            prints the platform's own form of the same value. The
+            tournament builder made the same trade on its two dates. */}
+        <input
+          type="date"
+          value={draft.date}
+          onChange={(event) => onEdit({ date: event.target.value })}
+          className="mono w-full bg-transparent text-[13px] text-[var(--ink-900)] outline-none"
+        />
+      </FieldCell>
+
+      <FieldCell label="Site" glyph="chevron">
+        <FieldSelect
+          value={draft.site}
+          options={SITES}
+          onChange={(value) => {
+            const chosen = SITES.find((option) => option.value === value);
+            if (chosen) onEdit({ site: chosen.value });
+          }}
+        />
+      </FieldCell>
+
+      <FieldCell label="Surface" glyph="chevron">
+        <FieldSelect
+          value={draft.surface}
+          options={SURFACES}
+          onChange={(value) => onEdit({ surface: value })}
+        />
+      </FieldCell>
+
+      {/* `2b` draws the ad half BELOW the underline rather than inside
+          the value — see this component's header for how the select is
+          laid over the cell rather than being it. */}
+      <FieldCell label="Format" glyph="chevron" note={draft.format.scoring}>
+        <span className="text-[13px] text-[var(--ink-900)]">
+          {draft.format.sets}
+        </span>
+        <select
+          aria-label="Format"
+          value={draft.format.value}
+          onChange={(event) => {
+            // The chosen ROW, not a parse of the chosen string. This is
+            // the only assignment `format` has, and every row of that
+            // table states `adScoring` as a literal boolean.
+            const chosen = FORMATS.find(
+              (option) => option.value === event.target.value
+            );
+            if (chosen) onEdit({ format: chosen });
+          }}
+          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+        >
+          {FORMATS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </FieldCell>
+    </div>
+  );
+}
+
+/**
+ * The nine courts: six singles, three doubles, and the note under them.
+ *
+ * A body, not a screen — see `DualFactsStep`. Everything here is real: an
+ * input per side, a live Forfeit toggle, and an `OpponentPopup` on each
+ * opponent cell.
+ *
+ * The two blocks are cut out of the one `lines` array rather than held apart,
+ * so the array `submit()` sends and the rows on screen are the same nine
+ * objects in the same order.
+ *
+ * Each popup is handed an `OpponentPool` — the school and ITS saved roster as
+ * one value — so a popup cannot dedupe against a different school's pool. See
+ * `OpponentPool` for why the mistake is not expressible, and `LineupBlock`'s
+ * row key for the other half of the same contract.
+ */
+export function DualLineupStep({
+  lines,
+  pool,
+  laddered,
+  onOurLabels,
+  onTheirLabels,
+  onForfeit,
+}: {
+  lines: LineupLine[];
+  /** The school and its saved roster. `pool.key` rides in every row's key. */
+  pool: OpponentPool;
+  /** Whether the program has a ladder — the singles note's only variable. */
+  laddered: boolean;
+  onOurLabels: (key: string, value: string) => void;
+  onTheirLabels: (key: string, value: string) => void;
+  onForfeit: (key: string, forfeited: boolean) => void;
+}) {
+  const singles = lines.filter((line) => line.discipline === "singles");
+  const doubles = lines.filter((line) => line.discipline === "doubles");
+
+  return (
+    <>
+      <LineupBlock
+        title="Lineup · singles"
+        // `2b`'s own note, and `dual-form.tsx`'s alternative for the
+        // program the artboard never drew: a ladder nobody has ordered
+        // seeds nothing, so promising six names "from your ladder" over
+        // six empty courts would be the screen claiming a source it does
+        // not have.
+        note={
+          laddered
+            ? "six required · from your ladder"
+            : "six required · type a name on each court"
+        }
+        lines={singles}
+        addLabel="Add name"
+        pool={pool}
+        onOurLabels={onOurLabels}
+        onTheirLabels={onTheirLabels}
+        onForfeit={onForfeit}
+      />
+
+      <div>
+        <LineupBlock
+          title="Lineup · doubles"
+          note="three required · pairs carried from singles"
+          lines={doubles}
+          addLabel="Add pair"
+          pool={pool}
+          onOurLabels={onOurLabels}
+          onTheirLabels={onTheirLabels}
+          onForfeit={onForfeit}
+        />
+        <div className="text-micro mt-2.5" style={{ color: "var(--ink-500)" }}>
+          All nine lines are expected — forfeit a line only when a team
+          can&apos;t field a player for it.
+        </div>
+      </div>
+    </>
+  );
+}
+
+/**
+ * `2b` — step two of a new dual: the facts and the lineup, in one frame.
+ *
+ * ── A composition, as of the split ─────────────────────────────────────────
+ * Three pieces, and nothing of its own but the frame: `useDualDraft` holds the
+ * draft and owns the write, `DualFactsStep` draws the top row and
+ * `DualLineupStep` the nine courts. The route and `static-dual-builder.tsx`
+ * see the same component taking the same one prop; what changed is that the
+ * draft and the two bodies can now each be mounted somewhere else — which is
+ * what T19's shell needs, and why the seed above is a parameter.
+ *
+ * ── The shell ──────────────────────────────────────────────────────────────
+ * `EventShell` with `flush`, which is the prop that exists for this artboard by
+ * name (see its doc comment). In `flush` mode the shell contributes
+ * `flex min-h-0 flex-1 overflow-hidden` and NO padding, so the pane inside owns
+ * its own insets and scrolls on its own. The default body would put 48/32/26
+ * around it and scroll it with the frame, which is a different screen.
+ *
+ * The footer is `2b`'s own `16px 32px 20px` rather than the shell's `footer`
+ * slot, whose `px-12 pb-[22px]` is 48/22 — the same call `dual-school-step.tsx`
+ * made for `2c`. The shell's body padding is what `flush` exists to remove; its
+ * footer padding belongs to the four create screens its comment names, and this
+ * artboard draws different numbers. Where the design and the shell disagree the
+ * design wins.
+ *
+ * ── One column, since the rail left ────────────────────────────────────────
+ * `2b` drew the conference in a 320px left rail so the answer step one asked
+ * for stayed revisable without a screen hop. That rail is gone with this
+ * split — a searched school, its head-to-head sublines, the drawn search field
+ * and the check on the chosen row all left together — so what remains is the
+ * detail pane, and it is now the whole width rather than a `flex-1` beside an
+ * empty 320px column. Re-choosing the school is step one's job again, as it is
+ * on `2c`.
+ *
+ * The school is the one step one chose — a `ChosenSchool`, handed down by
+ * `static-dual-builder.tsx`, which holds nothing else. It names the header, the
+ * footer and the popups, and every one of those reads the same object, so they
+ * cannot drift.
+ *
+ * Create calls `createDual` and pushes to the event it made. Its `ActionError`
+ * is a sentence meant for the coach, so it is printed in the footer where the
+ * line count goes — the same shape `static-tournament-builder.tsx` uses.
+ */
+export function DualBuildStep({ school }: { school: ChosenSchool }) {
+  const {
+    draft,
+    edit,
+    lines,
+    pool,
+    laddered,
+    editOurLabels,
+    editTheirLabels,
+    setForfeited,
+    lineCount,
+    submit,
+    pending,
+    error,
+  } = useDualDraft(school);
+
+  const program = school.kind === "program" ? school.program : null;
+  const schoolName =
+    school.kind === "program" ? school.program.schoolName : school.name;
+
+  // "Big Ten · D-I" — conference first. `programSubtitle()` prints the two the
+  // other way round ("D-I · Big Sky") and four claim-flow call sites depend on
+  // that order, so this composes its own rather than reversing a shared helper
+  // for one screen. The artboard's order, and reported. Only a directory row
+  // knows either, so a typed opponent renders no subline rather than an
+  // invented one.
+  const headerSubline = program
+    ? [program.conference, divisionLabel(program.division)]
+        .filter(Boolean)
+        .join(" · ")
+    : "";
+
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col bg-[var(--surface-card)]">
       <EventShell flush>
-        {/* ── The rail ─────────────────────────────────────────────────── */}
-        <div className="flex w-80 min-h-0 shrink-0 flex-col border-r border-[var(--border-hairline)]">
-          <div className="px-5 pb-3 pt-[18px]">
-            <span className="eyebrow">Opponent</span>
-            {/* Drawn, not wired — see the header. */}
-            <div className="mt-2.5 flex h-8 items-center gap-[9px] rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-2.5">
-              <Search
-                size={14}
-                strokeWidth={1.5}
-                className="shrink-0 text-[var(--ink-500)]"
-              />
-              <span
-                className="text-[12px]"
-                style={{ color: "var(--ink-600)" }}
-              >
-                {/* The artboard's sentence in full where the program has a
-                    conference to name, and its second half alone where it
-                    does not — never a separator with nothing before it. */}
-                {ourConference
-                  ? `${ourConference} · type to search all`
-                  : "type to search all"}
-              </span>
-            </div>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-auto px-3 pb-3">
-            {pinned ? (
-              <RailRow
-                name={schoolName}
-                subline={
-                  program
-                    ? railSubline(program, histories)
-                    : // "unlisted" is the dormant rail's own word for a typed
-                      // opponent, and `2c`'s escape row's. No squad — nothing
-                      // said one. Looked up under the typed text, which is the
-                      // name a free-text dual is recorded under.
-                      [
-                        "unlisted",
-                        formatOpponentRecord(
-                          opponentHistoryFor(histories, schoolName)
-                        ),
-                      ].join(" · ")
-                }
-                selected
-              />
-            ) : null}
-            {conferencePrograms.map((row) => (
-              <RailRow
-                key={row.programKey}
-                name={row.schoolName}
-                subline={railSubline(row, histories)}
-                selected={program?.programKey === row.programKey}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* ── The detail pane ──────────────────────────────────────────── */}
         <div className="flex min-w-0 flex-1 flex-col gap-[22px] overflow-auto px-8 py-6">
           <div className="flex items-end gap-3 border-b border-[var(--border-hairline)] pb-3">
             <div className="min-w-0 flex-1">
@@ -674,111 +845,16 @@ export function DualBuildStep({ school }: { school: ChosenSchool }) {
             ) : null}
           </div>
 
-          <div className="grid grid-cols-4 gap-6">
-            <FieldCell label="Date" glyph="calendar">
-              {/* `2b` draws "09-26", month and day; a native date input
-                  prints the platform's own form of the same value. The
-                  tournament builder made the same trade on its two dates. */}
-              <input
-                type="date"
-                value={draft.date}
-                onChange={(event) => edit({ date: event.target.value })}
-                className="mono w-full bg-transparent text-[13px] text-[var(--ink-900)] outline-none"
-              />
-            </FieldCell>
+          <DualFactsStep draft={draft} onEdit={edit} />
 
-            <FieldCell label="Site" glyph="chevron">
-              <FieldSelect
-                value={draft.site}
-                options={SITES}
-                onChange={(value) => {
-                  const chosen = SITES.find((option) => option.value === value);
-                  if (chosen) edit({ site: chosen.value });
-                }}
-              />
-            </FieldCell>
-
-            <FieldCell label="Surface" glyph="chevron">
-              <FieldSelect
-                value={draft.surface}
-                options={SURFACES}
-                onChange={(value) => edit({ surface: value })}
-              />
-            </FieldCell>
-
-            {/* `2b` draws the ad half BELOW the underline rather than inside
-                the value — see the header for how the select is laid over
-                the cell rather than being it. */}
-            <FieldCell
-              label="Format"
-              glyph="chevron"
-              note={draft.format.scoring}
-            >
-              <span className="text-[13px] text-[var(--ink-900)]">
-                {draft.format.sets}
-              </span>
-              <select
-                aria-label="Format"
-                value={draft.format.value}
-                onChange={(event) => {
-                  // The chosen ROW, not a parse of the chosen string. This is
-                  // the only assignment `format` has, and every row of that
-                  // table states `adScoring` as a literal boolean.
-                  const chosen = FORMATS.find(
-                    (option) => option.value === event.target.value
-                  );
-                  if (chosen) edit({ format: chosen });
-                }}
-                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-              >
-                {FORMATS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </FieldCell>
-          </div>
-
-          <LineupBlock
-            title="Lineup · singles"
-            // `2b`'s own note, and `dual-form.tsx`'s alternative for the
-            // program the artboard never drew: a ladder nobody has ordered
-            // seeds nothing, so promising six names "from your ladder" over
-            // six empty courts would be the screen claiming a source it does
-            // not have.
-            note={
-              ladder.some((player) => player.ladderPosition !== null)
-                ? "six required · from your ladder"
-                : "six required · type a name on each court"
-            }
-            lines={singles}
-            addLabel="Add name"
+          <DualLineupStep
+            lines={lines}
             pool={pool}
+            laddered={laddered}
             onOurLabels={editOurLabels}
             onTheirLabels={editTheirLabels}
             onForfeit={setForfeited}
           />
-
-          <div>
-            <LineupBlock
-              title="Lineup · doubles"
-              note="three required · pairs carried from singles"
-              lines={doubles}
-              addLabel="Add pair"
-              pool={pool}
-              onOurLabels={editOurLabels}
-              onTheirLabels={editTheirLabels}
-              onForfeit={setForfeited}
-            />
-            <div
-              className="text-micro mt-2.5"
-              style={{ color: "var(--ink-500)" }}
-            >
-              All nine lines are expected — forfeit a line only when a team
-              can&apos;t field a player for it.
-            </div>
-          </div>
         </div>
       </EventShell>
 
@@ -817,83 +893,6 @@ export function DualBuildStep({ school }: { school: ChosenSchool }) {
           {pending ? "Creating…" : "Create dual"}
         </button>
       </div>
-    </div>
-  );
-}
-
-/**
- * A rail row's subline: squad · how it has gone against us.
- *
- * The history is looked up under the name a dual is actually recorded under —
- * `programDisplayName()`, squad-qualified — and under nothing else. Step one's
- * `historyForProgram` (`dual-school-step.tsx`) explains why there is
- * deliberately no fall back to the bare school name: a school fielding both
- * squads is two rows here, and a record keyed on the bare name would print
- * on both of them.
- */
-function railSubline(
-  program: ProgramSearchResult,
-  histories: Map<string, OpponentDualHistory>
-): string {
-  const history = opponentHistoryFor(
-    histories,
-    programDisplayName(program.schoolName, program.team)
-  );
-  return [teamLabel(program.team), formatOpponentRecord(history)].join(" · ");
-}
-
-/**
- * One rail row.
- *
- * Subline is squad · how it has gone against us — `teamLabel` and
- * `formatOpponentRecord`. No conference and no division: `2b` keeps those for
- * the detail header, unlike `2c`'s list, which prints one of them per row. And
- * no season record — see the header.
- *
- * The selected row is not washed — it is weighted and carries a blue check,
- * which is the whole of what the artboard distinguishes it by — and it is the
- * one row with no hover state.
- */
-function RailRow({
-  name,
-  subline,
-  selected,
-}: {
-  name: string;
-  subline: string;
-  selected: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex items-center gap-2.5 rounded-[var(--radius-element)] p-2.5",
-        "transition-colors duration-[var(--duration-hover)]",
-        selected ? null : "hover:bg-[var(--surface-subtle)]"
-      )}
-    >
-      <div className="min-w-0 flex-1">
-        <div
-          className={cn(
-            "truncate text-[13px] text-[var(--ink-900)]",
-            selected ? "font-medium" : null
-          )}
-        >
-          {name}
-        </div>
-        <div
-          className="text-micro mt-0.5 truncate"
-          style={{ color: "var(--ink-600)" }}
-        >
-          {subline}
-        </div>
-      </div>
-      {selected ? (
-        <Check
-          size={13}
-          strokeWidth={1.5}
-          className="shrink-0 text-[var(--blue)]"
-        />
-      ) : null}
     </div>
   );
 }
