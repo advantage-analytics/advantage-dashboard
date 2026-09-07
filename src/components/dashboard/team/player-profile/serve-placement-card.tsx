@@ -5,12 +5,11 @@ import type { PlayerProfile } from "@/lib/data/player-profile-server";
  * Where this player's serves land — Home's quiet strip, scoped to one
  * program player and read on the server.
  *
- * The strip already IS the frame's card: T / Body / Wide bars per court with
- * the dominant-zone claim above them, and the drawn court as its empty
- * state. What the profile adds is the legend row and the "Season · N serves"
- * count, both optional props. The frame's closing sentence ("Wide is the
- * third option on both sides…") is not drawn — the one claim the data backs
- * is the strip's own.
+ * The strip already IS the frame's card: claim-led, T / Body / Wide bars per
+ * court, a legend-and-count row, and the drawn court as its empty state —
+ * all of it Home's own now (round splitstep-integration's Pa2 pass). The one
+ * thing a coach's page needs that Home's own copy does not supply is the
+ * third person: "Their serve map…", not "Your serve map…".
  */
 export function ServePlacementCard({
   serve,
@@ -24,17 +23,15 @@ export function ServePlacementCard({
   return (
     <ServePlacementQuietStrip
       zoneStats={serve.zoneStats}
-      contextLabel={`last ${serve.matchCount} ${serve.matchCount === 1 ? "match" : "matches"}`}
+      matchCount={serve.matchCount}
       awaitingReport={matchesPlayed > 0}
       statisticsHref="/dashboard/team/statistics"
-      legend
-      footerLabel={`Season · ${serve.serves} ${serve.serves === 1 ? "serve" : "serves"}`}
       emptyCopy={
         isSelf
           ? undefined
           : {
               awaiting: "Their serve map fills in when the first report lands.",
-              first: "Their first serves, plotted after their first match.",
+              first: "Where their first serves land, after their first match.",
             }
       }
     />

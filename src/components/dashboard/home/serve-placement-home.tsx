@@ -36,14 +36,7 @@ type ShotRow = {
   } | null;
 };
 
-export default function ServePlacementHome({
-  userId,
-  fill = false,
-}: {
-  userId: string;
-  /** Day zero: grow to the column and let the court fill it — see the strip. */
-  fill?: boolean;
-}) {
+export default function ServePlacementHome({ userId }: { userId: string }) {
   const [dots, setDots] = useState<ServeDot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -133,7 +126,10 @@ export default function ServePlacementHome({
         // opponent's placement would answer a different question.
         if (!point.serverIsPlayer1) continue;
         const dot = pointToServeDot(point);
-        if (dot) nextDots.push(dot);
+        // First serves only. `pickServeShot` returns the serve that was
+        // *played* — the second when there was one — so without this the
+        // bars mixed both while the claim above them said "First serves".
+        if (dot && dot.isFirstServe) nextDots.push(dot);
       }
       setDots(nextDots);
     } catch {
@@ -150,12 +146,11 @@ export default function ServePlacementHome({
     return () => window.removeEventListener("match-processed", handler);
   }, [load]);
 
-  const contextLabel = matchCount === 1 ? "1 match" : `last ${matchCount} matches`;
   const zoneStats = useMemo(() => computeZoneStats(dots), [dots]);
 
   if (loading) {
     return (
-      <div className="surface-card flex flex-col gap-3" style={{ padding: "18px 20px" }}>
+      <div className="surface-card flex flex-col gap-3" style={{ padding: "var(--pad-card)" }}>
         <span className="eyebrow">Serve placement</span>
         <div className="flex flex-col gap-2" aria-hidden>
           <div className="h-3.5 w-full animate-pulse rounded-full bg-[#F3F3F3]" />
@@ -167,7 +162,7 @@ export default function ServePlacementHome({
 
   if (error) {
     return (
-      <div className="surface-card flex flex-col gap-2" style={{ padding: "18px 20px" }} role="alert">
+      <div className="surface-card flex flex-col gap-2" style={{ padding: "var(--pad-card)" }} role="alert">
         <span className="eyebrow">Serve placement</span>
         <p className="text-body-sm">Couldn&apos;t load serve data.</p>
         <button
@@ -184,11 +179,10 @@ export default function ServePlacementHome({
   return (
     <ServePlacementQuietStrip
       zoneStats={zoneStats}
-      contextLabel={contextLabel}
+      matchCount={matchCount}
       // Matches exist but none has a mapped serve yet: the first report is
       // still in the pipeline, or the imports carried no shot coordinates.
       awaitingReport={matchCount > 0}
-      fill={fill}
     />
   );
 }
