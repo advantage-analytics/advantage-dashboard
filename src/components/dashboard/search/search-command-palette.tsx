@@ -94,7 +94,13 @@ interface MatchResult {
   /** Sets, already turned the viewer's way round — not a formatted string. */
   score: ScoreLineSet[];
   date: string;
-  isWin: boolean;
+  /**
+   * Null when the match has no score yet — an upload still analysing. That is
+   * undecided, not level, so the row draws no outcome mark at all rather than
+   * `ResultMark`'s null (a decided draw). It used to fall through to `false`
+   * and mark every unscored match as lost.
+   */
+  isWin: boolean | null;
   /** Which workspace the match belongs to — the eyebrow when scope is wide. */
   workspaceName: string;
 }
@@ -383,7 +389,15 @@ export function SearchCommandPalette({
       const escaped = debouncedQuery
         .replace(/%/g, "\\%")
         .replace(/_/g, "\\_");
-      const needle = `tournament_name.ilike.%${escaped}%,player1_name.ilike.%${escaped}%,player2_name.ilike.%${escaped}%,round.ilike.%${escaped}%`;
+      // The mode narrows the columns, not just the sections. Without this,
+      // `@va` returned M. Okafor as a person because their match was at Ojai
+      // VAlley — the event leaking into the people answer.
+      const needle =
+        mode === "@"
+          ? `player1_name.ilike.%${escaped}%,player2_name.ilike.%${escaped}%`
+          : mode === "#"
+            ? `tournament_name.ilike.%${escaped}%,round.ilike.%${escaped}%`
+            : `tournament_name.ilike.%${escaped}%,player1_name.ilike.%${escaped}%,player2_name.ilike.%${escaped}%,round.ilike.%${escaped}%`;
 
       // `@` in a program also asks the roster. Same RPC the Roster page calls,
       // through the same session, so it answers with exactly what that page
@@ -503,7 +517,7 @@ export function SearchCommandPalette({
             // from their side — game counts and tiebreaks flipped together.
             score: scoreSetsFrom(m.score, { swap: !isP1 }),
             date: formatShortDate(m.date),
-            isWin: didUserWin(m.score, isP1),
+            isWin: m.score ? didUserWin(m.score, isP1) : null,
             workspaceName: workspaceNameFor(m.program_id),
           };
         });
@@ -796,9 +810,18 @@ export function SearchCommandPalette({
             </span>
           )}
 
+          {/* `data-focus-ring="none"` is the DS's own opt-out for a composite
+              field (`focus.css`): the 44px row with the magnifier and the
+              chips is the field, and the input is a control inside it. This
+              was the "focus outline" the palette drew on open — the
+              `outline-none` utility never applied, because focus.css sits
+              outside Tailwind's layers and wins before specificity is read.
+              Focus stays visible: the caret lands in the one field the modal
+              has, and the modal opening is itself the change on screen. */}
           <input
             ref={inputRef}
             autoFocus
+            data-focus-ring="none"
             value={query}
             onChange={(e) => handleChange(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -1014,8 +1037,11 @@ function ResultRow({ item }: { item: FlatItem }) {
               <span className="truncate text-[13px] text-[var(--ink-900)]">
                 vs. {item.data.opponentName}
               </span>
-              {/* The one outcome register — see `ResultMark`. */}
-              <ResultMark won={item.data.isWin} className="shrink-0" />
+              {/* The one outcome register — see `ResultMark`. Nothing for an
+                  unscored match: undecided is not a result. */}
+              {item.data.isWin !== null && (
+                <ResultMark won={item.data.isWin} className="shrink-0" />
+              )}
             </span>
             <span className="text-[12px] text-[var(--ink-500)]">
               {item.data.tournamentName}
