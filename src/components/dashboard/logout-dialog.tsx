@@ -47,7 +47,13 @@ export function LogoutProvider({ children }: { children: React.ReactNode }) {
     setHasError(false);
     try {
       const supabase = createClient();
-      await supabase.auth.signOut();
+      // Local scope, explicitly: auth-js defaults signOut() to "global", which
+      // revokes every device's refresh token. This shared dialog is the
+      // "sign out here" action behind the sidebar footer, the header profile
+      // menu and Settings > Account's "This device" row. Ending every other
+      // session is a separate, explicitly-labelled control ("Sign out
+      // everywhere" on Settings > Account), and only that one should do it.
+      await supabase.auth.signOut({ scope: "local" });
       router.push("/login");
     } catch {
       setIsLoggingOut(false);

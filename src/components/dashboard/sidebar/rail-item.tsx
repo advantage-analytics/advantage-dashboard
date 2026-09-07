@@ -35,6 +35,10 @@ export function RailItem({
   ariaExpanded,
   onClick,
   as = "link",
+  /** Marks a route whose page renders `ComingSoonPage` rather than the real
+   *  feature. Surfaces as a dimmed second line in the collapsed tooltip and
+   *  widens the row's `aria-label`. */
+  comingSoon,
 }: {
   href?: string;
   label: string;
@@ -45,6 +49,7 @@ export function RailItem({
   ariaExpanded?: boolean;
   onClick?: () => void;
   as?: "link" | "button";
+  comingSoon?: boolean;
 }) {
   /** Labels arrive behind the advancing edge, and leave before it moves. */
   const fade = expanded
@@ -92,12 +97,15 @@ export function RailItem({
       : "text-[var(--nav-fg)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]"
   );
 
+  /** The marker is invisible in the expanded panel, so the name carries it. */
+  const ariaLabel = comingSoon ? `${label}, coming soon` : label;
+
   const row =
     as === "button" ? (
       <button
         type="button"
         onClick={onClick}
-        aria-label={label}
+        aria-label={ariaLabel}
         aria-expanded={ariaExpanded}
         className={className}
       >
@@ -108,7 +116,7 @@ export function RailItem({
         href={href ?? "#"}
         onClick={onClick}
         aria-current={active ? "page" : undefined}
-        aria-label={label}
+        aria-label={ariaLabel}
         className={className}
       >
         {body}
@@ -116,7 +124,12 @@ export function RailItem({
     );
 
   return (
-    <RailTooltip label={label} shortcut={shortcut} hidden={expanded}>
+    <RailTooltip
+      label={label}
+      detail={comingSoon ? "Coming soon" : undefined}
+      shortcut={shortcut}
+      hidden={expanded}
+    >
       {row}
     </RailTooltip>
   );

@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { PanelLeftClose, PanelLeftOpen, LogOut } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { WorkspaceRow } from "@/components/dashboard/sidebar/workspace-row";
@@ -12,7 +12,6 @@ import {
   RAIL_WIDTH,
   PANEL_WIDTH,
 } from "@/components/dashboard/sidebar/sidebar-state";
-import { useRequestLogout } from "@/components/dashboard/logout-dialog";
 import {
   activeHref,
   PERSONAL_NAV,
@@ -37,7 +36,6 @@ import {
 export function AppSidebar() {
   const pathname = usePathname();
   const { active } = useWorkspace();
-  const requestLogout = useRequestLogout();
   const { expanded, toggle } = useSidebarState();
 
   const isTeam = active.kind === "team";
@@ -73,6 +71,7 @@ export function AppSidebar() {
             icon={link.icon}
             active={current === link.href}
             expanded={expanded}
+            comingSoon={link.comingSoon}
           />
         ))}
       </div>
@@ -105,23 +104,18 @@ export function AppSidebar() {
         />
       </div>
 
-      <ViewerFooter expanded={expanded} onSignOut={requestLogout} />
+      <ViewerFooter expanded={expanded} />
     </nav>
   );
 }
 
 /**
- * Sign-out and the workspace sub-label are the only things dropped on collapse.
- * Nothing else disappears — the rail is the same list with its labels hidden,
- * so muscle memory holds.
+ * The footer is a single profile link to Settings → Account; only its label
+ * fades on collapse, same as the rail items above it. Sign-out lives
+ * elsewhere — Settings → Account and the header profile menu — not in the
+ * sidebar chrome.
  */
-function ViewerFooter({
-  expanded,
-  onSignOut,
-}: {
-  expanded: boolean;
-  onSignOut: () => void;
-}) {
+function ViewerFooter({ expanded }: { expanded: boolean }) {
   const { viewer } = useWorkspace();
 
   return (
@@ -150,17 +144,6 @@ function ViewerFooter({
           {viewer.name}
         </span>
       </Link>
-
-      {expanded && (
-        <button
-          type="button"
-          onClick={onSignOut}
-          aria-label="Sign out"
-          className="flex size-8 shrink-0 items-center justify-center rounded-[6px] text-[var(--ink-400)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-700)] focus-visible:outline-none cursor-pointer"
-        >
-          <LogOut className="size-[13px]" strokeWidth={1.5} aria-hidden="true" />
-        </button>
-      )}
     </div>
   );
 }

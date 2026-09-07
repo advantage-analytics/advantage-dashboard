@@ -2,7 +2,8 @@
 
 import { useCallback, useState, useTransition } from "react";
 import Link from "next/link";
-import { Monitor, Users } from "lucide-react";
+import { Monitor, MonitorSmartphone, Users } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { SettingsAlert } from "@/components/dashboard/settings/settings-alert";
 import { SettingsButton } from "@/components/dashboard/settings/settings-button";
 import { SettingsSectionHeading } from "@/components/dashboard/settings/settings-card";
@@ -10,6 +11,7 @@ import {
   deleteAccount,
   requestPasswordReset,
 } from "@/components/dashboard/settings/actions";
+import { useRequestLogout } from "@/components/dashboard/logout-dialog";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { createClient } from "@/lib/supabase/client";
 import { SUPPORT_EMAIL } from "@/lib/constants";
@@ -29,6 +31,9 @@ import { cn } from "@/lib/utils";
  */
 export default function AccountPage() {
   const { available, viewer } = useWorkspace();
+  // Same confirmation the header profile menu opens — one dialog, one place
+  // the unsaved-changes warning has to stay correct.
+  const requestLogout = useRequestLogout();
 
   const [confirmText, setConfirmText] = useState("");
   const [message, setMessage] = useState<{
@@ -146,34 +151,37 @@ export default function AccountPage() {
 
       {/* 02 · Sessions.
 
-          One row, not a device list: nothing in the app records where an
-          account has been signed in, and a list assembled from the current
-          session would show one device while implying it was all of them. The
-          action below is genuinely global. */}
+          Two rows — this device and everywhere — not a device list: nothing in
+          the app records where an account has been signed in, and a list
+          assembled from the current session would show one device while
+          implying it was all of them. The second action is genuinely global. */}
       <section className="flex flex-col gap-[18px]">
         <SettingsSectionHeading number="02" title="Where you're signed in" />
-        <div className="flex items-center gap-3.5 border-y border-[var(--border-hairline)] py-3">
-          <Monitor
-            className="size-3.5 shrink-0 text-[var(--ink-600)]"
-            strokeWidth={1.5}
-            aria-hidden="true"
-          />
-          <div className="min-w-0">
-            <div className="text-[12px] text-[var(--ink-900)]">This device</div>
-            <div className="mt-0.5 text-[11px] text-[var(--ink-500)]">
-              Signing out everywhere ends every other session too — phones
-              included.
-            </div>
-          </div>
-          <SettingsButton
-            variant="outline"
-            size="sm"
-            className="ml-auto"
-            onClick={handleSignOutEverywhere}
-            loading={isSigningOut}
+        <div className="flex flex-col border-y border-[var(--border-hairline)]">
+          <SessionRow
+            icon={Monitor}
+            title="This device"
+            detail="Ends this session only. Other devices stay signed in."
           >
-            Sign out everywhere
-          </SettingsButton>
+            <SettingsButton variant="outline" size="sm" onClick={requestLogout}>
+              Sign out
+            </SettingsButton>
+          </SessionRow>
+
+          <SessionRow
+            icon={MonitorSmartphone}
+            title="Every device"
+            detail="Signing out everywhere ends every other session too — phones included."
+          >
+            <SettingsButton
+              variant="outline"
+              size="sm"
+              onClick={handleSignOutEverywhere}
+              loading={isSigningOut}
+            >
+              Sign out everywhere
+            </SettingsButton>
+          </SessionRow>
         </div>
       </section>
 
@@ -255,6 +263,38 @@ export default function AccountPage() {
           </SettingsButton>
         </form>
       </section>
+    </div>
+  );
+}
+
+/**
+ * A session row: glyph, what it is, what ending it costs, and the button that
+ * ends it. Sibling to `FactRow` below, which cannot serve here — its fixed
+ * 130px label column has no room for a two-line body beside a glyph.
+ */
+function SessionRow({
+  icon: Icon,
+  title,
+  detail,
+  children,
+}: {
+  icon: LucideIcon;
+  title: string;
+  detail: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3.5 border-t border-[var(--border-hairline)] py-3 first:border-t-0">
+      <Icon
+        className="size-3.5 shrink-0 text-[var(--ink-600)]"
+        strokeWidth={1.5}
+        aria-hidden="true"
+      />
+      <div className="min-w-0">
+        <div className="text-[12px] text-[var(--ink-900)]">{title}</div>
+        <div className="mt-0.5 text-[11px] text-[var(--ink-500)]">{detail}</div>
+      </div>
+      <div className="ml-auto shrink-0">{children}</div>
     </div>
   );
 }
