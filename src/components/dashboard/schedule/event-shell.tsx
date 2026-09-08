@@ -18,7 +18,9 @@ export function EventShell({
   /**
    * The body owns its own panes and scrolling — 2b's master–detail, where a
    * fixed rail and a scrolling pane split the space edge to edge. The default
-   * body is one padded, scrolling column.
+   * body is one padded, scrolling column, and that column is itself a flex
+   * column — a caller with content shorter than the viewport can pin it with
+   * `my-auto` instead of leaving it stuck at the top.
    */
   flush?: boolean;
   children: React.ReactNode;
@@ -29,7 +31,7 @@ export function EventShell({
         className={
           flush
             ? "flex min-h-0 flex-1 overflow-hidden"
-            : "min-h-0 flex-1 overflow-y-auto px-12 pb-8 pt-[26px]"
+            : "flex min-h-0 flex-1 flex-col overflow-y-auto px-12 pb-8 pt-[26px]"
         }
       >
         {children}

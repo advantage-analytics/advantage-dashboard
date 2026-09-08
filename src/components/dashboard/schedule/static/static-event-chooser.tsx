@@ -43,13 +43,16 @@ import { cn } from "@/lib/utils";
  *      without either glyph promising a fight. Size and stroke are the
  *      artboard's still: 22px at `strokeWidth={1.5}`.
  *
- *   2. The body is a centred column, not a left-flushed one. The artboard
- *      flushes it left because it was drawn at the artboard's own width; in
- *      the live shell the 820px grid stranded a wide gutter on the right at
- *      dashboard widths. The column centres in `EventShell`'s body; the text
- *      inside it stays left-aligned, so only the column's position moves.
- *      Done with a wrapper here rather than an `mx-auto` in
- *      `event-shell.tsx`, which four other screens draw through.
+ *   2. The body is a centred column, not a left-flushed one — on both axes,
+ *      not just the horizontal one. The artboard flushes it to the top left
+ *      because it was drawn at the artboard's own width and height; in the
+ *      live shell the 820px grid stranded a wide gutter on the right, and a
+ *      short, unscrolled body left one below. The column centres in
+ *      `EventShell`'s body with `mx-auto my-auto`; the text inside it stays
+ *      left-aligned, so only the column's position moves. Done with a
+ *      wrapper here rather than in `event-shell.tsx`, which four other
+ *      screens draw through and which only grew `flex flex-col` (T22) so a
+ *      caller like this one *could* centre — it does not centre itself.
  *
  * ── The selected card's inner rule ─────────────────────────────────────────
  * The artboard draws it `rgba(59,130,246,0.15)`, and `--blue-glow`
@@ -182,13 +185,17 @@ export function StaticEventChooser() {
           the remaining 10px rather than reaching into the shared shell — three
           other screens in this run sit in the same frame.
 
-          The bottom is deliberately NOT reconciled: the artboard says 0 and
-          `EventShell` contributes `pb-8` (32px). Reaching into the shared
-          shell to strip it would move the other three screens that sit in it,
-          so the 32px stands. Invisible here — the content is top-aligned and
-          far shorter than the viewport — but it is a real divergence from the
-          artboard, recorded rather than left silent. */}
-      <div className="mx-auto w-full max-w-[820px] pt-[10px]">
+          The artboard's own layout is top-left, but that was drawn at the
+          artboard's own width; at dashboard widths the 820px grid stranded a
+          wide gutter on the right and a gap below. `EventShell`'s body is a
+          flex column (T22), so `my-auto` centres this column on the vertical
+          axis the same way `mx-auto` already centres it on the horizontal —
+          the column sits in the middle of the scroll area rather than pinned
+          to its top. Below the height where the column plus its padding no
+          longer fits, `my-auto` collapses to 0 and the body's own
+          `overflow-y-auto` takes over, so short viewports still scroll
+          instead of clipping. */}
+      <div className="mx-auto my-auto w-full max-w-[820px] pt-[10px]">
         <h1 className="text-[30px] font-light leading-[34px] tracking-[-0.6px] text-[var(--ink-900)]">
           {COPY.heading}
         </h1>
