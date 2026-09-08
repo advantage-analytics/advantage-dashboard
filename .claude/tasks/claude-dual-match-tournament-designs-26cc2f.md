@@ -298,7 +298,7 @@ need it.
 - **notes:** Plan step 2. `new-dual-flow.tsx` is not touched — Continue gating was measured correct in stage 02. Harness: `src/app/dev-preview/dual/page.tsx` (untracked, see T22's note).
 
 ## T24 · Facts step: MenuSelect for Site, Surface and Format; the Date rule answers focus
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** src/components/dashboard/schedule/static/dual-build-step.tsx, tests/dual-format-options.spec.ts (new)
 - **done when:**

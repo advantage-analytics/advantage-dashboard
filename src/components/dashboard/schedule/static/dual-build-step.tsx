@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Calendar, ChevronDown } from "lucide-react";
+import { Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
 import {
   OpponentPopup,
   opponentPoolFor,
@@ -75,7 +76,7 @@ export type ChosenSchool =
  * so the label and the value cannot drift into disagreeing about which format
  * this dual is.
  */
-interface DualFormat {
+export interface DualFormat {
   /** The `<select>` option's value — matched against, never split. */
   value: EventFormatValue;
   /** What the dropdown lists, once open. */
@@ -131,10 +132,46 @@ const FORMAT_WORDS: Record<
   },
 };
 
-const FORMATS: readonly DualFormat[] = EVENT_FORMATS.map((format) => ({
+export const FORMATS: readonly DualFormat[] = EVENT_FORMATS.map((format) => ({
   ...format,
   ...FORMAT_WORDS[format.value],
 }));
+
+/**
+ * The Format control's options: one per `FORMATS` row, carrying `2b`'s two
+ * halves as the two lines `MenuSelect` draws — `sets` as the label the closed
+ * trigger prints, `scoring` as the description beneath it in the open menu.
+ *
+ * Pure and exported so the mapping can be asserted without mounting the step
+ * (`tests/dual-format-options.spec.ts`). What it deliberately does NOT carry
+ * is `bestOf` or `adScoring`: an option is a NAME to look the row back up by,
+ * so nothing downstream can read a scoring rule off the dropdown instead of
+ * off the row. See `DualFormat`'s header and
+ * `docs/ui-revamp-guardrails.md` §3.1.
+ */
+export function formatOptions(
+  formats: readonly DualFormat[]
+): MenuOption<EventFormatValue>[] {
+  return formats.map((format) => ({
+    value: format.value,
+    label: format.sets,
+    description: format.scoring,
+  }));
+}
+
+/** Built once: `FORMATS` is a module constant, so its options are too. */
+const FORMAT_OPTIONS = formatOptions(FORMATS);
+
+/**
+ * The height the three menu cells take.
+ *
+ * `MenuSelect`'s underline trigger is 32px; `FieldCell`'s ruled row is 34 —
+ * `pt-1.5 pb-[7px]` plus its hairline, the artboard's own numbers, recorded
+ * again in `static-tournament-builder.tsx`. Two rules 2px apart in one four-up
+ * read as a mistake, so the trigger takes the row's height rather than the row
+ * taking the trigger's.
+ */
+const MENU_TRIGGER = "h-[34px]";
 
 /** What `2b` draws: best of 3, no-ad. Explicit — never a default standing in
  *  for a null. */
@@ -834,17 +871,26 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
  * A body, not a screen — no shell, no header and no footer, so whichever frame
  * shows it decides those. `2b` draws the four in one four-up at `gap:24px`.
  *
- * ── What is a control and what is still a picture ──────────────────────────
- *   date/site/surface   Real: an `<input type="date">` and two native
- *                       `<select>`s under the artboard's own underline
- *                       treatment, with the drawn glyph beside each.
- *   Format              Real, and the one cell a plain native select could not
- *                       draw: `2b` prints the sets half inside the underline
- *                       and the scoring half BELOW it, and a select prints one
- *                       label. So the select is a real one laid over the cell
- *                       at `opacity:0` — it owns the click, the keyboard and
- *                       the dropdown — while the two strings the cell prints
- *                       are read off the chosen `FORMATS` row underneath it.
+ * ── What draws what ────────────────────────────────────────────────────────
+ *   Date                A native `<input type="date">` inside `FieldCell`'s
+ *                       ruled row, under the drawn calendar. The platform's
+ *                       own picker icon and clear button are hidden so that
+ *                       calendar is the only glyph; the picker still opens
+ *                       from a click anywhere in the row, and from Space.
+ *   Site/Surface/Format `MenuSelect` — the app's select — in a cell that
+ *                       draws no chrome of its own.
+ *
+ * Format is why `MenuSelect` is here rather than a native select: `2b` prints
+ * the sets half inside the underline and the scoring half BELOW it, and an
+ * `<option>` carries one label. That used to be a real select laid over the
+ * cell at `opacity:0` — invisible, unstyleable, and a second focus target
+ * sitting on the cell. `MenuSelect` carries the two halves as an option's
+ * label and description, so the open menu says the same two things the closed
+ * cell does.
+ *
+ * `static-tournament-builder.tsx` draws a `FieldCell` of the same name and the
+ * same numbers, still on the old pattern. It is a separate task — do not edit
+ * it from here, and do not assume the two have already been reconciled.
  */
 export function DualFactsStep({
   draft,
@@ -863,56 +909,65 @@ export function DualFactsStep({
           type="date"
           value={draft.date}
           onChange={(event) => onEdit({ date: event.target.value })}
-          className="mono w-full bg-transparent text-[13px] text-[var(--ink-900)] outline-none"
+          // The row's rule goes 2px blue on focus, so a ring on top of it is
+          // the same stacked second mark the underline fields opt out of —
+          // see `styles/design-system/focus.css`.
+          data-focus-ring="none"
+          className={cn(
+            "mono w-full bg-transparent text-[13px] text-[var(--ink-900)] outline-none",
+            // The platform draws its own calendar, and an ✕ once the field
+            // has a value: two more glyphs beside the one the cell already
+            // drew. The clear button goes; the picker indicator is not hidden
+            // but stretched across the row at zero opacity, so it stays what
+            // opens the picker — a click anywhere in the cell, drawn calendar
+            // included, still opens it.
+            "[&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:m-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:p-0 [&::-webkit-calendar-picker-indicator]:opacity-0",
+            "[&::-webkit-clear-button]:hidden [&::-webkit-inner-spin-button]:hidden"
+          )}
         />
       </FieldCell>
 
-      <FieldCell label="Site" glyph="chevron">
-        <FieldSelect
+      <FieldCell label="Site" chrome="none">
+        <MenuSelect
+          label="Site"
+          variant="underline"
+          className={MENU_TRIGGER}
           value={draft.site}
           options={SITES}
-          onChange={(value) => {
-            const chosen = SITES.find((option) => option.value === value);
-            if (chosen) onEdit({ site: chosen.value });
-          }}
+          onChange={(site) => onEdit({ site })}
         />
       </FieldCell>
 
-      <FieldCell label="Surface" glyph="chevron">
-        <FieldSelect
+      <FieldCell label="Surface" chrome="none">
+        <MenuSelect
+          label="Surface"
+          variant="underline"
+          className={MENU_TRIGGER}
           value={draft.surface}
           options={SURFACES}
-          onChange={(value) => onEdit({ surface: value })}
+          onChange={(surface) => onEdit({ surface })}
         />
       </FieldCell>
 
-      {/* `2b` draws the ad half BELOW the underline rather than inside
-          the value — see this component's header for how the select is
-          laid over the cell rather than being it. */}
-      <FieldCell label="Format" glyph="chevron" note={draft.format.scoring}>
-        <span className="text-[13px] text-[var(--ink-900)]">
-          {draft.format.sets}
-        </span>
-        <select
-          aria-label="Format"
+      {/* `2b` draws the ad half BELOW the underline rather than inside the
+          value, so the cell prints `scoring` under a trigger printing `sets`
+          — the two halves of the one chosen row. */}
+      <FieldCell label="Format" chrome="none" note={draft.format.scoring}>
+        <MenuSelect
+          label="Format"
+          variant="underline"
+          className={MENU_TRIGGER}
           value={draft.format.value}
-          onChange={(event) => {
-            // The chosen ROW, not a parse of the chosen string. This is
-            // the only assignment `format` has, and every row of that
-            // table states `adScoring` as a literal boolean.
-            const chosen = FORMATS.find(
-              (option) => option.value === event.target.value
-            );
+          options={FORMAT_OPTIONS}
+          onChange={(value) => {
+            // The chosen ROW, looked up by option name — never a parse of the
+            // option's text. This is `format`'s only assignment, and every row
+            // of that table states `adScoring` as a literal boolean. See
+            // `DualFormat`'s header and `docs/ui-revamp-guardrails.md` §3.1.
+            const chosen = FORMATS.find((option) => option.value === value);
             if (chosen) onEdit({ format: chosen });
           }}
-          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-        >
-          {FORMATS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        />
       </FieldCell>
     </div>
   );
@@ -1049,13 +1104,19 @@ export function DualLineupStep({
 }
 
 /**
- * One underlined fact — `2b` draws all four the same way, with a trailing
- * glyph that says how it is answered.
+ * One fact under its eyebrow — `2b` draws all four the same way.
  *
- * A `<label>` rather than a `<div>`, now that every cell holds a real control:
- * the eyebrow is the control's name, so it labels it rather than sitting beside
- * it. The underlined row is `relative` so the Format cell's overlaid select
- * has something to fill.
+ * Two chromes, because the four cells no longer answer the same way. `rule`
+ * is the artboard's row drawn here: a hairline, a trailing glyph, and the
+ * control inside it. `none` hands the whole treatment to the child, because
+ * `MenuSelect`'s underline trigger already draws that hairline, its own
+ * chevron and its own 2px blue rule on focus — a second hairline here would
+ * stack a rule on a rule and a chevron beside a chevron.
+ *
+ * `rule` stays a `<label>`: the eyebrow names the one native control inside
+ * it. `none` is a `<div>`, because `MenuSelect` is a `<button>` and a button
+ * is not a labelable element — a `<label>` around it would name nothing. The
+ * same string goes in as its `label`, which is its `aria-label`.
  *
  * Not the deleted `field-row.tsx`'s `FieldCellText`/`FieldCellSelect`: those
  * were 25b's row and carried its `FieldRow` spacing (`mt-3.5`, `gap-8`) where
@@ -1066,19 +1127,52 @@ export function DualLineupStep({
 function FieldCell({
   label,
   glyph,
+  chrome = "rule",
   note,
   children,
 }: {
   label: string;
-  glyph: "calendar" | "chevron";
-  /** Drawn under the underline, on Format alone. */
+  /**
+   * The trailing glyph on a `rule` cell. The calendar is the only one left —
+   * the chevron went with `FieldSelect`, since every cell that wanted one now
+   * draws `MenuSelect`'s own.
+   */
+  glyph?: "calendar";
+  /** `rule` draws the hairline row; `none` lets the child draw its own. */
+  chrome?: "rule" | "none";
+  /** Drawn under the cell, on Format alone. */
   note?: string;
   children: React.ReactNode;
 }) {
+  const eyebrow = <span className="eyebrow">{label}</span>;
+  const footnote = note ? (
+    <span
+      className="text-micro mt-[5px] block"
+      style={{ color: "var(--ink-600)" }}
+    >
+      {note}
+    </span>
+  ) : null;
+
+  if (chrome === "none") {
+    return (
+      <div className="block">
+        {eyebrow}
+        {children}
+        {footnote}
+      </div>
+    );
+  }
+
   return (
     <label className="block">
-      <span className="eyebrow">{label}</span>
-      <span className="relative flex items-center border-b border-[var(--border-hairline)] pb-[7px] pt-1.5">
+      {eyebrow}
+      {/* `focus-within`, not `focus-visible`: the rule belongs to the row and
+          what it answers is focus landing on the control inside it. The 2px
+          rule takes a pixel back off the padding so the row does not grow as
+          it thickens, and the control inside opts out of the ring — the rule
+          going blue IS the one mark (`styles/design-system/focus.css`). */}
+      <span className="relative flex items-center border-b border-[var(--border-hairline)] pb-[7px] pt-1.5 focus-within:border-b-2 focus-within:border-[var(--blue)] focus-within:pb-[6px]">
         {children}
         <span className="flex-1" />
         {glyph === "calendar" ? (
@@ -1087,53 +1181,10 @@ function FieldCell({
             strokeWidth={1.5}
             className="pointer-events-none shrink-0 text-[var(--ink-400)]"
           />
-        ) : (
-          <ChevronDown
-            size={12}
-            strokeWidth={1.5}
-            className="pointer-events-none shrink-0 text-[var(--ink-400)]"
-          />
-        )}
+        ) : null}
       </span>
-      {note ? (
-        <span
-          className="text-micro mt-[5px] block"
-          style={{ color: "var(--ink-600)" }}
-        >
-          {note}
-        </span>
-      ) : null}
+      {footnote}
     </label>
-  );
-}
-
-/**
- * The Site and Surface cells: a native `<select>` under the artboard's own
- * underline treatment, so the value the app will store is in the document
- * rather than implied by a label. `appearance-none` is what stops the platform
- * drawing a second chevron beside `FieldCell`'s.
- */
-function FieldSelect({
-  value,
-  options,
-  onChange,
-}: {
-  value: string;
-  options: readonly { value: string; label: string }[];
-  onChange: (value: string) => void;
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      className="w-full cursor-pointer appearance-none bg-transparent text-[13px] text-[var(--ink-900)] outline-none"
-    >
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
   );
 }
 
