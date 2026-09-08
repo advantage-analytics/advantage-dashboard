@@ -1,6 +1,10 @@
 # Review — date-field
 
-**Sign-off: pending**
+**Sign-off: approved** — by the author in chat ("looks good now, sign off"),
+2026-09-08, recorded here by the runner. Given after two visual defects they
+reported from the flow were fixed and measured: the Date cell's rule sitting
+8px below its neighbours (`c126913`), and that rule drawn in the divider grey
+rather than the field token (`5affe67`).
 
 The gate ran in full over `28c0a2d..HEAD`. Mechanical is green, the quality
 pass applied nine fixes, and correctness review returned one real defect —
