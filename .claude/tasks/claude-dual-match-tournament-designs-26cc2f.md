@@ -111,7 +111,7 @@ ready).
 - **notes:** Plan step 7. The popover goes because nesting react-aria's popover inside Radix's would stack two focus scopes and two dismiss layers on one control. Guardrails §3.5 marks the wizard's step *presentation* explicitly safe to redesign. Check whether `formatDateRead` still has callers afterwards; delete it only if it does not.
 
 ## T33 · Migrate the match-edit dialog's date
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T27
 - **files:** `src/components/dashboard/matches/match-actions/edit-match-dialog.tsx`

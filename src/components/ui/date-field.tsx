@@ -210,6 +210,14 @@ export function DateField({
           // The FloatMenu surface, by value — see the header for why it is
           // not the component.
           "rounded-[10px] border border-[var(--border-hairline)] bg-white p-[10px] shadow-[var(--shadow-dropdown)]",
+          // The popover portals to `document.body`, and a Radix `Dialog` puts
+          // `pointer-events: none` on `body` for as long as it is open — so
+          // inside a dialog (the match-edit one) every day cell inherited
+          // `none` and the calendar was mouse-dead while looking perfectly
+          // normal. Measured, not assumed. Restoring it here is safe
+          // everywhere: a popover that is on screen is always meant to be
+          // clickable.
+          "pointer-events-auto",
           // A fade and a 2px lift, on the sanctioned curve. Nothing inside
           // the grid animates. Reduced motion keeps the fade and drops the lift.
           "duration-[var(--duration-hover)] ease-[var(--ease-out-expo)]",
