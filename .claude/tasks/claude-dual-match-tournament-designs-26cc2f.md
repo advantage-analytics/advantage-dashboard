@@ -310,7 +310,7 @@ need it.
 - **notes:** Plan step 3. `docs/ui-revamp-guardrails.md` §3.1 binds: `adScoring` travels only as the chosen `FORMATS` row's literal. `DualFactsStep`'s header comment is updated (the overlay is gone; the Format cell is why `MenuSelect` exists) and gains a one-line note that `static-tournament-builder.tsx`'s `FieldCell` has the same pattern and is a separate task — do not touch that file. Harness as in T22/T23.
 
 ## T25 · Harness down, full suite green
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T22, T23, T24
 - **files:** src/app/dev-preview/ (delete), .claude/launch.json (delete)
