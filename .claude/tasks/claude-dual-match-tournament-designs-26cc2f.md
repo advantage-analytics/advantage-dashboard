@@ -60,7 +60,7 @@ ready).
 - **notes:** Plan step 3. The mutual bounds are a behaviour addition — the native inputs allowed an inverted range. It is flagged in the design's open questions; if review struck it, drop those two props and change nothing else.
 
 ## T29 · Migrate the profile birthdate
-- **status:** blocked
+- **status:** todo
 - **model:** sonnet
 - **needs:** T27
 - **files:** `src/components/dashboard/settings/profile-form.tsx`
@@ -68,11 +68,12 @@ ready).
   - [ ] `ProfileField` renders `DateField variant="underline"` for its `date` branch instead of `SettingsUnderlineInput`; no `type="date"` remains in the file
   - [ ] `max` is today, so a future birthdate cannot be picked
   - [ ] The `missing` marker still appears for an empty birthdate and the field still draws the 2px blue emphasis rule in that state
-  - [ ] Verified on a dev server at `/dashboard/settings/profile`: empty shows `mm / dd / yyyy` in `--ink-400`, typing a date clears the marker, and Save persists the same `YYYY-MM-DD` the field showed; console clean
+  - [ ] Verified on a dev server: empty shows `mm / dd / yyyy` in `--ink-400`, typing a date clears the marker, and the value handed to the save call is the same `YYYY-MM-DD` the field showed; console clean
 - **notes:** Plan step 4. `mono` stops being meaningful on this branch — segments are `tabular-nums` already — so don't forward it; the prop stays for the other fields.
+  Amended 2026-09-08 by the author's instruction, after the first run was gated on the old wording. That criterion ended "Save persists the same `YYYY-MM-DD`", which needs a logged-in session this environment does not have — so it asserted `saveProfile` and the draft shape, which this migration does not touch. It now asks for the value reaching the save call, which a harness observes directly. Nothing else about the task changed.
 
 ## T30 · Migrate the dual facts Date cell
-- **status:** blocked
+- **status:** todo
 - **model:** opus
 - **needs:** T27
 - **files:** `src/components/dashboard/schedule/static/dual-build-step.tsx`
@@ -80,9 +81,11 @@ ready).
   - [ ] The Date cell renders `DateField variant="bare"` inside `FieldCell`; no `type="date"` and none of the `-webkit-calendar-picker-indicator` / `-webkit-clear-button` / `-webkit-inner-spin-button` classes remain in the file
   - [ ] `FieldCell`'s `glyph` prop, its render branch and any now-unused `Calendar` import are deleted — the primitive draws the only calendar in the row
   - [ ] The `DualFactsStep` doc comment describing the native input and the stretched picker-indicator trick is rewritten to describe `DateField`
-  - [ ] Verified on a dev server in the dual flow's facts step: one calendar glyph, the picker opens from it, the row's rule goes 2px blue on focus with no ring stacked on it, and Continue stays disabled until the date is set
+  - [ ] Verified on a dev server: one calendar glyph, the picker opens from it, the row's rule goes 2px blue on focus with no ring stacked on it, and the value the Continue gate reads is `""` while empty and the shown `YYYY-MM-DD` once set
   - [ ] `npm test` green, including `tests/schedule-static-copy.spec.ts`
 - **notes:** Plan step 5. This task is the last caller of `FieldCell`'s `glyph`, so the prop dies here rather than lingering with no callers.
+  Amended 2026-09-08 by the author's instruction, after the first run was gated on the old wording. That criterion ended "Continue stays disabled until the date is set", which is a button in `new-dual-flow.tsx` behind a session — a file this task does not touch. It now asks for the value that gate reads, which a harness observes directly. Nothing else about the task changed.
+  A second thing the first run found, worth keeping: `FieldCell`'s `rule` branch must stop being a `<label>`. A date segment is not a labelable element and the primitive's calendar trigger is a real button, so the label forwards every segment click to it and the month cannot be clicked into. Measured, and reviewed as correct.
 
 ## T31 · Migrate the tournament builder's Starts and Ends
 - **status:** done
