@@ -50,7 +50,7 @@ is generated: run `npm run map` after adding a route, or `npm test` fails.
   `settings/{account,profile,plan,preferences,subscription,teams,teams/[programId],usage}`
 - `src/app/claim/`, `src/app/join/[token]`, `src/app/admin/claims` — program claim,
   invite acceptance and claim review flows
-- `src/app/api/` — `upload`, `validate-file`, `chat`, `home-insight`, `matches/[matchId]`,
+- `src/app/api/` — `upload`, `validate-file`, `chat`, `home-insight`, `team-insight`, `matches/[matchId]`,
   `programs/search`, `splitstep/{jobs,upload-url}`, `create-checkout-session`,
   `webhooks/{splitstep,stripe}`, `cron/reclaim-videos`
 

@@ -15,6 +15,23 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import type { KpiFormat } from "@/lib/data/performance-server";
+import {
+  KPI_LABEL,
+  KPI_NOTE_ROW,
+  KPI_VALUE_RULE,
+  KpiTileStrip,
+  PlaceholderSparkline,
+  SPARK_HEIGHT,
+  SPARK_PADDING,
+  SPARK_WIDTH,
+} from "./kpi-tile-shell";
+
+// `KpiTileStrip` is re-exported alone, for the two client callers that render
+// a strip and its tiles from one import. The shell's constants are NOT: a
+// server component importing a plain string through this `"use client"`
+// module would receive a client reference, which is the bug the shell exists
+// to prevent. Server code imports from `./kpi-tile-shell` directly.
+export { KpiTileStrip } from "./kpi-tile-shell";
 
 // Lazy-loaded so Recharts is only pulled in when a tile actually renders a
 // detail popover (home KPI strip) — keeps the shared tile light elsewhere.
@@ -27,21 +44,22 @@ const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
 function Sparkline({
   data,
-  positive,
+  tone,
 }: {
   data: number[];
-  positive: boolean;
+  /** Which way the figure moved, in the outcome register. */
+  tone: "up" | "down";
 }) {
   const id = useId();
   const shouldReduceMotion = useReducedMotion();
-  const width = 80;
-  const height = 28;
-  const color = positive ? "#5DB955" : "#E51837";
+  const width = SPARK_WIDTH;
+  const height = SPARK_HEIGHT;
+  const color = tone === "up" ? "var(--success)" : "var(--danger)";
 
   if (data.length < 2) return null;
   const points = data;
 
-  const padding = 2;
+  const padding = SPARK_PADDING;
   const min = Math.min(...points);
   const max = Math.max(...points);
   const range = max - min || 1;
@@ -67,12 +85,12 @@ function Sparkline({
     >
       <defs>
         <linearGradient id={lineId} x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" style={{ stopColor: color, stopOpacity: 0.3 }} />
-          <stop offset="100%" style={{ stopColor: color, stopOpacity: 1 }} />
+          <stop offset="0%" stopColor={color} stopOpacity={0.3} />
+          <stop offset="100%" stopColor={color} stopOpacity={1} />
         </linearGradient>
         <linearGradient id={areaId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" style={{ stopColor: color, stopOpacity: 0.1 }} />
-          <stop offset="100%" style={{ stopColor: color, stopOpacity: 0 }} />
+          <stop offset="0%" stopColor={color} stopOpacity={0.1} />
+          <stop offset="100%" stopColor={color} stopOpacity={0} />
         </linearGradient>
       </defs>
       {/*
@@ -149,6 +167,26 @@ export interface KpiTileProps {
   value: string;
   /** Optional sparkline data. Hidden if fewer than 2 points. */
   sparkline?: number[];
+  /**
+   * Draw the grey placeholder curve when there are fewer than 2 points, rather
+   * than leaving the corner empty.
+   *
+   * Off by default. Team Home turns it on so its strip holds one shape from
+   * day zero: a ghost line at nothing and at one match, the real line from
+   * two. Without it a tile's right-hand corner is empty until the second
+   * match, and a strip half-full of lines reads as half-broken.
+   */
+  ghostSparkline?: boolean;
+  /**
+   * Two tiles to a phone row instead of four, with the line dropped below
+   * `sm`.
+   *
+   * Team Home's strip is four tiles and its own component used to set this;
+   * at four across a 375px screen a tile is ~94px, which is 40px of padding,
+   * a 28px number and an 80px line competing for the rest. The personal strip
+   * does not pass it, because its five tiles are governed by `collapse`.
+   */
+  compactPhone?: boolean;
   /** Optional trend readout. When absent, either `hintText` or a spacer is rendered. */
   trend?: KpiTileTrend;
   /** Fallback line shown in trend slot when `trend` is absent (e.g., "1 more match for trends"). */
@@ -178,6 +216,8 @@ export function KpiTile({
   label,
   value,
   sparkline,
+  ghostSparkline = false,
+  compactPhone = false,
   trend,
   hintText,
   description,
@@ -217,10 +257,10 @@ export function KpiTile({
       : trend.change >= 0
     : true;
   const trendColor = isNeutral
-    ? "text-[#888888]"
+    ? "text-[var(--ink-500)]"
     : isGood
-      ? "text-[#5DB955]"
-      : "text-[#E51837]";
+      ? "text-[var(--success)]"
+      : "text-[var(--danger)]";
   const arrow = !trend ? "" : isNeutral ? "→" : trend.change > 0 ? "↑" : "↓";
 
   const sharedMotion = {
@@ -233,7 +273,9 @@ export function KpiTile({
   } as const;
 
   // `.adv-kpi`: flex:1, min-width 0, 12px gap, 20px padding, overflow hidden.
-  const baseClass = "flex-1 flex flex-col gap-3 px-5 py-5 min-w-0 overflow-hidden";
+  const baseClass = `flex-1 flex flex-col gap-3 px-5 py-5 overflow-hidden ${
+    compactPhone ? "min-w-[50%] sm:min-w-0" : "min-w-0"
+  }`;
   const linkClass = href
     ? "cursor-pointer hover:bg-[#FAFAFA] transition-colors duration-200 focus-visible:outline-none"
     : hasDetail
@@ -252,7 +294,7 @@ export function KpiTile({
               "SERVICE GAMES WON" to "SERVICE GAME", which read as a different
               statistic. */}
           <p
-            className={`text-[9px] font-normal text-[var(--color-text-dim)] uppercase tracking-[2.5px] max-w-full truncate focus-visible:outline-none rounded-sm ${description ? "cursor-help" : ""}`}
+            className={`${KPI_LABEL} focus-visible:outline-none rounded-sm ${description ? "cursor-help" : ""}`}
             tabIndex={description ? 0 : undefined}
           >
             {label}
@@ -271,17 +313,28 @@ export function KpiTile({
         >
           {value}
         </ValueTransition>
-        {sparkline && sparkline.length >= 2 && (
+        {sparkline && sparkline.length >= 2 ? (
           <>
             {/* Uncapped: the DS's `.adv-kpi-spark{margin-left:auto}` pushes the
                 sparkline to the tile's right edge. A 48px cap used to hold it
                 beside the value, which only coincided with the design at one
                 tile width. */}
             <div aria-hidden className="flex-1" />
-            <Sparkline data={sparkline} positive={isGood} />
+            <span className={compactPhone ? "hidden sm:block" : undefined}>
+              <Sparkline data={sparkline} tone={isGood ? "up" : "down"} />
+            </span>
           </>
-        )}
+        ) : ghostSparkline ? (
+          <>
+            <div aria-hidden className="flex-1" />
+            <PlaceholderSparkline
+              index={index}
+              className={compactPhone ? "hidden sm:block" : ""}
+            />
+          </>
+        ) : null}
       </div>
+      <div className={KPI_NOTE_ROW}>
       {trend ? (
         <div className="flex items-center gap-1.5 overflow-hidden">
           {/* Arrow and magnitude share one 11px/500 run (`.adv-kpi-trend`);
@@ -300,24 +353,47 @@ export function KpiTile({
           >
             {Math.abs(trend.change)}
           </ValueTransition>
-          <span className="text-[10px] font-normal text-[var(--color-text-muted)]">
+          <span className="text-[10px] font-normal text-[var(--ink-500)]">
             {trend.changeLabel}
           </span>
         </div>
       ) : subtext ? (
-        <p className="text-[10px] font-normal text-[var(--color-text-muted)] truncate tabular-nums">
+        <p className="text-[10px] font-normal text-[var(--ink-500)] truncate tabular-nums">
           {subtext}
         </p>
       ) : hintText ? (
-        <p className="text-[10px] font-normal text-[var(--color-text-dim)]">{hintText}</p>
-      ) : (
-        <div aria-hidden className="h-[15px]" />
-      )}
+        <p className="text-[10px] font-normal text-[var(--ink-400)]">{hintText}</p>
+      ) : null}
+      </div>
     </>
   );
 
+  /**
+   * The history opens on hover, on focus, and on tap.
+   *
+   * Hover alone made it mouse-only: a tile without an `href` is a plain div
+   * with no tab stop, so a keyboard user could not reach the chart at all and
+   * a tap did nothing. Team Home's tiles are exactly that case — they carry a
+   * series and no link — and the per-point opponent names exist for this
+   * popover, so "reachable only with a mouse" would have been most of the
+   * feature missing. A tile that IS a link keeps click for navigation.
+   */
   const hoverHandlers = hasDetail
-    ? { onMouseEnter: handleDetailEnter, onMouseLeave: handleDetailLeave }
+    ? {
+        onMouseEnter: handleDetailEnter,
+        onMouseLeave: handleDetailLeave,
+        onFocus: handleDetailEnter,
+        onBlur: handleDetailLeave,
+        ...(href
+          ? {}
+          : {
+              tabIndex: 0,
+              onClick: () => setDetailOpen((open) => !open),
+              onKeyDown: (event: React.KeyboardEvent) => {
+                if (event.key === "Escape") setDetailOpen(false);
+              },
+            }),
+      }
     : {};
 
   const tileEl = href ? (
@@ -356,43 +432,5 @@ export function KpiTile({
         <KpiDetailChart label={label} points={detail} format={format} />
       </PopoverContent>
     </Popover>
-  );
-}
-
-export function KpiTileStrip({
-  children,
-  collapse = false,
-}: {
-  children: ReactNode;
-  /**
-   * Show fewer tiles rather than narrower ones as the strip loses width.
-   *
-   * A tile needs 184px to hold "BREAK POINTS SAVED", Home's longest label, on
-   * one line inside its 20px padding. With this on, the fifth tile goes below
-   * 920px of strip and the fourth below 736px — so every tile keeps the same
-   * height at every width, which is the point: a label that wrapped made the
-   * whole strip a row taller on a tablet and nowhere else.
-   *
-   * A container query, not a media query, because the sidebar takes either
-   * 64px or 232px of the window: the same 1280px window holds five tiles with
-   * the rail and four with the panel open. Hidden tiles stay mounted, so a
-   * customised selection survives a resize; the strip only decides what fits.
-   *
-   * Off by default, and off for match detail — a strip of four whose labels
-   * run to "First serve points won" would start dropping statistics from the
-   * page a player opened to read them. There the label ellipsizes instead.
-   *
-   * The rule itself is `.adv-kpi-strip` in globals.css: it needs a container
-   * query over `nth-child`, which is one composition Tailwind's variants drop
-   * on the floor.
-   */
-  collapse?: boolean;
-}) {
-  return (
-    <div
-      className={`${collapse ? "adv-kpi-strip " : ""}bg-white border border-[#F3F3F3] rounded-[14px] shadow-card overflow-hidden`}
-    >
-      <div className="flex flex-wrap sm:flex-nowrap">{children}</div>
-    </div>
   );
 }

@@ -208,9 +208,29 @@ export function Header({
     fetchMatchCrumb();
   }, [matchId]);
 
-  // The personal Home greets here (Pa2). A team workspace never reaches this
-  // branch: its home is /dashboard/team, which greets in its own body.
-  const showGreeting = pathname === "/dashboard" && active.kind === "personal";
+  // Both Homes greet here — the personal one on /dashboard (Pa2) and the
+  // program's on /dashboard/team (Ta3). Each page then opens on a title in
+  // its own body rather than a salutation, so the largest type on the first
+  // screen is a statistic. Kind AND path, never one alone: a team workspace
+  // on /dashboard is mid-redirect, and a personal one on /dashboard/team is
+  // about to be sent home.
+  const showGreeting =
+    (pathname === "/dashboard" && active.kind === "personal") ||
+    (pathname === "/dashboard/team" && active.kind === "team");
+  // What the greeting names beside the date: "Personal", or the program and
+  // its squad — "Meridian State · Men's tennis". Off `workspaceTitle`, so the
+  // greeting and the title slot can never spell one workspace two ways.
+  //
+  // The qualifier is dropped on a personal workspace, where it is the viewer's
+  // own name and the greeting two words to the left has already said it. The
+  // dots are this slot's own grammar: here the workspace joins a run of micro
+  // facts ending in the date, where the title slot sets name and qualifier in
+  // two type sizes and needs no separator between them.
+  const greetingTitle = workspaceTitle(active, viewer);
+  const greetingWorkspace =
+    active.kind === "team" && greetingTitle.qualifier
+      ? `${greetingTitle.name} · ${greetingTitle.qualifier}`
+      : greetingTitle.name;
 
   /**
    * The leading slot answers "where am I" once, never twice.
@@ -336,7 +356,7 @@ export function Header({
             <HeaderGreeting
               greeting={greeting}
               firstName={viewer.firstName}
-              workspaceName={active.name}
+              workspaceName={greetingWorkspace}
             />
           )}
 

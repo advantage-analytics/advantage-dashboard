@@ -8,45 +8,77 @@ import { KpiTile, KpiTileStrip } from "@/components/dashboard/shared/kpi-tile";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
-const STORAGE_KEY = "advantage.kpi.visible";
 const MAX_VISIBLE = 5;
 const MIN_VISIBLE = 4;
 const CATEGORY_ORDER: KpiCategory[] = ["Serve", "Return", "Other"];
 
 // Module-scope so the entrance stagger doesn't replay when users navigate away
-// and back within the same SPA session.
-let hasAnimatedOnce = false;
+// and back within the same SPA session. Keyed by strip: the personal Home and
+// Team Home share this module, and one flag meant a first-ever view of the
+// team strip skipped its entrance because the personal one had already played.
+const animatedStrips = new Set<string>();
 
 interface KpiCardsProps {
   cards: KpiCardData[];
   matchCount?: number;
+  /**
+   * Where the viewer's pick is kept. Team Home passes its own key so choosing
+   * tiles for a program does not rearrange the personal strip, and the
+   * reverse; the two are different questions asked of the same picker.
+   */
+  storageKey?: string;
+  /** How many tiles show before anyone has picked — 5 on the personal Home, 4 on Team Home. */
+  defaultCount?: number;
+  /** Passed through to every tile — see `KpiTile`. */
+  ghostSparkline?: boolean;
+  compactPhone?: boolean;
+  /**
+   * Drop tiles rather than narrow them as the strip loses width — see
+   * `KpiTileStrip`. Its thresholds are written for five tiles: the fourth
+   * leaves below 736px of strip. Team Home shows four and turns this off, or a
+   * coach on a phone would see the day-zero strip promise four regions and the
+   * first report take one away; `compactPhone` is that strip's narrow-width
+   * answer instead.
+   */
+  collapse?: boolean;
+  /** Names the strip as a landmark — "Program summary" on Team Home. */
+  ariaLabel?: string;
 }
 
-function defaultVisible(allKeys: string[]): string[] {
-  return allKeys.slice(0, MAX_VISIBLE);
+function defaultVisible(allKeys: string[], count: number): string[] {
+  return allKeys.slice(0, count);
 }
 
-function readVisible(allKeys: string[]): string[] {
-  if (typeof window === "undefined") return defaultVisible(allKeys);
+function readVisible(allKeys: string[], storageKey: string, count: number): string[] {
+  if (typeof window === "undefined") return defaultVisible(allKeys, count);
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultVisible(allKeys);
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) return defaultVisible(allKeys, count);
     const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return defaultVisible(allKeys);
+    if (!Array.isArray(parsed)) return defaultVisible(allKeys, count);
     const valid = parsed.filter(
       (k): k is string => typeof k === "string" && allKeys.includes(k)
     );
-    if (valid.length < MIN_VISIBLE) return defaultVisible(allKeys);
+    if (valid.length < MIN_VISIBLE) return defaultVisible(allKeys, count);
     return valid.slice(0, MAX_VISIBLE);
   } catch {
-    return defaultVisible(allKeys);
+    return defaultVisible(allKeys, count);
   }
 }
 
-export default function KpiCards({ cards, matchCount }: KpiCardsProps) {
+export default function KpiCards({
+  cards,
+  matchCount,
+  storageKey = "advantage.kpi.visible",
+  defaultCount = MAX_VISIBLE,
+  ghostSparkline = false,
+  compactPhone = false,
+  collapse = true,
+  ariaLabel,
+}: KpiCardsProps) {
   const showTrends = matchCount == null || matchCount >= 2;
   const shouldReduceMotion = useReducedMotion();
-  const skipAnimation = shouldReduceMotion || hasAnimatedOnce;
+  const skipAnimation = shouldReduceMotion || animatedStrips.has(storageKey);
 
   const allKeys = cards.map((c) => c.key);
   // Captured at mount only. The single consumer is the mount effect below,
@@ -56,22 +88,24 @@ export default function KpiCards({ cards, matchCount }: KpiCardsProps) {
   // a ref during render is unsafe under concurrent rendering (react-hooks/refs).
   const allKeysRef = useRef(allKeys);
 
-  const [visibleKeys, setVisibleKeys] = useState<string[]>(() => defaultVisible(allKeys));
+  const [visibleKeys, setVisibleKeys] = useState<string[]>(() =>
+    defaultVisible(allKeys, defaultCount)
+  );
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    setVisibleKeys(readVisible(allKeysRef.current));
+    setVisibleKeys(readVisible(allKeysRef.current, storageKey, defaultCount));
     setHydrated(true);
-  }, []);
+  }, [storageKey, defaultCount]);
 
   useEffect(() => {
-    hasAnimatedOnce = true;
-  }, []);
+    animatedStrips.add(storageKey);
+  }, [storageKey]);
 
   const persist = (next: string[]) => {
     setVisibleKeys(next);
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      window.localStorage.setItem(storageKey, JSON.stringify(next));
     } catch {
       // ignore quota / privacy mode
     }
@@ -91,7 +125,7 @@ export default function KpiCards({ cards, matchCount }: KpiCardsProps) {
 
   if (cards.length === 0) return null;
 
-  const shown = (hydrated ? visibleKeys : defaultVisible(allKeys))
+  const shown = (hydrated ? visibleKeys : defaultVisible(allKeys, defaultCount))
     .map((k) => cards.find((c) => c.key === k))
     .filter((c): c is KpiCardData => c !== undefined);
   const atMax = visibleKeys.length >= MAX_VISIBLE;
@@ -104,31 +138,49 @@ export default function KpiCards({ cards, matchCount }: KpiCardsProps) {
 
   return (
     // `group`: the customize control below reveals on hover over the strip.
-    <div className="group relative">
-      <KpiTileStrip collapse>
-        {shown.map((card, index) => (
+    <div
+      className="group relative"
+      role={ariaLabel ? "group" : undefined}
+      aria-label={ariaLabel}
+    >
+      <KpiTileStrip collapse={collapse}>
+        {shown.map((card, index) => {
+          // A trend needs a line: two readings of THIS statistic, not two
+          // matches in the program. Gating on the match count alone printed
+          // "→ 0 vs earlier" under a statistic nothing had measured, and under
+          // one measured once — a change of zero asserted about no comparison.
+          const hasLine = card.sparkline.length >= 2;
+          const trend =
+            showTrends && hasLine
+              ? {
+                  change: card.change,
+                  changeLabel: card.changeLabel,
+                  lowerIsBetter: card.lowerIsBetter,
+                }
+              : undefined;
+          const hintText = trend
+            ? undefined
+            : card.sparkline.length === 0
+              ? "Not measured yet"
+              : "1 more match for trends";
+          return (
           <KpiTile
             key={card.key}
             label={card.label}
             value={card.value}
             sparkline={card.sparkline}
-            trend={
-              showTrends
-                ? {
-                    change: card.change,
-                    changeLabel: card.changeLabel,
-                    lowerIsBetter: card.lowerIsBetter,
-                  }
-                : undefined
-            }
-            hintText={showTrends ? undefined : "1 more match for trends"}
+            ghostSparkline={ghostSparkline}
+            compactPhone={compactPhone}
+            trend={trend}
+            hintText={hintText}
             description={card.description}
             index={index}
             skipAnimation={skipAnimation}
             detail={card.points}
             format={card.format}
           />
-        ))}
+          );
+        })}
       </KpiTileStrip>
 
       <Popover>
@@ -260,7 +312,7 @@ export default function KpiCards({ cards, matchCount }: KpiCardsProps) {
             </p>
             <button
               type="button"
-              onClick={() => persist(defaultVisible(allKeys))}
+              onClick={() => persist(defaultVisible(allKeys, defaultCount))}
               className="inline-flex items-center gap-1 text-[11px] font-medium text-[#525252] hover:text-[#2563EB] transition-colors duration-200 focus-visible:outline-none focus-visible:text-[#2563EB] rounded-sm"
             >
               <RotateCcw className="size-3" strokeWidth={1.5} />

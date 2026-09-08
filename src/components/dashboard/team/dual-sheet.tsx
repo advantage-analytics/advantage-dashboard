@@ -1,10 +1,17 @@
 import Link from "next/link";
-import { Calendar, Flag, MapPin, type LucideIcon } from "lucide-react";
+import {
+  Calendar,
+  ChevronRight,
+  Flag,
+  MapPin,
+  type LucideIcon,
+} from "lucide-react";
 import { StatusChip } from "@/components/ui/status-chip";
+import { CardFooter } from "@/components/dashboard/shared/card-footer";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
-import { RowAction } from "@/components/dashboard/schedule/row-action";
-import { formatEventDay, siteTitle } from "@/lib/schedule/format";
+import { FormPills, type FormResult } from "@/components/dashboard/form-pills";
+import { formatEventDayLong, siteTitle } from "@/lib/schedule/format";
 import { LINE_STATUS } from "@/lib/schedule/line-status";
 import type {
   DualSheetLine,
@@ -13,132 +20,153 @@ import type {
 } from "@/lib/data/team-home-server";
 
 /**
- * 44a — this week's dual, as a sheet.
+ * Platform Audit Ta3 — this weekend's dual, as a card.
  *
- * The one thing a coach opens the page for on a Saturday: nine courts, who is
- * on each, and where the dual stands. It sits above the matches list because
- * during a dual it IS the news — the list below is the season, this is today.
+ * The one thing a coach opens the page for on a Saturday: who is on each
+ * court and where the dual stands. It sits directly under the KPI strip
+ * because during a dual it IS the news.
  *
- * **It renders or it does not.** No dual this week and the page never mounts
- * this component at all (`weekendDual` is null and `page.tsx` gates on it), so
- * there is no empty sheet, no "nothing scheduled" line and no dashed
- * placeholder holding the space — the same rule round 45 states for the rest of
- * this page. Most weeks of most seasons are the null case.
+ * **It is always on the page.** Ta3's rule is Pa2's — the frame never moves —
+ * so the card holds its slot in every state: this week's dual, else the next
+ * one on the schedule with its lineup and no scores (`mode: "next"`), else
+ * `dual-sheet-empty.tsx`'s ghost shape. Round 45 mounted it only on dual
+ * weeks; a card that appears and vanishes with the fixture list is the frame
+ * moving.
  *
- * **Nothing here is counted twice.** The tally, the S/D split, the state of
- * every line and who won it are all resolved in `team-home-server.ts` through
- * `lib/schedule/entry-state.ts` — the same functions the event page and the
- * schedule list ask. This file draws them and adds no arithmetic of its own: a
- * dual score that disagrees with the lines printed under it is exactly the
- * failure a derived tally exists to prevent.
+ * **Nothing here is counted twice.** The tally, the S/D split, the clinch
+ * slot, the state of every line and who won it are all resolved in
+ * `team-home-server.ts` through `lib/schedule/entry-state.ts` — the same
+ * functions the event page and the schedule list ask. This file draws them
+ * and adds no arithmetic of its own.
  *
- * **Round 44's row treatment**, the same as the Matches card below it: rows
- * hover to a `--surface-muted` wash on a rounded rect inset from the card edge
- * (6px inset against the card's 14px radius, so the row's 8px is concentric
- * with it), and nothing is ruled inside the card — not between the lines, not
- * under the header. The card's own border is the only line it draws.
+ * **Four lines, not nine.** Four rows, decided lines first, then whatever is
+ * in flight, then the rest in slot order; the header's "Full dual sheet" link
+ * and the footer's count say what the four are a slice of. The whole card is
+ * one click away on the event page.
  */
+
+/** How many lines the card shows before deferring to the event page. */
+const VISIBLE_LINES = 4;
 
 /**
- * Four tracks, and what each is protecting.
- *
- * - **28px, slot.** "S1"…"D3" is two characters of Roboto Mono at 11px, ~14px
- *   wide. 28 is that with room for a wider mono fallback and no more — every
- *   pixel here comes out of the names.
- * - **162px, outcome.** The same number, for the same content, as the Matches
- *   card's outcome column: the mark's 14px slot, the 8px gap, and a five-set
- *   score carrying a tiebreak digit on every set ("6-7^3, 7-6^3, 6-7^3, 7-6^3,
- *   7-6^3") at ~140px in 12px tabular figures. A best-of-5 line is the one a
- *   coach most wants to read, so it is the one sized for.
- * - **104px, trailing.** Holds either "Report" (~40px) or a status chip, and
- *   the widest chip is "Analysis failed" — 11px text plus the 5px dot and its
- *   gap, ~95px. Sized above that because this is the only cell whose text could
- *   wrap, and a wrap makes the row taller, which is the one thing the round-44
- *   row does not survive.
- *
- * The names take what is left. Below `sm` the grid collapses to stacked rows,
- * as the Matches card's does.
+ * The frame's seven tracks: slot · mark · ours · theirs · score · trailing ·
+ * chevron. The trailing track is measured to "Analysis failed" as a chip
+ * (~95px) with room, so no cell ever wraps a row taller.
  */
 const ROW =
-  "grid gap-3 px-[18px] py-3 sm:grid-cols-[28px_minmax(0,1fr)_162px_104px] sm:items-center sm:gap-4";
-
-/** Keyboard gets what the mouse gets — see `match-rows.tsx`. The row is not
- *  itself a link, so focus is caught from the controls inside it. */
-const ROW_SURFACE =
-  "rounded-[var(--radius-element)] transition-colors duration-150 hover:bg-[var(--surface-muted)] has-[:focus-visible]:bg-[var(--surface-muted)]";
+  "group grid items-center gap-3 rounded-[var(--radius-element)] px-3 py-[11px] -mx-3 transition-colors duration-150 hover:bg-[var(--surface-muted)] has-[:focus-visible]:bg-[var(--surface-muted)] sm:grid-cols-[26px_14px_minmax(112px,1.2fr)_minmax(104px,1fr)_106px_128px_13px]";
 
 export function DualSheet({ dual }: { dual: WeekendDual }) {
-  return (
-    <section className="rounded-[var(--radius-card)] border border-[var(--border-medium)] shadow-[var(--shadow-card)]">
-      <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-4 px-6 pt-4 pb-3">
-        <div className="flex min-w-0 flex-col gap-2">
-          <span className="eyebrow">This weekend</span>
+  const lines = visibleLines(dual.lines);
+  const hidden = dual.lines.length - lines.length;
 
+  return (
+    <section
+      aria-label={dual.mode === "weekend" ? "This weekend's dual" : "Next dual"}
+      className="surface-card p-5"
+    >
+      {/* Home's header grammar (Pa2): eyebrow left, the card's one 11px link
+          right. The link used to sit in the footer as a 12px line of its own,
+          which made this the one card on the page whose way out was at the
+          bottom; the count it carried is now the footer's, beside the
+          "showing 4 of 9" it belongs with. */}
+      <div className="flex items-center gap-3">
+        <span className="eyebrow">
+          {dual.mode === "weekend" ? "This weekend" : "Next dual"}
+        </span>
+        <div className="flex-1" />
+        <Link
+          href={`/dashboard/team/schedule/${dual.id}`}
+          className="text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+        >
+          Full dual sheet
+        </Link>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-end gap-x-5 gap-y-4">
+        <div className="min-w-0">
           <h2>
             <Link
               href={`/dashboard/team/schedule/${dual.id}`}
               className="text-title-lg rounded-[var(--radius-cell)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)]"
             >
-              vs {dual.opponent}
+              {dual.opponent}
             </Link>
           </h2>
-
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          <div className="mt-[7px] flex flex-wrap items-center gap-x-3.5 gap-y-1.5">
             <Fact icon={MapPin}>
               {siteTitle(dual.site)}
               {dual.surface ? ` · ${dual.surface}` : ""}
             </Fact>
-            <Fact icon={Calendar}>{formatEventDay(dual.startsOn)}</Fact>
-
-            {dual.tally.clinchedBy ? (
+            <Fact icon={Calendar}>
+              <span className="tabular">{formatEventDayLong(dual.startsOn)}</span>
+            </Fact>
+            {dual.tally.clinchedBy && dual.tally.clinchedAt ? (
               <Fact icon={Flag}>
                 {dual.tally.clinchedBy === "us"
-                  ? "Clinched"
-                  : `${dual.opponent} clinched`}
+                  ? `Clinched at ${dual.tally.clinchedAt}`
+                  : `${dual.opponent} clinched at ${dual.tally.clinchedAt}`}
               </Fact>
             ) : null}
           </div>
         </div>
 
-        <div className="flex max-w-[24ch] shrink-0 flex-col items-end gap-1.5">
-          <Tally tally={dual.tally} lines={dual.lines.length} />
-        </div>
+        <div className="hidden flex-1 sm:block" />
+
+        <Tally tally={dual.tally} lines={dual.lines} />
       </div>
 
-      <ul className="p-1.5">
-        {dual.lines.map((line) => (
-          <li key={line.id} className={`${ROW} ${ROW_SURFACE}`}>
-            <span className="mono text-[11px] text-[var(--ink-600)]">
-              {line.slot}
-            </span>
-
-            <span className="min-w-0 truncate text-[13px] text-[var(--ink-900)]">
-              {line.ours || "—"}{" "}
-              <span className="text-[var(--ink-600)]">vs</span>{" "}
-              {line.theirs || "—"}
-            </span>
-
-            <span className="flex items-center gap-2">
-              <span className="flex w-3.5 shrink-0 justify-center">
-                {line.won === null ? null : <ResultMark won={line.won} />}
-              </span>
-              <ScoreLine
-                sets={line.sets}
-                className="min-w-0 truncate text-[12px] text-[var(--ink-900)]"
-              />
-            </span>
-
-            <span className="flex sm:justify-end">
-              <Trailing line={line} />
-            </span>
-          </li>
+      <div className="mt-3.5 flex flex-col border-t border-[var(--border-hairline)] pt-1">
+        {lines.map((line) => (
+          <Row key={line.id} line={line} eventId={dual.id} />
         ))}
-      </ul>
+      </div>
+
+      <CardFooter
+        className="mt-2.5"
+        left={
+          <>
+            {hidden > 0 ? (
+              <>
+                Showing <span className="tabular">{lines.length}</span> of{" "}
+                <span className="tabular">{dual.lines.length}</span> ·{" "}
+              </>
+            ) : null}
+            doubles arrive via SwingVision
+          </>
+        }
+        right={
+          <>
+            <span className="tabular">{dual.lines.length}</span>{" "}
+            {dual.lines.length === 1 ? "match" : "matches"}
+          </>
+        }
+      />
     </section>
   );
 }
 
-/** One fact about the dual — an icon and a phrase, on the line under the name. */
+/**
+ * Decided lines first, in-flight next, the rest in slot order — a coach on
+ * Sunday morning wants the results, and the four rows on the card are the
+ * four with something to say. Stable within each group, so S1 stays above S2.
+ */
+function visibleLines(lines: DualSheetLine[]): DualSheetLine[] {
+  // `LINE_STATUS` has a word for every line that is waiting on something —
+  // analyzing, in line, failed, forfeited — and all of them outrank a line
+  // nobody has touched. Ranking on `live` alone put a queued upload and a
+  // FAILED analysis behind an empty court, so the one row needing a coach was
+  // the row hidden behind "showing 4 of 9".
+  const rank = (line: DualSheetLine) =>
+    line.won !== null ? 0 : LINE_STATUS[line.state] ? 1 : 2;
+  return [...lines]
+    .map((line, index) => ({ line, index }))
+    .sort((a, b) => rank(a.line) - rank(b.line) || a.index - b.index)
+    .slice(0, VISIBLE_LINES)
+    .map(({ line }) => line);
+}
+
+/** One fact about the dual — a 12px icon and a phrase, under the name. */
 function Fact({
   icon: Icon,
   children,
@@ -147,58 +175,120 @@ function Fact({
   children: React.ReactNode;
 }) {
   return (
-    <span className="text-micro flex items-center gap-1.5">
-      <Icon className="size-[13px] shrink-0" strokeWidth={1.5} aria-hidden />
+    <span className="text-micro inline-flex items-center gap-[5px]">
+      <Icon
+        className="size-3 shrink-0 text-[var(--ink-400)]"
+        strokeWidth={1.5}
+        aria-hidden
+      />
       {children}
     </span>
   );
 }
 
 /**
- * The team score and the two halves it is made of.
+ * The team score, standing on its own, with the S/D form under it.
+ *
+ * The frame drops the "S 3–3 · D 1–0 · final" sentence for two pill strips —
+ * every line's result in slot order, singles then doubles, a hairline
+ * between. The sentence is still on the event page; here the eye reads the
+ * card's shape rather than a second sentence about it.
  */
-function Tally({ tally, lines }: { tally: DualTally; lines: number }) {
+function Tally({ tally, lines }: { tally: DualTally; lines: DualSheetLine[] }) {
   const anyPoint = tally.us > 0 || tally.them > 0;
+  const results = (prefix: "S" | "D"): FormResult[] =>
+    lines
+      .filter((line) => line.slot.startsWith(prefix) && line.won !== null)
+      .map((line) => (line.won ? "win" : "loss"));
+  const singles = results("S");
+  const doubles = results("D");
 
   return (
-    <>
+    <div className="flex shrink-0 flex-col items-end gap-[9px]">
       <span
         className="text-score leading-none"
         style={{ color: anyPoint ? "var(--ink-900)" : "var(--ink-300)" }}
       >
         {tally.us}–{tally.them}
       </span>
-
-      <span className="text-micro tabular">
-        S {tally.singles.us}–{tally.singles.them} · D {tally.doubles.us}–
-        {tally.doubles.them} ·{" "}
-        {tally.decided ? (
-          "final"
-        ) : (
-          <>
-            {tally.playedLines} of {lines} in
-          </>
-        )}
-      </span>
-    </>
+      {singles.length + doubles.length > 0 ? (
+        <div className="flex items-center gap-2.5">
+          <span className="flex items-center gap-[5px]">
+            <span className="eyebrow-sm">S</span>
+            <FormPills results={singles} empty={null} />
+          </span>
+          {doubles.length > 0 ? (
+            <>
+              <span className="h-2.5 w-px bg-[var(--border-medium)]" aria-hidden />
+              <span className="flex items-center gap-[5px]">
+                <span className="eyebrow-sm">D</span>
+                <FormPills results={doubles} empty={null} />
+              </span>
+            </>
+          ) : null}
+        </div>
+      ) : (
+        <span className="text-micro tabular">
+          {lines.length} {lines.length === 1 ? "line" : "lines"} · not started
+        </span>
+      )}
+    </div>
   );
 }
 
 /**
- * The end of the line: where to read it, or what it is waiting for.
- *
- * The waiting states are not spelled here. Their words, tones and the pulse on
- * the one that is moving come from `lib/schedule/line-status.ts`, which the
- * event page's `line-row.tsx` reads too — a second set of words for one job is
- * how two screens start telling a coach different stories about it.
- *
- * What this does NOT carry is the event page's edit actions. "Add score" and
- * "Add video" are writes; Team Home is a read, a player may be the one reading
- * it, and the line's own page is one click away through the card's heading.
+ * One court. The row is a link — to the report when there is one, else to
+ * the event page where the line lives — so the chevron on the right is
+ * honest about where a click goes. `ResultMark` sits in its 14px track and
+ * takes no container.
+ */
+function Row({ line, eventId }: { line: DualSheetLine; eventId: string }) {
+  const href = line.reportId
+    ? `/dashboard/matches/${line.reportId}`
+    : `/dashboard/team/schedule/${eventId}`;
+
+  return (
+    <Link href={href} className={ROW}>
+      <span className="text-[11px] text-[var(--ink-500)]">{line.slot}</span>
+      <span className="flex w-3.5 justify-center">
+        {line.won === null ? null : <ResultMark won={line.won} />}
+      </span>
+      <span className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
+        {line.ours || "—"}
+      </span>
+      <span className="min-w-0 truncate text-[12px] text-[var(--ink-600)]">
+        vs {line.theirs || "—"}
+      </span>
+      <ScoreLine
+        sets={line.sets}
+        className="text-scoreboard-sm tabular min-w-0 truncate"
+      />
+      <span className="flex sm:justify-start">
+        <Trailing line={line} />
+      </span>
+      {/* ink-300 → ink-900 with the row, held in both states so nothing
+          shifts — the design system's rule for a record row's chevron. */}
+      <ChevronRight
+        className="hidden size-[13px] text-[var(--ink-300)] transition-colors duration-[var(--duration-hover)] group-hover:text-[var(--ink-900)] group-focus-visible:text-[var(--ink-900)] sm:block"
+        strokeWidth={1.5}
+        aria-hidden
+      />
+    </Link>
+  );
+}
+
+/**
+ * The end of the line: where to read it, or what it is waiting for. The
+ * waiting states come from `lib/schedule/line-status.ts`, which the event
+ * page reads too — one set of words for one job.
  */
 function Trailing({ line }: { line: DualSheetLine }) {
   if (line.reportId) {
-    return <RowAction href={`/dashboard/matches/${line.reportId}`}>Report</RowAction>;
+    return (
+      <span className="text-[11px] font-medium text-[var(--blue)]">
+        View report
+      </span>
+    );
   }
 
   const status = LINE_STATUS[line.state];
@@ -210,10 +300,11 @@ function Trailing({ line }: { line: DualSheetLine }) {
     );
   }
 
-  // Played and scored, with no video and nothing pending. The score two cells
-  // over has already said everything true about this line, so the cell is
-  // empty rather than filled with a word for "nothing is happening".
-  if (line.sets.length > 0) return null;
+  // Played and scored with no video: the score has said everything true
+  // about this line. A hand-entered or imported result names its source.
+  if (line.sets.length > 0) {
+    return <span className="text-[11px] text-[var(--ink-500)]">Score only</span>;
+  }
 
   return <StatusChip>Not played</StatusChip>;
 }

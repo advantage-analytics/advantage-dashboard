@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import HomeContent from "./home-content";
 import KpiCards from "@/components/dashboard/home/kpi-cards";
-import { KpiStripEmpty } from "@/components/dashboard/home/kpi-strip-empty";
+import { EmptyKpiStrip } from "@/components/dashboard/shared/kpi-tile-shell";
+import { DEFAULT_KPI_LABELS } from "@/lib/data/performance-server";
 import type { SetupProgress } from "@/components/dashboard/home/setup-line";
 import { createClient } from "@/lib/supabase/server";
 import { getMyPlayerIds } from "@/lib/data/player-identity-server";
@@ -149,7 +150,11 @@ export default async function Home() {
             analyzedMatchCount > 0 && allKpiCards.length > 0 ? (
               <KpiCards cards={allKpiCards} matchCount={analyzedMatchCount} />
             ) : (
-              <KpiStripEmpty awaitingReport={hasMatches} />
+              <EmptyKpiStrip
+                labels={DEFAULT_KPI_LABELS}
+                awaitingReport={hasMatches}
+                collapse
+              />
             )
           }
           usage={usage}

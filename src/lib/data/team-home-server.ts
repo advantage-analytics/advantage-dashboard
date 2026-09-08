@@ -1,14 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { getProgramUsage, type ProgramUsage } from "@/lib/data/usage-server";
-import {
-  getTeamSettings,
-  type TeamInvite,
-} from "@/lib/data/team-settings-server";
 import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
+import { getRosterData } from "@/lib/data/team-roster-server";
+import { topMovers, type TopMover } from "@/lib/data/team-movers";
+import { courtRecordFrom, type CourtRecord } from "@/lib/data/team-court-record";
 import {
-  claimedTodayNames,
-  type RosterInvite,
-} from "@/lib/data/team-roster-server";
+  buildInsightEvidenceWithCaption,
+  type InsightEvidence,
+} from "@/lib/ui/insight-evidence";
 import {
   ANALYSIS_LABEL,
   importedAnalysis,
@@ -22,37 +21,34 @@ import {
 } from "@/lib/data/match-analysis";
 import {
   matchOutcome,
-  setTally,
   shortDate,
   zonedDayString,
   type MatchScore,
 } from "@/lib/data/match-utils";
-import { meanOfPresent, pct, statKey } from "@/lib/data/aggregate";
-import { rosterMatchIds } from "@/lib/data/roster-ids";
+import { rosterMatchIds, type RosterIdRow } from "@/lib/data/roster-ids";
 import {
-  countTile,
-  seriesTile,
-  type TeamKpiObservation,
-  type TeamKpiTile,
-} from "@/lib/data/team-kpi";
+  calculateKpiCards,
+  KPI_STATS_SELECT,
+  type DbMatchStats,
+  type KpiCardData,
+} from "@/lib/data/performance-server";
 import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
 import {
   eventDetailFrom,
   getProgramSchedule,
   scheduleRowsFrom,
 } from "@/lib/data/schedule-server";
-import type { EventDetail, ScheduleRow } from "@/lib/schedule/types";
+import type { EventDetail, ProgramEvent, ScheduleRow } from "@/lib/schedule/types";
+import { formatEventShortDay } from "@/lib/schedule/format";
 import {
   dualScore,
   entryPlayed,
   entryState,
-  forfeitWon,
   lineWon,
   matchState,
-  matchWon,
   type EntryState,
 } from "@/lib/schedule/entry-state";
-import type { EventEntry, EventKind, EventSite } from "@/lib/schedule/types";
+import type { EventEntry, EventSite } from "@/lib/schedule/types";
 import { INVITE_TTL_HOURS } from "@/lib/services/programs/tokens";
 import type { ProgramOrgType } from "@/lib/workspace/types";
 
@@ -76,8 +72,10 @@ import type { ProgramOrgType } from "@/lib/workspace/types";
  * because someone would believe this one.
  */
 
-/** How many rows the page shows before "see all" would be the honest control. */
-const RECENT_MATCH_LIMIT = 6;
+/** Decided duals in the rail — the frame draws four. */
+const DUAL_HISTORY_LIMIT = 4;
+/** Results in a form strip — the DS's "last five". */
+const FORM_LIMIT = 5;
 
 /** Invites close enough to expiry to be worth naming on the home page. */
 const EXPIRING_SOON_DAYS = 7;
@@ -89,11 +87,11 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * The zone Team Home falls back to when a program has none of its own.
  *
  * Every program has a real zone now — `programs.time_zone`, `not null
- * default 'UTC'`, read through `getTeamSettings()` alongside the rest of the
- * program row — so this is no longer THE zone the page computes in, only the
- * one it uses when `team` itself did not come back (the `programs` row is
- * publicly readable, so that should not happen, but `getTeamHomeData` fails
- * closed rather than crash on it).
+ * default 'UTC'`, read by `getTeamHomeData` as the one column it needs from
+ * the program row — so this is no longer THE zone the page computes in, only
+ * the one it uses when that row did not come back (the `programs` row is
+ * publicly readable, so that should not happen, but the loader fails closed
+ * rather than crash on it).
  *
  * `programs.state` was considered and rejected as a substitute for a real
  * zone column: Arizona keeps no DST and nine states are split across two
@@ -147,6 +145,13 @@ export function localDay(now: Date, timeZone: string): string {
  * Exported for `tests/team-home-week.spec.ts` only, for the same reason
  * `localDay` is: the zone this computes in is the thing worth pinning down.
  */
+/** `day` (YYYY-MM-DD) moved by `delta` calendar days, on the same UTC-midnight ruler `weekBounds` steps on. */
+export function shiftDay(day: string, delta: number): string {
+  const date = new Date(`${day}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + delta);
+  return date.toISOString().slice(0, 10);
+}
+
 export function weekBounds(now: Date, timeZone: string): { start: string; end: string } {
   // Take the calendar day in `timeZone`, then step days on a UTC-midnight
   // anchor for it. Stepping on a zoned Date walks through DST twice a year and
@@ -210,41 +215,6 @@ export interface TeamMatchRow {
 }
 
 /**
- * The soonest event the program has not finished yet.
- *
- * Upcoming only, and deliberately so: a program whose schedule holds nothing
- * but last season has the same next action as one holding nothing at all.
- *
- * Read off `getProgramSchedule()`, which the KPI strip's dual record makes an
- * unconditional cost of this page anyway. It used to have its own narrow
- * `program_events` query, windowed to a dozen rows from this week's Monday and
- * ordered ascending — a fourth round trip for four fields the schedule read
- * already carries, plus a second ordering of `program_events` that had to stay
- * in step with the schedule page's. Both are gone: this and the weekend dual
- * are two reads off the one list, and there is no longer a second ordering to
- * keep in agreement.
- *
- * The window went with the query, and that is a strict gain rather than a
- * trade: a limit of twelve could in principle hide the next event behind a
- * program that had finished a dozen since Monday, and the whole list cannot.
- */
-export interface TeamNextEvent {
-  id: string;
-  /** Opponent school for a dual, the tournament's own name for a tournament. */
-  name: string;
-  /**
-   * Which of those two the name above is, because they are read differently: a
-   * dual's `name` is the opponent and wants a "vs" in front of it, a
-   * tournament's is the event's own title and stands alone. Off the row the
-   * query already selects — `kind` is what tells the sheet which of these
-   * events is a dual — so this is a field, not a column and not a read.
-   */
-  kind: EventKind;
-  /** YYYY-MM-DD. */
-  startsOn: string;
-}
-
-/**
  * One line of the dual sheet — a court, who stood on it, and how it went.
  *
  * **`player1` is our side, and nothing here asks a second time.** Every row on
@@ -292,6 +262,14 @@ export interface DualSheetLine {
  */
 export interface WeekendDual {
   id: string;
+  /**
+   * Which dual the card is about. `"weekend"` is one inside this week's
+   * window — the card the page was built for. `"next"` is the soonest dual
+   * still ahead when this week holds none: the lineup is on the schedule
+   * before anybody has played it, and Platform Audit Ta3 keeps the card on
+   * the page in every state rather than mounting it only on dual weeks.
+   */
+  mode: "weekend" | "next";
   /** The opponent school. `program_events.name` is the opponent on a dual. */
   opponent: string;
   site: EventSite;
@@ -337,48 +315,27 @@ export interface DualTally {
    * (an abandoned card), and clinched long before it is over.
    */
   clinchedBy: "us" | "them" | null;
-}
-
-/**
- * The roster, as the right column reads it.
- *
- * **The Roster page's own vocabulary, not a second set of words for it.** The
- * rows are `RosterInvite` — the very type `getRosterData` hands its table —
- * built the same way, `shortDate` included, so "Invited Aug 4" means the same
- * thing and is spelled the same way on both screens. The claimed-today names
- * come through `claimedTodayNames()`, which is where the pill's rule about what
- * "today" means already lives.
- *
- * Null when the program has nobody, nothing outstanding and no news: the card
- * renders nothing at all rather than a heading over an empty list. On day zero
- * that is the whole card — the checklist in the main column is what a program
- * with no roster is looking at.
- */
-export interface TeamRosterCard {
   /**
-   * Players on the roster, counted the way the Roster page counts them.
+   * The slot whose result clinched it — "S6", "D1" — or null when nobody has.
    *
-   * **The same number as `RosterProgress.players`, off the same rows and the
-   * same predicate** — both go through `playerCount()`. That was not always
-   * true: `RosterProgress` used to count SEATS, people who had accepted an
-   * invitation, so a squad a coach had built by hand read "8 players" in this
-   * card while the checklist beside it was still asking them to invite
-   * somebody. Two numbers behind one sentence, on one page.
+   * Read off the lines in order of play — doubles, then singles — naming
+   * the first line after which `clinchedBy` would have been set; see
+   * `clinchedAtSlot` for why that is a convention rather than a clock. Null
+   * whenever `clinchedBy` is — the two are one fact.
    */
-  players: number;
-  /**
-   * Every outstanding invitation, staff included, exactly as the Roster page
-   * lists them. Not filtered to players the way `RosterProgress` is: this card
-   * is the list of open invitations, and an assistant coach who has not
-   * accepted is one of them.
-   */
-  invites: RosterInvite[];
-  /** Who bound a login to a profile today, by name. */
-  claimedToday: string[];
+  clinchedAt: string | null;
 }
 
 /**
  * One thing on the page that is waiting for somebody.
+ *
+ * **Nothing renders this today.** Platform Audit Ta3 retired Team Home's
+ * right-hand alerts column, and no other surface has picked the list up, so
+ * `teamAttention` and `rosterProgress` below are exported, specified and
+ * uncalled. They are kept rather than deleted because the invitation countdown
+ * they hold is the product's only expiry warning and the next roster surface
+ * will want it — but until something mounts them, a lapsing invitation is
+ * visible nowhere.
  *
  * **Every row here is a fact the loader already holds.** No alert is
  * manufactured to make the list look fuller and no query was added to find one:
@@ -443,24 +400,37 @@ export interface RosterProgress {
 
 export interface TeamHomeData {
   usage: ProgramUsage;
-  matches: TeamMatchRow[];
   /**
-   * The strip — **zero to four tiles**, and empty is the day-zero answer rather
-   * than a shape to draw placeholders from.
+   * Every match the program has filed, video still in flight included.
    *
-   * The page renders nothing at all for an empty array: no skeleton, no zeroed
-   * tiles. `0–0`, `—%`, `—%`, `0` on a coach's first morning teaches them the
-   * product is broken, which is the one lesson a first visit must not carry.
-   *
-   * Any count in between is deliberate too: a figure with no rows behind it is
-   * dropped rather than filled in. A program that has never decided a dual has
-   * no dual record, and printing "0–0" for it would be inventing a season; a
-   * program that has never uploaded video has no team first serve. Same
-   * precedent as a match row whose side cannot be established going without
-   * its `<ResultMark>`. `teamKpis()` lists every tile that can go missing and
-   * exactly when — read it there, not here.
+   * A count rather than the rows: Ta3 has no matches list — `/dashboard/matches`
+   * is where they are read — and the page asks only whether there are any.
    */
-  kpis: TeamKpiTile[];
+  matchCount: number;
+  /**
+   * Matches a report has come back for. The same number the strip's "Matches
+   * analyzed" tile prints, returned in its own right rather than parsed back
+   * out of that tile's formatted string.
+   */
+  analyzedCount: number;
+  /**
+   * The strip's cards — the personal Home's twelve, built by the personal
+   * Home's builder over the program's side of every analyzed **dual** match,
+   * with a team-average headline. Every spec gets a card even when nothing
+   * measured it yet ("—"), which is what keeps the picker's default set
+   * intact; the page shows the empty strip instead while no card holds a
+   * figure.
+   */
+  kpiCards: KpiCardData[];
+  /**
+   * How many matches the strip is averaging — analyzed, attributed, and on a
+   * dual's lineup. Not `analyzedCount`: that counts every report the program
+   * has back, and the strip deliberately reads fewer (see `teamKpiCards`).
+   * The strip's trend gate, its empty state, the Focus card's footer and its
+   * evidence all take this one, so nothing on the page describes the strip
+   * with a number the strip did not use.
+   */
+  kpiMatchCount: number;
   /**
    * The setup checklist's first card, already answered — see
    * `teamFirstReport()`. Null when nothing has been sent yet.
@@ -472,27 +442,70 @@ export interface TeamHomeData {
    * search.
    */
   firstReport: TeamFirstReport | null;
-  roster: RosterProgress;
-  /** Null when the program has nothing on the schedule from today onwards. */
-  nextEvent: TeamNextEvent | null;
   /**
-   * The right column's roster card, or null when there is nothing to say — see
-   * `TeamRosterCard`. Staff read it; the page never renders the right column
-   * for a player, whose `program_roster` line is their own and whose
-   * `program_invites` policy returns them nothing anyway.
-   */
-  rosterCard: TeamRosterCard | null;
-  /**
-   * The right column's "Needs attention" list, and an empty array is the
-   * ordinary case. Nothing renders for it — no empty card, no "all clear".
-   */
-  attention: TeamAlert[];
-  /**
-   * This week's dual, or null — and null is the common case. The card that
-   * renders this renders nothing at all when it is null: no empty sheet, no
-   * placeholder, no line explaining that there is no dual.
+   * This week's dual, else the next one ahead (`WeekendDual.mode`), else null
+   * — and null now means "no dual on the schedule at all", which is the
+   * day-zero case the sheet draws its ghost rows for.
    */
   weekendDual: WeekendDual | null;
+  /**
+   * Decided duals, newest first, for the rail — see `DualHistoryRow`.
+   */
+  dualHistory: DualHistoryRow[];
+  /** The rail's footer: the season's dual form and record. */
+  dualForm: { form: ("win" | "loss")[]; wins: number; losses: number };
+  /**
+   * Reports that landed since the most recent Friday — the title row's
+   * "4 new results since Friday →". Counted on the server so the number is in
+   * the HTML and the same for every member; the personal Home's equivalent is
+   * per-viewer localStorage and reads `program_id IS NULL`, which is the wrong
+   * question here twice over.
+   */
+  newResults: { count: number; since: string };
+  /** Top movers, off the Roster page's own per-player measures. */
+  movers: TopMover[];
+  /**
+   * The rail's mosaic — singles results by court and dual, windowed. Off
+   * `programSchedule`, through the same `lineWon` the dual sheet decides by.
+   */
+  courtRecord: CourtRecord;
+  /**
+   * The Focus card's evidence line, composed from `kpiCards` by the personal
+   * Home's own builder — computed here, never written by the model. Null when
+   * no card holds a figure, which keeps the card's body empty rather than
+   * reaching for something to say.
+   */
+  insight: InsightEvidence | null;
+  /** How many players the roster holds — the movers card's "Full roster — 8". */
+  rosterSize: number;
+  /** The quiet setup line's three facts. */
+  setup: TeamSetupProgress;
+}
+
+/** One decided dual in the rail's history list (Platform Audit Ta3). */
+export interface DualHistoryRow {
+  id: string;
+  opponent: string;
+  site: EventSite;
+  /** "Aug 8" */
+  date: string;
+  /** The program's points, then the opponent's. Who won follows from the pair. */
+  us: number;
+  them: number;
+}
+
+/**
+ * What the quiet "Getting set up" line reads (Platform Audit Ta3, in the
+ * personal Home's `SetupLine` register). Three facts this loader already
+ * holds; nothing is read to answer them.
+ */
+export interface TeamSetupProgress {
+  /** Somebody is on the roster (`playerCount`). */
+  roster: boolean;
+  /** A dual is on the schedule, past or future. */
+  schedule: boolean;
+  /** A match has been sent — analyzing counts, `teamFirstReport` non-null. */
+  report: boolean;
 }
 
 /**
@@ -734,7 +747,8 @@ export function weekendDualRow<T extends { kind: string; startsOn: string }>(
  * what is worth pinning is the shape a dual takes. Nothing here performs I/O.
  */
 export function buildWeekendDual(
-  detail: EventDetail | null
+  detail: EventDetail | null,
+  mode: WeekendDual["mode"] = "weekend"
 ): WeekendDual | null {
   if (!detail || detail.entries.length === 0) return null;
 
@@ -742,6 +756,7 @@ export function buildWeekendDual(
 
   return {
     id: event.id,
+    mode,
     opponent: event.name,
     site: event.site,
     surface: event.surface,
@@ -789,7 +804,50 @@ function dualTally(entries: EventEntry[]): DualTally {
     playedLines: entries.filter(entryPlayed).length,
     ...dualBreakdown(entries),
     clinchedBy,
+    clinchedAt: clinchedBy ? clinchedAtSlot(entries, points) : null,
   };
+}
+
+/**
+ * The line after which one side held a majority of the points — see
+ * `DualTally.clinchedAt`.
+ *
+ * **One fold, not a second one.** The walk hands a growing prefix of played
+ * lines to `dualScore` — the same function that produced the tally printed
+ * beside it — and returns the first slot at which that score crosses the
+ * majority. An earlier draft re-implemented the doubles fold here with its own
+ * accumulators and decided each line with the one-argument `lineWon`, which
+ * returns `false` (never `null`) for a line nobody has played: every unplayed
+ * court was scored as a point for the opponent, so a dual still in progress
+ * could name a court its opponent had not won. Asking `dualScore` makes
+ * `clinchedBy` and `clinchedAt` one computation by construction.
+ *
+ * **Order of play, not timestamps.** An entry carries no completion time, so
+ * the walk follows the order a collegiate dual is played in: doubles first,
+ * then singles S1–S6. That is a convention, and the label reads as one —
+ * "clinched at S5" means that, taken in playing order, S5 is the line that put
+ * the dual out of reach, not that S5 was the last court still playing.
+ */
+function clinchedAtSlot(entries: EventEntry[], points: number): string | null {
+  const doubles = entries.filter((entry) => entry.discipline === "doubles");
+  const singles = entries.filter((entry) => entry.discipline === "singles");
+  const ordered = [
+    ...doubles.map((entry, i) => ({ entry, slot: entry.slot ?? `D${i + 1}` })),
+    ...singles.map((entry, i) => ({ entry, slot: entry.slot ?? `S${i + 1}` })),
+  ];
+
+  const played: EventEntry[] = [];
+  for (const { entry, slot } of ordered) {
+    // An unplayed line awards nothing and cannot clinch anything. `dualScore`
+    // makes the same refusal per line; this keeps it out of the prefix so the
+    // running score is only ever over lines that are in.
+    if (!entryPlayed(entry)) continue;
+    played.push(entry);
+    const score = dualScore(played);
+    if (score.us * 2 > points || score.them * 2 > points) return slot;
+  }
+
+  return null;
 }
 
 /**
@@ -856,7 +914,7 @@ function playerCount(rosterRows: { role: string }[]): number {
  * no longer opens.
  *
  * **Exported only so that `tests/team-roster-progress.spec.ts` can call it** —
- * the same arrangement, and the same reasoning, as `teamKpis` below: it takes
+ * the same arrangement, and the same reasoning, as `teamKpiCards` below: it takes
  * this loader's own row shapes, it should acquire no caller outside this file,
  * and the spec can import the module safely because nothing here runs at module
  * scope.
@@ -933,52 +991,6 @@ function wholeDaysUntil(expiry: number, now: number, timeZone: string): number {
   const midnight = (ms: number) =>
     Date.parse(`${localDay(new Date(ms), timeZone)}T00:00:00.000Z`);
   return Math.round((midnight(expiry) - midnight(now)) / DAY_MS);
-}
-
-/**
- * The roster card, or null when there is nothing on it to say.
- *
- * Built entirely from rows this loader has already fetched — `getTeamSettings`
- * for the open invitations, and the `program_roster_full` rows the match
- * attribution already needed — so the card costs no query of its own. The
- * invitations are mapped exactly as `getRosterData` maps them, into the same
- * `RosterInvite`, because the Roster page is where these rows have their
- * vocabulary and this is that same list seen from the home page.
- *
- * `now`/`timeZone` are the read's one clock and the program's own zone,
- * passed straight through to `claimedTodayNames` — see that function for why
- * a second clock here is the bug this arrangement exists to avoid.
- */
-function rosterCard(
-  invites: TeamInvite[],
-  rosterRows: {
-    role: string;
-    display_name: string | null;
-    email: string | null;
-    claimed_at: string | null;
-  }[],
-  now: Date,
-  timeZone: string
-): TeamRosterCard | null {
-  // The Roster page's own count, off the same RPC and the same predicate — see
-  // `TeamRosterCard.players` for why this and the checklist's receipt have to
-  // be one number rather than two.
-  const players = playerCount(rosterRows);
-  const claimedToday = claimedTodayNames(rosterRows, now, timeZone);
-  const open: RosterInvite[] = invites.map((invite) => ({
-    id: invite.id,
-    email: invite.email,
-    role: invite.role,
-    invitedOn: shortDate(invite.createdAt),
-    invitedBy: invite.invitedBy,
-  }));
-
-  // Nobody, nothing outstanding, no news: the card is absent rather than empty.
-  if (players === 0 && open.length === 0 && claimedToday.length === 0) {
-    return null;
-  }
-
-  return { players, invites: open, claimedToday };
 }
 
 /**
@@ -1119,7 +1131,7 @@ export function teamAttention(
  * row: they are the only evidence of which side of a match is the program's.
  * See `programSide()`.
  *
- * Exported with `teamKpis` below, so its spec builds fixtures in the shape the
+ * Exported with `teamKpiCards` below, so its spec builds fixtures in the shape the
  * `select()` actually returns rather than a hand-typed approximation of it.
  */
 export interface DbSeasonMatch {
@@ -1141,13 +1153,6 @@ export interface DbSeasonMatch {
   verified: boolean | null;
 }
 
-/** One side of one match, from `match_stats_with_percentages`. */
-export interface DbTeamStat {
-  match_id: string;
-  is_player1: boolean;
-  /** A `numeric` column: PostgREST hands it over as a string. */
-  first_serve_pct: string | number | null;
-}
 
 /**
  * What state a match row is in — a job's, or the state implied by having no job.
@@ -1316,196 +1321,75 @@ export function teamFirstReport(
 }
 
 /**
- * The strip's figures — up to four of them, and sometimes none.
+ * The strip's cards, through the personal Home's builder.
  *
- * **None until a match has actually been analyzed.** That is the gate round 45
- * states as "never a skeleton strip on day zero", and it is `isAnalysisReady`,
- * the same predicate the greeting line above counts with and the matches list
- * offers a report on. A program with a schedule full of hand-scored duals and
- * no analysis has plenty of rows and nothing this strip was built to say.
+ * All this decides is attribution: which side of each analyzed match is the
+ * program's (`programSide`, off `rosterIds`), and which dual it belongs to
+ * (`eventByEntryId`, which also names the point in the hover chart). A match
+ * nothing attributes to the program, or that sits on no dual, is left out of
+ * the map and so contributes to no card — the same refusal the matches list
+ * makes when it draws no outcome mark — and the builder never re-derives a
+ * side of its own. `headline: "mean"` because a team's figure is the squad's
+ * average, not the last match filmed.
  *
- * **Past that gate, every tile is conditional but one.** A tile is pushed only
- * when rows exist behind it, so a figure that cannot be computed honestly is
- * ABSENT — never `0–0`, never `—%`, never a zero standing in for a number
- * nobody has earned yet. Same rule as a match row whose side cannot be
- * established going without its outcome glyph: silence beats a plausible wrong
- * answer. Which tile can go missing, and exactly when:
+ * Returns the count beside the cards: `matchCount` is `orderedIds.length`,
+ * the matches the builder was handed, which is the honest "N matches" for
+ * every reader downstream. Reading it back off the longest card series
+ * would miss a match whose stats row measured nothing.
  *
- * - **`dual-record`** — absent until some dual has a DECIDED team score.
- *   That covers three separate cases: no dual played; a dual played but not
- *   finished (`teamScore` is null until every line is in); and a dual that
- *   ended level, which belongs in neither column. Present from the first dual
- *   the program wins or loses.
- * - **`sets-won`** — absent while no match this program can be attributed to
- *   carries a readable set score: `programSide` null on every row (nobody on
- *   the roster in either id column and no `event_entry_id`), or `setTally`
- *   null / every set level. Present from the first attributable match with a
- *   set somebody took.
- * - **`first-serve`** — absent while no attributable match has a
- *   `first_serve_pct` row in `match_stats_with_percentages`. A program
- *   importing scores without video sits here indefinitely, and that is the
- *   correct answer rather than a `0%` team serve. Present from the first
- *   attributable match that measured it.
- * - **`matches-analyzed`** — never absent. It is the count the day-zero gate
- *   is itself drawn from, so past that gate it is at least 1 by construction.
- *
- * So the strip renders one, two, three or four tiles and the component lays out
- * however many arrive. The two shapes worth picturing: a program's first
- * analyzed upload, before any dual is decided, gets `sets-won` +
- * `first-serve` + `matches-analyzed`; a program importing scores without video
- * gets everything but `first-serve`.
- *
- * Nothing here is a new source of truth:
- * - **Dual record** is `teamScore` off `scheduleRowsFrom()` — the very mapping
- *   `/dashboard/team/schedule` renders its rows from — which is `dualScore`
- *   over the lines and is present only once every line is in. The season
- *   aggregate of the rule the dual sheet above prints, not a second one.
- * - **Sets won** counts games with `setTally`, the function `matchOutcome`
- *   itself now reads, and orients the count with `programSide` — never a
- *   second answer to which side is ours.
- * - **Team first serve** reads `match_stats_with_percentages`, keyed by
- *   `statKey(match_id, is_player1)` exactly as the roster page keys it, and
- *   `is_player1` is matched against the side `programSide` established.
- * - **Matches analyzed** is `isAnalysisReady` over the same rows.
- *
- * Both percentage tiles are means of PER-MATCH percentages, via
- * `meanOfPresent` — the app's established rule for aggregating this view, and
- * the one that keeps an unmeasured match out of the average instead of
- * entering it as a zero.
- *
- * It also makes the headline the mean of the series the sparkline draws. That
- * only holds while the tile makes ONE window's worth of claims, and for a
- * while it did not: `seriesTile` drew a trailing slice of the series it was
- * handed, so the headline averaged a season, the change split that season in
- * half, and the line showed the last few weeks — three answers, three
- * stretches of calendar, one tile. The array passed below is now the array
- * drawn, so the headline is the mean of the line and the change is the line's
- * halves, and none of the three can point a different way from the others. If
- * this ever starts averaging over a window, `seriesTile` has to be handed that
- * same window rather than the whole season.
- *
- * **Exported only so that `tests/team-kpi.spec.ts` can call it.** It has no
- * caller outside this file and should not acquire one — it takes this loader's
- * private row shapes. It is exported here rather than moved next to the
- * thresholds in `lib/data/team-kpi.ts` because it could not travel alone:
- * `programSide` and `analysisOf` are the two refusals it is made of, and both
- * are read by the match rows below as well, so moving it would carry a
- * team-home-wide attribution rule into a file named for one strip. The spec
- * therefore imports this module, Supabase client and all — which is safe
- * because nothing here runs at module scope: `createClient()` is called inside
- * `getTeamHomeData`, and `teamKpis` itself performs no I/O. Should that ever
- * stop being true, move the function and its two refusals out together rather
- * than giving the test a copy of the logic.
+ * Exported for the attribution specs (`tests/team-roster-ids.spec.ts`), which
+ * pin that a claimed player's pre-claim match, a coach's own upload and a
+ * match between strangers each land on the side they should. Pure: no I/O.
  */
-export function teamKpis(
+export function teamKpiCards(
   rows: DbSeasonMatch[],
   jobs: Map<string, MatchAnalysis>,
-  stats: DbTeamStat[],
-  schedule: ScheduleRow[],
-  rosterIds: ReadonlySet<string>
-): TeamKpiTile[] {
-  // Oldest first. The read arrives newest-first, like the list's, and every
-  // series below is chronological by definition — a sparkline drawn backwards
-  // is a trend reported in reverse.
-  const chronological = [...rows].reverse();
+  stats: DbMatchStats[],
+  rosterIds: ReadonlySet<string>,
+  /**
+   * The schedule entry each match hangs off, by `event_entry_id`. **The strip
+   * is dual matches only** (CJ, 2026-09-07): a match feeds a card only when
+   * it sits on a dual's lineup. A tournament run, or a match recorded under
+   * the program with no schedule entry, is the program's match but not the
+   * team's result, and the squad average is about the team's results. The
+   * same entry names the point in the hover chart — "Pacific Ridge ·
+   * D. Brooks" — because a coach reads the season by its Saturdays.
+   */
+  eventByEntryId: ReadonlyMap<string, { event: ProgramEvent; entry: EventEntry }>
+): { cards: KpiCardData[]; matchCount: number } {
+  const matchPlayerMap = new Map<string, boolean>();
+  const matchMetaMap = new Map<string, { date: string; opponent: string }>();
+  const orderedIds: string[] = [];
 
-  const analyzed = chronological.filter((row) =>
-    isAnalysisReady(analysisOf(row, jobs).status)
+  // Newest first, which is the order the builder's window wants. Sorted here
+  // rather than assumed: the loader hands this function a DESC read, but a
+  // window that silently depends on its caller's ordering draws the season
+  // backwards the first time anybody passes it the other way — the specs do.
+  // `id` breaks a date tie: six courts of one Saturday share a date, and a
+  // series that reorders between page loads draws a different trend each time.
+  const newestFirst = [...rows].sort(
+    (left, right) =>
+      (right.date ?? "").localeCompare(left.date ?? "") || left.id.localeCompare(right.id)
   );
-  if (analyzed.length === 0) return [];
-
-  const tiles: TeamKpiTile[] = [];
-
-  // A dual that ended level is in neither column and so is in no sample: it is
-  // not a win, not a loss, and counting it under a "9–4" would make the record
-  // stop adding up to the number of duals beside it. A seven-point card cannot
-  // tie; a shortened one can.
-  const decisiveDuals = schedule
-    .filter((row) => row.kind === "dual")
-    .map((row) => ({ startsOn: row.startsOn, score: row.teamScore }))
-    .filter(
-      (row): row is { startsOn: string; score: { us: number; them: number } } =>
-        row.score !== null && row.score.us !== row.score.them
-    );
-  if (decisiveDuals.length > 0) {
-    const wins = decisiveDuals.filter((row) => row.score.us > row.score.them);
-    tiles.push(
-      countTile(
-        "dual-record",
-        "Dual record",
-        "dual",
-        `${wins.length}–${decisiveDuals.length - wins.length}`,
-        decisiveDuals.map((row) => row.startsOn)
-      )
-    );
-  }
-
-  const setsWon: TeamKpiObservation[] = [];
-  const firstServe: TeamKpiObservation[] = [];
-
-  const serveBySide = new Map<string, number | null>();
-  for (const stat of stats) {
-    serveBySide.set(
-      statKey(stat.match_id, stat.is_player1),
-      pct(stat.first_serve_pct)
-    );
-  }
-
-  for (const row of chronological) {
-    // No side, no figure. A row nothing attributes to this program contributes
-    // to neither average rather than contributing the stored order's guess —
-    // the same refusal the row itself makes when it draws no outcome mark.
+  for (const row of newestFirst) {
+    if (!isAnalysisReady(analysisOf(row, jobs).status)) continue;
     const side = programSide(row, rosterIds);
     if (side === null) continue;
-
-    const sets = setTally(row.score);
-    const setsPlayed = sets ? sets.player1 + sets.player2 : 0;
-    if (sets && setsPlayed > 0) {
-      const ours = side === "player1" ? sets.player1 : sets.player2;
-      setsWon.push({ value: (ours / setsPlayed) * 100, date: row.date });
-    }
-
-    const serve = serveBySide.get(statKey(row.id, side === "player1"));
-    // `null` is a match that did not measure it, and it is dropped rather than
-    // averaged as a zero — `lib/data/aggregate.ts` exists for that distinction.
-    if (serve !== null && serve !== undefined) {
-      firstServe.push({ value: serve, date: row.date });
-    }
+    const hung = row.event_entry_id ? eventByEntryId.get(row.event_entry_id) : undefined;
+    if (!hung || hung.event.kind !== "dual") continue;
+    matchPlayerMap.set(row.id, side === "player1");
+    const ours = side === "player1" ? row.player1_name : row.player2_name;
+    matchMetaMap.set(row.id, {
+      date: row.date ?? "",
+      opponent: `${hung.event.name} · ${ours?.trim() || hung.entry.playerLabels.join(" / ") || "—"}`,
+    });
+    orderedIds.push(row.id);
   }
 
-  const setsMean = meanOfPresent(setsWon.map((observation) => observation.value));
-  if (setsMean !== null) {
-    tiles.push(
-      seriesTile("sets-won", "Sets won", "match", `${Math.round(setsMean)}%`, setsWon)
-    );
-  }
-
-  const serveMean = meanOfPresent(
-    firstServe.map((observation) => observation.value)
-  );
-  if (serveMean !== null) {
-    tiles.push(
-      seriesTile(
-        "first-serve",
-        "Team 1st serve",
-        "match",
-        `${Math.round(serveMean)}%`,
-        firstServe
-      )
-    );
-  }
-
-  tiles.push(
-    countTile(
-      "matches-analyzed",
-      "Matches analyzed",
-      "match",
-      `${analyzed.length}`,
-      analyzed.map((row) => row.date)
-    )
-  );
-
-  return tiles;
+  return {
+    cards: calculateKpiCards(stats, matchPlayerMap, orderedIds, matchMetaMap, "mean"),
+    matchCount: orderedIds.length,
+  };
 }
 
 /**
@@ -1538,26 +1422,17 @@ export async function getTeamHomeData(
 
   const [
     usage,
-    team,
-    { data: rows },
+    { data: programRow },
     { data: rosterRows },
     { data: seasonRows },
     programSchedule,
+    rosterData,
   ] = await Promise.all([
       getProgramUsage(programId, billingMonth, orgType),
-      getTeamSettings(programId),
-      supabase
-        .from("matches")
-        // `score` carries the games AND both tiebreak arrays, which is what lets
-        // the row print "6-7³" rather than a set that looks decided 7-6 the same
-        // as one decided 7-5. The three id columns are not display data: they are
-        // the only evidence of which side is the program's — see `programSide()`.
-        .select(
-          "id, player1_id, player2_id, event_entry_id, player1_name, player2_name, score, tournament_name, round, date, match_type, source_provider, verified"
-        )
-        .eq("program_id", programId)
-        .order("date", { ascending: false })
-        .limit(RECENT_MATCH_LIMIT),
+      // The one column this page needs from the program row. This was
+      // `getTeamSettings()` — three reads, two of them for an invite-expiry
+      // alert Ta3 retired — kept for a time zone.
+      supabase.from("programs").select("time_zone").eq("id", programId).maybeSingle(),
       // Every id that means "us" on a match row. The same SECURITY DEFINER
       // function Roster and the lineup builder read (`roster-server.ts`,
       // `team-roster-server.ts`) — not a second answer to who is on this team,
@@ -1599,11 +1474,25 @@ export async function getTeamHomeData(
       // reads the whole season — and it is `cache()`d on the read itself, so a
       // later reader on the same request pays nothing.
       getProgramSchedule(programId),
+      // The Roster page's own read, for the movers card. Every figure the
+      // movers list prints is one the roster drawer prints for the same
+      // player; see `lib/data/team-movers.ts`.
+      //
+      // **It is not free, and it is not deduplicated with the read above.**
+      // `getRosterData` is `cache()`d per REQUEST, so it collapses with a
+      // second call in this render and not with the Roster page's own call in
+      // the next navigation; and its first statement is `program_roster_full`,
+      // the same RPC this `Promise.all` already runs. So Team Home asks for
+      // the roster twice and additionally pays for seat usage, invitations and
+      // a second season stats scan, to rank seven players. The honest fix is to
+      // widen the `match_stats_with_percentages` select below to the four
+      // `ROSTER_DRAWER_MEASURES` columns and fold the trends here — worth doing
+      // before this page is on anyone's critical path.
+      getRosterData(programId),
     ]);
 
   // **The single zone the rest of this read's calendar arithmetic runs in** —
-  // the program's own (`programs.time_zone`, already fetched above by
-  // `getTeamSettings`, so this costs no round trip), falling back to
+  // the program's own (`programs.time_zone`, read above), falling back to
   // `DEFAULT_TIME_ZONE` when the `programs` row itself did not come back.
   // The schedule window, the dual sheet and the invite countdown all have to
   // agree about what zone they are reading in, for the same reason they have
@@ -1611,67 +1500,42 @@ export async function getTeamHomeData(
   // another would put "this weekend" outside "this week", and a coach reading
   // the dual sheet in their own zone while the invite alert still spoke UTC
   // was exactly this bug.
-  const timeZone = team?.program.timeZone ?? DEFAULT_TIME_ZONE;
+  const timeZone = programRow?.time_zone ?? DEFAULT_TIME_ZONE;
   const today = localDay(now, timeZone);
   const week = weekBounds(now, timeZone);
 
   const season = (seasonRows ?? []) as DbSeasonMatch[];
   const seasonIds = season.map((row) => row.id);
-  // One analysis read for both consumers. The list's six rows are a subset of
-  // the season read, but the union is taken rather than assumed: two queries
-  // against a table that can be written between them is not somewhere to save
-  // a `Set`.
-  const analysisIds = Array.from(
-    new Set([...(rows ?? []).map((row) => row.id as string), ...seasonIds])
-  );
 
   const [jobs, stats] = await Promise.all([
     // `reap: true` is deliberately NOT passed. It is a write, and it belongs to
     // the two surfaces that draw a progress bar big enough for a frozen one to
     // mislead — the matches list and match detail. This page shows a dot.
-    loadMatchAnalysis(supabase, analysisIds),
+    loadMatchAnalysis(supabase, seasonIds),
     // The same view, the same three columns and the same natural key the
     // roster page reads (`team-roster-server.ts`) — including how it decides
     // which side of a match a stat row belongs to. A second way to attribute a
     // statistic to a side is a serve percentage printed under the wrong
     // player's name, with nothing on screen looking wrong.
-    (async (): Promise<DbTeamStat[]> => {
+    (async (): Promise<DbMatchStats[]> => {
       if (seasonIds.length === 0) return [];
       const { data } = await supabase
         .from("match_stats_with_percentages")
-        .select("match_id, is_player1, first_serve_pct")
+        .select(KPI_STATS_SELECT)
         .in("match_id", seasonIds);
-      return (data ?? []) as DbTeamStat[];
+      return (data ?? []) as DbMatchStats[];
     })(),
   ]);
-
-  // One RPC, four questions off it: which ids mean "us" on a match row, how
-  // many players the roster holds, how far along the setup checklist that
-  // makes the program, and who claimed a profile today. Neither the roster
-  // card nor the checklist adds a read of its own.
-  const people = (rosterRows ?? []) as {
-    player_id: string | null;
-    // Not display data and not redundant with `player_id`: for a CLAIMED
-    // player the two differ, and a match recorded before they claimed carries
-    // this one. See `rosterMatchIds`.
-    user_id: string | null;
-    role: string;
-    display_name: string | null;
-    email: string | null;
-    claimed_at: string | null;
-  }[];
 
   // Both ids the RPC returns per person, through the one rule the Roster page
   // resolves by (`lib/data/roster-ids.ts`). This was `player_id` alone, and the
   // miss was invisible on every seat it was ever read against — staff and
   // unclaimed players carry the same value in both columns. A claimed player's
   // pre-claim match was the one row it dropped: correct names, a real score,
-  // and no outcome mark, missing from the sets-won and first-serve tiles.
-  const rosterIds = rosterMatchIds(people);
-
-  const matches: TeamMatchRow[] = ((rows ?? []) as DbRecentMatch[]).map((row) =>
-    teamMatchRow(row, jobs, rosterIds)
-  );
+  // and no outcome mark, missing from every card on the KPI strip. Nothing
+  // else is read off these rows — the squad's size and the setup line come
+  // off `rosterData`.
+  const rosterIds = rosterMatchIds((rosterRows ?? []) as RosterIdRow[]);
 
   // `readSchedule` returns events newest first, which is the order the schedule
   // page renders them in. Both questions below are asked forwards in time, so
@@ -1684,56 +1548,177 @@ export async function getTeamHomeData(
   // one answer read twice rather than two answers that can drift.
   const scheduleRows = scheduleRowsFrom(programSchedule);
 
-  // Still "the soonest event the program has not finished yet". `ends_on`, not
-  // `starts_on`: a tournament that began on Thursday is still the next thing on
-  // the schedule on Saturday morning.
-  const nextEventRow = upcoming.find((event) => event.endsOn >= today);
-
   // No round trip left in this card: the dual, if there is one, is already in
   // `programSchedule` with its lines under it.
   const dualRow = weekendDualRow(upcoming, week, today);
-  const weekendDual = dualRow
-    ? buildWeekendDual(eventDetailFrom(programSchedule, dualRow.id))
-    : null;
+  // No dual this week: the next one ahead, so the card can show the lineup a
+  // coach is preparing. Still null when the schedule holds no dual ahead at
+  // all — the sheet then draws the day-zero shape rather than last month's
+  // card under a heading that says "this weekend".
+  // No dual this week, but one in the last seven days still has lines open —
+  // Sunday's dual read on Monday, the common case, since the week rolls on
+  // Monday and the rail lists decided duals only. It stays on the card, as
+  // "this weekend", until every line is in; only then does the card look
+  // ahead. Newest first, so `.find` is the most recent such dual.
+  const openRecentDual =
+    dualRow ??
+    programSchedule.events.find(
+      (event) =>
+        event.kind === "dual" &&
+        event.startsOn < today &&
+        event.startsOn >= shiftDay(today, -7) &&
+        !dualScore(programSchedule.entriesByEvent.get(event.id) ?? []).decided
+    ) ??
+    null;
+  const nextDualRow = openRecentDual
+    ? null
+    : (upcoming.find((event) => event.kind === "dual" && event.startsOn >= today) ?? null);
+  const weekendDual = openRecentDual
+    ? buildWeekendDual(eventDetailFrom(programSchedule, openRecentDual.id))
+    : nextDualRow
+      ? buildWeekendDual(eventDetailFrom(programSchedule, nextDualRow.id), "next")
+      : null;
 
-  // `people`, not `team?.members`: the seat list has no row for a
-  // coach-managed player, so a hand-built squad counted zero here and the
-  // checklist kept asking for invitations that were not needed. These are the
-  // same rows `rosterIds` and the roster card above are built from — one read,
-  // one answer to who is on this team.
-  //
-  // `now` and `timeZone`, not a second clock or a second zone: the invite
-  // countdown, the greeting, the schedule window and the dual sheet are all
-  // answered on this read's one clock and one zone, and the alert list below
-  // reads the expiry this returns.
-  const progress = rosterProgress(
-    people,
-    team?.invites ?? [],
-    now.getTime(),
-    timeZone
+  // The rail: every dual with a full card in, newest first — `teamScore` is
+  // null until every line is decided, which is the schedule page's own rule
+  // for printing one. `scheduleRows` is newest-first already.
+  const decidedDuals = scheduleRows.filter(
+    (row): row is ScheduleRow & { teamScore: { us: number; them: number } } =>
+      row.kind === "dual" && row.teamScore !== null && row.teamScore.us !== row.teamScore.them
+  );
+  let dualWins = 0;
+  const dualHistory: DualHistoryRow[] = [];
+  const dualForm: ("win" | "loss")[] = [];
+  for (const row of decidedDuals) {
+    const won = row.teamScore.us > row.teamScore.them;
+    if (won) dualWins += 1;
+    if (dualHistory.length < DUAL_HISTORY_LIMIT) {
+      dualHistory.push({
+        id: row.id,
+        opponent: row.name,
+        site: row.site,
+        date: formatEventShortDay(row.startsOn),
+        us: row.teamScore.us,
+        them: row.teamScore.them,
+      });
+    }
+    // Oldest at the left, like every form strip in the product — the source is
+    // newest-first, so the strip is unshifted rather than reversed at the end.
+    if (dualForm.length < FORM_LIMIT) dualForm.unshift(won ? "win" : "loss");
+  }
+
+  // "4 new results since Friday": reports whose job last moved on or after
+  // the most recent Friday midnight, program time. A ready job's `updatedAt`
+  // is when it finished — the pipeline writes nothing to a finished row. An
+  // import has no job row and no timestamp to read, so it is not counted;
+  // that is a silence, not a zero.
+  const friday = lastFriday(today);
+  // Both counts come off one walk of the season, and both ask when the REPORT
+  // landed rather than when the match was played: `updatedAt` on a ready job is
+  // when it finished, because the pipeline writes nothing to a finished row. An
+  // import has no job row and no timestamp, so it is in neither count — a
+  // silence, not a zero. `localDay` runs last, after three cheap tests, so the
+  // per-row Intl cost is paid only for rows that could qualify.
+  let newResultsCount = 0;
+  // The title row's figure: every report the program has back, off the same
+  // `jobs` map `teamKpiCards` reads. Deliberately wider than the strip's own
+  // count — `kpiMatchCount` — which drops matches nothing attributes to the
+  // program and matches on no dual lineup; the title says what came back,
+  // the strip says what it averaged, and the page reads both.
+  let analyzedCount = 0;
+  for (const row of season) {
+    // `analysisOf`, not `jobs.get` — an import has no job row, and reading the
+    // map directly counted the product's primary ingest path as nothing at
+    // all: a program that only imports would watch "matches analyzed" climb
+    // every weekend while the "N new results" link never once appeared.
+    const analysis = analysisOf(row, jobs);
+    if (!isAnalysisReady(analysis.status)) continue;
+    analyzedCount += 1;
+    // When the report landed. A job's `updatedAt` is exactly that, because the
+    // pipeline writes nothing to a finished row. An import never had a job and
+    // so has no arrival time; its match date stands in, which is the closest
+    // true thing about it — an imported file is filed for a match just played.
+    const stamp = analysis.updatedAt ?? row.date;
+    if (!stamp) continue;
+    // A job's `updatedAt` is an instant and is read in the program's zone. A
+    // match date is already a calendar day (`matches.date` is a `date`
+    // column; a bare YYYY-MM-DD), and putting one through `new Date()` reads
+    // it as UTC midnight — west of Greenwich, the evening before — so every
+    // Friday import fell out of "since Friday". The same trap `format.ts`
+    // documents for the schedule; here it is a comparison, not a print.
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(stamp) ? stamp : localDay(new Date(stamp), timeZone);
+    if (day >= friday) newResultsCount += 1;
+  }
+
+  // The squad, off the same snapshot `movers` was ranked from — see the
+  // `rosterSize` note below.
+  const rosterPlayers = rosterData.members.filter(
+    (member) => member.role === "player"
+  ).length;
+
+  // Same three inputs the strip is built from, and deliberately the same
+  // `jobs` map: the setup line saying a report is back while the strip counts
+  // no analyzed match would be two answers about one program, on one screen.
+  const firstReport = teamFirstReport(season, jobs, rosterIds);
+
+  // Which Saturday each match belongs to, for the strip's hover chart. One
+  // walk of the schedule the page already holds; no read of its own.
+  const eventByEntryId = new Map<string, { event: ProgramEvent; entry: EventEntry }>();
+  for (const event of programSchedule.events) {
+    for (const entry of programSchedule.entriesByEvent.get(event.id) ?? []) {
+      eventByEntryId.set(entry.id, { event, entry });
+    }
+  }
+  const { cards: kpiCards, matchCount: kpiMatchCount } = teamKpiCards(
+    season,
+    jobs,
+    stats,
+    rosterIds,
+    eventByEntryId
   );
 
   return {
     usage,
-    matches,
-    kpis: teamKpis(season, jobs, stats, scheduleRows, rosterIds),
-    // Same three inputs the strip is built from, and deliberately the same
-    // `jobs` map: the checklist saying a report is back while the strip counts
-    // no analyzed match would be two answers about one program, on one screen.
-    firstReport: teamFirstReport(season, jobs, rosterIds),
-    roster: progress,
-    nextEvent: nextEventRow
-      ? {
-          id: nextEventRow.id,
-          name: nextEventRow.name,
-          // Already an `EventKind` off the schedule loader, which narrows the
-          // column once for every surface — no second string test here.
-          kind: nextEventRow.kind,
-          startsOn: nextEventRow.startsOn,
-        }
-      : null,
-    rosterCard: rosterCard(team?.invites ?? [], people, now, timeZone),
-    attention: teamAttention(matches, progress, now.getTime()),
+    matchCount: season.length,
+    analyzedCount,
+    kpiCards,
+    kpiMatchCount,
+    firstReport,
     weekendDual,
+    dualHistory,
+    dualForm: { form: dualForm, wins: dualWins, losses: decidedDuals.length - dualWins },
+    newResults: { count: newResultsCount, since: "Friday" },
+    movers: topMovers(rosterData.members),
+    courtRecord: courtRecordFrom(programSchedule.events, programSchedule.entriesByEvent),
+    // The same cards the strip renders, through the same evidence builder the
+    // personal Home reads — so a figure on the card is a figure on a tile.
+    insight: buildInsightEvidenceWithCaption(kpiCards, kpiMatchCount),
+    // Off `rosterData`, the same snapshot `movers` was ranked from, so the
+    // card's "Full roster — 8" and the eight rows it could show can never
+    // disagree. `people` is a second read of the same RPC (see the note on the
+    // `getRosterData` call above) and could observe a different squad.
+    rosterSize: rosterPlayers,
+    setup: {
+      roster: rosterPlayers > 0,
+      schedule: scheduleRows.some((row) => row.kind === "dual"),
+      // A match SENT, which is what the step asks for — `teamFirstReport`
+      // returns a row for one still analyzing too. Gating on "done" told a
+      // coach who had uploaded that morning to "Send a match", pointing at the
+      // wizard for the match then running.
+      report: firstReport !== null,
+    },
   };
+}
+
+/**
+ * The most recent Friday on or before `today` (YYYY-MM-DD), for the title
+ * row's "since Friday". Friday because that is when a dual weekend's video
+ * starts arriving; on a Friday it is today.
+ */
+function lastFriday(today: string): string {
+  const [year, month, day] = today.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  // getUTCDay: Sunday 0 … Friday 5.
+  date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 2) % 7));
+  return date.toISOString().slice(0, 10);
 }

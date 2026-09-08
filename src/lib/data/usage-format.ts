@@ -119,3 +119,33 @@ export function hoursSeverity(fraction: number): HoursSeverity {
   if (fraction >= 0.8) return "low";
   return "ok";
 }
+
+/**
+ * Seconds of video left in the month, never negative.
+ *
+ * An over-spend is a quota bug, not the reader's problem, and "-2 h left"
+ * reports it as one. The usage footer, Team Home's title row and the
+ * dual-weekend estimate clamp through here rather than writing
+ * `Math.max(0, cap - used)` again; the personal title row and the settings
+ * hours summary still spell it out and should come here when touched.
+ */
+export function secondsLeft(usedSeconds: number, capSeconds: number): number {
+  return Math.max(0, capSeconds - usedSeconds);
+}
+
+/**
+ * Hours of video one dual weekend is likely to cost, for the footer's "about
+ * N dual weekends" clause (Platform Audit Ta3).
+ *
+ * An estimate, and labelled as one on the page. A collegiate dual is nine
+ * courts; the pipeline takes singles video, so six lines of roughly ninety
+ * minutes each is nine hours, rounded up to leave room for a long third set.
+ * Whole dual weekends only — a coach planning a month wants to know how many
+ * Saturdays are covered, not that 0.4 of one is.
+ */
+export const HOURS_PER_DUAL_WEEKEND = 10;
+
+/** How many whole dual weekends `seconds` of remaining video covers. */
+export function dualWeekendsLeft(seconds: number): number {
+  return Math.floor(Math.max(0, seconds) / 3600 / HOURS_PER_DUAL_WEEKEND);
+}

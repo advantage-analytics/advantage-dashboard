@@ -1,55 +1,76 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canUploadForProgram, isProgramStaff } from "@/lib/workspace/types";
 import { getTeamHomeData } from "@/lib/data/team-home-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
-import { isAnalysisReady, isWorking } from "@/lib/data/match-analysis";
-import { advButton } from "@/lib/ui/adv-button";
 import { UsageFooter } from "@/components/dashboard/shared/usage-footer";
-import { FirstSteps } from "@/components/dashboard/team/first-steps";
+import {
+  NewMatchAction,
+  TeamSeasonTitle,
+} from "@/components/dashboard/team/team-season-title";
+import KpiCards from "@/components/dashboard/home/kpi-cards";
+import { EmptyKpiStrip } from "@/components/dashboard/shared/kpi-tile-shell";
+import {
+  defaultKpiLabels,
+  TEAM_KPI_DEFAULT_COUNT,
+} from "@/lib/data/performance-server";
 import { DualSheet } from "@/components/dashboard/team/dual-sheet";
-import { KpiStrip } from "@/components/dashboard/team/kpi-strip";
-import { MatchRows } from "@/components/dashboard/team/match-rows";
-import { NextEventCard } from "@/components/dashboard/team/next-event-card";
-import { RosterCard } from "@/components/dashboard/team/roster-card";
-import { NeedsAttention } from "@/components/dashboard/team/needs-attention";
-import { playersLabel } from "@/components/dashboard/team/roster-vocabulary";
+import { DualSheetEmpty } from "@/components/dashboard/team/dual-sheet-empty";
+import { TopMovers } from "@/components/dashboard/team/top-movers";
+import { DualHistory } from "@/components/dashboard/team/dual-history";
+import { CourtRecord } from "@/components/dashboard/team/court-record";
+import { FocusCard } from "@/components/dashboard/home/focus-card";
+import { FocusEmpty } from "@/components/dashboard/home/focus-empty";
+import HomeAiInsight from "@/components/dashboard/home/home-ai-insight";
+import { TeamSetupLine } from "@/components/dashboard/team/team-setup-line";
 
 /**
- * The page's own name. Its `<h1>` is a greeting rather than the program, and
- * the header names the workspace rather than the page, so the tab fell back to
- * the root layout's "Advantage Analytics" — the app, not where you are.
- *
- * Most of this subtree is still in that state (schedule, settings, upload and
- * the schedule sub-routes export no metadata); this covers the one route the
- * header change left with nothing naming it.
+ * The page's own name. The header greets rather than naming the page, so
+ * without this the tab fell back to the root layout's "Advantage Analytics".
  */
 export const metadata = { title: "Team Home" };
 
 /**
- * F6 and F8 — the program's home page, empty and a week in.
+ * Platform Audit Ta3 — the program's home page, in season and on day zero.
  *
- * One route with two states rather than two routes, because the transition
- * between them is the thing being designed: onboarding ends when this page has
- * rows in it. A separate "welcome" screen would have to be dismissed, and a
- * dismissable welcome is a screen that lies about whether anything happened.
+ * One route, one composition, every state. The header bar greets
+ * ("Good morning, Elena · Meridian State · Men's tennis · Monday, Aug 10");
+ * the page opens on "Team season" in title type, then the KPI strip, then
+ * the personal Home's two columns: this weekend's dual and the top movers on
+ * the left, and a 400px rail of the Focus card, the court record and the
+ * dual history — over a quiet setup line and the usage footer.
  *
- * **Round 45, rule 1: the frame never moves.** Greeting, New match and the
- * usage footer are on screen from day zero, in the positions they will still
- * be in a season later; only the middle changes as data arrives. The empty
- * state used to be its own composition — an instructional headline announcing
- * its own emptiness, with the budget card promoted beside it — which meant a
- * coach's second visit rearranged the page under them and taught the first
- * visit's layout to nobody. An empty middle makes the point the headline was
- * making, and makes it without a ghost row or a dashed placeholder standing in
- * for content that has not arrived.
+ * **The columns are Pa2's, by decision (2026-09-07, "Team Home Layouts"
+ * canvas, direction A).** Ta3 ran the dual sheet across the whole page and it
+ * was a third of a 900px viewport before the squad appeared at all — on a
+ * Tuesday, a result nobody needed re-read. Now the card keeps every row and
+ * simply shares the width with the rail, and a coach who also plays learns
+ * one page shape in both workspaces. Nothing inside a card changed.
+ *
+ * **The frame never moves** (Pa2's rule, carried over from round 45 and
+ * taken further). Every region is on screen from the first visit: an empty
+ * KPI strip draws its four labels over rules and grey curves, the dual card
+ * draws a ghost lineup with one "Add a dual" band, the movers card draws
+ * ghost rows with "Add players", the rail says when it fills. Round 45 had
+ * these mount nothing until data arrived, which meant a coach's second visit
+ * rearranged the page under them and taught the first visit's layout to
+ * nobody.
+ *
+ * **What Ta3 retired, by decision (2026-09-07).** The three-card checklist
+ * became `TeamSetupLine`, one line in the personal Home's register. The
+ * Matches list, the Next-event card, the Roster card and the Needs-attention
+ * list are gone from this page; `/dashboard/matches`, the schedule and the
+ * roster each carry what those summarised.
+ *
+ * **White, not the frame's grey.** SKILL.md's ratified surface rule: every
+ * dashboard surface is `--surface-card`, and a card is told from the page by
+ * its hairline and shadow, never by a tint underneath.
  */
 export default async function TeamHomePage() {
   const workspace = await getWorkspaceContext();
   if (!workspace) redirect("/login");
 
-  const { active, viewer } = workspace;
+  const { active } = workspace;
   // The rail only offers this destination inside a program. Somebody who typed
   // the URL from a personal workspace gets their own dashboard rather than an
   // empty program page that belongs to nobody.
@@ -58,297 +79,180 @@ export default async function TeamHomePage() {
   const billingMonth = currentBillingMonth();
   const {
     usage,
-    matches,
-    kpis,
+    matchCount,
+    analyzedCount,
+    kpiCards,
+    kpiMatchCount,
     firstReport,
-    roster,
-    rosterCard,
-    attention,
-    nextEvent,
     weekendDual,
+    dualHistory,
+    dualForm,
+    newResults,
+    movers,
+    rosterSize,
+    setup,
+    courtRecord,
+    insight,
   } = await getTeamHomeData(active.id, billingMonth, active.orgType);
 
-  // Roster facts and the setup checklist are staff business. A player reaches
-  // this page from the same rail item, and `program_roster` returns them only
-  // their own line — so without this the greeting would tell a player that "1
-  // player has joined", and the checklist would send them to pages whose every
-  // write the database refuses.
-  // `isProgramStaff` rather than the same test spelled by hand — its own doc
-  // comment exists because the rail and this page once wrote the rule in
-  // opposite directions.
+  // Roster facts and the setup line are staff business. `isProgramStaff`
+  // rather than the same test spelled by hand — its own doc comment exists
+  // because the rail and this page once wrote the rule in opposite directions.
   const isStaff = isProgramStaff(active);
-  const empty = matches.length === 0;
 
-  const now = new Date();
-  const hour = now.getHours();
-  const greeting =
-    hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  const firstName = viewer.name.split(" ")[0];
-  // Server clock, like the greeting it sits under — the two would contradict
-  // each other if one were rendered here and the other in the browser.
-  const today = now.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-  });
-
-  // The same predicates the matches list and the match page ask. A dot that
-  // means "running" here and something else there is how two screens start
-  // disagreeing about one job.
-  const working = matches.filter((match) => isWorking(match.status)).length;
-  const ready = matches.filter((match) => isAnalysisReady(match.status)).length;
-
-  // Who may send video at all. A player only when the program has opened
-  // uploads to them AND their own row still allows it — that is the rule the
-  // database enforces (`enforce_member_upload_enabled`), so a player without
-  // it gets no button rather than a disabled one: it is not paused, it is not
-  // theirs to do. Staff whose claim is still being confirmed DO get the
-  // button, disabled, because for them it genuinely is paused and the slot it
-  // occupies is the one it will stay in — `canUploadForProgram()` answers
-  // staff before it reads either flag, so no arrangement of switches locks
-  // them out.
+  // Who may send video at all — see `canUploadForProgram()`. A player without
+  // it gets no button rather than a disabled one; staff whose claim is still
+  // being confirmed get it disabled, because for them it genuinely is paused.
   const canUpload = canUploadForProgram(active);
 
-  // Whether there is a right column at all.
-  //
-  // Two gates, and both matter. **Staff**, because every card in it is staff
-  // business — `program_invites` returns a player nothing, `program_roster`
-  // returns them their own line, and a failed job on somebody else's match is
-  // not theirs to chase. And **something to say**, because each of the three
-  // cards renders nothing when it is empty: without this a coach on a quiet
-  // morning would get a 340px strip of blank page beside their matches. One
-  // column when there is one column's worth of page — which is also every
-  // player's view of it, gutter included.
-  const showRail =
-    isStaff &&
-    (nextEvent !== null || rosterCard !== null || attention.length > 0);
+  // A match is in and no report has come back yet — said once here and read by
+  // both the title row and the empty strip, so the two cannot describe the
+  // same morning differently.
+  // `state === "progress"`, not `!== "done"`: `teamFirstReport` returns null
+  // for a match whose analysis FAILED, and "on its way" about that one was a
+  // promise the page could never keep.
+  const awaitingReport =
+    matchCount > 0 && analyzedCount === 0 && firstReport?.state === "progress";
+
+  // Whether the strip has a number to show. Not `analyzedCount > 0`: that
+  // counts reports by job status, and a report can be back for a match the
+  // program cannot be attributed to, or ahead of its stats row landing. Either
+  // way every card reads "—", and four dashes under a title saying "3 matches
+  // analyzed" is the confident, wrong shape the guardrails describe. The
+  // cards themselves know whether anything measured them.
+  const stripHasFigures = kpiCards.some((card) => card.value !== "—");
 
   return (
     <div className="w-full flex-1 bg-[var(--surface-card)]">
-      <div className="mx-auto flex max-w-screen-2xl flex-col gap-6 px-6 pt-5 pb-8 sm:px-14">
-        {/* The frame's top edge. Greeting, subline and the primary sit in the
-            same places in every state — the gap between the h1 and the line
-            under it is the only thing tuned by hand (9px), because 8 reads as
-            attached and 12 as unrelated. */}
-        <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end sm:gap-6">
-          <div className="flex flex-col gap-[9px]">
-            <h1 className="text-display">
-              {greeting}, {firstName}
-            </h1>
-
-            {/* Subline and date share a baseline. The subline is the one part
-                of the frame whose words change with the state — that is the
-                point of it; the frame is the geometry, not the sentence. */}
-            <div className="flex flex-wrap items-baseline gap-3">
-              <p className="text-body-sm max-w-[56ch]">
-                {empty ? (
-                  isStaff ? (
-                    "Send a match and the analysis comes back to this page."
-                  ) : canUpload ? (
-                    "Your matches appear here — your coach sends them, and so can you."
-                  ) : (
-                    "Your matches appear here as your coach sends them."
-                  )
-                ) : (
-                  <ProgressLine
-                    working={working}
-                    ready={ready}
-                    players={isStaff ? roster.players : 0}
-                  />
-                )}
-              </p>
-              <span className="text-micro tabular">{today}</span>
-            </div>
-          </div>
-
-          {canUpload &&
-            (active.canSubmitVideo ? (
-              <Link
-                href="/dashboard/matches/new"
-                className={advButton("primary")}
-              >
-                New match
-              </Link>
-            ) : (
-              /* Claim still in review. The claim-review screen promises that
-                 everything except sending video works now, so this keeps the
-                 promise in the honest way — the control is where it will be,
-                 and refuses rather than disappearing. `title` carries the
-                 reason; the checklist card below states it in full. */
-              <button
-                type="button"
-                disabled
-                title="Paused until we confirm the program."
-                className={advButton("primary")}
-              >
-                New match
-              </button>
-            ))}
-        </div>
-
-        {/* Two columns from `xl` up, one below it.
-
-            **The frame spans both.** The greeting row above and the usage
-            footer below are siblings of this grid rather than cells in it —
-            round 45's first rule is that the frame never moves, and a greeting
-            that narrowed to make room for a card would be the frame moving.
-            What splits is the middle: the page's own detail on the left, and on
-            the right the three cards answering what is next, who is on the
-            roster, and what is waiting.
-
-            340px is a fixed track rather than a fraction, because the cards in
-            it are sized to their contents and a proportional column would
-            stretch a two-line event card across a 27-inch monitor. `minmax(0,
-            1fr)` on the main column is what lets its rows truncate instead of
-            forcing the grid wider than the page.
-
-            `xl` (1280px), not `lg`: the matches card is a five-track grid
-            whose three fixed columns are measured to the widest score a row
-            can hold, and everything the 340px takes comes out of the two name
-            tracks that share what is left. At `xl` the main column is 836px —
-            the width that card already has at a 916px window, and comfortably
-            above the 560px it is laid out in at the `sm` breakpoint where its
-            grid first appears. At `lg` it would be 580px, narrower than
-            anything the card renders in today, which is why the split waits.
-
-            One column when there is no right column to show — see `showRail`. A
-            player never meets an empty gutter, because a player never meets the
-            split at all. */}
-        <div
-          className={`grid gap-6 ${
-            showRail ? "xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start" : ""
-          }`}
-        >
-          <div className="flex min-w-0 flex-col gap-6">
-            {/* The strip — up to four figures, directly under the greeting
-                it summarises and above everything the page then details.
-                Outside the `!empty` gate because it carries its own, stricter
-                one: `kpis` is empty until the program has a match that has
-                actually been ANALYZED, which is later than having a row. On
-                day zero this mounts nothing at all — no skeleton, no zeroed
-                tiles — which is the rule round 45 states about this strip in
-                particular. Fewer than four arrive whenever a figure cannot be
-                computed honestly; `teamKpis()` says which and when.
-
-                Not staff-only, and not player-blind either. Every figure here
-                is labelled as the program's, and that is exactly what a player
-                gets — the same numbers their coach reads. This used to depend
-                on a flag: with it unset, RLS handed a player their OWN matches
-                and nobody else's, and the strip would print one player's season
-                under the team's name with nothing on screen looking wrong.
-                `20260830120000_matches_visible_to_members` removed that read
-                entirely, so there is no longer a narrow one to detect. */}
-            <KpiStrip tiles={kpis} />
-
-            {/* The middle — the only thing empty → populated changes.
-
-                The checklist is no longer part of what changes. It renders in
-                both states and holds one position, because its cards flip to
-                receipts rather than disappearing as they are done; it takes
-                itself off the page in one step once all three are, which is
-                the only layout change it ever makes. Staff only:
-                `program_roster` returns a player their own line and nothing
-                else, and every write behind these cards is one the database
-                refuses them. */}
-            {isStaff && (
-              <FirstSteps
-                canSubmitVideo={active.canSubmitVideo}
-                firstReport={firstReport}
-                nextEvent={nextEvent}
-                roster={roster}
-                nowMs={now.getTime()}
-              />
-            )}
-
-            {/* Above the matches list, and outside its `!empty` gate: a
-                program's first dual is on the schedule before anybody has
-                played it, so the sheet has something to say on a page with no
-                rows in it yet. It is not part of the frame either — most weeks
-                there is no dual in range and `weekendDual` is null, in which
-                case nothing renders here at all.
-
-                Not staff-only: a player's lines are on this card, and the same
-                `program_events` policy that lets them read the schedule page is
-                what put it there. The lineup and the results used to come from
-                policies of different widths — a player read all nine lines and
-                got back exactly one match, so `WeekendDual.tally` was withheld
-                rather than printing a team score counted from one line out of
-                nine. Since `20260830120000_matches_visible_to_members` the two
-                widths match, and the tally is simply always counted. */}
-            {weekendDual && <DualSheet dual={weekendDual} />}
-
-            {!empty && <MatchRows matches={matches} />}
-          </div>
-
-          {/* The right column. Three cards, each rendering nothing at all when
-              it has nothing to say — so this is a column of one card as often
-              as it is a column of three, and never a column of headings over
-              empty lists. The invitations that used to be summarised in a line
-              under the matches list are here now: the roster card lists them
-              with a Resend beside each, which is what 44a shows and what a
-              count could never offer. */}
-          {showRail && (
-            <aside
-              aria-label="Program status"
-              className="flex min-w-0 flex-col gap-6"
-            >
-              <NextEventCard event={nextEvent} />
-              <RosterCard roster={rosterCard} />
-              <NeedsAttention alerts={attention} />
-            </aside>
-          )}
-        </div>
-
-        {/* The frame's bottom edge — last block on the page in both states. */}
-        <UsageFooter
-          usedSeconds={usage.usedSeconds}
-          capSeconds={usage.capSeconds}
-          billingMonth={usage.billingMonth}
-          note="free through Dec 31, 2026"
+      {/* The personal Home's column exactly — `px-14 pt-5 pb-8`, 16px between
+          the title row, the strip, the grid and the footer — so the two
+          workspaces' pages line up region for region. Ta3 ran 24px here;
+          the tighter gap is Pa2's, and Roster and Schedule share the same
+          56px gutter. */}
+      <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-4 px-14 pt-5 pb-8">
+        <TeamSeasonTitle
+          matchCount={matchCount}
+          analyzedCount={analyzedCount}
+          newResults={newResults}
+          usage={usage}
+          awaitingReport={awaitingReport}
+          action={
+            <NewMatchAction
+              canUpload={canUpload}
+              canSubmitVideo={active.canSubmitVideo}
+            />
+          }
         />
+
+        {/* The personal Home's strip, for the program: the same twelve cards
+            and the same picker, with a team-average headline, four tiles by
+            default, and a storage key of its own so a coach's pick here does
+            not rearrange their personal strip. **Dual matches only** — a
+            report for a match that is not on a dual's lineup is counted in
+            the title row and nowhere in the strip. Ghost curves until a card
+            has two readings; trends from two (`kpiMatchCount`). Until a dual
+            match has been analyzed there is nothing to average, and the strip
+            draws its four labelled regions empty instead. */}
+        {stripHasFigures ? (
+          <KpiCards
+            cards={kpiCards}
+            matchCount={kpiMatchCount}
+            storageKey="advantage.kpi.team.visible"
+            defaultCount={TEAM_KPI_DEFAULT_COUNT}
+            ghostSparkline
+            compactPhone
+            collapse={false}
+            ariaLabel="Program summary"
+          />
+        ) : (
+          /* The same four regions the picker will show, off the same count.
+             Three states, three sentences: "When the report lands" while a
+             match is in and no report is back; "After your first dual match"
+             when reports ARE back but none sits on a dual lineup — the title
+             row above counts those, so the strip has to say why it does not;
+             and the shell's own "After your first match" on day zero. */
+          <EmptyKpiStrip
+            labels={defaultKpiLabels(TEAM_KPI_DEFAULT_COUNT)}
+            awaitingReport={awaitingReport}
+            hint={analyzedCount > 0 && !awaitingReport ? "After your first dual match" : undefined}
+            ariaLabel="Program summary"
+          />
+        )}
+
+        {/* Pa2's grid: 400px rail, 24px gutter, `items-start` so each column
+            bottoms out where its cards do — nothing is stretched to level
+            them, and the cards inside a column sit 20px apart. `lg` rather
+            than Ta3's `xl`, because that is where the personal Home breaks and
+            the two pages should fold at the same width. */}
+        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+          <div className="flex min-w-0 flex-col gap-5">
+            {/* This week's dual, the next one ahead, or the shape of one. Not
+                staff-only: a player's lines are on this card, and the same
+                `program_events` policy that lets them read the schedule page
+                is what put it there. */}
+            {weekendDual ? (
+              <DualSheet dual={weekendDual} />
+            ) : (
+              <DualSheetEmpty canSchedule={isStaff} />
+            )}
+            <TopMovers movers={movers} rosterSize={rosterSize} canManage={isStaff} />
+          </div>
+
+          <div className="flex flex-col gap-5">
+            {/* The personal Home's three states, one card: computed evidence
+                with a streamed claim; its own anatomy holding nothing before
+                any match is in; and off the page between the two, because a
+                placeholder after a coach has already sent a match would be
+                the page failing to notice. */}
+            {insight ? (
+              <FocusCard
+                footer={{
+                  left: insight.caption,
+                  right: (
+                    <>
+                      <span className="tabular">{kpiMatchCount}</span>{" "}
+                      {kpiMatchCount === 1 ? "match" : "matches"}
+                    </>
+                  ),
+                }}
+              >
+                <HomeAiInsight
+                  evidence={insight.parts}
+                  cacheSignature={`${active.id}:${kpiMatchCount}:${kpiCards
+                    .map((card) => card.value)
+                    .join(",")}`}
+                  endpoint="/api/team-insight"
+                />
+              </FocusCard>
+            ) : (
+              matchCount === 0 && (
+                <FocusCard footer={{ left: "One thing to work on, after the first dual." }}>
+                  <FocusEmpty />
+                </FocusCard>
+              )
+            )}
+            <CourtRecord record={courtRecord} />
+            <DualHistory rows={dualHistory} form={dualForm} teamName={active.name} />
+          </div>
+        </div>
+
+        {/* The frame's bottom edge — the setup line while there is one, then
+            the footer, last on the page in every state. */}
+        <div className="flex flex-col gap-4">
+          {isStaff && <TeamSetupLine setup={setup} />}
+          {/* `dualWeekends` asks the footer for the "about 3 dual weekends"
+              clause; the footer owns both the arithmetic and the refusal to
+              print "about 0". `note` is the pilot's free-quota clause, which
+              this page has carried since round 45. */}
+          <UsageFooter
+            usedSeconds={usage.usedSeconds}
+            capSeconds={usage.capSeconds}
+            billingMonth={usage.billingMonth}
+            dualWeekends
+            note="free through Dec 31, 2026"
+          />
+        </div>
       </div>
     </div>
-  );
-}
-
-/**
- * "One match analyzing, one ready. Six players on the roster."
- *
- * Assembled from counts rather than written as a template with numbers in it,
- * because every clause has to be able to disappear: a program with nothing
- * running and nobody new should not read "0 matches analyzing, 0 ready".
- *
- * The roster clause used to read "six players have JOINED", off a count of
- * seats. It could not stay that way once `RosterProgress` started counting the
- * roster rather than the seat list: most players here are coach-managed
- * profiles who have joined nothing and may never sign in at all. So it is the
- * roster's own phrase now, in the roster's own words (`playersLabel`) — the
- * same number the card in the right column and the checklist's receipt print,
- * on the same page.
- */
-function ProgressLine({
-  working,
-  ready,
-  players,
-}: {
-  working: number;
-  ready: number;
-  players: number;
-}) {
-  const clauses: string[] = [];
-  if (working > 0) clauses.push(`${working} analyzing`);
-  if (ready > 0) clauses.push(`${ready} ready`);
-
-  const matchPart =
-    clauses.length > 0
-      ? `${clauses.join(", ")}.`
-      : "Nothing is running right now.";
-  const rosterPart = players > 0 ? ` ${playersLabel(players)} on the roster.` : "";
-
-  return (
-    <>
-      {matchPart}
-      {rosterPart}
-    </>
   );
 }

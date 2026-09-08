@@ -6,8 +6,9 @@ import type { EventKind } from "@/lib/schedule/types";
  * A dual carries the opponent program's initials on `--surface-subtle`; a
  * tournament carries the DS tournament glyph, because there is no program to
  * show. Two sizes, drawn on two surfaces: 26px in the table's Event cell and
- * 48px at the head of the drawer. `radius-button` on both — the legend says
- * "6px radius" in as many words.
+ * 48px at the head of the drawer, and 32px in Team Home's dual-history rail
+ * (Platform Audit Ta3). `radius-button` on all three — the legend says "6px
+ * radius" in as many words.
  */
 export function EventMark({
   kind,
@@ -16,16 +17,19 @@ export function EventMark({
 }: {
   kind: EventKind;
   name: string;
-  size: 26 | 48;
+  size: 26 | 32 | 48;
 }) {
   const large = size === 48;
+  const medium = size === 32;
   return (
     <span
       aria-hidden="true"
       className={
         large
           ? "flex size-12 shrink-0 items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-subtle)] text-[14px] font-medium tracking-[0.2px] text-[var(--ink-700)]"
-          : "flex size-[26px] shrink-0 items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-subtle)] text-[9px] font-medium text-[var(--ink-700)]"
+          : medium
+            ? "flex size-8 shrink-0 items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-subtle)] text-[12px] font-medium text-[var(--ink-700)]"
+            : "flex size-[26px] shrink-0 items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-subtle)] text-[9px] font-medium text-[var(--ink-700)]"
       }
     >
       {kind === "tournament" ? (
@@ -33,7 +37,7 @@ export function EventMark({
         <img
           src="/icons/tournament-icon.svg"
           alt=""
-          className={large ? "block size-5" : "block size-[13px]"}
+          className={large ? "block size-5" : medium ? "block size-4" : "block size-[13px]"}
         />
       ) : (
         markInitials(name)

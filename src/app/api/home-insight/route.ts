@@ -1,16 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { getLLMStream } from "@/lib/llm/adapter";
+import { formatChange, textStreamResponse } from "@/lib/llm/stream-response";
 import {
   getOverallPerformance,
   getTopKpiMovers,
   type OverallPerformanceData,
 } from "@/lib/data/performance-server";
-
-function formatChange(change: number): string {
-  if (change === 0) return "flat";
-  const sign = change > 0 ? "+" : "";
-  return `${sign}${change}`;
-}
 
 function buildHomeInsightSystemPrompt(
   perf: OverallPerformanceData,
@@ -124,24 +119,6 @@ export async function POST() {
     return new Response("LLM error", { status: 500 });
   }
 
-  // 5. Pipe async iterable into a ReadableStream response
-  const stream = new ReadableStream({
-    async start(controller) {
-      const encoder = new TextEncoder();
-      try {
-        for await (const chunk of iterable) {
-          controller.enqueue(encoder.encode(chunk));
-        }
-      } catch (err) {
-        console.error("Stream error:", err);
-        controller.error(err);
-      } finally {
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: { "Content-Type": "text/plain; charset=utf-8" },
-  });
+  // 5. Stream it — the same pipe the team route answers through.
+  return textStreamResponse(iterable);
 }

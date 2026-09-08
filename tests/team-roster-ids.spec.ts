@@ -4,15 +4,52 @@ import { canonicalRosterIds, rosterMatchIds } from '@/lib/data/roster-ids';
 import {
   teamAttention,
   teamFirstReport,
-  teamKpis,
+  teamKpiCards,
   teamMatchRow,
   type DbRecentMatch,
   type DbSeasonMatch,
   type RosterProgress,
 } from '@/lib/data/team-home-server';
 import type { AnalysisStatus, MatchAnalysis } from '@/lib/data/match-analysis';
+import type { DbMatchStats } from '@/lib/data/performance-server';
 import type { MatchScore } from '@/lib/data/match-utils';
-import type { ScheduleRow } from '@/lib/schedule/types';
+import type { EventEntry, ProgramEvent, ScheduleRow } from '@/lib/schedule/types';
+
+/**
+ * The strip reads dual matches only, so a season row reaches a card through
+ * its `event_entry_id`. One dual and one line are enough: `teamKpiCards`
+ * reads the event's kind and name and the entry's labels, nothing else.
+ */
+const DUAL_EVENT: ProgramEvent = {
+  id: 'e-dual',
+  programId: 'p-1',
+  kind: 'dual',
+  name: 'Rival State',
+  startsOn: '2026-03-20',
+  endsOn: '2026-03-20',
+  site: 'home',
+  surface: null,
+  host: null,
+  format: { bestOf: 3, adScoring: true },
+};
+const S1: EventEntry = {
+  id: 'entry-S1',
+  eventId: DUAL_EVENT.id,
+  discipline: 'singles',
+  slot: 'S1',
+  position: 0,
+  draw: null,
+  seed: null,
+  playerUserIds: [],
+  playerLabels: ['Ana Vasquez'],
+  opponentLabels: ['Rival One'],
+  opponentSchool: 'Rival State',
+  forfeit: null,
+  matches: [],
+};
+const ON_DUAL = new Map([[S1.id, { event: DUAL_EVENT, entry: S1 }]]);
+/** The season row as the schedule writes it: on S1 of the dual, ours in `player1`. */
+const onDual = (row: DbSeasonMatch): DbSeasonMatch => ({ ...row, event_entry_id: S1.id });
 
 /**
  * A claimed player's pre-claim match, on Team Home.
@@ -56,8 +93,45 @@ const ROSTER_IDS = rosterMatchIds(ROSTER_ROWS);
 const P1_WON: MatchScore = { player1: [6, 6], player2: [4, 3] };
 
 const NO_JOBS = new Map<string, MatchAnalysis>();
-const NO_STATS: never[] = [];
 const NO_SCHEDULE: ScheduleRow[] = [];
+
+/**
+ * One side's first-serve reading for a match, every other column unmeasured.
+ * The strip's cards are built from these, so which side's row a card reads is
+ * the attribution made visible: ours is 60, the opponent's is 20, and a card
+ * printing 20 under the program's name is the misattribution the guardrails
+ * exist for.
+ */
+function statFor(matchId: string, isPlayer1: boolean, firstServe: number): DbMatchStats {
+  return {
+    match_id: matchId,
+    is_player1: isPlayer1,
+    first_serve_pct: String(firstServe),
+    first_serve_won_pct: null,
+    second_serve_won_pct: null,
+    serve_rating: null,
+    first_return_won_pct: null,
+    second_return_won_pct: null,
+    break_points_saved_pct: null,
+    break_points_converted_pct: null,
+    service_games_won_pct: null,
+    return_games_won_pct: null,
+    total_points_won_pct: null,
+    aces: null,
+    double_faults: null,
+    winners: null,
+    unforced_errors: null,
+    avg_rally_length: null,
+  };
+}
+
+/** Both sides of one match: ours 60, theirs 20, on the columns the caller says. */
+function bothSides(matchId: string, oursIsPlayer1: boolean): DbMatchStats[] {
+  return [statFor(matchId, oursIsPlayer1, 60), statFor(matchId, !oursIsPlayer1, 20)];
+}
+
+const firstServe = ({ cards }: ReturnType<typeof teamKpiCards>) =>
+  cards.find((card) => card.key === 'first-serve-pct');
 
 /**
  * The list's row, carrying `ourId` in whichever column the caller names.
@@ -178,22 +252,22 @@ test.describe('a match carrying the pre-claim user id', () => {
     ]);
   });
 
-  test('it counts toward the sets-won tile', () => {
-    const tiles = teamKpis(
-      [seasonMatch({ ourId: ANA_USER })],
-      NO_JOBS,
-      NO_STATS,
-      NO_SCHEDULE,
-      ROSTER_IDS
+  test('it counts toward the first-serve card, on our side', () => {
+    const card = firstServe(
+      teamKpiCards(
+        [onDual(seasonMatch({ ourId: ANA_USER }))],
+        NO_JOBS,
+        bothSides('pre-claim', true),
+        ROSTER_IDS,
+        ON_DUAL
+      )
     );
 
-    const setsWon = tiles.find((tile) => tile.key === 'sets-won');
-    expect(setsWon).toBeDefined();
-    // Two sets of two: the figure exists at all only because the row was
-    // attributed. An unattributed row contributes to no sample, so the tile is
-    // absent rather than wrong — which is why this asserts the sample too.
-    expect(setsWon?.sample).toBe(1);
-    expect(setsWon?.value).toBe('100%');
+    // The card reads OUR row of the two: the figure exists at all only because
+    // the match was attributed, and it is 60 rather than 20 because it was
+    // attributed to the right side. An unattributed match contributes nothing.
+    expect(card?.sparkline).toEqual([60]);
+    expect(card?.value).toBe('60%');
   });
 
   test('the checklist receipt names it, our side first', () => {
@@ -254,14 +328,20 @@ test.describe('which side, not merely whose match', () => {
       [3, 6],
     ]);
 
-    const setsWon = teamKpis(
-      [seasonMatch({ ourId: ANA_USER, column: 'player2' })],
-      NO_JOBS,
-      NO_STATS,
-      NO_SCHEDULE,
-      ROSTER_IDS
-    ).find((tile) => tile.key === 'sets-won');
-    expect(setsWon?.value).toBe('0%');
+    // The strip has no player2 case to read: a match reaches a card only
+    // through a dual line, and the schedule writes our side as `player1`. A
+    // row like this one — ours in `player2`, off the schedule — is the
+    // list's business above, and contributes nothing to the average.
+    const card = firstServe(
+      teamKpiCards(
+        [seasonMatch({ ourId: ANA_USER, column: 'player2' })],
+        NO_JOBS,
+        bothSides('pre-claim', false),
+        ROSTER_IDS,
+        ON_DUAL
+      )
+    );
+    expect(card?.value).toBe('—');
   });
 
   test('the profile id keeps working on both sides', () => {
@@ -286,14 +366,17 @@ test.describe('staff seats keep working exactly as they do now', () => {
     const row = teamMatchRow(recentMatch({ ourId: COACH }), NO_JOBS, ROSTER_IDS);
     expect(row.won).toBe(true);
 
-    const setsWon = teamKpis(
-      [seasonMatch({ ourId: COACH })],
-      NO_JOBS,
-      NO_STATS,
-      NO_SCHEDULE,
-      ROSTER_IDS
-    ).find((tile) => tile.key === 'sets-won');
-    expect(setsWon?.sample).toBe(1);
+    // On the strip, the same upload counts once it is on a dual's lineup.
+    const card = firstServe(
+      teamKpiCards(
+        [onDual(seasonMatch({ ourId: COACH }))],
+        NO_JOBS,
+        bothSides('pre-claim', true),
+        ROSTER_IDS,
+        ON_DUAL
+      )
+    );
+    expect(card?.sparkline).toEqual([60]);
   });
 
   test('an unclaimed coach-managed player is still our side', () => {
@@ -312,14 +395,18 @@ test.describe('staff seats keep working exactly as they do now', () => {
     );
     expect(row.won).toBeNull();
 
-    expect(
-      teamKpis(
+    // The card exists — every spec gets one — but nothing fed it: stats for
+    // the match are on file and are NOT read, because no side is ours.
+    const card = firstServe(
+      teamKpiCards(
         [{ ...seasonMatch({ ourId: ANA_USER }), player1_id: 'stranger-1' }],
         NO_JOBS,
-        NO_STATS,
-        NO_SCHEDULE,
-        ROSTER_IDS
-      ).find((tile) => tile.key === 'sets-won')
-    ).toBeUndefined();
+        bothSides('pre-claim', true),
+        ROSTER_IDS,
+        ON_DUAL
+      )
+    );
+    expect(card?.value).toBe('—');
+    expect(card?.sparkline).toEqual([]);
   });
 });
