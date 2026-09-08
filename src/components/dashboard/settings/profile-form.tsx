@@ -13,6 +13,7 @@ import { SettingsSaveBar } from "@/components/dashboard/settings/settings-save-b
 import { saveProfile } from "@/components/dashboard/settings/actions";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { AdvSelect } from "@/components/ui/adv-select";
+import { DateField } from "@/components/ui/date-field";
 import { cn } from "@/lib/utils";
 
 /**
@@ -216,9 +217,9 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
           />
           <ProfileField
             label={FIELD_LABELS.birthdate}
-            type="date"
-            mono
+            isDate
             value={draft.birthdate}
+            missing={draft.birthdate.trim() === ""}
             onChange={(value) => set("birthdate", value)}
           />
           <ProfileField
@@ -332,6 +333,7 @@ function ProfileField({
   value,
   onChange,
   type = "text",
+  isDate = false,
   placeholder,
   hint,
   mono,
@@ -341,16 +343,37 @@ function ProfileField({
   value: string;
   onChange: (next: string) => void;
   type?: string;
+  /** Renders `DateField` instead of `SettingsUnderlineInput`. `type` is ignored. */
+  isDate?: boolean;
   placeholder?: string;
   hint?: string;
   mono?: boolean;
   /** Empty and counted by the strip above — mark it where the typing happens. */
   missing?: boolean;
 }) {
+  // Today, computed once per mount rather than per render — the calendar's
+  // disabled-future-dates state has no reason to shift while the form is
+  // open, and a value recomputed inline on every render would do exactly
+  // that across a midnight boundary.
+  const maxDate = useMemo(() => {
+    const now = new Date();
+    const year = String(now.getFullYear()).padStart(4, "0");
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }, []);
+
   return (
     <SettingsField
       label={label}
       hint={hint}
+      // `DateField`'s segments are not labelable elements — a wrapping
+      // `<label>` forwards every click on them to the first labelable
+      // descendant, the calendar `<button>`, so a segment can only be
+      // reached by Tab. `DateField` takes its own `label` prop and sets it
+      // as `aria-label`, so the accessible name survives dropping the
+      // `<label>` wrapper here.
+      labelless={isDate}
       marker={
         missing && (
           <span className="text-[10px] font-medium uppercase tracking-[1.2px] text-[var(--blue)]">
@@ -359,14 +382,35 @@ function ProfileField({
         )
       }
     >
-      <SettingsUnderlineInput
-        type={type}
-        value={value}
-        placeholder={placeholder}
-        mono={mono}
-        emphasis={missing}
-        onChange={(event) => onChange(event.target.value)}
-      />
+      {isDate ? (
+        // `DateField` draws its own on-focus emphasis (the underline family's
+        // focus-visible exception in focus.css), but has no `emphasis` prop
+        // for a static "this is missing" state the way `SettingsUnderlineInput`
+        // does. The `[role=group]` selector reaches the same wrapper that
+        // draws the hairline/rule, at higher specificity than its own
+        // `border-b` class, so the two branches stay visually identical
+        // without stacking a second indicator on top of the focus rule.
+        <DateField
+          label={label}
+          variant="underline"
+          value={value}
+          onChange={onChange}
+          max={maxDate}
+          className={cn(
+            missing &&
+              "[&_[role=group]]:border-b-2 [&_[role=group]]:border-[var(--blue)]"
+          )}
+        />
+      ) : (
+        <SettingsUnderlineInput
+          type={type}
+          value={value}
+          placeholder={placeholder}
+          mono={mono}
+          emphasis={missing}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      )}
     </SettingsField>
   );
 }

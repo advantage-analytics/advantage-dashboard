@@ -60,7 +60,7 @@ ready).
 - **notes:** Plan step 3. The mutual bounds are a behaviour addition — the native inputs allowed an inverted range. It is flagged in the design's open questions; if review struck it, drop those two props and change nothing else.
 
 ## T29 · Migrate the profile birthdate
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T27
 - **files:** `src/components/dashboard/settings/profile-form.tsx`
