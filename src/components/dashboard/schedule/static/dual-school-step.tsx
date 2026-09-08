@@ -321,7 +321,7 @@ export function DualSchoolStep({
        832px column, which measures 720px inside its gutters and is therefore
        the same width the artboard's own `max-w-[720px]` gave it. */
     <>
-          <div className="flex items-center gap-3 border-b-2 border-[var(--blue)] pb-[13px] pt-3">
+          <div className="flex items-center gap-3 border-b-2 border-[var(--border-medium)] pb-[13px] pt-3 transition-colors focus-within:border-[var(--blue)]">
             <Search
               size={17}
               strokeWidth={1.5}
@@ -330,12 +330,15 @@ export function DualSchoolStep({
             {/* Autofocused, which is how `2c` draws it: a field with the caret
                 already in it. The blue rule under the row is the drawn focus
                 state and stays put. */}
-            {/* The row IS the field — the blue rule under it is drawn as the
-                focus mark, so the input must not stack a second one inside it.
-                `outline-none` alone does not do that: `focus.css` sets a
-                `--focus-ring-field` box-shadow on every input, unlayered and
-                therefore unreachable by a Tailwind utility. The data attribute
-                is the opt-out that file documents for exactly this shape. */}
+            {/* The row IS the field, and the rule under it GOES blue on focus
+                — which is what earns this opt-out. `focus.css` is explicit that
+                looking like an underline is not enough: something has to change
+                at focus, or the field goes from one indicator to zero. A
+                standing blue rule (what this drew at first) was exactly that
+                failure. `outline-none` alone cannot opt out either — the
+                `--focus-ring-field` box-shadow is set unlayered and is
+                unreachable by a Tailwind utility, so the attribute is the
+                documented way. */}
             <input
               data-focus-ring="none"
               autoFocus

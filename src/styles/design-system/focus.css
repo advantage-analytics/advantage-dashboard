@@ -55,12 +55,21 @@
    the schedule lineup editor's `NameField`, and the match-edit dialog's
    `UnderlineField` children and `PlayerRow` name input.
 
-   Every native `<select>` in the product now reaches that attribute through
-   one component — `ui/adv-select.tsx` — which sets it from its `kind` rather
-   than accepting it as a prop: `underline` and `bare` opt out because the
-   rule under them thickens to 2px `--blue` on focus, and `boxed` keeps the
-   ring because its border does not change. That is the judgement below made
-   once instead of at five call sites, three of which had already drifted.
+   `ui/adv-select.tsx` is where that judgement is made once for the selects it
+   owns, rather than at each call site: it sets the attribute from its `kind`
+   rather than accepting it as a prop, so `underline` and `bare` opt out
+   because the rule under them thickens to 2px `--blue` on focus, and `boxed`
+   keeps the ring because its border does not change.
+
+   It is NOT yet every native `<select>` in the product. Seven still draw their
+   own — the two format/site cells in `schedule/static/dual-build-step.tsx`,
+   two more in `schedule/static/static-tournament-builder.tsx`, two in
+   `schedule/add-result-dialog.tsx` and one in `schedule/add-result-row.tsx`
+   (plus the deliberately `opacity-0` one in
+   `settings/settings-inline-select.tsx`, which is a different pattern). Those
+   all KEEP the ring, correctly: each sits under a hairline that never changes,
+   so the rule below applies to them unaltered. Migrating them is a live task,
+   not a finished one — do not read this paragraph as saying it is done.
 
    The opt-out is NOT safe merely because a field looks like an underline —
    only because something visibly changes on it at focus. `schedule/

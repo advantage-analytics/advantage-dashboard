@@ -26,6 +26,7 @@ import {
   type EventFormatValue,
 } from "@/lib/schedule/format";
 import { rosterIdsForLabels } from "@/lib/schedule/roster-match";
+import { courtIndex } from "@/lib/schedule/courts";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
 import type { EventSite, LineupLine } from "@/lib/schedule/types";
@@ -185,14 +186,6 @@ interface DualDraft {
 const SINGLES_SLOTS = ["S1", "S2", "S3", "S4", "S5", "S6"];
 const DOUBLES_SLOTS = ["D1", "D2", "D3"];
 
-/**
- * The same nine, as one list — the order a dual's courts are in, everywhere.
- *
- * This is what `program_event_entries.position` holds for a dual line: a
- * court's place in this list, which never moves. See `buildDualPayloadLines`
- * for what deriving it from anything else costs.
- */
-const DUAL_SLOT_ORDER = [...SINGLES_SLOTS, ...DOUBLES_SLOTS];
 
 /**
  * Six singles and three doubles, seeded from the ladder where there is one.
@@ -480,7 +473,7 @@ export function buildDualPayloadLines(
     // save is refused naming a court the coach never touched. A dual's court
     // order is fixed, so the position of a line is a fact about its slot and
     // nothing else.
-    position: DUAL_SLOT_ORDER.indexOf(row.line.slot),
+    position: courtIndex(row.line.slot),
     // A forfeited line carries nobody on either side. `setForfeited`
     // already emptied both, so these are empty anyway — stated here so
     // the write cannot drift from the row.
@@ -1214,15 +1207,28 @@ const LINE_GRID = "grid grid-cols-[34px_1fr_20px_1fr_70px] items-center gap-2.5"
  * The rule and hover wash under every row but the last — `2b` draws the last
  * row of each block without either. One function so the editable row and the
  * settled one below cannot drift into two different blocks.
+ *
+ * ── The row is where this lineup answers focus ──────────────────────────────
+ * The name and opponent cells inside a row are bare inputs that opt out of the
+ * field ring (`data-focus-ring="none"`), because a ring boxed inside one cell
+ * of a nine-row grid reads as a stray rectangle. That opt-out is only legal if
+ * something else visibly changes at focus, and nothing did: tabbing through
+ * the lineup moved nothing on screen, which is the exact failure `focus.css`
+ * exists to prevent. So the ROW takes it — its rule goes blue and it lifts the
+ * same wash hover uses.
+ *
+ * The last row keeps a transparent border rather than none, so colouring it on
+ * focus cannot shift the grid by a pixel.
  */
 function rowRule(last: boolean) {
-  return last
-    ? null
-    : [
-        "border-b border-[var(--border-hairline)]",
-        "transition-colors duration-[var(--duration-hover)]",
-        "hover:bg-[var(--surface-subtle)]",
-      ];
+  return [
+    last
+      ? "border-b border-transparent"
+      : "border-b border-[var(--border-hairline)]",
+    "transition-colors duration-[var(--duration-hover)]",
+    "hover:bg-[var(--surface-subtle)]",
+    "focus-within:border-[var(--blue)] focus-within:bg-[var(--surface-subtle)]",
+  ];
 }
 
 /**

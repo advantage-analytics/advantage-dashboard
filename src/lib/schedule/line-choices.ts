@@ -16,6 +16,7 @@ import type {
 } from "@/components/dashboard/matches/new-match-wizard/types";
 import type { EventEntry, ProgramEvent } from "@/lib/schedule/types";
 import { supportsVideo as entrySupportsVideo } from "@/lib/schedule/entry-state";
+import { compareEntryOrder } from "@/lib/schedule/courts";
 
 /**
  * The preset for one entry (and, optionally, one of its matches) within an
@@ -78,7 +79,9 @@ export function lineupChoices(
   programs: Map<string, { key: string; school: string }>
 ): LineChoice[] {
   return [...entries]
-    .sort((a, b) => a.position - b.position)
+    // By court on a dual, by `position` on a tournament — see `courts.ts` for
+    // why a dual is never ordered by the stored integer.
+    .sort(compareEntryOrder)
     .flatMap((entry): LineChoice[] => {
       const slot = entry.slot ?? entry.matches[0]?.round ?? `#${entry.position + 1}`;
       const playerName = entry.playerLabels.join(" / ") || null;

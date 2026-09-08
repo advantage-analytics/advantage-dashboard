@@ -110,6 +110,15 @@ export function LineupNamePicker({
   onOpenChange: (open: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
+  /**
+   * Has the coach stepped into the list on purpose?
+   *
+   * `opponent-popup.tsx`'s flag, for the identical gesture on the identical
+   * shape: a highlight the list put there is a suggestion, and only a highlight
+   * the coach moved to — or typed toward — is a choice. Reset whenever the
+   * list closes, so the next court starts unchosen.
+   */
+  const [walked, setWalked] = useState(false);
   /** What the server said when a write failed. Never invented locally. */
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -154,6 +163,16 @@ export function LineupNamePicker({
   // The escape row is always last and always present — "add your player" is
   // the answer to an empty list as much as to a full one.
   const count = suggestions.length + 1;
+
+  /**
+   * May Enter commit the highlighted row?
+   *
+   * Only once the coach has said something about it: typed enough for the
+   * ranking to mean anything, or walked the list themselves. The same two
+   * conditions `opponent-popup.tsx` uses, so one gesture cannot mean different
+   * things on the two halves of the same row.
+   */
+  const chosen = typed.length >= 2 || walked;
 
   /**
    * Is the caret in the segment the suggestions were ranked against?
@@ -270,6 +289,13 @@ export function LineupNamePicker({
     onOpenChange(open);
   }, [open, onOpenChange]);
 
+  // A closed list forgets that it was walked. Without this the flag survives
+  // for the life of the court: arrow into S3 once, and every later visit to S3
+  // has Enter armed on row 0 again.
+  useEffect(() => {
+    if (!open) setWalked(false);
+  }, [open]);
+
   // Bound only while open, torn down with it — the popup's pattern. A blur
   // handler cannot do this job: clicking a row blurs the field first.
   useEffect(() => {
@@ -316,12 +342,34 @@ export function LineupNamePicker({
           // ordinary Enter, and the arrows keep working so the coach can still
           // move the highlight before returning the caret.
           if (event.key === "Enter" && !caretInActiveSegment()) return;
+
+          // …and only on a highlight the coach actually chose. See `walked`:
+          // focusing an empty court opens the list with everyone in ladder
+          // order and the cursor on row 0, so a bare Enter — tabbing through
+          // the lineup, or confirming the court above — would write the #1
+          // ladder player onto a court nobody assigned, with a real roster id
+          // behind a real name. Nothing on screen would report it. Falls
+          // through to an ordinary Enter, which is what this field did before
+          // it had a list.
+          if (event.key === "Enter" && !chosen) return;
+          if (
+            event.key === "ArrowDown" ||
+            event.key === "ArrowUp" ||
+            event.key === "Home" ||
+            event.key === "End"
+          ) {
+            setWalked(true);
+          }
           onKeyDown(event);
         }}
         placeholder={discipline === "doubles" ? "Name / Name" : "Name"}
         aria-label={`Our player at ${slot}`}
         /* The row is the frame here — a ring inside a table cell boxes one
-           name of nine. Same opt-out the opponent popup's field takes. */
+           name of nine — and `LineRow`'s `rowRule` is what makes this legal:
+           the row's rule goes blue and it lifts a wash on `focus-within`, so
+           tabbing the lineup moves something on screen. Without that this
+           field would have no focus indicator at all, which is the one thing
+           `focus.css` says an opt-out may never cost. */
         data-focus-ring="none"
         className="w-full min-w-0 bg-transparent text-[13px] text-[var(--ink-900)] caret-[var(--blue)] outline-none placeholder:text-[var(--ink-300)]"
       />

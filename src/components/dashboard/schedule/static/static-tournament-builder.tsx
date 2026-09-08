@@ -526,15 +526,18 @@ export function TournamentWeekendStep({
         {/* The 2px blue rule is the artboard's. What `3c` draws filled in is
             this field's placeholder: an unnamed tournament is what the screen
             actually opens on, and `createTournament` refuses one. */}
-        <span className="mt-1 flex items-center border-b-2 border-[var(--blue)] pb-2 pt-1.5">
+        <span className="mt-1 flex items-center border-b-2 border-[var(--border-medium)] pb-2 pt-1.5 transition-colors focus-within:border-[var(--blue)]">
           <input
             autoFocus
             value={draft.name}
             onChange={(event) => onEdit({ name: event.target.value })}
             placeholder="Buckeye Fall Classic"
-            /* The span above carries a standing 2px blue rule — the one field
-               this step is asking for. A ring inset inside it is a second mark
-               on a field that is already spoken for. */
+            /* The span above turns its 2px rule blue on focus, and THAT is
+               the focus mark — so a ring inset inside it would be a second one.
+               The rule has to change, not merely be blue: drawn standing blue
+               (as it was) plus this opt-out left the field with no focus
+               indicator at all. `autoFocus` keeps the artboard's blue-on-arrival
+               look. */
             data-focus-ring="none"
             className="w-full bg-transparent text-[22px] font-light tracking-[-0.4px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-300)]"
           />

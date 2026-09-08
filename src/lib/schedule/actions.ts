@@ -657,12 +657,20 @@ export async function recordResult(
   /**
    * The opponent's name, back onto the entry the line is drawn from.
    *
-   * Run on BOTH the insert and the correction path. The event page draws a
-   * line's opponent from `program_event_entries.opponent_labels`, not from the
-   * match — so when this only ran on insert, correcting a misspelled opponent
-   * updated `matches.player2_name` and left the line still showing the old
-   * spelling. Two names for one player, and the row that looks authoritative
-   * is the stale one.
+   * The entry's copy is not what `line-row.tsx` prints when a match exists —
+   * that prefers `match.opponentLabels` — but it IS what `dualSeed` seeds the
+   * edit form from, and what a matchless row and `lineupChoices` fall back to.
+   * So a correction that fixed a misspelling on the match left the editor
+   * still offering the old spelling, ready to write it back on the next save.
+   *
+   * ── Only on a dual when correcting ──────────────────────────────────────
+   * A tournament entry has ONE `opponent_labels` column and one `recordResult`
+   * per round, so the column means "the last round filed" (stated at
+   * `tournament-detail.tsx`'s `SchoolsFaced`). Syncing on a correction breaks
+   * that: fix a typo in the R32 score after R16 is recorded, and the entry
+   * reverts to naming R32's opponent — a round-old school on the rail, from an
+   * edit that was only ever about a score. A dual line has exactly one round
+   * (its court), so it has no later round to clobber.
    */
   const syncEntryOpponent = async () => {
     if (input.opponentSchool === undefined && input.opponentLabels.length === 0) {
@@ -710,7 +718,9 @@ export async function recordResult(
       };
     }
 
-    await syncEntryOpponent();
+    // Duals only — see `syncEntryOpponent`. `input.round` is null exactly when
+    // the line's round is its own court, which is what a dual line is.
+    if (input.round === null) await syncEntryOpponent();
 
     revalidatePath("/dashboard/team/schedule");
     revalidatePath(`/dashboard/team/schedule/${entry.event_id}`);

@@ -1170,15 +1170,16 @@ function DetailsStepContentImpl({
           {namingOpponent ? (
             <Popover open={nameOpen} onOpenChange={setNameOpen}>
               <PopoverAnchor asChild>
-                <span className="flex w-[200px] shrink-0 items-center border-b-2 border-[var(--blue)] pb-1.5 pt-1">
+                <span className="flex w-[200px] shrink-0 items-center border-b-2 border-[var(--border-medium)] pb-1.5 pt-1 transition-colors focus-within:border-[var(--blue)]">
                   <input
                     autoFocus
                     value={nameTerm}
                     placeholder="Opponent"
                     aria-label="Opponent"
-                    // The span above carries a standing 2px blue rule while
-                    // this field is being named, so the ring would sit inset
-                    // inside a field that has already answered focus.
+                    // The span above turns its 2px rule blue on focus, which
+                    // is this field's focus mark — so the ring would sit inset
+                    // inside a field that has already answered. A STANDING blue
+                    // rule would not answer anything; see `focus.css`.
                     data-focus-ring="none"
                     autoComplete="off"
                     onFocus={() => setNameOpen(true)}

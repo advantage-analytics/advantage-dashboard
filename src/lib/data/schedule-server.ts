@@ -17,6 +17,7 @@ import {
   lineCoverageFrom,
 } from "@/lib/schedule/entry-state";
 import { roundRank } from "@/lib/schedule/format";
+import { compareEntryOrder } from "@/lib/schedule/courts";
 import type {
   EntryMatch,
   EventDetail,
@@ -216,6 +217,15 @@ async function readSchedule(
     const list = entriesByEvent.get(row.event_id);
     if (list) list.push(entry);
     else entriesByEvent.set(row.event_id, [entry]);
+  }
+
+  // The `.order("position")` above is the query's own ordering and is not
+  // enough on its own: a dual's court order is its slot, and `position` is a
+  // stored integer that can disagree with it (see `courts.ts`). Sorting here
+  // means every surface that reads these lists — the event page, the rail, the
+  // pinned bar — inherits one answer instead of each re-deciding.
+  for (const list of entriesByEvent.values()) {
+    list.sort(compareEntryOrder);
   }
 
   return { events, entriesByEvent };
