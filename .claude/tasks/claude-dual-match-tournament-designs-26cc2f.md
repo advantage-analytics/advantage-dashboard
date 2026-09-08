@@ -98,7 +98,7 @@ ready).
 - **notes:** Plan step 6. The focus pairing is not optional: this cell's hairline never changed, which is why its inputs kept the neutral ring today. Swapping in a control whose segments opt out without teaching the cell to answer focus takes the field from one indicator to zero.
 
 ## T32 · Migrate the upload wizard's date cell
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T27
 - **files:** `src/components/dashboard/matches/new-match-wizard/DetailsStepContent.tsx`, `src/components/dashboard/matches/new-match-wizard/useWizardKeys.ts`, `tests/wizard-keys-form-control.spec.ts`

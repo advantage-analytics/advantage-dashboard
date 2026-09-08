@@ -35,6 +35,10 @@ test.describe('isFormControl', () => {
     expect(isFormControl(el('BUTTON', { 'aria-haspopup': 'menu', 'aria-expanded': 'false' }))).toBe(true);
   });
 
+  test('a date segment owns its Enter — DateField renders each as a span with role="spinbutton"', () => {
+    expect(isFormControl(el('SPAN', { role: 'spinbutton', tabindex: '0' }))).toBe(true);
+  });
+
   test('a plain button, link or nothing does not', () => {
     expect(isFormControl(el('BUTTON'))).toBe(false);
     expect(isFormControl(el('A', { href: '/x' }))).toBe(false);

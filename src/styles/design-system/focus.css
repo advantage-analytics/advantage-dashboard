@@ -54,9 +54,11 @@
    reason for being safe: auth's `form-field.tsx`, `SettingsUnderlineInput`,
    the schedule lineup editor's `NameField`, the match-edit dialog's
    `UnderlineField` children and `PlayerRow` name input, the dual
-   builder's Date cell, and the tournament builder's four-up row (its two
+   builder's Date cell, the tournament builder's four-up row (its two
    `DateField` cells and the two `FieldSelect`s beside them) — each of whose
-   `FieldCell` rows answers `focus-within` with the same 2px blue rule.
+   `FieldCell` rows answers `focus-within` with the same 2px blue rule — and
+   the upload wizard's time input beside its `DateField`, whose own rule goes
+   2px blue on `:focus`.
 
    `ui/adv-select.tsx` is where that judgement is made once for the selects it
    owns, rather than at each call site: it sets the attribute from its `kind`

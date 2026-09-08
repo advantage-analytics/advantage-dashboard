@@ -45,6 +45,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import {
   Calendar,
@@ -61,6 +62,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { DateField } from "@/components/ui/date-field";
 import { StatePill } from "@/components/ui/state-pill";
 import { cn } from "@/lib/utils";
 import { getInitials } from "@/lib/data/match-utils";
@@ -140,25 +142,25 @@ const ROUND_OPTIONS: readonly { value: string; label: string; short: string }[] 
   { value: "Finals", label: "Finals", short: "F" },
 ];
 
-/** "Sep 5, 2026" or "Sep 5, 2026 · 2:04 PM" from the form's date and time. */
-function formatDateRead(date: string, time: string): string {
-  if (!date) return "";
-  const [y, m, d] = date.slice(0, 10).split("-").map(Number);
-  if (!y || !m || !d) return date;
-  const day = new Date(y, m - 1, d).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-  if (!time) return day;
-  const [hh, mm] = time.split(":").map(Number);
-  if (!Number.isFinite(hh)) return day;
-  const clock = new Date(y, m - 1, d, hh, mm || 0).toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  return `${day} · ${clock}`;
+/**
+ * Today as `YYYY-MM-DD` in the browser's own calendar — the local day, not
+ * the UTC one `toISOString()` would give, which is tomorrow for anyone west
+ * of Greenwich after their evening begins. Same shape `useUploadMatchWizard`
+ * defaults the date with.
+ */
+function localIsoToday(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
+
+// `useSyncExternalStore` needs a subscription; the clock has nothing to push,
+// so this one never fires. Both are module-level so their identity is stable
+// across renders.
+const subscribeToNothing = () => () => {};
+const serverHasNoToday = () => undefined;
 
 /** "Sat Sep 5" for the offer strip. */
 function formatDayShort(date: string): string {
@@ -241,23 +243,32 @@ function NewRing() {
 // ---------------------------------------------------------------------------
 // The underline cell vocabulary
 
-/** Eyebrow over a 13px value on a hairline — the Context grid's cell. */
+/**
+ * Eyebrow over a 13px value on a hairline — the Context grid's cell.
+ *
+ * `tag` is the value's provenance ("from the file"), set at the right of the
+ * eyebrow row. Most cells carry it in the value row instead; the Date cell
+ * cannot, because its row is already two controls wide.
+ */
 function Cell({
   label,
   required = false,
+  tag,
   children,
   className,
 }: {
   label: string;
   required?: boolean;
+  tag?: string;
   children: React.ReactNode;
   className?: string;
 }) {
   return (
     <div className={cn("flex flex-col gap-2", className)}>
-      <span className="inline-flex items-center gap-1">
+      <span className="flex items-center gap-1">
         <span className="eyebrow">{label}</span>
         {required && <Required />}
+        {tag && <span className="text-micro ml-auto shrink-0 whitespace-nowrap">{tag}</span>}
       </span>
       {children}
     </div>
@@ -388,7 +399,22 @@ function ReadCell({
   );
 }
 
-/** The date, read back in mono with its provenance; a popover edits it. */
+/**
+ * The date and the time, side by side under one label.
+ *
+ * `DateField` and a native `<input type="time">` sit directly in the cell —
+ * no popover. This was a Radix `Popover` reading the pair back as one line
+ * and editing both inside a panel; `DateField` carries react-aria's own
+ * popover for its calendar, and nesting that inside Radix's would have put
+ * two focus scopes and two dismiss layers on one control, where the second
+ * Escape does the wrong thing. The time stays native: it is restyled to the
+ * date field's 34px, 13px `tabular-nums` so the row reads level, but a time
+ * primitive is a separate decision.
+ *
+ * The time's rule goes 2px blue on focus exactly as the date field's does, so
+ * it takes the same `data-focus-ring="none"` — the change in the rule is its
+ * focus indicator (`styles/design-system/focus.css`).
+ */
 function DateCell({
   date,
   time,
@@ -400,60 +426,37 @@ function DateCell({
   tag?: string;
   onChange: (date: string, time: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const inputCls = `h-8 w-full rounded-[var(--radius-button)] border border-[var(--border-field)] bg-white px-2 text-[13px] text-[var(--ink-900)] outline-none tabular-nums ${focusRingCls}`;
+  // Today is the latest pickable day — a match is uploaded after it was
+  // played. The server renders this step too, and its clock (UTC, possibly a
+  // different day) would disagree with the browser's — a hydration mismatch
+  // on the field's invalid state. So the bound is a client-only read: the
+  // server snapshot is "no bound", and React swaps in the browser's day on
+  // the first client render, before anyone can type.
+  const today = useSyncExternalStore(subscribeToNothing, localIsoToday, serverHasNoToday);
+
   return (
-    <Cell label="Date" required>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            className={cn(
-              UNDERLINE_CLS,
-              "cursor-pointer",
-              open ? "border-b-2 border-[var(--blue)] pb-[7px]" : "border-[var(--border-hairline)]",
-              focusRingCls
-            )}
-          >
-            <span
-              className={cn(
-                "mono tabular min-w-0 flex-1 truncate text-[12px]",
-                date ? "text-[var(--ink-900)]" : "text-[var(--ink-400)]"
-              )}
-            >
-              {date ? formatDateRead(date, time) : "Pick a day"}
-            </span>
-            {tag && <span className="text-micro shrink-0 whitespace-nowrap">{tag}</span>}
-          </button>
-        </PopoverTrigger>
-        <PopoverContent align="start" sideOffset={6} className={cn(floatMenuCls, "w-[240px] gap-2 p-3")}>
-          <label className="flex flex-col gap-1">
-            <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
-              Date
-            </span>
-            <input
-              type="date"
-              aria-label="Date"
-              max={new Date().toISOString().slice(0, 10)}
-              value={date}
-              onChange={(e) => onChange(e.target.value, time)}
-              className={inputCls}
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="eyebrow-sm" style={{ color: "var(--ink-400)" }}>
-              Time
-            </span>
-            <input
-              type="time"
-              aria-label="Time"
-              value={time}
-              onChange={(e) => onChange(date, e.target.value)}
-              className={inputCls}
-            />
-          </label>
-        </PopoverContent>
-      </Popover>
+    <Cell label="Date" required tag={tag}>
+      <div className="flex items-center gap-3">
+        <DateField
+          label="Date"
+          variant="underline"
+          value={date}
+          max={today}
+          onChange={(next) => onChange(next, time)}
+          className="min-w-0 flex-1"
+        />
+        <input
+          type="time"
+          aria-label="Time"
+          value={time}
+          onChange={(e) => onChange(date, e.target.value)}
+          data-focus-ring="none"
+          className={cn(
+            "h-[34px] shrink-0 border-b border-[var(--border-field)] bg-transparent px-0 text-[13px] tabular-nums text-[var(--ink-900)] outline-none transition-colors duration-150",
+            "focus:border-b-2 focus:border-[var(--blue)]"
+          )}
+        />
+      </div>
     </Cell>
   );
 }

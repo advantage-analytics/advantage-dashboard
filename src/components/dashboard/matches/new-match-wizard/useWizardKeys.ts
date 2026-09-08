@@ -26,6 +26,12 @@ export function isFormControl(el: EventTarget | null): boolean {
     tag === "SELECT" ||
     node.isContentEditable ||
     node.getAttribute("role") === "combobox" ||
+    // A react-aria `DateSegment` — `DateField`'s month, day and year — is a
+    // `<span role="spinbutton">`, not an input, so it matched nothing above and
+    // a plain Enter typed into the middle of a date advanced the whole step.
+    // It owns its keyboard the way a field does; Enter inside it is not a
+    // submit.
+    node.getAttribute("role") === "spinbutton" ||
     // A closed popup trigger — `MenuSelect`'s button, or anything else that
     // declares `aria-haspopup` — owns its Enter the way a native `<select>`
     // does: Enter opens it. Without this the dual builder's Site cell
@@ -72,9 +78,15 @@ export function useWizardKeys({
       // chord lands on submit instead of silently no-op'ing.
       const root = contentRef.current;
       if (!root) return;
+      // `tabindex="-1"` is excluded on every kind, not only the bare
+      // `[tabindex]` clause: it is how a native control takes itself out of
+      // the tab order, and this walk is the tab order. `DateField` renders a
+      // visually-hidden `<input type="date" tabindex="-1">` for form
+      // submission after its calendar button; without this the chord landed
+      // there, on nothing visible, and needed a second press to move on.
       const list = Array.from(
         root.querySelectorAll<HTMLElement>(
-          'a, button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          'a:not([tabindex="-1"]), button:not([disabled]):not([tabindex="-1"]), input:not([disabled]):not([tabindex="-1"]), select:not([disabled]):not([tabindex="-1"]), textarea:not([disabled]):not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])'
         )
       ).filter((el) => el.offsetParent !== null || el === document.activeElement);
       const idx = list.indexOf(document.activeElement as HTMLElement);
