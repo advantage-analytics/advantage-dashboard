@@ -1,16 +1,34 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { CircleCheck, Plus, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useListboxNav } from "@/hooks/use-listbox-nav";
 import { normalizedPersonName } from "@/lib/data/person-name";
 import { splitNames } from "@/lib/schedule/format";
-import type { OpponentRosterCandidate } from "@/lib/schedule/actions";
+import {
+  saveOpponentPlayer,
+  type OpponentRosterCandidate,
+} from "@/lib/schedule/actions";
 
-/** How many close names the popup offers — `opponent-name-cell.tsx`'s number.
- *  More than a couple stops being "is this the same person?" and becomes a
- *  search result page. `2d` draws one. */
-const MAX_SUGGESTIONS = 3;
+/**
+ * How many roster rows the list offers at once.
+ *
+ * `2d` draws three, and three was right while this was only a
+ * near-duplicate warning — "is this the same person?", not a search result
+ * page. It is a roster PICKER now: it opens on the opponent's saved names
+ * before a character is typed, and a real collegiate roster runs eight to
+ * twelve deep, so a cap of three hid most of the pool and made the control
+ * look broken on the schools that have one. The list scrolls past this
+ * number rather than growing the popup, and the keyboard walks the whole of
+ * it — see `listRef` for the scroll-into-view that costs.
+ */
+const MAX_SUGGESTIONS = 8;
+
+/** `dual-build-step.tsx`'s own spelling of a directory school's key. The pool
+ *  is the only thing that parses it, and only to recover the program key the
+ *  roster write needs — see `OpponentPool.programKey`. */
+const PROGRAM_KEY_PREFIX = "program:";
 
 /**
  * Module-private, and that is the whole mechanism: no other file can write
@@ -56,6 +74,19 @@ export interface OpponentPool {
   /** The school's own name, in full — every string the popup prints reads it
    *  from here, so the toast and the prose cannot name different schools. */
   readonly schoolName: string;
+  /**
+   * `programs.program_key` for a directory school, null for free text — the
+   * argument `saveOpponentPlayer` takes, and the popup's answer to "is there a
+   * program to save an identity TO?".
+   *
+   * **Derived from `key`, never passed in.** A second constructor argument
+   * would be a second thing a call site could transpose, which is the exact
+   * failure this whole interface exists to make unwriteable: a name saved
+   * against the wrong program's key can attach to a real, different person
+   * there. `key` already IS the program key, prefixed, so recovering it here
+   * cannot disagree with the school the popup is drawing.
+   */
+  readonly programKey: string | null;
   /** The saved names to dedupe against — this school's, or none. */
   readonly candidates: readonly OpponentRosterCandidate[];
 }
@@ -81,6 +112,12 @@ export function opponentPoolFor(
     [POOL]: true,
     key,
     schoolName,
+    // `slice`, not a split on ":" — a program key is opaque and a colon in one
+    // must not truncate it. A `text:` key yields null, which is the popup's
+    // "no program to save to" and the reason free text stays free text.
+    programKey: key.startsWith(PROGRAM_KEY_PREFIX)
+      ? key.slice(PROGRAM_KEY_PREFIX.length)
+      : null,
     candidates: fetched?.forKey === key ? fetched.candidates : [],
   };
 }
@@ -115,14 +152,32 @@ export function opponentPoolFor(
  * rail offers one — remounts every popup and no draft, suggestion or pending
  * confirmation survives it.
  *
- * ── Reading, as of the schedule re-wiring ──────────────────────────────────
+ * ── Reading and writing, as of the picker-parity pass ──────────────────────
  * `pool.candidates` is the opponent's real pooled roster, fetched by
- * `dual-build-step.tsx` through `opponentRosterForDual()`. Nothing here still
- * writes: the confirmation is a statement the design makes rather than a
- * server's answer — see `saveNote` for what that costs — and the opposing
- * names are contributed to that pool by `createDual` at submit, best-effort,
- * once the lines are safely written. `opponent-name-cell.tsx` is the dormant
- * cell that drew these same two states; this component imports none of it.
+ * `dual-build-step.tsx` through `opponentRosterForDual()`, and this is a
+ * roster PICKER over it rather than a near-duplicate warning: with names
+ * saved, opening the field lists them, and typing filters. A school with no
+ * pooled roster — a club side typed past the directory, or a program nobody
+ * has entered yet — gets no list at all and the field alone, which is the
+ * free-text fallback and the only behaviour those schools ever had.
+ *
+ * "Save as a different player" now calls `saveOpponentPlayer` — the write
+ * `opponent-name-cell.tsx` did per-pick, left uncalled since the re-wiring
+ * for want of a popup that earned a real confirmation. `createDual`'s
+ * best-effort loop at submit still contributes every opposing name; this is
+ * the same converging RPC run earlier, so the coach is told the truth while
+ * the answer is still on screen rather than after the form is gone.
+ *
+ * ── The confirmation says only what happened ───────────────────────────────
+ * Three sentences, because there are three outcomes, and `2e` drew one of
+ * them for all three (see `SAVED_NOTE`). Picking a name already on the pool
+ * saves nothing and says so; a contribution the server confirms gets `2e`'s
+ * own words; a contribution refused — and every arm of
+ * `contribute_opponent_player` can legitimately refuse, most often "that
+ * program manages its own roster" — must not claim a roster the coach cannot
+ * see. `saveOpponentPlayer` swallows failure and answers `{ saved: false }`,
+ * so a refusal and an outage are the same sentence here, which is the honest
+ * one either way.
  *
  * ── Where the exact-vs-fuzzy line falls ────────────────────────────────────
  * The dormant cell's rule, unchanged, because the design draws its result:
@@ -139,9 +194,19 @@ export function opponentPoolFor(
  * write: Escape and a click outside close and revert, and the line keeps what
  * it had. That is a deliberate departure from the dormant cell, which commits
  * on blur — on a screen whose failure mode is a name landing on a line nobody
- * meant, a third implicit write path is the wrong side to err on. The arrow
- * keys move the highlight, which is the dormant cell's own behaviour and the
- * only keyboard route to the second card.
+ * meant, a third implicit write path is the wrong side to err on.
+ *
+ * ── The keyboard is `useListboxNav`, not a fourth hand-rolled copy ─────────
+ * Arrows, Home/End, Enter and Escape come from `hooks/use-listbox-nav.ts`,
+ * the same hook `team/invite-target-picker.tsx` walks its options with, and
+ * the ARIA is that picker's shape: the field is the `combobox` and points at
+ * the active row through `aria-activedescendant`, the rows are real
+ * `option`s inside a real `listbox`. It was `role="dialog"` over plain
+ * buttons, which announced a list of buttons rather than a choice with a
+ * current one — and its own Arrow/Enter/Escape handler, which is how two
+ * pickers on one screen drift on what a key does. The one behaviour the hook
+ * does not cover is Enter on a field with NO list under it: that is the
+ * free-text fallback, handled beside the hook rather than inside it.
  */
 export function OpponentPopup({
   value,
@@ -175,17 +240,33 @@ export function OpponentPopup({
   // and no rule the design states derives one — "Fairmont" for "Fairmont A&M"
   // is wrong — so the live popup writes the full name in both places, which is
   // what the dormant cell does too.
-  const { schoolName, candidates } = pool;
+  const { schoolName, candidates, programKey } = pool;
 
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
-  const [highlight, setHighlight] = useState(0);
-  /** `2e`'s card text, or null. Set only by the two save paths. */
+  /** `2e`'s card text, or null. Set only by the paths that reach the line. */
   const [confirmation, setConfirmation] = useState<string | null>(null);
 
   const popupRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  /**
+   * Which save's answer is still the current one.
+   *
+   * `saveOpponentPlayer` is a round trip, and its answer picks the
+   * confirmation sentence. Between the request and the reply the coach can
+   * reopen the field and resolve a different name — so a reply is allowed to
+   * write a confirmation only while the token it was issued under is still
+   * the latest. Every path that starts or supersedes a save bumps it.
+   */
+  const saveToken = useRef(0);
+
+  // Namespaces the option ids. Nine lines can each hold a popup, and two lists
+  // sharing an id space would point `aria-activedescendant` at another row's
+  // option — the accessible spelling of this file's one forbidden mistake.
+  const listboxId = `opponent-options-${useId()}`;
 
   // The segment being typed — for doubles, the text after the last "/", so a
   // pair field dedupes the partner under the caret rather than the whole pair.
@@ -193,38 +274,109 @@ export function OpponentPopup({
   const activeSegment = segments[segments.length - 1].trim();
   const typed = normalizedPersonName(activeSegment);
 
-  // Loose ON PURPOSE, and only ever for the suggestion — see the header.
-  // Exact hits first, then prefixes, then substrings, so the strongest claim
-  // to "this is the same person" carries the ↵.
-  const suggestions =
-    open && typed.length >= 2
-      ? candidates
-          .map((candidate) => {
-            const saved = normalizedPersonName(candidate.name);
-            const rank =
-              saved === typed
-                ? 0
-                : saved.startsWith(typed)
-                  ? 1
-                  : saved.includes(typed)
-                    ? 2
-                    : -1;
-            return { candidate, rank };
-          })
-          .filter((entry) => entry.rank >= 0)
-          .sort((a, b) => a.rank - b.rank)
-          .slice(0, MAX_SUGGESTIONS)
-          .map((entry) => entry.candidate)
-      : [];
+  /**
+   * Is there a pooled roster to pick from at all?
+   *
+   * The whole picker hangs off this. No saved names means no list, no "save
+   * as a different player" card — "different" from nothing is not a choice —
+   * and no roster write: the field is the field, and Enter commits the typed
+   * text. That is the fallback a club side typed past the directory has
+   * always had, and it is unchanged.
+   */
+  const hasRoster = candidates.length > 0;
 
-  // Rows the keyboard walks: the saved names, then "save as a different
-  // player". The whole list exists only while a close name does — with no
-  // near-duplicate to warn about, `2d`'s body has nothing to say and the
-  // popup is the field alone.
-  const rowCount = suggestions.length > 0 ? suggestions.length + 1 : 0;
-  // Clamped on read: a keystroke can remove the row the highlight is parked
-  // on, and Enter must never act on a row that is not there.
-  const highlighted = Math.min(highlight, Math.max(rowCount - 1, 0));
+  /**
+   * The rows, in the picker's two modes.
+   *
+   * Under two characters it is a browse — the pool in its own order, which
+   * `opponentRosterForDual` already sorted by lineup spot, so "#1" is the row
+   * a coach reaches for first. From two characters it is a filter, and the
+   * ranking is the dormant cell's: exact hits, then prefixes, then
+   * substrings, so the strongest claim to "this is the same person" carries
+   * the ↵. Loose ON PURPOSE, and only ever for the suggestion — what gets
+   * written is the roster's own spelling, verbatim. See the header.
+   */
+  const options = ((): readonly OpponentRosterCandidate[] => {
+    if (!open || !hasRoster) return [];
+    if (typed.length < 2) return candidates.slice(0, MAX_SUGGESTIONS);
+    return candidates
+      .map((candidate) => {
+        const saved = normalizedPersonName(candidate.name);
+        const rank =
+          saved === typed
+            ? 0
+            : saved.startsWith(typed)
+              ? 1
+              : saved.includes(typed)
+                ? 2
+                : -1;
+        return { candidate, rank };
+      })
+      .filter((entry) => entry.rank >= 0)
+      .sort((a, b) => a.rank - b.rank)
+      .slice(0, MAX_SUGGESTIONS)
+      .map((entry) => entry.candidate);
+  })();
+
+  // The last row, and only once there is typed text to name on it. Browsing
+  // the pool with an empty field has no "different player" to offer yet.
+  const showNewCard = hasRoster && typed.length >= 2;
+  const rowCount = options.length + (showNewCard ? 1 : 0);
+
+  /**
+   * Has the coach actually put the cursor on a row?
+   *
+   * Browse mode draws a list before a character is typed, and a listbox
+   * always has a current option — so row zero is highlighted from the moment
+   * the field opens. Enter on an untouched empty field would then commit the
+   * opponent's #1 player onto a line nobody chose, which is the one thing
+   * this component's header forbids. So a highlight the coach did not put
+   * there does not answer Enter: only arrowing, Home/End or hovering makes
+   * the selection theirs, and typing two characters makes it a match rather
+   * than a default (there the top row IS the answer, which is `2d`'s rule).
+   */
+  const [walked, setWalked] = useState(false);
+
+  const { activeIndex, setActiveIndex, optionId, onKeyDown: walkList } =
+    useListboxNav({
+      count: rowCount,
+      open,
+      onSelect: (index) => activateRow(index),
+      // Escape reverts. The line keeps what it had — see the header.
+      onDismiss: () => setOpen(false),
+      idPrefix: listboxId,
+    });
+
+  /**
+   * Park the cursor back on the first row whenever the rows themselves change.
+   *
+   * The hook resets on a change of COUNT, which is not enough here: a
+   * keystroke can rewrite the list to a different set of names of the same
+   * length, and a cursor left in place would then sit on somebody the coach
+   * never looked at while Enter is the fastest way to commit. Compared by
+   * identity, not length, so the reset fires on the reorder too.
+   *
+   * Adjusted during render for the hook's own stated reason — a setState in
+   * the render body re-runs the component before it paints, where an effect
+   * would paint once with the stale cursor and correct it a frame later.
+   */
+  const optionsKey = options.map((candidate) => candidate.playerId).join(",");
+  const [lastOptionsKey, setLastOptionsKey] = useState(optionsKey);
+  if (optionsKey !== lastOptionsKey) {
+    setLastOptionsKey(optionsKey);
+    setActiveIndex(0);
+    setWalked(false);
+  }
+
+  // The hook never touches the DOM, by design, so keeping the active row
+  // inside the scroller is the caller's job — and this list scrolls now that
+  // it holds a whole roster rather than three near-duplicates.
+  useEffect(() => {
+    if (!open) return;
+    listRef.current
+      ?.querySelector('[data-active="true"]')
+      ?.scrollIntoView({ block: "nearest" });
+  }, [open, activeIndex, optionsKey]);
 
   const active = open || confirmation !== null;
   useEffect(() => {
@@ -261,7 +413,11 @@ export function OpponentPopup({
     // to change it must not throw the coach's own answer away.
     setDraft(value.trim() === "" ? draftName : value);
     setConfirmation(null);
-    setHighlight(0);
+    setActiveIndex(0);
+    setWalked(false);
+    // Whatever save is still in flight belongs to the answer the coach has
+    // just moved on from; its reply must not toast over this visit.
+    saveToken.current += 1;
     setOpen(true);
     queueMicrotask(() => inputRef.current?.focus());
   }
@@ -271,27 +427,59 @@ export function OpponentPopup({
    * off the same school object the header and the rail's tick read, so the
    * name in the toast and the name on the screen cannot drift.
    *
-   * **Reproduced, not corrected.** `2e`'s own caption says "picking an
-   * existing name (or saving a new one) … toasts the save", and `2e` draws the
-   * line resolved to "Alexis Castellano" — the name the roster ALREADY held.
-   * Picking a saved name saves nothing, so on that path the sentence is false;
-   * the dormant cell splits the two ("On <school>'s saved roster" for a pick,
-   * "Saved to <school> roster" for a real write, and only after the server
-   * says a row exists). The design collapses them and this reproduces the
-   * design.
+   * It is now drawn only where it is TRUE: after `saveOpponentPlayer` reports
+   * that a row exists on that roster. `2e`'s own caption collapses three
+   * outcomes into this one sentence — "picking an existing name (or saving a
+   * new one) … toasts the save" — over a frame whose line resolves to "Alexis
+   * Castellano", a name the roster already held and that no save created.
+   * That collapse is the design's, and reproducing it was defensible while
+   * nothing wrote at all; it is not defensible now that something does. The
+   * split is the dormant cell's own, restored.
    */
-  const saveNote = `Saved to ${schoolName} roster`;
+  const savedNote = `Saved to ${schoolName} roster`;
+  /** A name the pool already holds. Nothing was written, and nothing claims
+   *  otherwise — `opponent-name-cell.tsx`'s wording for the same outcome. */
+  const pickedNote = `On ${schoolName}'s saved roster`;
+  /** The write did not happen: no program to save to, or the RPC refused. The
+   *  line has the name either way, and that is all this says. */
+  const lineupNote = "Added to this lineup";
 
   /**
-   * The one write path, and the only thing that reaches the line.
+   * Reach the line, and close.
    *
    * Boundary-normalized to the " / " convention `splitNames` keeps, so a pair
-   * reads downstream exactly as every other lineup label does.
+   * reads downstream exactly as every other lineup label does. It says
+   * nothing on its own — the caller knows which of the three sentences it
+   * earned, and this cannot.
    */
-  function save(next: string) {
+  function commit(next: string) {
     onCommit(splitNames(next).join(" / "));
     setOpen(false);
-    setConfirmation(saveNote);
+    saveToken.current += 1;
+  }
+
+  /**
+   * Contribute the typed identity to the opponent's pool, then say what
+   * actually happened.
+   *
+   * Fired AFTER the line is committed, never before: `saveOpponentPlayer`
+   * swallows every failure by design because an identity is an enrichment and
+   * never a precondition, so there is nothing here worth making the coach
+   * wait on. The reply only picks a sentence.
+   */
+  async function contributeAndConfirm(name: string) {
+    const token = (saveToken.current += 1);
+    if (!programKey) {
+      setConfirmation(lineupNote);
+      return;
+    }
+    const { saved } = await saveOpponentPlayer({
+      opponentProgramKey: programKey,
+      name,
+    });
+    // The coach has resolved something else since; that visit owns the card.
+    if (token !== saveToken.current) return;
+    setConfirmation(saved ? savedNote : lineupNote);
   }
 
   /**
@@ -307,55 +495,101 @@ export function OpponentPopup({
     const parts = [...prior, candidate.name];
     if (discipline === "doubles" && parts.length < 2) {
       setDraft(`${parts.join(" / ")} / `);
-      setHighlight(0);
+      setActiveIndex(0);
       inputRef.current?.focus();
       return;
     }
-    save(parts.join(" / "));
+    commit(parts.join(" / "));
+    setConfirmation(pickedNote);
   }
 
-  /** Keep the typed text — it names a DIFFERENT person than the close match. */
+  /**
+   * Keep the typed text — it names a DIFFERENT person than the close match —
+   * and contribute that person to the pool, which is what the card offers.
+   *
+   * The segment under the caret is what gets contributed, not the whole
+   * draft: on a doubles line the partner is a second person and gets its own
+   * pass through here. Same shape as `pickSaved`, so the two cards behave
+   * alike on a pair.
+   */
   function saveAsNew() {
-    save(draft);
+    const prior = segments
+      .slice(0, -1)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const name = activeSegment.trim();
+    if (name === "") return;
+    const parts = [...prior, name];
+    if (discipline === "doubles" && parts.length < 2) {
+      setDraft(`${parts.join(" / ")} / `);
+      setActiveIndex(0);
+      inputRef.current?.focus();
+      // Written now, but silently: the popup is still open for the partner,
+      // and a confirmation card belongs to a resolved line.
+      void contributeAndConfirmSilently(name);
+      return;
+    }
+    commit(parts.join(" / "));
+    void contributeAndConfirm(name);
+  }
+
+  /** The partner-still-to-type case: contribute, claim nothing. */
+  async function contributeAndConfirmSilently(name: string) {
+    if (!programKey) return;
+    await saveOpponentPlayer({ opponentProgramKey: programKey, name });
   }
 
   function activateRow(index: number) {
-    if (index < suggestions.length) pickSaved(suggestions[index]);
+    if (index < options.length) pickSaved(options[index]);
     else saveAsNew();
   }
 
   function onKeyDown(event: React.KeyboardEvent) {
+    // With rows under the field the hook owns every key it handles, including
+    // Escape — one handler, so Arrow/Home/End/Enter/Escape cannot mean one
+    // thing here and another in the roster's picker.
+    if (rowCount > 0) {
+      // …except Enter on a highlight the coach never chose. See `walked`:
+      // this falls through to the free-text handling below, which is what
+      // Enter on this field meant before there was ever a list on it.
+      const chosen = typed.length >= 2 || walked;
+      if (!(event.key === "Enter" && !chosen)) {
+        if (
+          event.key === "ArrowDown" ||
+          event.key === "ArrowUp" ||
+          event.key === "Home" ||
+          event.key === "End"
+        ) {
+          setWalked(true);
+        }
+        walkList(event);
+        return;
+      }
+    }
+
+    // No list, or a list the coach has not stepped into: the free-text
+    // fallback, which the hook deliberately has no opinion about.
     if (event.key === "Escape") {
       event.preventDefault();
       setOpen(false); // revert — the line keeps what it had
       return;
     }
-    if (event.key === "ArrowDown" && rowCount > 0) {
-      event.preventDefault();
-      setHighlight((was) => Math.min(was + 1, rowCount - 1));
-      return;
-    }
-    if (event.key === "ArrowUp" && rowCount > 0) {
-      event.preventDefault();
-      setHighlight((was) => Math.max(was - 1, 0));
-      return;
-    }
     if (event.key === "Enter") {
       event.preventDefault();
-      if (rowCount > 0) {
-        activateRow(highlighted);
-        return;
-      }
       // An empty field commits nothing. `splitNames` drops blank parts, so
-      // `save("")` would hand the line "" — clearing a name the coach had
-      // already entered — while still toasting that it was saved. Close the
-      // way Escape does instead: this screen reverts rather than commits on
-      // every path that is not a deliberate save.
+      // committing "" would hand the line "" — clearing a name the coach had
+      // already entered — while still toasting. Close the way Escape does
+      // instead: this screen reverts rather than commits on every path that
+      // is not a deliberate save.
       if (splitNames(draft).length === 0) {
         setOpen(false);
         return;
       }
-      save(draft);
+      commit(draft);
+      // No pool to contribute to, or none fetched — `createDual`'s own loop
+      // still contributes every opposing name at submit, so this understates
+      // rather than overstates, which is the correct side to err on.
+      setConfirmation(lineupNote);
     }
   }
 
@@ -422,29 +656,48 @@ export function OpponentPopup({
             <input
               ref={inputRef}
               value={draft}
-              onChange={(event) => {
-                setDraft(event.target.value);
-                // Reset with the keystroke, not in an effect — the suggestion
-                // list is about to change under the highlight.
-                setHighlight(0);
-              }}
+              onChange={(event) => setDraft(event.target.value)}
               onKeyDown={onKeyDown}
               placeholder={discipline === "doubles" ? "Name / Name" : "Name"}
+              // The listbox half of the combobox pattern. The field keeps DOM
+              // focus throughout and points at the current row, which is what
+              // lets the arrow keys move a selection without moving focus —
+              // and what `role="dialog"` over buttons could not say at all.
+              role="combobox"
+              aria-expanded={rowCount > 0}
+              aria-controls={rowCount > 0 ? listboxId : undefined}
+              aria-activedescendant={
+                rowCount > 0 ? optionId(activeIndex) : undefined
+              }
+              aria-autocomplete="list"
               data-focus-ring="none" /* the popup frame carries the focus */
               className="w-full min-w-0 bg-transparent text-[12px] text-[var(--ink-900)] caret-[var(--blue)] outline-none placeholder:text-[var(--ink-300)]"
             />
           </div>
 
-          {suggestions.length > 0 ? (
+          {rowCount > 0 ? (
             <div className="p-3">
               <div className="text-micro" style={{ color: "var(--ink-600)" }}>
-                {schoolName} already has a close name saved. Pick one.
+                {showNewCard
+                  ? `${schoolName} already has a close name saved. Pick one.`
+                  : `${schoolName}'s saved roster. Pick one, or type a name.`}
               </div>
-              <div className="mt-2.5 flex flex-col gap-2">
-                {suggestions.map((candidate, index) => (
+              <ul
+                ref={listRef}
+                id={listboxId}
+                role="listbox"
+                aria-label={`${schoolName}'s saved roster`}
+                className="mt-2.5 flex max-h-[228px] flex-col gap-2 overflow-y-auto"
+              >
+                {options.map((candidate, index) => (
                   <OptionCard
                     key={candidate.playerId}
-                    highlighted={highlighted === index}
+                    id={optionId(index)}
+                    active={activeIndex === index}
+                    onHover={() => {
+                      setActiveIndex(index);
+                      setWalked(true);
+                    }}
                     onClick={() => pickSaved(candidate)}
                     title={candidate.name}
                     strong
@@ -452,13 +705,20 @@ export function OpponentPopup({
                   />
                 ))}
 
-                <OptionCard
-                  highlighted={highlighted === suggestions.length}
-                  onClick={saveAsNew}
-                  title={activeSegment}
-                  note="Save as a different player"
-                />
-              </div>
+                {showNewCard ? (
+                  <OptionCard
+                    id={optionId(options.length)}
+                    active={activeIndex === options.length}
+                    onHover={() => {
+                      setActiveIndex(options.length);
+                      setWalked(true);
+                    }}
+                    onClick={saveAsNew}
+                    title={activeSegment}
+                    note="Save as a different player"
+                  />
+                ) : null}
+              </ul>
             </div>
           ) : null}
         </div>
@@ -492,32 +752,48 @@ export function OpponentPopup({
  * `strong` is the saved name's 500 weight — the typed text on the second card
  * is drawn at 400, which is the whole of what separates "this already exists"
  * from "this is what you wrote".
+ *
+ * An `option` rather than the `button` it was. A button inside a listbox is a
+ * second tab stop that steals focus from the combobox the arrow keys are
+ * driving, and it announces "button" where the row's whole job is to be one
+ * of several with a current one. Hovering moves the selection instead of
+ * lighting a separate hover state, so the pointer and the keyboard argue over
+ * one highlight rather than drawing two.
  */
 function OptionCard({
-  highlighted,
+  id,
+  active,
+  onHover,
   onClick,
   title,
   note,
   strong = false,
 }: {
-  highlighted: boolean;
+  id: string;
+  active: boolean;
+  onHover: () => void;
   onClick: () => void;
   title: string;
   note: string;
   strong?: boolean;
 }) {
   return (
-    <button
-      type="button"
+    <li
+      id={id}
+      role="option"
+      aria-selected={active}
+      // Read by the scroll-into-view above — the hook moves the selection but
+      // never the scroller, so something has to name the current row in DOM.
+      data-active={active ? "true" : undefined}
+      onMouseEnter={onHover}
       onClick={onClick}
       className={cn(
-        "flex w-full cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] border px-[11px] py-2.5 text-left",
-        highlighted
+        "flex w-full shrink-0 cursor-pointer items-center gap-2.5 rounded-[var(--radius-element)] border px-[11px] py-2.5 text-left",
+        active
           ? "border-[var(--blue)] bg-[var(--blue-soft)]"
           : [
               "border-[var(--border-hairline)]",
               "transition-colors duration-[var(--duration-hover)]",
-              "hover:bg-[var(--surface-subtle)]",
             ]
       )}
     >
@@ -538,7 +814,7 @@ function OptionCard({
           {note}
         </span>
       </span>
-      {highlighted ? (
+      {active ? (
         <span className="mono text-[10px]" style={{ color: "var(--ink-500)" }}>
           ↵
         </span>
@@ -549,7 +825,7 @@ function OptionCard({
           className="shrink-0 text-[var(--ink-400)]"
         />
       )}
-    </button>
+    </li>
   );
 }
 

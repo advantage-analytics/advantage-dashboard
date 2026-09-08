@@ -119,10 +119,10 @@ const DASHBOARD = path.join(__dirname, '..', 'src', 'components', 'dashboard');
  * Four passes, and the order matters:
  *
  *   1. **Comments go first, and they are the load-bearing pass.** These files
- *      quote the artboards at length in their own doc blocks — the tournament
- *      builder's header carries the info callout verbatim, `2b`'s carries
- *      "— no available player" — so a `toContain` over the raw file would pass
- *      on prose about the copy after the copy itself had been deleted. The
+ *      quote the artboards at length in their own doc blocks — `2b`'s header
+ *      carries "— no available player", and the tournament builder's names the
+ *      controls it draws — so a `toContain` over the raw file would pass on
+ *      prose about the copy after the copy itself had been deleted. The
  *      empty `{ }` a removed JSX comment leaves behind goes with it, or it
  *      lands in the middle of a sentence the design wrote as one.
  *   2. `{" "}`, JSX's explicit space, written wherever a line break would
@@ -497,12 +497,15 @@ test.describe('/dashboard/team/schedule/new · 3b', () => {
       file,
       "One player's own match — a challenge, practice set or outside entry — isn't an event."
     );
-    drawn(chooser, file, 'Add it in Matches');
+    drawn(chooser, file, 'Add a one-off match');
     drawn(chooser, file, 'Cancel');
     drawn(chooser, file, 'Continue');
     // The footer names the selection; `3b` opens on the dual.
     drawn(chooser, file, 'Dual selected');
     drawn(chooser, file, 'Tournament selected');
+    // RETIRED 'Add it in Matches' — the label named a rail entry a team
+    //   workspace does not have; `schedule-day-zero.tsx` already uses
+    //   'Add a one-off match' for the same `/new/single` destination.
   });
 });
 
@@ -512,6 +515,18 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
   const step1 = screen('dual-school-step.tsx');
   const step2 = screen('dual-build-step.tsx');
   const popup = screen('opponent-popup.tsx');
+  /** Our side of a lineup court, split out of step two's row. */
+  const picker = screen('lineup-name-picker.tsx');
+  /**
+   * The flow's own file, since T15.
+   *
+   * `new-dual-flow.tsx` frames all three steps on `WizardShell`, so the words
+   * that used to be a step body's chrome — the eyebrow, each screen's title,
+   * the footer's status line and the primary's label — are read from here
+   * rather than from the two bodies. What each body still draws itself, it is
+   * still asserted for below.
+   */
+  const flow = screen('new-dual-flow.tsx');
 
   test("2c's directory, as the artboard states it", () => {
     // Design record — see the header. Every expectation below reads
@@ -584,8 +599,14 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
   });
 
   test("2c's own words", () => {
-    drawn(step1, 'dual-school-step.tsx', 'New dual · step 1 of 2');
-    drawn(step1, 'dual-school-step.tsx', 'Which school are you playing?');
+    // RETIRED 'New dual · step 1 of 2' — the eyebrow is `WizardShell`'s now,
+    //   and it counts three steps rather than two: the school, the four facts
+    //   and the nine courts (T15). It prints "Step 1 of 3" from `stepIndex`
+    //   and `stepCount`, so there is no literal on any screen to pin — the
+    //   shell's own chrome is not this spec's record.
+    // RETIRED 'Which school are you playing?' — the title moved to the shell
+    //   with the eyebrow, and was rewritten with it: `flow` below pins the
+    //   sentence that replaced it.
     // RETIRED 'Region' — the pill is gone from the screen, not renamed. Nothing
     //   in `programs` backs a region and no mapping invents one, so the wired
     //   step drops the control rather than drawing a filter that cannot filter.
@@ -609,13 +630,57 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
     drawn(step1, 'dual-school-step.tsx', '↵');
     // The em dash a row with no last-played date falls back to.
     drawn(step1, 'dual-school-step.tsx', '"—"');
+    // RETIRED '· date, site and lineup come next' — the footer that printed
+    //   it is `WizardShell`'s. The line it stood in is now the shell's status
+    //   slot, which step one leaves empty: the pinned bar on the next screen
+    //   says what was chosen, so a sentence naming what comes after it would
+    //   be the flow describing its own step indicator.
+    // RETIRED 'Cancel' and 'Continue' — both are the shell's buttons
+    //   (`new-match-wizard/WizardShell.tsx`), drawn once for every wizard on
+    //   the platform rather than by each step. Step one hands the shell a
+    //   `cancelHref` and no `back`, and the shell decides which of the two it
+    //   draws. Step three's label IS this flow's, and is pinned below.
+  });
+
+  test("the flow's own words — the three steps' titles and ledes", () => {
+    // Not the artboards': `2c`'s title was rewritten and `2b`'s single frame
+    // became two steps when the flow adopted `WizardShell` (T15), so these
+    // three pairs are the new copy, transcribed here the same way — one side
+    // typed out by hand, the other the component's source.
+    drawn(flow, 'new-dual-flow.tsx', 'Who are you playing?');
     drawn(
-      step1,
-      'dual-school-step.tsx',
-      '· date, site and lineup come next'
+      flow,
+      'new-dual-flow.tsx',
+      'The school decides the lineup you fill in later. Pick a program, or type any opponent the directory never had.'
     );
-    drawn(step1, 'dual-school-step.tsx', 'Cancel');
-    drawn(step1, 'dual-school-step.tsx', 'Continue');
+    // STRAIGHT apostrophe in "it's", as everywhere else in this record.
+    drawn(flow, 'new-dual-flow.tsx', "When it's played, and how.");
+    drawn(
+      flow,
+      'new-dual-flow.tsx',
+      'Four facts the whole dual inherits. Every one of the nine lines is created under them.'
+    );
+    drawn(flow, 'new-dual-flow.tsx', 'The lineup.');
+    // Em dash before the clause about subs.
+    drawn(
+      flow,
+      'new-dual-flow.tsx',
+      'Six singles and three doubles. Your side is seeded from the ladder — type over a name to put a sub on.'
+    );
+
+    // The footer, which is the flow's and no longer either body's. The count
+    // line and the primary each read one of two words since T19 gave the edit
+    // route the same flow — the create half is unchanged, and the edit half is
+    // pinned beside it so a rename of either is a failure here rather than a
+    // "Create dual" button on a dual that already exists.
+    drawn(flow, 'new-dual-flow.tsx', '"Saves" : "Creates"');
+    drawn(flow, 'new-dual-flow.tsx', '"line" : "lines"');
+    drawn(flow, 'new-dual-flow.tsx', ' vs ');
+    drawn(flow, 'new-dual-flow.tsx', 'Create dual');
+    drawn(flow, 'new-dual-flow.tsx', 'Creating…');
+    drawn(flow, 'new-dual-flow.tsx', 'Save changes');
+    drawn(flow, 'new-dual-flow.tsx', 'Saving…');
+    drawn(flow, 'new-dual-flow.tsx', 'Continue');
   });
 
   test("2b's draft, as the fields print it", () => {
@@ -678,9 +743,17 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
   });
 
   test("2b's own words", () => {
-    drawn(step2, 'dual-build-step.tsx', 'Opponent');
-    drawn(step2, 'dual-build-step.tsx', '· type to search all');
-    drawn(step2, 'dual-build-step.tsx', 'Dual');
+    // RETIRED 'Dual' — the eyebrow over the "vs <school>" header, which left
+    //   with `DualBuildStep` when the builder became two steps of the flow
+    //   (T15). The school is pinned above the column by `PinnedEventBar`
+    //   instead, under its own swords glyph, and the eyebrow slot is the
+    //   shell's "Step N of 3".
+    // RETIRED 'Opponent' and '· type to search all' — the 320px opponent rail
+    //   left with the design when `dual-build-step.tsx` was split into a draft
+    //   hook and two step bodies (T14). Both strings were the rail's: the
+    //   eyebrow over its list, and the placeholder in its drawn search field.
+    //   Re-choosing the school is step one's job again, so nothing renames
+    //   them — the pane they sat in is gone, and the builder is one column.
     drawn(step2, 'dual-build-step.tsx', 'Date');
     drawn(step2, 'dual-build-step.tsx', 'Site');
     drawn(step2, 'dual-build-step.tsx', 'Surface');
@@ -711,11 +784,40 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
       'dual-build-step.tsx',
       "All nine lines are expected — forfeit a line only when a team can't field a player for it."
     );
-    drawn(step2, 'dual-build-step.tsx', 'Creates ');
-    drawn(step2, 'dual-build-step.tsx', '"line" : "lines"');
-    drawn(step2, 'dual-build-step.tsx', ' vs ');
-    drawn(step2, 'dual-build-step.tsx', 'Create dual');
-    drawn(step2, 'dual-build-step.tsx', 'Cancel');
+
+    // Our side of a court is a roster typeahead rather than a bare input
+    // (`lineup-name-picker.tsx`), so its two sentences are pinned here too.
+    // Neither is the artboard's — `2b` draws a filled lineup and no field
+    // affordance at all — but both are drawn copy, and the first is the whole
+    // point of the control: the roster is reachable without spelling it, and
+    // a coach whose player is missing has somewhere to go. STRAIGHT
+    // apostrophe in "Don't", as everywhere else in this record.
+    drawn(
+      picker,
+      'lineup-name-picker.tsx',
+      "Don't see your player? Add your player"
+    );
+    // A court filled with a name the roster does not know still saves — this
+    // is the screen finally SAYING so, which is the defect being closed.
+    drawn(
+      picker,
+      'lineup-name-picker.tsx',
+      'not on your roster · no player linked'
+    );
+    drawn(
+      picker,
+      'lineup-name-picker.tsx',
+      'Type a first and last name to add a player.'
+    );
+    drawn(picker, 'lineup-name-picker.tsx', 'Adding…');
+    // MOVED 'Creates ', '"line" : "lines"', ' vs ' and 'Create dual' — the
+    //   footer they were drawn in belonged to `DualBuildStep`, the composite
+    //   that framed these two bodies; the flow's shell draws them now, and
+    //   they are pinned against `new-dual-flow.tsx` above.
+    // RETIRED 'Cancel' — `WizardShell`'s, like step one's. Steps two and three
+    //   are handed a `back` rather than a `cancelHref`, so what the shell
+    //   draws in that corner is "Back": leaving from the lineup is a step back
+    //   to the facts and then out, not a second exit beside the first.
   });
 
   test('2d and 2e — the add-opponent popup', () => {
@@ -746,8 +848,27 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
     drawn(popup, 'opponent-popup.tsx', '"1 prior meeting"');
     drawn(popup, 'opponent-popup.tsx', 'prior meetings');
     drawn(popup, 'opponent-popup.tsx', 'Save as a different player');
-    // `2e`'s toast, in full — "Saved to Ridgeline University roster".
+    // The browse heading, which `2d` has no frame for: the popup lists the
+    // opponent's saved roster before a character is typed now, so the line
+    // above ("already has a close name saved") is the FILTERED state's and
+    // this is the unfiltered one. STRAIGHT apostrophe, as everywhere here.
+    drawn(
+      popup,
+      'opponent-popup.tsx',
+      "'s saved roster. Pick one, or type a name."
+    );
+    // `2e`'s toast, in full — "Saved to Ridgeline University roster". Still
+    // drawn, but no longer on every path: only once `saveOpponentPlayer`
+    // reports a row exists. `2e` collapsed three outcomes into this one
+    // sentence over a frame whose line resolves to a name the roster already
+    // held; the two below are the other two, and they are the dormant
+    // `opponent-name-cell.tsx`'s own split restored.
     drawn(popup, 'opponent-popup.tsx', 'Saved to ${schoolName} roster');
+    // A name the pool already had — nothing was written.
+    drawn(popup, 'opponent-popup.tsx', "On ${schoolName}'s saved roster");
+    // No program to save to, or the RPC refused. The line has the name; the
+    // card claims nothing more than that.
+    drawn(popup, 'opponent-popup.tsx', 'Added to this lineup');
     // The field's placeholders, singles and doubles.
     drawn(popup, 'opponent-popup.tsx', '"Name / Name"');
     drawn(popup, 'opponent-popup.tsx', '"Name"');
@@ -759,11 +880,17 @@ test.describe('/dashboard/team/schedule/new/dual · 2c 2b 2d 2e', () => {
 /* ────────────────────────────────────────────────────────────────────────── */
 
 test.describe('/dashboard/team/schedule/new/tournament · 3c', () => {
+  // `3c` drew one frame — a roster rail beside a weekend and an entries table.
+  // It is two steps of `WizardShell` now (T16): the weekend, then the field as
+  // ONE list over the roster, each row carrying its own draw and seed. The rail,
+  // the `+` control, the separate entries table and the info callout are gone
+  // from the screen; each retired string below carries the reason.
   const builder = screen('static-tournament-builder.tsx');
   const file = 'static-tournament-builder.tsx';
+  const flow = screen('new-tournament-flow.tsx');
 
   test("3c's roster rail and the field it feeds", () => {
-    // Design record — see the header. The rail has listed `getLadder()` since
+    // Design record — see the header. The list has been `getLadder()`'s since
     // T19; `TOURNAMENT_FIELD` has no consumer under `src/`.
     expect(TOURNAMENT_FIELD.map((row) => row.player.name)).toEqual([
       'Dana Brooks',
@@ -797,12 +924,17 @@ test.describe('/dashboard/team/schedule/new/tournament · 3c', () => {
   });
 
   test("3c's own words", () => {
-    drawn(builder, file, 'Roster');
-    drawn(builder, file, 'Add a player to the field');
-    // The four shapes the rail's state line takes.
-    drawn(builder, file, '${spot} · qualifying');
-    drawn(builder, file, '${spot} · entered · seed ${entry.seed}');
-    drawn(builder, file, '${spot} · entered');
+    // RETIRED 'Roster' — the rail is gone, not renamed. The field step IS the
+    //   roster now, so an eyebrow naming it would label the whole step.
+    // RETIRED 'Add a player to the field' — the rail's search field went with
+    //   the rail. A player is entered on their own row by picking a draw, so
+    //   there is no second list to search into.
+    // RETIRED '${spot} · qualifying', '${spot} · entered · seed ${entry.seed}'
+    //   and '${spot} · entered' — the rail's state line reported back what a
+    //   click on the rail had done in the other pane. One list has nothing to
+    //   report to: the draw cell and the seed cell on the row ARE the state,
+    //   and the ladder spot is drawn beside the name rather than folded into a
+    //   sentence about it.
 
     drawn(builder, file, 'Tournament · name');
     // Still drawn, as the name field's placeholder now rather than as text: a
@@ -821,38 +953,70 @@ test.describe('/dashboard/team/schedule/new/tournament · 3c', () => {
     // "Bo3 · ad" — best of 3, AD scoring, which is the opposite of the dual's.
     drawn(builder, file, 'Bo3 · ad');
 
-    // A claim nothing in this app can compute: no table records which programs
-    // attend a tournament. Drawn because the artboard draws it — and held: it
-    // is still the component's literal, now printed for real programs in any
-    // conference (T25, finding 6). It leaves this file when it leaves the
-    // component.
-    drawn(
-      builder,
-      file,
-      '3 Big Ten programs are in this field — matches against them count toward conference seeding.'
-    );
+    // RETIRED '3 Big Ten programs are in this field — matches against them
+    //   count toward conference seeding.' — a claim nothing in this app can
+    //   compute: no table records which programs attend a tournament, and T25
+    //   recorded it (finding 6) as still being printed for real programs in any
+    //   conference. The frame it sat in is gone, and it is not re-drawn: a
+    //   sentence that cannot be true of the data is not copy worth carrying
+    //   into a new screen.
+    // RETIRED 'Entries · singles' and 'added from the roster' — the header over
+    //   the second table, which no longer exists. The field is the roster, so
+    //   there is nothing for a header to say it was added from.
 
-    drawn(builder, file, 'Entries · singles');
-    drawn(builder, file, 'added from the roster');
     drawn(builder, file, '"Main draw"');
     drawn(builder, file, '"Qualifying"');
     drawn(builder, file, '"Unseeded"');
     drawn(builder, file, 'Seed ${entry.seed}');
     // A qualifier holds no seed, and `3c` draws an em dash rather than a word.
+    // The same glyph is the draw cell's first option — the one that takes a
+    // player back out of the field.
     drawn(builder, file, '"—"');
     drawn(
       builder,
       file,
       "An entry is a player in a draw — where they start, not what they'll play."
     );
-    drawn(builder, file, 'Creates ');
-    drawn(builder, file, '"entry" : "entries"');
+    // RETIRED 'Cancel' — `WizardShell`'s, like the dual flow's. The shell is
+    //   handed a `cancelHref` on step one and a `back` on step two, and decides
+    //   which of the two it draws.
+  });
+
+  test("the flow's own words — the two steps' titles and ledes", () => {
+    // Not the artboard's: `3c`'s single frame became two steps when the screen
+    // adopted `WizardShell` (T16), so both pairs are new copy, transcribed here
+    // the same way — one side typed out by hand, the other the component's
+    // source.
+    drawn(flow, 'new-tournament-flow.tsx', 'The weekend.');
     drawn(
-      builder,
-      file,
+      flow,
+      'new-tournament-flow.tsx',
+      'Name it, say when and where. A tournament holds entries rather than lines — the field comes next.'
+    );
+    drawn(flow, 'new-tournament-flow.tsx', 'The field.');
+    // STRAIGHT apostrophe in "they'll", as everywhere else in this record.
+    drawn(
+      flow,
+      'new-tournament-flow.tsx',
+      "Add players from the roster. An entry says where they start, not what they'll play."
+    );
+
+    // The footer, which is the flow's and no longer the builder's. The count
+    // line and the primary each read one of two words since T20 gave the edit
+    // route the same flow — the create half is unchanged, and the edit half is
+    // pinned beside it so a rename of either is a failure here rather than a
+    // "Create tournament" button on a tournament that already exists.
+    drawn(flow, 'new-tournament-flow.tsx', '"Saves" : "Creates"');
+    drawn(flow, 'new-tournament-flow.tsx', '"entry" : "entries"');
+    drawn(
+      flow,
+      'new-tournament-flow.tsx',
       "and no matches — a match exists once it's played"
     );
-    drawn(builder, file, 'Create tournament');
-    drawn(builder, file, 'Cancel');
+    drawn(flow, 'new-tournament-flow.tsx', 'Create tournament');
+    drawn(flow, 'new-tournament-flow.tsx', 'Creating…');
+    drawn(flow, 'new-tournament-flow.tsx', 'Save changes');
+    drawn(flow, 'new-tournament-flow.tsx', 'Saving…');
+    drawn(flow, 'new-tournament-flow.tsx', 'Continue');
   });
 });

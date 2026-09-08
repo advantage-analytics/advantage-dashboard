@@ -44,9 +44,12 @@
  * `focus:*` or `focus-visible:*` ring, shadow or outline utility written here
  * would be silently discarded: it would look like coverage and be dead code.
  * It is also unnecessary. focus.css already resolves `input`, `select` and
- * `textarea` to the neutral `--focus-ring-field` for free, which is the design
- * system's field carve-out — blue on a focused field reads as a validation
- * state, and a six-field form would spend the accent six times over.
+ * `textarea` to `--focus-ring-field` for free. That token is NOT neutral —
+ * `--field-ring` has aliased to `--blue` since 2026-08-26, so a focused field
+ * rings blue like everything else; it differs from `--focus-ring` in geometry
+ * (a 1px core plus a 30% band vs. a single 40% band), not in hue. Earlier
+ * drafts of this comment described a neutral field carve-out and were left
+ * behind by that reversion.
  *
  * Consumers of the `underline` kind add `data-focus-ring="none"` themselves.
  * It stays theirs to add because focus.css's test for that attribute is
@@ -57,6 +60,13 @@
  * judgement into a default, and that failure is silent: a control that merely
  * LOOKS like an underline would go from one focus indicator to zero, which is
  * the exact bug focus.css exists to prevent.
+ *
+ * `ui/adv-select.tsx` is where that judgement is made for every native
+ * `<select>` in the product: it sets the attribute from its own `kind`, so
+ * `underline` opts out and `boxed` — whose border does not change on focus —
+ * keeps the ring. A select should reach this file through that component
+ * rather than by calling `advField()` and hand-rolling the chevron and the
+ * opt-out beside it, which is what five call sites used to do.
  *
  * ── The disabled background ─────────────────────────────────────────────────
  * The DS colour table names this `bg-field` = `#F7F7F7`, "Disabled fields".

@@ -3,19 +3,18 @@ import { redirect } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canUploadForProgram, isProgramStaff } from "@/lib/workspace/types";
-import { getProgramSchedule, getUploadQueue } from "@/lib/data/schedule-server";
-import { createClient } from "@/lib/supabase/server";
+import {
+  getProgramSchedule,
+  getUploadQueue,
+  programNamesFor,
+} from "@/lib/data/schedule-server";
 import { loadMatchDraft } from "@/lib/wizard/actions";
-import { supportsVideo as entrySupportsVideo } from "@/lib/schedule/entry-state";
-import type { EventEntry, ProgramEvent } from "@/lib/schedule/types";
+import { presetFor, lineupChoices } from "@/lib/schedule/line-choices";
 import { getTeamSingleMatch } from "@/lib/data/single-match-server";
 import { supportsVideo } from "@/lib/schedule/entry-state";
 import { formatEventSpan, siteLabel } from "@/lib/schedule/format";
 import { UploadMatchFlow } from "@/components/dashboard/matches/new-match-wizard";
-import type {
-  EventPreset,
-  LineChoice,
-} from "@/components/dashboard/matches/new-match-wizard/types";
+import type { EventPreset } from "@/components/dashboard/matches/new-match-wizard/types";
 
 /**
  * Uploading a match video in a team workspace.
@@ -188,47 +187,9 @@ export default async function TeamUploadPage({
         siblings.map((e) => e.opponentProgramId ?? null).filter((id): id is string => Boolean(id))
       );
 
-      const presetFor = (
-        candidate: EventEntry,
-        candidateMatch: EventEntry["matches"][number] | null
-      ): EventPreset => ({
-        entryId: candidate.id,
-        eventId: group.event.id,
-        eventName: group.event.name,
-        matchId: candidateMatch?.id ?? null,
-        round: candidate.slot ?? candidateMatch?.round ?? null,
-        playerName: candidate.playerLabels.join(" / "),
-        // Singles only. A doubles line has two accounts and one `player1_id`
-        // column, so there is no non-arbitrary answer and null is the honest
-        // one — see the note on EventPreset.playerUserId.
-        playerUserId:
-          candidate.discipline === "doubles"
-            ? null
-            : (candidate.playerUserIds[0] ?? null),
-        opponentName:
-          (candidateMatch?.opponentLabels ?? candidate.opponentLabels).join(" / ") || "",
-        date: group.event.startsOn,
-        surface: group.event.surface,
-        bestOf: group.event.format.bestOf,
-        adScoring: group.event.format.adScoring,
-        score: candidateMatch?.score ?? null,
-        supportsVideo: entrySupportsVideo(candidate),
-        eventHref: `/dashboard/team/schedule/${group.event.id}`,
-        site: group.event.site,
-        eventKind: group.event.kind,
-        opponentProgramKey: candidate.opponentProgramId
-          ? programs.get(candidate.opponentProgramId)?.key ?? null
-          : null,
-        opponentSchool:
-          candidate.opponentSchool ??
-          (candidate.opponentProgramId
-            ? programs.get(candidate.opponentProgramId)?.school ?? null
-            : null),
-      });
-
       const preset: EventPreset = {
-        ...presetFor(entry, match),
-        lineup: lineupChoices(group.event, siblings, presetFor),
+        ...presetFor(group.event, entry, match, programs),
+        lineup: lineupChoices(group.event, siblings, programs),
       };
 
       return <UploadMatchFlow preset={preset} />;
@@ -251,52 +212,6 @@ export default async function TeamUploadPage({
   if (!staff) return <UploadMatchFlow />;
 
   return <LinePicker groups={await getUploadQueue(active.id)} />;
-}
-
-/** `programs.program_key` and school name, by id, for a dual's opponents. */
-async function programNamesFor(
-  ids: string[]
-): Promise<Map<string, { key: string; school: string }>> {
-  const map = new Map<string, { key: string; school: string }>();
-  const unique = [...new Set(ids)];
-  if (unique.length === 0) return map;
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("programs")
-    .select("id, program_key, school_name")
-    .in("id", unique);
-  for (const row of (data ?? []) as { id: string; program_key: string; school_name: string }[]) {
-    map.set(row.id, { key: row.program_key, school: row.school_name });
-  }
-  return map;
-}
-
-/**
- * The event's lines as the pinned bar's Change menu lists them: every slot in
- * lineup order, each with its own state and — where someone holds it — the
- * preset to switch to. A line with video already is still listed (it is
- * legal to attach more video to a scored line), an unset one is listed but
- * not pickable.
- */
-function lineupChoices(
-  event: ProgramEvent,
-  entries: EventEntry[],
-  presetFor: (entry: EventEntry, match: EventEntry["matches"][number] | null) => EventPreset
-): LineChoice[] {
-  return [...entries]
-    .sort((a, b) => a.position - b.position)
-    .flatMap((entry): LineChoice[] => {
-      const slot = entry.slot ?? entry.matches[0]?.round ?? `#${entry.position + 1}`;
-      const playerName = entry.playerLabels.join(" / ") || null;
-      if (!playerName || entry.forfeit !== null) {
-        return [{ slot, playerName, state: "unset", preset: null }];
-      }
-      const match = entry.matches[0] ?? null;
-      const state: LineChoice["state"] = !match ? "open" : match.hasVideo ? "video" : "result";
-      return [{ slot, playerName, state, preset: presetFor(entry, match) }];
-    })
-    .filter((choice, index, all) => all.findIndex((c) => c.slot === choice.slot) === index)
-    .map((choice) => (event.kind === "dual" ? choice : choice));
 }
 
 /**

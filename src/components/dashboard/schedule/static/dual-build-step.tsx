@@ -1,31 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Calendar, Check, ChevronDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { advButton } from "@/lib/ui/adv-button";
-import { EventShell } from "@/components/dashboard/schedule/event-shell";
+import { DateField } from "@/components/ui/date-field";
+import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
 import {
   OpponentPopup,
   opponentPoolFor,
   type OpponentPool,
 } from "@/components/dashboard/schedule/static/opponent-popup";
+import { LineupNamePicker } from "@/components/dashboard/schedule/static/lineup-name-picker";
 import { useNewDualData } from "@/components/dashboard/schedule/static/dual-school-step";
-import {
-  divisionLabel,
-  programDisplayName,
-  teamLabel,
-} from "@/lib/data/programs-server";
-import {
-  formatOpponentRecord,
-  opponentHistoryFor,
-  type OpponentDualHistory,
-} from "@/lib/schedule/opponent-history";
+import { programDisplayName } from "@/lib/data/programs-server";
 import {
   createDual,
   opponentRosterForDual,
+  updateDual,
+  type LineupLineInput,
   type OpponentRosterCandidate,
 } from "@/lib/schedule/actions";
 import {
@@ -35,6 +27,7 @@ import {
   type EventFormatValue,
 } from "@/lib/schedule/format";
 import { rosterIdsForLabels } from "@/lib/schedule/roster-match";
+import { courtIndex } from "@/lib/schedule/courts";
 import type { LadderPlayer } from "@/lib/data/roster-server";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
 import type { EventSite, LineupLine } from "@/lib/schedule/types";
@@ -57,12 +50,13 @@ export type ChosenSchool =
  * One row of the Format control: the option it is, and what it means.
  *
  * ── Why this is a table and not an encoding ────────────────────────────────
- * The deleted `dual-form.tsx` carried the format through a `<select>` as the
- * string `"<bestOf>|<adScoring>"` and decoded it with `format.split("|")` →
- * `Number(bestOf)` and `adScoring === "true"`. Until this change the cell here
- * held the same string, hard-coded to `"3|false"` — because `adScoring` is
- * `boolean | null` on `EventFormat`, a null interpolates into that string as
- * the four characters `null`, and `=== "true"` reads those as a confident
+ * The deleted `dual-form.tsx` carried the format through a `<select>` as one
+ * pipe-joined string of the two fields, and decoded it by splitting on the
+ * pipe, numbering the first half and string-comparing the second against the
+ * word true. Until an earlier pass the cell here held the same string, with
+ * both halves hard-coded — and because `adScoring` is `boolean | null` on
+ * `EventFormat`, a null interpolates into such a string as the four characters
+ * spelling null, which that comparison then reads as a confident
  * `false`: a wrong answer that looks like a real one. That is the recorded
  * cause of a real outage — format arrived as `{}`, `adScoring` arrived null,
  * and every tournament video failed vendor submission long after the coach had
@@ -82,14 +76,12 @@ export type ChosenSchool =
  * so the label and the value cannot drift into disagreeing about which format
  * this dual is.
  */
-interface DualFormat {
-  /** The `<select>` option's value — matched against, never split. */
+export interface DualFormat {
+  /** The option's name — matched against, never split. */
   value: EventFormatValue;
-  /** What the dropdown lists, once open. */
-  label: string;
-  /** What the closed cell prints. */
+  /** What the closed cell prints, and the menu row's first line. */
   sets: string;
-  /** What prints under the underline. */
+  /** What prints under the cell, and the menu row's second line. */
   scoring: string;
   bestOf: number;
   adScoring: boolean;
@@ -114,34 +106,55 @@ interface DualFormat {
  */
 const FORMAT_WORDS: Record<
   EventFormatValue,
-  { label: string; sets: string; scoring: string }
+  { sets: string; scoring: string }
 > = {
   "bo3-no-ad": {
-    label: "Best of 3 sets · no-ad",
     sets: "Best of 3 sets",
     scoring: "No-ad scoring",
   },
   "bo3-ad": {
-    label: "Best of 3 sets · ad",
     sets: "Best of 3 sets",
     scoring: "Ad scoring",
   },
   "one-set-no-ad": {
-    label: "One set · no-ad",
     sets: "One set",
     scoring: "No-ad scoring",
   },
   "one-set-ad": {
-    label: "One set · ad",
     sets: "One set",
     scoring: "Ad scoring",
   },
 };
 
-const FORMATS: readonly DualFormat[] = EVENT_FORMATS.map((format) => ({
+export const FORMATS: readonly DualFormat[] = EVENT_FORMATS.map((format) => ({
   ...format,
   ...FORMAT_WORDS[format.value],
 }));
+
+/**
+ * The Format control's options: one per `FORMATS` row, carrying `2b`'s two
+ * halves as the two lines `MenuSelect` draws — `sets` as the label the closed
+ * trigger prints, `scoring` as the description beneath it in the open menu.
+ *
+ * Pure and exported so the mapping can be asserted without mounting the step
+ * (`tests/dual-format-options.spec.ts`). What it deliberately does NOT carry
+ * is `bestOf` or `adScoring`: an option is a NAME to look the row back up by,
+ * so nothing downstream can read a scoring rule off the dropdown instead of
+ * off the row. See `DualFormat`'s header and
+ * `docs/ui-revamp-guardrails.md` §3.1.
+ */
+export function formatOptions(
+  formats: readonly DualFormat[]
+): MenuOption<EventFormatValue>[] {
+  return formats.map((format) => ({
+    value: format.value,
+    label: format.sets,
+    description: format.scoring,
+  }));
+}
+
+/** Built once: `FORMATS` is a module constant, so its options are too. */
+const FORMAT_OPTIONS = formatOptions(FORMATS);
 
 /** What `2b` draws: best of 3, no-ad. Explicit — never a default standing in
  *  for a null. */
@@ -192,6 +205,7 @@ interface DualDraft {
 /** `2b`'s nine courts, in the order it draws them. */
 const SINGLES_SLOTS = ["S1", "S2", "S3", "S4", "S5", "S6"];
 const DOUBLES_SLOTS = ["D1", "D2", "D3"];
+
 
 /**
  * Six singles and three doubles, seeded from the ladder where there is one.
@@ -254,107 +268,274 @@ function seedLineup(ladder: LadderPlayer[]): LineupLine[] {
 }
 
 /**
- * `2b` — step two of a new dual: the master–detail builder.
+ * A draft handed in from outside — one line's half of it.
  *
- * The conference stays on the left while the fixture fills in on the right, so
- * the answer step one asked for is revisable without a screen hop. Date, site,
- * surface and format across the top; six singles and three doubles under them.
+ * Keyed by `LineupLine.key` (S1–S6, D1–D3) rather than by index, because an
+ * index is exactly the mistake `LineRow`'s header forbids: one row off, and a
+ * name lands on a court nobody meant. A key that matches no seeded line is
+ * simply not applied.
  *
- * ── The shell ──────────────────────────────────────────────────────────────
- * `EventShell` with `flush`, which is the prop that exists for this artboard by
- * name (see its doc comment). In `flush` mode the shell contributes
- * `flex min-h-0 flex-1 overflow-hidden` and NO padding, so the rail and the
- * detail pane own their own insets and each scrolls on its own — two panes edge
- * to edge, not one padded column. The default body would put 48/32/26 around
- * both of them and scroll them together, which is a different screen.
- *
- * The footer is `2b`'s own `16px 32px 20px` rather than the shell's `footer`
- * slot, whose `px-12 pb-[22px]` is 48/22 — the same call `dual-school-step.tsx`
- * made for `2c`. The shell's body padding is what `flush` exists to remove; its
- * footer padding belongs to the four create screens its comment names, and this
- * artboard draws different numbers. Where the design and the shell disagree the
- * design wins.
- *
- * ── Reading again, as of the schedule re-wiring ────────────────────────────
- * The school is the one step one chose — a `ChosenSchool`, handed down by
- * `static-dual-builder.tsx`, which holds nothing else. It names the header,
- * the rail's check, the subline, the footer and the popup, and every one of
- * those reads the same object, so they cannot drift. This used to be a module
- * const pinned to Ridgeline, and that const was the fix for a real defect:
- * step two's date, site, format and nine lines were Ridgeline's fixtures,
- * drawn and unvarying, so a header that followed step one's pick put one
- * school's name over another school's data. The pin comes out now because the
- * data travels with the school — see below — not because the guard was
- * unwanted.
- *
- * Date, site, surface and format are controlled state, opened on today, home,
- * the program's `default_surface` and `2b`'s own format. The rail lists the
- * real conference — `getConferenceTable`'s rows, own program already dropped —
- * with the chosen school checked, and pins that school on top when it is not
- * a conference row: a searched school, or a club side typed past the
- * directory. Sublines are this program's own head-to-head, from
- * `opponentDualHistory()`. All of it arrives through `useNewDualData()`; the
- * route reads once for both steps.
- *
- * The nine lines are the program's own: `seedLineup()` fills S1–S6 and D1–D3
- * from `getLadder`, every name is editable in place, and a typed name is
- * resolved back to a roster id by `rosterIdsForLabels` — exact beyond case and
- * whitespace, because that id is what the line's eventual match is attributed
- * to. Forfeiting is live too, which is what makes `2b`'s own "— no available
- * player" row reachable now that no fixture states one.
- *
- * Create calls `createDual` and pushes to the event it made. Its `ActionError`
- * is a sentence meant for the coach, so it is held in `error` and printed in
- * the footer where the line count goes — the same shape
- * `static-tournament-builder.tsx` uses.
- *
- * ── What is a control and what is still a picture ──────────────────────────
- *   date/site/surface   Real: an `<input type="date">` and two native
- *                       `<select>`s under the artboard's own underline
- *                       treatment, with the drawn glyph beside each.
- *   Format              Real, and the one cell a plain native select could not
- *                       draw: `2b` prints the sets half inside the underline
- *                       and the scoring half BELOW it, and a select prints one
- *                       label. So the select is a real one laid over the cell
- *                       at `opacity:0` — it owns the click, the keyboard and
- *                       the dropdown — while the two strings the cell prints
- *                       are read off the chosen `FORMATS` row underneath it.
- *   the lineup          Real: an input per side, a live Forfeit toggle, and
- *                       `createDual` behind the footer's button.
- *   the rail rows       Still drawn: a hover wash and no `cursor:pointer`,
- *                       which is what `2b` gives the unselected rows, and this
- *                       task's criteria do not ask for a re-target. The two
- *                       things a re-target needs are now both here — the row
- *                       key drops names typed against the old school, and
- *                       `OpponentPool` swaps the saved roster with it — so a
- *                       later task can make them live without re-deriving
- *                       either. The search field above them is a picture for
- *                       the same reason.
- *
- * The opponent cells ("Add name" / "Add pair") are `OpponentPopup`s, each
- * writing to its own row's state and nowhere else. Each is handed an
- * `OpponentPool` — the school and ITS saved roster as one value — built here
- * from `opponentRosterForDual()` and stamped with the school key it was
- * fetched for. That is the shape rather than two props on purpose: a popup
- * that dedupes against a different school's pool either merges two people or
- * fails to merge one, and the screen looks entirely correct either way. See
- * `OpponentPool` for why the mistake is not expressible.
- *
- * ── What the design draws that this app cannot know ────────────────────────
- * "18–4" and its five siblings on the rail were each opponent's OWN season
- * record, from matches this program never saw — `opponent-history.ts`'s header
- * says outright that the figure does not exist anywhere in this app. The slot
- * is gone rather than filled, the same call `2c` made in the previous task:
- * the rail's subline is squad · head-to-head now, two facts instead of three.
+ * Every field is optional and every absent field means "leave the ladder's
+ * seed alone" — `forfeit: null` is therefore a real value ("not forfeited"),
+ * distinguished from absence, so a seed can take a forfeit back.
  */
-export function DualBuildStep({ school }: { school: ChosenSchool }) {
-  const {
-    ladder,
-    ourConference,
-    conferencePrograms,
-    historyEntries,
-    defaultSurface,
-  } = useNewDualData();
+export interface DualLineSeed {
+  /** `"S1"`…`"D3"` — the same string `seedLineup()` puts on `key` and `slot`. */
+  key: string;
+  /**
+   * The `program_event_entries` row this line was loaded from, when there is
+   * one.
+   *
+   * **Every loaded line must state it, and `submit()` must send it back.**
+   * `planEntryChanges` matches a submitted line to a saved one by id first and
+   * by slot second, so a lineup round-tripped without ids reads as nine
+   * deletes and nine inserts the moment any slot moves — and a renamed slot
+   * would orphan the matches hanging off the row it used to be. See
+   * `LineupLineInput.id` and `entry-plan.ts`.
+   */
+  id?: string;
+  ourLabels?: string[];
+  theirLabels?: string[];
+  /**
+   * Which side forfeited, as the SAVED row states it.
+   *
+   * Wider than `LineupLine["forfeit"]` — `"theirs"` is a real saved value that
+   * a builder can never produce (`line-row.tsx` on the event page is where the
+   * opponent's forfeit gets recorded), and a seed that could not spell it would
+   * load such a line as "not forfeited" and submit it back changed. That is a
+   * save `planEntryChanges` refuses, on a line the coach never touched.
+   */
+  forfeit?: "ours" | "theirs" | null;
+  /**
+   * This line is settled and may not be edited — `isSettled` in
+   * `entry-plan.ts` is the same question, asked server-side at save.
+   *
+   * `"played"` — a `matches` row points at it. `"forfeited"` — a side gave the
+   * point away. Either way `planEntryChanges` REFUSES the whole save if the
+   * submission moves it, so the row is drawn read-only rather than offered as
+   * an edit that will be rejected after the coach has retyped it. Absent means
+   * a free line.
+   */
+  locked?: "played" | "forfeited";
+}
+
+/**
+ * The facts and lines a caller can open the builder on.
+ *
+ * T19 hands one in; `NewDualFlow` passes none, and every absent field falls
+ * back to exactly what a new dual has always opened on — today, home, the
+ * program's `default_surface`, `2b`'s format, and `seedLineup()`'s nine
+ * courts.
+ *
+ * `format` is the option NAME (`EventFormatValue`), never a `"<bestOf>|<ad>"`
+ * string and never a pair of loose numbers: `useDualDraft` resolves it to the
+ * `FORMATS` row, which states `bestOf` and `adScoring` as literals. See
+ * `DualFormat`'s header and `docs/ui-revamp-guardrails.md` §3.1 — there is no
+ * encoding here to get wrong, and a seed cannot introduce one.
+ */
+export interface DualDraftSeed {
+  /**
+   * The dual being edited. Present ONLY on an edit — its presence is what
+   * makes `submit()` call `updateDual` instead of `createDual`, and it is the
+   * one field that says which of the two writes this draft is for.
+   *
+   * Not folded into `CreateDualInput` as an optional field: creating and
+   * editing are different actions with different rules (an edit consults
+   * `planEntryChanges` before it writes anything at all), and a create call
+   * that quietly became an update on the strength of one extra property is
+   * exactly the branch this seed keeps out of `actions.ts`.
+   */
+  eventId?: string;
+  /** YYYY-MM-DD. */
+  date?: string;
+  site?: EventSite;
+  /** One of `SURFACES`' values; `""` is none, and is honoured as none. */
+  surface?: string;
+  format?: EventFormatValue;
+  lines?: DualLineSeed[];
+}
+
+/** The `FORMATS` row an option name names, or `2b`'s own. Never a parse. */
+function formatFor(value: EventFormatValue | undefined): DualFormat {
+  if (!value) return DEFAULT_FORMAT;
+  return FORMATS.find((option) => option.value === value) ?? DEFAULT_FORMAT;
+}
+
+/**
+ * The saved entry id behind each seeded line — see `DualLineSeed.id`.
+ *
+ * Pulled out of `useDualDraft` (a mechanical extraction, no behaviour change)
+ * so the seed→payload path is importable without mounting the hook. See
+ * `tests/entry-round-trip.spec.ts`.
+ */
+export function seededIdsFromSeed(initial?: DualDraftSeed): Map<string, string> {
+  return new Map(
+    (initial?.lines ?? [])
+      .filter((row): row is DualLineSeed & { id: string } => Boolean(row.id))
+      .map((row) => [row.key, row.id] as const)
+  );
+}
+
+/** Which courts are settled, and how — see `DualLineSeed.locked`. */
+export function lockedByKeyFromSeed(
+  initial?: DualDraftSeed
+): Record<string, "played" | "forfeited"> {
+  const locked: Record<string, "played" | "forfeited"> = {};
+  for (const row of initial?.lines ?? []) {
+    if (row.locked) locked[row.key] = row.locked;
+  }
+  return locked;
+}
+
+/** A settled line's forfeit exactly as it was saved — see `DualLineSeed.forfeit`. */
+export function lockedForfeitFromSeed(
+  initial?: DualDraftSeed
+): Map<string, "ours" | "theirs" | null> {
+  return new Map(
+    (initial?.lines ?? [])
+      .filter((row) => row.locked)
+      .map((row) => [row.key, row.forfeit ?? null] as const)
+  );
+}
+
+/** The nine courts, seeded from the ladder and overlaid with `initial.lines`. */
+export function seedDualLines(
+  ladder: LadderPlayer[],
+  initial?: DualDraftSeed
+): LineupLine[] {
+  // A seed that states its lines is a lineup that was SAVED, and a court it
+  // does not mention is a court that has no saved row — because the coach
+  // emptied it. Falling back to the ladder there would quietly put a doubles
+  // pair back on a court they deliberately removed, and the next save would
+  // insert it for real. Only a draft with no `lines` at all (a brand new dual)
+  // opens on the ladder.
+  const loaded = initial?.lines !== undefined;
+
+  return seedLineup(ladder).map((line) => {
+    const seed = initial?.lines?.find((row) => row.key === line.key);
+    if (!seed) {
+      if (!loaded) return line;
+      return { ...line, ourIds: [], ourLabels: [], theirLabels: [], forfeit: null };
+    }
+    const ourLabels = seed.ourLabels ?? line.ourLabels;
+    return {
+      ...line,
+      ourLabels,
+      // Re-resolved from the seeded label, never carried in by the caller:
+      // this id is what the line's eventual match is attributed to, and the
+      // one rule that may produce it is `rosterIdsForLabels`.
+      ourIds: rosterIdsForLabels(ourLabels.join(" / "), ladder),
+      theirLabels: seed.theirLabels ?? line.theirLabels,
+      // `undefined` is "not stated"; `null` is "not forfeited". A saved
+      // `"theirs"` narrows to null here because `LineupLine` cannot hold it
+      // — such a line is always `locked`, so it is drawn from
+      // `lockedByKeyFromSeed` and submitted from `lockedForfeitFromSeed`,
+      // never from this field.
+      forfeit:
+        seed.forfeit === undefined
+          ? line.forfeit
+          : seed.forfeit === "ours"
+            ? "ours"
+            : null,
+    };
+  });
+}
+
+/**
+ * The lines that count toward the write — our side named, or a forfeit either
+ * side already carries. See `useDualDraft`'s `lineCount`.
+ */
+export function filledDualLines(
+  lines: LineupLine[],
+  lockedByKey: Record<string, "played" | "forfeited">
+): { line: LineupLine; ours: string[]; theirs: string[] }[] {
+  return lines
+    .map((line) => ({
+      line,
+      ours: splitNames(line.ourLabels.join(" / ")),
+      theirs: splitNames(line.theirLabels.join(" / ")),
+    }))
+    .filter(
+      (row) =>
+        row.ours.length > 0 ||
+        row.line.forfeit !== null ||
+        // A settled line always submits, whatever is on it. An opponent
+        // forfeit names nobody on either side, and dropping it here would
+        // submit a lineup missing a line the save is not allowed to delete.
+        lockedByKey[row.line.key] !== undefined
+    );
+}
+
+/**
+ * The nine courts as the two writes take them — `useDualDraft`'s
+ * `payloadLines()`, pulled out so it can be composed and tested without the
+ * hook. One mapping for create and edit both, so an edit cannot start sending
+ * a subtly different row than a create does. `id` is the only field that
+ * means anything to just one of them: `createDual` ignores it, and
+ * `updateDual` needs EVERY loaded line to carry it or `planEntryChanges`
+ * matches by slot, where a reorder reads as a rename and the save is refused.
+ */
+export function buildDualPayloadLines(
+  filled: { line: LineupLine; ours: string[]; theirs: string[] }[],
+  seededIds: Map<string, string>,
+  lockedForfeit: Map<string, "ours" | "theirs" | null>
+): LineupLineInput[] {
+  return filled.map((row) => ({
+    // Absent on a line the coach typed into an empty court — a fresh line
+    // has no saved row to be, and `planEntryChanges` inserts it.
+    id: seededIds.get(row.line.key),
+    discipline: row.line.discipline,
+    slot: row.line.slot,
+    // The court's own index, NOT this row's index in `filled`. `filled` skips
+    // empty courts, so an index into it moves whenever a court above changes:
+    // fill an empty S1 above a played S2 and S2's position slides 0 → 1,
+    // `planEntryChanges` reads that as an edit to a settled line, and the whole
+    // save is refused naming a court the coach never touched. A dual's court
+    // order is fixed, so the position of a line is a fact about its slot and
+    // nothing else.
+    position: courtIndex(row.line.slot),
+    // A forfeited line carries nobody on either side. `setForfeited`
+    // already emptied both, so these are empty anyway — stated here so
+    // the write cannot drift from the row.
+    playerUserIds: row.line.forfeit === null ? row.line.ourIds : [],
+    playerLabels: row.line.forfeit === null ? row.ours : [],
+    opponentLabels: row.line.forfeit === null ? row.theirs : [],
+    // A settled line hands back the side it was saved with, untouched.
+    forfeit: lockedForfeit.has(row.line.key)
+      ? lockedForfeit.get(row.line.key) ?? null
+      : row.line.forfeit,
+  }));
+}
+
+/**
+ * A new dual's draft: the four facts, the nine lines, the opponent's pool, and
+ * the write.
+ *
+ * ── Why this is a hook and not a component ─────────────────────────────────
+ * The builder is being taken apart into steps, and the one thing the steps
+ * cannot each own is the draft: a lineup held inside the lineup step would be
+ * thrown away every time the coach walked back to the facts, and a facts step
+ * that held the date would leave `submit()` with nothing to send. So the draft
+ * lives above whatever is on screen and the step bodies below are given the
+ * slice they draw. Nothing here renders.
+ *
+ * ── The lineup ─────────────────────────────────────────────────────────────
+ * Seeded once from `getLadder` through `seedLineup()`, then overlaid with
+ * `initial.lines` where a caller states one. Seeded ONCE on purpose: a ladder
+ * that changed under an open builder would rewrite a lineup the coach is
+ * halfway through entering, which is the one thing this screen must not do.
+ *
+ * `ourIds` is recomputed from the label on every edit rather than tracked
+ * beside it, so the two cannot drift — see `editOurLabels`.
+ *
+ * ── The opponent's pool ────────────────────────────────────────────────────
+ * The school and ITS saved roster travel as one value, stamped with the
+ * `schoolKey` the fetch was made for. `dual-form.tsx`'s rule, ported: an
+ * in-flight request for School A must not land after a change of school and
+ * pose as School B's.
+ */
+export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
+  const { ladder, defaultSurface } = useNewDualData();
 
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -362,26 +543,80 @@ export function DualBuildStep({ school }: { school: ChosenSchool }) {
   const [error, setError] = useState<string | null>(null);
 
   const [draft, setDraft] = useState<DualDraft>(() => ({
-    date: todayISO(),
-    site: "home",
-    // The program's own default, or none — not "Hard". A court type nobody
-    // stated is a fact about the fixture we would be inventing.
-    surface: defaultSurface ?? "",
-    format: DEFAULT_FORMAT,
+    date: initial?.date ?? todayISO(),
+    site: initial?.site ?? "home",
+    // The seed first — including `""`, which is a coach saying "no surface"
+    // and not an absent answer — then the program's own default, then none.
+    // Never "Hard": a court type nobody stated is a fact about the fixture we
+    // would be inventing.
+    surface:
+      initial?.surface !== undefined ? initial.surface : defaultSurface ?? "",
+    format: formatFor(initial?.format),
   }));
 
-  // Seeded once. A ladder that changed under an open builder would rewrite a
-  // lineup the coach is halfway through entering, which is the one thing this
-  // screen must not do.
-  const [lines, setLines] = useState<LineupLine[]>(() => seedLineup(ladder));
+  /**
+   * The saved entry behind each seeded line, and whether it is settled.
+   *
+   * Held beside `lines` rather than folded into `LineupLine`, which is the
+   * pre-persist shape and says so: a line the coach typed has no id and no
+   * lock, and widening the type would make both look optional on every row
+   * rather than absent from the ones that never had them.
+   *
+   * Keyed on `LineupLine.key` (S1–D3) — never on an index. `DualLineSeed`'s
+   * header states why, and it is the same reason: one row off, and an id lands
+   * on a court nobody meant, which is a save that re-points a played line at
+   * another player.
+   */
+  const seededIds = useMemo(
+    () => seededIdsFromSeed(initial),
+    [initial?.lines]
+  );
+
+  const lockedByKey = useMemo(
+    () => lockedByKeyFromSeed(initial),
+    [initial?.lines]
+  );
+
+  /**
+   * A settled line's forfeit exactly as it was saved, including `"theirs"`.
+   *
+   * The row is read-only, so what it submits must equal what it loaded or
+   * `planEntryChanges` reports it changed and refuses the whole save. This is
+   * the half `LineupLine` cannot carry — see `DualLineSeed.forfeit`.
+   */
+  const lockedForfeit = useMemo(
+    () => lockedForfeitFromSeed(initial),
+    [initial?.lines]
+  );
+
+  // Seeded once. See the header.
+  const [lines, setLines] = useState<LineupLine[]>(() =>
+    seedDualLines(ladder, initial)
+  );
+
+  /**
+   * Players created from a lineup court, mid-flow.
+   *
+   * `addProgramPlayer` revalidates the roster's routes, but this client tree
+   * holds the ladder it was rendered with — the new row will not appear in
+   * `useNewDualData()` until a navigation re-runs the loader, which is long
+   * after the coach has typed the other eight courts. So the ids they carry
+   * are remembered here, and `editOurLabels` resolves against ladder + these.
+   * Nothing invented: every entry came back from the server with a real
+   * `program_players.id`.
+   */
+  const [extraPlayers, setExtraPlayers] = useState<LadderPlayer[]>([]);
+
+  /** The ladder as this flow now knows it — see `extraPlayers`. */
+  const roster = useMemo(
+    () => (extraPlayers.length === 0 ? ladder : [...ladder, ...extraPlayers]),
+    [ladder, extraPlayers]
+  );
 
   function edit(patch: Partial<DualDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
   }
 
-  const histories = useMemo(() => new Map(historyEntries), [historyEntries]);
-
-  const program = school.kind === "program" ? school.program : null;
   const schoolName =
     school.kind === "program" ? school.program.schoolName : school.name;
   // `OpponentTarget.key`'s mechanism (`opponent-name-cell.tsx`): every name on
@@ -392,26 +627,6 @@ export function DualBuildStep({ school }: { school: ChosenSchool }) {
       ? `program:${school.program.programKey}`
       : `text:${school.name}`;
 
-  // "Big Ten · D-I" — conference first. `programSubtitle()` prints the two the
-  // other way round ("D-I · Big Sky") and four claim-flow call sites depend on
-  // that order, so this composes its own rather than reversing a shared helper
-  // for one screen. The artboard's order, and reported. Only a directory row
-  // knows either, so a typed opponent renders no subline rather than an
-  // invented one.
-  const headerSubline = program
-    ? [program.conference, divisionLabel(program.division)]
-        .filter(Boolean)
-        .join(" · ")
-    : "";
-
-  // The chosen school always has a row carrying the check. When it is a
-  // conference row that row is it; when it is not — a searched school, or a
-  // club side typed past the directory — it is pinned on top rather than
-  // silently absent. The dormant `OpponentRail`'s rule.
-  const pinned =
-    program === null ||
-    !conferencePrograms.some((row) => row.programKey === program.programKey);
-
   // The opponent's pooled roster, stored WITH the school key it was fetched
   // for. `dual-form.tsx`'s rule, ported: an in-flight request for School A
   // must not land after a change of school and pose as School B's. The
@@ -421,7 +636,8 @@ export function DualBuildStep({ school }: { school: ChosenSchool }) {
     forKey: string;
     candidates: OpponentRosterCandidate[];
   } | null>(null);
-  const programKey = program?.programKey ?? null;
+  const programKey =
+    school.kind === "program" ? school.program.programKey : null;
 
   useEffect(() => {
     // Free text has no directory row, so there is no pool to ask for — an
@@ -463,14 +679,27 @@ export function DualBuildStep({ school }: { school: ChosenSchool }) {
    * match is attributed to, and a looser rule would hand an athlete's match to
    * someone else with nothing on screen saying so.
    */
-  function editOurLabels(key: string, value: string) {
+  function editOurLabels(key: string, value: string, added?: LadderPlayer) {
+    // The just-created player is folded in for THIS call as well as kept,
+    // because `roster` is this render's value and `setExtraPlayers` will not
+    // have widened it yet. Without that, the player the coach just added
+    // resolves to no id on the very edit that placed them — the exact silent
+    // miss this screen is being fixed for.
+    const against = added ? [...roster, added] : roster;
+    if (added) {
+      setExtraPlayers((current) =>
+        current.some((player) => player.userId === added.userId)
+          ? current
+          : [...current, added]
+      );
+    }
     setLines((current) =>
       current.map((line) =>
         line.key === key
           ? {
               ...line,
               ourLabels: [value],
-              ourIds: rosterIdsForLabels(value, ladder),
+              ourIds: rosterIdsForLabels(value, against),
             }
           : line
       )
@@ -520,17 +749,8 @@ export function DualBuildStep({ school }: { school: ChosenSchool }) {
   // footer reads 9 over a lineup whose S6 is forfeited. Dropping it would
   // write eight lines under a dual that has nine points to give, and
   // `dualScore` would read a decided 4–3 as a 4–3 out of eight.
-  const filled = lines
-    .map((line) => ({
-      line,
-      ours: splitNames(line.ourLabels.join(" / ")),
-      theirs: splitNames(line.theirLabels.join(" / ")),
-    }))
-    .filter((row) => row.ours.length > 0 || row.line.forfeit !== null);
+  const filled = filledDualLines(lines, lockedByKey);
   const lineCount = filled.length;
-
-  const singles = lines.filter((line) => line.discipline === "singles");
-  const doubles = lines.filter((line) => line.discipline === "doubles");
 
   // The name the dual is recorded under — squad-qualified for a directory
   // pick, so a school fielding both sides is two opponents and not one, and
@@ -540,37 +760,62 @@ export function DualBuildStep({ school }: { school: ChosenSchool }) {
       ? programDisplayName(school.program.schoolName, school.program.team)
       : school.name;
 
+  // Whether the singles block may promise "from your ladder" — see
+  // `DualLineupStep`.
+  const laddered = ladder.some((player) => player.ladderPosition !== null);
+
+  /**
+   * The nine courts as the two writes take them.
+   *
+   * One mapping for create and edit both, so an edit cannot start sending a
+   * subtly different row than a create does. `id` is the only field that means
+   * anything to just one of them: `createDual` ignores it, and `updateDual`
+   * needs EVERY loaded line to carry it or `planEntryChanges` matches by slot,
+   * where a reorder reads as a rename and the save is refused.
+   */
+  function payloadLines(): LineupLineInput[] {
+    return buildDualPayloadLines(filled, seededIds, lockedForfeit);
+  }
+
+  /**
+   * Write the draft — creating a dual, or saving one that already exists.
+   *
+   * Two actions, chosen here by whether the seed named an event, rather than
+   * one action that decides for itself. `updateDual` takes no opponent at all:
+   * a dual's school is fixed once its lines point at it, which is why the edit
+   * flow pins the school with no way to change it.
+   */
   function submit() {
     setError(null);
+    const eventId = initial?.eventId;
+
     startTransition(async () => {
-      const result = await createDual({
-        opponent: opponentName,
-        // The key, never the uuid: `createDual` resolves it server-side, and
-        // a key that resolves to nothing leaves the dual on free text rather
-        // than refusing it.
-        opponentProgramKey: school.kind === "program"
-          ? school.program.programKey
-          : null,
-        date: draft.date,
-        site: draft.site,
-        surface: draft.surface,
-        // Read off the chosen `FORMATS` row, which states both as literals.
-        // Nothing here parses a string, so no null can arrive as "null".
-        bestOf: draft.format.bestOf,
-        adScoring: draft.format.adScoring,
-        lines: filled.map((row, index) => ({
-          discipline: row.line.discipline,
-          slot: row.line.slot,
-          position: index,
-          // A forfeited line carries nobody on either side. `setForfeited`
-          // already emptied both, so these are empty anyway — stated here so
-          // the write cannot drift from the row.
-          playerUserIds: row.line.forfeit === null ? row.line.ourIds : [],
-          playerLabels: row.line.forfeit === null ? row.ours : [],
-          opponentLabels: row.line.forfeit === null ? row.theirs : [],
-          forfeit: row.line.forfeit,
-        })),
-      });
+      const result = eventId
+        ? await updateDual({
+            eventId,
+            date: draft.date,
+            site: draft.site,
+            surface: draft.surface,
+            bestOf: draft.format.bestOf,
+            adScoring: draft.format.adScoring,
+            lines: payloadLines(),
+          })
+        : await createDual({
+            opponent: opponentName,
+            // The key, never the uuid: `createDual` resolves it server-side, and
+            // a key that resolves to nothing leaves the dual on free text rather
+            // than refusing it.
+            opponentProgramKey:
+              school.kind === "program" ? school.program.programKey : null,
+            date: draft.date,
+            site: draft.site,
+            surface: draft.surface,
+            // Read off the chosen `FORMATS` row, which states both as literals.
+            // Nothing here parses a string, so no null can arrive as "null".
+            bestOf: draft.format.bestOf,
+            adScoring: draft.format.adScoring,
+            lines: payloadLines(),
+          });
 
       if ("error" in result) {
         // The action's own sentence, on screen. A refusal that only turned the
@@ -584,406 +829,330 @@ export function DualBuildStep({ school }: { school: ChosenSchool }) {
     });
   }
 
-  return (
-    <div className="flex min-h-0 w-full flex-1 flex-col bg-[var(--surface-card)]">
-      <EventShell flush>
-        {/* ── The rail ─────────────────────────────────────────────────── */}
-        <div className="flex w-80 min-h-0 shrink-0 flex-col border-r border-[var(--border-hairline)]">
-          <div className="px-5 pb-3 pt-[18px]">
-            <span className="eyebrow">Opponent</span>
-            {/* Drawn, not wired — see the header. */}
-            <div className="mt-2.5 flex h-8 items-center gap-[9px] rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-2.5">
-              <Search
-                size={14}
-                strokeWidth={1.5}
-                className="shrink-0 text-[var(--ink-500)]"
-              />
-              <span
-                className="text-[12px]"
-                style={{ color: "var(--ink-600)" }}
-              >
-                {/* The artboard's sentence in full where the program has a
-                    conference to name, and its second half alone where it
-                    does not — never a separator with nothing before it. */}
-                {ourConference
-                  ? `${ourConference} · type to search all`
-                  : "type to search all"}
-              </span>
-            </div>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-auto px-3 pb-3">
-            {pinned ? (
-              <RailRow
-                name={schoolName}
-                subline={
-                  program
-                    ? railSubline(program, histories)
-                    : // "unlisted" is the dormant rail's own word for a typed
-                      // opponent, and `2c`'s escape row's. No squad — nothing
-                      // said one. Looked up under the typed text, which is the
-                      // name a free-text dual is recorded under.
-                      [
-                        "unlisted",
-                        formatOpponentRecord(
-                          opponentHistoryFor(histories, schoolName)
-                        ),
-                      ].join(" · ")
-                }
-                selected
-              />
-            ) : null}
-            {conferencePrograms.map((row) => (
-              <RailRow
-                key={row.programKey}
-                name={row.schoolName}
-                subline={railSubline(row, histories)}
-                selected={program?.programKey === row.programKey}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* ── The detail pane ──────────────────────────────────────────── */}
-        <div className="flex min-w-0 flex-1 flex-col gap-[22px] overflow-auto px-8 py-6">
-          <div className="flex items-end gap-3 border-b border-[var(--border-hairline)] pb-3">
-            <div className="min-w-0 flex-1">
-              <span className="eyebrow">Dual</span>
-              <div className="mt-1.5 flex items-baseline gap-2.5">
-                <span
-                  className="text-[30px] font-light leading-none tracking-[-0.6px]"
-                  style={{ color: "var(--ink-600)" }}
-                >
-                  vs
-                </span>
-                <span
-                  className="min-w-0 truncate text-[30px] font-light leading-none tracking-[-0.6px]"
-                  style={{ color: "var(--ink-900)" }}
-                >
-                  {schoolName}
-                </span>
-              </div>
-            </div>
-            {headerSubline ? (
-              <span
-                className="text-micro shrink-0"
-                style={{ color: "var(--ink-500)" }}
-              >
-                {headerSubline}
-              </span>
-            ) : null}
-          </div>
-
-          <div className="grid grid-cols-4 gap-6">
-            <FieldCell label="Date" glyph="calendar">
-              {/* `2b` draws "09-26", month and day; a native date input
-                  prints the platform's own form of the same value. The
-                  tournament builder made the same trade on its two dates. */}
-              <input
-                type="date"
-                value={draft.date}
-                onChange={(event) => edit({ date: event.target.value })}
-                className="mono w-full bg-transparent text-[13px] text-[var(--ink-900)] outline-none"
-              />
-            </FieldCell>
-
-            <FieldCell label="Site" glyph="chevron">
-              <FieldSelect
-                value={draft.site}
-                options={SITES}
-                onChange={(value) => {
-                  const chosen = SITES.find((option) => option.value === value);
-                  if (chosen) edit({ site: chosen.value });
-                }}
-              />
-            </FieldCell>
-
-            <FieldCell label="Surface" glyph="chevron">
-              <FieldSelect
-                value={draft.surface}
-                options={SURFACES}
-                onChange={(value) => edit({ surface: value })}
-              />
-            </FieldCell>
-
-            {/* `2b` draws the ad half BELOW the underline rather than inside
-                the value — see the header for how the select is laid over
-                the cell rather than being it. */}
-            <FieldCell
-              label="Format"
-              glyph="chevron"
-              note={draft.format.scoring}
-            >
-              <span className="text-[13px] text-[var(--ink-900)]">
-                {draft.format.sets}
-              </span>
-              <select
-                aria-label="Format"
-                value={draft.format.value}
-                onChange={(event) => {
-                  // The chosen ROW, not a parse of the chosen string. This is
-                  // the only assignment `format` has, and every row of that
-                  // table states `adScoring` as a literal boolean.
-                  const chosen = FORMATS.find(
-                    (option) => option.value === event.target.value
-                  );
-                  if (chosen) edit({ format: chosen });
-                }}
-                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-              >
-                {FORMATS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </FieldCell>
-          </div>
-
-          <LineupBlock
-            title="Lineup · singles"
-            // `2b`'s own note, and `dual-form.tsx`'s alternative for the
-            // program the artboard never drew: a ladder nobody has ordered
-            // seeds nothing, so promising six names "from your ladder" over
-            // six empty courts would be the screen claiming a source it does
-            // not have.
-            note={
-              ladder.some((player) => player.ladderPosition !== null)
-                ? "six required · from your ladder"
-                : "six required · type a name on each court"
-            }
-            lines={singles}
-            addLabel="Add name"
-            pool={pool}
-            onOurLabels={editOurLabels}
-            onTheirLabels={editTheirLabels}
-            onForfeit={setForfeited}
-          />
-
-          <div>
-            <LineupBlock
-              title="Lineup · doubles"
-              note="three required · pairs carried from singles"
-              lines={doubles}
-              addLabel="Add pair"
-              pool={pool}
-              onOurLabels={editOurLabels}
-              onTheirLabels={editTheirLabels}
-              onForfeit={setForfeited}
-            />
-            <div
-              className="text-micro mt-2.5"
-              style={{ color: "var(--ink-500)" }}
-            >
-              All nine lines are expected — forfeit a line only when a team
-              can&apos;t field a player for it.
-            </div>
-          </div>
-        </div>
-      </EventShell>
-
-      {/* `padding:16px 32px 20px` — the artboard's, not `EventShell`'s footer
-          slot at 16/48/22. See the header. */}
-      <div className="flex shrink-0 items-center gap-3 border-t border-[var(--border-hairline)] px-8 pb-5 pt-4">
-        {/* Inside the rebuilt set. */}
-        <Link
-          href="/dashboard/team/schedule"
-          className={advButton("ghost", "md")}
-        >
-          Cancel
-        </Link>
-        <div className="flex-1" />
-        {error ? (
-          // `createDual`'s own sentence, in the count line's place — the same
-          // slot the tournament builder gives it.
-          <span className="text-[11px]" style={{ color: "var(--danger)" }}>
-            {error}
-          </span>
-        ) : (
-          <span className="text-[11px]" style={{ color: "var(--ink-600)" }}>
-            Creates <span className="tabular">{lineCount}</span>{" "}
-            {lineCount === 1 ? "line" : "lines"} vs {schoolName}
-          </span>
-        )}
-        {/* `createDual` refuses a dual with no lines, so the button is off
-            until there is one to write — a disabled button says that better
-            than a sentence the coach has to read to find out. */}
-        <button
-          type="button"
-          disabled={pending || lineCount === 0}
-          className={advButton("primary", "md")}
-          onClick={submit}
-        >
-          {pending ? "Creating…" : "Create dual"}
-        </button>
-      </div>
-    </div>
-  );
+  return {
+    draft,
+    edit,
+    lines,
+    /** Which courts are settled, and how — see `DualLineSeed.locked`. */
+    locked: lockedByKey,
+    pool,
+    laddered,
+    editOurLabels,
+    editTheirLabels,
+    setForfeited,
+    lineCount,
+    opponentName,
+    submit,
+    pending,
+    error,
+  };
 }
 
 /**
- * A rail row's subline: squad · how it has gone against us.
+ * The four facts `2b` draws across the top: Date, Site, Surface, Format.
  *
- * The history is looked up under the name a dual is actually recorded under —
- * `programDisplayName()`, squad-qualified — and under nothing else. Step one's
- * `historyForProgram` (`dual-school-step.tsx`) explains why there is
- * deliberately no fall back to the bare school name: a school fielding both
- * squads is two rows here, and a record keyed on the bare name would print
- * on both of them.
+ * A body, not a screen — no shell, no header and no footer, so whichever frame
+ * shows it decides those. `2b` draws the four in one four-up at `gap:24px`.
+ *
+ * ── What draws what ────────────────────────────────────────────────────────
+ *   Date                `DateField variant="bare"` inside `FieldCell`'s ruled
+ *                       row. The primitive brings the app's own segments,
+ *                       calendar button and popover, so the row draws no
+ *                       glyph of its own: the rule and the height are the
+ *                       cell's, everything inside them is the field's.
+ *   Site/Surface/Format `MenuSelect` — the app's select — in a cell that
+ *                       draws no chrome of its own.
+ *
+ * Format is why `MenuSelect` is here rather than a native select: `2b` prints
+ * the sets half inside the underline and the scoring half BELOW it, and an
+ * `<option>` carries one label. That used to be a real select laid over the
+ * cell at `opacity:0` — invisible, unstyleable, and a second focus target
+ * sitting on the cell. `MenuSelect` carries the two halves as an option's
+ * label and description, so the open menu says the same two things the closed
+ * cell does.
+ *
+ * `static-tournament-builder.tsx` draws a `FieldCell` of the same name and the
+ * same numbers, still on the old pattern. It is a separate task — do not edit
+ * it from here, and do not assume the two have already been reconciled.
  */
-function railSubline(
-  program: ProgramSearchResult,
-  histories: Map<string, OpponentDualHistory>
-): string {
-  const history = opponentHistoryFor(
-    histories,
-    programDisplayName(program.schoolName, program.team)
-  );
-  return [teamLabel(program.team), formatOpponentRecord(history)].join(" · ");
-}
-
-/**
- * One rail row.
- *
- * Subline is squad · how it has gone against us — `teamLabel` and
- * `formatOpponentRecord`. No conference and no division: `2b` keeps those for
- * the detail header, unlike `2c`'s list, which prints one of them per row. And
- * no season record — see the header.
- *
- * The selected row is not washed — it is weighted and carries a blue check,
- * which is the whole of what the artboard distinguishes it by — and it is the
- * one row with no hover state.
- */
-function RailRow({
-  name,
-  subline,
-  selected,
+export function DualFactsStep({
+  draft,
+  onEdit,
 }: {
-  name: string;
-  subline: string;
-  selected: boolean;
+  draft: DualDraft;
+  onEdit: (patch: Partial<DualDraft>) => void;
 }) {
   return (
-    <div
-      className={cn(
-        "flex items-center gap-2.5 rounded-[var(--radius-element)] p-2.5",
-        "transition-colors duration-[var(--duration-hover)]",
-        selected ? null : "hover:bg-[var(--surface-subtle)]"
-      )}
-    >
-      <div className="min-w-0 flex-1">
-        <div
-          className={cn(
-            "truncate text-[13px] text-[var(--ink-900)]",
-            selected ? "font-medium" : null
-          )}
-        >
-          {name}
-        </div>
-        <div
-          className="text-micro mt-0.5 truncate"
-          style={{ color: "var(--ink-600)" }}
-        >
-          {subline}
-        </div>
-      </div>
-      {selected ? (
-        <Check
-          size={13}
-          strokeWidth={1.5}
-          className="shrink-0 text-[var(--blue)]"
+    <div className="grid grid-cols-4 gap-6">
+      <FieldCell label="Date">
+        <DateField
+          label="Date"
+          variant="bare"
+          value={draft.date}
+          onChange={(date) => onEdit({ date })}
+          className="w-full"
         />
-      ) : null}
+      </FieldCell>
+
+      <FieldCell label="Site" chrome="none">
+        <MenuSelect
+          label="Site"
+          variant="underline"
+          value={draft.site}
+          options={SITES}
+          onChange={(site) => onEdit({ site })}
+        />
+      </FieldCell>
+
+      <FieldCell label="Surface" chrome="none">
+        <MenuSelect
+          label="Surface"
+          variant="underline"
+          value={draft.surface}
+          options={SURFACES}
+          onChange={(surface) => onEdit({ surface })}
+        />
+      </FieldCell>
+
+      {/* `2b` draws the ad half BELOW the underline rather than inside the
+          value, so the cell prints `scoring` under a trigger printing `sets`
+          — the two halves of the one chosen row. */}
+      <FieldCell label="Format" chrome="none" note={draft.format.scoring}>
+        <MenuSelect
+          label="Format"
+          variant="underline"
+          value={draft.format.value}
+          options={FORMAT_OPTIONS}
+          onChange={(value) => {
+            // The chosen ROW, looked up by option name — never a parse of the
+            // option's text. This is `format`'s only assignment, and every row
+            // of that table states `adScoring` as a literal boolean. See
+            // `DualFormat`'s header and `docs/ui-revamp-guardrails.md` §3.1.
+            const chosen = FORMATS.find((option) => option.value === value);
+            if (chosen) onEdit({ format: chosen });
+          }}
+        />
+      </FieldCell>
     </div>
   );
 }
 
 /**
- * One underlined fact — `2b` draws all four the same way, with a trailing
- * glyph that says how it is answered.
+ * The nine courts: six singles, three doubles, and the note under them.
  *
- * A `<label>` rather than a `<div>`, now that every cell holds a real control:
- * the eyebrow is the control's name, so it labels it rather than sitting beside
- * it. The underlined row is `relative` so the Format cell's overlaid select
- * has something to fill.
+ * A body, not a screen — see `DualFactsStep`. Everything here is real: an
+ * input per side, a live Forfeit toggle, and an `OpponentPopup` on each
+ * opponent cell.
+ *
+ * The two blocks are cut out of the one `lines` array rather than held apart,
+ * so the array `submit()` sends and the rows on screen are the same nine
+ * objects in the same order.
+ *
+ * Each popup is handed an `OpponentPool` — the school and ITS saved roster as
+ * one value — so a popup cannot dedupe against a different school's pool. See
+ * `OpponentPool` for why the mistake is not expressible, and `LineupBlock`'s
+ * row key for the other half of the same contract.
+ */
+export function DualLineupStep({
+  lines,
+  locked,
+  pool,
+  laddered,
+  onOurLabels,
+  onTheirLabels,
+  onForfeit,
+}: {
+  lines: LineupLine[];
+  /**
+   * Courts the save may not move, by line key — `useDualDraft().locked`.
+   *
+   * Empty on a new dual: nothing has been played yet, so nothing is settled.
+   * On an edit it is the same question `planEntryChanges` asks server-side,
+   * asked early so a settled line is drawn read-only instead of accepting an
+   * edit the save is going to refuse.
+   */
+  locked?: Record<string, "played" | "forfeited">;
+  /** The school and its saved roster. `pool.key` rides in every row's key. */
+  pool: OpponentPool;
+  /** Whether the program has a ladder — the singles note's only variable. */
+  laddered: boolean;
+  /**
+   * Our side of one court.
+   *
+   * `added` is a player the picker just created, handed over on the same call
+   * that names them so the id can be resolved before the widened roster has
+   * rendered — see `editOurLabels`. Optional, so a caller that only ever
+   * edits text passes a two-argument function unchanged.
+   */
+  onOurLabels: (key: string, value: string, added?: LadderPlayer) => void;
+  onTheirLabels: (key: string, value: string) => void;
+  onForfeit: (key: string, forfeited: boolean) => void;
+}) {
+  const singles = lines.filter((line) => line.discipline === "singles");
+  const doubles = lines.filter((line) => line.discipline === "doubles");
+
+  // Read from context rather than taken as a prop: the flow already provides
+  // it, and a required prop here would be a required prop on every caller for
+  // a value they all read from the same place.
+  const { ladder } = useNewDualData();
+
+  /**
+   * Players added from a court since this step mounted.
+   *
+   * Held here as well as in `useDualDraft` because the two answer different
+   * questions from the one event — this one is "who may the list offer, and
+   * whose name is NOT a stranger", `useDualDraft`'s is "which id does this
+   * label resolve to". There is exactly one path that appends to either.
+   */
+  const [added, setAdded] = useState<LadderPlayer[]>([]);
+  const roster = useMemo(
+    () => (added.length === 0 ? ladder : [...ladder, ...added]),
+    [ladder, added]
+  );
+
+  function onAddPlayer(key: string, player: LadderPlayer, value: string) {
+    setAdded((current) =>
+      current.some((entry) => entry.userId === player.userId)
+        ? current
+        : [...current, player]
+    );
+    onOurLabels(key, value, player);
+  }
+
+  return (
+    <>
+      <LineupBlock
+        title="Lineup · singles"
+        // `2b`'s own note, and `dual-form.tsx`'s alternative for the
+        // program the artboard never drew: a ladder nobody has ordered
+        // seeds nothing, so promising six names "from your ladder" over
+        // six empty courts would be the screen claiming a source it does
+        // not have.
+        note={
+          laddered
+            ? "six required · from your ladder"
+            : "six required · type a name on each court"
+        }
+        lines={singles}
+        locked={locked}
+        addLabel="Add name"
+        pool={pool}
+        roster={roster}
+        onAddPlayer={onAddPlayer}
+        onOurLabels={onOurLabels}
+        onTheirLabels={onTheirLabels}
+        onForfeit={onForfeit}
+      />
+
+      <div>
+        <LineupBlock
+          title="Lineup · doubles"
+          note="three required · pairs carried from singles"
+          lines={doubles}
+          locked={locked}
+          addLabel="Add pair"
+          pool={pool}
+          roster={roster}
+          onAddPlayer={onAddPlayer}
+          onOurLabels={onOurLabels}
+          onTheirLabels={onTheirLabels}
+          onForfeit={onForfeit}
+        />
+        <div className="text-micro mt-2.5" style={{ color: "var(--ink-500)" }}>
+          All nine lines are expected — forfeit a line only when a team
+          can&apos;t field a player for it.
+        </div>
+      </div>
+    </>
+  );
+}
+
+/**
+ * One fact under its eyebrow — `2b` draws all four the same way.
+ *
+ * Two chromes, because the four cells no longer answer the same way. `rule`
+ * is the artboard's row drawn here: a hairline and the control inside it.
+ * `none` hands the whole treatment to the child, because `MenuSelect`'s
+ * underline trigger already draws that hairline, its own chevron and its own
+ * 2px blue rule on focus — a second hairline here would stack a rule on a
+ * rule and a chevron beside a chevron.
+ *
+ * Both are a `<div>`, and `rule` is one on purpose. It was a `<label>` while
+ * a native date input sat in it and the eyebrow named that input. `DateField`
+ * is a group of segments plus a calendar `<button>`, and a button IS
+ * labelable: the `<label>` forwarded every click on a segment to the calendar
+ * button instead, so the month could never be clicked into. Measured, not
+ * assumed. Each cell's `label` string goes to its child as an `aria-label`,
+ * which is what names the control now.
  *
  * Not the deleted `field-row.tsx`'s `FieldCellText`/`FieldCellSelect`: those
  * were 25b's row and carried its `FieldRow` spacing (`mt-3.5`, `gap-8`) where
- * this artboard draws a plain four-up at `gap:24px`. Everything below the
- * label matched those cells exactly, `pt-1.5 pb-[7px]` and a 12px glyph
- * included; `static-tournament-builder.tsx` still records the same numbers.
+ * this artboard draws a plain four-up at `gap:24px`. The row's own spacing
+ * matched those cells exactly, `pt-1.5 pb-[7px]` included;
+ * `static-tournament-builder.tsx` still records the same numbers.
  */
 function FieldCell({
   label,
-  glyph,
+  chrome = "rule",
   note,
   children,
 }: {
   label: string;
-  glyph: "calendar" | "chevron";
-  /** Drawn under the underline, on Format alone. */
+  /** `rule` draws the hairline row; `none` lets the child draw its own. */
+  chrome?: "rule" | "none";
+  /** Drawn under the cell, on Format alone. */
   note?: string;
   children: React.ReactNode;
 }) {
-  return (
-    <label className="block">
-      <span className="eyebrow">{label}</span>
-      <span className="relative flex items-center border-b border-[var(--border-hairline)] pb-[7px] pt-1.5">
-        {children}
-        <span className="flex-1" />
-        {glyph === "calendar" ? (
-          <Calendar
-            size={12}
-            strokeWidth={1.5}
-            className="pointer-events-none shrink-0 text-[var(--ink-400)]"
-          />
-        ) : (
-          <ChevronDown
-            size={12}
-            strokeWidth={1.5}
-            className="pointer-events-none shrink-0 text-[var(--ink-400)]"
-          />
-        )}
-      </span>
-      {note ? (
-        <span
-          className="text-micro mt-[5px] block"
-          style={{ color: "var(--ink-600)" }}
-        >
-          {note}
-        </span>
-      ) : null}
-    </label>
-  );
-}
-
-/**
- * The Site and Surface cells: a native `<select>` under the artboard's own
- * underline treatment, so the value the app will store is in the document
- * rather than implied by a label. `appearance-none` is what stops the platform
- * drawing a second chevron beside `FieldCell`'s.
- */
-function FieldSelect({
-  value,
-  options,
-  onChange,
-}: {
-  value: string;
-  options: readonly { value: string; label: string }[];
-  onChange: (value: string) => void;
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      className="w-full cursor-pointer appearance-none bg-transparent text-[13px] text-[var(--ink-900)] outline-none"
+  const eyebrow = <span className="eyebrow">{label}</span>;
+  const footnote = note ? (
+    <span
+      className="text-micro mt-[5px] block"
+      style={{ color: "var(--ink-600)" }}
     >
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
+      {note}
+    </span>
+  ) : null;
+
+  if (chrome === "none") {
+    return (
+      <div>
+        {eyebrow}
+        {children}
+        {footnote}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {eyebrow}
+      {/* `focus-within`, not `focus-visible`: the rule belongs to the row and
+          what it answers is focus landing on the control inside it. The
+          control inside opts out of the ring — the rule going blue IS the one
+          mark (`styles/design-system/focus.css`).
+
+          34px, not padding around the content: this row sits in a four-up
+          beside three `MenuSelect` underline triggers, which are 34px, and a
+          rule whose height is whatever its content happens to be does not
+          line up with them. It did while the content was bare text; the date
+          brought a 28px calendar button with it and the row grew, leaving the
+          Date rule sitting ~7px below the other three. Borders are inside the
+          box, so thickening to 2px on focus moves nothing.
+
+          `--border-field`, not `--border-hairline`: this rule IS a field's
+          underline, and the field family draws it in that token —
+          `MenuSelect`'s underline trigger in the three cells beside this one,
+          `SettingsUnderlineInput`, `DateField`'s own `underline` variant. The
+          two are not interchangeable greys (#E5E5EA against #F3F3F3), so the
+          hairline read visibly fainter than its neighbours in the same row.
+          `--border-hairline` is for a divider between things, which is what
+          the rest of this file uses it for. */}
+      <span className="relative flex h-[34px] items-center border-b border-[var(--border-field)] focus-within:border-b-2 focus-within:border-[var(--blue)]">
+        {children}
+      </span>
+      {footnote}
+    </div>
   );
 }
 
@@ -992,19 +1161,27 @@ function LineupBlock({
   title,
   note,
   lines,
+  locked,
   addLabel,
   pool,
+  roster,
   onOurLabels,
+  onAddPlayer,
   onTheirLabels,
   onForfeit,
 }: {
   title: string;
   note: string;
   lines: LineupLine[];
+  /** Settled courts by line key — see `DualLineupStep`. */
+  locked?: Record<string, "played" | "forfeited">;
   addLabel: string;
   /** The school and its saved roster. `pool.key` rides in every row's key. */
   pool: OpponentPool;
-  onOurLabels: (key: string, value: string) => void;
+  /** OUR ladder, including anyone added from a court — see `DualLineupStep`. */
+  roster: LadderPlayer[];
+  onOurLabels: (key: string, value: string, added?: LadderPlayer) => void;
+  onAddPlayer: (key: string, player: LadderPlayer, value: string) => void;
   onTheirLabels: (key: string, value: string) => void;
   onForfeit: (key: string, forfeited: boolean) => void;
 }) {
@@ -1027,9 +1204,12 @@ function LineupBlock({
             // remounts the row and drops the resolved name with it.
             key={`${pool.key}:${line.key}`}
             line={line}
+            locked={locked?.[line.key]}
             addLabel={addLabel}
             pool={pool}
+            roster={roster}
             onOurLabels={onOurLabels}
+            onAddPlayer={onAddPlayer}
             onTheirLabels={onTheirLabels}
             onForfeit={onForfeit}
             last={index === lines.length - 1}
@@ -1041,6 +1221,34 @@ function LineupBlock({
 }
 
 const LINE_GRID = "grid grid-cols-[34px_1fr_20px_1fr_70px] items-center gap-2.5";
+
+/**
+ * The rule and hover wash under every row but the last — `2b` draws the last
+ * row of each block without either. One function so the editable row and the
+ * settled one below cannot drift into two different blocks.
+ *
+ * ── The row is where this lineup answers focus ──────────────────────────────
+ * The name and opponent cells inside a row are bare inputs that opt out of the
+ * field ring (`data-focus-ring="none"`), because a ring boxed inside one cell
+ * of a nine-row grid reads as a stray rectangle. That opt-out is only legal if
+ * something else visibly changes at focus, and nothing did: tabbing through
+ * the lineup moved nothing on screen, which is the exact failure `focus.css`
+ * exists to prevent. So the ROW takes it — its rule goes blue and it lifts the
+ * same wash hover uses.
+ *
+ * The last row keeps a transparent border rather than none, so colouring it on
+ * focus cannot shift the grid by a pixel.
+ */
+function rowRule(last: boolean) {
+  return [
+    last
+      ? "border-b border-transparent"
+      : "border-b border-[var(--border-hairline)]",
+    "transition-colors duration-[var(--duration-hover)]",
+    "hover:bg-[var(--surface-subtle)]",
+    "focus-within:border-[var(--blue)] focus-within:bg-[var(--surface-subtle)]",
+  ];
+}
 
 /**
  * One line.
@@ -1073,23 +1281,85 @@ const LINE_GRID = "grid grid-cols-[34px_1fr_20px_1fr_70px] items-center gap-2.5"
  */
 function LineRow({
   line,
+  locked,
   addLabel,
   pool,
+  roster,
   onOurLabels,
+  onAddPlayer,
   onTheirLabels,
   onForfeit,
   last,
 }: {
   line: LineupLine;
+  /** Settled, and how — the row is then read-only. See `DualLineSeed.locked`. */
+  locked?: "played" | "forfeited";
   addLabel: string;
   pool: OpponentPool;
-  onOurLabels: (key: string, value: string) => void;
+  /** OUR ladder, ranked and unranked — what the name picker offers. */
+  roster: LadderPlayer[];
+  onOurLabels: (key: string, value: string, added?: LadderPlayer) => void;
+  onAddPlayer: (key: string, player: LadderPlayer, value: string) => void;
   onTheirLabels: (key: string, value: string) => void;
   onForfeit: (key: string, forfeited: boolean) => void;
   last: boolean;
 }) {
   const forfeited = line.forfeit !== null;
   const [active, setActive] = useState(false);
+  // Our picker's own open state, held apart from the opponent popup's: two
+  // controls writing one flag would have whichever closed last say the row is
+  // resting while the other is still up.
+  const [picking, setPicking] = useState(false);
+
+  // A settled court. Drawn in place — the lineup has to read as nine courts —
+  // but with nothing on it a save could move: no name inputs, no opponent
+  // popup, no Forfeit toggle, just the two sides as they were recorded and one
+  // ink-500 micro saying why the row is closed. `planEntryChanges` refuses a
+  // submission that moves this line, and a refusal is total, so an editable row
+  // here would take a coach's retyped lineup and then reject the whole save.
+  if (locked) {
+    // From the lock, not from `line.forfeit`: an opponent's forfeit is saved as
+    // `"theirs"`, which `LineupLine` cannot hold at all.
+    const settledForfeit = locked === "forfeited";
+    return (
+      <div className={cn(LINE_GRID, "py-[7px]", rowRule(last))}>
+        <span className="mono text-[11px]" style={{ color: "var(--ink-600)" }}>
+          {line.slot}
+        </span>
+
+        <span className="truncate text-[13px] text-[var(--ink-900)]">
+          {settledForfeit
+            ? /* The one string a forfeited line prints, here and on the event
+                 page's own `line-row.tsx`. */
+              "— no available player"
+            : line.ourLabels.join(" / ")}
+        </span>
+
+        {settledForfeit ? (
+          <span />
+        ) : (
+          <span className="text-micro" style={{ color: "var(--ink-400)" }}>
+            vs
+          </span>
+        )}
+
+        {settledForfeit ? (
+          <span />
+        ) : (
+          <span className="truncate text-[13px] text-[var(--ink-900)]">
+            {line.theirLabels.join(" / ")}
+          </span>
+        )}
+
+        <span
+          className="text-micro text-right"
+          style={{ color: "var(--ink-500)" }}
+        >
+          {locked === "forfeited" ? "Forfeited" : "Played"}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -1099,14 +1369,8 @@ function LineRow({
         // The popup's containing block: `2d` anchors it to `right:0` of the
         // row, so the row is what it is positioned against.
         "relative",
-        active ? "z-20" : null,
-        last
-          ? null
-          : [
-              "border-b border-[var(--border-hairline)]",
-              "transition-colors duration-[var(--duration-hover)]",
-              "hover:bg-[var(--surface-subtle)]",
-            ]
+        active || picking ? "z-20" : null,
+        rowRule(last)
       )}
     >
       <span
@@ -1126,12 +1390,20 @@ function LineRow({
         // `2b` draws our side as plain text because the artboard draws a
         // filled lineup. It is a real field under the same 13px ink-900 — the
         // ladder seeds it, and typing over a seeded name is how a sub goes on.
-        <input
+        //
+        // A typeahead over the roster rather than a bare input since the
+        // lineup defects: the field still takes free text, but the roster is
+        // now reachable without spelling it, and a name matching nobody says
+        // so instead of saving a court attributed to no player. Both handlers
+        // are closures over THIS row's key — see this component's header.
+        <LineupNamePicker
           value={line.ourLabels.join(" / ")}
-          onChange={(event) => onOurLabels(line.key, event.target.value)}
-          placeholder={line.discipline === "doubles" ? "Name / Name" : "Name"}
-          aria-label={`Our player at ${line.slot}`}
-          className="w-full min-w-0 bg-transparent text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-300)]"
+          slot={line.slot}
+          discipline={line.discipline}
+          ladder={roster}
+          onChange={(value) => onOurLabels(line.key, value)}
+          onAddPlayer={(player, value) => onAddPlayer(line.key, player, value)}
+          onOpenChange={setPicking}
         />
       )}
 
@@ -1153,10 +1425,12 @@ function LineRow({
           value={line.theirLabels.join(" / ")}
           addLabel={addLabel}
           discipline={line.discipline}
-          // The school and ITS saved roster, as one value — the header's name,
-          // the rail's tick, `2d`'s dedupe and `2e`'s confirmation all read
-          // this one object, so none of them can name a different school than
-          // the pool the name was matched against.
+          // The school and ITS saved roster, as one value — the pinned bar's
+          // name, `2d`'s dedupe and `2e`'s confirmation all read this one
+          // object, so none of them can name a different school than the pool
+          // the name was matched against. (The rail this once also fed was
+          // deleted with the single-frame builder; the object is still the
+          // reason a school change cannot leave a stale name behind.)
           pool={pool}
           draftName=""
           onCommit={(value) => onTheirLabels(line.key, value)}

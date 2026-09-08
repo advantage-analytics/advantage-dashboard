@@ -1,237 +1,346 @@
+/*
+ * LIVE — do not mistake this for part of the dormant tree.
+ * `app/dashboard/team/schedule/[eventId]/page.tsx` renders it, beside
+ * `dual-detail.tsx`, on the same `event-page.tsx` frame.
+ *
+ * See `./README.md` for the full live/dormant map.
+ */
+
 import Link from "next/link";
-import { Info } from "lucide-react";
-import { advButton } from "@/lib/ui/adv-button";
-import { StatusChip } from "@/components/ui/status-chip";
-import { EventShell } from "@/components/dashboard/schedule/event-shell";
-import { LineRow } from "@/components/dashboard/schedule/line-row";
-import { RunStrip, runRecord } from "@/components/dashboard/schedule/run-strip";
-import { AddResultRow } from "@/components/dashboard/schedule/add-result-row";
-import { entryState } from "@/lib/schedule/entry-state";
 import {
-  drawOfRound,
+  DetailLine,
+  EventFacts,
+  EventPageFrame,
+  EventTitle,
+  GroupHead,
+  TableCard,
+  type DetailCount,
+} from "@/components/dashboard/schedule/event-page";
+import { LineRow } from "@/components/dashboard/schedule/line-row";
+import { AddResultButton } from "@/components/dashboard/schedule/add-result-button";
+import { TeamTotalsWidget } from "@/components/dashboard/schedule/team-totals-widget";
+import { runRecord } from "@/components/dashboard/schedule/run-strip";
+import { lineCoverageFrom, matchState } from "@/lib/schedule/entry-state";
+import {
   formatEventSpanWithYear,
   siteTitle,
+  surfaceTitle,
 } from "@/lib/schedule/format";
+import { groupByDraw, runFinish } from "@/lib/schedule/tournament-run";
+import { advButton } from "@/lib/ui/adv-button";
+import type { EventTeamTotals } from "@/lib/data/event-team-totals";
 import type { EventDetail, EventEntry } from "@/lib/schedule/types";
 
-const COLUMNS = "grid-cols-[44px_52px_1fr_168px_110px]";
+/**
+ * The tournament's five columns, stated once and handed to both `TableCard`
+ * and every `LineRow` under it. The first is a ROUND, not a line: a dual's
+ * first cell is a court that exists before anyone plays on it, a tournament's
+ * is a round that only exists because a match was played in it.
+ */
+const COLUMNS = "grid-cols-[56px_52px_minmax(0,1fr)_120px_130px]";
+const HEADERS = ["Round", "Result", "Match", "Score", "Status"];
 
 /**
- * 25f and 25g — a tournament, empty and read as runs.
+ * A tournament, on the T5 event frame — empty and filled by ONE renderer.
  *
- * A run is one entry's matches in the order they were played. Segment headings
- * appear only when a player actually changed draws: an entry that never left
- * the main draw gets its rounds listed flat, because "Main draw" above four
- * rows that could not be anywhere else is a label carrying no information.
+ * ── Why there is no team result on this page ───────────────────────────────
+ * A dual's detail line can declare the match over, because a dual IS over when
+ * every line is in and the page can check that. A tournament has no such
+ * signal: entries finish on different days, one result played is not a finished
+ * weekend, and a word claiming otherwise says the opposite of what is true. So
+ * the detail line carries the summed run record and how many matches it is
+ * drawn from, and nothing else — the dual's closing word appears nowhere in
+ * this file, deliberately.
+ *
+ * ── Entries are runs, and a run is rows ────────────────────────────────────
+ * One table card, one `GroupHead` per entry, and that entry's matches as rows
+ * ordered by `ROUND_ORDER`. Draw dividers appear only where an entry's own run
+ * actually crossed draws (`groupByDraw` yielding more than one) — "Main draw"
+ * above four rows that could not be anywhere else is a heading carrying no
+ * information, and the subline already says which draw the run sits in.
+ *
+ * Everything the page draws arrives computed: `totals` is the route's read
+ * (`getEventTeamTotals`), and the shape, the facts row and the table card are
+ * `event-page.tsx`'s, so a dual and a tournament cannot drift apart a gap at a
+ * time.
  */
 export function TournamentDetail({
   detail,
   canEdit,
+  totals,
 }: {
   detail: EventDetail;
   canEdit: boolean;
+  /** Summed over this event's analysed matches. Null when nothing is measured. */
+  totals: EventTeamTotals | null;
 }) {
   const { event, entries } = detail;
 
-  const played = entries.reduce((count, entry) => count + entry.matches.length, 0);
-  const working = entries.reduce(
-    (count, entry) => count + (entryState(entry) === "working" ? 1 : 0),
-    0
-  );
   // Matches, not entries. A coach reading "1 without video" under a tournament
   // is counting films to make, and one entry can be a four-match run — counting
   // entries told them to film once when four were waiting.
-  const withoutVideo = entries.reduce(
-    (count, entry) => count + entry.matches.filter((match) => !match.hasVideo).length,
-    0
+  const matches = entries.flatMap((entry) => entry.matches);
+  const played = matches.length;
+
+  const record = entries.reduce(
+    (total, entry) => {
+      const run = runRecord(entry.matches);
+      return { won: total.won + run.won, lost: total.lost + run.lost };
+    },
+    { won: 0, lost: 0 }
   );
 
+  // Counted over `matchState`, not `entryState`: a run is many matches, and
+  // asking the entry gives every round the loudest round's answer.
+  const states = matches.map(matchState);
+  const needFile = states.filter((state) => state === "no-video").length;
+  const working = states.filter((state) => state === "working").length;
+  const ready = states.filter((state) => state === "ready").length;
+
+  const counts: DetailCount[] = [
+    {
+      kind: "action",
+      n: needFile,
+      label: needFile === 1 ? "match needs a file" : "matches need a file",
+      href: "/dashboard/team/upload",
+    },
+    { kind: "live", n: working, label: "analyzing" },
+    {
+      kind: "done",
+      n: ready,
+      label: ready === 1 ? "report ready" : "reports ready",
+    },
+  ];
+
   return (
-    <EventShell>
-      <div className="flex items-start gap-12">
-        <div className="min-w-0 flex-1">
-          <span className="eyebrow">
-            Tournament ·{" "}
-            <span
-              className="mono"
-              style={{ fontSize: "10px", letterSpacing: 0 }}
+    <EventPageFrame
+      title={<EventTitle name={event.name} />}
+      actions={
+        canEdit ? (
+          <>
+            <Link
+              href={`/dashboard/team/schedule/${event.id}/edit`}
+              className={advButton("ghost", "md")}
             >
-              {formatEventSpanWithYear(event.startsOn, event.endsOn)}
-            </span>
-            {/* No "· final" here. A dual is final when every line is in — a
-                fact the page can check. A tournament has no such signal: one
-                result played is not a finished weekend, and printing "final"
-                after the first one says the opposite of what is true. */}
-          </span>
-          {/* The page's h1. It had no heading at any level before. */}
-          <h1
-            className="mt-2.5 text-[30px] font-light leading-[34px] tracking-[-0.6px]"
-            style={{ color: "var(--ink-900)" }}
-          >
-            {event.name}
-          </h1>
-          <div className="mt-3 flex items-center gap-2.5">
-            <span className="text-[13px] text-[var(--ink-900)]">
-              {siteTitle(event.site)}
-            </span>
-            {event.surface ? (
-              <>
-                <span className="text-[var(--ink-300)]">·</span>
-                <span className="text-[13px] text-[var(--ink-900)]">
-                  {event.surface}
-                </span>
-              </>
-            ) : null}
-            {event.host ? (
-              <>
-                <span className="text-[var(--ink-300)]">·</span>
-                <span className="text-[13px] text-[var(--ink-700)]">
-                  Hosted by {event.host}
-                </span>
-              </>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="flex w-[260px] shrink-0 flex-col items-end gap-2.5">
-          {canEdit ? (
-            <Link href="/dashboard/team/upload" className={advButton("primary", "sm")}>
-              Upload video
+              Edit tournament
             </Link>
-          ) : null}
-          {working > 0 ? (
-            <StatusChip tone="blue" live>
-              <span className="tabular">{played}</span>&nbsp;results ·{" "}
-              <span className="tabular">{working}</span>&nbsp;analyzing
-            </StatusChip>
-          ) : (
-            <span
-              className="text-micro text-right"
-              style={{ color: "var(--ink-600)" }}
-            >
-              <span className="tabular">{entries.length}</span>{" "}
-              {entries.length === 1 ? "entry" : "entries"} ·{" "}
-              {played === 0
-                ? "no results yet"
-                : `${played} ${played === 1 ? "result" : "results"}, ${withoutVideo} without video`}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {entries.map((entry) => (
-        <EntryRun key={entry.id} entry={entry} canEdit={canEdit} />
-      ))}
-
-      {played === 0 ? (
-        <div className="mt-5 flex items-center gap-2.5 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3.5 py-[11px]">
-          <Info
-            strokeWidth={1.5}
-            className="size-[13px] shrink-0 text-[var(--ink-600)]"
+            <AddResultButton entries={entries} />
+          </>
+        ) : null
+      }
+      facts={
+        <EventFacts
+          date={formatEventSpanWithYear(event.startsOn, event.endsOn)}
+          site={siteTitle(event.site)}
+          surface={event.surface ? surfaceTitle(event.surface) : null}
+          count={{
+            n: entries.length,
+            noun: entries.length === 1 ? "entry" : "entries",
+          }}
+          format={event.format}
+        />
+      }
+      detail={
+        <DetailLine
+          score={
+            played === 0 ? (
+              // An em dash, not "0–0". A nil-all reads as a result; this event
+              // has none yet, and the capsule beside it says so in words.
+              <span style={{ color: "var(--ink-300)" }}>—</span>
+            ) : (
+              <span style={{ color: "var(--ink-900)" }}>
+                {record.won}–{record.lost}
+              </span>
+            )
+          }
+          state={
+            played === 0
+              ? "No results yet"
+              : // Singular at one, because "Across 1 matches" is the sort of
+                // copy a reader trusts a little less afterwards.
+                `Across ${played} ${played === 1 ? "match" : "matches"}`
+          }
+          counts={counts}
+        />
+      }
+      rail={
+        <div className="flex flex-col gap-4">
+          <TeamTotalsWidget
+            totals={totals}
+            coverage={lineCoverageFrom(entries)}
           />
-          <span className="text-[12px]" style={{ color: "var(--ink-700)" }}>
-            Rounds appear as you add results. Nothing to enter until the first
-            match is played — if a player&rsquo;s draw changes, edit the entry
-            rather than starting a second one.
-          </span>
+          <SchoolsFaced entries={entries} />
         </div>
-      ) : null}
-    </EventShell>
+      }
+    >
+      <TableCard columns={COLUMNS} headers={HEADERS}>
+        {entries.map((entry) => (
+          <EntryRun key={entry.id} entry={entry} canEdit={canEdit} />
+        ))}
+      </TableCard>
+    </EventPageFrame>
   );
 }
 
+/**
+ * One entry: its heading, and its run as rows.
+ *
+ * A fragment, not a bordered block — the card's rows carry no rules between
+ * them, and the old page's per-entry `border-t` plus blue tick beside the name
+ * were both the "coloured left stripe" register `event-page.tsx` rules out. The
+ * heading itself is the separation.
+ */
 function EntryRun({ entry, canEdit }: { entry: EventEntry; canEdit: boolean }) {
-  const record = runRecord(entry.matches);
-  const decided = record.won + record.lost;
-
-  // Segment only where a player actually moved. One draw across a whole run is
-  // the normal case, and heading it "Main draw" tells the reader nothing.
-  const draws = new Set(
-    entry.matches.map((match) => drawOfRound(match.round) ?? entry.draw ?? "Main draw")
-  );
-  const segmented = draws.size > 1;
+  const segments = groupByDraw(entry);
+  const segmented = segments.length > 1;
 
   return (
-    <div className="mt-6 border-t border-[var(--border-hairline)] pt-6 first:border-t-0">
-      <div className="flex items-center gap-3 pb-2.5">
-        <span className="h-3 w-0.5 shrink-0 bg-[var(--blue)]" />
-        {/* Each entry is a section of this page — one player's run — so it is
-            an h2. Without these the outline was one heading and 30 rows. */}
-        <h2 className="text-[16px] font-normal text-[var(--ink-900)]">
-          {entry.playerLabels.join(" / ") || "Unnamed entry"}
-        </h2>
-        <span className="text-micro" style={{ color: "var(--ink-600)" }}>
-          {entry.draw ? entry.draw.toLowerCase() : "entered"}
-          {entry.seed ? (
-            <>
-              {" · seed "}
-              <span className="tabular">{entry.seed}</span>
-            </>
-          ) : null}
-          {/* The design annotates a single-draw run with "no segments — never
-              left it". That reads as a claim about a FINISHED run, and after
-              one match it is just noise — the absence of segment headings
-              already says the player has not moved draws. */}
-        </span>
-        <div className="flex-1" />
-        <RunStrip matches={entry.matches} />
-        {decided > 0 ? (
-          <span
-            className="tabular w-11 text-right text-[14px]"
-            style={{ color: "var(--ink-900)" }}
-          >
-            {record.won}–{record.lost}
-          </span>
-        ) : null}
-      </div>
-
-      {entry.matches.length === 0 ? (
-        canEdit ? (
-          <AddResultRow entry={entry} />
-        ) : null
-      ) : (
-        <>
-          {groupByDraw(entry).map((segment) => (
-            <div key={segment.draw}>
-              {segmented ? (
-                <div className="pb-0.5 pt-3.5">
-                  <span className="eyebrow">{segment.draw}</span>
-                </div>
-              ) : null}
-              {segment.matches.map((match, index) => (
-                <LineRow
-                  key={match.id}
-                  entry={entry}
-                  match={match}
-                  label={match.round ?? "—"}
-                  round={match.round}
-                  canEdit={canEdit}
-                  columns={COLUMNS}
-                  last={index === segment.matches.length - 1}
-                />
-              ))}
+    <>
+      <GroupHead
+        name
+        label={entry.playerLabels.join(" / ") || "Unnamed entry"}
+        note={runSubline(entry)}
+      />
+      {segments.map((segment) => (
+        <div key={segment.draw}>
+          {segmented ? (
+            <div className="pb-1 pt-2.5">
+              <span className="eyebrow-sm">{segment.draw}</span>
             </div>
+          ) : null}
+          {segment.matches.map((match) => (
+            <LineRow
+              key={match.id}
+              entry={entry}
+              match={match}
+              label={match.round ?? "—"}
+              round={match.round}
+              canEdit={canEdit}
+              columns={COLUMNS}
+              showSchool={false}
+              // Every row `last`: inside the card the rows carry no rules
+              // between them — the header's single hairline is the only one,
+              // which is the table law `TableCard` draws.
+              last
+            />
           ))}
-          {canEdit ? <AddResultRow entry={entry} /> : null}
-        </>
+        </div>
+      ))}
+    </>
+  );
+}
+
+/**
+ * "Seed 3 · 2–1 · out in the quarter-final" — the heading's second line.
+ *
+ * Three segments, any of which can be absent, joined by middots. An entry that
+ * has played nothing says which draw it is in and that it has played nothing,
+ * because a bare seed under a name reads as a run that has been lost rather
+ * than one that has not started.
+ *
+ * "Qualifier" replaces the seed for a qualifying entry: a seeding inside a
+ * qualifying draw is a different number from a main-draw seed, and printing it
+ * unqualified beside main-draw entries invites the two to be compared.
+ */
+function runSubline(entry: EventEntry): string {
+  const qualifying = (entry.draw ?? "").toLowerCase().includes("qualif");
+
+  if (entry.matches.length === 0) {
+    return `${qualifying ? "Qualifier" : "Main draw"} · no matches yet`;
+  }
+
+  const record = runRecord(entry.matches);
+  const segments = [
+    qualifying ? "Qualifier" : entry.seed ? `Seed ${entry.seed}` : null,
+    `${record.won}–${record.lost}`,
+    runFinish(entry),
+  ];
+
+  return segments.filter(Boolean).join(" · ");
+}
+
+/**
+ * The rail's second card — every school this weekend was played against, with
+ * the record against each.
+ *
+ * ── The school is per ENTRY, not per match ─────────────────────────────────
+ * `opponentSchool` lives on `program_event_entries` and is overwritten by the
+ * last `recordResult` filed against that entry, so a run through four different
+ * programs carries only the fourth. Summing `runRecord` over the entries that
+ * name a school is therefore the honest reading of the column we have: it says
+ * "this entry's run, filed against this school", not "these matches were played
+ * against this school". A per-match answer needs a per-match column, which does
+ * not exist yet.
+ *
+ * No "all opponents" footer link: the tournament page has no single opponent
+ * for one to be about, and a link to the whole directory from here is a
+ * different question than the one the card answers.
+ */
+function SchoolsFaced({ entries }: { entries: EventEntry[] }) {
+  const order: string[] = [];
+  const rows = new Map<
+    string,
+    { won: number; lost: number; programId: string | null }
+  >();
+
+  for (const entry of entries) {
+    const school = entry.opponentSchool;
+    if (!school) continue;
+
+    if (!rows.has(school)) {
+      rows.set(school, { won: 0, lost: 0, programId: null });
+      order.push(school);
+    }
+    const row = rows.get(school)!;
+    const run = runRecord(entry.matches);
+    row.won += run.won;
+    row.lost += run.lost;
+    row.programId = row.programId ?? entry.opponentProgramId ?? null;
+  }
+
+  return (
+    <div className="surface-card min-w-0 px-5 pb-4 pt-4">
+      <span className="eyebrow">Schools faced</span>
+
+      {order.length === 0 ? (
+        <p className="mt-3 text-[12px]" style={{ color: "var(--ink-500)" }}>
+          No schools yet
+        </p>
+      ) : (
+        <div className="mt-1 flex flex-col">
+          {order.map((school) => {
+            const row = rows.get(school)!;
+            const body = (
+              <>
+                <span className="min-w-0 truncate" style={{ color: "var(--ink-900)" }}>
+                  {school}
+                </span>
+                <span className="tabular shrink-0" style={{ color: "var(--ink-600)" }}>
+                  {row.won}–{row.lost}
+                </span>
+              </>
+            );
+            const className =
+              "flex h-[36px] items-center justify-between gap-3 text-[12px]";
+
+            // A link only where the event actually resolved a program. A row
+            // that looks clickable and lands nowhere is worse than a plain one.
+            return row.programId ? (
+              <Link
+                key={school}
+                href={`/dashboard/opponents/${row.programId}`}
+                className={className}
+              >
+                {body}
+              </Link>
+            ) : (
+              <div key={school} className={className}>
+                {body}
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
-}
-
-function groupByDraw(entry: EventEntry) {
-  const home = entry.draw ?? "Main draw";
-  const order: string[] = [];
-  const buckets = new Map<string, EventEntry["matches"]>();
-
-  for (const match of entry.matches) {
-    const draw = drawOfRound(match.round) ?? home;
-    if (!buckets.has(draw)) {
-      buckets.set(draw, []);
-      order.push(draw);
-    }
-    buckets.get(draw)!.push(match);
-  }
-
-  return order.map((draw) => ({ draw, matches: buckets.get(draw)! }));
 }

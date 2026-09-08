@@ -33,6 +33,7 @@ export function LineRow({
   round,
   canEdit,
   columns,
+  showSchool = true,
   last,
 }: {
   entry: EventEntry;
@@ -44,6 +45,15 @@ export function LineRow({
   round: string | null;
   canEdit: boolean;
   columns: string;
+  /**
+   * Print the opponent's school after their name.
+   *
+   * True for a tournament, where every round can be against a different
+   * program and the name alone says nothing about who. False on a dual, whose
+   * title already names the one school every line is played against — repeating
+   * it on all nine rows is the same word nine times.
+   */
+  showSchool?: boolean;
   last?: boolean;
 }) {
   const [scoring, setScoring] = useState(false);
@@ -86,7 +96,7 @@ export function LineRow({
 
   return (
     <div
-      className={`grid ${columns} items-center gap-3.5 py-[11px] ${
+      className={`grid ${columns} items-center gap-4 py-[11px] ${
         last ? "" : "border-b border-[var(--border-hairline)]"
       }`}
     >
@@ -106,7 +116,7 @@ export function LineRow({
           {isForfeited ? "vs" : won === null ? "vs" : won ? "d." : "f."}
         </span>{" "}
         {theirLabel || "—"}
-        {entry.opponentSchool ? (
+        {showSchool && entry.opponentSchool ? (
           <span style={{ color: "var(--ink-600)" }}> {entry.opponentSchool}</span>
         ) : null}
       </span>

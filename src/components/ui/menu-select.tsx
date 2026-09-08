@@ -72,13 +72,27 @@ export function MenuSelect<T extends string>({
       aria-label={label}
       aria-haspopup="menu"
       aria-expanded={open}
+      // The underline trigger is drawn as a field — a hairline in a row of
+      // underline inputs — so it answers focus the way they do: the rule goes
+      // 2px blue, and that is the only mark. The button ring on top of it was
+      // a second one. `focus.css` honours this attribute on actionables for
+      // exactly this case; the pill keeps its ring, since its border does not
+      // change on focus and a box with no change would be a box with no mark.
+      data-focus-ring={variant === "underline" ? "none" : undefined}
       className={cn(
         "flex cursor-pointer items-center justify-between gap-2 text-left transition-colors duration-150",
         "focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60",
         variant === "underline"
-          ? "h-8 w-full rounded-none border-b bg-transparent text-[13px] text-[var(--ink-900)]"
+          ? // 34px, the underline family's one height (`advField("underline")`,
+            // `SettingsUnderlineInput`): this trigger sat at 32 and read as a
+            // 2px mistake beside any underline input in the same row.
+            "h-[34px] w-full rounded-none border-b bg-transparent text-[13px] text-[var(--ink-900)] focus-visible:border-b-2 focus-visible:border-[var(--blue)]"
           : "h-[30px] shrink-0 rounded-[6px] border bg-[var(--surface-card)] px-3 text-[12px] text-[var(--ink-900)] hover:bg-[var(--surface-subtle)]",
-        open ? "border-[var(--blue)]" : "border-[var(--border-field)]",
+        open
+          ? variant === "underline"
+            ? "border-b-2 border-[var(--blue)]"
+            : "border-[var(--blue)]"
+          : "border-[var(--border-field)]",
         className
       )}
     >

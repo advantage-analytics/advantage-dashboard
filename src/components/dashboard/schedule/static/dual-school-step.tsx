@@ -8,10 +8,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import Link from "next/link";
-import { ChevronRight, Plus, Search } from "lucide-react";
+import { Check, ChevronRight, Plus, Search } from "lucide-react";
+import { EventMark } from "@/components/dashboard/schedule/static/event-mark";
 import { cn } from "@/lib/utils";
-import { advButton } from "@/lib/ui/adv-button";
 import {
   divisionLabel,
   programDisplayName,
@@ -32,25 +31,41 @@ import type { ProgramSearchResult } from "@/lib/data/programs-server";
  * the route reads once for the whole flow, as it always did.
  *
  * ── Why a context and not props ────────────────────────────────────────────
- * `StaticDualBuilder` is the two steps' shell: it owns which step is showing
- * and nothing else, deliberately, so that neither step's work has to be read
- * through it. Threading one screen's data through that shell as props would
- * undo exactly that. So the route wraps it in the provider below and each step
- * takes what it needs — step one the directory half, `ourConference` through
- * `directoryTotal`, and step two the rest.
+ * `NewDualFlow` (`new-dual-flow.tsx`) is the three steps' shell: it owns which
+ * step is showing and which school was chosen, and nothing else, deliberately,
+ * so that no step's work has to be read through it. Threading one screen's data
+ * through that shell as props would undo exactly that. So the route wraps it in
+ * the provider below and each step takes what it needs — step one the directory
+ * half, `ourConference` through `directoryTotal`, and the other two the rest.
  *
  * `ladder` and `defaultSurface` are therefore read on a
  * screen that does not use them: they are step two's, and this route is the
  * flow's one read.
  */
 export interface NewDualData {
-  /** The viewer's own program, for step two's header and its squad warning. */
   /** `getLadder` — step two's lineup. Step one does not read it. */
   ladder: LadderPlayer[];
   /** `getTeamSettings` — step two's surface default. */
   defaultSurface: string | null;
   /** From `getTeamSettings` — the label the own-conference chip carries. */
   ourConference: string | null;
+  /**
+   * The viewer's own squad, from `getTeamSettings` — step one lists only the
+   * squad that could actually be played.
+   *
+   * A men's program schedules men's duals. `programs` carries one row per
+   * squad, so a school fielding both surfaces as two rows in the conference
+   * table and in every search response; without this, half of every list is
+   * opponents this program will never face, and the two rows are told apart
+   * only by a word in the subline.
+   *
+   * Null when `getTeamSettings` came back empty — the one read that supplies
+   * it. Step one then narrows by squad NOT AT ALL and lists both, which is the
+   * honest failure: guessing a squad would hide the real opponents from
+   * whichever program guessed wrong, and a list that is too long is a list the
+   * coach can still finish.
+   */
+  ourTeam: "mens" | "womens" | null;
   /** Already label-formatted ("D-I"), so the chip and the sublines agree. */
   ourDivision: string | null;
   /** So a program cannot schedule a dual against itself out of the directory. */
@@ -141,16 +156,33 @@ export function useNewDualData(): NewDualData {
  * `onContinue` takes the answer with it: the directory row beside the
  * school's own name for a pick, the typed text and a null row for a club side
  * or a school the directory never had — the dormant `SchoolSearch.onChosen`'s
- * contract. Step two names whichever it was given and nothing else; see
- * `static-dual-builder.tsx`'s header for the defect that shaped this.
+ * contract. The two steps after it name whichever it was given and nothing
+ * else. An earlier pass threaded the picked row through while the rest of the
+ * builder was still the artboard's fixtures, so picking Ridgemont Tech printed
+ * "vs Ridgemont Tech" over Ridgeline's lineup; the row travels now because the
+ * data travels with it. See `new-dual-flow.tsx`'s header for the shape that
+ * carries it.
  */
 export function DualSchoolStep({
   onContinue,
+  onChoiceChange,
 }: {
   onContinue: (name: string, program: ProgramSearchResult | null) => void;
+  /**
+   * What Continue would carry right now, reported upward on every change.
+   *
+   * The step still owns the answer — the picked row and the typed term are its
+   * state, and `commit()` below is still the one place the two are turned into
+   * one choice. What this adds is a read of that choice for a footer that is no
+   * longer this component's: `NewDualFlow` draws the shell's Continue, and a
+   * button that cannot see the answer cannot know whether to be asleep. Null is
+   * "nothing chosen yet", which is exactly the state that disables it.
+   */
+  onChoiceChange?: (name: string | null, program: ProgramSearchResult | null) => void;
 }) {
   const {
     ourConference,
+    ourTeam,
     ourDivision,
     ourProgramKey,
     conferencePrograms,
@@ -199,6 +231,25 @@ export function DualSchoolStep({
 
   const query = term.trim().toLowerCase();
 
+  /**
+   * The viewer's own squad, over both lists.
+   *
+   * Not a chip: a men's program cannot play a women's dual, so this is what
+   * the directory *is* on this screen and not a filter the coach turns on. It
+   * runs over the conference list and the search results alike — the search
+   * RPC matches on name, not on squad, so "Ridg" answers with both of
+   * Ridgeline's rows and only this drops the one that is not playable.
+   *
+   * ── When `ourTeam` is null ─────────────────────────────────────────────────
+   * Every row survives, both squads listed. `ourTeam` is null only when
+   * `getTeamSettings` returned nothing, and a program whose own identity did
+   * not load is one this screen cannot narrow honestly. See `NewDualData`.
+   */
+  function isOurSquad(program: ProgramSearchResult): boolean {
+    if (ourTeam === null) return true;
+    return program.team === ourTeam;
+  }
+
   function passesChips(program: ProgramSearchResult): boolean {
     if (conferenceOnly && program.conference !== ourConference) return false;
     if (divisionOnly && divisionLabel(program.division) !== ourDivision) {
@@ -214,15 +265,24 @@ export function DualSchoolStep({
   // dormant `SchoolSearch`, which showed nothing until two characters were
   // typed: behind a field that is now genuinely empty on arrival, that reads as
   // a program with no opponents rather than as a directory waiting for a term.
+  //
+  // The term matches a school's name OR its conference, because "Big Ten" is
+  // a thing a coach types into a box that lists schools by conference — and
+  // a term that matched only names answered it with nothing, having just
+  // drawn the heading "Your conference" above the list it emptied.
   const conferenceRows = conferencePrograms
+    .filter(isOurSquad)
     .filter(
       (program) =>
-        query.length === 0 || program.schoolName.toLowerCase().includes(query)
+        query.length === 0 ||
+        program.schoolName.toLowerCase().includes(query) ||
+        (program.conference?.toLowerCase().includes(query) ?? false)
     )
     .filter(passesChips);
 
   const listedKeys = new Set(conferenceRows.map((row) => row.programKey));
   const searchRows = results
+    .filter(isOurSquad)
     .filter((program) => program.programKey !== ourProgramKey)
     .filter((program) => !listedKeys.has(program.programKey))
     .filter(passesChips);
@@ -240,25 +300,28 @@ export function DualSchoolStep({
    */
   const chosen: string | null = picked ? picked.schoolName : term.trim() || null;
 
+  // Reported rather than lifted: the choice stays this component's, and the
+  // flow above is told what it is so its Continue can gate on it. An effect
+  // and not a call inside the handlers, because "the term changed" and "a row
+  // was picked" are three separate handlers and one of them is the escape row.
+  useEffect(() => {
+    onChoiceChange?.(chosen, picked);
+  }, [chosen, picked, onChoiceChange]);
+
   function commit() {
     if (chosen === null) return;
     onContinue(chosen, picked);
   }
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col bg-[var(--surface-card)]">
-      {/* `padding:32px 40px` — the artboard's, not `EventShell`'s 26/48/32. */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-10 py-8">
-        <div className="max-w-[720px]">
-          <span className="eyebrow">New dual · step 1 of 2</span>
-          <h1
-            className="mt-[9px] text-[30px] font-light leading-[34px] text-[var(--ink-900)]"
-            style={{ letterSpacing: "-.6px" }}
-          >
-            Which school are you playing?
-          </h1>
-
-          <div className="mt-5 flex items-center gap-3 border-b-2 border-[var(--blue)] pb-[13px] pt-3">
+    /* No frame, no eyebrow, no title and no footer: all four are
+       `WizardShell`'s now (`new-dual-flow.tsx`), which draws them the same way
+       for all three steps. What is left is the question itself — the field,
+       the two pills, the two lists and the escape row — sitting in the shell's
+       832px column, which measures 720px inside its gutters and is therefore
+       the same width the artboard's own `max-w-[720px]` gave it. */
+    <>
+          <div className="flex items-center gap-3 border-b-2 border-[var(--border-medium)] pb-[13px] pt-3 transition-colors focus-within:border-[var(--blue)]">
             <Search
               size={17}
               strokeWidth={1.5}
@@ -267,7 +330,17 @@ export function DualSchoolStep({
             {/* Autofocused, which is how `2c` draws it: a field with the caret
                 already in it. The blue rule under the row is the drawn focus
                 state and stays put. */}
+            {/* The row IS the field, and the rule under it GOES blue on focus
+                — which is what earns this opt-out. `focus.css` is explicit that
+                looking like an underline is not enough: something has to change
+                at focus, or the field goes from one indicator to zero. A
+                standing blue rule (what this drew at first) was exactly that
+                failure. `outline-none` alone cannot opt out either — the
+                `--focus-ring-field` box-shadow is set unlayered and is
+                unreachable by a Tailwind utility, so the attribute is the
+                documented way. */}
             <input
+              data-focus-ring="none"
               autoFocus
               value={term}
               onChange={(event) => {
@@ -423,34 +496,7 @@ export function DualSchoolStep({
               ) : null}
             </button>
           ) : null}
-        </div>
-      </div>
-
-      {/* `padding:16px 40px 20px` — again the artboard's own, not the shell's. */}
-      <div className="flex shrink-0 items-center gap-3 border-t border-[var(--border-hairline)] px-10 pb-5 pt-4">
-        {/* Inside the rebuilt set. */}
-        <Link
-          href="/dashboard/team/schedule"
-          className={advButton("ghost", "md")}
-        >
-          Cancel
-        </Link>
-        <div className="flex-1" />
-        {chosen ? (
-          <span className="text-[11px]" style={{ color: "var(--ink-600)" }}>
-            {chosen} · date, site and lineup come next
-          </span>
-        ) : null}
-        <button
-          type="button"
-          onClick={commit}
-          disabled={chosen === null}
-          className={advButton("primary", "md")}
-        >
-          Continue
-        </button>
-      </div>
-    </div>
+    </>
   );
 }
 
@@ -486,14 +532,27 @@ function SchoolRow({
       onClick={onSelect}
       aria-pressed={selected}
       className={cn(
-        "-mx-3 grid cursor-pointer grid-cols-[minmax(0,1fr)_96px_13px] items-center gap-4",
+        "-mx-3 grid cursor-pointer grid-cols-[32px_minmax(0,1fr)_96px_13px] items-center gap-4",
         "rounded-[var(--radius-element)] px-3 py-2.5 text-left",
         "transition-colors duration-[var(--duration-hover)]",
+        // `--surface-muted` (#FAFAFA) measured invisible against the white
+        // card this row sits on — a wash that leaves the selected row
+        // indistinguishable from the rest of the list. `--surface-subtle`
+        // (#F5F5F5) is the same wash the mark itself sits on, and is the one
+        // that actually reads at rest.
         selected
-          ? "bg-[var(--surface-muted)]"
-          : "hover:bg-[var(--surface-muted)]"
+          ? "bg-[var(--surface-subtle)]"
+          : "hover:bg-[var(--surface-subtle)]"
       )}
     >
+      {/* The same mark the schedule table draws for the same opponent
+          (`schedule-table.tsx`), one size up from its 26px — this row's
+          denser three-line subline needs the extra weight the table's
+          single-line cell does not. Picking a school here and finding it on
+          the schedule afterwards should still be recognising one thing, not
+          reading two names — which is the whole job a monogram does in a
+          product with no crests to draw. */}
+      <EventMark kind="dual" name={program.schoolName} size={32} />
       <span className="min-w-0">
         <span
           className={cn(
@@ -519,11 +578,24 @@ function SchoolRow({
             off rather than formatted. */}
         {history.lastPlayedOn ? history.lastPlayedOn.slice(5) : "—"}
       </span>
-      <ChevronRight
-        size={13}
-        strokeWidth={1.5}
-        className="text-[var(--ink-300)]"
-      />
+      {/* Selected-row check is Signal Blue, site-wide (design system SKILL.md)
+          — the same 13px Lucide `check` every menu and card uses for "chosen".
+          The chevron is what an unselected row draws instead; the two never
+          show together. */}
+      {selected ? (
+        <Check
+          size={13}
+          strokeWidth={2}
+          aria-hidden="true"
+          className="text-[var(--blue)]"
+        />
+      ) : (
+        <ChevronRight
+          size={13}
+          strokeWidth={1.5}
+          className="text-[var(--ink-300)]"
+        />
+      )}
     </button>
   );
 }

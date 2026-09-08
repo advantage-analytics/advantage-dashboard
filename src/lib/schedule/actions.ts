@@ -13,6 +13,12 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { headToHeadRows } from "@/lib/data/opponents-server";
+import { getEventDetail } from "@/lib/data/schedule-server";
+import {
+  planEntryChanges,
+  type EntryPlan,
+  type IncomingEntry,
+} from "./entry-plan";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { isProgramStaff } from "@/lib/workspace/types";
 import type { Discipline, EventSite } from "./types";
@@ -20,6 +26,14 @@ import type { Discipline, EventSite } from "./types";
 export type ActionError = { error: string };
 
 export interface LineupLineInput {
+  /**
+   * The `program_event_entries` row this line came from, when a form loaded an
+   * existing lineup. Absent on a line typed fresh, and ignored entirely by
+   * `createDual` — it exists so `planEntryChanges` can match a submitted line
+   * to a saved one by identity rather than by slot, which is what lets a coach
+   * rename a slot without the save reading as "deleted S1, inserted S2".
+   */
+  id?: string;
   discipline: Discipline;
   slot: string;
   position: number;
@@ -76,6 +90,8 @@ export interface CreateDualInput {
 }
 
 export interface TournamentEntryInput {
+  /** See `LineupLineInput.id` — the saved row this entry came from, if any. */
+  id?: string;
   discipline: Discipline;
   position: number;
   draw: string | null;
@@ -296,6 +312,230 @@ export async function createTournament(
 }
 
 /**
+ * Editing an event that already exists.
+ *
+ * `updateDual` and `updateTournament` are `createDual`/`createTournament` a
+ * second time — the same staff gate, the same `program_events` columns — plus
+ * the one thing creating has no need of: deciding what may happen to lines the
+ * rest of the product has already built on. That decision is
+ * `planEntryChanges` in `entry-plan.ts`, pure and specced, and this half only
+ * carries it out.
+ *
+ * **The plan is consulted before ANY write, the event row included.** A save
+ * that renamed the tournament and then discovered it could not move a scored
+ * entry would leave the coach with half their edit applied and no way to see
+ * which half. Refusal is total.
+ */
+
+/** `{ eventId }` and everything `createDual` takes except who we are playing. */
+export type UpdateDualInput = Omit<
+  CreateDualInput,
+  "opponent" | "opponentProgramKey"
+> & {
+  eventId: string;
+};
+
+export type UpdateTournamentInput = CreateTournamentInput & { eventId: string };
+
+/**
+ * Columns for one entry row, given the submitted row. Kind-specific, because a
+ * dual line has a slot and an opponent and a tournament entry has a draw and a
+ * seed, and writing the union of both would put nulls into columns the other
+ * kind means something by.
+ */
+type EntryColumns = (row: IncomingEntry) => Record<string, unknown>;
+
+/**
+ * Carry out a plan whose `refuse` list the caller has already found empty.
+ *
+ * Deletes first, then updates, then inserts: a lineup edit that swaps two slots
+ * would otherwise collide with the unique-ish shape of the old rows while both
+ * spellings exist. There is no transaction here — PostgREST gives one per
+ * statement — so the ordering is what keeps a partial failure legible rather
+ * than a rollback.
+ */
+async function applyEntryPlan(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  plan: EntryPlan,
+  event: { id: string; programId: string },
+  columns: EntryColumns
+): Promise<ActionError | null> {
+  if (plan.delete.length > 0) {
+    const { error } = await supabase
+      .from("program_event_entries")
+      .delete()
+      .in(
+        "id",
+        plan.delete.map((row) => row.id)
+      )
+      // Scoped again at the write, not just at the read that produced the plan.
+      // The ids came from a read this action did itself, so this is belt and
+      // braces — but it is the cheap kind, and it is what makes the statement
+      // safe to read in isolation.
+      .eq("program_id", event.programId);
+    if (error) return { error: error.message };
+  }
+
+  for (const row of plan.update) {
+    const { error } = await supabase
+      .from("program_event_entries")
+      .update({ ...columns(row.row), updated_at: new Date().toISOString() })
+      .eq("id", row.id)
+      .eq("program_id", event.programId);
+    if (error) return { error: error.message };
+  }
+
+  if (plan.insert.length > 0) {
+    const { error } = await supabase.from("program_event_entries").insert(
+      plan.insert.map((row) => ({
+        event_id: event.id,
+        program_id: event.programId,
+        ...columns(row.row),
+      }))
+    );
+    if (error) return { error: error.message };
+  }
+
+  return null;
+}
+
+function revalidateEvent(eventId: string): void {
+  revalidatePath("/dashboard/team/schedule");
+  revalidatePath(`/dashboard/team/schedule/${eventId}`);
+}
+
+export async function updateDual(
+  input: UpdateDualInput
+): Promise<{ eventId: string } | ActionError> {
+  const auth = await requireStaff();
+  if (isError(auth)) return auth;
+
+  if (input.lines.length === 0) return { error: "A dual needs at least one line." };
+
+  // Scoped on BOTH ids, and never on the client's `eventId` alone:
+  // `getEventDetail` reads `program_events` filtered by `program_id` as well,
+  // so an event belonging to another program comes back null and is
+  // indistinguishable from one that does not exist — which is the answer a
+  // caller poking at ids deserves.
+  const detail = await getEventDetail(auth.programId, input.eventId);
+  if (!detail) return { error: "That event no longer exists." };
+  if (detail.event.kind !== "dual") return { error: "That event isn't a dual." };
+
+  const plan = planEntryChanges(detail.entries, input.lines);
+  if (plan.refuse.length > 0) return { error: plan.refuse[0].reason };
+
+  const supabase = await createClient();
+
+  // The opponent is not editable here, so a line added to an existing dual
+  // inherits the school every other line already points at rather than
+  // re-resolving a directory key this action does not take.
+  const opponentProgramId = detail.entries[0]?.opponentProgramId ?? null;
+
+  const { error: eventError } = await supabase
+    .from("program_events")
+    .update({
+      // A dual is one day, so the span collapses — `createDual`'s rule, kept
+      // here so an edited date cannot leave `ends_on` on the old day.
+      starts_on: input.date,
+      ends_on: input.date,
+      site: input.site,
+      surface: input.surface || null,
+      format: { best_of: input.bestOf, ad_scoring: input.adScoring },
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", detail.event.id)
+    .eq("program_id", auth.programId);
+
+  if (eventError) return { error: eventError.message };
+
+  const failure = await applyEntryPlan(
+    supabase,
+    plan,
+    { id: detail.event.id, programId: auth.programId },
+    (row) => {
+      const line = row as LineupLineInput;
+      return {
+        discipline: line.discipline,
+        slot: line.slot,
+        position: line.position,
+        player_user_ids: line.playerUserIds,
+        player_labels: line.playerLabels,
+        opponent_labels: line.opponentLabels,
+        opponent_program_id: opponentProgramId,
+        forfeit: line.forfeit ?? null,
+      };
+    }
+  );
+  if (failure) return failure;
+
+  revalidateEvent(detail.event.id);
+  return { eventId: detail.event.id };
+}
+
+export async function updateTournament(
+  input: UpdateTournamentInput
+): Promise<{ eventId: string } | ActionError> {
+  const auth = await requireStaff();
+  if (isError(auth)) return auth;
+
+  if (!input.name.trim()) return { error: "Name the tournament first." };
+  if (input.endsOn < input.startsOn) {
+    return { error: "The tournament can't end before it starts." };
+  }
+
+  const detail = await getEventDetail(auth.programId, input.eventId);
+  if (!detail) return { error: "That event no longer exists." };
+  if (detail.event.kind !== "tournament") {
+    return { error: "That event isn't a tournament." };
+  }
+
+  const plan = planEntryChanges(detail.entries, input.entries);
+  if (plan.refuse.length > 0) return { error: plan.refuse[0].reason };
+
+  const supabase = await createClient();
+
+  const { error: eventError } = await supabase
+    .from("program_events")
+    .update({
+      name: input.name.trim(),
+      starts_on: input.startsOn,
+      ends_on: input.endsOn,
+      site: input.site,
+      surface: input.surface || null,
+      host: input.host || null,
+      format: { best_of: input.bestOf, ad_scoring: input.adScoring },
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", detail.event.id)
+    .eq("program_id", auth.programId);
+
+  if (eventError) return { error: eventError.message };
+
+  const failure = await applyEntryPlan(
+    supabase,
+    plan,
+    { id: detail.event.id, programId: auth.programId },
+    (row) => {
+      const entry = row as TournamentEntryInput;
+      return {
+        discipline: entry.discipline,
+        // No slot: a tournament entry has a draw, not a court.
+        slot: null,
+        position: entry.position,
+        draw: entry.draw,
+        seed: entry.seed,
+        player_user_ids: entry.playerUserIds,
+        player_labels: entry.playerLabels,
+      };
+    }
+  );
+  if (failure) return failure;
+
+  revalidateEvent(detail.event.id);
+  return { eventId: detail.event.id };
+}
+
+/**
  * Record how a line went — and, in doing so, mint its match.
  *
  * This is the only place a match is created from an event, and it is what makes
@@ -414,6 +654,40 @@ export async function recordResult(
       ? null
       : (((entry.player_user_ids as string[] | null) ?? [])[0] ?? null);
 
+  /**
+   * The opponent's name, back onto the entry the line is drawn from.
+   *
+   * The entry's copy is not what `line-row.tsx` prints when a match exists —
+   * that prefers `match.opponentLabels` — but it IS what `dualSeed` seeds the
+   * edit form from, and what a matchless row and `lineupChoices` fall back to.
+   * So a correction that fixed a misspelling on the match left the editor
+   * still offering the old spelling, ready to write it back on the next save.
+   *
+   * ── Only on a dual when correcting ──────────────────────────────────────
+   * A tournament entry has ONE `opponent_labels` column and one `recordResult`
+   * per round, so the column means "the last round filed" (stated at
+   * `tournament-detail.tsx`'s `SchoolsFaced`). Syncing on a correction breaks
+   * that: fix a typo in the R32 score after R16 is recorded, and the entry
+   * reverts to naming R32's opponent — a round-old school on the rail, from an
+   * edit that was only ever about a score. A dual line has exactly one round
+   * (its court), so it has no later round to clobber.
+   */
+  const syncEntryOpponent = async () => {
+    if (input.opponentSchool === undefined && input.opponentLabels.length === 0) {
+      return;
+    }
+    await supabase
+      .from("program_event_entries")
+      .update({
+        opponent_labels: input.opponentLabels,
+        ...(input.opponentSchool !== undefined
+          ? { opponent_school: input.opponentSchool }
+          : {}),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", entry.id);
+  };
+
   if (existing?.id) {
     const { data: updated, error: updateError } = await supabase
       .from("matches")
@@ -443,6 +717,10 @@ export async function recordResult(
           "they can change it. Ask them to correct it.",
       };
     }
+
+    // Duals only — see `syncEntryOpponent`. `input.round` is null exactly when
+    // the line's round is its own court, which is what a dual line is.
+    if (input.round === null) await syncEntryOpponent();
 
     revalidatePath("/dashboard/team/schedule");
     revalidatePath(`/dashboard/team/schedule/${entry.event_id}`);
@@ -493,18 +771,7 @@ export async function recordResult(
 
   if (matchError) return { error: matchError.message };
 
-  if (input.opponentSchool !== undefined || input.opponentLabels.length > 0) {
-    await supabase
-      .from("program_event_entries")
-      .update({
-        opponent_labels: input.opponentLabels,
-        ...(input.opponentSchool !== undefined
-          ? { opponent_school: input.opponentSchool }
-          : {}),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", entry.id);
-  }
+  await syncEntryOpponent();
 
   revalidatePath("/dashboard/team/schedule");
   revalidatePath(`/dashboard/team/schedule/${entry.event_id}`);

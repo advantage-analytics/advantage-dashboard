@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { ArrowLeft, Check, ChevronDown, X } from "lucide-react";
+import { ArrowLeft, Check, X } from "lucide-react";
 import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
+import { AdvSelect } from "@/components/ui/adv-select";
 
 /**
  * The chrome every claim screen shares, transcribed from Stage E.
@@ -335,12 +336,13 @@ export const CLAIM_LABEL = "mb-2 block text-[11px] text-[var(--ink-700)]";
  * A `<select>` in the field chrome, with the design's chevron instead of the
  * browser's.
  *
- * The native control draws its own arrow — a stacked pair on macOS — which is
- * the one mark on these forms that no token describes. `appearance-none`
- * removes it and a 13px Lucide chevron in `--ink-500` stands in, exactly as
- * the frames draw it; the right padding keeps a long label from running under
- * the glyph. The chevron ignores the pointer so a click on it still opens the
- * select beneath.
+ * `AdvSelect`'s `boxed` kind is exactly this component, so this is now a name
+ * rather than an implementation — the claim flow's five forms keep importing
+ * `ClaimSelect` alongside `CLAIM_FIELD` and `CLAIM_LABEL`, which is the
+ * vocabulary they were written against.
+ *
+ * `boxed` keeps its focus ring, unlike the underline kind: the box's border
+ * does not change on focus, so the ring is the field's only indicator.
  */
 export function ClaimSelect({
   className,
@@ -348,19 +350,9 @@ export function ClaimSelect({
   ...props
 }: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <div className="relative">
-      <select
-        {...props}
-        className={`${CLAIM_FIELD} cursor-pointer appearance-none pr-9 ${className ?? ""}`}
-      >
-        {children}
-      </select>
-      <ChevronDown
-        className="pointer-events-none absolute right-3 top-1/2 size-[13px] -translate-y-1/2 text-[var(--ink-500)]"
-        strokeWidth={1.5}
-        aria-hidden="true"
-      />
-    </div>
+    <AdvSelect {...props} kind="boxed" className={className}>
+      {children}
+    </AdvSelect>
   );
 }
 

@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Swords } from "lucide-react";
+import { Check, GraduationCap } from "lucide-react";
 import { advButton } from "@/lib/ui/adv-button";
 import { EventShell } from "@/components/dashboard/schedule/event-shell";
 import { cn } from "@/lib/utils";
@@ -24,12 +25,34 @@ import { cn } from "@/lib/utils";
  *   1. No `New event` eyebrow above the heading. The artboard has none — the
  *      words are already in the breadcrumb the dashboard header draws.
  *   2. The bracket mark is 19px, not 22px. It is drawn smaller than the 22px
- *      Lucide `swords` beside it. That asymmetry is in the design.
+ *      Lucide icon beside it. That asymmetry is in the design.
  *   3. `Creates 9 lines` sets the 9 in `mono tabular`, as the artboard's own
  *      class list does. The dormant component dropped `mono` on the grounds
  *      that Roboto Mono is reserved for timestamps and job ids. That is a real
  *      argument and it is recorded here rather than acted on, because
  *      re-deciding it silently is exactly what this run is not for.
+ *
+ * ── Two departures from the artboard, made deliberately ────────────────────
+ * Both were raised against the shipped screen, and both override "the design
+ * wins" above, so they are recorded here rather than left to be re-litigated:
+ *
+ *   1. Dual match carries Lucide `graduation-cap`, not the artboard's `swords`.
+ *      Crossed swords read as combat, and the two cards are not opponent vs.
+ *      opponent — they are two shapes of *collegiate* event. The cap says the
+ *      thing the pair actually divides on, and it sits beside `BracketMark`
+ *      without either glyph promising a fight. Size and stroke are the
+ *      artboard's still: 22px at `strokeWidth={1.5}`.
+ *
+ *   2. The body is a centred column, not a left-flushed one — on both axes,
+ *      not just the horizontal one. The artboard flushes it to the top left
+ *      because it was drawn at the artboard's own width and height; in the
+ *      live shell the 820px grid stranded a wide gutter on the right, and a
+ *      short, unscrolled body left one below. The column centres in
+ *      `EventShell`'s body with `mx-auto my-auto`; the text inside it stays
+ *      left-aligned, so only the column's position moves. Done with a
+ *      wrapper here rather than in `event-shell.tsx`, which four other
+ *      screens draw through and which only grew `flex flex-col` (T22) so a
+ *      caller like this one *could* centre — it does not centre itself.
  *
  * ── The selected card's inner rule ─────────────────────────────────────────
  * The artboard draws it `rgba(59,130,246,0.15)`, and `--blue-glow`
@@ -94,7 +117,7 @@ const COPY = {
   tournamentMeta: "Creates entries · draws by round",
   aside:
     "One player's own match — a challenge, practice set or outside entry — isn't an event.",
-  asideLink: "Add it in Matches",
+  asideLink: "Add a one-off match",
   cancel: "Cancel",
   continue: "Continue",
   dualSelected: "Dual selected",
@@ -162,13 +185,12 @@ export function StaticEventChooser() {
           the remaining 10px rather than reaching into the shared shell — three
           other screens in this run sit in the same frame.
 
-          The bottom is deliberately NOT reconciled: the artboard says 0 and
-          `EventShell` contributes `pb-8` (32px). Reaching into the shared
-          shell to strip it would move the other three screens that sit in it,
-          so the 32px stands. Invisible here — the content is top-aligned and
-          far shorter than the viewport — but it is a real divergence from the
-          artboard, recorded rather than left silent. */}
-      <div className="pt-[10px]">
+          Centred on both axes — the header's point 2 says why. One fact
+          lives only here: below the height where the column plus its padding
+          no longer fits, `my-auto` collapses to 0 and the body's own
+          `overflow-y-auto` takes over, so short viewports scroll instead of
+          clipping. */}
+      <div className="mx-auto my-auto w-full max-w-[820px] pt-[10px]">
         <h1 className="text-[30px] font-light leading-[34px] tracking-[-0.6px] text-[var(--ink-900)]">
           {COPY.heading}
         </h1>
@@ -209,7 +231,7 @@ export function StaticEventChooser() {
                     }
                   >
                     {option.id === "dual" ? (
-                      <Swords
+                      <GraduationCap
                         strokeWidth={1.5}
                         className="size-[22px]"
                         aria-hidden="true"
@@ -276,20 +298,20 @@ export function StaticEventChooser() {
           <span className="text-micro" style={{ color: "var(--ink-600)" }}>
             {COPY.aside}
           </span>
-          {/* Inert, and deliberately so. The artboard's own anchor is the
-              placeholder `href="#3b"`, and the destination the label names —
-              `/dashboard/matches/new` — is outside the four routes this run
-              rebuilds. The brief is categorical: links are inert or point
-              within the rebuilt set, and wiring them to real destinations is
-              later work. Same treatment `7e`'s "One-off match in Matches"
-              gets in `static-schedule.tsx`.
-
-              Flagged, not reworded: a team workspace's rail has no Matches
-              entry, so this label names a place the coach cannot navigate to
-              from here. The design wins; the falsehood is T12's to record. */}
-          <span className="text-[11px] font-medium text-[var(--blue)]">
+          {/* The artboard's own anchor is the placeholder `href="#3b"`. This
+              run wires it to the wizard's single-match step under the
+              schedule — `/new/single`, one of the four routes this run
+              rebuilds — rather than the label the artboard used to carry,
+              which named `/dashboard/matches/new`: a team workspace's rail
+              has no Matches entry to arrive at, so that destination was
+              never one a coach could reach from here. `schedule-day-zero.tsx`
+              already uses the same label for the same destination. */}
+          <Link
+            href="/dashboard/team/schedule/new/single"
+            className="text-[11px] font-medium text-[var(--blue)]"
+          >
             {COPY.asideLink}
-          </span>
+          </Link>
         </div>
       </div>
     </EventShell>

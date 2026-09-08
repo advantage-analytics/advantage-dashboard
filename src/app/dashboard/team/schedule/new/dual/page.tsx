@@ -9,7 +9,7 @@ import { getProgramSchedule } from "@/lib/data/schedule-server";
 import { opponentDualHistory } from "@/lib/schedule/opponent-history";
 import { divisionLabel } from "@/lib/data/programs-server";
 import { NewDualDataProvider } from "@/components/dashboard/schedule/static/dual-school-step";
-import { StaticDualBuilder } from "@/components/dashboard/schedule/static/static-dual-builder";
+import { NewDualFlow } from "@/components/dashboard/schedule/static/new-dual-flow";
 import type { ConferenceProgram } from "@/lib/data/opponents-server";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
 
@@ -82,6 +82,11 @@ async function directoryTotal(): Promise<number | null> {
 /**
  * 2c/25b — the new dual: find the school, then date, site and lineup.
  *
+ * Three steps of the upload wizard's chrome since T15 — `new-dual-flow.tsx`
+ * frames `DualSchoolStep`, `DualFactsStep` and `DualLineupStep` on
+ * `WizardShell`. This route is unchanged by that: it reads once for the whole
+ * flow, as it always did.
+ *
  * ── Reading again, as of the schedule re-wiring ────────────────────────────
  * Four loaders in parallel — the ladder, the team settings, the conference
  * table and the whole program schedule — plus `opponentDualHistory()` over the
@@ -89,9 +94,9 @@ async function directoryTotal(): Promise<number | null> {
  * and real head-to-head records off the back of it; the ladder and the default
  * surface are read here for step two, which owns no route of its own.
  *
- * They reach the two steps through `NewDualDataProvider` rather than as props:
- * `StaticDualBuilder` owns the step state and takes none. See `NewDualData` in
- * `dual-school-step.tsx`.
+ * They reach the three steps through `NewDualDataProvider` rather than as
+ * props: `NewDualFlow` owns the step state and takes none. See `NewDualData`
+ * in `dual-school-step.tsx`.
  *
  * `dual-form.tsx` and `school-search.tsx` were the previous DB-wired
  * implementation of these two steps and are deleted — this route reads the same
@@ -134,6 +139,10 @@ export default async function NewDualPage() {
         ladder,
         defaultSurface: settings?.program.defaultSurface ?? null,
         ourConference: settings?.program.conference ?? null,
+        // Which squad this program fields — step one lists only opponents it
+        // could actually play. Null when the settings read came back empty,
+        // which step one reads as "do not narrow": see `NewDualData`.
+        ourTeam: settings?.program.team ?? null,
         ourDivision: divisionLabel(self?.division ?? null),
         // Off the loader, not off `self`: the conference table is empty for a
         // program with no `conference`, and a key read out of it would then be
@@ -150,7 +159,7 @@ export default async function NewDualPage() {
         directoryTotal: total,
       }}
     >
-      <StaticDualBuilder />
+      <NewDualFlow />
     </NewDualDataProvider>
   );
 }

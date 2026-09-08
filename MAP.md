@@ -61,7 +61,9 @@ markers is hand-written — edit it as things move.
 | `/dashboard/team` | [`src/app/dashboard/team/page.tsx`](src/app/dashboard/team/page.tsx) |
 | `/dashboard/team/roster/[playerId]` | [`src/app/dashboard/team/roster/[playerId]/page.tsx`](src/app/dashboard/team/roster/[playerId]/page.tsx) |
 | `/dashboard/team/roster` | [`src/app/dashboard/team/roster/page.tsx`](src/app/dashboard/team/roster/page.tsx) |
+| `/dashboard/team/schedule/[eventId]/edit` | [`src/app/dashboard/team/schedule/[eventId]/edit/page.tsx`](src/app/dashboard/team/schedule/[eventId]/edit/page.tsx) |
 | `/dashboard/team/schedule/[eventId]` | [`src/app/dashboard/team/schedule/[eventId]/page.tsx`](src/app/dashboard/team/schedule/[eventId]/page.tsx) |
+| `/dashboard/team/schedule/[eventId]/score` | [`src/app/dashboard/team/schedule/[eventId]/score/page.tsx`](src/app/dashboard/team/schedule/[eventId]/score/page.tsx) |
 | `/dashboard/team/schedule/new/dual` | [`src/app/dashboard/team/schedule/new/dual/page.tsx`](src/app/dashboard/team/schedule/new/dual/page.tsx) |
 | `/dashboard/team/schedule/new` | [`src/app/dashboard/team/schedule/new/page.tsx`](src/app/dashboard/team/schedule/new/page.tsx) |
 | `/dashboard/team/schedule/new/tournament` | [`src/app/dashboard/team/schedule/new/tournament/page.tsx`](src/app/dashboard/team/schedule/new/tournament/page.tsx) |

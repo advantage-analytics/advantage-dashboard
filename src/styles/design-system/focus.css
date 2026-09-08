@@ -19,14 +19,22 @@
    utility class. `advButton()` sets the same ring, so it agrees by value.
 
    ── Two rings, split by control kind ─────────────────────────────────────────
-   The floor is one indicator per control, not one COLOUR for every control.
-   Text fields are the carve-out (DESIGN.md "Focus"): blue on a focused field
-   reads as a validation state, and a six-field form would spend the accent six
-   times over. So `input`, `select` and `textarea` resolve to the neutral
-   `--focus-ring-field`, and need no focus class of their own. Everything
-   actionable — links, buttons, `summary`, anything tabbable — keeps the blue
-   `--focus-ring`. The split is keyed on tag name, so Radix's `SelectTrigger`
-   is a `<button>` and takes blue; only a native `<select>` gets the carve-out.
+   The floor is one indicator per control. `input`, `select` and `textarea`
+   resolve to `--focus-ring-field`; everything actionable — links, buttons,
+   `summary`, anything tabbable — resolves to `--focus-ring`. The split is
+   keyed on tag name, so Radix's `SelectTrigger` is a `<button>` and takes the
+   actionable ring; only a native `<select>` takes the field one.
+
+   Two tokens, but as of 2026-08-26 ONE COLOUR: `--field-ring` aliases straight
+   to `--blue` (colors.css), so a focused field rings blue exactly like a
+   focused button. It sat on the neutral `--ink-500` for a while — the argument
+   being that blue on a field reads as a validation state, and a six-field form
+   would spend the accent six times over — and was reverted at the design
+   owner's explicit call: one consistent focus colour across the product
+   mattered more. The tokens stay separate so the two families *can* diverge
+   again, not because they currently do. Anything describing this rule as "the
+   neutral field ring" is stale; the two differ in geometry (1px core + 30%
+   band vs. a single 40% band), not in hue.
 
    One thing this split must not do: resolve either branch to `none`.
    "No indicator" is the bug this file exists to fix — recolour a ring, never
@@ -43,10 +51,29 @@
 
    These fields opt out with the same `data-focus-ring="none"` the composite-
    field case below uses — same attribute, same specificity-0 rule, different
-   reason for being safe: auth's `form-field.tsx`, the settings underline input
-   (`SettingsUnderlineInput`, `UnderlineSelect`, and `ProfileSelect`'s inline
-   copy of the same rule), the schedule lineup editor's `NameField`, and the
-   match-edit dialog's `UnderlineField` children and `PlayerRow` name input.
+   reason for being safe: auth's `form-field.tsx`, `SettingsUnderlineInput`,
+   the schedule lineup editor's `NameField`, the match-edit dialog's
+   `UnderlineField` children and `PlayerRow` name input, the dual
+   builder's Date cell, the tournament builder's four-up row (its two
+   `DateField` cells and the two `FieldSelect`s beside them) — each of whose
+   `FieldCell` rows answers `focus-within` with the same 2px blue rule — and
+   the upload wizard's time input beside its `DateField`, whose own rule goes
+   2px blue on `:focus`.
+
+   `ui/adv-select.tsx` is where that judgement is made once for the selects it
+   owns, rather than at each call site: it sets the attribute from its `kind`
+   rather than accepting it as a prop, so `underline` and `bare` opt out
+   because the rule under them thickens to 2px `--blue` on focus, and `boxed`
+   keeps the ring because its border does not change.
+
+   It is NOT yet every native `<select>` in the product. Three still draw their
+   own — two in `schedule/add-result-dialog.tsx` and one in
+   `schedule/add-result-row.tsx`
+   (plus the deliberately `opacity-0` one in
+   `settings/settings-inline-select.tsx`, which is a different pattern). Those
+   all KEEP the ring, correctly: each sits under a hairline that never changes,
+   so the rule below applies to them unaltered. Migrating them is a live task,
+   not a finished one — do not read this paragraph as saying it is done.
 
    The opt-out is NOT safe merely because a field looks like an underline —
    only because something visibly changes on it at focus. `schedule/
@@ -63,17 +90,43 @@
   [tabindex]:not([tabindex="-1"])
 ):focus-visible {
   outline: none;
+}
+
+/* The same `data-focus-ring="none"` opt-out the fields have, for the one
+   actionable that is drawn AS a field: `MenuSelect`'s underline trigger is a
+   <button> with a hairline beneath it, sitting in a row of underline inputs.
+   Its rule goes 2px blue on focus exactly as theirs do, so the ring on top of
+   it was the same stacked second mark the field opt-out exists to remove.
+   Split from `outline: none` above for the reason given under the field rule
+   below: an opt-out must never hand the control back to the browser's own
+   outline. */
+:where(
+  :is(a[href], button, [role="button"], summary, [tabindex]:not([tabindex="-1"])):not([data-focus-ring="none"])
+):focus-visible {
   box-shadow: var(--focus-ring);
 }
 
-/* `data-focus-ring="none"` opts one control out. It exists for composite
-   fields — an input inside a bordered box, where the box is what reads as the
-   field — so the wrapper can draw the ring and the inner control does not draw
-   a second one inset within it. Everything stays inside :where(), so this is
-   still specificity 0. Scoping the opt-out to :focus-visible matters: an
-   inline `style={{boxShadow:"none"}}` would suppress the focus ring AND any
-   shadow the component ever sets for its own reasons, silently. */
-:where(:is(input, select, textarea):not([data-focus-ring="none"])):focus-visible {
+/* The browser's own outline goes for EVERY field, opted out or not. Split
+   from the ring rule below on purpose: when the two lived in one rule, opting
+   out of the ring also opted out of `outline: none`, and a native `<select>`
+   under `data-focus-ring="none"` fell back to the UA's `outline: auto` — a
+   grey box drawn around the exact control whose blue rule had just earned the
+   right to be the only mark. Measured on `AdvSelect` (`outlineStyle: "auto"`
+   while focused, ring correctly gone). An `<input>` hid the same gap only
+   where its own classes happened to carry `outline-none`. */
+:where(input, select, textarea):focus-visible {
   outline: none;
+}
+
+/* `data-focus-ring="none"` opts one control out of the RING only. It exists
+   for composite fields — an input inside a bordered box, where the box is what
+   reads as the field — so the wrapper can draw the ring and the inner control
+   does not draw a second one inset within it, and for underline fields whose
+   own rule visibly changes at focus (see the note above). Everything stays
+   inside :where(), so this is still specificity 0. Scoping the opt-out to
+   :focus-visible matters: an inline `style={{boxShadow:"none"}}` would
+   suppress the focus ring AND any shadow the component ever sets for its own
+   reasons, silently. */
+:where(:is(input, select, textarea):not([data-focus-ring="none"])):focus-visible {
   box-shadow: var(--focus-ring-field);
 }

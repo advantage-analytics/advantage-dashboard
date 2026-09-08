@@ -443,7 +443,10 @@ export function deriveOutcome(
  * True when a given set index has any user-entered data (score or tiebreak).
  * Used to warn before the sets stepper drops it.
  */
-export function setHasData(formData: FormData, index: number): boolean {
+export function setHasData(
+  formData: Pick<FormData, "playerScores" | "opponentScores" | "playerTiebreaks" | "opponentTiebreaks">,
+  index: number
+): boolean {
   return (
     formData.playerScores[index] != null ||
     formData.opponentScores[index] != null ||

@@ -6,7 +6,7 @@
  * is three chances to drift.
  */
 
-import type { EventSite } from "./types";
+import type { EventFormat, EventSite } from "./types";
 
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -145,6 +145,30 @@ export const EVENT_FORMATS: readonly {
 ];
 
 /**
+ * A saved event's format as the option name the builders select by, or
+ * `undefined` when no row states that pair.
+ *
+ * A lookup over the table above, never a parse: `EVENT_FORMATS` states each
+ * pair as literals, so this either finds the row or finds nothing. Nothing is
+ * the honest answer for an event whose `ad_scoring` is null — the state
+ * `docs/ui-revamp-guardrails.md` §3.1 and §4 exist about — and the draft hook
+ * then opens on its own default rather than on a `false` invented here to make
+ * the lookup succeed.
+ *
+ * Lives here rather than in either edit flow because both need it and a second
+ * copy is a second place for the encoding to come back.
+ */
+export function formatValueOf(format: {
+  bestOf: number;
+  adScoring: boolean | null;
+}): EventFormatValue | undefined {
+  return EVENT_FORMATS.find(
+    (option) =>
+      option.bestOf === format.bestOf && option.adScoring === format.adScoring
+  )?.value;
+}
+
+/**
  * "Brooks / Reid" → ["Brooks", "Reid"].
  *
  * Applied at the BOUNDARIES — on submit, and when comparing against the roster
@@ -181,6 +205,39 @@ export function roundRank(round: string | null): number {
   if (!round) return Number.MAX_SAFE_INTEGER;
   const index = ROUND_ORDER.indexOf(round.toUpperCase());
   return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+}
+
+/**
+ * A round code as a sentence says it — "QF" → "the quarter-final".
+ *
+ * The article is PART of the label, because every caller drops it straight into
+ * a clause ("out in the quarter-final", "through the round of 16") and a
+ * qualifying or consolation round takes no article at all. Splitting the two
+ * apart would put the decision in each caller and give us "out in the
+ * qualifying round 2" the first time one of them guessed.
+ *
+ * Covers `ROUND_ORDER` and nothing else: an unrecognised code comes back
+ * verbatim rather than being dressed up, so a run built on a round we do not
+ * know still prints an honest string.
+ */
+const ROUND_LONG: Record<string, string> = {
+  Q1: "qualifying round 1",
+  Q2: "qualifying round 2",
+  Q3: "qualifying round 3",
+  R128: "the round of 128",
+  R64: "the round of 64",
+  R32: "the round of 32",
+  R16: "the round of 16",
+  QF: "the quarter-final",
+  SF: "the semi-final",
+  F: "the final",
+  C1: "consolation round 1",
+  C2: "consolation round 2",
+  C3: "consolation round 3",
+};
+
+export function roundLongLabel(code: string): string {
+  return ROUND_LONG[code.toUpperCase()] ?? code;
 }
 
 /**
@@ -224,4 +281,25 @@ export function formatEventDatesLong(startsOn: string, endsOn: string): string {
  */
 export function surfaceTitle(surface: string): string {
   return surface.charAt(0).toUpperCase() + surface.slice(1);
+}
+
+/**
+ * "Best of 3 Sets · No-Ad Scoring" — the event page's format capsule.
+ *
+ * Two halves joined by a middot, and the SCORING half is dropped entirely when
+ * `adScoring` is null. Null is a real state (`EventFormat.adScoring` says so:
+ * the vision pipeline rejects a job without it), so the capsule must not print
+ * a guess — "Best of 3 Sets" with nothing after it reads as "not chosen yet",
+ * where "Best of 3 Sets · Ad Scoring" would be a wrong answer that looks like a
+ * real one. `EVENT_FORMATS` above holds the four pairs a builder can WRITE;
+ * this labels whatever a stored event turns out to carry, which is why it takes
+ * `EventFormat` (nullable) and not `EventFormatValue`.
+ *
+ * Title Case is the design's, and it is the page's, not the row's — the
+ * schedule table's cells stay sentence case.
+ */
+export function formatLabel(format: EventFormat): string {
+  const sets = format.bestOf === 1 ? "One Set" : `Best of ${format.bestOf} Sets`;
+  if (format.adScoring === null) return sets;
+  return `${sets} · ${format.adScoring ? "Ad Scoring" : "No-Ad Scoring"}`;
 }

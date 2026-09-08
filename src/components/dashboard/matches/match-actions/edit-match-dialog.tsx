@@ -10,6 +10,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AdvSelect } from "@/components/ui/adv-select";
+import { DateField, type DateFieldHandle } from "@/components/ui/date-field";
 import { cn } from "@/lib/utils";
 import {
   eyebrowLabelCls,
@@ -97,7 +99,15 @@ export function EditMatchDialog({ matchId, open, onOpenChange }: EditMatchDialog
 
   const p1NameRef = useRef<HTMLInputElement>(null);
   const p2NameRef = useRef<HTMLInputElement>(null);
-  const dateRef = useRef<HTMLInputElement>(null);
+  // Not an input ref: the date is a `DateField`, whose focusable thing is a
+  // segment inside its group. `DateFieldHandle` is the one method
+  // focus-first-invalid needs.
+  const dateRef = useRef<DateFieldHandle | null>(null);
+  // True while the date field is showing a blank segment. It is not derivable
+  // from `date`: react-stately reports complete dates only, so a half-cleared
+  // field leaves `date` holding the value being replaced. See the prop's own
+  // comment on `DateField`.
+  const [dateIncomplete, setDateIncomplete] = useState(false);
   const saveRef = useRef<HTMLButtonElement>(null);
   const p1ScoreRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const p2ScoreRefs = useRef<Record<number, HTMLInputElement | null>>({});
@@ -159,10 +169,28 @@ export function EditMatchDialog({ matchId, open, onOpenChange }: EditMatchDialog
       p2ScoreRefs.current[i]?.focus();
     }
   };
-  const fieldRefs: Record<FieldKey, React.RefObject<HTMLInputElement | null>> = {
+  // Two shapes, one map: the two name fields are real inputs, the date is a
+  // `DateField` handle. Both can be focused; only the element can be scrolled,
+  // so `focusField` branches instead of the map being widened to `any`.
+  const fieldRefs: Record<
+    FieldKey,
+    React.RefObject<HTMLInputElement | null> | React.RefObject<DateFieldHandle | null>
+  > = {
     player1_name: p1NameRef,
     player2_name: p2NameRef,
     date: dateRef,
+  };
+
+  const focusField = (key: FieldKey) => {
+    const target = fieldRefs[key]?.current;
+    if (!target) return;
+    if (target instanceof HTMLElement) {
+      target.scrollIntoView({ block: "center", behavior: "smooth" });
+      target.focus({ preventScroll: true });
+      return;
+    }
+    // The handle focuses the first segment; the browser scrolls it into view.
+    target.focus();
   };
 
   // Per-set validation against tennis rules. The dialog shares the upload
@@ -280,6 +308,25 @@ export function EditMatchDialog({ matchId, open, onOpenChange }: EditMatchDialog
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (saving || hasInvalidSet) return;
+    // The date used to be a native `required` input, so the browser blocked a
+    // submit with it empty. A `DateField` reports validity through ARIA only,
+    // so the emptiness check is the dialog's now — same message and the same
+    // focus move the server's `field: "date"` reply already produces.
+    if (!date) {
+      setFieldErrors({ date: "Date is required." });
+      focusField("date");
+      return;
+    }
+    // A half-cleared date is the dangerous one, and `!date` cannot see it.
+    // Clear the year of `03/21/2026` and the field draws `03/21/yyyy` while
+    // `date` still holds `2026-03-21` — so without this the dialog would
+    // quietly save the date the person was replacing and report success. The
+    // native input it replaced could not reach this state.
+    if (dateIncomplete) {
+      setFieldErrors({ date: "Finish the date." });
+      focusField("date");
+      return;
+    }
     setSaving(true);
     setError(null);
     setFieldErrors({});
@@ -314,9 +361,7 @@ export function EditMatchDialog({ matchId, open, onOpenChange }: EditMatchDialog
         const field = body?.field as FieldKey | undefined;
         if (field && field in fieldRefs) {
           setFieldErrors({ [field]: message });
-          const target = fieldRefs[field]?.current;
-          target?.scrollIntoView({ block: "center", behavior: "smooth" });
-          target?.focus({ preventScroll: true });
+          focusField(field);
         } else {
           setError(message);
         }
@@ -564,23 +609,39 @@ export function EditMatchDialog({ matchId, open, onOpenChange }: EditMatchDialog
               {/* Metadata grid — the hairline border above does the section
                   break; no eyebrow needed (each field is self-labeled). */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5 pt-6 border-t border-[#F3F3F3]">
+                {/* `variant="bare"`: `UnderlineField` draws the rule and already
+                    thickens it to 2px on focus-within, so the primitive must
+                    not draw a second one — same arrangement the two selects
+                    below use with `kind="bare"`. Its segments carry
+                    `data-focus-ring="none"` of their own, so the wrapper's
+                    rule stays the one focus indicator. */}
                 <UnderlineField label="Date" error={fieldErrors.date ?? null}>
-                  <input
-                    ref={dateRef}
-                    type="date"
+                  <DateField
+                    label="Date"
+                    variant="bare"
+                    handleRef={dateRef}
                     value={date}
-                    onChange={(e) => {
-                      setDate(e.target.value);
+                    required
+                    onChange={(next) => {
+                      setDate(next);
                       if (fieldErrors.date) {
-                        const next = { ...fieldErrors };
-                        delete next.date;
-                        setFieldErrors(next);
+                        const cleared = { ...fieldErrors };
+                        delete cleared.date;
+                        setFieldErrors(cleared);
                       }
                     }}
-                    required
-                    aria-invalid={fieldErrors.date ? true : undefined}
-                    data-focus-ring="none" /* the rule below carries focus */
-                    className="w-full appearance-none bg-transparent text-[14px] outline-none text-[#0D0D0D] pb-1.5"
+                    onIncompleteChange={(incomplete) => {
+                      setDateIncomplete(incomplete);
+                      // Filling the last blank segment clears the complaint
+                      // the way typing into an empty field clears the required
+                      // one — the error should not outlive the state it named.
+                      if (!incomplete && fieldErrors.date) {
+                        const cleared = { ...fieldErrors };
+                        delete cleared.date;
+                        setFieldErrors(cleared);
+                      }
+                    }}
+                    className="w-full pb-1.5"
                   />
                 </UnderlineField>
                 <UnderlineField label="Round">
@@ -591,15 +652,24 @@ export function EditMatchDialog({ matchId, open, onOpenChange }: EditMatchDialog
                     className="w-full bg-transparent text-[14px] outline-none text-[#0D0D0D] placeholder:text-[#AAAAAA] pb-1.5"
                   />
                 </UnderlineField>
+                {/* `kind="bare"`: `UnderlineField` already draws the rule and
+                    already thickens it to 2px blue on focus, so the select
+                    contributes only the chevron this dialog was missing —
+                    `appearance-none` had removed the browser's arrow and put
+                    nothing back. The 14px stays because it is what every other
+                    field in this dialog runs at; retiring it is a dialog-wide
+                    change, not a select change. */}
                 <UnderlineField label="Match type">
-                  <select
+                  <AdvSelect
+                    kind="bare"
+                    aria-label="Match type"
                     value={matchType}
                     onChange={(e) => setMatchType(e.target.value)}
-                    data-focus-ring="none" /* the rule below carries focus */
-                    className={cn(
-                      "w-full appearance-none bg-transparent text-[14px] outline-none pb-1.5 cursor-pointer",
-                      matchType ? "text-[#0D0D0D]" : "text-[#AAAAAA]"
-                    )}
+                    className="text-[14px] text-[#0D0D0D] pb-1.5"
+                    /* `pb-1.5` is the gap to the rule below, so the select's
+                       text sits 3px above its own box centre — nudge the
+                       glyph up by the same amount or it reads as low. */
+                    chevronClassName="-translate-y-[calc(50%+3px)]"
                   >
                     <option value="">Select type</option>
                     {MATCH_TYPES.map((t) => (
@@ -607,17 +677,16 @@ export function EditMatchDialog({ matchId, open, onOpenChange }: EditMatchDialog
                         {t}
                       </option>
                     ))}
-                  </select>
+                  </AdvSelect>
                 </UnderlineField>
                 <UnderlineField label="Court surface">
-                  <select
+                  <AdvSelect
+                    kind="bare"
+                    aria-label="Court surface"
                     value={courtType}
                     onChange={(e) => setCourtType(e.target.value)}
-                    data-focus-ring="none" /* the rule below carries focus */
-                    className={cn(
-                      "w-full appearance-none bg-transparent text-[14px] outline-none pb-1.5 cursor-pointer capitalize",
-                      courtType ? "text-[#0D0D0D]" : "text-[#AAAAAA]"
-                    )}
+                    className="text-[14px] text-[#0D0D0D] pb-1.5 capitalize"
+                    chevronClassName="-translate-y-[calc(50%+3px)]"
                   >
                     <option value="">Select surface</option>
                     {COURT_TYPES.map((t) => (
@@ -625,7 +694,7 @@ export function EditMatchDialog({ matchId, open, onOpenChange }: EditMatchDialog
                         {t.charAt(0).toUpperCase() + t.slice(1)}
                       </option>
                     ))}
-                  </select>
+                  </AdvSelect>
                 </UnderlineField>
               </div>
 
@@ -737,8 +806,17 @@ function UnderlineField({
         {children}
         <div
           className={
+            // Both branches thicken to 2px on focus, and that is load-bearing
+            // rather than symmetry: every child of this wrapper carries
+            // `data-focus-ring="none"`, so this rule is their ONLY focus
+            // indicator (focus.css, "the underline exception"). The error
+            // branch used to be a flat 1px that never changed — so a field
+            // that had just been rejected was also the one field on the
+            // dialog with no visible focus at all, which is the state a
+            // keyboard user is most likely to be in. It stays red: the error
+            // owns the colour, focus owns the weight.
             error
-              ? "h-[1px] w-full bg-[#E51837]"
+              ? "h-[1px] w-full bg-[#E51837] motion-safe:transition-all motion-safe:duration-300 group-focus-within:h-[2px]"
               : "h-[1px] w-full bg-[#F3F3F3] motion-safe:transition-all motion-safe:duration-300 group-focus-within:h-[2px] group-focus-within:bg-[#3B82F6]"
           }
         />

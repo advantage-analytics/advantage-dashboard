@@ -76,8 +76,15 @@ export function AddResultRow({ entry }: { entry: EventEntry }) {
   );
 }
 
-/** The round after the last one recorded, so the common case is pre-picked. */
-function nextRound(entry: EventEntry): string {
+/**
+ * The round after the last one recorded, so the common case is pre-picked.
+ *
+ * Exported because `AddResultDialog` asks the same question from the tournament
+ * page's header. Two copies would be two ladders, and the one that drifts hands
+ * `recordResult` a round it already holds — which UPDATES that result instead of
+ * adding the next, losing the earlier score with no error.
+ */
+export function nextRound(entry: EventEntry): string {
   const last = entry.matches[entry.matches.length - 1]?.round;
   if (!last) {
     return entry.draw?.toLowerCase().includes("qualif") ? "Q1" : "R32";

@@ -12,6 +12,9 @@ import {
 import { SettingsSaveBar } from "@/components/dashboard/settings/settings-save-bar";
 import { saveProfile } from "@/components/dashboard/settings/actions";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
+import { AdvSelect } from "@/components/ui/adv-select";
+import { DateField } from "@/components/ui/date-field";
+import { todayISO } from "@/lib/schedule/format";
 import { cn } from "@/lib/utils";
 
 /**
@@ -215,9 +218,9 @@ export function ProfileForm({ initial }: { initial: ProfileDraft }) {
           />
           <ProfileField
             label={FIELD_LABELS.birthdate}
-            type="date"
-            mono
+            isDate
             value={draft.birthdate}
+            missing={draft.birthdate.trim() === ""}
             onChange={(value) => set("birthdate", value)}
           />
           <ProfileField
@@ -331,6 +334,7 @@ function ProfileField({
   value,
   onChange,
   type = "text",
+  isDate = false,
   placeholder,
   hint,
   mono,
@@ -340,16 +344,31 @@ function ProfileField({
   value: string;
   onChange: (next: string) => void;
   type?: string;
+  /** Renders `DateField` instead of `SettingsUnderlineInput`. `type` is ignored. */
+  isDate?: boolean;
   placeholder?: string;
   hint?: string;
   mono?: boolean;
   /** Empty and counted by the strip above — mark it where the typing happens. */
   missing?: boolean;
 }) {
+  // Today, computed once per mount rather than per render — the calendar's
+  // disabled-future-dates state has no reason to shift while the form is
+  // open, and a value recomputed inline on every render would do exactly
+  // that across a midnight boundary.
+  const maxDate = useMemo(() => todayISO(), []);
+
   return (
     <SettingsField
       label={label}
       hint={hint}
+      // `DateField`'s segments are not labelable elements — a wrapping
+      // `<label>` forwards every click on them to the first labelable
+      // descendant, the calendar `<button>`, so a segment can only be
+      // reached by Tab. `DateField` takes its own `label` prop and sets it
+      // as `aria-label`, so the accessible name survives dropping the
+      // `<label>` wrapper here.
+      labelless={isDate}
       marker={
         missing && (
           <span className="text-[10px] font-medium uppercase tracking-[1.2px] text-[var(--blue)]">
@@ -358,14 +377,29 @@ function ProfileField({
         )
       }
     >
-      <SettingsUnderlineInput
-        type={type}
-        value={value}
-        placeholder={placeholder}
-        mono={mono}
-        emphasis={missing}
-        onChange={(event) => onChange(event.target.value)}
-      />
+      {isDate ? (
+        // `emphasis` is the same prop name `SettingsUnderlineInput` takes
+        // below, and means the same thing: draw the rule 2px blue at rest
+        // because the page is asking for this field. The two branches stay
+        // visually identical, and neither restyles the other's internals.
+        <DateField
+          label={label}
+          variant="underline"
+          value={value}
+          onChange={onChange}
+          max={maxDate}
+          emphasis={missing}
+        />
+      ) : (
+        <SettingsUnderlineInput
+          type={type}
+          value={value}
+          placeholder={placeholder}
+          mono={mono}
+          emphasis={missing}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      )}
     </SettingsField>
   );
 }
@@ -385,14 +419,14 @@ function ProfileSelect({
 }) {
   return (
     <SettingsField label={label}>
-      <select
+      {/* `AdvSelect` rather than this file's own copy of the underline rule:
+          the copy recoloured on focus but never thickened to 2px, and it left
+          the browser's own arrow in place beside two sibling fields that had
+          none. Both are the primitive's job now. */}
+      <AdvSelect
+        aria-label={label}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        data-focus-ring="none" /* the border-b above carries focus */
-        className={cn(
-          "h-[34px] cursor-pointer border-b border-[var(--border-field)] bg-transparent text-[13px] outline-none transition-colors focus:border-[var(--blue)]",
-          value === "" ? "text-[var(--ink-400)]" : "text-[var(--ink-900)]"
-        )}
       >
         <option value="">{placeholder}</option>
         {options.map((option) => (
@@ -400,7 +434,7 @@ function ProfileSelect({
             {option.label}
           </option>
         ))}
-      </select>
+      </AdvSelect>
     </SettingsField>
   );
 }

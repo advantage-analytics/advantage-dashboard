@@ -152,6 +152,7 @@ export function SettingsField({
   hint,
   marker,
   required = false,
+  labelless = false,
   children,
 }: {
   label: string;
@@ -168,10 +169,26 @@ export function SettingsField({
    * rather than in its caption.
    */
   required?: boolean;
+  /**
+   * Renders the outer wrapper as a `<div>` instead of a `<label>`.
+   *
+   * The default `<label>` gives a plain `<input>`/`<select>` its accessible
+   * name for free by nesting, which is why every other call site leaves this
+   * false. `DateField`'s segments are `[tabindex]` divs, not labelable
+   * elements, so a wrapping `<label>` cannot reach them — instead it forwards
+   * every click to the first labelable descendant, which for `DateField` is
+   * its real `<button>` (the calendar trigger). Click a date segment with
+   * this on and the click lands on the calendar button, focus never reaches
+   * the segment, and typed digits go nowhere. `DateField` already takes its
+   * own `label` prop and sets it as `aria-label`, so opting out here costs no
+   * accessible name — verify in the a11y tree, not by reading the markup.
+   */
+  labelless?: boolean;
   children: React.ReactNode;
 }) {
+  const Wrapper = labelless ? "div" : "label";
   return (
-    <label className="flex flex-col gap-2">
+    <Wrapper className="flex flex-col gap-2">
       <span className="flex items-center gap-2">
         <span className="text-[11px] text-[var(--ink-600)]">
           {label}
@@ -191,7 +208,7 @@ export function SettingsField({
       </span>
       {children}
       {hint && <span className="text-[11px] text-[var(--ink-500)]">{hint}</span>}
-    </label>
+    </Wrapper>
   );
 }
 

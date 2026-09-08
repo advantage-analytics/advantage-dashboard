@@ -46,7 +46,8 @@ is generated: run `npm run map` after adding a route, or `npm test` fails.
   (OAuth) route handlers. `/request-access` is a `next.config.ts` redirect to the landing
   page form, not a page.
 - `src/app/dashboard/` — `(home)`, `matches`, `matches/[matchId]`, `matches/new`,
-  `statistics`, `ask`, `help`, `team/{roster,schedule,compare,upload,settings}`,
+  `statistics`, `ask`, `help`,
+  `team/{roster,schedule/[eventId]/{score,edit},compare,upload,settings}`,
   `settings/{account,profile,plan,preferences,subscription,teams,teams/[programId],usage}`
 - `src/app/claim/`, `src/app/join/[token]`, `src/app/admin/claims` — program claim,
   invite acceptance and claim review flows

@@ -11,6 +11,10 @@ export { UploadMatchFlow } from "./UploadMatchFlow";
 
 // Shell components
 export { StepIndicator } from "./StepIndicator";
+export { WizardShell, CONTENT_CLS } from "./WizardShell";
+export type { WizardShellProps } from "./WizardShell";
+export { useWizardKeys } from "./useWizardKeys";
+export type { UseWizardKeysOptions } from "./useWizardKeys";
 
 // Content components
 export { SourceStepContent } from "./SourceStepContent";
@@ -24,6 +28,8 @@ export type { TrimStepContentProps } from "./TrimStepContent";
 
 export { DetailsStepContent } from "./DetailsStepContent";
 export type { DetailsStepContentProps } from "./DetailsStepContent";
+
+export { ScoreBlock } from "./ScoreBlock";
 
 export { PinnedLineBar } from "./PinnedLineBar";
 
