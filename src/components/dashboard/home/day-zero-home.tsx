@@ -33,7 +33,7 @@ export function DayZeroHome({
   kpiStrip,
   children,
 }: {
-  /** `EmptyKpiStrip` — kept at full strength above the graded regions. */
+  /** `KpiStripEmpty` — kept at full strength above the graded regions. */
   kpiStrip: ReactNode;
   /** The card grid, exactly as the populated page composes it. */
   children: ReactNode;

@@ -30,6 +30,7 @@ export function KpiStripEmpty({
   awaitingReport = false,
   labels = SEASON_KPI_LABELS,
   hint: hintOverride,
+  ariaLabel,
 }: {
   /**
    * A match is filed but nothing has been analysed yet. "After your first
@@ -49,12 +50,14 @@ export function KpiStripEmpty({
    * say why it does not.
    */
   hint?: string;
+  /** See `KpiTileStrip`. */
+  ariaLabel?: string;
 }) {
   const hint =
     hintOverride ?? (awaitingReport ? "When the report lands" : "After your first match");
 
   return (
-    <KpiTileStrip collapse>
+    <KpiTileStrip collapse ariaLabel={ariaLabel}>
       {labels.map((label, index) => (
         <div
           key={label}

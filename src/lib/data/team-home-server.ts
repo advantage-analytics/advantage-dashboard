@@ -27,16 +27,16 @@ import {
 } from "@/lib/data/match-utils";
 import { rosterMatchIds, type RosterIdRow } from "@/lib/data/roster-ids";
 import {
-  seasonKpis,
-  toStatRow,
+  seasonStrip,
+  statRowsByKey,
   STAT_COLUMNS,
   type DbStatRow,
   type ProfileKpi,
   type ProfileResult,
-  type ProfileStatRow,
+  type SeasonStrip,
 } from "@/lib/data/player-profile";
 import { statKey } from "@/lib/data/aggregate";
-import type { KpiCardData } from "@/lib/data/performance-server";
+import type { EvidenceCard } from "@/lib/ui/insight-evidence";
 import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
 import {
   eventDetailFrom,
@@ -419,12 +419,11 @@ export interface TeamHomeData {
    */
   analyzedCount: number;
   /**
-   * The strip's cards — the personal Home's twelve, built by the personal
-   * Home's builder over the program's side of every analyzed **dual** match,
-   * with a team-average headline. Every spec gets a card even when nothing
-   * measured it yet ("—"), which is what keeps the picker's default set
-   * intact; the page shows the empty strip instead while no card holds a
-   * figure.
+   * The strip's tiles — the season strip's catalogue, built by the season
+   * strip's own builder over the program's side of every analyzed **dual**
+   * match. Every statistic gets a tile even when nothing measured it yet
+   * ("—"), which is what keeps the picker's default set intact; the page
+   * draws the empty strip instead while `kpiHasStats` is false.
    */
   kpiCards: ProfileKpi[];
   /** Any stats row on the program's side — what turns the empty strip real. */
@@ -432,7 +431,7 @@ export interface TeamHomeData {
   /**
    * How many matches the strip is averaging — analyzed, attributed, and on a
    * dual's lineup. Not `analyzedCount`: that counts every report the program
-   * has back, and the strip deliberately reads fewer (see `teamKpiCards`).
+   * has back, and the strip deliberately reads fewer (see `teamSeasonKpis`).
    * The strip's trend gate, its empty state, the Focus card's footer and its
    * evidence all take this one, so nothing on the page describes the strip
    * with a number the strip did not use.
@@ -921,7 +920,7 @@ function playerCount(rosterRows: { role: string }[]): number {
  * no longer opens.
  *
  * **Exported only so that `tests/team-roster-progress.spec.ts` can call it** —
- * the same arrangement, and the same reasoning, as `teamKpiCards` below: it takes
+ * the same arrangement, and the same reasoning, as `teamSeasonKpis` below: it takes
  * this loader's own row shapes, it should acquire no caller outside this file,
  * and the spec can import the module safely because nothing here runs at module
  * scope.
@@ -1138,7 +1137,7 @@ export function teamAttention(
  * row: they are the only evidence of which side of a match is the program's.
  * See `programSide()`.
  *
- * Exported with `teamKpiCards` below, so its spec builds fixtures in the shape the
+ * Exported with `teamSeasonKpis` below, so its spec builds fixtures in the shape the
  * `select()` actually returns rather than a hand-typed approximation of it.
  */
 export interface DbSeasonMatch {
@@ -1361,11 +1360,8 @@ export function teamSeasonKpis(
   eventByEntryId: ReadonlyMap<string, { event: ProgramEvent; entry: EventEntry }>,
   /** The program's dual record, for the Record tile's "6–2 in duals" line. */
   duals: { wins: number; losses: number }
-): { kpis: ProfileKpi[]; matchesPlayed: number; hasStats: boolean } {
-  const statsByKey = new Map<string, ProfileStatRow>();
-  for (const stat of statRows) {
-    statsByKey.set(statKey(stat.match_id, stat.is_player1), toStatRow(stat));
-  }
+): SeasonStrip {
+  const statsByKey = statRowsByKey(statRows);
 
   // Newest first, which is the order `seasonKpis` reads in. Sorted here
   // rather than assumed: the loader hands this a DESC read, but a window that
@@ -1402,48 +1398,35 @@ export function teamSeasonKpis(
     });
   }
 
-  let wins = 0;
-  let losses = 0;
-  for (const result of results) {
-    if (result.won === true) wins++;
-    else if (result.won === false) losses++;
-  }
-
-  return {
-    kpis: seasonKpis(results, { wins, losses, duals }),
-    matchesPlayed: results.length,
-    hasStats: results.some((result) => result.stats !== null),
-  };
+  // The Record tile reads the DUAL record, not a tally of the matches this
+  // strip averaged: those are the analyzed dual matches, and headlining
+  // "3–1" for a squad that is 6–2 in duals would print a denominator of
+  // "matches we filmed" with nothing on the tile saying so. `duals` is also
+  // passed as the record itself, so the tile draws no redundant subtext.
+  return seasonStrip(results, { wins: 0, losses: 0 }, duals);
 }
 
 /**
  * The season tiles as the insight layer reads them.
  *
- * `buildInsightEvidenceWithCaption` and `getTopKpiMovers` speak `KpiCardData`
- * — the personal Home's performance model still produces it for exactly this
- * — while the strip speaks `ProfileKpi`. The two differ in one place: a
- * trend is nested on `ProfileKpi` and flat on `KpiCardData`. Adapting here
- * rather than widening the shared type keeps the personal Home's insight
- * path untouched; a tile with no trend reads as a zero change, which is what
+ * `buildInsightEvidenceWithCaption` and `getTopKpiMovers` read five fields —
+ * `EvidenceCard` — while the strip's tile nests its trend. Adapting here
+ * rather than widening either data type keeps the personal Home's path
+ * untouched: its `KpiCardData` already satisfies the reader structurally.
+ * A tile with no trend reads as a zero change, which is what
  * `getTopKpiMovers` already filters on.
  *
  * `record` is dropped: "12–4" is not a figure the evidence line can compare
  * or sign, and a claim built on it would read as a rate.
  */
-export function insightCardsFrom(kpis: ProfileKpi[]): KpiCardData[] {
+export function insightCardsFrom(kpis: readonly ProfileKpi[]): EvidenceCard[] {
   return kpis
     .filter((kpi) => kpi.key !== "record")
     .map((kpi) => ({
-      key: kpi.key,
       label: kpi.label,
       value: kpi.value,
       change: kpi.trend?.change ?? 0,
       changeLabel: kpi.trend?.changeLabel ?? "",
-      sparkline: kpi.sparkline ?? [],
-      points: kpi.points,
-      format: kpi.format,
-      description: kpi.description,
-      category: kpi.category,
     }));
 }
 
@@ -1676,7 +1659,7 @@ export async function getTeamHomeData(
   // per-row Intl cost is paid only for rows that could qualify.
   let newResultsCount = 0;
   // The title row's figure: every report the program has back, off the same
-  // `jobs` map `teamKpiCards` reads. Deliberately wider than the strip's own
+  // `jobs` map `teamSeasonKpis` reads. Deliberately wider than the strip's own
   // count — `kpiMatchCount` — which drops matches nothing attributes to the
   // program and matches on no dual lineup; the title says what came back,
   // the strip says what it averaged, and the page reads both.

@@ -2,8 +2,8 @@ import { COURT_RECORD_WINDOW } from "@/lib/data/team-court-record";
 
 /**
  * The court record's geometry — the server-safe half, on the pattern
- * `shared/kpi-tile-shell.tsx` set: what both the populated grid
- * (`court-record-mosaic.tsx`, a client component) and the day-zero ghost
+ * `shared/kpi-tile.tsx` and `home/kpi-strip-empty.tsx` set: what both the
+ * populated grid (`court-record-mosaic.tsx`, a client component) and the ghost
  * (`court-record.tsx`, a server component) draw from, so neither reaches
  * through the other's module for a constant.
  *

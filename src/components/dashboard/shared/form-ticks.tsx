@@ -20,9 +20,10 @@ export function FormTicks({
 }: {
   form: readonly ("win" | "loss")[];
   /**
-   * What to draw for no results at all. The roster's em dash by default;
-   * Team Home's cards pass `null`, where the strip sits inside a line that
-   * already says there is nothing yet and a second mark would be noise.
+   * What to draw for no results at all. The em dash by default, for the two
+   * table cells with a column to keep aligned; every card that draws the
+   * strip inside a line which already says there is nothing yet passes
+   * `null`, where a second mark would be noise.
    */
   empty?: React.ReactNode;
 }) {

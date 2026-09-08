@@ -13,7 +13,7 @@ import {
 import type { AnalysisStatus, MatchAnalysis } from '@/lib/data/match-analysis';
 import type { DbStatRow } from '@/lib/data/player-profile';
 import type { MatchScore } from '@/lib/data/match-utils';
-import type { EventEntry, ProgramEvent, ScheduleRow } from '@/lib/schedule/types';
+import type { EventEntry, ProgramEvent } from '@/lib/schedule/types';
 
 /**
  * The strip reads dual matches only, so a season row reaches a card through
@@ -93,7 +93,6 @@ const ROSTER_IDS = rosterMatchIds(ROSTER_ROWS);
 const P1_WON: MatchScore = { player1: [6, 6], player2: [4, 3] };
 
 const NO_JOBS = new Map<string, MatchAnalysis>();
-const NO_SCHEDULE: ScheduleRow[] = [];
 
 /**
  * One side's first-serve reading for a match, every other column unmeasured.
