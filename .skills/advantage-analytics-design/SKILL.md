@@ -789,6 +789,81 @@ text-[#525252] font-medium
 - Punctuation keys render as-is (`/`, `?`).
 - Detect platform via `navigator.userAgentData?.platform ?? navigator.platform` and gate render behind `if (isMac !== null)` to avoid SSR mismatches.
 
+### Date field (`DateField`)
+
+**Every date is `DateField`** (`ui/date-field.tsx`), and **no native
+`<input type="date">` belongs in product UI.** The native control draws the
+browser's picker rather than ours, and its resting text cannot be typed into
+segment by segment. `DateField` is built on react-aria's `DatePicker`, which
+owns the segment keyboard model, the month arithmetic and the grid's ARIA; the
+file owns the chrome. The wire format is the product's, not the library's: a
+`YYYY-MM-DD` string in and a `YYYY-MM-DD` string out, `""` for empty, and
+`min`/`max` in the same shape. A rendered page does still contain one
+`input type="date"` — react-aria's visually-hidden, `tabindex="-1"` input for
+form submission. That one is the library's; finding it is not licence to write
+another.
+
+**Three variants, each matching what its call sites already drew** so no
+surface changed shape when it landed:
+
+| Variant | Chrome | Shipped on |
+|---|---|---|
+| `underline` (default) | 34px, the caption's hairline beneath, 2px `--blue` on focus and for as long as the calendar is open — the same field as `MenuSelect variant="underline"` | the profile page's date of birth (`settings/profile-form.tsx`), the upload wizard's date-and-time cell (`matches/new-match-wizard/DetailsStepContent.tsx`) |
+| `bare` | no rule and no height of its own | the dual builder's Date cell and the tournament builder's Starts/Ends, each inside a `FieldCell` row (`schedule/static/dual-build-step.tsx`, `schedule/static/static-tournament-builder.tsx`); the match-edit dialog's Date inside `UnderlineField` (`matches/match-actions/edit-match-dialog.tsx`) |
+| `boxed` | 30px, radius 6, `--border-field` on `--surface-field`, 12px text | the statistics match selector's From/To date filter (`statistics/match-selector.tsx`) |
+
+On `underline` and `boxed`, error owns the colour and focus owns the weight:
+the rule goes red on `data-invalid` and stays red while focused.
+
+`bare` is a contract with the row above it. **The parent owns the rule and the
+height, and the parent answers focus** — 2px blue on `focus-within`, which
+every shipped `bare` row draws (`FieldCell` in both schedule builders,
+`UnderlineField` in the match-edit dialog). Keep the pair: the segments opt out
+of the ring whatever the row does, so a `bare` field dropped into a row that
+does not change on focus leaves the field itself unmarked, with only the live
+segment's fill inside it.
+
+**The segments opt out of the focus ring; the buttons keep theirs.** Every
+`DateSegment` carries `data-focus-ring="none"`, earned the way Focus → "the
+underline opt-out" requires: the focused segment fills Signal Blue with white
+text off react-aria's `data-focused` — a real on-focus change, not a standing
+colour, and already the mark that says which segment is live. The calendar
+trigger is a plain `<button>` whose appearance does not change on focus, and a
+day cell is a `[role="button"]` with a roving tabindex; both keep the ring the
+system gives them, and the file writes no focus class of its own.
+
+**Never wrap a `DateField` in a `<label>`.** A `DateSegment` renders as a
+tabbable `role="spinbutton"` span — not a labelable element — while the
+calendar trigger is a real `<button>`. A wrapping `<label>` therefore forwards
+every click on a segment to that button, and the segments become unreachable
+by mouse with nothing looking broken on screen. `DateField` takes its own
+`label` prop and sets it as `aria-label`, so the accessible name survives
+dropping the wrapper. Three shipped rows had to stop being one — `FieldCell`
+in both schedule builders, `SettingsField` in settings (a `labelless` branch,
+since its other fields are still inputs) — and where that `<label>` was also
+naming a sibling control, the sibling takes an `aria-label` of its own, or it
+ships unnamed with, again, nothing visibly wrong.
+
+**The calendar popover is not a `FloatMenu`, and must never be rendered inside
+one.** It agrees with `ui/float-menu.tsx` by value — `rounded-[10px]`, the
+hairline border, white, `--shadow-dropdown` — so a date picker and a select on
+the same page read as one family. It does not import it, because `FloatMenu`
+wraps its children in `role="menu"` and a menu cannot contain a grid: the
+calendar would be an ARIA error that no reviewer sees on screen. The classes
+are duplicated on purpose; keep them in step if either moves. The popover
+portals to `document.body`, and a Radix `Dialog` puts `pointer-events: none`
+there for as long as it is open — so the popover carries `pointer-events-auto`.
+Without it every day cell inside a dialog was mouse-dead while looking
+perfectly normal. Measured, not assumed.
+
+Validation is ARIA-only. `validationBehavior="aria"` marks the group
+`data-invalid` the moment a typed date falls outside `min`/`max`, rather than
+waiting for a form submit; the value is still reported upward, so the call site
+stays the authority on whether it may be submitted. `handleRef`
+(`DateFieldHandle`) focuses the first segment, which is how a dialog sends
+focus here as its first invalid field — a segment, not an input, so an
+`HTMLInputElement` ref will not do.
+
 ---
 
 ## Navigation Patterns
@@ -2183,23 +2258,25 @@ selector on:
 | `UnderlineField`'s children, `PlayerRow`'s name input | `matches/match-actions/edit-match-dialog.tsx` |
 | `EventCell`'s input — the wrapper goes blue 2px on `focus-within` | `matches/new-match-wizard/DetailsStepContent.tsx` |
 | the opponent-name input — its rule recolours to blue on `:focus` | `schedule/score-only-flow.tsx` |
+| every `DateSegment` — the focused segment fills Signal Blue with white text | `ui/date-field.tsx` |
 
 The opt-out is earned by an actual on-focus change, never by looking like an
 underline. `schedule/add-result-row.tsx`'s round `<select>`,
-`schedule/add-result-dialog.tsx`'s `SELECT_CLS`, `schedule/score-entry.tsx`'s
-opponent input and `schedule/static/static-tournament-builder.tsx`'s
-`FieldCell` all draw a hairline that never changes — no thickening, no
+`schedule/add-result-dialog.tsx`'s `SELECT_CLS` and `schedule/score-entry.tsx`'s
+opponent input all draw a hairline that never changes — no thickening, no
 recolour, nothing — so they keep the neutral ring: remove it there and the
 field drops from one indicator to zero, which is precisely the failure this
 file exists to prevent.
 
-A *standing* rule fails the test for the same reason, even a bold one. The
+A *standing* rule fails the test for the same reason, even a bold one.
+"Already blue" is not "changes on focus": a `border-b-2 border-[var(--blue)]`
+drawn by an editing state looks focused, never changes, and stays blue after
+focus moves to the next field, so a control under it keeps the ring. The
 opponent-name span in `DetailsStepContent.tsx` and the title field in
-`static/static-tournament-builder.tsx` both sit under a permanent
-`border-b-2 border-[var(--blue)]` that looks focused but never changes: it is
-drawn by an editing state, not by focus, and it stays blue after focus moves
-to the next field. Those keep the ring. "Already blue" is not "changes on
-focus."
+`static/static-tournament-builder.tsx` were both that case and are no longer:
+each now rests on `--border-medium` and recolours to blue on `focus-within`,
+which is what earned each of them the opt-out it carries today. The test is the
+change, not the colour — re-read the rule before copying either of them.
 
 Before adding this attribute anywhere new, find the actual
 `:focus`/`:focus-within` rule that changes the control and confirm it fires —

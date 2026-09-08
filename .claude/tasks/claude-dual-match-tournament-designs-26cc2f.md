@@ -126,7 +126,7 @@ ready).
 - **notes:** Plan step 8. `UnderlineField` already draws the 2px-on-focus rule for children that opt out of the ring, so the primitive draws no rule of its own here — that is what `variant="bare"` is for.
 
 ## T34 · Write the design system's date-field rule
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T28, T29, T30, T31, T32, T33
 - **files:** `.skills/advantage-analytics-design/SKILL.md`

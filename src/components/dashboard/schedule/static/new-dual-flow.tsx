@@ -52,7 +52,8 @@
  *            `onChoiceChange`, and null there is what disables the button.
  *   step 2   a date. The other three facts open on real values — home, the
  *            program's `default_surface`, `2b`'s format — and a date is the
- *            one an `<input type="date">` can be emptied back to.
+ *            one a `DateField` can be cleared back to empty: delete its
+ *            segments and it reports `""`.
  *   step 3   a line. `createDual` refuses a dual with no lines, and the
  *            footer prints how many there are beside the button.
  *
