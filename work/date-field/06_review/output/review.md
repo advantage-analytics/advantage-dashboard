@@ -3,10 +3,15 @@
 **Sign-off: pending**
 
 The gate ran in full over `28c0a2d..HEAD`. Mechanical is green, the quality
-pass applied nine fixes, and correctness review returned **one real defect
-that is not fixed** — see Findings. My recommendation is **not ready to merge
-as it stands**; the defect is narrow and its fix is a small, separable change,
-but it silently discards a coach's edit, so it should not ship unnoticed.
+pass applied nine fixes, and correctness review returned one real defect —
+**since fixed, on the author's instruction, and verified in a browser**
+(`b72ae1d`). My recommendation is now **ready to merge**, with the caveats
+under Consciously left.
+
+This section originally read "not ready" while the defect stood. It is
+rewritten rather than annotated because a review whose summary contradicts the
+branch it describes is worse than no review; the finding itself is kept below,
+with what was done about it.
 
 Editing the line above to `approved` (or annotating otherwise) is the
 pipeline's final gate. It is deliberately left `pending`.
@@ -81,7 +86,7 @@ advisory.
 
 ### Stage 3 — correctness (`code-review`, medium)
 
-**One real defect, not fixed.**
+**One real defect. Found here, fixed here** — see "The fix" below.
 
 **A partially cleared date saves the old value silently.**
 `edit-match-dialog.tsx:306`. The native input reported `""` the moment any
@@ -94,11 +99,34 @@ match dated `2026-03-21` who clicks the year, presses Backspace, and saves sees
 and the tournament builder have the same gap with no guard at all; there the
 consequence is a stale draft value rather than a discarded edit.
 
-The fix belongs in the primitive — surface the incomplete state so a call site
-can refuse it, or report `""` when the segments no longer form a date — and it
-needs its own browser verification across the six call sites. It is not a
-one-line change and it is not safe to make unverified at a review gate, which
-is why it is reported rather than patched here.
+**The fix** (`b72ae1d`). `DateField` gained `onIncompleteChange`, and the edit
+dialog refuses the submit while a segment is blank, with the field error and
+focus move its empty-date guard already makes. Reporting `""` was the other
+option and was rejected: the field is controlled, so clearing the value would
+blank the segments the person deliberately kept, turning a year edit into a
+lost month and day.
+
+Detecting it needed care. `DateInput` creates the field state *below* the
+component and provides it on a context inside its own subtree, so an effect in
+`DateField` never re-runs when a segment is cleared — the component watches the
+DOM instead, with a `MutationObserver` filtered to the `data-placeholder`
+attribute react-aria puts on a blank segment. That is the same attribute the
+segment styling already keys on, so if it ever moved, the placeholder colour
+would break visibly in the same release rather than this going quiet.
+
+Verified in a browser across five checks and adversarial probing: the save is
+refused with the error and focus lands in the field; refilling clears it and
+saves the date the segments show; an all-blank date still reports that a date
+is required, so the two messages do not collide; typed and calendar-picked
+edits are unaffected; and six open-and-close cycles leak no state. The
+guardrails reviewer ran on the fix and returned an explicit all-clear,
+confirming the new refusal is an early return before the payload is built and
+cannot reorder or mutate a field.
+
+**The two builders still carry the same gap**, deliberately. There the
+consequence is a stale draft value rather than a discarded edit, and wiring the
+signal through their draft state is a larger change than this gate should make.
+The primitive now offers what they need.
 
 **One non-issue, reported for completeness.** `parseDate` accepts two shapes the
 old regex rejected: an expanded-year form (`+002026-03-21`) and `0000-01-01`.
@@ -132,8 +160,19 @@ range changes `src/lib/supabase/`, `src/lib/data/`, `src/app/api/` or
 
 ## Consciously left
 
-- **The partial-clear defect above.** The one item here that is a bug rather
-  than a preference.
+- **An implausible year still saves**, found while verifying the fix above and
+  **pre-existing, not a regression**. Clear the year, open the calendar, and
+  react-aria opens on its placeholder year — picking a day writes `03/09/2`,
+  which has no blank segment, so the new guard correctly does not fire and
+  `0002-03-09` saves. Typing a half year like `202` does the same. Unlike the
+  bug that was fixed, the field is honest on screen about what it holds, so
+  nothing is discarded silently. Closing it means a plausible-year bound, at
+  the primitive or per call site, which is a product decision.
+- **The two builders' partial-clear gap**, described above.
+- **`edit-match-dialog.tsx` never resets `saving` on the success path**, also
+  found during verification and also pre-existing. Harmless today only because
+  `match-actions-menu.tsx` mounts the dialog conditionally, so it remounts;
+  keep it mounted and Save stays disabled reading "Saving…" forever.
 - **Six reuse and simplification findings**, listed under Stage 2, each a
   refactor of verified code that deserves its own verification.
 - **`DateField` has no `aria-invalid` and no error-message wiring**, which the
