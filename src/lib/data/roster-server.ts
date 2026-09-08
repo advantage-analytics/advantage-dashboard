@@ -1,6 +1,10 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
-import { rosterPlayerOptions, type RosterFullRow } from "@/lib/data/roster-shared";
+import {
+  rosterPlayerOptions,
+  type RosterFullRow,
+  type RosterPlayerOption,
+} from "@/lib/data/roster-shared";
 
 export interface LadderPlayer {
   /**
@@ -29,9 +33,9 @@ export interface LadderPlayer {
  * and floating those to S1 would make the lineup form propose a ladder nobody
  * set.
  */
-export const getLadder = cache(async function getLadder(
+export const getRosterPlayerOptions = cache(async function getRosterPlayerOptions(
   programId: string
-): Promise<LadderPlayer[]> {
+): Promise<RosterPlayerOption[]> {
   const supabase = await createClient();
 
   const { data } = await supabase.rpc("program_roster_full", {
@@ -40,10 +44,24 @@ export const getLadder = cache(async function getLadder(
 
   // The filter/name-fallback/sort rules live in roster-shared.ts, shared with
   // the upload wizard's who-played picker so the two RPC consumers cannot
-  // drift. NOTE the field rename: this type's `userId` is the shared
-  // `playerId` (a program_players.id) — historical naming, kept because the
-  // lineup forms already read it.
-  return rosterPlayerOptions((data ?? []) as RosterFullRow[]).map((row) => ({
+  // drift.
+  return rosterPlayerOptions((data ?? []) as RosterFullRow[]);
+});
+
+/**
+ * The lineup forms' view of the same read.
+ *
+ * NOTE the field rename: this type's `userId` is the shared `playerId` (a
+ * program_players.id) — historical naming, kept because the lineup forms
+ * already read it. A caller that needs the LOGIN id as well (a claimed
+ * player's older matches carry it) wants `getRosterPlayerOptions`, which keeps
+ * both columns; this shape cannot answer that question and must not be asked
+ * it.
+ */
+export const getLadder = cache(async function getLadder(
+  programId: string
+): Promise<LadderPlayer[]> {
+  return (await getRosterPlayerOptions(programId)).map((row) => ({
     userId: row.playerId,
     name: row.name,
     ladderPosition: row.ladderPosition,

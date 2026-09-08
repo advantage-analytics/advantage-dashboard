@@ -1066,7 +1066,9 @@ function DetailsStepContentImpl({
   exportRead,
   error,
 }: DetailsStepContentProps) {
-  const line = preset?.kind === "line" ? preset : null;
+  // A preset IS the line it came from; the name is what reads at the use
+  // sites, several of which pair it with `attachedLine`.
+  const line = preset;
   const lineSchool = attachedLine?.opponentSchool ?? line?.opponentSchool ?? formData.opponentSchool ?? null;
   const lineProgramKey = attachedLine?.opponentProgramKey ?? line?.opponentProgramKey ?? formData.opponentProgramKey ?? null;
   const lineSlot = attachedLine?.slot ?? line?.round ?? null;

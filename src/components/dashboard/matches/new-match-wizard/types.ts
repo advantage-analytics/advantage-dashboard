@@ -304,24 +304,31 @@ export interface ParsingState {
  *
  * A check here is a fact the EVENT owns. Wrong ones are corrected on the event,
  * never re-typed in the wizard, or the two disagree and the event loses.
+ *
+ * ── THE BAR A PRESET HAS TO CLEAR ───────────────────────────────────────────
+ * A preset does not pre-fill step 1, it REPLACES it: `firstStep` opens the
+ * flow on the file step and `handleBack` floors there, so every question step
+ * 1 would have asked is answered from these fields or not at all. It may
+ * therefore only be built where each of those answers is a FACT.
+ *
+ * The source is the one that bites, because it is answered here implicitly by
+ * `supportsVideo` rather than by a named field. Two rails once supplied it by
+ * default rather than by fact and so locked every one-off match to video with
+ * no way back; both are retired (see the `next.config.ts` redirect and
+ * `team/upload`'s `?player=` note). Where a source is genuinely open, send the
+ * person to `/dashboard/matches/new`, whose step 1 asks all three questions,
+ * rather than presetting a guess.
+ *
+ * There is deliberately no `kind` discriminant. It carried one live value and
+ * discriminated nothing, which made it a label a construction site could get
+ * wrong without the compiler noticing.
  */
 export interface EventPreset {
-  /**
-   * Which shape this is.
-   *
-   * `line` — a dual court or a tournament round. The event knows everything.
-   * `single` — a challenge, practice set or outside event. The workspace knows
-   *   only WHOSE match it is, which is the one question the personal wizard
-   *   cannot answer here; the rest is the personal details step, unchanged.
-   */
-  kind: "line" | "single";
-  /** Null on a single match — there is no event and no line. */
+  /** Null where the preset is an existing match by id rather than a line. */
   entryId: string | null;
   eventId: string | null;
   /** Opponent school for a dual, tournament name for a tournament. */
   eventName: string | null;
-  /** Single only: the program's players, to pick from. */
-  roster?: { userId: string; name: string; ladderPosition: number | null }[];
   /** The match this line already produced, when somebody has scored it. */
   matchId: string | null;
   /** 'S1' for a dual line, 'R16' for a tournament round. */
@@ -362,21 +369,21 @@ export interface EventPreset {
   supportsVideo: boolean;
   /** Where Cancel and success return to. */
   eventHref: string;
-  /** Home, away or neutral — the bar's map-pin fact. Null for a single. */
+  /** Home, away or neutral — the bar's map-pin fact. */
   site: EventSite | null;
-  /** What kind of event the line belongs to. Null for a single. */
+  /** What kind of event the line belongs to. */
   eventKind: "dual" | "tournament" | null;
   /**
    * The opponent program behind a dual, so the opponent picker can offer its
    * roster and a new name can be saved to it. Null where the event named no
-   * program, and for every tournament and single.
+   * program, and for every tournament.
    */
   opponentProgramKey: string | null;
   opponentSchool: string | null;
   /**
    * The event's other lines, for the pinned bar's Change menu — picking one
    * rewrites the bar and nothing else, so the file already dropped stays.
-   * Only on a `line` preset that came from an event.
+   * Only on a preset that came from an event.
    */
   lineup?: LineChoice[];
 }

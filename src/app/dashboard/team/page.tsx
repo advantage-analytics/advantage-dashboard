@@ -8,12 +8,7 @@ import {
   NewMatchAction,
   TeamSeasonTitle,
 } from "@/components/dashboard/team/team-season-title";
-import KpiCards from "@/components/dashboard/home/kpi-cards";
-import { EmptyKpiStrip } from "@/components/dashboard/shared/kpi-tile-shell";
-import {
-  defaultKpiLabels,
-  TEAM_KPI_DEFAULT_COUNT,
-} from "@/lib/data/performance-server";
+import { SeasonKpiStrip } from "@/components/dashboard/shared/season-kpi-strip";
 import { DualSheet } from "@/components/dashboard/team/dual-sheet";
 import { DualSheetEmpty } from "@/components/dashboard/team/dual-sheet-empty";
 import { TopMovers } from "@/components/dashboard/team/top-movers";
@@ -82,6 +77,7 @@ export default async function TeamHomePage() {
     matchCount,
     analyzedCount,
     kpiCards,
+    kpiHasStats,
     kpiMatchCount,
     firstReport,
     weekendDual,
@@ -114,13 +110,6 @@ export default async function TeamHomePage() {
   const awaitingReport =
     matchCount > 0 && analyzedCount === 0 && firstReport?.state === "progress";
 
-  // Whether the strip has a number to show. Not `analyzedCount > 0`: that
-  // counts reports by job status, and a report can be back for a match the
-  // program cannot be attributed to, or ahead of its stats row landing. Either
-  // way every card reads "—", and four dashes under a title saying "3 matches
-  // analyzed" is the confident, wrong shape the guardrails describe. The
-  // cards themselves know whether anything measured them.
-  const stripHasFigures = kpiCards.some((card) => card.value !== "—");
 
   return (
     <div className="w-full flex-1 bg-[var(--surface-card)]">
@@ -144,40 +133,29 @@ export default async function TeamHomePage() {
           }
         />
 
-        {/* The personal Home's strip, for the program: the same twelve cards
-            and the same picker, with a team-average headline, four tiles by
-            default, and a storage key of its own so a coach's pick here does
-            not rearrange their personal strip. **Dual matches only** — a
-            report for a match that is not on a dual's lineup is counted in
-            the title row and nowhere in the strip. Ghost curves until a card
-            has two readings; trends from two (`kpiMatchCount`). Until a dual
-            match has been analyzed there is nothing to average, and the strip
-            draws its four labelled regions empty instead. */}
-        {stripHasFigures ? (
-          <KpiCards
-            cards={kpiCards}
-            matchCount={kpiMatchCount}
-            storageKey="advantage.kpi.team.visible"
-            defaultCount={TEAM_KPI_DEFAULT_COUNT}
-            ghostSparkline
-            compactPhone
-            collapse={false}
-            ariaLabel="Program summary"
-          />
-        ) : (
-          /* The same four regions the picker will show, off the same count.
-             Three states, three sentences: "When the report lands" while a
-             match is in and no report is back; "After your first dual match"
-             when reports ARE back but none sits on a dual lineup — the title
-             row above counts those, so the strip has to say why it does not;
-             and the shell's own "After your first match" on day zero. */
-          <EmptyKpiStrip
-            labels={defaultKpiLabels(TEAM_KPI_DEFAULT_COUNT)}
-            awaitingReport={awaitingReport}
-            hint={analyzedCount > 0 && !awaitingReport ? "After your first dual match" : undefined}
-            ariaLabel="Program summary"
-          />
-        )}
+        {/* The season strip both Homes draw (`shared/season-kpi-strip.tsx`),
+            over the squad rather than one player. Same catalogue, same
+            picker, same per-viewer pick — a coach who swaps a statistic in
+            on their own Home reads it here too, which is the whole point of
+            there being one strip. **Dual matches only**: a report for a
+            match that is not on a dual's lineup is counted in the title row
+            and nowhere in the strip. Before any of them has statistics the
+            strip is still here, labelled and empty. */}
+        <SeasonKpiStrip
+          kpis={kpiCards}
+          hasStats={kpiHasStats}
+          matchesPlayed={kpiMatchCount}
+          /* Three states, three sentences: the shell's "When the report
+             lands" while a match is in and no report is back, its "After your
+             first match" on day zero, and this one where reports ARE back but
+             none sits on a dual lineup — the title row above counts those, so
+             the strip has to say why it does not. */
+          emptyHint={
+            analyzedCount > 0 && kpiMatchCount === 0
+              ? "After your first dual match"
+              : undefined
+          }
+        />
 
         {/* Pa2's grid: 400px rail, 24px gutter, `items-start` so each column
             bottoms out where its cards do — nothing is stretched to level

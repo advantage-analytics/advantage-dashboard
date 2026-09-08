@@ -32,7 +32,6 @@ Seven route files render this directory, and all seven read the database.
 | `/dashboard/team/schedule/new/tournament` | `static/static-tournament-builder.tsx` | `getLadder`, `getTeamSettings`; writes through `createTournament` |
 | `/dashboard/team/schedule/[eventId]` | `dual-detail.tsx`, `tournament-detail.tsx` | `getEventDetail` |
 | `/dashboard/team/schedule/single/[matchId]` | `single-detail.tsx` | `getTeamSingleMatch` |
-| `/dashboard/team/schedule/new/single` | `matches/new-match-wizard` (not this directory) | — |
 
 The four `static/` routes were the design-copy run's; the three below them
 were never re-pointed and never dormant. Which task wired which — the commits

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
-import { buildWeekendDual, teamKpiCards } from '@/lib/data/team-home-server';
-import type { DbMatchStats } from '@/lib/data/performance-server';
+import { buildWeekendDual, teamSeasonKpis } from '@/lib/data/team-home-server';
+import type { DbStatRow } from '@/lib/data/player-profile';
 import { scheduleRowsFrom } from '@/lib/data/schedule-server';
 import type { MatchAnalysis } from '@/lib/data/match-analysis';
 import type { DbSeasonMatch } from '@/lib/data/team-home-server';
@@ -186,6 +186,22 @@ const JOBS = new Map<string, MatchAnalysis>(
   SEASON.map((row) => [row.id, ANALYZED])
 );
 const ROSTER = new Set(['ana-user']);
+const NO_DUALS = { wins: 0, losses: 0 };
+
+/** One season-strip stat row, carrying a first-serve percentage and nothing else. */
+const serve = (id: string, value: number): DbStatRow => ({
+  match_id: id,
+  is_player1: true,
+  first_serve_pct: String(value),
+  break_points_converted: null,
+  break_point_opportunities: null,
+  service_games: null,
+  service_games_won: null,
+  return_games: null,
+  return_games_won: null,
+  winners: null,
+  unforced_errors: null,
+});
 
 // ---------------------------------------------------------------------------
 // The schedule list
@@ -209,38 +225,19 @@ test.describe('scheduleRowsFrom · the schedule list agrees with the dual sheet'
   });
 });
 
-test.describe('teamKpiCards · the strip over a full read', () => {
+test.describe('teamSeasonKpis · the strip over a full read', () => {
   test('averages the program side of every analyzed match', () => {
-    const serve = (id: string, value: number): DbMatchStats => ({
-      match_id: id,
-      is_player1: true,
-      first_serve_pct: String(value),
-      first_serve_won_pct: null,
-      second_serve_won_pct: null,
-      serve_rating: null,
-      first_return_won_pct: null,
-      second_return_won_pct: null,
-      break_points_saved_pct: null,
-      break_points_converted_pct: null,
-      service_games_won_pct: null,
-      return_games_won_pct: null,
-      total_points_won_pct: null,
-      aces: null,
-      double_faults: null,
-      winners: null,
-      unforced_errors: null,
-      avg_rally_length: null,
-    });
-    const { cards } = teamKpiCards(
+    const { kpis } = teamSeasonKpis(
       SEASON,
       JOBS,
       [serve('m-1', 50), serve('m-2', 60), serve('m-3', 70)],
       ROSTER,
-      ON_DUAL
+      ON_DUAL,
+      NO_DUALS
     );
 
-    expect(cards.length).toBeGreaterThan(0);
-    const card = cards.find((c) => c.key === 'first-serve-pct');
+    expect(kpis.length).toBeGreaterThan(0);
+    const card = kpis.find((k) => k.key === 'first_serve_pct');
     // A team headline is the squad's mean, not the last match filmed.
     expect(card?.value).toBe('60%');
     // Oldest first, the way the line is drawn.
@@ -253,30 +250,10 @@ test.describe('teamKpiCards · the strip over a full read', () => {
       'Rival State · Ana Vasquez',
     ]);
     // A statistic nothing measured still has its card, and says so.
-    expect(cards.find((c) => c.key === 'aces')?.value).toBe('—');
+    expect(kpis.find((k) => k.key === 'second_serve_won_pct')?.value).toBe('—');
   });
 
   test('a match off the dual lineups is analyzed but not averaged', () => {
-    const serve = (id: string, value: number): DbMatchStats => ({
-      match_id: id,
-      is_player1: true,
-      first_serve_pct: String(value),
-      first_serve_won_pct: null,
-      second_serve_won_pct: null,
-      serve_rating: null,
-      first_return_won_pct: null,
-      second_return_won_pct: null,
-      break_points_saved_pct: null,
-      break_points_converted_pct: null,
-      service_games_won_pct: null,
-      return_games_won_pct: null,
-      total_points_won_pct: null,
-      aces: null,
-      double_faults: null,
-      winners: null,
-      unforced_errors: null,
-      avg_rally_length: null,
-    });
     // m-1 hangs off S1 of the Rival State dual; m-2 was recorded under the
     // program with no schedule entry, and m-3 sits on a tournament entry.
     // Both are the program's matches and neither is a team result, so the
@@ -287,7 +264,7 @@ test.describe('teamKpiCards · the strip over a full read', () => {
       seasonMatch('m-2', '2026-03-17T00:00:00.000Z'),
       { ...seasonMatch('m-3', '2026-03-20T00:00:00.000Z'), event_entry_id: tournamentEntry.id },
     ];
-    const { cards } = teamKpiCards(
+    const { kpis } = teamSeasonKpis(
       season,
       new Map(season.map((row) => [row.id, ANALYZED])),
       [serve('m-1', 50), serve('m-2', 60), serve('m-3', 70)],
@@ -295,9 +272,10 @@ test.describe('teamKpiCards · the strip over a full read', () => {
       new Map([
         ...ON_DUAL,
         [tournamentEntry.id, { event: { ...EVENT, id: 'e-t', kind: 'tournament' as const, name: 'Spring Invitational' }, entry: tournamentEntry }],
-      ])
+      ]),
+      NO_DUALS
     );
-    const card = cards.find((c) => c.key === 'first-serve-pct');
+    const card = kpis.find((k) => k.key === 'first_serve_pct');
     expect(card?.sparkline).toEqual([50]);
     expect(card?.points?.map((p) => p.opponent)).toEqual(['Rival State · Ana Vasquez']);
   });

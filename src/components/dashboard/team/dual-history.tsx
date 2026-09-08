@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ResultMark } from "@/components/dashboard/result-mark";
-import { FormPills } from "@/components/dashboard/form-pills";
+import { FormTicks } from "@/components/dashboard/shared/form-ticks";
 import { EventMark } from "@/components/dashboard/schedule/static/event-mark";
 import { CardFooter } from "@/components/dashboard/shared/card-footer";
 import {
@@ -88,7 +88,7 @@ export function DualHistory({
           rows.length > 0 ? (
             <span className="inline-flex items-center gap-2">
               <span className="eyebrow-sm">{shortTeamName(teamName)} form</span>
-              <FormPills results={form.form} empty={null} />
+              <FormTicks form={form.form} empty={null} />
             </span>
           ) : (
             "Results land here after the first dual"

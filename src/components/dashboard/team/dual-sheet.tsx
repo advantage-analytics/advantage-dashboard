@@ -10,7 +10,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { CardFooter } from "@/components/dashboard/shared/card-footer";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { ScoreLine } from "@/components/dashboard/score-line";
-import { FormPills, type FormResult } from "@/components/dashboard/form-pills";
+import { FormTicks } from "@/components/dashboard/shared/form-ticks";
 import { formatEventDayLong, siteTitle } from "@/lib/schedule/format";
 import { LINE_STATUS } from "@/lib/schedule/line-status";
 import type {
@@ -196,7 +196,7 @@ function Fact({
  */
 function Tally({ tally, lines }: { tally: DualTally; lines: DualSheetLine[] }) {
   const anyPoint = tally.us > 0 || tally.them > 0;
-  const results = (prefix: "S" | "D"): FormResult[] =>
+  const results = (prefix: "S" | "D"): ("win" | "loss")[] =>
     lines
       .filter((line) => line.slot.startsWith(prefix) && line.won !== null)
       .map((line) => (line.won ? "win" : "loss"));
@@ -215,14 +215,14 @@ function Tally({ tally, lines }: { tally: DualTally; lines: DualSheetLine[] }) {
         <div className="flex items-center gap-2.5">
           <span className="flex items-center gap-[5px]">
             <span className="eyebrow-sm">S</span>
-            <FormPills results={singles} empty={null} />
+            <FormTicks form={singles} empty={null} />
           </span>
           {doubles.length > 0 ? (
             <>
               <span className="h-2.5 w-px bg-[var(--border-medium)]" aria-hidden />
               <span className="flex items-center gap-[5px]">
                 <span className="eyebrow-sm">D</span>
-                <FormPills results={doubles} empty={null} />
+                <FormTicks form={doubles} empty={null} />
               </span>
             </>
           ) : null}

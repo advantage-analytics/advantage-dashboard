@@ -1,6 +1,7 @@
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { getTeamHomeData, type TeamHomeData } from "@/lib/data/team-home-server";
 import { getTopKpiMovers } from "@/lib/data/performance-server";
+import { insightCardsFrom } from "@/lib/data/team-home-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { getLLMStream } from "@/lib/llm/adapter";
 import { formatChange, textStreamResponse } from "@/lib/llm/stream-response";
@@ -31,7 +32,7 @@ function buildTeamInsightSystemPrompt(data: TeamHomeData, program: string): stri
 
   // The same pick the strip's picker and the personal route make, so the
   // claim is drawn from the cards a coach can see move.
-  const kpiText = getTopKpiMovers(kpiCards, 5)
+  const kpiText = getTopKpiMovers(insightCardsFrom(kpiCards), 5)
     .map((k) => {
       const improving = k.lowerIsBetter ? k.change < 0 : k.change > 0;
       return `  - ${k.label}: ${k.value} (${formatChange(k.change)} ${k.changeLabel}, ${

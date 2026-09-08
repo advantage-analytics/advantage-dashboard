@@ -27,11 +27,16 @@ import {
 } from "@/lib/data/match-utils";
 import { rosterMatchIds, type RosterIdRow } from "@/lib/data/roster-ids";
 import {
-  calculateKpiCards,
-  KPI_STATS_SELECT,
-  type DbMatchStats,
-  type KpiCardData,
-} from "@/lib/data/performance-server";
+  seasonKpis,
+  toStatRow,
+  STAT_COLUMNS,
+  type DbStatRow,
+  type ProfileKpi,
+  type ProfileResult,
+  type ProfileStatRow,
+} from "@/lib/data/player-profile";
+import { statKey } from "@/lib/data/aggregate";
+import type { KpiCardData } from "@/lib/data/performance-server";
 import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
 import {
   eventDetailFrom,
@@ -421,7 +426,9 @@ export interface TeamHomeData {
    * intact; the page shows the empty strip instead while no card holds a
    * figure.
    */
-  kpiCards: KpiCardData[];
+  kpiCards: ProfileKpi[];
+  /** Any stats row on the program's side — what turns the empty strip real. */
+  kpiHasStats: boolean;
   /**
    * How many matches the strip is averaging — analyzed, attributed, and on a
    * dual's lineup. Not `analyzedCount`: that counts every report the program
@@ -1321,75 +1328,123 @@ export function teamFirstReport(
 }
 
 /**
- * The strip's cards, through the personal Home's builder.
+ * The strip's tiles, through the season strip both Homes now draw.
+ *
+ * `seasonKpis()` is the personal Home's and a player profile's own builder
+ * (`lib/data/player-profile.ts`), and this hands it the program's side of
+ * each match rather than one player's. That is the whole difference: the
+ * arithmetic, the catalogue, the picker and the hover chart are the ones a
+ * coach already reads on their own Home, so a squad average and a personal
+ * average cannot disagree about what "1st serve won" counts.
  *
  * All this decides is attribution: which side of each analyzed match is the
  * program's (`programSide`, off `rosterIds`), and which dual it belongs to
- * (`eventByEntryId`, which also names the point in the hover chart). A match
- * nothing attributes to the program, or that sits on no dual, is left out of
- * the map and so contributes to no card — the same refusal the matches list
- * makes when it draws no outcome mark — and the builder never re-derives a
- * side of its own. `headline: "mean"` because a team's figure is the squad's
- * average, not the last match filmed.
+ * (`eventByEntryId`). **Dual matches only** (CJ, 2026-09-07): a match feeds a
+ * tile only when it sits on a dual's lineup — a tournament run, or a match
+ * recorded under the program with no schedule entry, is the program's match
+ * but not the team's result. A match nothing attributes to the program is
+ * left out too, the same refusal the matches list makes when it draws no
+ * outcome mark.
  *
- * Returns the count beside the cards: `matchCount` is `orderedIds.length`,
- * the matches the builder was handed, which is the honest "N matches" for
- * every reader downstream. Reading it back off the longest card series
- * would miss a match whose stats row measured nothing.
+ * The opponent a point is named after is the DUAL and our player — "Pacific
+ * Ridge · D. Brooks" — not the player across the net, because a coach reads
+ * the season by its Saturdays.
  *
- * Exported for the attribution specs (`tests/team-roster-ids.spec.ts`), which
- * pin that a claimed player's pre-claim match, a coach's own upload and a
- * match between strangers each land on the side they should. Pure: no I/O.
+ * Exported for the attribution specs (`tests/team-roster-ids.spec.ts`).
+ * Pure: no I/O.
  */
-export function teamKpiCards(
+export function teamSeasonKpis(
   rows: DbSeasonMatch[],
   jobs: Map<string, MatchAnalysis>,
-  stats: DbMatchStats[],
+  statRows: DbStatRow[],
   rosterIds: ReadonlySet<string>,
-  /**
-   * The schedule entry each match hangs off, by `event_entry_id`. **The strip
-   * is dual matches only** (CJ, 2026-09-07): a match feeds a card only when
-   * it sits on a dual's lineup. A tournament run, or a match recorded under
-   * the program with no schedule entry, is the program's match but not the
-   * team's result, and the squad average is about the team's results. The
-   * same entry names the point in the hover chart — "Pacific Ridge ·
-   * D. Brooks" — because a coach reads the season by its Saturdays.
-   */
-  eventByEntryId: ReadonlyMap<string, { event: ProgramEvent; entry: EventEntry }>
-): { cards: KpiCardData[]; matchCount: number } {
-  const matchPlayerMap = new Map<string, boolean>();
-  const matchMetaMap = new Map<string, { date: string; opponent: string }>();
-  const orderedIds: string[] = [];
+  eventByEntryId: ReadonlyMap<string, { event: ProgramEvent; entry: EventEntry }>,
+  /** The program's dual record, for the Record tile's "6–2 in duals" line. */
+  duals: { wins: number; losses: number }
+): { kpis: ProfileKpi[]; matchesPlayed: number; hasStats: boolean } {
+  const statsByKey = new Map<string, ProfileStatRow>();
+  for (const stat of statRows) {
+    statsByKey.set(statKey(stat.match_id, stat.is_player1), toStatRow(stat));
+  }
 
-  // Newest first, which is the order the builder's window wants. Sorted here
-  // rather than assumed: the loader hands this function a DESC read, but a
-  // window that silently depends on its caller's ordering draws the season
-  // backwards the first time anybody passes it the other way — the specs do.
-  // `id` breaks a date tie: six courts of one Saturday share a date, and a
-  // series that reorders between page loads draws a different trend each time.
+  // Newest first, which is the order `seasonKpis` reads in. Sorted here
+  // rather than assumed: the loader hands this a DESC read, but a window that
+  // silently depends on its caller's ordering draws the season backwards the
+  // first time anybody passes it the other way — the specs do. `id` breaks a
+  // date tie: six courts of one Saturday share a date, and a series that
+  // reorders between page loads draws a different trend each time.
   const newestFirst = [...rows].sort(
     (left, right) =>
       (right.date ?? "").localeCompare(left.date ?? "") || left.id.localeCompare(right.id)
   );
+
+  const results: ProfileResult[] = [];
   for (const row of newestFirst) {
     if (!isAnalysisReady(analysisOf(row, jobs).status)) continue;
     const side = programSide(row, rosterIds);
     if (side === null) continue;
     const hung = row.event_entry_id ? eventByEntryId.get(row.event_entry_id) : undefined;
     if (!hung || hung.event.kind !== "dual") continue;
-    matchPlayerMap.set(row.id, side === "player1");
-    const ours = side === "player1" ? row.player1_name : row.player2_name;
-    matchMetaMap.set(row.id, {
-      date: row.date ?? "",
-      opponent: `${hung.event.name} · ${ours?.trim() || hung.entry.playerLabels.join(" / ") || "—"}`,
+    const isPlayer1 = side === "player1";
+    const ours = isPlayer1 ? row.player1_name : row.player2_name;
+    results.push({
+      id: row.id,
+      date: row.date,
+      isPlayer1,
+      won: matchOutcome(row.score, isPlayer1),
+      entryId: row.event_entry_id,
+      opponentName: `${hung.event.name} · ${
+        ours?.trim() || hung.entry.playerLabels.join(" / ") || "—"
+      }`,
+      score: row.score,
+      tournamentName: null,
+      stats: statsByKey.get(statKey(row.id, isPlayer1)) ?? null,
     });
-    orderedIds.push(row.id);
+  }
+
+  let wins = 0;
+  let losses = 0;
+  for (const result of results) {
+    if (result.won === true) wins++;
+    else if (result.won === false) losses++;
   }
 
   return {
-    cards: calculateKpiCards(stats, matchPlayerMap, orderedIds, matchMetaMap, "mean"),
-    matchCount: orderedIds.length,
+    kpis: seasonKpis(results, { wins, losses, duals }),
+    matchesPlayed: results.length,
+    hasStats: results.some((result) => result.stats !== null),
   };
+}
+
+/**
+ * The season tiles as the insight layer reads them.
+ *
+ * `buildInsightEvidenceWithCaption` and `getTopKpiMovers` speak `KpiCardData`
+ * — the personal Home's performance model still produces it for exactly this
+ * — while the strip speaks `ProfileKpi`. The two differ in one place: a
+ * trend is nested on `ProfileKpi` and flat on `KpiCardData`. Adapting here
+ * rather than widening the shared type keeps the personal Home's insight
+ * path untouched; a tile with no trend reads as a zero change, which is what
+ * `getTopKpiMovers` already filters on.
+ *
+ * `record` is dropped: "12–4" is not a figure the evidence line can compare
+ * or sign, and a claim built on it would read as a rate.
+ */
+export function insightCardsFrom(kpis: ProfileKpi[]): KpiCardData[] {
+  return kpis
+    .filter((kpi) => kpi.key !== "record")
+    .map((kpi) => ({
+      key: kpi.key,
+      label: kpi.label,
+      value: kpi.value,
+      change: kpi.trend?.change ?? 0,
+      changeLabel: kpi.trend?.changeLabel ?? "",
+      sparkline: kpi.sparkline ?? [],
+      points: kpi.points,
+      format: kpi.format,
+      description: kpi.description,
+      category: kpi.category,
+    }));
 }
 
 /**
@@ -1517,13 +1572,13 @@ export async function getTeamHomeData(
     // which side of a match a stat row belongs to. A second way to attribute a
     // statistic to a side is a serve percentage printed under the wrong
     // player's name, with nothing on screen looking wrong.
-    (async (): Promise<DbMatchStats[]> => {
+    (async (): Promise<DbStatRow[]> => {
       if (seasonIds.length === 0) return [];
       const { data } = await supabase
         .from("match_stats_with_percentages")
-        .select(KPI_STATS_SELECT)
+        .select(STAT_COLUMNS)
         .in("match_id", seasonIds);
-      return (data ?? []) as DbMatchStats[];
+      return (data ?? []) as unknown as DbStatRow[];
     })(),
   ]);
 
@@ -1669,19 +1724,21 @@ export async function getTeamHomeData(
       eventByEntryId.set(entry.id, { event, entry });
     }
   }
-  const { cards: kpiCards, matchCount: kpiMatchCount } = teamKpiCards(
-    season,
-    jobs,
-    stats,
-    rosterIds,
-    eventByEntryId
-  );
+  const {
+    kpis: kpiCards,
+    matchesPlayed: kpiMatchCount,
+    hasStats: kpiHasStats,
+  } = teamSeasonKpis(season, jobs, stats, rosterIds, eventByEntryId, {
+    wins: dualWins,
+    losses: decidedDuals.length - dualWins,
+  });
 
   return {
     usage,
     matchCount: season.length,
     analyzedCount,
     kpiCards,
+    kpiHasStats,
     kpiMatchCount,
     firstReport,
     weekendDual,
@@ -1692,7 +1749,7 @@ export async function getTeamHomeData(
     courtRecord: courtRecordFrom(programSchedule.events, programSchedule.entriesByEvent),
     // The same cards the strip renders, through the same evidence builder the
     // personal Home reads — so a figure on the card is a figure on a tile.
-    insight: buildInsightEvidenceWithCaption(kpiCards, kpiMatchCount),
+    insight: buildInsightEvidenceWithCaption(insightCardsFrom(kpiCards), kpiMatchCount),
     // Off `rosterData`, the same snapshot `movers` was ranked from, so the
     // card's "Full roster — 8" and the eight rows it could show can never
     // disagree. `people` is a second read of the same RPC (see the note on the

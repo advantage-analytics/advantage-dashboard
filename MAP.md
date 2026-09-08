@@ -64,7 +64,6 @@ markers is hand-written — edit it as things move.
 | `/dashboard/team/schedule/[eventId]` | [`src/app/dashboard/team/schedule/[eventId]/page.tsx`](src/app/dashboard/team/schedule/[eventId]/page.tsx) |
 | `/dashboard/team/schedule/new/dual` | [`src/app/dashboard/team/schedule/new/dual/page.tsx`](src/app/dashboard/team/schedule/new/dual/page.tsx) |
 | `/dashboard/team/schedule/new` | [`src/app/dashboard/team/schedule/new/page.tsx`](src/app/dashboard/team/schedule/new/page.tsx) |
-| `/dashboard/team/schedule/new/single` | [`src/app/dashboard/team/schedule/new/single/page.tsx`](src/app/dashboard/team/schedule/new/single/page.tsx) |
 | `/dashboard/team/schedule/new/tournament` | [`src/app/dashboard/team/schedule/new/tournament/page.tsx`](src/app/dashboard/team/schedule/new/tournament/page.tsx) |
 | `/dashboard/team/schedule` | [`src/app/dashboard/team/schedule/page.tsx`](src/app/dashboard/team/schedule/page.tsx) |
 | `/dashboard/team/schedule/single/[matchId]` | [`src/app/dashboard/team/schedule/single/[matchId]/page.tsx`](src/app/dashboard/team/schedule/single/[matchId]/page.tsx) |

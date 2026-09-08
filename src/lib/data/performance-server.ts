@@ -1,5 +1,6 @@
 import { meanOfPresent, num, pct, presentPairs } from "./aggregate";
 import { createClient } from "@/lib/supabase/server";
+import { getPersonalMatchData } from "@/lib/data/personal-matches-server";
 import { getMyPlayerIds } from "@/lib/data/player-identity-server";
 import { viewerSide } from "./viewer-side";
 
@@ -117,12 +118,7 @@ interface DbMatch {
   } | null;
 }
 
-/**
- * One side of one match from `match_stats_with_percentages`. Exported with
- * the column list below so Team Home reads the same row shape the personal
- * Home does — `calculateKpiCards` is the one card builder for both.
- */
-export interface DbMatchStats {
+interface DbMatchStats {
   match_id: string;
   is_player1: boolean;
   first_serve_pct: string | null;
@@ -616,38 +612,6 @@ const KPI_SPECS: KpiSpec[] = [
   },
 ];
 
-/**
- * The columns `calculateKpiCards` picks from, as one select string. Both
- * Homes read through it — the personal loader below and Team Home's — so a
- * column added to `DbMatchStats` reaches both strips or neither.
- */
-export const KPI_STATS_SELECT =
-  "match_id, is_player1, first_serve_pct, first_serve_won_pct, second_serve_won_pct, serve_rating, first_return_won_pct, second_return_won_pct, break_points_saved_pct, break_points_converted_pct, service_games_won_pct, return_games_won_pct, total_points_won_pct, aces, double_faults, winners, unforced_errors, avg_rally_length";
-
-/**
- * How many tiles Team Home shows before a coach has picked: four, because the
- * team frame (Platform Audit Ta3) is drawn with four; the picker allows five.
- * One number, exported, so the day-zero strip and the populated one cannot
- * promise different counts.
- */
-export const TEAM_KPI_DEFAULT_COUNT = 4;
-
-/**
- * The labels a strip shows before anything is customised — the first `count`
- * of the same list `KpiCards` falls back to.
- *
- * `KpiCards` restores a saved selection from localStorage and otherwise takes
- * the first `defaultCount` cards in this order, so on a first visit — the only
- * time the empty strip is drawn — these are exactly the tiles that will be
- * there once a report lands. Derived from `KPI_SPECS` rather than retyped, so
- * a renamed statistic cannot leave the empty state promising an old name.
- */
-export function defaultKpiLabels(count: number): readonly string[] {
-  return KPI_SPECS.slice(0, count).map((spec) => spec.label);
-}
-
-/** The personal Home's five. */
-export const DEFAULT_KPI_LABELS: readonly string[] = defaultKpiLabels(5);
 
 function formatKpiValue(value: number, format: KpiFormat): string {
   if (format === "percent") return `${Math.round(value)}%`;
@@ -655,32 +619,11 @@ function formatKpiValue(value: number, format: KpiFormat): string {
   return value.toFixed(1);
 }
 
-/**
- * How a card's headline reads its series.
- *
- * `latest` is the personal Home: the number is the most recent match, the
- * change is that match against the one before. `mean` is Team Home: the
- * number is the average over the window and the change is the window's
- * recent half against its earlier half — a team's "first serve" is a fact
- * about the squad, not about whichever player happened to be filmed last.
- */
-export type KpiHeadline = "latest" | "mean";
-
-/**
- * Exported so Team Home builds its strip through this and nothing else. Both
- * Homes draw the same tile; two builders for it would be two answers to what
- * a first-serve percentage is.
- *
- * `matchPlayerMap` is the caller's attribution — which side of each match is
- * the reader's — and a match absent from it contributes nothing. That is the
- * only place side is decided; nothing below re-derives it.
- */
-export function calculateKpiCards(
+function calculateKpiCards(
   stats: DbMatchStats[],
   matchPlayerMap: Map<string, boolean>,
   orderedMatchIds: string[],
-  matchMetaMap: Map<string, { date: string; opponent: string }>,
-  headline: KpiHeadline = "latest"
+  matchMetaMap: Map<string, { date: string; opponent: string }>
 ): KpiCardData[] {
   const statByMatch = new Map<string, DbMatchStats>();
   for (const stat of stats) {
@@ -711,12 +654,7 @@ export function calculateKpiCards(
     // metadata by one for every gap.
     const measured = presentPairs(orderedStats.map(spec.pick), orderedIds);
     const hasData = measured.length > 0;
-    // The personal strip draws a player's last eight — a window whose points
-    // are individually inspectable and whose headline is its newest one. A
-    // team average over the last eight is a fact about whichever eight lines
-    // were filmed last, which on a dual weekend is one Sunday; the squad's
-    // figure is the whole season, and the line beside it draws the same.
-    const window = headline === "mean" ? measured : measured.slice(0, 8);
+    const window = measured.slice(0, 8);
     const sparkline = window.map((m) => m.value).reverse();
     // Same slice+reverse window as `sparkline` so points[k].value === sparkline[k].
     const points = window
@@ -729,59 +667,16 @@ export function calculateKpiCards(
         };
       })
       .reverse();
-    let value = "—";
-    let change = 0;
-    // The label is the headline's, data or no data: a tile that measured
-    // nothing must not borrow the other Home's phrase for its empty row.
-    let changeLabel = headline === "mean" ? "vs earlier" : "last 30 days";
-    if (hasData && headline === "mean") {
-      // Over the drawn series, so the number is the mean of the line beside
-      // it and the change is that line's halves — `meanOfPresent`, the
-      // module's one rule for averaging this view, never a second spelling.
-      // `window` is newest-first; `half` is floored so an odd series drops
-      // its middle reading rather than handing it to one side.
-      const values = window.map((m) => m.value);
-      const half = Math.floor(values.length / 2);
-      // A squad mean of a COUNT is not a count: "2.4 double faults" is a
-      // real reading and "2" is a value no match in the series produced.
-      value = formatKpiValue(
-        meanOfPresent(values) ?? 0,
-        spec.format === "count" ? "decimal" : spec.format
-      );
-      change =
-        half >= 1
-          ? Math.round(
-              ((meanOfPresent(values.slice(0, half)) ?? 0) -
-                (meanOfPresent(values.slice(values.length - half)) ?? 0)) *
-                10
-            ) / 10
-          : 0;
-      // The caveat rides in the trend's own label. The team strip used to
-      // print "3 matches — small sample" in the slot under the value, and it
-      // lost that line when it moved onto this tile; below five readings the
-      // label says what the figure rests on, so the caveat survives the trend.
-      // …and "vs earlier" only when there IS an earlier: six courts of one
-      // Saturday are six readings of one afternoon, and halving them compares
-      // S1–S3 with S4–S6, not this week with last. One date in the window
-      // keeps the sample caveat whatever the count.
-      const oneDay = new Set(points.map((point) => point.date)).size <= 1;
-      changeLabel =
-        values.length < 5 || oneDay
-          ? `over ${values.length} match${values.length === 1 ? "" : "es"}`
-          : "vs earlier";
-    } else if (hasData) {
-      value = formatKpiValue(measured[0].value, spec.format);
-      change =
-        measured.length >= 2
-          ? Math.round((measured[0].value - measured[1].value) * 10) / 10
-          : 0;
-    }
+    const change =
+      measured.length >= 2
+        ? Math.round((measured[0].value - measured[1].value) * 10) / 10
+        : 0;
     return {
       key: spec.key,
       label: spec.label,
-      value,
+      value: hasData ? formatKpiValue(measured[0].value, spec.format) : "—",
       change,
-      changeLabel,
+      changeLabel: "last 30 days",
       sparkline,
       points,
       format: spec.format,
@@ -953,30 +848,21 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
 
   if (!user) return DEFAULT_PERFORMANCE;
 
-  // `player2_id` joins the projection because `viewerSide` needs both halves to
+  // Both reads come from `getPersonalMatchData`, shared with the season strip
+  // on the same page — see that module for why the pair lives there. Its
+  // projection carries `player2_id` because `viewerSide` needs both halves to
   // tell "I was player two" from "this is not my match at all".
-  const [{ data: matches }, myPlayerIds] = await Promise.all([
-    supabase
-      .from("matches")
-      .select("id, date, player1_id, player2_id, player1_name, player2_name, score")
-      .eq("created_by", user.id)
-      // AND no program. `/dashboard` is the personal home — same predicate as
-      // the matches list (`matches/page.tsx`), for the same reason:
-      // `matches.program_id` is nullable precisely so "no program" is the
-      // personal workspace.
-      .is("program_id", null)
-      .order("date", { ascending: false }),
-    getMyPlayerIds(),
-  ]);
+  const [{ matches: personalMatches, stats: personalStats }, myPlayerIds] =
+    await Promise.all([getPersonalMatchData(user.id), getMyPlayerIds()]);
+  const matches = personalMatches;
 
-  if (!matches || matches.length === 0) return DEFAULT_PERFORMANCE;
+  if (matches.length === 0) return DEFAULT_PERFORMANCE;
 
-  const typedMatches = matches as DbMatch[];
+  const typedMatches = matches as unknown as DbMatch[];
   const overall = calculateWinLoss(typedMatches, myPlayerIds, user.id);
   const last30 = calculateWinLoss(typedMatches, myPlayerIds, user.id, 30);
   const last7 = calculateWinLoss(typedMatches, myPlayerIds, user.id, 7);
 
-  const matchIds = matches.map((m) => m.id);
   const matchPlayerMap = new Map<string, boolean>();
   const matchMetaMap = new Map<string, { date: string; opponent: string }>();
   for (const m of matches) {
@@ -992,12 +878,7 @@ export async function getOverallPerformance(): Promise<OverallPerformanceData> {
     });
   }
 
-  const { data: stats } = await supabase
-    .from("match_stats_with_percentages")
-    .select(KPI_STATS_SELECT)
-    .in("match_id", matchIds);
-
-  const typedStats = (stats as DbMatchStats[]) ?? [];
+  const typedStats = personalStats as unknown as DbMatchStats[];
   const orderedMatchIds = matches.map((m) => m.id);
 
   const ratings = calculateAverageRating(typedStats, user.id, matchPlayerMap);

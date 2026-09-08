@@ -9,7 +9,8 @@ import { BENCH, sequenceFrom } from "@/lib/data/lineup-draft";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ResultMark } from "@/components/dashboard/result-mark";
 import { EmptyMark } from "@/components/ui/empty-mark";
-import { FormPills } from "@/components/dashboard/form-pills";
+import { FormTicks } from "@/components/dashboard/shared/form-ticks";
+import { recordLabel } from "@/lib/data/player-profile";
 import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { cn } from "@/lib/utils";
 import {
@@ -189,7 +190,11 @@ export interface LineupDraft {
 function Record({ wins, losses }: { wins: number; losses: number }) {
   return (
     <span className={cn(COL.record, "tabular flex items-center text-[13px] text-[var(--ink-900)]")}>
-      {wins + losses === 0 ? <EmptyMark label="No record yet" /> : `${wins}–${losses}`}
+      {wins + losses === 0 ? (
+        <EmptyMark label="No record yet" />
+      ) : (
+        recordLabel(wins, losses)
+      )}
     </span>
   );
 }
@@ -575,7 +580,7 @@ function MemberRow({
 
       <Record wins={member.wins} losses={member.losses} />
       <span className={cn(COL.form, "flex items-center gap-[3px]")}>
-        <FormPills results={member.form} />
+        <FormTicks form={member.form} />
       </span>
       <LastMatchCell member={member} />
     </Reorder.Item>

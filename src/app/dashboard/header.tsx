@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useHeaderStatus } from "@/components/dashboard/header-status";
+import { useHeaderSlot } from "@/components/dashboard/header-slot";
 import {
   ChevronRight,
   ChevronDown,
@@ -70,6 +71,15 @@ const SCHEDULE_CRUMB = {
   label: navLabel(SCHEDULE_HREF) ?? "Schedule",
   href: SCHEDULE_HREF,
 };
+
+/**
+ * `/dashboard/team/roster/<playerId>` — the player profile. The page publishes
+ * its own leading slot (a name, or "Roster › name ⌄ n / N" with a switcher);
+ * until that lands the slot stays empty rather than showing the "Roster"
+ * crumb `navLabel` would prefix-match, which would flash and then be replaced
+ * by a trail that starts with the same word.
+ */
+const ROSTER_PROFILE_PAGE = /^\/dashboard\/team\/roster\/[^/]+$/;
 
 /**
  * The crumb for any page that is simply a navigation destination.
@@ -140,6 +150,7 @@ export function Header({
 }) {
   const pathname = usePathname();
   const headerStatus = useHeaderStatus();
+  const headerSlot = useHeaderSlot();
   const { active, available, viewer } = useWorkspace();
 
   // A program's own settings page names the program as the third crumb —
@@ -232,6 +243,11 @@ export function Header({
       ? `${greetingTitle.name} · ${greetingTitle.qualifier}`
       : greetingTitle.name;
 
+  // A page that publishes its own leading slot outranks every treatment below
+  // — see `header-slot.tsx`. The profile route is the one that does, and it
+  // also holds the slot empty while the page is still on its way.
+  const pageOwnsSlot = headerSlot !== null || ROSTER_PROFILE_PAGE.test(pathname);
+
   /**
    * The leading slot answers "where am I" once, never twice.
    *
@@ -265,10 +281,24 @@ export function Header({
    * click away. Platform Audit Pa2 then promoted that page's greeting into
    * this slot ("Good morning, Jordan", with "Personal · Monday, Aug 24"
    * beside it), so the personal Home has a third treatment that outranks the
-   * title. It is the only per-path exception left in here; keep it that way.
+   * title.
+   *
+   * ── The two per-path exceptions, and why there are two ──────────────────
+   * `showGreeting` above, and `ROSTER_PROFILE_PAGE` in `pageOwnsSlot`. The
+   * second exists because a page that fills this slot itself
+   * (`header-slot.tsx`) can only publish from an effect, so between the
+   * route resolving and that effect there is a frame where the slot is empty
+   * and the fallback below would draw "Roster" — the crumb the page is about
+   * to replace with a person's name. Suppressing it needs an answer during
+   * render, and the path is the only one available then.
+   *
+   * A `claimed` flag on the slot context was weighed as the general form and
+   * rejected: a claim is also an effect, so it would move the flash rather
+   * than remove it. Keep the count at two — a third path here means the slot
+   * mechanism needs a render-time signal, not another regex.
    */
   const title =
-    !showGreeting && isDestination(pathname)
+    !showGreeting && !pageOwnsSlot && isDestination(pathname)
       ? workspaceTitle(active, viewer)
       : null;
 
@@ -277,7 +307,7 @@ export function Header({
   // that used to be built here for insights/performance/statistics/video/visuals
   // matched routes that cannot be reached.
   const breadcrumbs: { label: string; href?: string }[] =
-    title || showGreeting
+    title || showGreeting || pageOwnsSlot
       ? []
       : isMatchDetailPage && matchCrumb
       ? [
@@ -352,6 +382,8 @@ export function Header({
             both. The collapse toggle moved into the sidebar's bottom group,
             where it never shifts relative to Settings and Help. */}
         <div className="flex min-w-0 flex-1 items-center">
+          {headerSlot}
+
           {showGreeting && (
             <HeaderGreeting
               greeting={greeting}
