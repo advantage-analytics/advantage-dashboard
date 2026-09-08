@@ -22,7 +22,7 @@ ready).
 > git history at `c4f896a`. Ids are never reused.
 
 ## T26 · Add the date libraries and the ISO conversion module
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** `package.json`, `package-lock.json`, `src/lib/ui/date-value.ts` (new), `tests/date-value.spec.ts` (new)
 - **done when:**
