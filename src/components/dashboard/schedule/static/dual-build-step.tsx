@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DateField } from "@/components/ui/date-field";
 import { MenuSelect, type MenuOption } from "@/components/ui/menu-select";
 import {
   OpponentPopup,
@@ -855,11 +855,11 @@ export function useDualDraft(school: ChosenSchool, initial?: DualDraftSeed) {
  * shows it decides those. `2b` draws the four in one four-up at `gap:24px`.
  *
  * ── What draws what ────────────────────────────────────────────────────────
- *   Date                A native `<input type="date">` inside `FieldCell`'s
- *                       ruled row, under the drawn calendar. The platform's
- *                       own picker icon and clear button are hidden so that
- *                       calendar is the only glyph; the picker still opens
- *                       from a click anywhere in the row, and from Space.
+ *   Date                `DateField variant="bare"` inside `FieldCell`'s ruled
+ *                       row. The primitive brings the app's own segments,
+ *                       calendar button and popover, so the row draws no
+ *                       glyph of its own: the rule and the height are the
+ *                       cell's, everything inside them is the field's.
  *   Site/Surface/Format `MenuSelect` — the app's select — in a cell that
  *                       draws no chrome of its own.
  *
@@ -884,29 +884,13 @@ export function DualFactsStep({
 }) {
   return (
     <div className="grid grid-cols-4 gap-6">
-      <FieldCell label="Date" glyph="calendar">
-        {/* `2b` draws "09-26", month and day; a native date input
-            prints the platform's own form of the same value. The
-            tournament builder made the same trade on its two dates. */}
-        <input
-          type="date"
+      <FieldCell label="Date">
+        <DateField
+          label="Date"
+          variant="bare"
           value={draft.date}
-          onChange={(event) => onEdit({ date: event.target.value })}
-          // The row's rule goes 2px blue on focus, so a ring on top of it is
-          // the same stacked second mark the underline fields opt out of —
-          // see `styles/design-system/focus.css`.
-          data-focus-ring="none"
-          className={cn(
-            "mono w-full bg-transparent text-[13px] text-[var(--ink-900)] outline-none",
-            // The platform draws its own calendar, and an ✕ once the field
-            // has a value: two more glyphs beside the one the cell already
-            // drew. The clear button goes; the picker indicator is not hidden
-            // but stretched across the row at zero opacity, so it stays what
-            // opens the picker — a click anywhere in the cell, drawn calendar
-            // included, still opens it.
-            "[&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:m-0 [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:p-0 [&::-webkit-calendar-picker-indicator]:opacity-0",
-            "[&::-webkit-clear-button]:hidden [&::-webkit-inner-spin-button]:hidden"
-          )}
+          onChange={(date) => onEdit({ date })}
+          className="w-full"
         />
       </FieldCell>
 
@@ -1087,37 +1071,33 @@ export function DualLineupStep({
  * One fact under its eyebrow — `2b` draws all four the same way.
  *
  * Two chromes, because the four cells no longer answer the same way. `rule`
- * is the artboard's row drawn here: a hairline, a trailing glyph, and the
- * control inside it. `none` hands the whole treatment to the child, because
- * `MenuSelect`'s underline trigger already draws that hairline, its own
- * chevron and its own 2px blue rule on focus — a second hairline here would
- * stack a rule on a rule and a chevron beside a chevron.
+ * is the artboard's row drawn here: a hairline and the control inside it.
+ * `none` hands the whole treatment to the child, because `MenuSelect`'s
+ * underline trigger already draws that hairline, its own chevron and its own
+ * 2px blue rule on focus — a second hairline here would stack a rule on a
+ * rule and a chevron beside a chevron.
  *
- * `rule` stays a `<label>`: the eyebrow names the one native control inside
- * it. `none` is a `<div>`, because `MenuSelect` is a `<button>` and a button
- * is not a labelable element — a `<label>` around it would name nothing. The
- * same string goes in as its `label`, which is its `aria-label`.
+ * Both are a `<div>`, and `rule` is one on purpose. It was a `<label>` while
+ * a native date input sat in it and the eyebrow named that input. `DateField`
+ * is a group of segments plus a calendar `<button>`, and a button IS
+ * labelable: the `<label>` forwarded every click on a segment to the calendar
+ * button instead, so the month could never be clicked into. Measured, not
+ * assumed. Each cell's `label` string goes to its child as an `aria-label`,
+ * which is what names the control now.
  *
  * Not the deleted `field-row.tsx`'s `FieldCellText`/`FieldCellSelect`: those
  * were 25b's row and carried its `FieldRow` spacing (`mt-3.5`, `gap-8`) where
- * this artboard draws a plain four-up at `gap:24px`. Everything below the
- * label matched those cells exactly, `pt-1.5 pb-[7px]` and a 12px glyph
- * included; `static-tournament-builder.tsx` still records the same numbers.
+ * this artboard draws a plain four-up at `gap:24px`. The row's own spacing
+ * matched those cells exactly, `pt-1.5 pb-[7px]` included;
+ * `static-tournament-builder.tsx` still records the same numbers.
  */
 function FieldCell({
   label,
-  glyph,
   chrome = "rule",
   note,
   children,
 }: {
   label: string;
-  /**
-   * The trailing glyph on a `rule` cell. The calendar is the only one left —
-   * the chevron went with `FieldSelect`, since every cell that wanted one now
-   * draws `MenuSelect`'s own.
-   */
-  glyph?: "calendar";
   /** `rule` draws the hairline row; `none` lets the child draw its own. */
   chrome?: "rule" | "none";
   /** Drawn under the cell, on Format alone. */
@@ -1145,7 +1125,7 @@ function FieldCell({
   }
 
   return (
-    <label className="block">
+    <div>
       {eyebrow}
       {/* `focus-within`, not `focus-visible`: the rule belongs to the row and
           what it answers is focus landing on the control inside it. The 2px
@@ -1154,17 +1134,9 @@ function FieldCell({
           going blue IS the one mark (`styles/design-system/focus.css`). */}
       <span className="relative flex items-center border-b border-[var(--border-hairline)] pb-[7px] pt-1.5 focus-within:border-b-2 focus-within:border-[var(--blue)] focus-within:pb-[6px]">
         {children}
-        <span className="flex-1" />
-        {glyph === "calendar" ? (
-          <Calendar
-            size={12}
-            strokeWidth={1.5}
-            className="pointer-events-none shrink-0 text-[var(--ink-400)]"
-          />
-        ) : null}
       </span>
       {footnote}
-    </label>
+    </div>
   );
 }
 

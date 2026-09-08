@@ -73,7 +73,7 @@ ready).
   Amended 2026-09-08 by the author's instruction, after the first run was gated on the old wording. That criterion ended "Save persists the same `YYYY-MM-DD`", which needs a logged-in session this environment does not have — so it asserted `saveProfile` and the draft shape, which this migration does not touch. It now asks for the value reaching the save call, which a harness observes directly. Nothing else about the task changed.
 
 ## T30 · Migrate the dual facts Date cell
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T27
 - **files:** `src/components/dashboard/schedule/static/dual-build-step.tsx`
